@@ -1,6 +1,6 @@
 import type { PromptReference, ResourceRef } from '@text-to-cad/core/prompt';
 import type { JsonValue } from '../../../file-viewer/types.js';
-import { normalizeViewSettings, resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
+import { normalizeViewSettings } from '@text-to-cad/core/common/viewSettings.js';
 import { mergeViewerDisplaySettings } from '../view-settings/viewerDisplaySettings.js';
 
 // The live command surface: what an app-owned tool (an agent, a test) may ask of
@@ -30,7 +30,6 @@ export interface LiveViewState {
   camera: LiveCameraSnapshot | null;
   /** Canonical sparse grouped View configuration. */
   display: { [key: string]: JsonValue };
-  renderMode: 'inspect' | 'render';
 }
 export interface LiveViewController<State extends LiveViewState = LiveViewState> {
   /** Pure snapshots only. After unmount this returns the last view, active:false. */
@@ -38,7 +37,6 @@ export interface LiveViewController<State extends LiveViewState = LiveViewState>
   setCamera(snapshot: LiveCameraSnapshot): Promise<State>;
   resetCamera(): Promise<State>;
   setDisplaySettings(patch: { [key: string]: JsonValue }): Promise<State>;
-  setRenderMode(enabled: boolean): Promise<State>;
   /** This returns a frozen image only; the host owns its transport and destination. */
   capture(): Promise<Blob>;
   /**
@@ -58,7 +56,6 @@ export interface LiveViewRuntime<State extends LiveViewState = LiveViewState> {
   setCamera(snapshot: LiveCameraSnapshot): void;
   resetCamera(): void;
   setDisplaySettings(patch: { [key: string]: JsonValue }): void;
-  setRenderMode(enabled: boolean): void;
   capture(): Promise<Blob>;
   /** The card's picture, drawn off to the side of the view (`kit/viewport/thumbnail.js`). */
   thumbnail(size: { width: number; height: number }): Promise<Blob>;
@@ -111,8 +108,8 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
     const { runtime, scope } = admit();
     apply(runtime);
     const deadline = Date.now() + 10_000;
-    // A mode switch can suspend while the Render chunk loads. The first RAF
-    // may precede its React commit, so observe the actual destination state.
+    // A change can take more than a frame to commit: the first RAF may precede
+    // its React commit, so observe the actual destination state.
     do {
       await settle();
       checkScope(scope);
@@ -136,18 +133,15 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
         return Boolean(actual && typeof actual === 'object') && Object.entries(expected).every(
           ([key, value]) => containsPatch((actual as Record<string, unknown>)[key], value));
       };
-      let expectedDisplay: ReturnType<typeof mergeViewerDisplaySettings>;
+      // What the patch names, as it lands: a setting it does not name may move with it (a renderer
+      // that keeps one motion at a time turns one setting off as another goes on), and is not awaited.
+      let expectedDisplay: Record<string, unknown>;
       return mutate(runtime => {
-        expectedDisplay = mergeViewerDisplaySettings(runtime.readState().display, canonicalPatch);
+        const merged = mergeViewerDisplaySettings(runtime.readState().display, canonicalPatch) as Record<string, unknown>;
+        expectedDisplay = Object.fromEntries(Object.keys(canonicalPatch).map(key => [key, merged[key]]));
         runtime.setDisplaySettings(canonicalPatch as { [key: string]: JsonValue });
       }, state => containsPatch(state.display, expectedDisplay));
     },
-    // Committed once the VIEWPORT shows the mode, not once the store names it: the store flips at
-    // once, the camera takes the mode's projection a frame or more later, and the reply (or a
-    // capture right after it) must not describe the mode it left.
-    setRenderMode: enabled => mutate(runtime => runtime.setRenderMode(enabled),
-      state => state.renderMode === (enabled ? 'render' : 'inspect')
-        && (!state.camera?.projection || state.camera.projection === resolveViewSettings(state.display).camera.projection)),
     async capture() {
       const { runtime, scope } = admit();
       const pending = runtime.capture();

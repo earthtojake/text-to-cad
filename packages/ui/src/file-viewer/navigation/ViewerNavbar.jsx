@@ -1,147 +1,222 @@
-import { ArrowLeft, Ellipsis, Folders } from "lucide-react";
+import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
+import { useRef, useState } from "react";
 
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
+import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 
+import logo from "../../assets/logo-c.svg";
 import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js";
+import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
+import { useViewerMobile } from "../responsive.js";
 
-import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
+import { AppMenu } from "./AppMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
-import { InlineName } from "./InlineName.jsx";
-import { FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
+import { FolderExplorer } from "./FolderExplorer.jsx";
+import { ModelList } from "./ModelList.jsx";
+import { useControlUsage } from "../../usage/controls.js";
+
+// The file menu's item as telemetry names it (`usage/controls.js`).
+const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", reveal: "file_reveal" });
+// The name menu's tabs as telemetry names them: Files is the explorer.
+const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 
 /**
- * The row above a file: ONE navbar, the same in every app, so a person finds each control in the
- * same place whatever is open. A host's home has none; it holds the links itself.
+ * The row above a file and above the host's home in a page's chrome (`FileViewer`'s `chrome: "page"`,
+ * the web viewer's): the same row whatever is open, so a person finds each control in the same place.
+ * Over the home it has only the logo (its menu without Back to home), Back and Forward, the host's
+ * update and its actions. A host that shows the view alone (`chrome: "bare"`: the CAD app's file
+ * handler) has no navbar, and Preview hides it in every host, drawing its own bar in its place.
  *
- * Left, in this order: the way back to the host's home, where there is one; the file explorer's
- * toggle, where the host's files can be browsed; and the open file's name with its ⋯ menu, the
- * same menu a row of the explorer has — or, with no file open, the words "Select file", which
- * are not a control: the explorer's toggle beside them is. The name is not a menu of its own, and
- * has no right-click: the ⋯ is the one door.
+ * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document
+ * alike), which opens the app's menu (`AppMenu`: Back to home
+ * where the host has a home, then the person's settings, feedback and links); Back and Forward,
+ * where the host keeps the view's own history (`history`); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
+ * where the view can show another; and the ⋯ menu of what the host can do with the file.
  *
- * Right: the file's own actions (the CAD viewer's one: a dismissed alert's icon, which brings its
- * card back), the toggles of any panel the file declares, the host's update —
- * a blue download button, only where the host found a newer release (`NavbarLinks.jsx`) —
- * Feedback, a new issue where the host has a tracker, then the renderer's view controls
- * (`controlsRef`: the CAD viewer's Settings and Preview). Preview takes the whole page, this row
- * with it.
+ * Right, only what a host or a file adds: the host's update button while its install is behind
+ * (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the
+ * CAD viewer's one: a dismissed alert's icon, which brings its card back); last, the host's own
+ * actions (`actions`: the web viewer's Export). The colour scheme is the app menu's. A view's own
+ * controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
 
 /**
- * One class for every toggle in the row, so "highlighted while its panel is open" looks the same
- * on all of them and in every app.
+ * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
+ * the pointer is on it or its menu is open, then the same accent — and none with a tooltip: each
+ * says what it is. They sit edge to edge, spaced by their own padding alone: the logo's 24px button,
+ * Back, Forward and the ⋯ in 20px ones, the name 4px in from its edges — about 7px between glyphs.
  */
-export const PANEL_TOGGLE_CLASSES =
-  "size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
+const NAV_ITEM_CLASS = "flex h-6 shrink-0 cursor-pointer items-center rounded-md outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[state=open]:bg-accent data-[state=open]:text-accent-foreground";
 
 /**
- * One panel's toggle. `active` is the panel being open, not the button being pressed: it is
- * `aria-pressed`, which is what paints it.
- *
- * @param {object} props
- * @param {import("react").ElementType} props.icon
- * @param {string} props.label The accessible name — what pressing it does.
- * @param {boolean} props.active
- * @param {() => void} props.onClick
- * @param {string} [props.id] Written as `data-file-panel`, for the host's tests.
- * @param {string} [props.testId]
+ * The text-to-cad logo, the app's menu: the "C" mark, 16px, the same over the home and over a
+ * document (one mark, no wordmark and nothing that moves between the two); over the home its menu
+ * has no Back to home. It is the way back to the home from every page.
  */
-export function PanelToggle({ icon: Icon, label, active, onClick, id, testId }) {
-  return (
-    <TooltipHint content={label.replace(/^(Show|Hide) /, "").replace(/^files$/, "Files")}><Button
-      aria-label={label}
-      aria-pressed={active}
-      className={PANEL_TOGGLE_CLASSES}
-      {...(id ? { "data-file-panel": id } : {})}
-      {...(testId ? { "data-testid": testId } : {})}
-      onClick={onClick}
-      size="icon-xs"
-      type="button"
-      variant="ghost"
-    >
-      <Icon className="size-3.5" />
-    </Button></TooltipHint>
-  );
+function LogoMenu({ onHome, menu }) {
+  const { t } = useI18n();
+  return <AppMenu onHome={onHome} {...menu} trigger={<button type="button" aria-label={t("navbar.menu")} className={cn(NAV_ITEM_CLASS, "cad-navbar-logo justify-start px-1")}
+    data-navbar-menu="" data-logo="mark">
+    <img src={logo} alt="" className="cad-navbar-mark" draggable={false} />
+  </button>} />;
 }
 
-/** Back to the host's home, from a file: an arrow the size of the row's other icon buttons. */
-function BackButton({ onBack }) {
-  return <TooltipHint content="Back"><Button type="button" variant="ghost" size="icon-xs" aria-label="Back" onClick={onBack}
-    className="size-6 text-muted-foreground hover:text-foreground" data-navbar-back="">
-    <ArrowLeft className="size-3.5" />
-  </Button></TooltipHint>;
+// Back and Forward: the row's icon buttons, muted as the ⋯ is, and dimmed where there is nowhere to go.
+const HISTORY_CLASS = cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground");
+
+/**
+ * Back and Forward through the view's own history, as a browser's are: each disabled where it has
+ * nowhere to go. The history is the host's (`viewHistory`), never the page's.
+ */
+function HistoryButtons({ viewHistory }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  return <span className="flex shrink-0 items-center" data-navbar-history="">
+    <button type="button" aria-label={t("navbar.back")} disabled={!viewHistory.canGoBack} onClick={() => { usage.used("navbar_back"); viewHistory.back(); }} className={HISTORY_CLASS}>
+      <ArrowLeft className="size-3.5" aria-hidden="true" />
+    </button>
+    <button type="button" aria-label={t("navbar.forward")} disabled={!viewHistory.canGoForward} onClick={() => { usage.used("navbar_forward"); viewHistory.forward(); }} className={HISTORY_CLASS}>
+      <ArrowRight className="size-3.5" aria-hidden="true" />
+    </button>
+  </span>;
 }
 
-/** The ⋯ after the file's name: the explorer's own menu for that file, opened by a click. */
-function FileActions({ entry, capabilities, platform, onAction }) {
-  const guard = useEntryMenuFocusGuard(onAction);
-  // A host that can do nothing with the file has no ⋯ at all, rather than an empty menu.
-  if (entryMenu(entry, platform, capabilities).length === 0) return null;
+/** The ⋯ after the file's name: what the host can do with the file. A host that can do nothing has none. */
+function FileMenu({ path, platform, capabilities, onAction }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  const items = entryMenu(platform, capabilities, t);
+  if (!items.length) return null;
   return <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild><TooltipHint content="File actions"><button aria-label="File actions" data-testid="file-actions" type="button"
-      className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
+    <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
+      className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
-    </button></TooltipHint></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="w-56" data-entry-menu={entry.path} onCloseAutoFocus={guard.onCloseAutoFocus} sideOffset={6}>
-      <EntryMenuItems capabilities={capabilities} entry={entry} onAction={guard.onAction} platform={platform} surface="dropdown" />
+    </button></DropdownMenuTrigger>
+    <DropdownMenuContent align="start" className="w-56" sideOffset={6}>
+      {items.map(item => <DropdownMenuItem key={item.action} onSelect={() => { usage.used(FILE_ACTION_CONTROLS[item.action]); onAction(item.action, path); }}>{item.label}</DropdownMenuItem>)}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
 
 /**
- * @typedef {object} NavbarFile
- * @property {string} path Root-relative: the file on screen.
- * @property {ReadonlySet<import("./entry-menu.js").EntryAction>} capabilities
- * @property {import("./entry-menu.js").Platform} platform
- * @property {(action: import("./entry-menu.js").EntryAction, entry: import("./entry-menu.js").MenuEntryTarget) => void} onAction
- * @property {{ commit(name: string): Promise<boolean>, cancel(): void } | null} [renaming]
- *   While the host renames the file: a field over its name.
+ * What the name opens: Models and Files, two stock tabs sized to their labels on top of the
+ * explorer's own style, each there only where the host has it (one alone has no tabs). Models is
+ * the host's library's models, by last activity, a row opening its model; Files is the explorer
+ * (`FolderExplorer`), from the file's folder, or for a model where the explorer was last. Built anew on each opening, on Models over a model and on Files over a file.
  */
+function NameMenu({ path, kind, explorer, recent, onPick }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  const [tab, setTab] = useState(() => firstTab(kind, explorer, recent));
+  // The tab on screen as last chosen: a press and the focus it brings both ask for the same tab.
+  const shownTab = useRef(tab);
+  const files = explorer ? <FolderExplorer source={explorer.source} file={path} folder={explorer.folder} onFolderChange={explorer.onFolderChange}
+    onOpen={next => onPick(explorer.onOpen, next)} /> : null;
+  const models = recent ? <ModelList recent={recent} current={path} onOpen={next => { usage.used("models_open"); onPick(recent.onOpen, next); }} /> : null;
+  if (!files || !models) return files ?? models;
+  // A tab a person turns to is a use of it, as the one the menu opens on is (`FileName`).
+  return <Tabs value={tab} onValueChange={next => { if (next !== shownTab.current) usage.used(TAB_CONTROLS[next]); shownTab.current = next; setTab(next); }} className="flex min-h-0 flex-1 flex-col gap-0" data-name-menu="">
+    <TabsList className="mx-2 mt-2 h-7 w-fit shrink-0 self-start">
+      <TabsTrigger value="models">{t("explorer.models")}</TabsTrigger>
+      <TabsTrigger value="files">{t("explorer.files")}</TabsTrigger>
+    </TabsList>
+    <TabsContent value="models" className="flex min-h-0 flex-col">{models}</TabsContent>
+    <TabsContent value="files" className="flex min-h-0 flex-col">{files}</TabsContent>
+  </Tabs>;
+}
+
+/** The tab the name menu opens on: Models over a model, Files over a file, or the one there is. */
+const firstTab = (kind, explorer, recent) => (!explorer ? "models" : !recent ? "files" : kind === "model" ? "models" : "files");
+
+/**
+ * The open document's name, with no glyph. Where the view can show another document it is also the
+ * name menu's door: the name and its chevron, transparent until the pointer is on it, opening the
+ * menu under it. Where it cannot, it is the name alone, in the same place.
+ */
+function FileName({ path, name: given, kind = "file", explorer, recent }) {
+  const [open, setOpen] = useState(false);
+  const mobile = useViewerMobile();
+  const usage = useControlUsage();
+  const name = given || path.split("/").pop() || path;
+  if (!explorer && !recent) return <span className="flex min-w-0 items-center gap-1 px-1" data-file-name=""><span className="truncate">{name}</span></span>;
+  // Opened, the tab's filter has the keyboard (the explorer's, or the Models tab's), so typing
+  // finds a document at once; Down takes it into the rows. A phone keeps its keyboard down, the menu
+  // holding focus itself. Nothing else is focused for the person on opening.
+  const focusFilter = event => {
+    event.preventDefault();
+    const content = event.currentTarget;
+    (mobile ? content : content.querySelector("input") ?? content).focus({ preventScroll: true });
+  };
+  const intoRows = event => {
+    if (event.key !== "ArrowDown" || event.target !== event.currentTarget) return;
+    const first = event.currentTarget.querySelector("[data-model-row]:not(:disabled), [data-explorer-row]");
+    if (!first) return;
+    event.preventDefault();
+    first.focus();
+  };
+  const pick = (opener, next) => { setOpen(false); opener(next); };
+  // Opened, the tab it opens on is a use of that tab (`usage/controls.js`: `models`, `explorer`).
+  return <Popover open={open} onOpenChange={next => { if (next && !open) usage.used(TAB_CONTROLS[firstTab(kind, explorer, recent)]); setOpen(next); }}>
+    <PopoverTrigger asChild>
+      <button type="button" className={cn(NAV_ITEM_CLASS, "min-w-0 shrink gap-1 px-1 text-left")} data-file-name="">
+        <span className="truncate">{name}</span>
+        {/* The name opens its menu; the chevron says so. A plain name (no menu) has none. */}
+        <ChevronDown className="ml-0.5 size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
+    </PopoverTrigger>
+    <PopoverContent align="start" sideOffset={8} data-file-explorer="" onOpenAutoFocus={focusFilter} onKeyDown={intoRows}
+      className={cn(FLOATING_SURFACE_CLASS, "flex max-h-[min(28rem,var(--radix-popover-content-available-height))] w-[17.5rem] max-w-[calc(100vw-1rem)] flex-col overflow-hidden p-0")}>
+      {/* Remounted on each opening, so it starts on its first tab, in the open file's folder. */}
+      <NameMenu path={path} kind={kind} explorer={explorer} recent={recent} onPick={pick} />
+    </PopoverContent>
+  </Popover>;
+}
 
 /**
  * @param {object} props
- * @param {(() => void) | undefined} [props.onBack] Back to the host's home, from a file.
- * @param {{ open: boolean, onToggle: () => void } | null} [props.explorer] The explorer's toggle, where there are files to browse.
- * @param {NavbarFile | null} [props.file] The open file, once the host has named it.
- * @param {boolean} [props.selecting] No file is open: the name's place asks for one.
- * @param {import("react").ReactNode} [props.status] After the name: the unsaved-changes dot.
- * @param {import("react").ReactNode} [props.trailing] The file's actions and its panels' toggles.
- * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
- * @param {import("../../host/types.js").ViewerLinks} [props.links]
- * @param {string} [props.platform] The host's `environment.platform`, which Feedback's issue names.
- * @param {import("../../host/types.js").ClipboardPort} props.clipboard
- * @param {(error: Error) => void} [props.onError]
+ * @param {(() => void) | undefined} [props.onHome] The host's home, where it has one: the menu's Back to home.
+ * @param {{ links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[], colorScheme?: import("../types.js").ColorSchemeSetting, platform?: string } | null} [props.menu]
+ *   The rest of the app's menu: the host's links and the person's settings.
+ * @param {import("../types.js").ViewerHistory | null} [props.history] The view's own history, where the host keeps one: Back and Forward after the logo.
+ * @param {string | null} [props.file] The open file, by its absolute path (a document with no file of its own: its id).
+ * @param {string} [props.name] The document's name where its path does not give it (a model's).
+ * @param {"model" | "file"} [props.kind] What the open document is: its glyph, and the name menu's first tab.
+ * @param {{ source: Pick<import("../types").FileSource, "list" | "search">, folder?: string | null, onOpen(path: string): void } | null} [props.explorer]
+ *   Where the host's files can be browsed: the name menu's Files, from `folder` where given.
+ * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]
+ *   The host's library: the name menu's Models, its models alone.
+ * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
+ *   onAction(action: import("./entry-menu.js").EntryAction, path: string): void } | null} [props.fileMenu]
+ * @param {import("react").ReactNode} [props.trailing] The file's actions.
+ * @param {import("react").ReactNode} [props.actions] Host workflow controls at the right end.
+ * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, controlsRef, links, platform, clipboard, onError, className }) {
-  const name = file ? file.path.split("/").pop() || file.path : "";
+export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, update = null, actions = null, className }) {
+  const { t } = useI18n();
+  const usage = useControlUsage();
+  const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
   return (
-    <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
-      <nav aria-label="Viewer" className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm">
-        {onBack ? <BackButton onBack={onBack} /> : null}
-        {explorer ? <PanelToggle icon={Folders} id="tree" testId="tree-toggle" active={explorer.open}
-          label={explorer.open ? "Hide files" : "Show files"} onClick={explorer.onToggle} /> : null}
-        {file ? <span className="flex min-w-0 items-center gap-1">
-          {file.renaming ? <InlineName initial={name} kind="file" label="Rename file" className="max-w-64"
-            onCancel={file.renaming.cancel} onCommit={file.renaming.commit} /> : <>
-            {/* The name keeps its width longest: it is what the row is about. Its full path, only when it is cut short. */}
-            <TooltipHint content={file.path} overflowOnly><span className="min-w-0 truncate" data-file-name="">{name}</span></TooltipHint>
-            {status}
-            <FileActions entry={{ path: file.path, kind: "file", surface: "navbar" }} capabilities={file.capabilities}
-              platform={file.platform} onAction={file.onAction} />
-          </>}
-        </span> : selecting && explorer ? <span className="truncate text-muted-foreground" data-select-file="">Select file</span> : status}
+    // `pl-3`: the logo's mark (its button's 4px in) stands on the page's 16px gutter, the Home's
+    // grid's left edge (`.cad-library-content`), over the home and over a page alike.
+    <header className={cn(NAVBAR_ROW_CLASS, "pl-3 border-border bg-background text-foreground", className)} data-viewer-navbar="">
+      <nav aria-label={t("navbar.viewer")} className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
+        {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
+        {history ? <HistoryButtons viewHistory={history} /> : null}
+        {file ? <span className="flex min-w-0 items-center">
+          <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
+          {fileMenu ? <FileMenu path={file} {...fileMenu} /> : null}
+        </span> : null}
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>
+        {update}
         {trailing}
-        {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
-        {links ? <FeedbackLink links={links} platform={platform} onError={onError} /> : null}
-        <div ref={controlsRef} className="contents" data-navbar-controls="" />
+        {actions}
       </div>
     </header>
   );

@@ -4,8 +4,8 @@
     robot: lyra (RIGHT hand) | consumers: CAD Viewer, external URDF consumers (RViz/MoveIt)
     units: meters, kilograms, radians | frames: wrist-flange mount face center = origin,
     +Z distal (fingers up), +Y palmar, +X radial (thumb side)
-    root: wrist_mount (frame-only) | source of dimensions: lyra.step.py / lyra_parts/chain.py (mm)
-    meshes: 3MF/, one mm 3MF export per link in that link's part-local frame (scale 0.001); link
+    root: wrist_mount (frame-only) | source of dimensions: src/lyra.py / src/lib/chain.py (mm)
+    meshes: 3MF/, the mm 3MF src/exports.py writes of each link model of src/lyra.py, in that link's part-local frame (scale 0.001); link
     frames sit at joint centers with axes parallel to the palm at zero angles, so all visual
     origins are identity and URDF joint origins are pure translations
     inertials: CAD volume properties at a uniform ASSUMED density chosen so the hand masses
@@ -13,7 +13,7 @@
     only the density is assumed (confidence: estimated)
     collisions: per-link axis-aligned CAD bounding boxes (intentionally coarse)
     assumptions:
-    - joint limits/efforts are assumed tendon-drive values documented in lyra_parts/chain.py
+    - joint limits/efforts are assumed tendon-drive values documented in src/lib/chain.py
     - total mass 0.62 kg is assumed, distributed by CAD volume
   -->
   <link name="wrist_mount" />

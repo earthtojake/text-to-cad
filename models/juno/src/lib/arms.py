@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import math  # noqa: F401  (kept per module convention)
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .juno_lib import (
     ALU,

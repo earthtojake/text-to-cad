@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import body as B
 from lib import geometry as G

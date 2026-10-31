@@ -1,10 +1,22 @@
-from cadgen import step, stl
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cad import model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/fdm.step")
-@stl(out="../STL/fdm.stl")
+
+@model
 def fdm():
-    return tray("fdm")
+    part = tray("fdm")
+    # printed upright: PLA (README)
+    part.material = FinishedMaterial(
+        plastics.pla().material,
+        pbr=PbrProperties.create('Polylactic acid, the common FDM filament', color='#ededebff', metalness=0.0,
+            roughness=0.45),
+    )
+    return part
+
 
 if __name__ == "__main__":
     fdm()

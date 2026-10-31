@@ -1,6 +1,10 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cad import model
+import build123d as bd
 
 from lib.part_common import safe_fillet
 
@@ -60,7 +64,7 @@ def _transition_edges(part):
     return edges
 
 
-@step(out="../STEP/l_bracket.step")
+@model
 def l_bracket():
     """Return the L-bracket model in millimeters."""
     with bd.BuildPart() as bracket:
@@ -100,6 +104,11 @@ def l_bracket():
     part = bracket.part
     part = safe_fillet(part, _transition_edges(part), radius=TRANSITION_FILLET)
     part.label = "l_bracket_gussets_two_hole_directions"
+    part.material = FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Low-carbon mild steel, cold drawn bar', color='#c5c7c8ff', metalness=1.0,
+            roughness=0.4),
+    )  # mild steel, its colour the catalogue's
     return part
 
 

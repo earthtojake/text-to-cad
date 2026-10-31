@@ -97,10 +97,11 @@ export function clampScale(scale, limits) {
  * @param {DrawingBounds|null} bounds
  * @param {number} width CSS pixels.
  * @param {number} height CSS pixels.
- * @param {{ margin?: number }} [options]
+ * @param {{ margin?: number, top?: number }} [options]  `top`: CSS pixels at the pane's top that the
+ *   drawing keeps clear of (the view's tool strip), past its margin.
  * @returns {DrawingTransform}
  */
-export function fitTransform(bounds, width, height, { margin = DRAWING_FIT_MARGIN } = {}) {
+export function fitTransform(bounds, width, height, { margin = DRAWING_FIT_MARGIN, top = 0 } = {}) {
   if (!Array.isArray(bounds) || bounds.length !== 4 || !bounds.every(finite)) {
     throw new Error(
       "fitTransform needs a [minX, minY, maxX, maxY] box of finite numbers; "
@@ -116,8 +117,10 @@ export function fitTransform(bounds, width, height, { margin = DRAWING_FIT_MARGI
   const spanY = Math.abs(maxY - minY);
   // Never let the margin eat the pane: a 30 px pane with a 16 px gutter has no
   // room left, and a non-positive usable size would make the scale 0 or worse.
+  // The strip's room comes off the top, never more than half the pane.
+  const clear = finite(top) && top > 0 ? Math.min(top, height * 0.5) : 0;
   const usableWidth = Math.max(width - 2 * margin, width * 0.5);
-  const usableHeight = Math.max(height - 2 * margin, height * 0.5);
+  const usableHeight = Math.max(height - clear - 2 * margin, (height - clear) * 0.5);
   const scaleX = spanX > 0 ? usableWidth / spanX : Infinity;
   const scaleY = spanY > 0 ? usableHeight / spanY : Infinity;
   const fitted = Math.min(scaleX, scaleY);
@@ -127,7 +130,7 @@ export function fitTransform(bounds, width, height, { margin = DRAWING_FIT_MARGI
   return {
     scale,
     offsetX: width / 2 - centreX * scale,
-    offsetY: height / 2 + centreY * scale
+    offsetY: clear + (height - clear) / 2 + centreY * scale
   };
 }
 

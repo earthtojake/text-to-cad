@@ -1,12 +1,17 @@
 /**
- * `cadgen dxf snapshot` in the page: a `GET /__cad/drawing` payload, on a 2D
- * canvas, as a PNG.
+ * A drawing job on the parity page: a `GET /__cad/drawing` payload, on a 2D
+ * canvas, as a PNG (`cad snapshot` draws by OCCT in the engine).
  *
- * This is the CLI half of the viewer's DXF pane, and deliberately shares its
+ * This is the headless page's half of the viewer's DXF pane, and deliberately shares its
  * whole drawing path (`../lib/drawing2d`): the same fit, the same hairline rule,
  * the same default-pen resolution against the same theme pair. A drawing has
- * no scene, no camera and no lights, so nothing here touches three.js — the
+ * no scene and no lights, so nothing here renders with three.js — the
  * headless entry routes a `dxf` job straight past the mesh pipeline.
+ *
+ * A job may frame it (a plan-view `camera`, the window a Quick Edit's view was
+ * looking at) and draw over it (an `annotation` whose marks lie on the sheet), with the
+ * code the pane draws it with
+ * (`../lib/drawing2d/marks.js`): so a prompt's views come back as they were seen.
  *
  * The payload arrives over the snapshot host's loopback asset server rather
  * than inside the job: cadgen renders it with ezdxf, caches it in the store and
@@ -16,6 +21,9 @@
  */
 import { appThemeColors } from "../lib/appTheme.js";
 import { clearSurface, drawDrawing, fitTransform, prepareDrawing } from "../lib/drawing2d/index.js";
+import { drawAnnotationMarks } from "../lib/drawing2d/marks.js";
+import { planTransform } from "../lib/drawing2d/planView.js";
+import { ANNOTATION_REFERENCE_HEIGHT_PX, normalizeAnnotation } from "./annotation.js";
 
 /** What an output falls back to when the host sent no size (it always does). */
 const DEFAULT_OUTPUT_WIDTH = 1200;
@@ -56,18 +64,20 @@ function canvasContext(width, height) {
  * OUTPUT pixels, so a render scale buys sampling quality and never changes the
  * size of the file.
  */
-function drawOutput(drawable, { width, height, scale, background, foreground }) {
+function drawOutput(drawable, { width, height, scale, background, foreground, camera = null, annotation = null }) {
   const { canvas, context } = canvasContext(
     Math.max(1, Math.round(width * scale)),
     Math.max(1, Math.round(height * scale))
   );
   clearSurface(context, { width, height, pixelRatio: scale, background });
-  if (drawable.bounds) {
-    drawDrawing(context, drawable, {
-      transform: fitTransform(drawable.bounds, width, height),
-      foreground,
-      pixelRatio: scale
-    });
+  // A plan view frames the window it names; without one the drawing is fitted whole.
+  const transform = camera ? planTransform(camera, width, height)
+    : drawable.bounds ? fitTransform(drawable.bounds, width, height) : null;
+  if (drawable.bounds && transform) {
+    drawDrawing(context, drawable, { transform, foreground, pixelRatio: scale });
+  }
+  if (transform && annotation?.marks?.length) {
+    drawAnnotationMarks(context, annotation.marks, { transform, pixelRatio: scale, lineScale: height / ANNOTATION_REFERENCE_HEIGHT_PX });
   }
   if (canvas.width === width && canvas.height === height) {
     return canvas.toDataURL("image/png");
@@ -82,7 +92,18 @@ function drawOutput(drawable, { width, height, scale, background, foreground }) 
 }
 
 /**
+ * A job's annotation, checked as every annotation is: on a drawing its points are in drawing
+ * coordinates, on the sheet.
+ */
+function drawingAnnotation(raw) {
+  return raw == null ? null : normalizeAnnotation(raw);
+}
+
+/**
  * Render one resolved `dxf` snapshot job.
+ *
+ * What the picture says about itself (an empty drawing) is cadgen's to say,
+ * and it does, beside the job; the page only paints.
  *
  * @param {object} job The resolved render job; `job.resolved.drawingUrl` names the payload.
  * @returns {Promise<object>} The host's result shape: `{ ok, mode, outputs, warnings }`.
@@ -100,6 +121,7 @@ export async function runHeadlessDrawingJob(job) {
     throw new Error(`the drawing payload could not be read (HTTP ${response.status} for ${url})`);
   }
   const drawable = prepareDrawing(await response.json());
+  const annotation = drawingAnnotation(job?.annotation);
   const warnings = [];
   if (!drawable.bounds) {
     // A true answer, and one nobody would guess from a blank PNG.
@@ -121,7 +143,9 @@ export async function runHeadlessDrawingJob(job) {
         height,
         scale,
         background: transparent ? null : background,
-        foreground
+        foreground,
+        camera: output?.camera && typeof output.camera === "object" ? output.camera : null,
+        annotation
       })
     };
   });
@@ -131,6 +155,6 @@ export async function runHeadlessDrawingJob(job) {
     appearance: job?.display?.appearance === "dark" ? "dark" : "light",
     primitiveCount: drawable.primitiveCount,
     outputs,
-    warnings
+    warnings: []
   };
 }

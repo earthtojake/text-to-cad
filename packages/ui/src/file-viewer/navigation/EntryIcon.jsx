@@ -1,12 +1,4 @@
-import {
-  Bot,
-  Box,
-  DraftingCompass,
-  FileBox,
-  LoaderCircle,
-  Printer,
-  Triangle
-} from "lucide-react";
+import { File, LoaderCircle } from "lucide-react";
 
 import { cn } from "@text-to-cad/ui/utils";
 import {
@@ -14,24 +6,17 @@ import {
   entryIconKind
 } from "./entryIconKind.js";
 
-// One icon table for every surface that lists files — the sidebar, the
-// explorer, and the home list — so a file cannot read as one thing in
-// one place and something else in another.
+// One glyph for every CAD file, on every surface that lists files — the
+// explorer, the Home, the name menu: lucide's plain `File`, so a file reads as
+// a file at a glance, and the name beside it says which kind. (A model, built
+// from code, is lucide's `Box`: `DocumentGlyph`.) Only a file still loading
+// differs: the spinner.
 const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.LOADING]: LoaderCircle,
-  // A solid cube for the solid-model format; STL gets the triangle it is
-  // actually made of, so mesh and B-rep never read alike.
-  [ENTRY_ICON_KIND.STEP]: Box,
-  [ENTRY_ICON_KIND.STL_MESH]: Triangle,
-  // 3MF is the 3D-print package.
-  [ENTRY_ICON_KIND.THREE_MF_MESH]: Printer,
-  [ENTRY_ICON_KIND.GLB_MESH]: FileBox,
-  [ENTRY_ICON_KIND.DXF]: DraftingCompass,
-  [ENTRY_ICON_KIND.ROBOT]: Bot
 };
 
 export function entryIconComponent(entry, sourceFormat, status) {
-  return ENTRY_ICON_COMPONENTS[entryIconKind(entry, { sourceFormat, status })] || Box;
+  return ENTRY_ICON_COMPONENTS[entryIconKind(entry, { sourceFormat, status })] || File;
 }
 
 // A file's icon says what it IS — nothing more. How the file came to exist (a

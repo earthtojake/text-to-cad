@@ -19,8 +19,8 @@ Units: millimetres. Right-handed.
 So the front axle is x = 0, the rear axle is x = -3600, the ground is z = 0,
 and the car is mirror-symmetric about the y = 0 plane. Every part module
 builds in these car coordinates directly (no part-local frames) so the
-assembly is a flat list of correctly-placed children and the animation sidecar
-can rotate things about real, stated pivots.
+assembly is a flat list of correctly-placed children and `f1.py`'s joints
+turn things about real, stated pivots.
 
 --------------------------------------------------------------------------
 DESIGN LANGUAGE  (the aesthetic rubric, expressed as rules)
@@ -65,7 +65,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 # ==========================================================================
 # PACKAGE — overall vehicle
@@ -200,8 +200,8 @@ BEAM_WING_CHORD = 175.0
 # SUSPENSION HARDPOINTS — the single source of truth
 #
 # Stated for the LEFT (+Y) side; the right side is the y-mirror. Every
-# suspension member, the uprights, the steering rack and the animation sidecar
-# read these, so a member never "nearly" reaches its joint.
+# suspension member, the uprights, the steering rack and `f1.py`'s steering
+# motion read these, so a member never "nearly" reaches its joint.
 #
 # The two front ball joints DEFINE the steering axis. The upright, brake, hub
 # and wheel rotate about that axis; the wishbones do not move, because their
@@ -343,43 +343,43 @@ SHOULDER_LINE = (
 
 # Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
 # Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-RED = (0.520, 0.043, 0.038)  # the bodywork red — deep, slightly warm
-RED_DEEP = (0.240, 0.022, 0.020)  # shadowed / inner face of a red panel
+# bd.Color(...) would import the CAD kernel when this module loads.
+RED = "#bf3a37"  # the bodywork red — deep, slightly warm
+RED_DEEP = "#862927"  # shadowed / inner face of a red panel
 
-CARBON = (0.072, 0.078, 0.088)  # primary structural carbon, near black
+CARBON = "#4c4f54"  # primary structural carbon, near black
 CARBON_GLOSS = RED  # painted outer bodywork skin — SEE ABOVE
-CARBON_WEAVE = (0.118, 0.108, 0.106)  # exposed twill, warmed toward the red
-CARBON_MATTE = (0.088, 0.090, 0.096)  # matte underfloor / inner surfaces
+CARBON_WEAVE = "#605c5c"  # exposed twill, warmed toward the red
+CARBON_MATTE = "#545557"  # matte underfloor / inner surfaces
 
 # Exposed metal is deliberately GUNMETAL, not bright. At 0.56/0.70 the
 # suspension and halo were the brightest objects in every view and pulled the
 # eye straight off the bodywork — the car read as a white linkage diagram
 # wearing a black shell. Real machined titanium under studio light is much
 # darker than intuition suggests. Keep metals below the accent in value.
-TITANIUM = (0.395, 0.408, 0.430)  # machined uprights, wishbone tips
-ALLOY = (0.545, 0.558, 0.578)  # bright machined aluminium
-ANODIZED = (0.235, 0.255, 0.285)  # dark anodized brackets and clevises
-INCONEL = (0.318, 0.278, 0.238)  # heat-tinted exhaust / turbine
-MAGNESIUM = (0.400, 0.398, 0.386)  # cast gearbox / engine block
-STEEL = (0.470, 0.480, 0.500)  # fasteners, Dzus, pins
-COPPER = (0.520, 0.330, 0.205)  # coolers, bus bars
-GOLD_FOIL = (0.640, 0.520, 0.255)  # heat-shield foil, sparingly
+TITANIUM = "#a9abaf"  # machined uprights, wishbone tips
+ALLOY = "#c3c5c8"  # bright machined aluminium
+ANODIZED = "#858a91"  # dark anodized brackets and clevises
+INCONEL = "#999086"  # heat-tinted exhaust / turbine
+MAGNESIUM = "#aaa9a7"  # cast gearbox / engine block
+STEEL = "#b6b8bc"  # fasteners, Dzus, pins
+COPPER = "#bf9b7d"  # coolers, bus bars
+GOLD_FOIL = "#d1bf8a"  # heat-shield foil, sparingly
 
 # The accent was vermillion when the body was black. On a red car vermillion
 # goes muddy — two reds a few steps apart read as a printing error, not a
 # stripe. A warm chalk white is the classic answer: it reads crisply on the
 # red skin AND on the black carbon, so the same accent still ties the whole
 # car together, which was the point of having exactly one.
-ACCENT = (0.910, 0.892, 0.862)  # warm chalk white — THE accent
-ACCENT_DEEP = (0.560, 0.545, 0.520)  # shadowed side of the accent
+ACCENT = "#f5f2ef"  # warm chalk white — THE accent
+ACCENT_DEEP = "#c5c3bf"  # shadowed side of the accent
 
-RUBBER = (0.052, 0.052, 0.056)  # slick tread
-RUBBER_SIDEWALL = (0.068, 0.068, 0.072)
-CARBON_DISC = (0.140, 0.132, 0.126)  # carbon brake disc
-GLASS = (0.030, 0.055, 0.090)  # mirror glass, camera lenses
-SEAT = (0.078, 0.080, 0.086)
-BELT = (0.120, 0.122, 0.130)
+RUBBER = "#404043"  # slick tread
+RUBBER_SIDEWALL = "#4a4a4c"
+CARBON_DISC = "#696663"  # carbon brake disc
+GLASS = "#304255"  # mirror glass, camera lenses
+SEAT = "#4f5053"
+BELT = "#616265"
 
 # ==========================================================================
 # DERIVED CASCADE HELPERS

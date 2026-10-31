@@ -25,17 +25,20 @@ export function fallbackCadWebGlRendererAttributes(options = {}) {
   };
 }
 
+// `canvas`: draw on this canvas (an OffscreenCanvas, say) rather than one the renderer creates.
 export function createCadWebGlRenderer(THREE, {
   allowFallback = false,
   isRecoverableError = () => true,
+  canvas = undefined,
   ...options
 } = {}) {
+  const on = attributes => (canvas ? { ...attributes, canvas } : attributes);
   try {
-    return new THREE.WebGLRenderer(cadWebGlRendererAttributes(options));
+    return new THREE.WebGLRenderer(on(cadWebGlRendererAttributes(options)));
   } catch (error) {
     if (!allowFallback || !isRecoverableError(error)) {
       throw error;
     }
-    return new THREE.WebGLRenderer(fallbackCadWebGlRendererAttributes(options));
+    return new THREE.WebGLRenderer(on(fallbackCadWebGlRendererAttributes(options)));
   }
 }

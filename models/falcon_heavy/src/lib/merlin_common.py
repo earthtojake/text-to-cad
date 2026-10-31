@@ -29,7 +29,7 @@ from __future__ import annotations
 
 from math import cos, radians, sin
 
-from cadgen import build123d as bd
+import build123d as bd
 
 DISPLAY_NAME = "SpaceX Merlin 1D sea-level engine (educational public-source reconstruction)"
 
@@ -55,12 +55,14 @@ EXPANSION_RATIO = (EXIT_RADIUS / THROAT_RADIUS) ** 2   # ~16 effective. LOW
 #    r_c <= 1830 - exit/2), so the vehicle copy uses 960 mm exit / 240 mm
 #    throat - still inside the public 0.93-1.10 m photo band, eps = 16. LOW.
 # 2) DETAIL_BOLTS toggles decorative bolt/bellows loops so 27 instances stay
-#    tractable; geometry of retained parts is identical.
+#    tractable; geometry of retained parts is identical. The vehicle builds
+#    every engine without them, so the constant is False here (it was a
+#    global the vehicle library set before each build).
 EXIT_DIAMETER = 960.0
 EXIT_RADIUS = EXIT_DIAMETER / 2.0
 THROAT_RADIUS = 120.0
 EXPANSION_RATIO = (EXIT_RADIUS / THROAT_RADIUS) ** 2
-DETAIL_BOLTS = True
+DETAIL_BOLTS = False
 
 BELL_LENGTH = 1165.0          # 80% Rao length for eps~16 at Rt=130. schematic
 Z_THROAT = BELL_LENGTH
@@ -96,34 +98,33 @@ CUT_INNER_ARC_DEG = 266.0
 # Palette
 # ---------------------------------------------------------------------------
 
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-COL_BELL_OUTER = (0.45, 0.46, 0.49, 1.0)     # dark oxidized regen bell
-COL_BELL_INNER = (0.10, 0.10, 0.12, 1.0)     # dark nozzle interior
-COL_CHAMBER = (0.58, 0.56, 0.52, 1.0)        # warm alloy chamber
-COL_DOME = (0.66, 0.67, 0.69, 1.0)
-COL_STRUCT = (0.46, 0.48, 0.52, 1.0)
-COL_PUMP = (0.70, 0.72, 0.74, 1.0)           # bright aluminum pump
-COL_GG = (0.42, 0.42, 0.45, 1.0)
-COL_DUCT = (0.60, 0.62, 0.65, 1.0)
-COL_EXHAUST = (0.30, 0.29, 0.30, 1.0)        # heat-stained exhaust duct
-COL_VALVE = (0.34, 0.36, 0.39, 1.0)
-COL_HARNESS = (0.18, 0.19, 0.20, 1.0)
-COL_BOLT = (0.55, 0.56, 0.58, 1.0)
-COL_CLAMP = (0.38, 0.39, 0.41, 1.0)
-COL_SENSOR = (0.25, 0.27, 0.30, 1.0)
-COL_TINT_STRAW = (0.60, 0.48, 0.33, 1.0)     # restrained heat tint
-COL_TINT_BRONZE = (0.47, 0.37, 0.41, 1.0)
-COL_TINT_BLUE = (0.37, 0.43, 0.53, 1.0)
+# Plain RGB(A) tuples: build123d's Shape.color setter builds the Color on
+# assignment.
+COL_BELL_OUTER = "#b3b5ba"     # dark oxidized regen bell
+COL_BELL_INNER = "#595961"     # dark nozzle interior
+COL_CHAMBER = "#c8c5bf"        # warm alloy chamber
+COL_DOME = "#d4d6d8"
+COL_STRUCT = "#b5b8bf"
+COL_PUMP = "#dadddf"           # bright aluminum pump
+COL_GG = "#adadb3"
+COL_DUCT = "#cbced3"
+COL_EXHAUST = "#959395"        # heat-stained exhaust duct
+COL_VALVE = "#9ea2a8"
+COL_HARNESS = "#76797c"
+COL_BOLT = "#c4c5c8"
+COL_CLAMP = "#a6a8ac"
+COL_SENSOR = "#898e95"
+COL_TINT_STRAW = "#cbb89b"     # restrained heat tint
+COL_TINT_BRONZE = "#b6a4ac"
+COL_TINT_BLUE = "#a4afc0"
 
 # schematic flow palette (translucent)
-COL_LOX = (0.20, 0.45, 0.95, 0.60)           # LOX = blue
-COL_RP1 = (0.85, 0.60, 0.15, 0.60)           # RP-1 = amber
-COL_HOT = (0.95, 0.42, 0.12, 0.55)           # hot gas = orange/red
-COL_REGEN = (0.85, 0.60, 0.15, 0.35)         # regen band, faint amber
-COL_UNKNOWN = (0.62, 0.62, 0.68, 0.35)       # inferred placeholder gray
-COL_INJECTOR = (0.70, 0.70, 0.72, 0.60)
+COL_LOX = "#7cb3f999"           # LOX = blue
+COL_RP1 = "#edcb6c99"           # RP-1 = amber
+COL_HOT = "#f9ad618c"           # hot gas = orange/red
+COL_REGEN = "#edcb6c59"         # regen band, faint amber
+COL_UNKNOWN = "#ceced759"       # inferred placeholder gray
+COL_INJECTOR = "#dadadd99"
 
 
 def _label(part, label: str, color: bd.Color | None = None):

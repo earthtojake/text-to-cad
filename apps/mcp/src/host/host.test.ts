@@ -1,27 +1,28 @@
 import { describe, expect, it, vi } from 'vitest';
+import { encodeBase64 } from '@text-to-cad/core/client';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
-import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
 import { frameClipboard } from './clipboard';
-import { createFilesystemSource } from './files';
 import { chatReach, createChatPromptContext } from './prompt';
-import { relaunch } from './relaunch';
-import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
-import { createViewSync, LOST_AFTER, NEWS_MS, SYNC_MS } from './sync';
-import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
+import { createServer, ServerError, type SyncReply, type SyncRequest, type ViewEvent } from './server';
+import { createViewSync, LOST_AFTER, SYNC_MS } from './sync';
+import { createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
 function fakeHost(respond: (message: any) => unknown) {
   const listeners = new Set<(event: MessageEvent) => void>();
   const posted: any[] = [];
-  const deliver = (data: unknown) => { for (const listener of [...listeners]) listener({ data } as MessageEvent); };
-  const host = {
+  const host: { postMessage(message: any): void } = {
     postMessage(message: any) {
       posted.push(message);
       if (message.id === undefined || message.method === undefined) return;
       const result = respond(message);
       if (result !== undefined) queueMicrotask(() => deliver({ jsonrpc: '2.0', id: message.id, result }));
     },
+  };
+  // What the host posts arrives from the host's window; `source` lets a test speak as another frame.
+  const deliver = (data: unknown, source: unknown = host) => {
+    for (const listener of [...listeners]) listener({ data, source } as MessageEvent);
   };
   const self = {
     addEventListener: (_type: string, listener: any) => listeners.add(listener),
@@ -37,12 +38,46 @@ describe('the MCP Apps bridge', () => {
     await bridge.initialize({ name: 'CAD', version: 'test' });
     expect(bridge.hostContext.theme).toBe('dark');
     expect(frame.posted.some(message => message.method === 'ui/notifications/initialized')).toBe(true);
-    frame.deliver({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { structuredContent: { launch: { page: 'home' } } } });
+    frame.deliver({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { structuredContent: { launch: { page: 'home' } }, _meta: { 'dev.texttocad/httpToken': 'session-capability' } } });
     const seen: ToolResult[] = [];
     bridge.onToolResult(result => seen.push(result));
     expect(seen[0].structuredContent).toEqual({ launch: { page: 'home' } });
+    expect(seen[0]._meta?.['dev.texttocad/httpToken']).toBe('session-capability');
     frame.deliver({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'light' } });
     expect(bridge.hostContext.theme).toBe('light');
+  });
+
+  it('hears only the host: another frame can neither answer a request nor speak as the host', async () => {
+    const frame = fakeHost(() => undefined);
+    const bridge = createBridge(frame.host, frame.self as any);
+    const other = { postMessage() {} };
+    const seen: ToolResult[] = [];
+    bridge.onToolResult(result => seen.push(result));
+    frame.deliver({ jsonrpc: '2.0', method: 'ui/notifications/tool-result', params: { structuredContent: { launch: { page: 'forged' } } } }, other);
+    frame.deliver({ jsonrpc: '2.0', method: 'ui/notifications/host-context-changed', params: { theme: 'dark' } }, null);
+    expect(seen).toEqual([]);
+    expect(bridge.hostContext.theme).toBeUndefined();
+
+    const pending = bridge.callTool('cad_sync', { view: 'v' });
+    const call = frame.posted.find(message => message.method === 'tools/call');
+    frame.deliver({ jsonrpc: '2.0', id: call.id, result: { structuredContent: { from: 'other' } } }, other);
+    frame.deliver({ jsonrpc: '2.0', id: call.id, result: { structuredContent: { from: 'host' } } });
+    await expect(pending).resolves.toEqual({ structuredContent: { from: 'host' } });
+  });
+
+  it('numbers its requests from a random start, one apart', async () => {
+    const starts = new Set<number>();
+    for (let at = 0; at < 4; at += 1) {
+      const frame = fakeHost(() => ({}));
+      const bridge = createBridge(frame.host, frame.self as any);
+      await bridge.callTool('cad_sync', { view: 'v' });
+      await bridge.callTool('cad_sync', { view: 'v' });
+      const [first, second] = frame.posted.filter(message => message.method === 'tools/call').map(message => message.id);
+      expect(Number.isSafeInteger(first)).toBe(true);
+      expect(second).toBe(first + 1);
+      starts.add(first);
+    }
+    expect(starts.size).toBeGreaterThan(1);
   });
 
   it('cancels an aborted request with the host and rejects it', async () => {
@@ -84,7 +119,7 @@ describe('a view\'s one call each second', () => {
   it('answers the agent, asks again at once after news, and otherwise once a second; nothing is held', async () => {
     vi.useFakeTimers();
     try {
-      const launch = { protocol: 4, page: 'viewer' as const, model: '/p/b.step', root: { kind: 'global' as const, path: '/', name: '/' }, explore: false };
+      const launch = { protocol: 5, page: 'viewer' as const, model: '/p/b.step' };
       const { server, requests, replied } = syncing([
         { events: [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }] as ViewEvent[] },
         { events: [{ seq: 3, type: 'capture', requestId: 'c2' }] as ViewEvent[] },
@@ -95,7 +130,7 @@ describe('a view\'s one call each second', () => {
       const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
         show: next => shown.push(next.model),
         capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
-        state: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
+        state: () => ({ model: '/p/a.step', selection: ['/p/a.step#bracket/f:bracket.extrude1.3'] }),
       });
       sync.run(stop.signal);
       await vi.advanceTimersByTimeAsync(0);
@@ -106,7 +141,7 @@ describe('a view\'s one call each second', () => {
       expect(requests).toHaveLength(4);
       // What the view shows goes up once, and again only when it changes.
       expect(requests.map(request => Boolean(request.state))).toEqual([true, false, false, false]);
-      expect(requests[0]).toMatchObject({ view: 'v1', surface: 'tab', model: '/p/a.step', state: { selection: ['/p/a.step#o1.f2'] } });
+      expect(requests[0]).toMatchObject({ view: 'v1', surface: 'tab', model: '/p/a.step', state: { selection: ['/p/a.step#bracket/f:bracket.extrude1.3'] } });
       expect(shown).toEqual(['/p/b.step']);
       expect(replied).toEqual(expect.arrayContaining([
         { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
@@ -157,41 +192,65 @@ describe('a view\'s one call each second', () => {
     } finally { vi.useRealTimers(); }
   });
 
-  it('reads the catalog again only when its revision moves past the one applied, and carries a STEP\'s build feed', async () => {
+  // A server that answers, refusing the view (the host restarted it since the view opened), is not
+  // gone: the view says what it said, never to quit and reopen the host (#729).
+  it('says what the server answered when it refuses every sync', async () => {
+    vi.useFakeTimers();
+    try {
+      const refusal = 'This CAD view was opened before CAD restarted: close it and open CAD again.';
+      const server = { sync: vi.fn(async (): Promise<SyncReply> => { throw new ServerError(refusal); }), reply: async () => {} };
+      const said: [boolean, string | undefined][] = [];
+      const stop = new AbortController();
+      createViewSync(server, { id: 'v1', surface: 'tab', model: () => null }, {
+        show: () => {}, capture: async () => new Blob(), state: () => ({}),
+        connection: (connected, refused) => said.push([connected, refused]),
+      }).run(stop.signal);
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(said).toEqual([[false, refusal]]);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('reads the catalog again only when its revision moves past the one applied', async () => {
     vi.useFakeTimers();
     try {
       const { server, requests } = syncing([
         { catalog: { revision: 'r1' } },
-        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'building', feedCursor: 'k1' }] as SyncReply['previews'] },
-        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'done', feedCursor: 'k2' }] as SyncReply['previews'] },
-        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'done', feedCursor: 'k2' }] as SyncReply['previews'] },
+        { catalog: { revision: 'r2' } },
+        { catalog: { revision: 'r2' } },
+        { catalog: { revision: 'r2' } },
       ]);
       let applied = 'r1';
       const refreshes: (string | null)[] = [];
       const stop = new AbortController();
       const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step' },
         { show() {}, capture: async () => new Blob(), state: () => ({}) });
-      sync.watch({ root: { kind: 'workspace', path: '/p' }, file: () => 'a.step', revision: () => applied,
+      sync.watch({ file: () => '/p/a.step', revision: () => applied,
         refresh: async file => { refreshes.push(file); applied = 'r2'; } });
-      const feed: string[] = [];
-      sync.observePreview('a.step', preview => feed.push(String(preview.state)), () => {});
       sync.run(stop.signal);
       await vi.advanceTimersByTimeAsync(0);
-      expect(requests[0].watch).toEqual({ root: { kind: 'workspace', path: '/p' }, file: 'a.step', previews: ['a.step'] });
+      expect(requests[0].watch).toEqual({ file: '/p/a.step' });
       expect(refreshes).toEqual([]);
       await vi.advanceTimersByTimeAsync(SYNC_MS);
-      expect(refreshes).toEqual(['a.step']);
-      // A moving build is asked after sooner; a still one waits the second.
-      expect(feed).toEqual(['building']);
-      await vi.advanceTimersByTimeAsync(NEWS_MS);
-      expect(feed).toEqual(['building', 'done']);
-      await vi.advanceTimersByTimeAsync(NEWS_MS);
-      expect(feed).toEqual(['building', 'done', 'done']);
-      await vi.advanceTimersByTimeAsync(NEWS_MS);
+      expect(refreshes).toEqual(['/p/a.step']);
+      await vi.advanceTimersByTimeAsync(2 * SYNC_MS);
       expect(requests).toHaveLength(4);
-      expect(refreshes).toEqual(['a.step']);
+      expect(refreshes).toEqual(['/p/a.step']);
       stop.abort();
     } finally { vi.useRealTimers(); }
+  });
+});
+
+describe('the page\'s own calls', () => {
+  it('carry the app capability: cad_sync and cad_capture_reply as `app`', async () => {
+    const calls: any[] = [];
+    const server = createServer({ callTool: async (name, args) => { calls.push({ name, args }); return { structuredContent: { events: [] } }; } }, 'app-capability');
+    await server.sync({ view: 'v', surface: 'tab', model: null });
+    await server.reply('r1', { png: 'iVBORw0KGgo=' });
+    expect(calls).toEqual([
+      { name: 'cad_sync', args: { view: 'v', surface: 'tab', model: null, app: 'app-capability' } },
+      { name: 'cad_capture_reply', args: { requestId: 'r1', png: 'iVBORw0KGgo=', app: 'app-capability' } },
+    ]);
   });
 });
 
@@ -203,11 +262,12 @@ describe('the fetch tunnel', () => {
         calls.push({ name, args });
         return { structuredContent: { status: args.method === 'HEAD' ? 200 : 201, headers: { 'content-type': 'application/json', 'content-length': '11' }, body: encodeBase64(new TextEncoder().encode('{"ok":true}')) } };
       },
-    });
-    const tunnel = createTunnelFetch(server, { kind: 'workspace', path: '/project' });
-    const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/surfaces?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
-    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { root: { kind: 'workspace', path: '/project' }, method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/surfaces?x=1` } });
+    }, 'app-capability');
+    const tunnel = createTunnelFetch(server);
+    const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/parts?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
+    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/parts?x=1` } });
     expect(calls[0].args.headers['x-cadgen-viewer']).toBe('1');
+    expect(calls[0].args.headers['x-cadgen-app']).toBe('app-capability');
     expect(new TextDecoder().decode(decodeBase64(calls[0].args.body))).toBe('{"a":1}');
     expect(posted.status).toBe(201);
     expect(await posted.json()).toEqual({ ok: true });
@@ -215,102 +275,162 @@ describe('the fetch tunnel', () => {
     expect([head.status, head.headers.get('content-length'), await head.text()]).toEqual([200, '11', '']);
   });
 
-  it('turns a failed call into the TypeError fetch throws', async () => {
-    const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }), { kind: 'workspace', path: '/p' });
+  it('keeps version reads from occupying a host call slot', async () => {
+    const calls: any[] = [];
+    const server = createServer({ callTool: async (_name, args) => {
+      calls.push(args);
+      return { structuredContent: { status: 200, headers: {}, body: '' } };
+    } }, 'app-capability');
+    await createTunnelFetch(server)(`${TUNNEL_ORIGIN}/__cad/api/doc/part/version?after=v&wait=60`);
+    expect(new URL(calls[0].url).searchParams.get('wait')).toBe('0');
+  });
+
+  it('inflates a body the server gzipped for the trip, and refuses an encoding it cannot read', async () => {
+    const json = JSON.stringify({ entries: Array.from({ length: 200 }, (_, index) => ({ file: `parts/part-${index}.step` })) });
+    const gzipped = new Uint8Array(await new Response(new Response(json).body!.pipeThrough(new CompressionStream('gzip'))).arrayBuffer());
+    let encoding = 'gzip';
+    const server = createServer({
+      callTool: async () => ({ structuredContent: { status: 200, encoding, body: encodeBase64(gzipped),
+        headers: { 'content-type': 'application/json', 'content-length': String(json.length) } } }),
+    }, 'app-capability');
+    const tunnel = createTunnelFetch(server);
+    const reply = await tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`);
+    expect([reply.headers.get('content-length'), await reply.text()]).toEqual([String(json.length), json]);
+    encoding = 'br';
     await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
   });
-});
 
-describe('a tab restored from an older build', () => {
-  it('is launched again as it was: the home, a thread\'s tab, a file\'s tab or an agent\'s model', async () => {
-    const root = { kind: 'workspace' as const, path: '/work', name: 'work' };
-    const calls: [string, Record<string, unknown>][] = [];
-    const bridge = { callTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
-      calls.push([name, args]);
-      return { structuredContent: { launch: { protocol: 3, page: name === 'cad_home' ? 'home' : 'viewer', model: (args.model as string) || null, root, explore: true } } } as ToolResult;
-    }) };
-    const stale = (patch: object) => ({ protocol: 2, page: 'viewer' as const, model: null, root, explore: true, ...patch });
-    expect((await relaunch(bridge, stale({ page: 'home', surface: 'sidebar' }))).page).toBe('home');
-    await relaunch(bridge, stale({ surface: 'tab' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/a b.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/link #2?.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: 'C:\\work\\b.step' }));
-    const agent = await relaunch(bridge, stale({ surface: 'agent', model: '/work/parts/a.step' }));
-    expect(calls).toEqual([
-      ['cad_home', {}], ['cad_tab', {}],
-      ['cad_file', { file: { name: 'a b.step', resourceUri: 'file:///work/parts/a%20b.step' } }],
-      ['cad_file', { file: { name: 'link #2?.step', resourceUri: 'file:///work/parts/link%20%232%3F.step' } }],
-      ['cad_file', { file: { name: 'b.step', resourceUri: 'file:///C:/work/b.step' } }],
-      ['cad_launch', { model: '/work/parts/a.step' }],
-    ]);
-    expect([agent.protocol, agent.surface]).toEqual([3, 'agent']);
+  it('turns a failed call into the TypeError fetch throws', async () => {
+    const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }, 'app-capability'));
+    await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+  });
+
+  it('reads a body longer than one reply a part at a time, each within the bound and naming the body it continues, and hands over the whole', async () => {
+    const bytes = pattern(3 * TUNNEL_REPLY_MAX_BYTES + 1000);
+    const parted = servingInParts(bytes);
+    const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+    expect([reply.status, reply.headers.get('content-length'), reply.headers.get('content-range')]).toEqual([200, String(bytes.length), null]);
+    expect(same(new Uint8Array(await reply.arrayBuffer()), bytes)).toBe(true);
+    expect(parted.ranges).toEqual([0, 1, 2, 3].map(part => `bytes=${part * TUNNEL_REPLY_MAX_BYTES}-${Math.min(bytes.length, (part + 1) * TUNNEL_REPLY_MAX_BYTES) - 1}`));
+    expect(Math.max(...parted.sizes)).toBe(TUNNEL_REPLY_MAX_BYTES);
+    // Every part after the first names the body, which the server kept and cuts the part from.
+    expect(parted.continues).toEqual([null, '"v1"', '"v1"', '"v1"']);
+  });
+
+  it('fails the read of a body that changed between its parts, or whose parts are out of place', async () => {
+    const bytes = pattern(TUNNEL_REPLY_MAX_BYTES + 10);
+    for (const parted of [
+      servingInParts(bytes, { etag: first => (first ? '"rewritten"' : '"v1"') }),
+      servingInParts(bytes, { offset: first => (first ? first + 1 : 0) }),
+    ]) {
+      const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+      await expect(reply.arrayBuffer()).rejects.toThrow(TypeError);
+    }
   });
 });
 
-describe('a filesystem, the file on screen alone', () => {
-  it('lists nothing, and hears only the file that stayed change, not another file shown', async () => {
-    let entries: any[] = [{ file: '/Users/me/.work/a.step', rootRelativeFile: 'Users/me/.work/a.step', hash: '1' }];
-    const listeners = new Set<() => void>();
-    const changed = () => { for (const listener of [...listeners]) listener(); };
-    const client = { getSnapshot: () => ({ entries, hydrated: true }), subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); } } as any;
-    const source = createFilesystemSource(client, { kind: 'global', path: '/', name: '/' }, { id: 'fs' });
-    expect([source.list, source.paths]).toEqual([undefined, undefined]);
-    const seen: unknown[] = [];
-    source.subscribe!(change => seen.push(change.changes));
-    entries = [{ ...entries[0], hash: '2' }];
-    changed();
-    entries = [{ file: '/Users/me/b.stl', rootRelativeFile: 'Users/me/b.stl', hash: '1' }];
-    changed();
-    expect(seen).toEqual([[{ kind: 'content', path: 'Users/me/.work/a.step', revision: expect.any(String) }]]);
-  });
+/** `length` bytes that differ from part to part. */
+function pattern(length: number) {
+  return new Uint8Array(length).map((_, index) => (index * 7 + (index >> 12)) & 255);
+}
 
-  it('names its files absolutely in copied references, where a project names them by its own paths', () => {
-    const client = { getSnapshot: () => ({ entries: [], hydrated: true }), subscribe: () => () => {} } as any;
-    const filesystem = (path: string) => createFilesystemSource(client, { kind: 'global', path, name: path }, { id: path });
-    expect(filesystem('/').referencePath?.('Users/me/a.step')).toBe('/Users/me/a.step');
-    expect(filesystem('C:\\').referencePath?.('work/a.step')).toBe('C:\\work\\a.step');
-    // A project's catalog keeps the default: the path under its root.
-    expect(createCatalogFileSource(client, { id: 'w', rootName: 'project' }).referencePath).toBeUndefined();
-  });
-});
+function same(a: Uint8Array, b: Uint8Array) {
+  if (a.length !== b.length) return false;
+  for (let index = 0; index < a.length; index += 1) if (a[index] !== b[index]) return false;
+  return true;
+}
+
+/**
+ * A server that answers a ranged GET as `cad-mcp` does (`cad_server/mcp/tunnel.py`) for a body
+ * longer than the range: its part (206). `etag` names the body a part is of, `offset` moves where
+ * a part starts, and `alter` changes a part's bytes.
+ */
+function servingInParts(bytes: Uint8Array, {
+  etag = (_first: number) => '"v1"', offset = (first: number) => first, alter = (part: Uint8Array, _first: number) => part,
+} = {}) {
+  const ranges: string[] = [];
+  const continues: (string | null)[] = [];
+  const sizes: number[] = [];
+  const server = createServer({
+    callTool: async (_name, args: any) => {
+      ranges.push(args.headers.range);
+      continues.push(args.headers['if-range'] ?? null);
+      const asked = /^bytes=(\d+)-(\d+)$/.exec(args.headers.range)!;
+      const first = offset(Number(asked[1]));
+      const last = Math.min(bytes.length - 1, Number(asked[2]));
+      const part = alter(bytes.slice(first, last + 1), first);
+      sizes.push(part.length);
+      return { structuredContent: { status: 206, body: encodeBase64(part), headers: {
+        'content-type': 'application/octet-stream', 'content-length': String(part.length),
+        'content-range': `bytes ${first}-${last}/${bytes.length}`, etag: etag(first),
+      } } };
+    },
+  }, 'app-capability');
+  return { server, ranges, continues, sizes };
+}
 
 describe('a Quick Edit in the chat', () => {
-  const resolvePath = (resource: any) => `/project/${resource.kind === 'workspace-file' ? resource.path : ''}`;
-  const file = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
-  const face = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
-  const sketch = () => ({ id: 'sketch', kind: 'attachment' as const, name: 'a-sketch.png', label: 'Sketch', mimeType: 'image/png', about: ['file'],
-    content: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }) });
+  const file = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
+  const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['base/f:base.extrude1.2'] } }, 'face');
+  const annotation = () => ({ id: 'annotation', kind: 'attachment' as const, name: 'a.annotation.json', label: 'Annotation', mimeType: 'application/json', about: ['file'],
+    content: { then: () => { throw new Error('JSON bytes must not be read for handoff'); } }, path: Promise.resolve('/tmp/p/a-1.annotation.json') });
+  // The snapshot packet: a file, never an image, always named by where it was made.
+  const snapshot = () => ({ id: 'snapshot', kind: 'attachment' as const, name: 'a.snapshot.json', label: 'Snapshot', mimeType: 'application/json', about: ['file'],
+    content: new Blob(['{}'], { type: 'application/json' }), path: Promise.resolve('/tmp/p/a-1.snapshot.json') });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
 
-  it('reaches what the host declared: a tab host queues whatever it declares, and a picture rides in a message only where it takes images', () => {
-    expect(chatReach({}, 'tabs')).toEqual({ queue: true, send: false, sendImages: false });
-    expect(chatReach({ message: { text: {} } }, 'inline')).toEqual({ queue: false, send: true, sendImages: false });
-    expect(chatReach({ updateModelContext: {}, message: { text: {}, image: {} } }, 'inline')).toEqual({ queue: true, send: true, sendImages: true });
+  it('reaches what the host declared: a tab host queues whatever it declares, and messages only need text', () => {
+    expect(chatReach({}, 'tabs')).toEqual({ queue: true, send: false });
+    expect(chatReach({ message: { text: {} } }, 'inline')).toEqual({ queue: false, send: true });
+    expect(chatReach({ updateModelContext: {}, message: { text: {}, image: {} } }, 'inline')).toEqual({ queue: true, send: true });
   });
 
-  it('queues into the composer as one titled message and its sketch, keeping what it queued until the host clears it', async () => {
+  it('queues into the composer as one titled message and its annotation, keeping what it queued until the host clears it', async () => {
     const updates: any[] = [];
     let context: (value: any) => void = () => {};
     const port = createChatPromptContext({
       hostContext: {},
       onHostContext: listener => { context = listener; return () => {}; },
       request: async (method: string, params: any) => { updates.push({ method, params }); return {}; },
-    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    } as any, { reach: { queue: true, send: false } });
     expect([port.getSnapshot().kind, port.send]).toEqual(['composer', undefined]);
-    expect((await port.deliver(edit(face, sketch()))).status).toBe('added');
-    const [text, image] = updates[0].params.content;
+    expect((await port.deliver(edit(face, annotation()))).status).toBe('added');
+    const [text] = updates[0].params.content;
+    expect(updates[0].params.content).toHaveLength(1);
     expect(updates[0].method).toBe('ui/update-model-context');
-    expect(text).toEqual({ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#o1.f2', _meta: { 'openai/title': 'Quick edit · a.step' } });
-    expect([image.type, image.mimeType, image._meta['openai/title']]).toEqual(['image', 'image/png', 'Sketch · a.step']);
+    expect(text).toEqual({ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#base/f:base.extrude1.2\nAnnotation: /tmp/p/a-1.annotation.json', _meta: { 'openai/title': 'Quick edit · a.step' } });
     await port.deliver(edit());
-    expect(updates[1].params.content).toHaveLength(3);
+    expect(updates[1].params.content).toHaveLength(2);
     // The host cleared the context (the message went out): the next one starts afresh.
     context({ 'openai/modelContext': null });
     await port.deliver(edit());
     expect(updates[2].params.content).toHaveLength(1);
   });
 
-  it('sends a message into the chat, its sketch as an image, or saved and named where the host refuses the image', async () => {
+  it('says to copy the prompt where a tab host does not take context, instead of the bare JSON-RPC error', async () => {
+    const port = createChatPromptContext({
+      hostContext: {}, onHostContext: () => () => {},
+      request: async () => { throw new HostError('Method not found', -32601); },
+    } as any, { reach: { queue: true, send: false } });
+    const result = await port.deliver(edit());
+    expect(result.status).toBe('failed');
+    expect((result as { message: string }).message).toMatch(/Copy Prompt/);
+  });
+
+  it.each(['queue', 'send'])('delivers inline snapshot JSON through the real %s host port', async action => {
+    const sent: any[] = [];
+    const port = createChatPromptContext({ hostContext: {}, onHostContext: () => () => {},
+      request: async (method: string, params: any) => { sent.push({ method, params }); return {}; },
+    } as any, { reach: { queue: true, send: true } });
+    const context = edit({ ...snapshot(), path: Promise.resolve(''),
+      inlineText: Promise.resolve('Snapshot JSON:\n{"jobs":[]}') });
+    await (action === 'queue' ? port.deliver(context) : port.send!(context));
+    expect(sent[0].method).toBe(action === 'queue' ? 'ui/update-model-context' : 'ui/message');
+    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot JSON:\n{"jobs":[]}');
+    port.dispose();
+  });
+
+  it('sends a message into the chat, its single snapshot named by path even when the host supports images', async () => {
     const sent: any[] = [];
     let refuse = false;
     const bridge = {
@@ -321,19 +441,17 @@ describe('a Quick Edit in the chat', () => {
         return {};
       },
     } as any;
-    const saved: string[] = [];
-    const attachments = { save: async (_png: Blob, name: string) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } };
-    const port = createChatPromptContext(bridge, { resolvePath, reach: { queue: false, send: true, sendImages: true }, attachments });
+    const port = createChatPromptContext(bridge, { reach: { queue: false, send: true } });
     expect(port.getSnapshot().kind).toBe('unavailable');
-    expect((await port.send!(edit(sketch()))).status).toBe('sent');
+    expect((await port.send!(edit(snapshot()))).status).toBe('sent');
     expect(sent[0].method).toBe('ui/message');
     expect(sent[0].params.role).toBe('user');
-    expect(sent[0].params.content.map((block: any) => block.type)).toEqual(['text', 'image']);
-    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step');
+    expect(sent[0].params.content.map((block: any) => block.type)).toEqual(['text']);
+    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json');
     refuse = true;
-    expect((await port.send!(edit(sketch()))).status).toBe('sent');
-    expect(sent.at(-1).params.content).toEqual([{ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nSketch: /tmp/cadgen-sketches/a-sketch.png' }]);
-    expect(saved).toEqual(['a-sketch.png']);
+    expect((await port.send!(edit(snapshot()))).status).toBe('sent');
+    expect(sent.at(-1).params.content).toEqual([{ type: 'text',
+      text: 'Round it.\n\nFile: /project/parts/a.step\nSnapshot: /tmp/p/a-1.snapshot.json' }]);
   });
 });
 
@@ -350,5 +468,46 @@ describe('the frame\'s clipboard', () => {
       await copied;
       expect(events).toEqual(['item', 'write', 'File: /work/a.step']);
     } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('copies by the page\'s copy command where the host grants the frame no clipboard, and fails only when that fails too', async () => {
+    const details = ['File: /work/gear.step', 'Operation: loading geometry', 'Traceback (most recent call last):',
+      ...Array.from({ length: 40 }, (_, line) => `  File "/work/gear.py", line ${line + 1}, in build`), 'ValueError: no teeth'].join('\n');
+    // What the copy command would put on the clipboard: the selection in the focused field.
+    const copied: string[] = [];
+    const execCommand = vi.fn((command: string) => {
+      const field = document.activeElement as HTMLTextAreaElement;
+      copied.push(`${command}:${field.value.slice(field.selectionStart, field.selectionEnd)}`);
+      return true;
+    });
+    Object.defineProperty(document, 'execCommand', { configurable: true, value: execCommand });
+    const button = document.body.appendChild(document.createElement('button'));
+    const refusing = { clipboard: { writeText: async () => { throw new DOMException('Write permission denied.', 'NotAllowedError'); } } };
+    try {
+      // Granted: the clipboard API, and nothing else.
+      const written: string[] = [];
+      vi.stubGlobal('navigator', { clipboard: { writeText: async (text: string) => { written.push(text); } } });
+      await frameClipboard.writeText(details);
+      expect([written, execCommand.mock.calls.length]).toEqual([[details], 0]);
+      // Refused, or no clipboard API at all: the copy command takes the whole text, and leaves the
+      // page as it was, its field gone and the focus back on the button pressed.
+      vi.stubGlobal('navigator', refusing);
+      button.focus();
+      await frameClipboard.writeText(details);
+      expect([copied, document.querySelector('textarea'), document.activeElement]).toEqual([[`copy:${details}`], null, button]);
+      vi.stubGlobal('navigator', {});
+      await frameClipboard.writeText('File: /work/a.step');
+      await frameClipboard.writeText(Promise.resolve('File: /work/b.step'));
+      expect(copied.slice(1)).toEqual(['copy:File: /work/a.step', 'copy:File: /work/b.step']);
+      // Both refused: the copy fails, with the clipboard's refusal where there was one.
+      execCommand.mockReturnValue(false);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Copying is not available here.');
+      vi.stubGlobal('navigator', refusing);
+      await expect(frameClipboard.writeText('File: /work/c.step')).rejects.toThrow('Write permission denied.');
+    } finally {
+      vi.unstubAllGlobals();
+      delete (document as { execCommand?: unknown }).execCommand;
+      button.remove();
+    }
   });
 });

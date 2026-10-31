@@ -5,7 +5,7 @@ The original cubic helix is the groove cutter: animated rope remains seated.
 A blind end on the terminal ferrule abuts the rope end at its start plane;
 its OD is captured in a matching pocket and retained by the lower flange.
 """
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 from .capstan_path import full_groove_path,stored_path,prefix_length,tangent
 

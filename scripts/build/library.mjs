@@ -25,6 +25,8 @@ export async function buildLibrary(root, { css = false } = {}) {
   }
   await walk(src);
   await fs.rm(dist, { recursive: true, force: true });
+  // Each module's map, with its source's text, is what a page's build chains to show a crash
+  // in this code as its source (@text-to-cad/core/source-maps).
   await build({entryPoints: entries, outbase: src, outdir: dist, bundle: false,
     format: 'esm', platform: 'neutral', target: 'es2022', jsx: 'automatic',
     loader: { '.js': 'jsx' }, sourcemap: true, logLevel: 'warning'});

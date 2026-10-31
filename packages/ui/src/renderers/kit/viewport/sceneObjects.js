@@ -1,5 +1,5 @@
-// Release a scene object and everything under it: geometry (unless a shared cache
-// owns it), materials and their maps, and its place in the graph.
+// Release a scene object and everything under it: geometry, materials and their maps,
+// and its place in the graph.
 export function disposeSceneObject(object) {
   if (!object) {
     return;
@@ -11,9 +11,7 @@ export function disposeSceneObject(object) {
     object.userData.beforeDispose(object);
     delete object.userData.beforeDispose;
   }
-  if (object.geometry?.userData?.cadSceneCachedGeometry !== true) {
-    object.geometry?.dispose?.();
-  }
+  object.geometry?.dispose?.();
   const materials = Array.isArray(object.material) ? object.material : [object.material];
   for (const material of materials) {
     material?.map?.dispose?.();

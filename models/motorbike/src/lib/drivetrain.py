@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from math import sqrt
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import lib as L
 from lib import spec as S
@@ -79,11 +79,12 @@ def build_engine():
         - L.axis_cylinder(S.REAR_AXLE, (0, 1, 0), S.WHEEL_ARCH_R_IN,
                           2 * S.WHEEL_ARCH_HALF_Y + 2.0),
     )
-    engine = L.paint(engine, "engine", "unit_swingarm", color=S.ENGINE_SILVER)
+    engine = L.paint(engine, "engine", "unit_swingarm", color=S.ENGINE_SILVER,
+                     material=S.CAST_ALUMINIUM)
 
     rear_axle = L.paint(
         L.axis_cylinder(S.REAR_AXLE, (0, 1, 0), S.AXLE_DIAMETER / 2, 130.0),
-        "rear_axle", color=S.CHROME,
+        "rear_axle", color=S.CHROME, material=S.CHROMED_STEEL,
     )
 
     cvt_drum = L.axis_cylinder(
@@ -91,19 +92,22 @@ def build_engine():
          S.CVT_COVER_CENTER[2]),
         (0, 1, 0), S.CVT_COVER_OD / 2, S.CVT_COVER_Y1 - S.CVT_COVER_Y0,
     )
-    cvt_drum = L.paint(cvt_drum, "cvt_cover", "rider_left", color=S.ENGINE_DARK)
+    cvt_drum = L.paint(cvt_drum, "cvt_cover", "rider_left", color=S.ENGINE_DARK,
+                       material=S.CAST_ALUMINIUM)
     cvt_plate = L.axis_cylinder(
         (S.CVT_COVER_CENTER[0], S.CVT_COVER_Y0 - S.CVT_PLATE_T / 2,
          S.CVT_COVER_CENTER[2]),
         (0, 1, 0), S.CVT_PLATE_OD / 2, S.CVT_PLATE_T,
     )
-    cvt_plate = L.paint(cvt_plate, "cvt_inner_plate", color=S.ENGINE_DARK)
+    cvt_plate = L.paint(cvt_plate, "cvt_inner_plate", color=S.ENGINE_DARK,
+                        material=S.CAST_ALUMINIUM)
     crank_cover = L.axis_cylinder(
         (S.CRANK_COVER_CENTER[0], (S.CRANK_COVER_Y0 + S.CRANK_COVER_Y1) / 2,
          S.CRANK_COVER_CENTER[2]),
         (0, 1, 0), S.CRANK_COVER_OD / 2, abs(S.CRANK_COVER_Y1 - S.CRANK_COVER_Y0),
     )
-    crank_cover = L.paint(crank_cover, "crank_cover", "rider_right", color=S.ENGINE_DARK)
+    crank_cover = L.paint(crank_cover, "crank_cover", "rider_right", color=S.ENGINE_DARK,
+                          material=S.CAST_ALUMINIUM)
     return [engine, cvt_drum, cvt_plate, crank_cover, rear_axle]
 
 
@@ -123,7 +127,7 @@ def build_exhaust():
         (S.MUFFLER_X1 - 22.0, S.MUFFLER_Y, S.MUFFLER_Z), (1, 0, 0), 12.0, 60.0,
     )
     exhaust = pipe.fuse(flange, can, cap_front, cap_rear, tip)
-    return L.paint(exhaust, "exhaust", "chrome", color=S.CHROME)
+    return L.paint(exhaust, "exhaust", "chrome", color=S.CHROME, material=S.POLISHED_STAINLESS)
 
 
 def build_rear_shock():
@@ -148,14 +152,14 @@ def build_rear_shock():
     seat_upper = local(bd.Cone(S.SHOCK_SPRING_MEAN_D / 2 - 2.0, S.SHOCK_BODY_OD / 2, 10.0)
                        .moved(bd.Location((0, 0, 158.0))))
     damper = eye_lower.fuse(body, seat_lower, seat_upper, eye_upper)
-    damper = L.paint(damper, "damper", color=S.SHOCK_BODY)
+    damper = L.paint(damper, "damper", color=S.SHOCK_BODY, material=S.PAINTED_STEEL)
 
     spring = L.coil_between(
         (0, 0, 108.0), (0, 0, 162.0),
         S.SHOCK_SPRING_MEAN_D, S.SHOCK_SPRING_WIRE_D, S.SHOCK_SPRING_TURNS,
     ).moved(plane.location)
-    spring = L.paint(spring, "coil_spring", color=S.SPRING_YELLOW)
+    spring = L.paint(spring, "coil_spring", color=S.SPRING_YELLOW, material=S.SPRING_STEEL)
 
     rod = local(L.axis_cylinder((0, 0, 130.0), (0, 0, 1), 7.0, 76.0))
-    rod = L.paint(rod, "piston_rod", color=S.CHROME)
+    rod = L.paint(rod, "piston_rod", color=S.CHROME, material=S.CHROMED_STEEL)
     return [damper, spring, rod]

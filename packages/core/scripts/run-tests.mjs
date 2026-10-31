@@ -6,7 +6,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const repoRoot = path.resolve(packageRoot, "..", "..");
 // Both roots: src/ holds the library tests, scripts/ the CLI ones. A runner that only
 // walked src/ would silently stop running any CLI test that lands beside this file.
 const testRoots = [path.join(packageRoot, "src"), path.join(packageRoot, "scripts")];
@@ -66,15 +65,6 @@ const result = spawnSync(process.execPath, [
   ...tests,
 ], {
   cwd: packageRoot,
-  env: {
-    ...process.env,
-    ...(fs.existsSync(path.join(repoRoot, ".venv", "bin", "python"))
-      ? { CAD_PYTHON: path.join(repoRoot, ".venv", "bin", "python") }
-      : {}),
-    ...(fs.existsSync(path.join(repoRoot, "packages", "cadgen", "src"))
-      ? { CAD_PYTHONPATH: path.join(repoRoot, "packages", "cadgen", "src") }
-      : {}),
-  },
   stdio: "inherit",
 });
 

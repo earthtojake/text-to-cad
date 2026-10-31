@@ -1,29 +1,21 @@
 /**
- * What the navbar's right end links to, in every app: the running version (its release notes and
- * how to update), the source, the community and a new issue. `@text-to-cad/ui/links` — pure, with
- * no imports, so a host's own build configuration and its unit tests read the same defaults the
- * navbar draws.
+ * What the app menu links to, in every app: the running version (its release notes), the
+ * source, the community and a new issue. `@text-to-cad/ui/links` — pure, with no imports, so a
+ * host's own build configuration and its unit tests read the same defaults the navbar draws. A
+ * newer release is not a link: cadgen says so, with the update button (`@text-to-cad/ui/update`).
  *
- * A host supplies the version it runs and hands `viewerLinks(...)` to its `ViewerHost.links`. It
- * may point the links elsewhere (the web reads its build's environment), say what it found when
- * it checked for a newer release (`latest`), and say how a link is followed (`open`, for a page
- * in a frame that cannot open one itself). Nothing here fetches or navigates.
+ * A host supplies the version it runs, and the id of its build where that is not the release's
+ * own (`@text-to-cad/ui/build-id`), and hands `viewerLinks(...)` to its `ViewerHost.links`. It
+ * may point the links elsewhere (the web reads its build's environment), and say how a link is
+ * followed (`open`, for a page in a frame that cannot open one itself). Nothing here fetches or
+ * navigates.
  */
 
 export const TEXT_TO_CAD_LINKS = Object.freeze({
   x: "https://x.com/earthtojake",
   github: "https://github.com/earthtojake/text-to-cad",
   discord: "https://discord.gg/5FGB9DwJYU",
-  issues: "https://github.com/earthtojake/text-to-cad/issues/new",
-  install: Object.freeze({
-    // `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
-    // that is NEW in a release, because `update` walks the lockfile. Skills only: the skill text
-    // tells the agent when and how to install or upgrade cadgen.
-    command: "npx skills add earthtojake/text-to-cad",
-    // The same update, handed to an agent instead of run in a terminal: one short line, read at a
-    // glance in a menu and pasted into a chat where the agent already knows the rest of the job.
-    prompt: "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`."
-  })
+  issues: "https://github.com/earthtojake/text-to-cad/issues/new"
 });
 
 /** A version as the navbar shows and compares it: `v0.7.4`, or a `refs/tags/` ref, is `0.7.4`. */
@@ -100,25 +92,26 @@ function cut(text, length) {
 
 /**
  * The navbar's links for a host running `version`: the defaults, with whatever the host changes.
+ * A custom build of it (`build`, the id its Vite config names: `@text-to-cad/ui/build-id`) runs
+ * `0.7.15-dev.<build>`, which the app menu shows and a new issue names; its release notes are still
+ * those of the release it was built on.
  *
  * @param {object} options
  * @param {string} options.version The version this host runs.
+ * @param {string} [options.build] The id of a custom build of it; "" (the release's own build) for none.
  * @param {string} [options.x]
  * @param {string} [options.github]
  * @param {string} [options.discord]
  * @param {string} [options.issues] Where a new issue is opened; "" offers none.
  * @param {string} [options.release] This version's release notes; by default its tag on `github`.
- * @param {{ command?: string, prompt?: string, message?: string }} [options.install]
- *   How this host updates, in place of the skills' update: see `ViewerLinks.install`.
- * @param {{ version: string, url: string, newer: boolean } | null} [options.latest]
- *   The newest release, for a host that checked, and whether it is newer than `version`.
  * @param {(url: string) => Promise<void>} [options.open]
  */
-export function viewerLinks({ version, x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
-  issues = TEXT_TO_CAD_LINKS.issues, release, install = TEXT_TO_CAD_LINKS.install, latest = null, open } = {}) {
+export function viewerLinks({ version, build = "", x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
+  issues = TEXT_TO_CAD_LINKS.issues, release, open } = {}) {
   const bare = releaseVersion(version);
+  const custom = String(build ?? "").trim();
   return {
-    version: bare, x, github, discord, issues, install, latest,
+    version: bare && custom ? `${bare}-dev.${custom}` : bare, x, github, discord, issues,
     release: release || releaseNotesUrl(github, bare),
     ...(open ? { open } : {})
   };

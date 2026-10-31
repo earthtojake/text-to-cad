@@ -9,29 +9,28 @@ Conventions (all part modules must follow):
 - Exposed actuator cans: cylinder axis along the joint axis, centered at the
   joint center, built with `actuator_solids()`.
 
-Verified joint-attach math (see probe_joint.py): for build123d 0.10,
 `revolute_attach()` places the child so its joint plane coincides with the
-parent joint plane rotated `angle_deg` about the shared axis.
+parent joint plane rotated `angle_deg` about the shared axis, and leaves the
+two build123d joints that do it on the parts: the robot's mechanism.
 """
 
 from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 # Palette: warm porcelain + graphite + aluminum, with a coral accent on
 # small repeated functional details (hub caps, bumpers, vents). No logos.
-# Plain RGB(A) tuples / sRGB hex strings, not bd.Color objects: build123d's
-# Shape.color setter builds the Color on assignment, and a module-level
-# bd.Color(...) would import the CAD kernel before the @step freshness gate.
-SHELL = (0.82, 0.815, 0.79)     # warm porcelain composite shells
-STRUCT = (0.16, 0.17, 0.19)     # graphite structural cores
-ALU = (0.88, 0.90, 0.94)        # bright machined-aluminum joint rims
-VISOR = (0.02, 0.05, 0.11)      # gloss midnight-blue sensor glass
-RUBBER = (0.08, 0.08, 0.09)     # sole / grip rubber
-ACCENT = (0.93, 0.38, 0.16)     # coral-orange accent details
-EYE = (0.32, 0.90, 0.98)        # bright cyan display "pixels" (Anki-style)
+# Plain RGB(A) tuples: build123d's Shape.color setter builds the Color on
+# assignment.
+SHELL = "#eae9e6"     # warm porcelain composite shells
+STRUCT = "#6f7379"     # graphite structural cores
+ALU = "#f1f3f8"        # bright machined-aluminum joint rims
+VISOR = "#273f5d"      # gloss midnight-blue sensor glass
+RUBBER = "#505055"     # sole / grip rubber
+ACCENT = "#f7a66f"     # coral-orange accent details
+EYE = "#99f3fd"        # bright cyan display "pixels" (Anki-style)
 
 
 def styled(solid, label: str, color):
@@ -53,7 +52,6 @@ def joint_plane(origin, axis_dir, x_ref) -> bd.Location:
 
 
 def revolute_attach(
-    asm,
     parent,
     child,
     name: str,
@@ -64,31 +62,30 @@ def revolute_attach(
     c_axis,
     c_xref,
     angle_deg: float,
+    angular_range,
 ):
-    """Author a parent revolute frame + child rigid frame and connect them.
+    """Author the revolute joint ``name`` on the parent, its rigid mount on the
+    child, and connect them at ``angle_deg`` (the as-built value).
 
     Joint origins/axes are given in each part's LOCAL modeling frame; the
     helper transforms them by each part's current location, so parts that were
     already repositioned by upstream connects keep correct joints (connect in
     root-to-leaf order). At angle 0 the child's c_xref direction aligns with
-    the parent's p_xref direction about the shared axis.
+    the parent's p_xref direction about the shared axis. ``angular_range`` is
+    the joint's travel in degrees (absolute, as the URDF has it).
     """
     j_p_world = parent.location * joint_plane(p_origin, p_axis, p_xref)
     z_tip = (j_p_world * bd.Pos(0, 0, 1)).position
     axis_world = bd.Axis(j_p_world.position, z_tip - j_p_world.position)
-    f_parent = asm.revolute_frame(
-        parent, f"{name}_axis", axis_world, angular_range=(-360.0, 360.0)
-    )
+    bd.RevoluteJoint(name, parent, axis=axis_world, angular_range=tuple(angular_range))
     # The joint's stored frame may use any x-reference convention; read the
     # actual frame back and fold the constant Rz difference into the child
     # mount so the child's c_xref aligns with p_xref at angle 0.
-    joint_obj = parent.joints[f"{name}_axis"]
-    a_eff_world = parent.location * joint_obj.relative_axis.location
+    a_eff_world = parent.location * parent.joints[name].relative_axis.location
     delta = j_p_world.inverse() * a_eff_world  # pure Rz about the joint axis
     j_c = joint_plane(c_origin, c_axis, c_xref)
-    l_c_world = child.location * (j_c * delta)
-    f_child = asm.rigid_frame(child, f"{name}_mount", l_c_world)
-    asm.revolute(f_parent, f_child, angle=angle_deg, label=name)
+    bd.RigidJoint(name, child, child.location * (j_c * delta))
+    parent.joints[name].connect_to(child.joints[name], angle=angle_deg)
 
 
 def _axis_rot(axis_dir) -> bd.Rot:

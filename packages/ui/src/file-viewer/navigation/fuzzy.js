@@ -1,12 +1,11 @@
 /**
- * Subsequence matching for the shared file tree's `Filter files…` box.
+ * Subsequence matching for the Model tree's filter (`modelTreeSearch.js`).
  *
- * Not a general fuzzy matcher: the corpus is file paths, and the only thing a
- * person typing into that box wants is for `srexfs` to find
- * `src/main/explorer/fs.ts` in the desktop app. So the score rewards exactly what makes that
- * work — matches on a path segment's first character, runs of consecutive
- * characters, and a match late in the path (the filename) over one early in it
- * (a directory nobody was thinking about).
+ * Not a general fuzzy matcher: the corpus is names and paths, and the only thing a
+ * person typing into a filter wants is for `srexfs` to find `src/main/explorer/fs.ts`.
+ * So the score rewards exactly what makes that work — matches on a segment's first
+ * character, runs of consecutive characters, and a match late in the path (the
+ * name) over one early in it (a folder nobody was thinking about).
  *
  * Pure, and exported, because it is the part with edge cases worth a test.
  */
@@ -97,28 +96,4 @@ export function fuzzyMatch(needle, haystack) {
   score -= Math.min(6, Math.floor(haystack.length / 16));
 
   return { score, indices };
-}
-
-/** Rank `paths` against `query`, best first, capped at `limit`. */
-/**
- * @param {readonly string[]} paths
- * @param {string} query
- * @param {number} [limit]
- * @returns {{ path: string, indices: number[] }[]}
- */
-export function fuzzyFilter(paths, query, limit = 300) {
-  const trimmed = query.trim();
-  if (trimmed === "") {
-    return paths.slice(0, limit).map((path) => ({ path, indices: [] }));
-  }
-  /** @type {{ path: string, score: number, indices: number[] }[]} */
-  const scored = [];
-  for (const path of paths) {
-    const match = fuzzyMatch(trimmed, path);
-    if (match) {
-      scored.push({ path, score: match.score, indices: match.indices });
-    }
-  }
-  scored.sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
-  return scored.slice(0, limit).map(({ path, indices }) => ({ path, indices }));
 }

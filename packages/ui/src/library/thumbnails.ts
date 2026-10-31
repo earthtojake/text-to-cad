@@ -7,6 +7,9 @@ import type { LiveRegistry } from "../host/liveRegistry.js";
  */
 export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 360 });
 
+// What a view shows that the library keeps: a file, or a model's document the engine holds by its id.
+const SHOWN_KINDS: ReadonlySet<string> = new Set(["workspace-file", "cad-model"]);
+
 /**
  * Keep a picture of each model a view shows, for the library: once the view has settled — the
  * whole file loaded and drawn — `save` is handed its picture (`LiveView.thumbnail`: the model
@@ -14,9 +17,9 @@ export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 360 });
  * Once per revision of a file per mounted view, so a model rebuilt while it is open is pictured
  * again once its new revision is drawn; a failure is left alone, since a picture is a nicety.
  *
- * `file` is the root-relative path of the file on screen, as the viewer names it, and `revision`
- * the catalog's revision of it: a picture of any other file — the view moved on before it
- * settled — is never saved as this one's.
+ * `file` is the absolute path of the file on screen, as the viewer names it, or a model's document
+ * by its id, and `revision` the catalog's revision of it: a picture of any other file — the view
+ * moved on before it settled — is never saved as this one's.
  */
 export function useModelThumbnail(live: LiveRegistry, file: string | null, revision: string,
   save: (png: Blob, file: string) => Promise<unknown>) {
@@ -30,7 +33,7 @@ export function useModelThumbnail(live: LiveRegistry, file: string | null, revis
     let cancelled = false;
     void controller.thumbnail(THUMBNAIL_SIZE).then(png => {
       const state = controller.readState();
-      if (cancelled || state.active === false || state.resource?.kind !== "workspace-file" || state.resource.path !== file) return;
+      if (cancelled || state.active === false || !SHOWN_KINDS.has(state.resource?.kind ?? "") || state.resource?.path !== file) return;
       taken.current.add(key);
       return latest.current(png, file);
     }).catch(() => { /* a picture is a nicety */ });

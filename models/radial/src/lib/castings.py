@@ -12,7 +12,7 @@ shop:
                   `palette.MACHINED` so the eye reads the material change.
 
 Conventions
-  * build123d algebra mode; `from cadgen import build123d as bd`.
+  * build123d algebra mode; `import build123d as bd`.
   * Every primitive is returned in its OWN local frame with the base at z=0 and
     +Z up.  The caller places it — with `locate()`, or `bd.Pos`/`bd.Rot`.
   * Millimetres.  Casting radii 3-8 mm on the block/heads/sump, 1-2 mm on small
@@ -53,7 +53,7 @@ import math
 import sys
 from typing import Callable, Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Run BRepAlgoAPI_Check as part of is_sound(). Costs real time on big
@@ -132,12 +132,12 @@ def locate(shape, origin, z_dir, x_dir=None):
 def _is_closed(shape) -> bool:
     """Every non-degenerate edge bounded by exactly two faces."""
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+    from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.BRep import BRep_Tool
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopoDS import TopoDS
     try:
-        m = TopTools_IndexedDataMapOfShapeListOfShape()
+        m = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapesAndAncestors_s(
             shape.wrapped,
             TopAbs_ShapeEnum.TopAbs_EDGE,
@@ -148,7 +148,7 @@ def _is_closed(shape) -> bool:
             return False
         for i in range(1, m.Extent() + 1):
             edge = m.FindKey(i)
-            if BRep_Tool.Degenerated_s(TopoDS.Edge_s(edge)):
+            if BRep_Tool.Degenerated_s(TopoDS.Edge(edge)):
                 continue
             if m.FindFromIndex(i).Extent() != 2:
                 return False
@@ -157,7 +157,7 @@ def _is_closed(shape) -> bool:
         return False
 
 
-def is_sound(shape) -> bool:
+def is_sound(shape, bop_check: bool | None = None) -> bool:
     """True when `shape` is a real solid body: non-null, `is_valid`, closed,
     every solid of positive volume, and (unless `BOP_CHECK` is off) passing
     `BRepAlgoAPI_Check`.
@@ -185,7 +185,7 @@ def is_sound(shape) -> bool:
                 return False
         if not _is_closed(shape):
             return False
-        if BOP_CHECK and not BRepAlgoAPI_Check(wrapped).IsValid():
+        if (BOP_CHECK if bop_check is None else bop_check) and not BRepAlgoAPI_Check(wrapped).IsValid():
             return False
     except Exception:
         return False
@@ -202,7 +202,7 @@ def _ladder(value: float, floor: float):
         value *= LADDER_STEP
 
 
-def safe_fillet(part, edges, r: float, min_r: float = 0.3):
+def safe_fillet(part, edges, r: float, min_r: float = 0.3, bop_check: bool | None = None):
     """Fillet `edges` at `r`, retrying at 0.75x steps down to `min_r`.
 
     A result is accepted only if `is_sound()` passes it, so a BOP-faulty
@@ -218,7 +218,7 @@ def safe_fillet(part, edges, r: float, min_r: float = 0.3):
             result = bd.fillet(edge_list, radius=radius)
         except Exception:
             continue
-        if is_sound(result):
+        if is_sound(result, bop_check):
             return result, radius
     return part, None
 

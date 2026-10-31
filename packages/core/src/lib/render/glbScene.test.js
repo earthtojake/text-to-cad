@@ -92,3 +92,57 @@ test("dispose releases the document once: geometry, materials and textures, and 
   assert.deepEqual(released, { geometry: 1, material: 1, texture: 1, standIn: 1 });
   assert.doesNotThrow(() => scene.setSurfaceLook(look()), "a late look from the viewport is ignored, never applied to released materials");
 });
+
+// Two nodes that draw, as `glbMeshData.js` marks a file's nodes: a lit box and an unlit one, both
+// named "part" (an exporter's habit), 2 m apart along glTF's X.
+function nodeDocument() {
+  const scene = new THREE.Group();
+  const node = (index, x, material) => {
+    const object = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+    object.position.x = x;
+    object.name = "part";
+    Object.assign(object.userData, { gltfNode: index, gltfNodePath: String(index + 1) });
+    scene.add(object);
+    return object;
+  };
+  const lit = node(0, 0, new THREE.MeshStandardMaterial({ color: "#336699" }));
+  const unlit = node(1, 2, new THREE.MeshBasicMaterial({ color: "#00ff00" }));
+  return { document: { scene, clips: [], cadRootMatrix: new THREE.Matrix4().makeScale(1000, 1000, 1000).toArray(),
+    restBounds: { min: [-500, -500, -500], max: [2500, 500, 500] }, animatedBounds: null }, lit, unlit };
+}
+
+test("a GLB's nodes are what Select picks and Quick Edit names: `n<index>`, the file's `nodes[index]`, with the point hit", () => {
+  const { document, lit, unlit } = nodeDocument();
+  const scene = createGlbScene(THREE, document);
+  scene.object3D.updateMatrixWorld(true);
+  const hit = scene.pick(new THREE.Ray(new THREE.Vector3(2000, 0, 5000), new THREE.Vector3(0, 0, -1)));
+  assert.deepEqual([hit.id, hit.name, hit.point.map(Math.round)], ["n1", "part (n1)", [2000, 0, 500]]);
+  assert.deepEqual(scene.describePart("n0").facts.map(fact => fact.value), ["nodes[0]", "12"]);
+  assert.deepEqual([scene.hasPart("n0"), scene.hasPart("n9"), scene.units], [true, false, { unit: "m", perWorld: 0.001 }]);
+  assert.deepEqual([lit.userData.partId, unlit.userData.partId], ["n0", "n1"], "what Annotate hangs a mark on");
+  // A pick lights its node; letting go puts back even what the look does not own (an unlit material).
+  scene.setSurfaceLook(look({ authored: true }));
+  scene.setHighlight({ selected: ["n1"] });
+  assert.notEqual(unlit.material.color.getHexString(), "00ff00");
+  scene.setHighlight({ selected: [] });
+  assert.equal(unlit.material.color.getHexString(), "00ff00");
+  // Clip cuts what the look dressed, the look's later stand-ins too, and a pick ignores what it cut away.
+  scene.setClipPlanes([new THREE.Plane(new THREE.Vector3(-1, 0, 0), 1000)]);
+  scene.setSurfaceLook(look());
+  assert.deepEqual([lit.material.clippingPlanes?.length, unlit.material.clippingPlanes?.length], [1, 1]);
+  assert.equal(scene.pick(new THREE.Ray(new THREE.Vector3(2000, 0, 5000), new THREE.Vector3(0, 0, -1))), null);
+  scene.dispose();
+});
+
+test("a GLB of two nodes explodes them apart, its box following, and back to where they were authored", () => {
+  const { document, lit, unlit } = nodeDocument();
+  const scene = createGlbScene(THREE, document);
+  assert.equal(scene.explodeParts, 2);
+  assert.equal(scene.setExplode(1), true);
+  assert.ok(unlit.position.x - lit.position.x > 2, "further apart");
+  assert.ok(scene.bounds.max[0] - scene.bounds.min[0] > 3000, "the box they make");
+  assert.equal(scene.setExplode(1), false, "the same amount moves nothing");
+  scene.setExplode(0);
+  assert.deepEqual([lit.position.x, unlit.position.x, scene.bounds], [0, 2, document.restBounds]);
+  scene.dispose();
+});

@@ -1,0 +1,1 @@
+<?xml version="1.0"?><robot name="gone"><link name="base"><visual><geometry><mesh filename="meshes/absent.stl"/></geometry></visual></link></robot>

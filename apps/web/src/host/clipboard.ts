@@ -1,5 +1,5 @@
 import type { ClipboardPort } from '@text-to-cad/ui/host';
-import { copyImageBlobToClipboard, copyTextToClipboard, readTextFromClipboard } from './browserClipboard.js';
+import { copyImageBlobToClipboard, copyTextToClipboard } from './browserClipboard.js';
 
 export function browserClipboardSupportsImages(): boolean {
   return typeof globalThis.navigator?.clipboard?.write === 'function' && typeof ClipboardItem === 'function';
@@ -27,7 +27,6 @@ export type WebClipboard = ClipboardPort & { writeContent?(content: { text?: str
 
 export const browserClipboard: WebClipboard = {
   writeText: copyTextToClipboard,
-  readText: readTextFromClipboard,
   async writeImage(image) {
     const png = await image;
     if (png.type !== 'image/png') throw new Error('Screenshot must be a PNG.');

@@ -1,14 +1,18 @@
 """The dependency-direction and ships-alone laws, held by test rather than prose.
 
 Boundary law (packages/README.md and each package's README): apps import
-packages; packages never import apps; @text-to-cad/core is framework-free — no
-React, no app or workflow state. Ships-alone law: cadgen (the built PyPI
-distribution) and every skill (the Skills CLI installs
+packages; packages never import apps (here for the Python distributions'; the JavaScript's
+direction, and core being framework-free, are scripts/test/check-dependencies.mjs's). Ships-alone
+law: each Python distribution (the library, cad; the server, cad-server; the shim,
+cad-mcp: each its own PyPI wheel) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
-models/ and whose packages/ is never installed) each work in isolation outside
-this repo, so their markdown must not refer to anything outside the package.
+models/ and whose packages/ is never installed; the server's wheel carries skills/ whole, and
+writes it into the plugin folder the agent apps read) each work in isolation outside
+this repo, so their markdown must not refer to anything outside the package -- a
+distribution's not even to another distribution's files, which its wheel does not carry, and
+a skill's links not out of its skill.
 The private apps are workspace consumers; their READMEs describe that workspace.
-The web app ships as compiled assets inside cadgen, not as a source mirror.
+The web app ships as compiled assets inside the server's wheel, not as a source mirror.
 """
 
 from __future__ import annotations
@@ -17,60 +21,13 @@ import re
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import repo_path
-
-CADGEN_JS_SRC = repo_path("packages/core/src")
-CADGEN_JS_BIN = repo_path("packages/core/bin")
-CADGEN_SRC = repo_path("packages/cadgen/src")
-
-_IMPORT_RE = re.compile(
-    r"""(?:^|\n)\s*(?:import\s[^;]*?from\s+["']([^"']+)["']|import\s+["']([^"']+)["']|require\(\s*["']([^"']+)["']\s*\))""",
-)
-
-
-def _js_files(*roots: Path):
-    for root in roots:
-        if not root.is_dir():
-            continue
-        for suffix in ("*.js", "*.mjs"):
-            for path in root.rglob(suffix):
-                if "node_modules" in path.parts:
-                    continue
-                yield path
-
-
-def _import_specifiers(path: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8", errors="replace")
-    found = []
-    for match in _IMPORT_RE.finditer(text):
-        specifier = next(group for group in match.groups() if group)
-        found.append(specifier)
-    return found
-
-
-class CadgenJsIsFrameworkFree(unittest.TestCase):
-    def test_no_react_and_no_app_imports(self) -> None:
-        offenders: list[str] = []
-        for path in _js_files(CADGEN_JS_SRC, CADGEN_JS_BIN):
-            for specifier in _import_specifiers(path):
-                lowered = specifier.lower()
-                if lowered == "react" or lowered.startswith("react/") or lowered.startswith("react-"):
-                    offenders.append(f"{path}: {specifier}")
-                if "apps/" in specifier.replace("\\", "/"):
-                    offenders.append(f"{path}: {specifier}")
-        self.assertEqual(
-            offenders,
-            [],
-            "@text-to-cad/core is framework-free shared code (its README, Boundary "
-            "laws): no React, nothing from apps/. Move app-flavored code "
-            "into the app that owns it.",
-        )
+from tests.python.support.paths import PROJECTS, REPO_ROOT, SOURCES, repo_path
 
 
 class PackagesNeverImportApps(unittest.TestCase):
     def test_no_python_reference_into_apps(self) -> None:
         offenders: list[str] = []
-        for path in CADGEN_SRC.rglob("*.py"):
+        for path in (path for source in SOURCES for path in source.rglob("*.py")):
             if "__pycache__" in path.parts:
                 continue
             text = path.read_text(encoding="utf-8", errors="replace")
@@ -87,19 +44,11 @@ class PackagesNeverImportApps(unittest.TestCase):
             "distribution must build and run with the apps deleted.",
         )
 
-    def test_no_js_import_into_apps(self) -> None:
-        offenders: list[str] = []
-        for path in _js_files(CADGEN_JS_SRC, CADGEN_JS_BIN):
-            for specifier in _import_specifiers(path):
-                if specifier.replace("\\", "/").startswith(("../../apps", "../../../apps")):
-                    offenders.append(f"{path}: {specifier}")
-        self.assertEqual(offenders, [])
-
 
 # The ships-alone law. Two surfaces leave this repo whole:
-#   - packages/cadgen builds into the PyPI wheel (README.md is its long
-#     description; @text-to-cad/core and the viewer client arrive already bundled
-#     under _runtime/).
+#   - packages/cad, packages/cad-server and packages/cad-mcp each
+#     build into a PyPI wheel (each README.md is its long description; the server's
+#     @text-to-cad/core and viewer client arrive already bundled under _runtime/).
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
 #     models/ and never installs its packages/ — so a skill that points at this
@@ -113,20 +62,21 @@ class PackagesNeverImportApps(unittest.TestCase):
 # skills: it is the conventional example of a USER workspace's model
 # directory ("the project's `models/` directory"), never this repo's.
 _MD_BOUNDARY = r"(?<![\w./@-])"
+# A distribution ships with no repo around it at all: nothing repo-relative.
+_DISTRIBUTION_FAMILIES = (
+    r"apps/",
+    r"packages/",
+    r"skills/",
+    r"models/",
+    r"tests/",
+    r"scripts/",
+    r"requirements-dev",
+    r"AGENTS\.md",
+    r"CONTRIBUTING\.md",
+    r"\.github/",
+)
 _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
-    # cadgen ships with no repo around it at all: nothing repo-relative.
-    "packages/cadgen": (
-        r"apps/",
-        r"packages/",
-        r"skills/",
-        r"models/",
-        r"tests/",
-        r"scripts/",
-        r"requirements-dev",
-        r"AGENTS\.md",
-        r"CONTRIBUTING\.md",
-        r"\.github/",
-    ),
+    **{project.relative_to(REPO_ROOT).as_posix(): _DISTRIBUTION_FAMILIES for project in PROJECTS},
     # Skills own their scripts/<tool> entrypoints; the repo's scripts/
     # families, its venv and its dev manifests are not theirs to name.
     "skills": (
@@ -153,8 +103,10 @@ _MD_UNBOUNDED_PHRASES: dict[str, tuple[str, ...]] = {
         r"[Rr]epository fixtures",
     ),
 }
-_MD_SKIPPED_DIRS = {"node_modules", "dist", "dist-verify", ".vite", "tmp", "__pycache__"}
+_MD_SKIPPED_DIRS = {"node_modules", "dist", "dist-verify", ".vite", "tmp", "__pycache__", "_runtime"}
 _URL_RE = re.compile(r"https?://\S+")
+# A Markdown link's target, its fragment apart.
+_MD_LINK = re.compile(r"\]\(([^)\s#]*)(?:#[^)\s]*)?(?:\s+\"[^\"]*\")?\)")
 
 
 def _markdown_files(root: Path):
@@ -203,6 +155,39 @@ class PackagedMarkdownShipsAlone(unittest.TestCase):
             "audience.\n"
             + "\n".join(offenders),
         )
+
+
+def _links_outside(root: Path, files) -> list[str]:
+    """Each relative Markdown link in ``files`` that leaves ``root`` or names nothing there."""
+    offenders = []
+    for path in files:
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for target in _MD_LINK.findall(text):
+            if not target or re.match(r"[a-z][a-z0-9+.-]*:", target, re.I):
+                continue  # a fragment of this page, or a URL
+            resolved = (path.parent / target).resolve()
+            if not resolved.is_relative_to(root.resolve()) or not resolved.exists():
+                offenders.append(f"{path.relative_to(REPO_ROOT)}: {target}")
+    return offenders
+
+
+class DistributionLinksStayInside(unittest.TestCase):
+    """A distribution's relative links name its own files: another distribution's are not in its wheel."""
+
+    def test_every_relative_link_resolves_inside_its_distribution(self) -> None:
+        offenders: list[str] = []
+        for project in PROJECTS:
+            offenders += _links_outside(project, _markdown_files(project))
+        self.assertEqual(offenders, [], "a link out of its distribution, or to a file that is not there")
+
+    def test_every_skill_link_resolves_inside_its_skill(self) -> None:
+        # The skills ship whole inside the server's wheel (cad_server/_runtime/plugin/skills, byte for byte
+        # these files: scripts/release/check-wheel-contents.sh) and each alone through the Skills CLI, so a
+        # skill's relative link names a file of its own skill, which both carry, or is a URL.
+        offenders: list[str] = []
+        for skill in sorted(path.parent for path in repo_path("skills").glob("*/SKILL.md")):
+            offenders += _links_outside(skill, _markdown_files(skill))
+        self.assertEqual(offenders, [], "a skill's link out of its skill, or to a file that is not there")
 
 
 if __name__ == "__main__":

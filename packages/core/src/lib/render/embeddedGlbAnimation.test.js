@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import * as THREE from "three";
 import {
@@ -7,8 +8,14 @@ import {
   disposeGlbDocument,
   isPlayableGlbAnimationClip
 } from "./glbMeshData.js";
-import { writeGlb } from "../glb/writeGlb.js";
 import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "./glbAnimationRuntime.js";
+
+// cadgen's exports of a polished base and a rider (`fixtures/README.md`): static, and with
+// the clip that slides the rider 60 mm along +X under its pivot.
+function fixture(name) {
+  const bytes = readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+}
 
 function applyClip(root, clip, time = 0.5) {
   const mixer = new THREE.AnimationMixer(root);
@@ -81,50 +88,28 @@ test("absolute GLB scrub reactivates a LoopOnce action after its endpoint", () =
 });
 
 test("interactive GLB parsing retains the native animated hierarchy and CAD-space framing estimate", async () => {
-  const bytes = writeGlb({
-    primitives: [{
-      name: "triangle",
-      node: "animated",
-      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0])
-    }]
-  }, {
-    preset: "export",
-    animations: [{
-      name: "travel",
-      times: new Float32Array([0, 1]),
-      channels: [{ node: "animated", translation: new Float32Array([0, 0, 0, 2, 0, 0]) }]
-    }]
-  });
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const document = await buildGlbDocumentFromBuffer(buffer);
+  const document = await buildGlbDocumentFromBuffer(fixture("pair.slide.glb"));
   assert.equal(document.clips.length, 1);
-  let retainedMesh = null;
-  document.scene.traverse((object) => { if (object.isMesh) retainedMesh = object; });
-  assert.ok(retainedMesh, "native mesh hierarchy is retained");
-  assert.equal(retainedMesh.position.x, 0, "bounds sampling restores the authored rest pose");
+  const rider = document.scene.getObjectByName("rider");
+  assert.ok(rider?.isMesh, "native mesh hierarchy is retained");
+  // The clip keys the rider's pivot; sampling its travel for the bounds leaves it where it rests.
+  assert.ok(rider.parent.parent.position.distanceTo(new THREE.Vector3(0.035, 0.005, 0.005)) < 1e-6,
+    "bounds sampling restores the authored rest pose");
   assert.ok(document.animatedBounds.max[0] > document.restBounds.max[0]);
   assert.equal(document.meshData, undefined, "the viewer's document is the native scene, never a flattened mesh");
   disposeGlbDocument(document);
 });
 
 test("interactive GLB parsing retains a static native hierarchy with its authored finish", async () => {
-  const bytes = writeGlb({
-    primitives: [{
-      name: "finished-part",
-      positions: new Float32Array([0, 0, 0, 1, 0, 0, 0, 1, 0]),
-      material: { roughness: 0.18, metalness: 0.72 }
-    }]
-  }, { preset: "export" });
-  const buffer = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-  const document = await buildGlbDocumentFromBuffer(buffer);
+  const document = await buildGlbDocumentFromBuffer(fixture("pair.glb"));
   assert.equal(document.clips.length, 0);
   assert.ok(document.scene, "static native hierarchy remains document-owned");
-  assert.deepEqual(document.restBounds.max.map(Math.round), [1000, 0, 1000], "rest bounds are in CAD space: millimetres, Z up");
+  assert.deepEqual([document.restBounds.min, document.restBounds.max].map(corner => corner.map(Math.round)), [[0, -20, 0], [40, 0, 20]],
+    "rest bounds are in CAD space: millimetres, Z up");
   assert.equal(document.animatedBounds, null);
-  let material = null;
-  document.scene.traverse((object) => { if (object.isMesh) material = object.material; });
-  assert.equal(material.roughness, 0.18);
-  assert.equal(material.metalness, 0.72);
+  const finishes = [];
+  document.scene.traverse((object) => { if (object.isMesh) finishes.push([object.material.roughness, object.material.metalness]); });
+  assert.ok(finishes.some(([roughness, metalness]) => roughness === 0.05 && metalness === 1), JSON.stringify(finishes));
   disposeGlbDocument(document);
 });
 

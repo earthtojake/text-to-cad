@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
@@ -19,16 +19,16 @@ function clipRows(document) {
 const REST = Object.freeze({ activeClipId: "", enabled: false, playing: false, elapsedSec: 0, speed: 1, loopEnabled: true });
 
 /**
- * The file's glTF clips as the kit playbar's runtime, driven by this renderer's
+ * The file's glTF clips as the kit's routine runtime, driven by this renderer's
  * own clock: ONE `AnimationMixer` on the native scene, alive only while a routine
- * owns the pose. The file opens at rest with no mixer at all, so the playbar
- * appearing under the model changes nothing on screen; the mixer is built by the
+ * owns the pose. The file opens at rest with no mixer at all, so preview's Animation
+ * row appearing changes nothing on screen; the mixer is built by the
  * first play, scrub or clip choice, and disposing it restores every animated
  * property to the value it had at rest.
  *
  * @param {object | null} document  The native GLB document on screen.
  * @param {() => void} requestRender  Asks the viewport for a frame.
- * @returns the playbar runtime, or null for a file without playable clips.
+ * @returns the routine runtime, or null for a file without playable clips.
  */
 export function useGlbAnimation(document, requestRender) {
   const clock = useMemo(() => createAnimationClock(), []);
@@ -45,15 +45,18 @@ export function useGlbAnimation(document, requestRender) {
     stateRef.current = next;
     setState(next);
   }, []);
-  useEffect(() => {
+  // At rest for every document, before anything (an Autoplay) plays it.
+  // Every clip opens looping: a clip is its motion once (a cadgen GLB's is), and the player repeats it.
+  useLayoutEffect(() => {
     clock.resetAnimationClock();
     update({ ...REST, activeClipId: clips[0]?.id || "" });
   }, [document, clips, clock, update]);
 
   const onClipSelect = useCallback((id) => {
-    if (!clips.some((clip) => clip.id === id)) return;
+    const chosen = clips.find((clip) => clip.id === id);
+    if (!chosen) return;
     clock.resetAnimationClock();
-    update({ activeClipId: id, enabled: true, playing: false, elapsedSec: 0 });
+    update({ activeClipId: id, enabled: true, playing: false, elapsedSec: 0, loopEnabled: REST.loopEnabled });
   }, [clips, clock, update]);
   const onPlayToggle = useCallback(() => {
     if (!activeClip) return;
@@ -69,12 +72,32 @@ export function useGlbAnimation(document, requestRender) {
     clock.resetAnimationClock();
     update({ enabled: true, playing: false, elapsedSec: 0 });
   }, [clock, update]);
-  // Leaving preview: stopped, rewound and at rest, the mixer gone; the routine, speed and loop stay.
+  // Putting the routine down: stopped, rewound and at rest, the mixer gone; the routine, speed and loop stay.
   const onRelease = useCallback(() => {
     if (!stateRef.current.enabled && !stateRef.current.playing) return;
     clock.resetAnimationClock();
     update({ enabled: false, playing: false, elapsedSec: 0 });
   }, [clock, update]);
+  // Preview's routine is its own (`kit/shell/useRendererShell.js`): the Animation tool's is saved
+  // as it stands — which clip, where its clock is, whether it plays, its Speed and Loop — and handed
+  // back as it was; preview's opens at rest at the clip's own Speed and Loop.
+  const savePlayback = useCallback(() => {
+    const { activeClipId, enabled, playing, elapsedSec, speed, loopEnabled } = stateRef.current;
+    return { activeClipId, enabled, playing, elapsedSec: playing ? clock.getAnimationClock() : elapsedSec, speed, loopEnabled };
+  }, [clock]);
+  const resetPlayback = useCallback(() => {
+    onRelease();
+    update({ speed: REST.speed, loopEnabled: REST.loopEnabled });
+  }, [onRelease, update]);
+  const restorePlayback = useCallback((saved) => {
+    const clip = clips.find((candidate) => candidate.id === saved?.activeClipId);
+    if (!clip) return;
+    const enabled = saved.enabled === true;
+    const elapsedSec = clampAnimationElapsed(saved.elapsedSec, clip.duration);
+    clock.setAnimationClock(elapsedSec);
+    update({ activeClipId: clip.id, enabled, playing: enabled && saved.playing === true, elapsedSec,
+      speed: clampAnimationSpeed(saved.speed), loopEnabled: saved.loopEnabled !== false });
+  }, [clips, clock, update]);
   const onScrub = useCallback((value) => {
     if (!activeClip) return;
     const elapsedSec = clampAnimationElapsed(value, activeClip.duration);
@@ -105,13 +128,11 @@ export function useGlbAnimation(document, requestRender) {
 
   // The mixer exists exactly while a routine owns the pose.
   const clip = state.enabled ? activeClip?.clip || null : null;
-  const mixerRef = useRef(null);
   const frameRef = useRef(null);
   usePlaybackFrames(clock, state.playing, frameRef);
   useEffect(() => {
     if (!document?.scene || !clip) return undefined;
     const mixer = createGlbAnimationRuntime(THREE, document.scene, clip);
-    mixerRef.current = mixer;
     // One function, two callers: React for a scrub or a new clip, the clock per playing tick.
     frameRef.current = (elapsedSec) => {
       setGlbAnimationTime(mixer, elapsedSec);
@@ -120,7 +141,6 @@ export function useGlbAnimation(document, requestRender) {
     frameRef.current(playbackFrameTime(clock, stateRef.current));
     return () => {
       frameRef.current = null;
-      mixerRef.current = null;
       disposeGlbAnimationRuntime(mixer);
       requestRenderRef.current?.();
     };
@@ -131,8 +151,8 @@ export function useGlbAnimation(document, requestRender) {
     clips, activeClipId: activeClip?.id || "", enabled: state.enabled, playing: state.playing,
     elapsedSec: state.elapsedSec, speed: state.speed, loopEnabled: state.loopEnabled,
     clock, showRestart: false,
-    onClipSelect, onPlayToggle, onRestart, onScrub, onRelease,
+    onClipSelect, onPlayToggle, onRestart, onScrub, onRelease, savePlayback, resetPlayback, restorePlayback,
     onSpeedChange: (speed) => update({ speed: clampAnimationSpeed(speed) }),
     onLoopToggle: (loopEnabled) => update({ loopEnabled: loopEnabled !== false })
-  } : null), [clips, activeClip, state, clock, onClipSelect, onPlayToggle, onRestart, onScrub, onRelease, update]);
+  } : null), [clips, activeClip, state, clock, onClipSelect, onPlayToggle, onRestart, onScrub, onRelease, savePlayback, resetPlayback, restorePlayback, update]);
 }

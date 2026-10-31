@@ -1,5 +1,6 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fuzzyMatch } from '../../../file-viewer/navigation/fuzzy.js';
+import { useControlUsage } from '../../../usage/controls.js';
 
 /** The scroller a tree sits in (its tool-stack panel's body): a search keeps its place in it. */
 const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? element;
@@ -24,20 +25,19 @@ const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? e
  * @property {string} prefix Ancestor labels joined by `/`, with a trailing `/`; shared between siblings.
  * @property {string} lowerLabel
  * @property {string} lowerPrefix
- * @property {string} reference Lower-case id the node is selected by (`node.selectionId`, e.g. `o1.2`), when it has one.
+ * @property {string} reference Lower-case id the node is selected by (`node.selectionId`: a document's part instance `i3` or assembly `n0.2`, a mesh file's `o2.1`), when it has one.
  * @property {string[]} aliases Other names the row answers to (`node.searchAliases`).
  */
 
 const segment = label => String(label || '').replaceAll('/', '∕');
 const NO_ALIASES = Object.freeze([]);
 
-/** Flatten the presented tree once per tree; curves are never rows. */
+/** Flatten the presented tree once per tree. */
 export function buildModelTreeSearchIndex(tree) {
   /** @type {ModelTreeSearchEntry[]} */
   const entries = [];
   const visit = (nodes, parent, prefix) => {
     for (const node of nodes || []) {
-      if (node.kind === 'curve') continue;
       const label = String(node.label || '');
       const at = entries.push({
         node, parent, label, prefix,
@@ -92,7 +92,7 @@ export function searchModelTree(index, query, limit = 200) {
   const scored = [];
   for (let at = 0; at < index.length; at += 1) {
     const entry = index[at];
-    // A pasted reference (`#o1.2`) names one row; nothing outranks it.
+    // A pasted selection id (`#i3`, `#n0.2`, a mesh file's `#o2.1`; never an engine ref) names one row; nothing outranks it.
     if (entry.reference === lower) { scored.push({ at, entry, indices: [], score: 1000 }); continue; }
     // The whole query against the name first, as the file filter reads a
     // filename: `m3scr` finds `M3 Screw`. Names are short, so a subsequence
@@ -122,7 +122,7 @@ const NO_MATCHES = Object.freeze({ matches: Object.freeze([]), total: 0 });
  * A tree's filter box, as one hook for every file tree that has one: the query, the ranked
  * hits over `roots` (indexed only while there is a query, and searched at deferred
  * priority), the keyboard cursor over them, and the scroll position the tree had when the
- * search began, put back when it ends.
+ * search began, put back when it ends. Escape clears the query.
  *
  * The tree renders the hits into `listRef`'s element; each hit row carries
  * `data-search-row={node.id}`, and Enter presses that row's `button[aria-pressed]`.
@@ -135,7 +135,10 @@ export function useTreeSearch(roots) {
   const index = useMemo(() => (searching ? buildModelTreeSearchIndex(roots) : null), [searching, roots]);
   const found = useMemo(() => (index ? searchModelTree(index, deferredQuery) : NO_MATCHES), [index, deferredQuery]);
   const listRef = useRef(null), resumeScroll = useRef(0);
+  const controls = useControlUsage();
   const changeQuery = value => {
+    // A search begun is a use (`usage/controls.js`); never what it looks for.
+    if (!searching && value.trim()) controls.used('tree_filter');
     if (!searching && value.trim() && listRef.current) resumeScroll.current = panelScroller(listRef.current).scrollTop;
     setQuery(value); setCursor(null);
   };

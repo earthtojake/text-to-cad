@@ -16,7 +16,7 @@ function visualWithObjects(id, linkName, objects) {
   return {
     id,
     name: id,
-    linkName,
+    link: linkName,
     meshUrl: `${linkName}.3mf`,
     sourceMeshKey: `${id}#mesh`,
     sourceMesh: {
@@ -49,7 +49,7 @@ test("named mesh objects become one pickable part each", () => {
   assert.deepEqual([...split.parts[1].sourceMesh.indices], [0, 1, 2]);
   assert.equal(split.parts[1].sourceMesh.vertices.length, 9);
   // The visual's identity survives the split, so a component still names its link.
-  assert.equal(split.parts[1].linkName, "arm");
+  assert.equal(split.parts[1].link, "arm");
   assert.equal(split.parts[1].visualId, "arm:v1");
 });
 
@@ -70,22 +70,25 @@ test("objects named by their own occurrence id are still named", () => {
   );
 });
 
-test("objects a loader named for want of a name are not components", () => {
-  // `glb:0` / `3mf:1` are the readers' fallbacks; `o1.2` is a CAD occurrence id.
-  for (const name of ["glb:0", "3mf:1", "o1.2", "o3"]) {
+test("objects a loader named for want of a name are not components: their visual is", () => {
+  // `glb:0` / `3mf:1` are the readers' fallbacks; `o:3f2a9c1d7e5b` is a CAD occurrence token.
+  for (const name of ["glb:0", "3mf:1", "o:3f2a9c1d7e5b", "mesh_0"]) {
     const visual = visualWithObjects("base:v1", "base", [{ name, id: name }, { name, id: name }]);
     const meshData = { parts: [visual] };
     const split = buildRobotComponentGeometry(meshData);
-    assert.deepEqual(split.parts, [visual], `${name} must not become a component`);
-    assert.deepEqual(robotComponents(split, "arm.urdf"), []);
+    assert.deepEqual(split.parts, [{ ...visual, componentName: "base:v1", visualId: "base:v1" }], `${name} must not become a component`);
+    assert.deepEqual(robotComponents(split, "arm.urdf").map((component) => component.id), ["base:v1"]);
   }
 });
 
-test("a visual with no named objects is left whole", () => {
+test("a visual with no named objects is one whole component, named as the payload labels it", () => {
   const visual = visualWithObjects("base:v1", "base", [{ name: "" }, { name: "Unnamed component" }]);
   const split = buildRobotComponentGeometry({ parts: [visual] });
-  assert.deepEqual(split.parts, [visual]);
-  assert.deepEqual(robotComponents(split, "robot.urdf"), []);
+  assert.deepEqual(split.parts, [{ ...visual, componentName: "base:v1", visualId: "base:v1" }]);
+  assert.deepEqual(robotComponents(split, "robot.urdf").map((component) => component.name), ["base:v1"]);
+  // The payload's label (the description's `name` for the visual, else its geometry) names the row.
+  const labelled = buildRobotComponentGeometry({ parts: [{ ...visual, label: "shell" }] });
+  assert.deepEqual(robotComponents(labelled).map((component) => [component.id, component.name, component.visualId]), [["base:v1", "shell", "base:v1"]]);
 });
 
 test("an unsliceable object costs its visual's components, never the robot's geometry", () => {
@@ -112,11 +115,12 @@ test("an unsliceable object costs its visual's components, never the robot's geo
       const good = visualWithObjects("base:v1", "base", [{ name: "foot" }]);
       const split = buildRobotComponentGeometry({ parts: [broken, good] });
 
-      // The bad visual renders exactly as it did before the split existed...
-      assert.deepEqual(split.parts[0], broken, `visual kept whole for ${JSON.stringify(overrides)}`);
-      // ...and contributes no component rows, while its healthy sibling still does.
+      // The bad visual renders exactly as it did before the split existed, as one component...
+      assert.deepEqual(split.parts[0], { ...broken, componentName: "arm:v1", visualId: "arm:v1" },
+        `visual kept whole for ${JSON.stringify(overrides)}`);
+      // ...while its healthy sibling still splits.
       const components = robotComponents(split, "robot.urdf");
-      assert.deepEqual(components.map((component) => component.name), ["foot"]);
+      assert.deepEqual(components.map((component) => component.name), ["arm:v1", "foot"]);
     }
   } finally {
     console.warn = realWarn;
@@ -136,7 +140,7 @@ test("buildRobotComponentGeometry passes absent geometry straight through", () =
 });
 
 test("a component reports what it is: colour, counts and its size on the robot", () => {
-  // The link mesh is in its own file's units and the visual's transform carries the
+  // The link mesh is in its own file's units and the visual's placement carries the
   // `<mesh scale>`, so a 30-unit box under a 0.001 scale is 30 mm of robot.
   const visual = visualWithObjects("arm:v1", "arm", [{
     name: "bracket",
@@ -144,7 +148,7 @@ test("a component reports what it is: colour, counts and its size on the robot",
     // a count that does not describe a slice of it is what makes an object unsliceable.
     overrides: { color: "#ff8800", bounds: { min: [0, 0, 0], max: [30, 10, 2] } }
   }]);
-  visual.localTransform = [
+  visual.placement = [
     0.001, 0, 0, 0,
     0, 0.001, 0, 0,
     0, 0, 0.001, 0,

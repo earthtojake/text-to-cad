@@ -7,7 +7,7 @@ rounded tip bridge and two bored pad/nail seats.
 """
 from math import sqrt
 
-from cadgen import build123d as bd, srgb
+import build123d as bd
 
 
 def _swept_rib(points, radius=.66):
@@ -162,7 +162,7 @@ def make_phalanx(length=45., width=18., distal=False, label='skeletal_proximal_p
     except ValueError as exc:
         raise ValueError(f'{label}: D-bore entry rim fillet failed: {exc}') from exc
     shape.label=label
-    shape.color=srgb('#a9b7c1')
+    shape.color='#a9b7c1'
     if not shape.is_valid or shape.volume <=0:
         raise ValueError(f'{label}: invalid or nonpositive frame')
     return shape

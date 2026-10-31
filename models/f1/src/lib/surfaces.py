@@ -19,7 +19,7 @@ import copy
 import math
 from typing import Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec
 
@@ -221,7 +221,7 @@ def obox(shape):
 
     box = Bnd_Box()
     BRepBndLib.AddOptimal_s(shape.wrapped, box, False, True)
-    v = box.Get()
+    v = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return v[:3], v[3:]
 
 
@@ -715,7 +715,7 @@ def bbox(shape):
     """Exact bounding box WITHOUT tessellating the shape.
 
     `Shape.bounding_box()` triangulates, which mutates the shared TShape and
-    breaks cadgen's content-addressed component dedup. Always use this instead.
+    changes what every placement of it shares. Always use this instead.
     Returns ((xmin, ymin, zmin), (xmax, ymax, zmax)).
     """
     from OCP.Bnd import Bnd_Box
@@ -723,7 +723,7 @@ def bbox(shape):
 
     box = Bnd_Box()
     BRepBndLib.Add_s(shape.wrapped, box, False)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return (xmin, ymin, zmin), (xmax, ymax, zmax)
 
 

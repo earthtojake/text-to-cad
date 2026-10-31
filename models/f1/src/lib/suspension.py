@@ -6,7 +6,7 @@ where the bending moment lives and slim at the ball joint. Nothing is a bar.
 
 The hardpoints in `spec` are law. Every member terminates exactly on its named
 point — the uprights build their ball-joint eyes on the same coordinates and
-the animation sidecar solves the steering from them — so no number in this
+`f1.py`'s steering motion solves the steering from them — so no number in this
 file may "nearly" reach a joint.
 
 Layout, front to rear:
@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from . import spec, surfaces
 
@@ -995,7 +995,7 @@ def build_suspension_rear():
 
 
 # ==========================================================================
-# TRACK ROD — its own child, the sidecar re-aims it during steering
+# TRACK ROD — its own child, `f1.py`'s steering motion re-aims it
 # ==========================================================================
 
 

@@ -12,9 +12,9 @@
  * effect would be the value from before the switch.
  *
  * When the tokens cannot be read the pair comes from `APP_THEME_COLORS`, which
- * is also what `cadgen dxf snapshot` paints with: the headless bundle has no
- * stylesheet to read, so that constant is the one place the two colours are
- * written down and the CLI and this pane cannot drift.
+ * is also what the parity page's headless drawing paints with: that bundle has
+ * no stylesheet to read, so that constant is the one place the two colours are
+ * written down and the page and this pane cannot drift.
  */
 import { APP_THEME_COLORS } from "@text-to-cad/core/lib/appTheme.js";
 import { cssColorToHex } from "../kit/look/chromeBackdrop.js";

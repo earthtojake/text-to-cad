@@ -39,7 +39,7 @@ import functools
 import math
 from functools import lru_cache
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import geometry as G
 from lib import palette as P
@@ -772,7 +772,7 @@ def _transparencies():
     out = [P.style(_canopy_glass(), "canopy_glass", P.CANOPY_GLASS,
                    P.CANOPY_ALPHA)]
     for shape in mirror_pair(_ws_quarter, "windscreen_quarter"):
-        shape.color = P.srgb(P.CANOPY_GLASS, P.CANOPY_ALPHA)
+        shape.color = (P.CANOPY_GLASS, P.CANOPY_ALPHA)
         out.append(shape)
     out.append(P.style(_ws_flat(), "windscreen_front_panel", P.CANOPY_GLASS,
                        P.CANOPY_ALPHA + 0.08))
@@ -788,13 +788,13 @@ def _frames():
            P.style(_bow(*X_CAN_BOW_A, BOW_T + 10), "canopy_bow_aft",
                    P.CANOPY_FRAME)]
     for shape in mirror_pair(_ws_post, "windscreen_post"):
-        shape.color = P.srgb(P.CANOPY_FRAME)
+        shape.color = P.CANOPY_FRAME
         out.append(shape)
     for shape in mirror_pair(_rail, "canopy_rail"):
-        shape.color = P.srgb(P.CANOPY_FRAME)
+        shape.color = P.CANOPY_FRAME
         out.append(shape)
     for shape in mirror_pair(_seal, "canopy_seal"):
-        shape.color = P.srgb(P.RUBBER)
+        shape.color = P.RUBBER
         out.append(shape)
     return out
 

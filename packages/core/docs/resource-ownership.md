@@ -1,8 +1,8 @@
 # Resource ownership and reuse
 
 How the shared render code owns, shares, reuses and releases the expensive
-things: component geometry, GPU buffers, BVH accelerators, tessellation
-workers and cache reservations. Workspace resource reads and their cache
+things: component geometry, GPU buffers, BVH accelerators and decode
+workers. Workspace resource reads and their cache
 generations are specified in [workspace services](workspace-resources.md).
 
 The one-sentence laws are in [the package README](../README.md#the-laws-that-live-here);
@@ -12,34 +12,34 @@ persistent cache identity or occurrence identity.**
 
 | § | Covers |
 |---|---|
-| [1](#1-shared-ownership-and-disposal) | More than one scene owner, and who disposes |
-| [2](#2-the-demand-boundary) | Selectors and raycast accelerators built only when asked for |
-| [3](#3-reuse-without-changing-geometry) | Recomposition, instancing, culling, material pass keys |
-| [4](#4-tessellation-workers) | One request per worker, pool growth, reclamation, charges |
-| [5](#5-browser-mesh-cache-admission) | Probe, admit, verify, adopt — and strict reads |
+| [1](#1-shared-ownership-and-disposal) | A scene's sibling over its source's buffers, and who disposes |
+| [2](#2-the-demand-boundary) | Raycast accelerators built only when a ray needs one |
+| [3](#3-reuse-without-changing-geometry) | Recomposition and instancing |
+| [4](#4-decode-workers) | The GLB and STL workers, leased by render sessions |
 
 ## 1. Shared ownership and disposal
 
-Component geometry and edge textures can have more than one scene owner; only
-the last release disposes shared GPU/BVH state.
+A buffer has one owner, the scene that built it; a sibling borrows it and frees only what
+is its own.
 
-- Full scene disposal includes host-reparented groups and records attached by
-  an interrupted reconciliation.
-- Cleanup retires completed ownership steps. A thrown disposal remains
-  retryable and cannot release another scene's share twice.
-- Failed initial construction cleans its partial scene before throwing, or
-  transfers the still-owned scene with an explicit cleanup error for retry.
 - Disposable resource admission never changes exact geometry or persistent
   cache identity.
+- A scene's sibling (`createSibling()` of `lib/render/glbScene.js`,
+  `lib/render/meshScene.js`, `lib/urdf/robotScene.js` and `lib/xbf/xbfScene.js`) draws over the source's
+  geometry through `lib/render/sharedGeometry.js`: `shareGeometry` gives it the
+  source's index and attribute objects, so one renderer drawing both scenes uploads
+  each buffer once, and copies only what the sibling rewrites for itself (a robot's
+  vertex colours). `releaseGeometry` lets go of the shared attributes before
+  disposing, so only what the sibling owns is freed. The source stays the owner and
+  is disposed after its siblings. A GLB sibling restores the authored local transforms,
+  bone transforms and morph weights captured at scene creation; the editor's current
+  routine, explosion and selection overlays never become Preview's baseline.
+- `createCadWebGlRenderer` (`common/webglRenderer.js`) takes the `canvas` it draws
+  on (an `OffscreenCanvas`), so one renderer, and one upload of each resource, can
+  serve several views; disposing it and losing its context are its caller's.
 
 ## 2. The demand boundary
 
-Render-only loads do not construct selector topology until it is requested,
-and viewport refinement keeps that boundary.
-
-- Unused components replace only display arrays. A component with active
-  topology replaces its selectors at the same concrete tessellation before
-  publishing new triangles.
 - Raycast accelerators may be deferred until a ray reaches a component's
   local bounds. The first ray uses exact stock intersection; surface builds
   enter a single worker queue in idle time and are shared by occurrences.
@@ -51,145 +51,30 @@ and viewport refinement keeps that boundary.
 - Failed or pending builds keep stock picking. A result must match the
   geometry's attributes, arrays, versions, groups, draw range and live
   ownership; the last geometry release cancels queued or active work.
-- Deformation runs before the bounds test.
-- The merged edge-pick `LineSegments` (`edgePickRaycast.js`) keeps its one
-  buffer and gains a table of boxes over contiguous 32-segment runs (and
-  1,024-segment groups), built on the first edge ray (O(segments), a tenth of
-  the index buffer) and keyed by the proxy's position array. A ray runs
-  three's own segment test over only the segments whose boxes (group, run,
-  then the segment's own) it passes within the pick threshold of, widened by
-  1e-4 of the ray's reach, far above three's rounding, so the hits and their
-  order are the full scan's. A sync whose proxy only grew (every earlier
-  index and position bit-identical) keeps the built boxes and boxes only the
-  appended segments; any other change builds afresh on the next edge ray.
 
 ## 3. Reuse without changing geometry
 
 ### Recomposition
 
-Recomposition may take its previous result when the descriptor and component
-inputs are immutable. It shares unchanged occurrence rows and unchanged tree
-metadata across detail swaps; changed triangle ranges, bounds, placements and
-appearance still produce the corresponding new records. Its private weak
-ownership metadata never enters saved geometry or cache identity. Complete
-same-file revisions can also seed from the prior composition.
+An engine document read again with the last version as `previous`
+(`loadXbfDocument(source, { previous })`, `lib/xbf/xbfDocument.js`) keeps every part buffer
+whose geometry key the new version still holds, and the geometry built over it; only the
+parts the edit changed are fetched and built. Nothing of that reuse enters saved geometry or
+cache identity.
 
-Detached occurrence snapshots detect in-place descriptor or material edits;
-only rows proven to belong to the current composition may skip scene work. A
-static delta requires the same last-applied render context and no dynamic
-pose, animation or clip. Changed components update their own records, while
-unchanged occurrence geometry and selectors retain their owners. Arbitrary
-mutable caller meshes keep normal reconciliation.
+### Instancing
 
-### Selector composition
-
-An assembly's selector runtime is composed from one part per placed occurrence
-(`buildSelectorCompositionPart`, `createSelectorRuntimeComposer` in
-`lib/selectors/runtime.js`). A part keeps its rows, its references as last
-placed and the bundle's own proxy buffers with the placement transform — never
-a placed copy of the proxy or lookup maps. The composer re-places a part's
-references only when its offsets move, and a composition that begins with the
-previous one extends that result instead of rebuilding it. The result is value
-for value the whole-runtime `composeSelectorRuntimes` result for the same
-components in the same order (`runtimeComposer.test.js`). An edge's chain
-endpoints are read lazily from the bundle's unplaced positions, placed and
-rounded as the placed proxy stores them; copies of a reference carry the
-accessor rather than reading it.
-
-### Instancing and culling
-
-Repeated compatible opaque surfaces share instanced draws and retain
-occurrence identity; mirrors, transparency and deformation use explicit
-fallback paths.
-
-Detail publications retain compatible surface instance sets and their original
-occurrence slots. Only changed membership or render passes replace those sets;
-selected, hidden and deformed occurrences keep inactive slots until eligible
-again. Transform passes reuse each mesh's matrix while observing mutable
-source transforms and effect matrices on every update.
-
-Surface instance groups use aggregate frustum bounds, invalidated by instance
-matrix and slot changes. Transformed component boxes and conservative parent
-affine padding keep boundary-crossing geometry eligible, including shear.
-Culling changes draw submission only; occurrence slots and picking remain
-intact. Screen-space edge instances retain their separate drawing policy.
-
-### Material pass keys
-
-Material pass keys reuse serialized strings only after comparing their current
-scalar values, emission state, render order and clipping planes. Direct
-material and plane mutations remain observable; custom values use ordinary
-serialization. Reapplying material settings preserves unchanged shader programs
-and owned emissive colors. Colour and PBR uniforms still update on every pass;
-feature changes, vertex-colour mode and transparency invalidate the appropriate
-program. Reflection intensity belongs to the shared pass key. A distinct
-nonblack emissive channel, or emission over vertex colours, uses the ordinary
-material so the instance colour cannot tint that channel.
-
-Clients that apply pose, selection or material changes directly to display
-records finish with `scene.syncSurfaceInstances()`; this uses the same
-reconciliation as a source update. Clip-only viewer updates also synchronize
-the shared surface material.
+An engine document draws one `Mesh` per instance over one shared prototype geometry
+(`lib/xbf/xbfScene.js`, `lib/render/sharedGeometry.js`), with no instanced draws of its own;
+a rebuild keeps the buffers and geometries whose keys it still holds, as above.
 
 ### Revision reuse
 
-Canonical geometry trees contain no surface-producer selection. A runtime view
-binds each component's opaque surface input to a concrete immutable SURF
-object, and render/selector reuse requires that exact binding plus the lossless
-tolerance pair and payload version. Other snapshot source scopes remain
-isolated. Placement and appearance belong to each tree's occurrence
-composition. Viewport L0 is explicitly coarse; L1 preserves the canonical
-default mesh options and key. **Changing viewport detail never changes export
-defaults.**
+Snapshot source scopes remain isolated (`lib/renderAssetSourceScope.js`: the document
+it renders). Placement and appearance belong to the document's instances.
 
-## 4. Tessellation workers
+## 4. Decode workers
 
-Each tessellation worker runs one request at a time; excess requests wait on
-the client. Render sessions lease that shared scheduler. Releasing one owner
-never cancels another owner; the final release retires remaining work and
-workers. Idle pressure reclamation preserves active and queued consumers.
-
-- Aborting synchronous work replaces only its worker, preserving other
-  callers. A failed worker request reports an error instead of retrying
-  expensive tessellation on the UI thread. Inline execution is reserved for
-  environments where workers cannot start.
-- A pool starts with one isolate and grows only for ready concurrent requests.
-  Sequential viewport refinement reuses that isolate until the drain becomes
-  idle; it does not create a maximum-size pool for each component.
-- Pressure reclamation may release idle worker slots while active and queued
-  consumers keep their work. Each live slot retains its own highest completed
-  request estimate, including handled failures; reclamation or replacement
-  removes that slot's charge.
-- Memory estimates stay on the client. They do not enter worker messages or
-  cache keys, and RAM hits add no worker charge.
-
-## 5. Browser mesh-cache admission
-
-Browser mesh-cache reads start with a bounded metadata probe. The client
-admits the encoded object and conservative decoded size before fetching a
-body, binds that fetch to the probed object digest and byte limit, then
-verifies the v4 header and content address before adoption.
-
-A validated warm entry carries the full surface-object provenance, so
-rendering does not need the SURF object or its derivation index to remain
-present. `createHttpTessellationCacheProvider` takes an `origin` for hosts
-whose cache is not on the page's own origin. TESB body groups remain bounded
-at 32 MiB; the Node export provider uses the same immutable `objects/` and
-`index/mesh/` layout as Python.
-
-A caller admitted using a cache probe can request a strict read: a missing or
-invalid body reports a typed cache miss before tessellation starts. The viewer
-releases that reservation and probes another cached tier or resolves the exact
-surface under fresh cold-work admission. **Cache loss never silently turns a
-cheap decoded-mesh request into unbudgeted surface tessellation.**
-
-A client lazily owns one `createTessellationCache({provider})`, whose
-`createSession({signal})` method lends cancellable views to render sessions.
-No module-global provider can be swapped by another root. Closing a view aborts
-its reads and prevents late results from enqueueing writes; writes already
-admitted to the root's byte-bounded queue survive file switches. Closing the
-client disposes the owner, aborts every view and discards remaining queued
-writes. Viewer write-backs drain after a quiet interval with bounded concurrency,
-while snapshot jobs flush and dispose their own cache after their complete
-source is loaded. Decoded component meshes retain their existing page-wide
-content-addressed LRU; a cache view does not retain an additional geometry copy.
+The GLB and STL decode workers are one each, and render sessions lease them. Releasing
+one owner never cancels another owner's work; the final release retires the worker and
+its pending work.

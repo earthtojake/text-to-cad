@@ -1,6 +1,10 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cad import model
+import build123d as bd
 
 
 OUTER_LENGTH = 100.0
@@ -22,7 +26,7 @@ STANDOFF_LOCATIONS = (
 )
 
 
-@step(out="../STEP/electronics_enclosure_base.step")
+@model
 def electronics_enclosure_base():
     """Return a single solid open-top electronics enclosure base in millimeters."""
     inner_length = OUTER_LENGTH - 2.0 * WALL_THICKNESS
@@ -67,6 +71,11 @@ def electronics_enclosure_base():
 
     part = enclosure.part
     part.label = "electronics_enclosure_base"
+    part.material = FinishedMaterial(
+        plastics.abs_().material,
+        pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', color='#767679ff',
+            metalness=0.0, roughness=0.55),
+    )  # a moulded enclosure, its colour the catalogue's
     return part
 
 

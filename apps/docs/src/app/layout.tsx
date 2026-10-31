@@ -2,47 +2,39 @@ import type { Metadata } from "next";
 import Script from "next/script";
 import { Analytics } from "@vercel/analytics/next";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { siteConfig } from "@/lib/site";
+import { absoluteUrl, siteConfig } from "@/lib/site";
 import "./globals.css";
 
+// A new name for a new picture: the platforms that unfurl links cache a preview by its URL.
 const socialPreview = {
-  url: "/social-preview-gear.png",
+  url: "/social-preview-products.png",
   width: 1200,
   height: 630,
-  alt: "text-to-cad homepage showing a planetary gear CAD model",
+  alt: "text-to-cad: Design physical products with AI. Colorful planetary gears rendered from editable CAD geometry.",
 };
 
+// The site follows the system's light or dark theme, on load and whenever it changes; it has no
+// toggle. The choice an earlier toggle stored is removed once.
 const themeScript = `
 (() => {
   const media = window.matchMedia("(prefers-color-scheme: dark)");
   const storageKey = "cad-skills-theme-v2";
-  const applyTheme = (theme) => {
+  const applyTheme = () => {
+    const theme = media.matches ? "dark" : "light";
     document.documentElement.classList.toggle("dark", theme === "dark");
     document.documentElement.style.colorScheme = theme;
   };
-  const getStoredTheme = () => {
-    try {
-      const storedTheme = window.localStorage.getItem(storageKey);
-      return storedTheme === "dark" || storedTheme === "light"
-        ? storedTheme
-        : null;
-    } catch {
-      return null;
-    }
-  };
-
-  applyTheme(getStoredTheme() ?? "dark");
-
-  const handleSystemThemeChange = () => {
-    if (!getStoredTheme()) {
-      applyTheme("dark");
-    }
-  };
 
   try {
-    media.addEventListener("change", handleSystemThemeChange);
+    window.localStorage.removeItem(storageKey);
+  } catch {}
+
+  applyTheme();
+
+  try {
+    media.addEventListener("change", applyTheme);
   } catch {
-    media.addListener(handleSystemThemeChange);
+    media.addListener(applyTheme);
   }
 })();
 `;
@@ -56,6 +48,8 @@ export const metadata: Metadata = {
   },
   description: siteConfig.description,
   keywords: siteConfig.keywords,
+  authors: [{ name: siteConfig.author.name, url: siteConfig.author.url }],
+  creator: siteConfig.author.name,
   alternates: {
     canonical: "/",
   },
@@ -65,12 +59,20 @@ export const metadata: Metadata = {
     url: "/",
     siteName: siteConfig.name,
     images: [socialPreview],
+    videos: [{
+      url: absoluteUrl("/social-preview-products.mp4"),
+      type: "video/mp4",
+      width: 1200,
+      height: 630,
+    }],
     type: "website",
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: siteConfig.title,
     description: siteConfig.description,
+    creator: siteConfig.author.handle,
     images: [socialPreview],
   },
   icons: {

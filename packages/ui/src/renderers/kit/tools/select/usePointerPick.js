@@ -27,9 +27,11 @@ const COARSE_TAP_SLOP_PX = 12;
  *   element and `commitScene()` belong to a renderer that draws its own layer into the
  *   viewport or publishes a scene that changed in place.
  * @param {import("../../scene.js").KitScene | null} options.scene
- * @param {boolean} options.enabled  The renderer's selecting tool is active (never in preview, never under Draw).
- * @param {(hit: object | null, modifiers: { multiSelect: boolean }) => void} options.onPick  A tap. Shift adds.
- * @param {(hit: object | null) => void} [options.onHover]  The pick under a resting fine pointer changed.
+ * @param {boolean} options.enabled  The renderer's selecting tool is active (never in preview, never under Annotate).
+ * @param {(hit: object | null, modifiers: { multiSelect: boolean }, pointer: Pointer) => void} options.onPick  A tap. Shift adds.
+ * @param {(hit: object | null, pointer: Pointer | null) => void} [options.onHover]  The pick under a resting fine pointer changed.
+ *   `Pointer`: where the pointer is, in CSS pixels from the viewport's top-left (`x`, `y`), and the
+ *   viewport's size (`width`, `height`): what a tool that snaps to the screen (Measure) measures by.
  * @param {(left: object | null, right: object | null) => boolean} [options.sameHit]  When two hover hits are
  *   the same thing to the renderer (default: equal `id`), so `onHover` fires on change only.
  */
@@ -64,12 +66,16 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       raycaster.setFromCamera(ndc.set(((clientX - rect.left) / rect.width) * 2 - 1, 1 - ((clientY - rect.top) / rect.height) * 2), live.camera);
       return scene.pick(raycaster.ray) || null;
     };
+    const pointerAt = (clientX, clientY) => {
+      const rect = host.getBoundingClientRect();
+      return { x: clientX - rect.left, y: clientY - rect.top, width: rect.width, height: rect.height };
+    };
     const same = (left, right) => callbacks.current.sameHit ? callbacks.current.sameHit(left, right) : (left?.id || "") === (right?.id || "");
-    const setHover = (hit) => {
+    const setHover = (hit, pointer = null) => {
       if (same(hovered, hit)) return;
       hovered = hit;
       host.style.cursor = hit ? "pointer" : "";
-      callbacks.current.onHover?.(hit);
+      callbacks.current.onHover?.(hit, pointer);
     };
 
     const handlePointerDown = (event) => {
@@ -87,7 +93,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       if (!started || event.button !== 0 || event.pointerId !== started.pointerId) return;
       const slop = coarse(started.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX;
       if (Math.hypot(event.clientX - started.x, event.clientY - started.y) > slop) return;
-      callbacks.current.onPick(pickAt(started.x, started.y), { multiSelect: Boolean(event.shiftKey) });
+      callbacks.current.onPick(pickAt(started.x, started.y), { multiSelect: Boolean(event.shiftKey) }, pointerAt(started.x, started.y));
     };
     const handlePointerMove = (event) => {
       if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > (coarse(press.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX)) press = null;
@@ -102,7 +108,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
         if (!pendingHover) return;
         hoverAt = pendingHover;
         pendingHover = null;
-        setHover(pickAt(hoverAt.x, hoverAt.y));
+        setHover(pickAt(hoverAt.x, hoverAt.y), pointerAt(hoverAt.x, hoverAt.y));
       });
     };
     const handlePointerLeave = () => { pendingHover = null; hoverAt = null; setHover(null); };

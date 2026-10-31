@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronRight } from "lucide-react";
+import { Check, ChevronRight, Minus } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 
 import { cn } from "@text-to-cad/ui/utils"
@@ -49,6 +49,7 @@ const DropdownMenuContent = React.forwardRef(/**
   );
 });
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean, variant?: "default" | "destructive" }} props */
 function DropdownMenuItem({
   className,
   inset,
@@ -88,8 +89,9 @@ function DropdownMenuCheckboxItem({
       {...props}
     >
       <span className="pointer-events-none absolute right-2 flex size-3.5 items-center justify-center">
+        {/* A box some of whose items are ticked (`checked` "indeterminate") shows a dash, not a tick. */}
         <DropdownMenuPrimitive.ItemIndicator>
-          <Check className="size-4" />
+          {checked === "indeterminate" ? <Minus className="size-4" /> : <Check className="size-4" />}
         </DropdownMenuPrimitive.ItemIndicator>
       </span>
       {children}
@@ -127,6 +129,7 @@ function DropdownMenuRadioItem({
   );
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Label> & { inset?: boolean }} props */
 function DropdownMenuLabel({
   className,
   inset,
@@ -142,6 +145,7 @@ function DropdownMenuLabel({
   );
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Separator>} props */
 function DropdownMenuSeparator({
   className,
   ...props

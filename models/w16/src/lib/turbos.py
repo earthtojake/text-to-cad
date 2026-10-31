@@ -40,7 +40,7 @@ from __future__ import annotations
 import math
 import sys
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import fasteners as F, geo, palette as P, spec as S
 from lib.castings import edges_at, fuse_all, machined_skin, safe_fillet

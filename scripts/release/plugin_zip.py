@@ -6,9 +6,11 @@ release cannot submit the plugin itself. It can hand the person who does a file
 that uploads cleanly. Publish Release builds that file from the release commit,
 before any irreversible step, and attaches it to the GitHub Release.
 
-The archive is one top-level directory named after the plugin. It holds the Codex
+The plugin is at the archive's root, where the portal looks for it: the Codex
 manifest and the rest of `.codex-plugin/`, `skills/`, `LICENSE`, and every file
-the manifest points at. One thing differs from the checkout: the portal requires
+the manifest points at, each folder with an entry of its own. (The portal also
+documents a single top-level folder, but turned 0.7.6's away -- a folder with no
+directory entry of its own -- as having no plugin at all.) One thing differs from the checkout: the portal requires
 that `mcpServers` "must resolve to the root `.mcp.json`". A server config kept
 under another name (a root `.mcp.json` is one Claude Code would load too) goes
 into the archive as `.mcp.json`, and the archived manifest points there.
@@ -132,15 +134,6 @@ def collect(root: Path) -> Package:
             if name.split(".")[1] in ICONS and path not in package.icons:
                 package.icons.append(path)
 
-    extensions = manifest.get("extensions") if isinstance(manifest.get("extensions"), dict) else {}
-    openai = extensions.get("com.openai") if isinstance(extensions.get("com.openai"), dict) else {}
-    if "onboardingSkill" in openai:
-        value = openai["onboardingSkill"]
-        if not (isinstance(value, str) and re.fullmatch(r"\./skills/[^/]+/SKILL\.md", value)
-                and value[2:] in modes):
-            package.errors.append("extensions.com.openai.onboardingSkill must be the ./skills/<name>/SKILL.md "
-                                  f"path of a packaged skill (got {value!r})")
-
     for archived in sorted(wanted | sources.keys()):
         source = sources.get(archived, archived)
         mode = modes[source]
@@ -156,11 +149,31 @@ def collect(root: Path) -> Package:
         if data.startswith(LFS_POINTER):
             package.errors.append(f"{source} is a Git LFS pointer, not the file; keep plugin files out of LFS")
             continue
+        if archived == MCP_CONFIG:
+            data = with_channel(package, data)
         package.files[archived] = (data, mode == "100755")
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
     return package
+
+
+def with_channel(package: Package, data: bytes) -> bytes:
+    """The server config naming OpenAI's directory as the install's channel, in its server's
+    environment (the server's `_internal/channel.py`): this package goes only there. Analytics report
+    it, and `CAD_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
+    try:
+        config = json.loads(data)
+        servers = [server for server in config["mcpServers"].values() if server["args"][-1:] == ["cad-mcp"]]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
+        return data
+    if len(servers) != 1:
+        package.errors.append(f"{MCP_CONFIG} must start exactly one `cad-mcp` server (found {len(servers)})")
+        return data
+    servers[0]["env"] = {**servers[0].get("env", {}), "CAD_INSTALL_CHANNEL": "openai-directory",
+                         "CAD_AUTO_UPDATED": "1"}
+    return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 
 def check_manifest(package: Package) -> None:
@@ -281,7 +294,7 @@ def check_images(package: Package) -> None:
 
 
 def check_archive(package: Package) -> None:
-    entries = {f"{package.top}/{path}": len(data) for path, (data, _) in package.files.items()}
+    entries = {path: len(data) for path, (data, _) in package.files.items()}
     if len(entries) > 5000:
         package.errors.append(f"archive_too_many_entries: {len(entries)} entries; the limit is 5,000")
     if sum(entries.values()) > 512 * MIB:
@@ -308,8 +321,13 @@ def build(root: Path = REPO_ROOT, out: Path | None = None) -> Package:
         return package
     out.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as archive:
+        for folder in sorted(folders(package.files)):
+            info = zipfile.ZipInfo(f"{folder}/", date_time=(1980, 1, 1, 0, 0, 0))
+            info.create_system = 3
+            info.external_attr = (0o40755 << 16) | 0x10
+            archive.writestr(info, b"")
         for path, (data, executable) in sorted(package.files.items()):
-            info = zipfile.ZipInfo(f"{package.top}/{path}", date_time=(1980, 1, 1, 0, 0, 0))
+            info = zipfile.ZipInfo(path, date_time=(1980, 1, 1, 0, 0, 0))
             info.create_system = 3
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (0o100755 if executable else 0o100644) << 16
@@ -318,6 +336,11 @@ def build(root: Path = REPO_ROOT, out: Path | None = None) -> Package:
         package.errors.append("archive_too_large: the compressed ZIP exceeds 100 MB")
         out.unlink()
     return package
+
+
+def folders(files) -> set[str]:
+    """Every folder that holds a file of the archive, nested ones included."""
+    return {"/".join(path.split("/")[:depth]) for path in files for depth in range(1, path.count("/") + 1)}
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -334,7 +357,7 @@ def main(argv: list[str] | None = None) -> int:
     if package.errors:
         return 1
     where = args.out if args.out else "plugin ZIP check"
-    print(f"{where}: {len(package.files)} files under {package.top}/, "
+    print(f"{where}: {len(package.files)} files at the root, "
           f"{sum(len(data) for data, _ in package.files.values())} bytes before compression")
     return 0
 

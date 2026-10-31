@@ -9,8 +9,6 @@
 // That is the case a flattened copy of a GLB gets wrong and the native scene does not.
 
 const RING = [[-0.1, -0.1], [0.1, -0.1], [0.1, 0.1], [-0.1, 0.1]];
-export const DEFORMED_EXTENT = Object.freeze({ min: [-1, -0.5, -0.1], max: [0.1, 1.1, 0.1] });
-export const BIND_EXTENT = Object.freeze({ min: [-0.1, 0, -0.1], max: [0.1, 2, 0.1] });
 
 function barIndices() {
   const indices = [];

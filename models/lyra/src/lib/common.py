@@ -17,20 +17,19 @@ Conventions (all part modules must follow):
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 # Palette: warm pearl composite shells over a graphite structural core,
 # machined-aluminum joint hardware, near-black soft-touch tactile pads, and
 # a restrained amber accent on small functional details. No logos.
-PEARL = (0.91, 0.905, 0.89)     # warm-white composite shells
-GRAPHITE = (0.15, 0.16, 0.18)   # structural cores / phalanx links
-ALU = (0.87, 0.89, 0.93)        # machined-aluminum rims, pins, flange
-PAD = (0.10, 0.10, 0.11)        # soft-touch tactile pad rubber
-AMBER = (0.83, 0.50, 0.16)      # amber accent (sensor ring, tensioners)
-SENSOR = (0.03, 0.06, 0.12)     # gloss midnight sensor glass
-# Plain RGB tuples, not bd.Color objects: a module-level bd.Color(...) would
-# import the CAD kernel the moment this module loads, before the @step
-# freshness gate runs. build123d's ``Shape.color`` setter builds the Color.
+PEARL = "#f5f4f2"     # warm-white composite shells
+GRAPHITE = "#6c6f76"   # structural cores / phalanx links
+ALU = "#f0f2f7"        # machined-aluminum rims, pins, flange
+PAD = "#59595d"        # soft-touch tactile pad rubber
+AMBER = "#ebbc6f"      # amber accent (sensor ring, tensioners)
+SENSOR = "#304561"     # gloss midnight sensor glass
+# Plain RGB tuples: build123d's ``Shape.color`` setter builds the Color on
+# assignment.
 
 
 def styled(solid, label: str, color):
@@ -98,7 +97,6 @@ def joint_plane(origin, axis_dir, x_ref) -> bd.Location:
 
 
 def revolute_attach(
-    asm,
     parent,
     child,
     name: str,
@@ -109,30 +107,30 @@ def revolute_attach(
     c_axis,
     c_xref,
     angle_deg: float,
+    angular_range,
 ):
-    """Author a parent revolute frame + child rigid frame and connect them.
+    """Author the revolute joint ``name`` on the parent, its rigid mount on the
+    child, and connect them at ``angle_deg`` (the as-built value).
 
     Joint origins/axes are given in each part's LOCAL modeling frame; the
     helper transforms them by each part's current location, so parts that
     were already repositioned by upstream connects keep correct joints
     (connect in root-to-leaf order). At angle 0 the child's c_xref direction
     aligns with the parent's p_xref direction about the shared axis.
+    ``angular_range`` is the joint's travel in degrees (absolute, as the URDF
+    has it).
 
-    (Same verified build123d-0.10 joint-attach math as the juno humanoid.)
+    (The same joint-attach math as the juno humanoid's.)
     """
     j_p_world = parent.location * joint_plane(p_origin, p_axis, p_xref)
     z_tip = (j_p_world * bd.Pos(0, 0, 1)).position
     axis_world = bd.Axis(j_p_world.position, z_tip - j_p_world.position)
-    f_parent = asm.revolute_frame(
-        parent, f"{name}_axis", axis_world, angular_range=(-360.0, 360.0)
-    )
+    bd.RevoluteJoint(name, parent, axis=axis_world, angular_range=tuple(angular_range))
     # The joint's stored frame may use any x-reference convention; read the
     # actual frame back and fold the constant Rz difference into the child
     # mount so the child's c_xref aligns with p_xref at angle 0.
-    joint_obj = parent.joints[f"{name}_axis"]
-    a_eff_world = parent.location * joint_obj.relative_axis.location
+    a_eff_world = parent.location * parent.joints[name].relative_axis.location
     delta = j_p_world.inverse() * a_eff_world  # pure Rz about the joint axis
     j_c = joint_plane(c_origin, c_axis, c_xref)
-    l_c_world = child.location * (j_c * delta)
-    f_child = asm.rigid_frame(child, f"{name}_mount", l_c_world)
-    asm.revolute(f_parent, f_child, angle=angle_deg, label=name)
+    bd.RigidJoint(name, child, child.location * (j_c * delta))
+    parent.joints[name].connect_to(child.joints[name], angle=angle_deg)

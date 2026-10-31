@@ -1,28 +1,39 @@
-// Read-only section fill using stencil winding, as in Three.js's clipping
-// example: https://threejs.org/examples/webgl_clipping_stencil.html
-// Borrow display geometry; never rebuild the solid or add selectable faces.
+import { readSourceColor } from './surfaceMaterials.js';
+
+// Stencil winding borrows display geometry. Each part's winding pair is followed
+// by its own opaque fill, preserving both color and holes. The fill writes the
+// stencil back to 0 wherever it covers (Replace with ref 0, on pass and fail
+// alike), and it covers the whole model on the plane, where every winding lies:
+// the next part starts from a clear stencil without clearing the buffer per part
+// (a full-screen clear each, which cost more than all the parts' draws).
+function disposeCut(cut) {
+  for (const mesh of cut.stencils) {
+    mesh.removeFromParent();
+    mesh.material.dispose();
+  }
+  cut.plane.removeFromParent();
+  cut.plane.material.dispose();
+}
+
 export function disposeSectionCaps(runtime) {
   const caps = runtime?.sectionCaps;
   if (!caps) return;
-  for (const mesh of caps.stencils) {
-    mesh.removeFromParent();
-    mesh.material.dispose(); // geometry belongs to the original display mesh
-  }
-  caps.plane.removeFromParent();
-  caps.plane.geometry.dispose();
-  caps.plane.material.dispose();
+  for (const cut of caps.cuts.values()) disposeCut(cut);
+  caps.geometry.dispose();
   runtime.sectionCaps = null;
 }
 
-export function syncSectionCaps(runtime, clipPlane) {
+export function syncSectionCaps(runtime, clipPlane, settings = null) {
+  const partColors = settings?.partColors !== false;
   const THREE = runtime?.THREE;
   const parent = runtime?.scene || runtime?.modelGroup?.parent;
   if (!THREE || !parent || !clipPlane) {
     disposeSectionCaps(runtime);
     return;
   }
-  // Only parts touched by the plane need stencil passes. Reuse cached bounds
-  // so a large assembly does not redraw every uncut component twice.
+  // Reuse cached bounds; uncut parts need no stencil passes. Stencils stay
+  // under their display mesh, so hiding/showing a part takes effect without
+  // a Clip update. With no stencil pixels its cap writes nothing.
   const records = (runtime.displayRecords || []).filter(record => {
     const mesh = record.mesh;
     if (!mesh?.geometry) return false;
@@ -34,60 +45,64 @@ export function syncSectionCaps(runtime, clipPlane) {
     disposeSectionCaps(runtime);
     return;
   }
-  let caps = runtime.sectionCaps;
-  if (!caps) {
-    const material = new THREE.MeshBasicMaterial({
-      color: 0xe9a451, side: THREE.DoubleSide,
-      stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
-      stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
-      polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
-    });
-    const plane = new THREE.Mesh(new THREE.PlaneGeometry(1,1), material);
-    plane.name = 'Section fill';
-    plane.renderOrder = 1001;
-    plane.frustumCulled = false;
-    plane.raycast = () => {};
-    plane.onAfterRender = renderer => renderer.clearStencil();
-    parent.add(plane);
-    caps = runtime.sectionCaps = { records: [], stencils: [], plane };
-  }
-  // Retain existing stencil materials as parts enter/leave the cut. Geometry
-  // remains borrowed from display meshes and nothing survives disabling Clip.
+  const caps = runtime.sectionCaps ||= { cuts: new Map(), geometry: new THREE.PlaneGeometry(1, 1) };
   const active = new Set(records.map(record => record.mesh));
-  caps.stencils = caps.stencils.filter(mesh => {
-    if (active.has(mesh.parent) && mesh.geometry === mesh.parent.geometry) return true;
-    mesh.removeFromParent();
-    mesh.material.dispose();
-    return false;
-  });
-  const retained = new Set(caps.stencils.map(mesh => mesh.parent));
-  for (const record of records) {
-    if (retained.has(record.mesh)) continue;
-    for (const [side, operation] of [[THREE.BackSide, THREE.IncrementWrapStencilOp], [THREE.FrontSide, THREE.DecrementWrapStencilOp]]) {
-      const material = new THREE.MeshBasicMaterial({
-        side, colorWrite: false, depthWrite: false, depthTest: false,
-        stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc,
-        stencilFail: operation, stencilZFail: operation, stencilZPass: operation,
-        clippingPlanes: [clipPlane],
-      });
-      const mesh = new THREE.Mesh(record.mesh.geometry, material);
-      mesh.name = 'Section stencil';
-      mesh.renderOrder = 1000;
-      mesh.raycast = () => {};
-      record.mesh.add(mesh);
-      caps.stencils.push(mesh);
-    }
+  for (const [mesh, cut] of caps.cuts) {
+    if (active.has(mesh) && cut.stencils[0].geometry === mesh.geometry) continue;
+    disposeCut(cut);
+    caps.cuts.delete(mesh);
   }
-  caps.records = [...active];
-  for (const mesh of caps.stencils) mesh.material.clippingPlanes = [clipPlane];
   const size = Math.max(1, Number(runtime.modelRadius || 1) * 4);
-  caps.plane.scale.set(size,size,1);
-  // Project the model's centre onto the cutting plane. A plane centred only
-  // on the world origin could miss a translated assembly entirely.
   const bounds = runtime.modelBounds;
   const center = new THREE.Vector3();
-  if (bounds?.min && bounds?.max) center.set(...bounds.min.map((value,i) => (value + bounds.max[i])/2));
+  if (bounds?.min && bounds?.max) center.set(...bounds.min.map((value, i) => (value + bounds.max[i]) / 2));
   if (runtime.modelGroup?.position) center.add(runtime.modelGroup.position);
-  clipPlane.projectPoint(center, caps.plane.position);
-  caps.plane.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1), clipPlane.normal);
+  for (const [index, record] of records.entries()) {
+    let cut = caps.cuts.get(record.mesh);
+    if (!cut) {
+      const material = new THREE.MeshBasicMaterial({
+        side: THREE.DoubleSide,
+        stencilWrite: true, stencilRef: 0, stencilFunc: THREE.NotEqualStencilFunc,
+        stencilFail: THREE.ReplaceStencilOp, stencilZFail: THREE.ReplaceStencilOp, stencilZPass: THREE.ReplaceStencilOp,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+      });
+      const plane = new THREE.Mesh(caps.geometry, material);
+      plane.name = 'Section fill';
+      plane.frustumCulled = false;
+      plane.raycast = () => {};
+      parent.add(plane);
+      const stencils = [
+        [THREE.BackSide, THREE.IncrementWrapStencilOp],
+        [THREE.FrontSide, THREE.DecrementWrapStencilOp]
+      ].map(([side, operation]) => {
+        const stencilMaterial = new THREE.MeshBasicMaterial({
+          side, colorWrite: false, depthWrite: false, depthTest: false,
+          stencilWrite: true, stencilFunc: THREE.AlwaysStencilFunc,
+          stencilFail: operation, stencilZFail: operation, stencilZPass: operation,
+        });
+        const mesh = new THREE.Mesh(record.mesh.geometry, stencilMaterial);
+        mesh.name = 'Section stencil';
+        mesh.raycast = () => {};
+        record.mesh.add(mesh);
+        return mesh;
+      });
+      cut = { plane, stencils };
+      caps.cuts.set(record.mesh, cut);
+    }
+    // Never copy the live material: selection/hover can tint it and change its
+    // transparency. Normal choreography color, like base display color, is stable.
+    cut.plane.material.color.copy(partColors
+      ? readSourceColor(THREE, record.effectStyle?.color) || record.baseColor || record.mesh.userData.cadBaseColor
+        || (Array.isArray(record.mesh.material) ? record.mesh.material[0] : record.mesh.material)?.color
+        || new THREE.Color(0xe9a451)
+      : new THREE.Color(0xe9a451));
+    cut.stencils.forEach((mesh, pass) => {
+      mesh.renderOrder = 1000 + index * 3 + pass;
+      mesh.material.clippingPlanes = [clipPlane];
+    });
+    cut.plane.renderOrder = 1002 + index * 3;
+    cut.plane.scale.set(size, size, 1);
+    clipPlane.projectPoint(center, cut.plane.position);
+    cut.plane.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), clipPlane.normal);
+  }
 }

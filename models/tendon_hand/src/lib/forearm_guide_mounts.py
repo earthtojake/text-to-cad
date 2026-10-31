@@ -5,7 +5,8 @@ capstan guide outlets and wrist inlets. Split jaws have R.47 through bores;
 liners remain R.45. Fasteners are separate named solids with socket recesses.
 """
 from collections import defaultdict
-from cadgen import build123d as bd, report
+
+import build123d as bd
 from .guide_mounts import guide_end_registry, _bolt, _finish, _rod, _sweep
 from .finish import finish
 from .forearm_frame import SIDE_RAIL_X,SIDE_RAIL_WIDTH,SIDE_RAIL_LENGTH,SIDE_RAIL_HEIGHT,SIDE_RAIL_CENTER_Y,SIDE_RAIL_FILLET
@@ -114,7 +115,6 @@ def make_forearm_guide_mount_bodies(host=None):
         local_host=host if sign>0 else bd.Rot(0,180,0)*host
         local_rows={(y,abs(z)):[sign*x for x in xs] for (y,z),xs in rows.items() if z*sign>0}
         for y in (-222.,-181.,-140.,-99.,-58.):
-            report(f'{face} forearm guide bridge {y:g}')
             spec=[(yy,z,xs) for (yy,z),xs in local_rows.items() if yy==y]
             bank=_positive_bank(spec,local_host,f'{face}_forearm_exit_bridge_{int(-y)}',y)
             parts.extend(bank if sign>0 else [bd.Rot(0,180,0)*b for b in bank])

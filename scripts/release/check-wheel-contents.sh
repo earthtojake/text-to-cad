@@ -1,29 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assert the cadgen wheel actually contains its runtime assets.
+# Assert the five distributions' wheels carry what they must, and only their own packages: the library's,
+# the server's and the shim's, and the aliases' (cadgen, text-to-cad), which carry nothing but the library
+# at the release.
 #
-# cadgen ships JavaScript it executes (Node builders, the snapshot browser bundle, the
-# CAD Viewer's built client), the native file tracer every build loads, and non-Python
-# data its server reads (collation.json).
+# The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
+# non-Python data it reads (collation.json); the library ships the page `serve` shows a document
+# in and the environment image its look lights with.
 # Those arrive through `[tool.setuptools.package-data]`, which is exactly the kind of
 # declaration that fails QUIETLY: a glob that does not match nested files produces a
-# wheel that imports fine, passes every Python test, and then cannot build a DXF preview
-# -- or serve a Viewer -- on a user's machine. The repo has already been bitten by the
+# wheel that imports fine, passes every Python test, and then cannot serve a Viewer or
+# the CAD app on a user's machine. The repo has already been bitten by the
 # same shape of bug in JS bundling (an entry tree-shaken to a 20-byte shebang, exit
 # code 0).
 #
-# So: build in clean scratch, require the paths, and compare every runtime file's bytes
-# with the bundled source. Reusing setuptools' build/lib can retain obsolete hashed
-# viewer chunks even after the source bundle removed them. The viewer client
-# is NOT committed (scripts/bundle/cadgen-runtime.sh --viewer writes it
+# So: build each in clean scratch, require the paths, keep each wheel to its own top-level
+# packages, and compare every runtime file's bytes with the bundled source. Reusing setuptools'
+# build/lib can retain obsolete hashed viewer chunks even after the source bundle removed them.
+# The viewer client is NOT committed (scripts/bundle/cadgen-runtime.sh --viewer writes it
 # right before the build), so this is the only gate proving it made the wheel.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-PACKAGE_DIR="$REPO_ROOT/packages/cadgen"
-OUT_DIR="${CADGEN_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/cadgen-wheel-check}"
-KEEP_WHEEL="${CADGEN_KEEP_WHEEL:-0}"
+OUT_DIR="${CAD_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/wheel-check}"
+KEEP_WHEEL="${CAD_KEEP_WHEEL:-0}"
 
 PYTHON_BIN="${PYTHON_BIN:-}"
 if [ -z "$PYTHON_BIN" ]; then
@@ -36,122 +37,199 @@ if [ -z "$PYTHON_BIN" ]; then
   fi
 fi
 
-# Paths every wheel must carry. The Node builders are what cadgen spawns for DXF and mesh
-# export; the browser bundle is what the snapshot CLI loads in a page.
-REQUIRED=(
-  # The Python the wheel must actually contain. Asset globs were the whole list once,
-  # back when cadgen was Python-plus-data; it now also carries the CLI parsers and the
-  # warm daemon, and a packages.find regression that dropped any of them would produce a
-  # wheel whose `cadgen` console script dies at import. This is the ONLY packaging gate
-  # the publish job runs -- test-installed.sh covers the same ground far better but runs
-  # in test.yml, not at publish.
+# Paths each wheel must carry. The Python a wheel must actually contain is listed beside the asset
+# globs: a packages.find regression that dropped any of it would produce a wheel whose console script
+# dies at import. This is the ONLY packaging gate the publish job runs -- test-installed.sh covers the
+# same ground far better but runs in test.yml, not at publish.
+LIBRARY_REQUIRED=(
+  "cad/__init__.py"
+  # The library's earlier import name, an alias of it.
   "cadgen/__init__.py"
-  "cadgen/assets.py"
-  "cadgen/cli/__init__.py"
-  "cadgen/cli/step_build.py"
-  "cadgen/cli/viewer.py"
-  "cadgen/viewer/__init__.py"
-  "cadgen/viewer/__main__.py"
-  "cadgen/viewer/main.py"
-  "cadgen/viewer/compiles.py"
-  "cadgen/viewer/collation.json"
-  "cadgen/authoring.py"
-  "cadgen/build123d.py"
-  # The robot validators moved out of skills/{sdf,srdf,urdf}/scripts into cadgen, so a
-  # packaging regression here would ship a cadgen whose `cadgen urdf validate` cannot import.
-  "cadgen/cli/urdf_validate.py"
-  "cadgen/urdf_source.py"
-  "cadgen/srdf_validation.py"
-  "cadgen/findings.py"
-  "cadgen/daemon/__init__.py"
-  "cadgen/daemon/server.py"
-  # The warm-worker pool. Without these the daemon supervisor starts and then
-  # cannot spawn a worker, so every build silently falls back to cold.
-  "cadgen/daemon/pool.py"
-  "cadgen/daemon/worker.py"
-  "cadgen/cli/daemon_status.py"
-  # Doubles as a rename sentinel: step_artifacts.py became step_topology_artifact.py, so a
-  # merge that resurrected the old name would ship a wheel missing this one.
-  "cadgen/step_topology_artifact.py"
-  "cadgen/_internal/node_resolve_register.mjs"
-  "cadgen/_internal/node_resolve_hooks.mjs"
-  "cadgen/_runtime/node/mesh-export.mjs"
-  "cadgen/_runtime/node/package.json"
-  "cadgen/_runtime/node/THIRD_PARTY_LICENSES.txt"
-  "cadgen/_runtime/browser/snapshot-render.js"
-  "cadgen/_runtime/browser/render.html"
-  "cadgen/_runtime/viewer/index.html"
-  # CAD in an agent host: the server `cadgen mcp` runs and the one page it serves.
-  "cadgen/cli/mcp.py"
-  "cadgen/mcp/server.py"
-  "cadgen/mcp/tunnel.py"
-  "cadgen/_runtime/mcp/index.html"
-  # The file tracer every build loads, one per platform: a wheel missing one builds
-  # nothing on that platform.
-  "cadgen/_runtime/native/filetrace-macos-aarch64.dylib"
-  "cadgen/_runtime/native/filetrace-macos-x86_64.dylib"
-  "cadgen/_runtime/native/filetrace-linux-x86_64.so"
-  "cadgen/_runtime/native/filetrace-linux-aarch64.so"
-  "cadgen/_runtime/native/filetrace-windows-x86_64.dll"
+  # `import build123d` made lazy at interpreter start: the finder, and the .pth at the root of
+  # site-packages that installs it.
+  "cad/_internal/lazy_kernel.py"
+  "cad-lazy-kernel.pth"
+  # The robot validators' library: a packaging regression here would ship a server whose
+  # `urdf validate` cannot import.
+  "cad/urdf_source.py"
+  "cad/srdf_validation.py"
+  "cad/findings.py"
+  # The engine's library half: the worker every build runs in, and the client every command reaches
+  # the server by.
+  "cad/engine/__init__.py"
+  "cad/engine/worker.py"
+  "cad/engine/client.py"
+  "cad/engine/places.py"
+  # The engine's data: the page `serve` shows a document in and the environment image its look
+  # lights the display modes with.
+  "cad/engine/page/index.html"
+  "cad/engine/page/viewer.js"
+  "cad/engine/render/studio.hdr"
+)
+SERVER_REQUIRED=(
+  "cad_server/__init__.py"
+  "cad_server/assets.py"
+  "cad_server/cli/__init__.py"
+  "cad_server/cli/viewer.py"
+  "cad_server/cli/urdf_validate.py"
+  "cad_server/viewer/__init__.py"
+  "cad_server/viewer/__main__.py"
+  "cad_server/viewer/main.py"
+  "cad_server/viewer/documents.py"
+  "cad_server/viewer/collation.json"
+  # The engine's server half: its daemon and the commands. Without the daemon the server starts no
+  # engine, and every build fails.
+  "cad_server/engine/daemon.py"
+  "cad_server/engine/cli.py"
+  "cad_server/_internal/engine_daemon.py"
+  # Its README: the mechanisms the package's laws name.
+  "cad_server/engine/README.md"
+  "cad_server/_runtime/viewer/index.html"
+  # Each page's third-party notice, written by its build: the wheel redistributes what they inline.
+  "cad_server/_runtime/viewer/THIRD_PARTY_LICENSES.txt"
+  # CAD in an agent host: the server's MCP endpoint and the one page it serves.
+  "cad_server/mcp/server.py"
+  "cad_server/mcp/tunnel.py"
+  "cad_server/_runtime/mcp/shell.html"
+  "cad_server/_runtime/mcp/app.js"
+  "cad_server/_runtime/mcp/THIRD_PARTY_LICENSES.txt"
+  # The agent-app plugin the server writes into the plugin folder: its manifests (in folders a glob
+  # skips, being dot folders) and its skills; the plugin check below holds all of it to the repository's.
+  "cad_server/_runtime/plugin/.claude-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.claude-plugin/marketplace.json"
+  "cad_server/_runtime/plugin/.codex-plugin/plugin.json"
+  "cad_server/_runtime/plugin/.cursor-plugin/plugin.json"
+  "cad_server/_runtime/plugin/skills/cad/SKILL.md"
+)
+SHIM_REQUIRED=(
+  # The stdio transport an agent app starts: the standard library alone.
+  "cad_mcp/__init__.py"
+  "cad_mcp/shim.py"
+  "cad_mcp/engine.py"
+  "cad_mcp/protocol.py"
 )
 
-echo "Building cadgen wheel for content check..."
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
-BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-wheel-build.XXXXXX")"
+BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/wheel-build.XXXXXX")"
 trap 'rm -rf "$BUILD_SCRATCH"' EXIT
-"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" stage "$PACKAGE_DIR" "$BUILD_SCRATCH/package"
-"$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$BUILD_SCRATCH/package" >"$OUT_DIR/build.log" 2>&1 || {
-  echo "Wheel build failed:" >&2
-  tail -40 "$OUT_DIR/build.log" >&2
-  echo "" >&2
-  echo "If this is a missing build backend, install it: $PYTHON_BIN -m pip install build" >&2
-  exit 1
-}
 
-wheel="$(find "$OUT_DIR" -name '*.whl' -type f | head -n 1)"
-if [ -z "$wheel" ]; then
-  echo "No wheel produced in $OUT_DIR" >&2
-  exit 1
-fi
-echo "Built $(basename "$wheel")"
+# check PROJECT DISTRIBUTION TOP REQUIRED...: build packages/PROJECT's wheel, and hold it to the paths it
+# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth;
+# none for an alias).
+check() {
+  local project="$1" distribution="$2" top="$3"
+  local label="${project//\//-}"
+  shift 3
+  echo "Building the $project wheel for its content check..."
+  "$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" stage "$REPO_ROOT/packages/$project" "$BUILD_SCRATCH/$project"
+  "$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$BUILD_SCRATCH/$project" >"$OUT_DIR/$label-build.log" 2>&1 || {
+    echo "The $project wheel's build failed:" >&2
+    tail -40 "$OUT_DIR/$label-build.log" >&2
+    echo "" >&2
+    echo "If this is a missing build backend, install it: $PYTHON_BIN -m pip install build" >&2
+    exit 1
+  }
+  local wheels=("$OUT_DIR/$distribution"-[0-9]*.whl)
+  if [ "${#wheels[@]}" -ne 1 ] || [ ! -f "${wheels[0]}" ]; then
+    echo "No single $distribution wheel in $OUT_DIR" >&2
+    exit 1
+  fi
+  wheel="${wheels[0]}"
+  echo "Built $(basename "$wheel")"
 
-listing="$OUT_DIR/contents.txt"
-"$PYTHON_BIN" -c "
+  listing="$OUT_DIR/$label-contents.txt"
+  "$PYTHON_BIN" -c "
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as zf:
     sys.stdout.write('\n'.join(sorted(zf.namelist())) + '\n')
 " "$wheel" > "$listing"
 
-missing=""
-for path in "${REQUIRED[@]}"; do
-  if ! grep -Fxq "$path" "$listing"; then
-    missing="$missing  - $path"$'\n'
+  local path missing=""
+  for path in "$@"; do
+    if ! grep -Fxq "$path" "$listing"; then
+      missing="$missing  - $path"$'\n'
+    fi
+  done
+  if [ -n "$missing" ]; then
+    echo "" >&2
+    echo "The $project wheel is missing required files:" >&2
+    printf '%s' "$missing" >&2
+    echo "Wheel listing: $listing" >&2
+    echo "Check [tool.setuptools.packages.find] and [tool.setuptools.package-data] in packages/$project/pyproject.toml." >&2
+    exit 1
   fi
-done
 
-# A nested-glob failure usually loses MANY files at once rather than one, so report the
-# count too: it distinguishes "one file moved" from "package-data is not matching".
-runtime_count="$(grep -c '^cadgen/_runtime/' "$listing" || true)"
+  # Its own packages alone: a package another distribution ships, in this one too, is two copies of one
+  # module on a user's path.
+  local strays own="${distribution}-[^/]*\.dist-info"
+  [ -z "$top" ] || own="$top|$own"
+  strays="$(sed 's|/.*||' "$listing" | sort -u | grep -Ev "^(${own})$" || true)"
+  if [ -n "$strays" ]; then
+    echo "The $project wheel carries what is not its own: $(echo $strays)" >&2
+    exit 1
+  fi
 
-if [ -n "$missing" ]; then
-  echo "" >&2
-  echo "The cadgen wheel is missing required runtime assets:" >&2
-  printf '%s' "$missing" >&2
-  echo "" >&2
-  echo "cadgen/_runtime entries in the wheel: $runtime_count" >&2
-  echo "Wheel listing: $listing" >&2
-  echo "" >&2
-  echo "Check [tool.setuptools.package-data] in packages/cadgen/pyproject.toml. Nested" >&2
-  echo "globs behave differently across setuptools versions; if whole directories are" >&2
-  echo "absent, switch to include-package-data + a MANIFEST.in with:" >&2
-  echo "  graft src/cadgen/_runtime" >&2
-  echo "Assets are built by: scripts/bundle/bundle.sh" >&2
+  # The engine's test goldens (pictures and payloads its tests compare against) are the tests'
+  # own and never ship: a wheel that carries one carries a fixture a user never reads.
+  local shipped_goldens
+  shipped_goldens="$(grep -E '^cad(_server)?/engine/.*(golden|\.png$)' "$listing" || true)"
+  if [ -n "$shipped_goldens" ]; then
+    echo "The $project wheel ships engine test goldens:" >&2
+    printf '%s\n' "$shipped_goldens" >&2
+    exit 1
+  fi
+}
+
+# An alias, packages/aliases/PROJECT: its dist-info alone, and the library at the release (a project that
+# declares the earlier name gets the library it names), its extras the library's `build123d` extra under
+# each name it keeps (`build123d`, and for cadgen `kernel` too, its 0.8 spelling).
+check_alias() {
+  local project="$1" distribution="$2" extras="$3"
+  check "aliases/$project" "$distribution" ""
+  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" "$extras" <<'PY'
+import sys, zipfile
+
+wheel, version, extras = sys.argv[1], sys.argv[2], sys.argv[3].split()
+with zipfile.ZipFile(wheel) as archive:
+    metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
+wanted = [f"Requires-Dist: cad=={version}",
+          *(f'Requires-Dist: cad[build123d]=={version}; extra == "{extra}"' for extra in extras)]
+if requires != wanted:
+    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release and its build123d extra "
+             f"({wanted}) alone")
+PY
+}
+
+check cad cad "cad|cadgen|cad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
+check cad-mcp cad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
+check_alias cadgen cadgen "build123d kernel"
+check_alias text-to-cad text_to_cad build123d
+# The server's last: the runtime checks below read its wheel and listing.
+check cad-server cad_server "cad_server" "${SERVER_REQUIRED[@]}"
+
+# The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
+# report the count too: it distinguishes "one file moved" from "package-data is not matching".
+runtime_count="$(grep -c '^cad_server/_runtime/' "$listing" || true)"
+
+# The runtime is exactly the stages the bundler builds: an entry beside them (a folder a retired
+# stage left in a checkout, which package-data ships whole) is a file the wheel carries that
+# nothing builds, and the byte comparison below would pass it, since it is in the source too.
+expected_runtime="$("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-outputs | sed 's|.*/||' | sort -u)"
+shipped_runtime="$(sed -n 's|^cad_server/_runtime/\([^/]*\).*|\1|p' "$listing" | sort -u)"
+if [ "$shipped_runtime" != "$expected_runtime" ]; then
+  echo "The server wheel's cad_server/_runtime holds $(echo $shipped_runtime); the bundler builds $(echo $expected_runtime)." >&2
+  echo "Rebuild it with scripts/bundle/bundle.sh, which removes what no stage builds." >&2
   exit 1
 fi
 
-"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$PACKAGE_DIR"
-echo "cadgen wheel carries its runtime assets ($runtime_count entries under cadgen/_runtime)."
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/cad-server"
+# The skills and the plugin's files ship in the server's wheel: byte for byte the repository's, at this commit.
+plugin_files=()
+while IFS= read -r plugin_file; do plugin_files+=("$plugin_file"); done < <("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-plugin-files)
+"$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" plugin "$wheel" "$REPO_ROOT" "${plugin_files[@]}"
+echo "The five wheels carry their own packages (the aliases none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"
 fi

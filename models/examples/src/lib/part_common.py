@@ -3,7 +3,7 @@ from __future__ import annotations
 from math import cos, hypot, sin, tau
 from typing import Iterable
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 TOLERANCE = 1e-6

@@ -1,0 +1,26 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "CAD",
+      "description": "Model, draw, source, check and fabricate parts.",
+      "skills": [
+        "cad",
+        "dxf",
+        "engineering-drawing",
+        "step-parts",
+        "dfm",
+        "dfam-check",
+        "gcode",
+        "bambu-labs",
+        "sendcutsend"
+      ]
+    },
+    {
+      "title": "Robotics",
+      "description": "Robot descriptions for ROS, MoveIt2 and Gazebo.",
+      "skills": ["urdf", "srdf", "sdf"]
+    }
+  ]
+}

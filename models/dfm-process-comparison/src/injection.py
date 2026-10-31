@@ -1,10 +1,22 @@
-from cadgen import step, stl
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cad import model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/injection.step")
-@stl(out="../STL/injection.stl")
+
+@model
 def injection():
-    return tray("injection")
+    part = tray("injection")
+    # moulded: ABS, the common injection-moulding resin
+    part.material = FinishedMaterial(
+        plastics.abs_().material,
+        pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', color='#767679ff',
+            metalness=0.0, roughness=0.55),
+    )
+    return part
+
 
 if __name__ == "__main__":
     injection()

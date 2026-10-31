@@ -1,0 +1,1097 @@
+{
+ "schemaVersion": 2,
+ "kind": "srdf",
+ "name": "arm",
+ "root": "base_footprint",
+ "articulation": {
+  "schemaVersion": 2,
+  "controls": [
+   {
+    "id": "shoulder",
+    "label": "shoulder",
+    "unit": "deg",
+    "min": -90.00021045915,
+    "max": 90.00021045915,
+    "default": 0.0
+   },
+   {
+    "id": "lift",
+    "label": "lift",
+    "unit": "m",
+    "min": 0.0,
+    "max": 0.3,
+    "default": 0.0
+   },
+   {
+    "id": "grip",
+    "label": "grip",
+    "unit": "m",
+    "min": 0.0,
+    "max": 0.04,
+    "default": 0.0
+   },
+   {
+    "id": "nod",
+    "label": "nod",
+    "unit": "deg",
+    "min": -57.295779513082,
+    "max": 57.295779513082,
+    "default": 0.0
+   }
+  ],
+  "joints": [
+   {
+    "id": "footprint",
+    "parent": null,
+    "kind": "fixed"
+   },
+   {
+    "id": "shoulder",
+    "parent": "footprint",
+    "kind": "revolute",
+    "origin": [
+     0.0,
+     0.0,
+     0.2
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "turn": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "shoulder",
+       1.0
+      ]
+     ]
+    }
+   },
+   {
+    "id": "lift",
+    "parent": "footprint",
+    "kind": "slider",
+    "origin": [
+     -0.15,
+     0.15,
+     0.15
+    ],
+    "axis": [
+     0.0,
+     0.0,
+     1.0
+    ],
+    "travel": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "lift",
+       1.0
+      ]
+     ]
+    }
+   },
+   {
+    "id": "camera_mount",
+    "parent": "footprint",
+    "kind": "fixed"
+   },
+   {
+    "id": "grip",
+    "parent": "lift",
+    "kind": "slider",
+    "origin": [
+     -0.15,
+     0.16,
+     0.15
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "travel": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "grip",
+       1.0
+      ]
+     ]
+    }
+   },
+   {
+    "id": "grip_mirror",
+    "parent": "lift",
+    "kind": "slider",
+    "origin": [
+     -0.15,
+     0.14,
+     0.15
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "travel": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "grip",
+       -1.0
+      ]
+     ]
+    }
+   },
+   {
+    "id": "nod",
+    "parent": "footprint",
+    "kind": "revolute",
+    "origin": [
+     -0.15,
+     -0.15,
+     0.14
+    ],
+    "axis": [
+     0.0,
+     1.0,
+     0.0
+    ],
+    "turn": {
+     "bias": 0.0,
+     "terms": [
+      [
+       "nod",
+       1.0
+      ]
+     ]
+    }
+   }
+  ],
+  "carries": {
+   "footprint": [
+    "base"
+   ],
+   "shoulder": [
+    "upper_arm"
+   ],
+   "lift": [
+    "carriage"
+   ],
+   "camera_mount": [
+    "camera"
+   ],
+   "grip": [
+    "finger_left"
+   ],
+   "grip_mirror": [
+    "finger_right"
+   ],
+   "nod": [
+    "head"
+   ]
+  },
+  "handles": [
+   {
+    "id": "shoulder",
+    "joint": "shoulder",
+    "dof": "turn",
+    "control": "shoulder",
+    "weight": 1.0,
+    "label": "shoulder",
+    "unit": "deg",
+    "min": -90.00021045915,
+    "max": 90.00021045915
+   },
+   {
+    "id": "lift",
+    "joint": "lift",
+    "dof": "travel",
+    "control": "lift",
+    "weight": 1.0,
+    "label": "lift",
+    "unit": "m",
+    "min": 0.0,
+    "max": 0.3
+   },
+   {
+    "id": "grip",
+    "joint": "grip",
+    "dof": "travel",
+    "control": "grip",
+    "weight": 1.0,
+    "label": "grip",
+    "unit": "m",
+    "min": 0.0,
+    "max": 0.04
+   },
+   {
+    "id": "grip_mirror",
+    "joint": "grip_mirror",
+    "dof": "travel",
+    "control": "grip",
+    "weight": -1.0,
+    "label": "grip_mirror",
+    "unit": "m",
+    "min": -0.04,
+    "max": 0.0
+   },
+   {
+    "id": "nod",
+    "joint": "nod",
+    "dof": "turn",
+    "control": "nod",
+    "weight": 1.0,
+    "label": "nod",
+    "unit": "deg",
+    "min": -57.295779513082,
+    "max": 57.295779513082
+   }
+  ],
+  "poses": {
+   "arm/home": {
+    "shoulder": -28.647889756541,
+    "lift": 0.1
+   },
+   "arm/raised": {
+    "shoulder": -57.295779513082,
+    "lift": 0.2
+   }
+  },
+  "opening": {
+   "shoulder": -28.647889756541,
+   "lift": 0.1,
+   "grip": 0.0,
+   "nod": 0.0
+  }
+ },
+ "links": [
+  {
+   "name": "base_footprint",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "base",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.4,
+      0.4,
+      0.1
+     ],
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.05
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#4d4d59",
+     "materialName": "m0.30.30.351"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "upper_arm",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.2,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "upper_arm_shell",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.5,
+      0.08,
+      0.08
+     ],
+     "origin": {
+      "xyz": [
+       0.25,
+       0.0,
+       0.0
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#e6801a",
+     "materialName": "m0.90.50.11"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "carriage",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    1.0,
+    0.0,
+    0.15,
+    0.0,
+    0.0,
+    1.0,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.1,
+      0.1,
+      0.1
+     ],
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#1a66e6",
+     "materialName": "m0.10.40.91"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "camera",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    0.15,
+    0.0,
+    1.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.0,
+    1.0,
+    0.13,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.06,
+      0.06,
+      0.06
+     ],
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#1ab34d",
+     "materialName": "m0.10.70.31"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "finger_left",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    1.0,
+    0.0,
+    0.16,
+    0.0,
+    0.0,
+    1.0,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.02,
+      0.02,
+      0.08
+     ],
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.09
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#cccc33",
+     "materialName": "m0.80.80.21"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "finger_right",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    1.0,
+    0.0,
+    0.14,
+    0.0,
+    0.0,
+    1.0,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "box",
+     "filename": "",
+     "size": [
+      0.02,
+      0.02,
+      0.08
+     ],
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.09
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "#cccc33",
+     "materialName": "m0.80.80.21"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  },
+  {
+   "name": "head",
+   "placement": [
+    1.0,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    1.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.0,
+    1.0,
+    0.14,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "visuals": [
+    {
+     "name": "",
+     "type": "mesh",
+     "filename": "meshes/head.glb",
+     "scale": null,
+     "origin": {
+      "xyz": [
+       0.0,
+       0.0,
+       0.0
+      ],
+      "rpy": [
+       0.0,
+       0.0,
+       0.0
+      ]
+     },
+     "color": "",
+     "materialName": "",
+     "path": "/models/meshes/head.glb"
+    }
+   ],
+   "collisions": [],
+   "inertial": null
+  }
+ ],
+ "joints": [
+  {
+   "name": "footprint",
+   "type": "fixed",
+   "parent": "base_footprint",
+   "child": "base",
+   "axis": null,
+   "origin": {
+    "xyz": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": null,
+   "mimic": null,
+   "fourBar": null
+  },
+  {
+   "name": "shoulder",
+   "type": "revolute",
+   "parent": "base",
+   "child": "upper_arm",
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "origin": {
+    "xyz": [
+     0.0,
+     0.0,
+     0.2
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": -1.5708,
+    "upper": 1.5708,
+    "effort": 1.0,
+    "velocity": 1.0
+   },
+   "mimic": null,
+   "fourBar": null
+  },
+  {
+   "name": "lift",
+   "type": "prismatic",
+   "parent": "base",
+   "child": "carriage",
+   "axis": [
+    0.0,
+    0.0,
+    1.0
+   ],
+   "origin": {
+    "xyz": [
+     -0.15,
+     0.15,
+     0.15
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": 0.0,
+    "upper": 0.3,
+    "effort": 1.0,
+    "velocity": 1.0
+   },
+   "mimic": null,
+   "fourBar": null
+  },
+  {
+   "name": "camera_mount",
+   "type": "fixed",
+   "parent": "base",
+   "child": "camera",
+   "axis": null,
+   "origin": {
+    "xyz": [
+     0.15,
+     -0.15,
+     0.13
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": null,
+   "mimic": null,
+   "fourBar": null
+  },
+  {
+   "name": "grip",
+   "type": "prismatic",
+   "parent": "carriage",
+   "child": "finger_left",
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "origin": {
+    "xyz": [
+     0.0,
+     0.01,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": 0.0,
+    "upper": 0.04,
+    "effort": 1.0,
+    "velocity": 1.0
+   },
+   "mimic": null,
+   "fourBar": null
+  },
+  {
+   "name": "grip_mirror",
+   "type": "prismatic",
+   "parent": "carriage",
+   "child": "finger_right",
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "origin": {
+    "xyz": [
+     0.0,
+     -0.01,
+     0.0
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": -0.04,
+    "upper": 0.0,
+    "effort": 1.0,
+    "velocity": 1.0
+   },
+   "mimic": {
+    "joint": "grip",
+    "multiplier": -1.0,
+    "offset": 0.0
+   },
+   "fourBar": null
+  },
+  {
+   "name": "nod",
+   "type": "revolute",
+   "parent": "base",
+   "child": "head",
+   "axis": [
+    0.0,
+    1.0,
+    0.0
+   ],
+   "origin": {
+    "xyz": [
+     -0.15,
+     -0.15,
+     0.14
+    ],
+    "rpy": [
+     0.0,
+     0.0,
+     0.0
+    ]
+   },
+   "limit": {
+    "lower": -1.0,
+    "upper": 1.0,
+    "effort": 1.0,
+    "velocity": 1.0
+   },
+   "mimic": null,
+   "fourBar": null
+  }
+ ],
+ "visuals": [
+  {
+   "id": "base:v1",
+   "link": "base",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.05,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#4d4d59",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/609f32530d08aba46e105b45036b7dea515baf7c4762d020a9e481f2b34fa6de.glb"
+   }
+  },
+  {
+   "id": "upper_arm:v1",
+   "link": "upper_arm",
+   "label": "upper_arm_shell",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    0.25,
+    0.0,
+    0.001,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.001,
+    0.2,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#e6801a",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/2c5b7f77723a3001a15cabc5debb1fc01fb20a4d4de8a73172c2ccd239b9e75d.glb"
+   }
+  },
+  {
+   "id": "carriage:v1",
+   "link": "carriage",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.001,
+    0.0,
+    0.15,
+    0.0,
+    0.0,
+    0.001,
+    0.15,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#1a66e6",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/b549a4754a89a91336164b86bf914d7fb66314e7cd7dd9205b0ac37f382ca1b4.glb"
+   }
+  },
+  {
+   "id": "camera:v1",
+   "link": "camera",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    0.15,
+    0.0,
+    0.001,
+    0.0,
+    -0.15,
+    0.0,
+    0.0,
+    0.001,
+    0.13,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#1ab34d",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/d798c751ca7a25e0b7dd70af31867ed3d20c634a75dabeae2e90f07d491aa916.glb"
+   }
+  },
+  {
+   "id": "finger_left:v1",
+   "link": "finger_left",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.001,
+    0.0,
+    0.16,
+    0.0,
+    0.0,
+    0.001,
+    0.24,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#cccc33",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/21a39ddf04a4d04e0f07580d03f56bd3b88bedab633ad40c3c0084bf8dc78139.glb"
+   }
+  },
+  {
+   "id": "finger_right:v1",
+   "link": "finger_right",
+   "label": "box",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.001,
+    0.0,
+    0.14,
+    0.0,
+    0.0,
+    0.001,
+    0.24,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "#cccc33",
+   "mesh": {
+    "format": "glb",
+    "url": "/primitives/21a39ddf04a4d04e0f07580d03f56bd3b88bedab633ad40c3c0084bf8dc78139.glb"
+   }
+  },
+  {
+   "id": "head:v1",
+   "link": "head",
+   "label": "head.glb",
+   "placement": [
+    0.001,
+    0.0,
+    0.0,
+    -0.15,
+    0.0,
+    0.001,
+    0.0,
+    -0.15,
+    0.0,
+    0.0,
+    0.001,
+    0.14,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": "",
+   "mesh": {
+    "format": "glb",
+    "url": "/meshes/head.glb"
+   }
+  }
+ ],
+ "srdf": {
+  "planningGroups": [
+   {
+    "name": "arm",
+    "jointNames": [
+     "shoulder",
+     "lift"
+    ],
+    "linkNames": [],
+    "chains": [],
+    "subgroups": []
+   },
+   {
+    "name": "gripper",
+    "jointNames": [
+     "grip"
+    ],
+    "linkNames": [],
+    "chains": [],
+    "subgroups": []
+   }
+  ],
+  "endEffectors": [
+   {
+    "name": "tool",
+    "parentLink": "carriage",
+    "group": "gripper",
+    "parentGroup": "arm",
+    "link": "carriage"
+   }
+  ],
+  "groupStates": [
+   {
+    "id": "arm/home",
+    "name": "home",
+    "group": "arm"
+   },
+   {
+    "id": "arm/raised",
+    "name": "raised",
+    "group": "arm"
+   }
+  ],
+  "disabledCollisionPairs": [],
+  "groupsByLink": {
+   "carriage": [
+    "arm"
+   ],
+   "upper_arm": [
+    "arm"
+   ],
+   "finger_left": [
+    "gripper"
+   ]
+  }
+ },
+ "sdf": null
+}

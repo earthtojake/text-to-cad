@@ -54,7 +54,7 @@ export function entryAsset(entry, key) {
   if (
     assetKey === kind ||
     assetKey === sourceFormat ||
-    (sourceFormat === RENDER_FORMAT.STEP && ["glb", "topology", "selectortopology", "displayedgetopology"].includes(assetKey)) ||
+    (sourceFormat === RENDER_FORMAT.STEP && assetKey === "glb") ||
     (kind === "srdf" && assetKey === "srdf")
   ) {
     return primaryAsset(entry);
@@ -70,11 +70,6 @@ export function entryAssetHash(entry, key) {
   return normalizeString(entryAsset(entry, key)?.hash);
 }
 
-export function entryAssetBytes(entry, key) {
-  const bytes = Number(entryAsset(entry, key)?.bytes);
-  return Number.isFinite(bytes) && bytes >= 0 ? bytes : 0;
-}
-
 export function entryMeshAssetUrl(entry) {
   return entryAssetUrl(entry, meshAssetKeyForEntry(entry));
 }
@@ -83,84 +78,10 @@ export function entryMeshAssetHash(entry) {
   return entryAssetHash(entry, meshAssetKeyForEntry(entry));
 }
 
-export function entryMeshAssetBytes(entry) {
-  return entryAssetBytes(entry, meshAssetKeyForEntry(entry));
-}
-
-export function entryTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "topology") || entryAssetUrl(entry, "glb");
-}
-
-export function entrySelectorTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "selectorTopology") || entryTopologyAssetUrl(entry);
-}
-
-export function entryDisplayEdgeTopologyAssetUrl(entry) {
-  return entryAssetUrl(entry, "displayEdgeTopology") || entryTopologyAssetUrl(entry);
-}
-
 export function entryUrdfAssetHash(entry) {
   return [
     entryAssetHash(entry, "urdf"),
     entryAssetHash(entry, "srdf"),
     entryAssetHash(entry, "sdf")
   ].filter(Boolean).join(":");
-}
-
-export function entryMeshAssetSignature(entry) {
-  const mesh = String(
-    entry?.kind === "assembly"
-      ? entryAssetHash(entry, "glb")
-      : entryMeshAssetHash(entry)
-  );
-  const appearance = entrySourceFormat(entry) === RENDER_FORMAT.STEP
-    ? normalizeString(entry?.appearanceHash)
-    : "";
-  return appearance ? `${mesh}:${appearance}` : mesh;
-}
-
-export function entryReferenceAssetSignature(entry) {
-  return entryAssetHash(entry, "selectorTopology") || normalizeString(entry?.hash);
-}
-
-export function entryHasMesh(entry) {
-  if (entrySourceFormat(entry) === RENDER_FORMAT.STEP) {
-    return Boolean(
-      entryAssetUrl(entry, "glb") &&
-      entryAssetHash(entry, "glb")
-    );
-  }
-  const meshKey = meshAssetKeyForEntry(entry);
-  return Boolean(entryAssetUrl(entry, meshKey) && entryAssetHash(entry, meshKey));
-}
-
-export function entryHasReferences(entry) {
-  return Boolean(
-    entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entryAssetUrl(entry, "glb") &&
-    entryAssetHash(entry, "selectorTopology")
-  );
-}
-
-export function entryHasDisplayEdges(entry) {
-  return Boolean(
-    entrySourceFormat(entry) === RENDER_FORMAT.STEP &&
-    entryAssetUrl(entry, "glb") &&
-    entryAssetHash(entry, "displayEdgeTopology")
-  );
-}
-
-export function entryPoseUrl(entry) {
-  // The sidecar URL for a STEP model that declares kinematics — the source of
-  // the viewer's Pose tab. The block is authored on the decorator and travels
-  // in the sidecar.
-  return entrySourceFormat(entry) === RENDER_FORMAT.STEP
-    ? normalizeString(entry?.poseUrl)
-    : "";
-}
-
-export function entrySourceSidecarUrl(entry) {
-  return entrySourceFormat(entry) === RENDER_FORMAT.STEP
-    ? normalizeString(entry?.sourceUrl)
-    : "";
 }

@@ -6,5 +6,6 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 "$SCRIPT_DIR/test-js.sh"
+"$SCRIPT_DIR/test-api.sh"
 "$SCRIPT_DIR/test-python.sh"
 "$SCRIPT_DIR/test-global.sh"

@@ -3,6 +3,11 @@ import { Slider as SliderPrimitive } from "radix-ui"
 
 import { cn } from "@text-to-cad/ui/utils"
 
+// shadcn's slider: every slider in the viewer is this one (a row may size and place it; Position's
+// joints leave out its fill). Two changes from shadcn's, for the viewer's denser, see-through
+// panels (11px text, 24px rows): a 12px thumb, not 16px, and a track a shade darker than muted,
+// which all but vanishes on a translucent panel. It adds only the rounding below.
+
 // The decimals a step is written with ("0.25" → 2): what a reported value is rounded to.
 function stepDecimals(step) {
   const text = String(step)
@@ -57,7 +62,7 @@ function Slider({
       <SliderPrimitive.Track
         data-slot="slider-track"
         className={cn(
-          "relative grow overflow-hidden rounded-full bg-muted data-[orientation=horizontal]:h-1 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1"
+          "relative grow overflow-hidden rounded-full bg-foreground/15 data-[orientation=horizontal]:h-1.5 data-[orientation=horizontal]:w-full data-[orientation=vertical]:h-full data-[orientation=vertical]:w-1.5"
         )}
       >
         <SliderPrimitive.Range
@@ -72,7 +77,7 @@ function Slider({
           {...thumbProps}
           data-slot="slider-thumb"
           key={index}
-          className="relative z-10 block size-3.5 shrink-0 rounded-full border border-background bg-primary shadow-sm ring-1 ring-foreground/15 transition-[color,box-shadow] outline-none hover:ring-2 hover:ring-ring/25 focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-50"
+          className="block size-3 shrink-0 rounded-full border border-primary bg-white shadow-sm ring-ring/50 transition-[color,box-shadow] hover:ring-4 focus-visible:ring-4 focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
         />
       ))}
     </SliderPrimitive.Root>

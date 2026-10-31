@@ -4,9 +4,7 @@ import * as THREE from "three";
 
 import {
   applyExplodedViewProgress,
-  clearExplodedViewRecords,
   computeExplodedViewLayout,
-  easeExplodedViewProgress,
   explodedViewBounds
 } from "./explodedView.js";
 
@@ -26,9 +24,11 @@ function box(center, half) {
 }
 
 // Resolve a layout into per-record displacement at `progress`, so tests can
-// assert on where parts actually end up.
-function explode(records, bounds, progress = 1) {
-  const layout = computeExplodedViewLayout(records, bounds);
+// assert on where parts actually end up. `hierarchy` is each leaf's path of node ids
+// through the assembly tree (root first), the one source of nesting: a part id is a
+// token and says nothing about its ancestors.
+function explode(records, bounds, progress = 1, hierarchy = null) {
+  const layout = computeExplodedViewLayout(records, bounds, { hierarchy });
   applyExplodedViewProgress(THREE, layout, progress);
   const offsets = new Map();
   for (const r of records) {
@@ -133,18 +133,28 @@ test("fully concentric parts telescope out along their long axis", () => {
 });
 
 test("subassemblies separate first, then bloom internally (cascade)", () => {
+  // Two subassemblies of two leaves each, as the file's tree lists them: the ids are tokens,
+  // and only the tree says which leaves share a parent.
   const records = [
     record("o1.1.1", box([-10, -1.5, 0], 1)),
     record("o1.1.2", box([-10, 1.5, 0], 1)),
     record("o1.2.1", box([10, -1.5, 0], 1)),
     record("o1.2.2", box([10, 1.5, 0], 1))
   ];
+  const hierarchy = new Map([
+    ["o1.1.1", ["root", "left", "o1.1.1"]],
+    ["o1.1.2", ["root", "left", "o1.1.2"]],
+    ["o1.2.1", ["root", "right", "o1.2.1"]],
+    ["o1.2.2", ["root", "right", "o1.2.2"]]
+  ]);
   const bounds = { min: [-11, -3, -1], max: [11, 3, 1] };
-  const { layout } = explode(records, bounds);
+  const { layout } = explode(records, bounds, 1, hierarchy);
   assert.equal(layout.levelCount, 2);
+  // Without the tree, the same four parts are four siblings: nothing in an id nests them.
+  assert.equal(explode(records, bounds).layout.levelCount, 1);
 
   // Early in the scrub only level 1 has advanced: subassembly moves rigidly.
-  const early = explode(records, bounds, 0.3).offsets;
+  const early = explode(records, bounds, 0.3, hierarchy).offsets;
   assert.ok(length(early.get("o1.1.1")) > 0.5, "subassembly is moving");
   const delta = [
     early.get("o1.1.1")[0] - early.get("o1.1.2")[0],
@@ -154,7 +164,7 @@ test("subassemblies separate first, then bloom internally (cascade)", () => {
   assert.ok(length(delta) < 0.15, "parts within a subassembly still move together early on");
 
   // At full explode the internal bloom has separated them too.
-  const full = explode(records, bounds, 1).offsets;
+  const full = explode(records, bounds, 1, hierarchy).offsets;
   assert.ok(full.get("o1.1.1")[1] < full.get("o1.1.2")[1], "parts bloom apart within the subassembly");
   assert.ok(full.get("o1.1.1")[0] < -1 && full.get("o1.2.1")[0] > 1, "subassemblies separated radially");
 });
@@ -256,21 +266,4 @@ test("non-occurrence part ids explode as flat leaves", () => {
   const { offsets } = explode(records, bounds);
   assert.ok(offsets.get("part:0")[0] < -1);
   assert.ok(offsets.get("part:1")[0] > 1);
-});
-
-test("clearExplodedViewRecords nulls every matrix", () => {
-  const records = [
-    record("o1.1", box([-5, 0, 0], 1)),
-    record("o1.2", box([5, 0, 0], 1))
-  ];
-  const layout = computeExplodedViewLayout(records, { min: [-6, -1, -1], max: [6, 1, 1] });
-  applyExplodedViewProgress(THREE, layout, 1);
-  clearExplodedViewRecords(records);
-  assert.ok(records.every((r) => r.explodedViewMatrix === null));
-});
-
-test("easeExplodedViewProgress clamps and eases out", () => {
-  assert.equal(easeExplodedViewProgress(-1), 0);
-  assert.equal(easeExplodedViewProgress(2), 1);
-  assert.ok(easeExplodedViewProgress(0.5) > 0.5);
 });

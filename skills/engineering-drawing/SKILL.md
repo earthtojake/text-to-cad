@@ -1,6 +1,7 @@
 ---
 name: engineering-drawing
 description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part".
+license: MIT
 ---
 
 # Engineering drawing
@@ -8,7 +9,7 @@ description: Make an engineering drawing of a part as a PDF - orthographic views
 Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
 Use the installed local skill files as the runtime source of truth.
 
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, places dimensions between points ON
 that geometry, finds centre marks on it, and lays the result out on an ISO
 sheet with a frame and a title block. Change the model, rerun the drawing
@@ -21,12 +22,25 @@ operating system opens. No DXF is written, nothing is paired or linked, and
 there is no CLI: the script is the interface. `$dxf` makes cut layouts and flat
 patterns, which are toolpaths, not documents; the two are different jobs.
 
+## Setup
+
+Run the server through the `cad` command its installation writes, so this skill's commands
+share one installation, and its server, with the CAD app's:
+
+- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.9.0 run`
+
+For first-time setup or an update, a missing `cad` command, a release it says is not
+installed, a server that is not running, or an installation or kernel load error, read
+[Setup and troubleshooting](references/setup.md).
+
 ## Workflow
 
-1. Get the part. `cadgen.read_step(Path(__file__).parent / "../STEP/part.step")`
-   reads the artifact a `@step` model wrote (run `python <model>.py` first); a
-   live build123d shape works just as well. The drawing documents geometry, it
-   does not build it.
+1. Get the part. Call the model: `enclosure()`, imported from the model's script,
+   is built by text-to-cad's server (a replay when the server already holds it), and
+   its `.shape` is the part. For a part with no model, read its file: `read_step` for a
+   STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
+   shape works. The drawing documents geometry, it does not build it.
 2. Write `<name>_drawing.py` beside the model, from
    [the template](references/sheet-api.md#template). Import the model facts the
    dimensions reference (hole pitch, overall size, wall) from the model module
@@ -106,7 +120,8 @@ The script raises rather than writing a wrong or missing document:
   `angle()` legs that are collinear or zero-length, a non-finite `at=` or
   `offset=`.
 - A missing renderer. The PDF is the drawing, so no matplotlib is a failure,
-  not a skipped half. A failed render leaves no file behind.
+  not a skipped half. A failed render leaves no file
+  it wrote; an earlier PDF stays byte for byte.
 - `out=` missing or not naming a `.pdf`, at import time.
 
 ## Limits to state in the handoff

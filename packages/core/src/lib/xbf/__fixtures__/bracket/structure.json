@@ -1,0 +1,181 @@
+{
+ "name": "bracket",
+ "path": "bracket.xbf",
+ "version": "1792510834700988695-19446",
+ "units": "mm",
+ "prototypes": [
+  {
+   "index": 0,
+   "key": "b652d41ec8b298216e4c9df0d774e0aa",
+   "name": "plate",
+   "color": [
+    0.27451,
+    0.509804,
+    0.705882,
+    1.0
+   ],
+   "faceNames": {
+    "1": "f:bracket.make_box1.1;M:bracket.fillet1",
+    "2": "f:bracket.fillet1~d3f70920d846",
+    "3": "f:bracket.make_box1.1;Ge:bracket.fillet1",
+    "4": "f:bracket.make_box1.3;Ge:bracket.fillet1",
+    "5": "f:bracket.fillet1~908aee34f872",
+    "6": "f:bracket.make_box1.3;M:bracket.fillet1",
+    "7": "f:bracket.make_box1.4;M:bracket.fillet1",
+    "8": "f:bracket.make_box1.5;Ge:bracket.fillet1",
+    "9": "f:bracket.make_box1.7;Ge:bracket.fillet1",
+    "10": "f:bracket.make_box1.2;M:bracket.fillet1",
+    "11": "f:bracket.make_cylinder1.1;M:bracket.cut1"
+   },
+   "edgeNames": {
+    "1": "e:bracket.make_box1.2;M:bracket.fillet1",
+    "2": "e:bracket.fillet1~055275fbace2",
+    "3": "e:bracket.fillet1~a271f4d6e2aa",
+    "4": "e:bracket.make_box1.4;M:bracket.fillet1",
+    "5": "e:bracket.fillet1~d3f70920d846;U:bracket.fillet1",
+    "6": "e:bracket.fillet1~d3f70920d846;U2:bracket.fillet1",
+    "7": "e:bracket.make_box1.10;M:bracket.fillet1",
+    "8": "e:bracket.make_box1.12;M:bracket.fillet1",
+    "9": "e:bracket.fillet1~d3f70920d846;U3:bracket.fillet1",
+    "10": "e:bracket.fillet1~d3f70920d846;U4:bracket.fillet1",
+    "11": "e:bracket.make_box1.6;M:bracket.fillet1",
+    "12": "e:bracket.cut1~51146d384f13",
+    "13": "e:bracket.fillet1~908aee34f872;U:bracket.fillet1",
+    "14": "e:bracket.fillet1~f9126a58a19a",
+    "15": "e:bracket.fillet1~908aee34f872;U2:bracket.fillet1",
+    "16": "e:bracket.fillet1~ccbeba1a5769",
+    "17": "e:bracket.make_box1.9;M:bracket.fillet1",
+    "18": "e:bracket.make_box1.11;M:bracket.fillet1",
+    "19": "e:bracket.fillet1~908aee34f872;U3:bracket.fillet1",
+    "20": "e:bracket.fillet1~908aee34f872;U4:bracket.fillet1",
+    "21": "e:bracket.make_box1.8;M:bracket.fillet1",
+    "22": "e:bracket.cut1~935f896d4de0",
+    "23": "e:bracket.fillet1~85abd6f67a67",
+    "24": "e:bracket.fillet1~cf1302294b6e",
+    "25": "e:bracket.fillet1~6dc548244856",
+    "26": "e:bracket.fillet1~8d0cbb5e5cdc",
+    "27": "e:bracket.make_cylinder1.2;M:bracket.cut1"
+   },
+   "faceColors": {
+    "2": [
+     1.0,
+     0.647059,
+     0.0,
+     1.0
+    ]
+   },
+   "unmeshed": [],
+   "unmeshedCheck": {}
+  },
+  {
+   "index": 1,
+   "key": "81ba2b11eb13d5c1188d77e6fd9f7f9c",
+   "name": "peg",
+   "color": null,
+   "faceNames": {
+    "1": "f:bracket.make_cylinder1.1",
+    "2": "f:bracket.make_cylinder1.2",
+    "3": "f:bracket.make_cylinder1.3"
+   },
+   "edgeNames": {
+    "1": "e:bracket.make_cylinder1.1",
+    "2": "e:bracket.make_cylinder1.2",
+    "3": "e:bracket.make_cylinder1.3"
+   },
+   "faceColors": {},
+   "unmeshed": [],
+   "unmeshedCheck": {}
+  }
+ ],
+ "instances": [
+  {
+   "prototype": 0,
+   "path": "bracket/plate",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 1,
+   "path": "bracket/peg",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    12.0,
+    0.0,
+    8.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 1,
+   "path": "bracket/peg",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    -12.0,
+    0.0,
+    8.0,
+    1.0
+   ],
+   "color": null
+  }
+ ],
+ "tree": {
+  "name": "bracket",
+  "children": [
+   {
+    "name": "plate",
+    "prototype": 0,
+    "instance": 0
+   },
+   {
+    "name": "peg",
+    "prototype": 1,
+    "instance": 1
+   },
+   {
+    "name": "peg",
+    "prototype": 1,
+    "instance": 2
+   }
+  ]
+ }
+}

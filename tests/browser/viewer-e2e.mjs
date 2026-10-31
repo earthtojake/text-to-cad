@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Real-browser coverage for the bundled Viewer: every load path opens through the
-// real backend and bundle, and the camera holds across modes and re-fits a saved
-// revision. CI runs all of it; there is no local-only set. Fixture and process
-// lifecycle belong to scripts/test/test-viewer-browser.sh.
+// real backend and bundle, the camera holds across modes, and a saved revision re-fits a
+// camera nobody has touched and keeps one the person took. CI runs all of it; there is no
+// local-only set. Fixture and process lifecycle belong to scripts/test/test-viewer-browser.sh.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -30,16 +30,23 @@ function parseArgs(argv) {
 const args = parseArgs(process.argv.slice(2));
 const diagnosticDir = args.out || process.env.VIEWER_TEST_DIAGNOSTICS_DIR || "";
 const root = path.resolve(args.dir || ".");
-// One fixture per LOAD PATH: an exact-surface STEP package, a mesh, a 2D drawing,
-// a robot description.
+// One fixture per LOAD PATH: a mesh, a 2D drawing, a robot description, and the two
+// documents the cadgen engine serves -- a STEP and an engine document (.xbf) -- read through
+// the viewer and drawn by one renderer.
 const fixtures = [
-  // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
-  // apply is hidden, not disabled); `threeD` has the view's Settings and Preview in the navbar.
-  { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
+  // `tools` is the file's own tool strip; unavailable tools are hidden. `threeD` has
+  // Projection, Display and Preview at the strip's end; `sections`
+  // are file sidebar tiles it must have (what there is to read of the file, whatever the tool).
+  { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
+  // A STEP: read by the engine, drawn as an engine document is.
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model tree"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
-  { format: "dxf", file: "smoke.dxf", parts: false, tools: [], threeD: false, minCoverage: 0.003 },
-  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Position"], threeD: true },
+  { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: [], threeD: false, minCoverage: 0.003 },
+  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Links"], threeD: true },
+  // A cadgen engine document: served by the engine, read by the page from it, and picked,
+  // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
+  { format: "xbf", file: "smoke.xbf", parts: true,
+    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model tree"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -62,17 +69,23 @@ for (const fixture of fixtures) {
   if (!fs.existsSync(path.join(root, fixture.file))) fail(`missing test input ${fixture.file}`);
 }
 
-const angle = process.platform === "darwin" ? "metal" : "swiftshader";
+// CI's Linux renders in software (SwiftShader); CAD_TEST_SWIFTSHADER=1 does so on a Mac too, and
+// VIEWER_E2E_CPU_THROTTLE=N slows each page's CPU N times (CDP), to reproduce a slow runner locally.
+const angle = process.platform === "darwin" && process.env.CAD_TEST_SWIFTSHADER !== "1" ? "metal" : "swiftshader";
+const cpuThrottle = Number(process.env.VIEWER_E2E_CPU_THROTTLE || 0);
+// VIEWER_E2E_PREVIEW_FRAME_MS=N draws a frame of N ms every frame while Preview is up, as a software
+// GPU accumulating Render's samples on a slow runner does (CI's camera gate once took 46 s to settle there).
+const previewFrameMs = Number(process.env.VIEWER_E2E_PREVIEW_FRAME_MS || 0);
 const browserFlags = [`--use-angle=${angle}`, "--ignore-gpu-blocklist"];
 if (angle === "swiftshader") browserFlags.push("--enable-unsafe-swiftshader");
-console.log(`viewer browser e2e: Chromium ANGLE=${angle}`);
+console.log(`viewer browser e2e: Chromium ANGLE=${angle}${cpuThrottle > 1 ? `, CPU throttled ${cpuThrottle}x` : ""}`);
 const browser = await chromium.launch({
   headless: true,
   args: browserFlags,
 });
 
 async function newPage() {
-  const context = await browser.newContext({ viewport, deviceScaleFactor: 1 });
+  const context = await browser.newContext({ viewport, deviceScaleFactor: 1, extraHTTPHeaders: process.env.VIEWER_TEST_TOKEN ? { Authorization: `Bearer ${process.env.VIEWER_TEST_TOKEN}` } : {} });
   const errors = [];
   const responseReads = new Set();
   await context.route("**/*", async (route) => {
@@ -91,22 +104,39 @@ async function newPage() {
       return;
     }
     const parsed = new URL(url);
-    // Catalog identities are absolute so two hosted projects can keep separate
-    // file state. Artifact/editing endpoints accept the served-root reference.
-    if (["/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
+    // A file is named by its absolute path in every request: the page addresses documents by id
+    // (`/<id>`) and asks for a file by the path its row gives.
+    if (parsed.pathname === "/__cad/catalog") {
       const file = parsed.searchParams.get("file") || "";
-      if (/^(?:[/\\]|[a-z]:[/\\])/i.test(file)) {
-        errors.push(`absolute file identity leaked to ${parsed.pathname}: ${file}`);
+      if (file && !/^(?:\/|[a-z]:\/)/i.test(file)) {
+        errors.push(`a relative file reached ${parsed.pathname}: ${file}`);
       }
     }
+    // The page reads its own origin alone: a document the cadgen engine serves is read through
+    // the viewer (`/__cad/api/...`), never from the engine's own port.
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
-      errors.push(`unexpected external request: ${request.method()} ${url} (${request.resourceType()})`);
+      errors.push(`a request to another origin: ${request.method()} ${url} (${request.resourceType()})`);
       await route.abort("blockedbyclient");
       return;
     }
     await route.continue();
   });
   const page = await context.newPage();
+  if (cpuThrottle > 1) await (await context.newCDPSession(page)).send("Emulation.setCPUThrottlingRate", { rate: cpuThrottle });
+  if (previewFrameMs > 0) {
+    await page.addInitScript((ms) => {
+      // A frame every frame while Preview is up, each one ms long: Render accumulating its samples
+      // in software, which on a slow runner is drawing for tens of seconds after the camera stops.
+      const draw = () => {
+        if (document.querySelector("[data-preview-view]")) {
+          const end = performance.now() + ms;
+          while (performance.now() < end) { /* the frame's draw */ }
+        }
+        requestAnimationFrame(draw);
+      };
+      requestAnimationFrame(draw);
+    }, previewFrameMs);
+  }
   page.setDefaultTimeout(30_000);
   page.on("response", response => {
     if (response.status() < 400 || !response.url().startsWith(`${viewerOrigin}/__cad/`)) return;
@@ -131,16 +161,6 @@ async function newPage() {
     errors.push(`console: ${message.text()}${source}`);
   });
   await page.addInitScript(MODEL_BOUNDS_SCRIPT);
-  await page.addInitScript(() => {
-    window.__viewerTestCameraLodTrace = [];
-    window.addEventListener("cad:lod-status", (event) => {
-      const status = event.detail;
-      const trace = window.__viewerTestCameraLodTrace;
-      trace.push({ at: performance.now(), camera: window.__cadCamera?.(), pending: status?.pendingEvaluation,
-        occupied: status?.occupied, settled: status?.qualitySettled });
-      if (trace.length > 8) trace.shift();
-    });
-  });
   // Keep one bounded diagnostic snapshot per gate. It is written before the
   // owned context closes, so a thrown assertion still leaves its actual UI and
   // renderer state available instead of only a locator timeout.
@@ -161,13 +181,9 @@ async function newPage() {
             url: location.href,
             text: document.body.innerText.slice(0, 24000),
             buttons: [...document.querySelectorAll('button')].filter(node => node.getBoundingClientRect().height).map(node => ({ label: node.getAttribute('aria-label'), text: node.innerText.slice(0, 120), disabled: node.disabled })).slice(0, 120),
-            placement: window.__cadModelPlacement,
             canvases: [...document.querySelectorAll('canvas')].map(canvas => canvas.getBoundingClientRect().toJSON()),
             camera: window.__cadCamera?.(),
-            cameraLodTrace: window.__viewerTestCameraLodTrace,
-            lod: window.__cadViewportLod?.(),
-            quality: window.__cadViewerQuality,
-            badge: document.querySelector('[data-file-status]')?.dataset.fileStatus,
+            load: window.__cadViewerLoad,
           })),
           new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('diagnostic state timed out')), 3000); }),
         ]);
@@ -194,7 +210,17 @@ async function newPage() {
 }
 
 async function openFile(page, file) {
-  await page.goto(`${args.url.replace(/\/$/, "")}/?file=${encodeURIComponent(file)}`, {
+  // A page names its document by id, `/<id>`: the file's, which the server derives from its canonical
+  // path and registers when the catalog is asked for it (as Select File and the home do).
+  const base = args.url.replace(/\/$/, "");
+  // These one-off Node requests can be separated by more than the server's idle timeout.
+  // Close them from first use so its connection pool cannot race an idle socket closing.
+  const catalog = await page.request.get(`${base}/__cad/catalog?file=${encodeURIComponent(path.join(root, file))}`, {
+    headers: { Connection: "close" },
+  });
+  const id = (await catalog.json()).entries?.[0]?.id;
+  if (!id) fail(`the catalog gave ${file} no document id`);
+  await page.goto(`${base}/${id}`, {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
@@ -206,8 +232,7 @@ async function openFile(page, file) {
   await page.locator('[data-slot="cad-file-view"] [aria-busy="false"]').first().waitFor({ timeout: 120_000 });
   // Then settle on the seam that says the model reached the RENDERER, not on a second of wall
   // clock: every 3D renderer's viewport publishes the bounds it staged (`modelBounds`); a 2D
-  // drawing has none, and its viewport's `aria-busy` is the whole of it. The short pause after it
-  // is for the frame to be painted, which has no seam of its own.
+  // drawing has none, and its viewport's `aria-busy` is the whole of it. Then a frame is painted.
   if (!/\.dxf$/i.test(file)) {
     await page.waitForFunction(() => {
       const bounds = window.__cadModelBounds?.();
@@ -215,15 +240,18 @@ async function openFile(page, file) {
         && bounds.min.some((value, axis) => Number(bounds.max[axis]) - Number(value) > 0);
     }, null, { timeout: 120_000 });
   }
-  await page.waitForTimeout(250);
+  await painted(page);
   return canvas;
 }
 
-/** The staged model's bounds, from whichever seam its renderer publishes. */
+/** Once the page has painted a frame after this: the second animation frame from now runs after the first one's paint. */
+function painted(page) {
+  return page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+/** The staged model's bounds, from the stage its renderer publishes (`__cadStage`). */
 const MODEL_BOUNDS_SCRIPT = () => {
   window.__cadModelBounds = () => {
-    const placement = window.__cadModelPlacement;
-    if (Array.isArray(placement?.boundsMin)) return { min: placement.boundsMin, max: placement.boundsMax };
     const stage = window.__cadStage?.();
     return stage?.bounds ? { min: stage.bounds.min, max: stage.bounds.max } : null;
   };
@@ -253,7 +281,7 @@ async function canvasMenuItems(page, canvas) {
   const box = await canvas.boundingBox();
   const point = { x: box.x + box.width * 0.12, y: box.y + box.height * 0.86 };
   await page.mouse.click(point.x, point.y, { button: "right" });
-  await page.waitForTimeout(300);
+  await painted(page);  // a menu the press opened is drawn by then
   const menu = page.locator('[role="menu"]').first();
   const items = await menu.count() ? (await menu.locator('[role="menuitem"]').allTextContents()).map((x) => x.trim()) : [];
   await page.keyboard.press("Escape");
@@ -281,17 +309,25 @@ async function formatGate() {
       if (drawn < (fixture.minCoverage ?? 0.03)) failures.push(`${fixture.format}: no foreground model region (${drawn.toFixed(4)})`);
       // The file's own tools, exactly: one that does not apply is hidden, not disabled.
       const strip = await page.locator('[role="group"][aria-label="Interaction tools"] button').evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")));
+        buttons.filter((button) => !button.closest("[data-view-controls]")).map((button) => button.getAttribute("aria-label")));
       for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
-      if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: a tool strip on a file with no tools (${strip.join(", ")})`);
+      if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: tools on a file that has none (${strip.join(", ")})`);
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // A 3D view's controls, at the navbar's right end: Settings, then Preview. A drawing has none.
-      const controls = await page.locator("[data-navbar-controls] button").evaluateAll((buttons) =>
+      // What there is to read of the file is the file sidebar's, a tile per section, never a tool.
+      const tiles = await page.locator("[data-file-sidebar-tools] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Settings", "Preview"] : [];
-      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: navbar controls are ${JSON.stringify(controls)}`);
+      for (const label of fixture.sections) if (!tiles.includes(label)) failures.push(`${fixture.format}: missing the ${label} tile (sidebar: ${tiles.join(", ")})`);
+      if (!fixture.sections.length && tiles.length) failures.push(`${fixture.format}: a file sidebar on a file with nothing to read (${tiles.join(", ")})`);
+      // Projection, Display and Preview end the tool strip on 3D views; drawings have none.
+      const controls = await page.locator("[data-cad-toolbar] [data-view-controls] button").evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-label")));
+      const expected = fixture.threeD ? ["Projection: Orthographic", "Display mode: Solid", "Preview"] : [];
+      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
+      if (await page.locator("[data-viewer-navbar] [data-view-controls] button").count()) failures.push(`${fixture.format}: editor view controls in the navbar`);
+      const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
+      if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
       if (fixture.parts) {
         for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
@@ -311,27 +347,37 @@ async function formatGate() {
   }
 }
 
-// Inspect and Render are the Display settings' Solid and Render presets, chosen from the Mode
-// dropdown of the popover the navbar's Settings opens.
-const VIEWING_PRESET = { Inspect: "Solid", Render: "Render" };
+// Inspect is the tools view, in the file's mode (Solid); Render is Preview's alone, in by
+// Preview at the strip's end and out by Exit preview in Preview's bar, each once the cover over the crossing has lifted.
 async function selectViewingMode(page, current, next) {
-  const popover = page.locator("[data-display-popover]");
-  if (!(await popover.count())) await page.locator("[data-navbar-controls]").getByRole("button", { name: "Settings", exact: true }).click();
-  const mode = popover.getByRole("combobox", { name: "Mode", exact: true });
-  await mode.waitFor();
-  if ((await mode.innerText()).trim() !== VIEWING_PRESET[current]) fail(`viewing mode: expected ${current} before switching to ${next}`);
-  await mode.click();
-  await page.getByRole("option", { name: VIEWING_PRESET[next], exact: true }).click();
-  await page.waitForFunction((label) => document.querySelector('[data-display-popover] [role="combobox"][aria-label="Mode"]')?.textContent.trim() === label,
-    VIEWING_PRESET[next]);
-  await page.keyboard.press("Escape");
-  await popover.waitFor({ state: "detached" });
+  const [press, arrive] = next === "Render" ? ["Preview", "Exit preview"] : ["Exit preview", "Preview"];
+  if (!(await page.getByRole("button", { name: press, exact: true }).count())) fail(`viewing mode: expected ${current} before switching to ${next}`);
+  const button = page.getByRole("button", { name: press, exact: true });
+  if (next !== "Render") {
+    // Preview's bar hides two seconds after the pointer last rests over the view (counted from the frame
+    // that shows it), and a person's pointer, moving to Exit preview, brings it back and holds it while it
+    // rests there: this pointer does the same. Playwright checks what is under a point before it moves
+    // there, so a press alone on a hidden bar would never bring it back.
+    const visible = () => page.locator('[data-preview-bar][data-state="visible"]').waitFor({ state: "attached" });
+    const view = await page.locator("[data-preview-view]").first().boundingBox();
+    await page.mouse.move(view.x + view.width / 2, view.y + view.height / 2);
+    await visible();
+    const box = await button.boundingBox();
+    const [x, y] = [box.x + box.width / 2, box.y + box.height / 2];
+    await page.mouse.move(x, y);
+    await visible();
+    await page.mouse.move(x + 1, y);  // over the bar while it shows: resting there holds it
+    await visible();
+  }
+  await button.click();
+  await page.getByRole("button", { name: arrive, exact: true }).waitFor();
+  await page.waitForFunction(() => !document.querySelector("[data-preview-cover]"));
 }
 
 // --- camera grounding -----------------------------------------------------
 // The camera is fitted ONCE per model, to its zero pose: a mode round trip does
-// not move it, the explicit Reset view re-fits to that same zero pose, and only a
-// saved REVISION (a new zero pose) re-fits it. The tolerance is only there for
+// not move it, a saved REVISION (a new zero pose) does not move it either, and the
+// explicit Reset view re-fits to the zero pose there is now. The tolerance is only there for
 // the last-bit drift OrbitControls' own update leaves behind (observed at ~1e-15
 // relative); the regression this catches moved the framing by 2.4% and the pivot
 // by a quarter of the model.
@@ -397,64 +443,48 @@ async function resetView(page) {
   const box = await page.locator("canvas").first().boundingBox();
   await page.mouse.click(box.x + box.width * 0.12, box.y + box.height * 0.86, { button: "right" });
   await page.getByRole("menuitem", { name: "Zoom to fit", exact: true }).click();
-  // Reset changes framing on the presented model. The pose and zero-pose
-  // camera assertions do not require a queued LOD camera sample to finish;
-  // actual geometry adoption, presentation and camera stability still do.
-  await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
+  // Reset changes framing on the presented model: presentation and a camera at
+  // rest are what it waits for.
+  await settledCameraFrame(page, { stage: "reset view" });
 }
 
 // --- the camera across modes ----------------------------------------------
-// Inspect (Solid) and Render are Display presets over one view: a switch converts
-// the camera to the other projection, keeping what it looks at and how large it
-// draws it, and converting back returns the view exactly. A model opens framed
-// against its own zero pose.
-async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
+// Inspect (the tools view, Solid) and Render (Preview) look at one model: Preview converts
+// the camera to its perspective, keeping what it looks at, and leaving it gives the tools view's
+// camera back exactly. A model opens framed against its own zero pose.
+async function settledCameraFrame(page, { projection = null, stage, timeout = 60_000 } = {}) {
   const startedAt = Date.now();
-  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
+  cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection } });
   // Projection is published during scene reconciliation, before Render's
   // environment and first frame are necessarily ready. The presentation host
-  // clears aria-busy only after drawing that destination scene. Camera damping
-  // must settle for every framing assertion; mode/gesture checks also require
-  // settled LOD refinement.
-  const ready = await page.waitForFunction(({ want, requireSettledLod }) => {
-    const read = () => {
-      const canvas = document.querySelector("canvas");
-      const camera = window.__cadCamera?.();
-      const quality = window.__cadViewerQuality;
-      const lod = window.__cadViewportLod?.();
-      if (!canvas || !camera || (want && camera.projection !== want)
-        || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
-        || getComputedStyle(canvas).visibility !== "visible"
-        || document.querySelector("[data-viewer-transition]")) return null;
-      const expectedQualities = camera.projection === "perspective" ? ["standard", "high"] : ["interactive"];
-      if (!quality?.standardQualityReady || !expectedQualities.includes(quality.quality)) return null;
-      if (lod?.componentCount > 0 && (lod.quality !== quality.quality || lod.busy || lod.collectionPending
-        || (requireSettledLod && (!lod.qualitySettled || lod.pendingEvaluation)))) return null;
-      return { canvas, camera, quality: quality.quality, levelCounts: lod?.levelCounts,
-        lodSettled: lod?.qualitySettled, lodPendingEvaluation: lod?.pendingEvaluation };
-    };
-    const after = read();
-    if (!after) {
-      delete window.__viewerTestCameraFrame;
-      return false;
-    }
-    const coordinates = camera => [...camera.position, ...camera.target, ...camera.up, camera.zoom, camera.zoomPercent,
-      ...(camera.projection === "orthographic" ? [camera.halfHeight] : [])];
-    const before = window.__viewerTestCameraFrame;
-    const a = before ? coordinates(before.camera) : [], b = coordinates(after.camera);
-    const stable = before?.canvas === after.canvas && before.quality === after.quality
-      && a.every((value, index) => Math.abs(value - b[index]) <= 1e-9 * Math.max(1, Math.abs(value)));
-    const stableFrames = stable ? before.stableFrames + 1 : 0;
-    window.__viewerTestCameraFrame = { ...after, stableFrames };
-    if (stableFrames < 2) return false;
-    const gl = after.canvas.getContext("webgl2");
-    if (!gl || gl.isContextLost()) throw new Error('camera: presented canvas has no live WebGL2 context');
-    gl.finish();
-    delete window.__viewerTestCameraFrame;
-    return { camera: after.camera, quality: after.quality, levelCounts: after.levelCounts,
-      lodSettled: after.lodSettled, lodPendingEvaluation: after.lodPendingEvaluation,
-      width: after.canvas.width, height: after.canvas.height };
-  }, { want: projection, requireSettledLod }, { timeout, polling: "raf" });
+  // clears aria-busy only after drawing that destination scene. The whole model
+  // must be loaded, and the camera at rest by the controller's own account
+  // (`settling`: no gesture, transition, held key or damping still moves it),
+  // for every framing assertion. The frame the poll runs in was drawn at rest.
+  // And the camera is framed for the box the canvas has on screen: leaving Preview brings the
+  // navbar back a commit after the tools view returns, and the viewport answers that resize (its
+  // refit of the orthographic half-height) in its ResizeObserver, which runs after this frame's
+  // animation callbacks -- so a poll can see the new box with the camera still framed for Preview's
+  // taller one. Its projection's aspect is the viewport's once the resize is handled.
+  const ready = await page.waitForFunction(({ want }) => {
+    const canvas = document.querySelector("canvas");
+    const camera = window.__cadCamera?.();
+    const box = canvas ? canvas.clientWidth / canvas.clientHeight : NaN;
+    if (!canvas || !camera || camera.settling !== false || (want && camera.projection !== want)
+      || !(Math.abs(Number(camera.aspect) - box) <= 1e-6 * box)
+      || canvas.closest("[aria-busy]")?.getAttribute("aria-busy") !== "false"
+      || getComputedStyle(canvas).visibility !== "visible"
+      || document.querySelector("[data-viewer-transition]")
+      || !window.__cadViewerLoad?.complete) return false;
+    // A view draws through the page's GPU device and is handed its frames as bitmaps; a browser
+    // without one draws in a context of the canvas's own.
+    const gl = canvas.getContext("webgl2");
+    if (gl) {
+      if (gl.isContextLost()) throw new Error('camera: presented canvas has lost its WebGL2 context');
+      gl.finish();
+    } else if (!(window.__cadGpuDevice?.().views > 0)) throw new Error('camera: presented canvas draws through no GPU device');
+    return { camera, width: canvas.width, height: canvas.height };
+  }, { want: projection }, { timeout, polling: "raf" });
   try {
     const state = { stage, waitMs: Date.now() - startedAt, ...await ready.jsonValue() };
     cameraReadiness.set(page, state);
@@ -505,8 +535,8 @@ async function modeCameraGate() {
       failures.push(`mode camera: Inspect did not open orthographic (${inspectFit?.projection})`);
     }
 
-    // Solid and Render are presets over ONE view: a switch converts the camera to the other
-    // projection, keeping what it looks at and how large it draws it, and a round trip is exact.
+    // Preview converts the camera to its projection, keeping what it looks at, and leaving it
+    // is exact.
     await switchMode(page, "Inspect", "Render");
     const renderFit = await cameraState(page);
     if (!renderFit) failures.push("mode camera: the camera seam published nothing in Render");
@@ -517,7 +547,8 @@ async function modeCameraGate() {
     await switchMode(page, "Render", "Inspect");
     await cameraHeld(page, inspectFit, "returning to Inspect");
 
-    // A view taken by hand survives a round trip, in either mode.
+    // A view taken by hand survives a visit to Preview, and what is done to the camera in
+    // Preview is Preview's: the tools view gets its own back.
     await orbitAndZoom(page);
     const handFramed = await cameraMoved(page, inspectFit, "orbit and zoom in Inspect");
     if (handFramed) {
@@ -526,11 +557,9 @@ async function modeCameraGate() {
       await cameraHeld(page, handFramed, "Inspect after a round trip through Render");
       await switchMode(page, "Inspect", "Render");
       await orbitAndZoom(page);
-      const renderFramed = await cameraMoved(page, renderFit, "orbit and zoom in Render");
+      await cameraMoved(page, renderFit, "orbit and zoom in Render");
       await switchMode(page, "Render", "Inspect");
-      await switchMode(page, "Inspect", "Render");
-      if (renderFramed) await cameraHeld(page, renderFramed, "Render after a round trip through Inspect");
-      await switchMode(page, "Render", "Inspect");
+      await cameraHeld(page, handFramed, "Inspect after the camera moved in Render");
     }
 
     // A different model is framed against ITS zero pose, not the camera the
@@ -552,44 +581,79 @@ async function modeCameraGate() {
     if (errors.length) failures.push(`mode camera: ${errors.join(" | ")}`);
     console.log(`  mode camera: Inspect ${describeCamera(inspectFit)}`);
     console.log(`  mode camera: Render  ${describeCamera(renderFit)}`);
-    console.log("  mode camera: a switch converts the view without re-aiming it, a round trip returns "
-      + "the view it started from, and a new model is framed against its own box");
+    console.log("  mode camera: Preview converts the view without re-aiming it, leaving it returns "
+      + "the tools view's camera, and a new model is framed against its own box");
   } finally {
     await context.close();
   }
 
-  // A mode switch or a pose must not re-frame; a REVISION must. Saving a rebuilt
-  // model over the open one gives it a new zero pose, and a camera still fitted to
-  // the old one leaves the new geometry clipped outside the frame. The grown arm
-  // reaches x = 158 where the first revision stopped at 58, so the old frame cannot
-  // contain it. A fresh tab, because the re-fit is for a camera nobody chose: one
-  // the tab kept for this file (Zoom to fit saves one) is restored instead.
+  // A REVISION follows the camera's owner (`kit/camera/cameraTouch.js`). While the camera is still
+  // the opening fit, nobody's yet, a rebuild whose box changed is fitted again, as the open
+  // fitted it: the grown arm (x = 158 where the first revision stopped at 58) comes up framed
+  // whole, at 100% of its own ruler, looking the way it did. Once the person has taken the camera,
+  // a rebuild keeps it exactly, its pose and its zoom, even as the model shrinks back; their own
+  // fit hands it back and frames the revision on screen. A fresh tab, so the camera at the start
+  // is the open-time fit and not one the tab kept for this file.
   const revision = await newPage();
+  const rebuilt = async (from, reaches) => {
+    fs.copyFileSync(path.join(root, ".revision", from), path.join(root, "hinge.step"));
+    const landed = await revision.page.waitForFunction((grown) => {
+      const x = Number(window.__cadModelBounds?.()?.max?.[0]);
+      return grown ? x > 100 : x > 0 && x < 100;
+    }, reaches === "grown", { timeout: 60_000 }).then(() => true).catch(() => false);
+    if (!landed) failures.push(`step revision: the viewer never picked up the ${reaches} model`);
+    else await settledCameraFrame(revision.page, { stage: `hinge ${reaches}` });
+    return landed;
+  };
+  const sameDirection = (a, b) => {
+    const unit = camera => { const d = camera.position.map((v, i) => v - camera.target[i]); const l = Math.hypot(...d) || 1; return d.map(v => v / l); };
+    return unit(a).every((value, axis) => Math.abs(value - unit(b)[axis]) <= 1e-6);
+  };
   try {
     await openFile(revision.page, "hinge.step");
+    await settledCameraFrame(revision.page, { stage: "hinge before its revision" });
     const firstFit = await cameraState(revision.page);
-    fs.copyFileSync(path.join(root, ".revision", "hinge.step"), path.join(root, "hinge.step"));
-    const grown = await revision.page.waitForFunction(() => {
-      const bounds = window.__cadModelBounds?.();
-      return Number(bounds?.max?.[0]) > 100;
-    }, null, { timeout: 60_000 }).then(() => true).catch(() => false);
-    if (!grown) {
-      failures.push("step revision: the viewer never picked up the rebuilt model");
-    } else {
-      // Settle: the fit lands in the same effect that adopts the new geometry.
-      await revision.page.waitForTimeout(1_500);
-      const revised = await cameraState(revision.page);
-      if (cameraDrift(revised, firstFit) <= CAMERA_EPSILON) {
-        failures.push(`step revision: the camera kept the previous revision's frame — ${describeCamera(revised)}`);
-      } else if (!(Number(revised?.halfHeight) > Number(firstFit?.halfHeight))) {
-        failures.push(`step revision: the model grew but the frame did not — ${describeCamera(revised)}, `
+    if (firstFit?.untouched !== true) failures.push(`step revision: the opening fit does not read as untouched (${firstFit?.untouched})`);
+    if (await rebuilt("hinge.step", "grown")) {
+      const refit = await cameraState(revision.page);
+      if (!(Number(refit?.halfHeight) > Number(firstFit?.halfHeight))) {
+        failures.push(`step revision: an untouched camera was not fitted to the grown model — ${describeCamera(refit)}, `
           + `was ${describeCamera(firstFit)}`);
-      } else if (Math.abs(Number(revised?.zoomPercent) - 100) > 0.5) {
-        failures.push(`step revision: the new fit does not read as 100% (${revised?.zoomPercent})`);
+      } else if (Math.abs(Number(refit?.zoomPercent) - 100) > 0.5) {
+        failures.push(`step revision: the untouched re-fit does not read as 100% (${refit?.zoomPercent})`);
+      } else if (!sameDirection(refit, firstFit)) {
+        failures.push(`step revision: the untouched re-fit turned the view — ${describeCamera(refit)}`);
+      }
+
+      // The person takes the camera: a rebuild now keeps it, though the model shrank back.
+      await orbitAndZoom(revision.page);
+      const handFramed = await cameraMoved(revision.page, refit, "orbit and zoom on the grown hinge");
+      if (handFramed?.untouched !== false) failures.push(`step revision: an orbit did not touch the camera (${handFramed?.untouched})`);
+      if (handFramed && await rebuilt("hinge-first.step", "first")) {
+        // The zoom ruler is measured against the zero pose, which the revision changed: the pose
+        // is compared without it.
+        const kept = await cameraState(revision.page);
+        const drift = cameraDrift(kept && { ...kept, zoomPercent: handFramed.zoomPercent }, handFramed);
+        if (!(drift <= CAMERA_EPSILON)) {
+          failures.push(`step revision: a touched camera moved on a rebuild (${drift.toExponential(2)} relative) — `
+            + `${describeCamera(kept)}, was ${describeCamera(handFramed)}`);
+        }
+        // Their fit, F, frames the revision on screen, about its own centre, at the angle they
+        // left (the ruler's 100% is the default angle's, so it is not read here), and the camera
+        // is untouched again.
+        await revision.page.keyboard.press("f");
+        await settledCameraFrame(revision.page, { stage: "the fit F makes" });
+        const fitted = await cameraState(revision.page);
+        if (!fitted || fitted.target.some((value, axis) => Math.abs(value - firstFit.target[axis]) > 1e-6) || fitted.zoom !== 1) {
+          failures.push(`step revision: F did not frame the first revision — ${describeCamera(fitted)}`);
+        } else if (!sameDirection(fitted, handFramed)) {
+          failures.push(`step revision: F turned the view — ${describeCamera(fitted)}`);
+        }
+        if (fitted?.untouched !== true) failures.push(`step revision: a fit did not hand the camera back (${fitted?.untouched})`);
       }
     }
     if (revision.errors.length) failures.push(`step revision: ${revision.errors.join(" | ")}`);
-    console.log("  step revision: a saved revision re-fits a camera nobody moved to its own zero pose");
+    console.log("  step revision: an untouched camera fits a rebuilt box, a touched one is kept, and a fit hands it back");
   } finally {
     await revision.context.close();
   }

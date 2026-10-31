@@ -7,7 +7,7 @@ rear a drum shell. Wheel-local datum: the axle (origin at ``FRONT_AXLE`` /
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 from math import cos, sin, radians
 
 from lib import lib as L
@@ -41,7 +41,7 @@ def _tire(axle, od, width, color):
         for _ in range(0)
     ]
     del grooves  # grooves cut visually at render scale; kept single carcass
-    return L.paint(carcass, "tire", f"od{od:.0f}", color=color)
+    return L.paint(carcass, "tire", f"od{od:.0f}", color=color, material=S.TYRE_RUBBER)
 
 
 def _spoke(axle, angle_deg, r_in, r_out, w_in, w_out, thickness):
@@ -70,7 +70,7 @@ def _cast_rim(axle, color):
     ]
     hub = L.axis_ring(axle, (0, 1, 0), 34.0, S.AXLE_DIAMETER / 2, 66.0)
     rim = barrel.fuse(*spokes, hub)
-    return L.paint(rim, "cast_rim", f"{S.SPOKE_COUNT}spoke", color=color)
+    return L.paint(rim, "cast_rim", f"{S.SPOKE_COUNT}spoke", color=color, material=S.CAST_ALUMINIUM)
 
 
 def build_front_wheel():
@@ -81,7 +81,7 @@ def build_front_wheel():
         (axle[0], -46.0, axle[2]), (0, 1, 0),
         S.BRAKE_DISC_DIAMETER / 2, 60.0, 5.0,
     )
-    disc = L.paint(disc, "brake_disc", color=S.STEEL)
+    disc = L.paint(disc, "brake_disc", color=S.STEEL, material=S.DISC_STEEL)
     return [tire, rim, disc]
 
 
@@ -92,5 +92,5 @@ def build_rear_wheel():
     drum = L.axis_ring(
         (axle[0], -18.0, axle[2]), (0, 1, 0), 55.0, 39.0, 56.0,
     )
-    drum = L.paint(drum, "brake_drum", color=S.ENGINE_DARK)
+    drum = L.paint(drum, "brake_drum", color=S.ENGINE_DARK, material=S.CAST_ALUMINIUM)
     return [tire, rim, drum]

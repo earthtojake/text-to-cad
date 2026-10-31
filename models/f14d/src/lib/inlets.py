@@ -45,7 +45,7 @@ import functools
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import geometry as G
 from lib import sections as SEC
@@ -53,10 +53,7 @@ from lib.airframe import stance
 from lib.context import group, mirror_pair
 from lib import palette as P
 
-try:  # instanced fastener/perforation rows; optional so the module still loads
-    from cadgen import compound_from_instances
-except Exception:  # noqa: BLE001
-    compound_from_instances = None
+from lib.context import compound_from_instances  # instanced fastener/perforation rows
 
 M = G.M
 
@@ -468,8 +465,6 @@ def _bleed_panel(side, s0, s1):
 
 
 def _perforations(side, s0, s1):
-    if compound_from_instances is None:
-        return None
     y, z, a, b, r = _bore(0.5 * (s0 + s1))
     x0, x1 = duct_station(s0)[0], duct_station(s1)[0]
     w = 2.0 * max(50.0, a - r - 34.0)
@@ -580,8 +575,6 @@ def _louvres(side):
 
 
 def _fasteners(side, x, z_lo, z_hi, count):
-    if compound_from_instances is None:
-        return None
     proto = P.style(bd.Solid.make_sphere(8.5), "fastener", P.ALUM_DARK)
     inst = []
     for i in range(count):

@@ -1,21 +1,12 @@
-"""F1 part model: cockpit furniture.
+"""F1 part: cockpit furniture.
 
-The geometry `lib/cockpit.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.5`; rebuild `f1.py`
-to pick up a change here.
+Built in car coordinates by `lib/cockpit.py`; the `survival_cell` stage
+(`stages.py`) builds it.
 """
-
-from __future__ import annotations
-
-from cadgen import step
 
 from lib import cockpit as cockpit_lib
 
 
-@step(out="../STEP/cockpit.step")
 def cockpit():
-    return cockpit_lib.build_cockpit()
-
-
-if __name__ == "__main__":
-    cockpit()
+    built = cockpit_lib.build_cockpit()
+    return built

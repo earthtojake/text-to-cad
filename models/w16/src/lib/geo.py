@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 
@@ -88,56 +88,38 @@ def in_section_void(point, bank: int, enabled: bool) -> bool:
             and point[1] > S.SECTION_Y_MIN and point[2] > S.SECTION_Z_MIN)
 
 
+def _fuzzy(operation, shape, tools, fuzzy: float):
+    """``shape`` with ``operation`` (an OCCT boolean, fuzzy) applied to ``tools``, run
+    through build123d's boolean with no clean, as the original OCCT call ran it, so the
+    engine keys it as any build123d boolean (a raw OCCT boolean runs past its memo).
+    One solid back is that solid, else the compound."""
+    operation.SetFuzzyValue(fuzzy)
+    with bd.SkipClean():
+        result = shape._bool_op((shape,), list(tools), operation)
+    solids = result.solids()
+    return solids[0] if len(solids) == 1 else result
+
+
 def cut_fuzzy(shape, tools, fuzzy: float = 1e-3):
     """Boolean cut with an OCCT fuzzy value: absorbs near-tangent/coincident
     surface noise that makes an exact cut BOP-invalid. `tools` is a list."""
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Cut
-    from OCP.TopTools import TopTools_ListOfShape
 
-    args = TopTools_ListOfShape()
-    args.Append(shape.wrapped)
-    tl = TopTools_ListOfShape()
-    for t in tools:
-        tl.Append(t.wrapped)
-    op = BRepAlgoAPI_Cut()
-    op.SetArguments(args)
-    op.SetTools(tl)
-    op.SetFuzzyValue(fuzzy)
-    op.SetRunParallel(True)
-    op.Build()
-    if not op.IsDone():
-        raise RuntimeError("fuzzy cut failed")
-    return _wrap(op.Shape())
+    return _fuzzy(BRepAlgoAPI_Cut(), shape, tools, fuzzy)
+
+
+def common_fuzzy(shape, tools, fuzzy: float = 1e-3):
+    """Multi-tool intersection with an OCCT fuzzy value, as `cut_fuzzy`."""
+    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
+
+    return _fuzzy(BRepAlgoAPI_Common(), shape, tools, fuzzy)
 
 
 def fuse_fuzzy(shapes, fuzzy: float = 1e-3):
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
-    from OCP.TopTools import TopTools_ListOfShape
-
-    args = TopTools_ListOfShape()
-    args.Append(shapes[0].wrapped)
-    tl = TopTools_ListOfShape()
-    for t in shapes[1:]:
-        tl.Append(t.wrapped)
-    op = BRepAlgoAPI_Fuse()
-    op.SetArguments(args)
-    op.SetTools(tl)
-    op.SetFuzzyValue(fuzzy)
-    op.SetRunParallel(True)
-    op.Build()
-    if not op.IsDone():
-        raise RuntimeError("fuzzy fuse failed")
-    op.SimplifyResult()
-    return _wrap(op.Shape())
-
-
-def _wrap(topods):
-    """Wrap a TopoDS result as a build123d Solid when it is one solid, else a Compound."""
-    comp = bd.Compound(topods)
-    solids = comp.solids()
-    if len(solids) == 1:
-        return solids[0]
-    return comp
+    """Fuse with an OCCT fuzzy value, its result simplified (build123d's clean)."""
+    fused = shapes[0].fuse(*shapes[1:], tol=fuzzy)
+    solids = fused.solids()
+    return solids[0] if len(solids) == 1 else fused
 
 
 def sound(shape) -> bool:

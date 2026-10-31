@@ -87,8 +87,6 @@ function intersectsCandidateBounds(mesh, raycaster) {
 }
 
 function raycastWithDemand(raycaster, intersections) {
-  // Deformation must materialize its exact CPU positions/bounds first.
-  if (this.userData?.cadBeforeRaycast?.(raycaster) === false) return;
   const enqueue = raycastDemand.get(this);
   if (enqueue && !this.geometry.boundsTree) {
     if (!intersectsCandidateBounds(this, raycaster)) return;
@@ -186,7 +184,6 @@ export function scheduleRuntimeRaycastBvh(runtime, {
   maxTriangles = DEFAULT_MAX_BVH_TRIANGLES,
   reserveBuild = null,
   finishBuild = null,
-  onBuildDenied = null,
   deferUntilRaycast = false,
   workerClient = defaultRaycastBvhWorkerClient(),
 } = {}) {
@@ -245,8 +242,7 @@ export function scheduleRuntimeRaycastBvh(runtime, {
     if (!workerClient) {
       const estimatedBytes = estimateGeometryBvhBytes(geometry);
       const reservation = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-      if (reservation.ok === false) onBuildDenied?.({ geometry, estimatedBytes, ...(reservation.detail || {}) });
-      else {
+      if (reservation.ok !== false) {
         buildGeometryBvh(geometry, maxTriangles);
         finishBuild?.(reservation.token, { geometry, builtBytes: builtGeometryBvhBytes(geometry) });
       }
@@ -267,10 +263,7 @@ export function scheduleRuntimeRaycastBvh(runtime, {
       if (!snapshot) { geometry.userData.__bvhSkipped = true; return null; }
       const estimatedBytes = estimateGeometryBvhBuildBytes(geometry);
       const admitted = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-      if (admitted.ok === false) {
-        onBuildDenied?.({ geometry, estimatedBytes, ...(admitted.detail || {}) });
-        return null;
-      }
+      if (admitted.ok === false) return null;
       reservation = admitted;
       if (!current() || !matchesGeometry(geometry, snapshot)) return null;
       return copiedGeometry(snapshot);
@@ -305,57 +298,3 @@ export function scheduleRuntimeRaycastBvh(runtime, {
   }
 }
 
-// The merged face-pick proxy is rebuilt as a fresh BufferGeometry on every
-// selector sync, but always wraps the same proxy typed arrays, so the built
-// BVH is cached on the proxy and reattached across rebuilds.
-export function ensureFacePickBvh(runtime, selectorRuntime, options = null) {
-  const {
-    maxTriangles = DEFAULT_MAX_BVH_TRIANGLES,
-    reserveBuild = null,
-    finishBuild = null,
-    onBuildDenied = null,
-  } = options || runtime?.raycastBvhOptions || {};
-  const mesh = runtime?.facePickMesh;
-  const proxy = selectorRuntime?.proxy;
-  if (!mesh?.geometry || !proxy) {
-    return;
-  }
-  attachAcceleratedRaycast(mesh);
-  const cached = proxy.__facePickBvh;
-  if (cached && cached.__builtFromIndexArray === proxy.faceIndices) {
-    mesh.geometry.boundsTree = cached;
-    return;
-  }
-  if (proxy.__facePickBvhPending || proxy.__facePickBvhSkipped) {
-    return;
-  }
-  proxy.__facePickBvhPending = true;
-  scheduleIdle(() => {
-    proxy.__facePickBvhPending = false;
-    const activeMesh = runtime?.facePickMesh;
-    const geometry = activeMesh?.geometry;
-    if (!geometry || geometry.index?.array !== proxy.faceIndices) {
-      return;
-    }
-    if (geometryTriangleCount(geometry) > maxTriangles) {
-      proxy.__facePickBvhSkipped = true;
-      return;
-    }
-    const estimatedBytes = estimateGeometryBvhBytes(geometry);
-    const reservation = reserveBuild?.({ geometry, estimatedBytes }) ?? { ok: true, token: null };
-    if (reservation.ok === false) {
-      onBuildDenied?.({ geometry, estimatedBytes, ...(reservation.detail || {}) });
-      return;
-    }
-    try {
-      const bvh = new MeshBVH(geometry, BVH_OPTIONS);
-      bvh.__builtFromIndexArray = proxy.faceIndices;
-      proxy.__facePickBvh = bvh;
-      geometry.boundsTree = bvh;
-      finishBuild?.(reservation.token, { geometry, builtBytes: builtGeometryBvhBytes(geometry) });
-    } catch {
-      proxy.__facePickBvhSkipped = true;
-      finishBuild?.(reservation.token, { geometry, builtBytes: 0 });
-    }
-  });
-}

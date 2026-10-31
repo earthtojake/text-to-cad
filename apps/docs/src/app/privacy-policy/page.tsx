@@ -1,0 +1,277 @@
+import type { Metadata } from "next";
+import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
+
+export const metadata: Metadata = {
+  title: "Privacy Policy",
+  description:
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including text-to-cad's telemetry (usage counts and crash reports) and its hourly version check, why, who receives it, how long it is kept, and your controls.",
+  alternates: { canonical: "/privacy-policy" },
+};
+
+export default function PrivacyPolicyPage() {
+  return (
+    <LegalPage title="Privacy Policy" updated="October 31, 2026">
+      <LegalSection>
+        <p>
+          This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
+          text-to-cad: the text-to-cad plugin and its skills, the text-to-cad software they run (the packages{" "}
+          <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
+          before 0.9), the
+          step.parts part library they search, and this website, texttocad.dev. text-to-cad runs on
+          your computer. Your prompts, models, drawings and files stay there, and we do not collect
+          them.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="1. Personal data we collect">
+        <ul>
+          <li>
+            <strong>The plugin and its software:</strong> your prompts, models, drawings, file names and
+            paths never leave your computer. There are no accounts. Your agent and the local runtime
+            process your work on your computer and do not send it to us.
+          </li>
+          <li>
+            <strong>Telemetry: usage counts and crash reports, when it is on.</strong> text-to-cad’s
+            long-running parts -- the CAD app that shows models in your agent app (the plugin’s{" "}
+            <code>cad</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
+            in earlier releases the build daemon that built models for them -- send to api.texttocad.dev,
+            with what <code>cad</code> commands and model scripts counted, at most once every five
+            minutes while you use them and once as each stops:
+            <ul>
+              <li>
+                a random install ID created on your computer, a random ID for each time one of them
+                starts, and a random ID for each batch, with the time it was made by your computer’s
+                clock, so that a batch sent again after a failed send is counted once;
+              </li>
+              <li>
+                which of them sent it, the text-to-cad version, where it was installed from (a plugin
+                directory, the Cursor Marketplace, GitHub, or a development install, as the plugin’s
+                CAD app names it and notes on your computer for the viewer and text-to-cad’s commands to
+                report too), your operating
+                system and processor type, and the name and version of your agent app and how it shows
+                CAD (or that it is the browser viewer);
+              </li>
+              <li>
+                counts, added up over those five minutes: how many times each CAD tool was called and
+                failed, and why each failure happened, as one of a fixed set of words text-to-cad chooses
+                (such as no file at the path the agent gave, no view open, a view that did not answer
+                in time, or a bug in text-to-cad) -- never the error’s message or the path; how many times
+                you touched a CAD view; which of a CAD view’s tools and settings you used (such as
+                Select and its filters, Measure, Pencil and Shapes and what they draw with, Explode,
+                Clip, the display modes and Grid, Projection, Preview and its settings, playback, a
+                model’s joints, the sidebar’s sections, a part’s menu, the view cube, Quick Edit’s
+                Copy, Queue and Send, Export, the Models and Files menu, Theme and Language, and the
+                home’s search, filters, layout and card menus), each as a name from a fixed list, with how many times each was used and, for a
+                tool that stays on (the tool in hand, or Preview), how many whole seconds it was on --
+                never what you typed, a value you chose (other than a choice that is itself a name on the
+                list, such as a display mode or a clip axis), or the name of a file or a part; how many different live models
+                and files of each format (such as XBF, STEP or STL) a CAD view showed for the first time that day, told apart on your
+                computer and sent only as a number; how many models were built and files exported,
+                with live models counted separately from each exported file format, whether a model script or a <code>cad</code> command asked, how they
+                ended (finished, failed, crashed or stopped), how many were reused from an earlier
+                build rather than built again, and how long they took; how many snapshots were drawn,
+                of a live model or which file format, how many failed and how long they took; why each build or snapshot
+                failed, again as one of a fixed set of words text-to-cad chooses from the kind of error and
+                whose code raised it (such as an error in your model’s code, a CAD operation the
+                geometry kernel could not do, a module or file that is not there, a picture that could
+                not be drawn, or a bug in text-to-cad) -- never the error’s message, your code or the path;
+                how many times assemblies, mesh exports, posed joints, animations, engineering drawings
+                and Quick Edit were used; and how many of the CAD engine’s build workers started,
+                crashed or were retired (and, from earlier releases, how many builds were turned away for
+                want of memory);
+              </li>
+              <li>
+                crash reports, when text-to-cad’s own code fails unexpectedly: the error’s type (such as
+                “KeyError”), whether the program carried on, and where in code it failed -- file paths
+                inside text-to-cad, Python’s standard library, text-to-cad’s own open-source dependencies or the
+                CAD app’s and viewer’s page scripts, with function names and line numbers -- or, for a
+                build worker that crashed, its exit status. Any part of the failure in your own code is
+                replaced by a placeholder, and a crash report never includes the error’s message, any
+                values, your files, or file or folder names.
+              </li>
+            </ul>
+            We record each batch at the time your computer’s clock says it was made, and our server
+            adds the country each request comes
+            from, which it works out from your IP address; it keeps neither the address nor anything
+            finer than the country. Nothing is sent while text-to-cad sits unused. Telemetry never includes
+            your files, models, file or folder names, prompts, tool arguments or anything you type. A{" "}
+            <code>cad</code> command or model script sends nothing itself: it keeps what it counted (a
+            build, an export, a snapshot, a drawing, a crash) on your computer for the next part of text-to-cad
+            that sends; when nothing has sent it for five minutes, the next <code>cad</code> command
+            starts a short-lived sender in the background, which sends it and exits. Like any
+            request over the internet, each one also reaches our host with your IP address, the time
+            and a user agent (just “cadgen”, the software’s name before 0.9); see section 4 for what happens to them.
+            Section 5 says when telemetry is on and how to turn it off.
+          </li>
+          <li>
+            <strong>The version check:</strong> at most once an hour, text-to-cad (the CAD app or the CAD viewer)
+            asks api.texttocad.dev which text-to-cad release is the
+            newest, so it can tell you when there is an update. The request carries no ID and nothing
+            about you or your work; like any request, it reaches our host with your IP address, the
+            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory
+            or the Cursor Marketplace updates, and section 5 says how to turn it off. An update you ask
+            for (CAD’s update button, or <code>cad update</code>) asks again, then downloads the
+            release from PyPI, as the install command does.
+          </li>
+          <li>
+            <strong>step.parts searches:</strong> when you ask your agent to find a part, the
+            step-parts skill sends your search terms and the parts you request to step.parts. Each
+            request includes standard metadata: your IP address, the time and the user agent.
+          </li>
+          <li>
+            <strong>This website:</strong> page views, with the referring page, browser, device type
+            and country, through Vercel Web Analytics, which sets no cookies. Each request also
+            includes standard metadata: your IP address, the time and the user agent.
+          </li>
+        </ul>
+        <p>
+          We do not collect payment card data, health information, government identifiers, passwords,
+          API keys or other credentials, or any sensitive category of personal data.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="2. How we use it">
+        <ul>
+          <li>Search terms and part requests: only to return the parts and files you asked for.</li>
+          <li>
+            Request metadata: only to deliver, secure and troubleshoot step.parts, api.texttocad.dev
+            and this website.
+          </li>
+          <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
+          <li>Version checks: only to answer them; we keep nothing from them beyond our host’s request logs.</li>
+          <li>
+            Telemetry: only to understand, in aggregate, how many people use text-to-cad and how
+            often, how many files they work on and in which formats, what they build and how long it
+            takes, where in the world it is used, which features are used, which of the CAD views’ tools
+            and settings are used and for how long (so we know which to improve and which matter
+            less), which agent apps and
+            operating systems to support, and how often tools, builds and snapshots fail; and, from
+            crash reports, to find and fix the bugs behind them.
+          </li>
+        </ul>
+        <p>
+          We do not sell personal data, use it for advertising, or build profiles of you, and we do
+          not track you across other sites or services.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="3. Who receives it">
+        <ul>
+          <li>
+            <strong>Vercel Inc.</strong>, which hosts step.parts, this website and api.texttocad.dev
+            and processes their requests for us, and <strong>PostHog, Inc.</strong>, which stores and
+            analyzes telemetry for us. PostHog never sees your IP address: only our server sends it
+            telemetry, with the country it worked out and PostHog’s own location lookup turned off.
+          </li>
+          <li>
+            <strong>Services the software contacts directly</strong>, under their own privacy
+            policies. The agent app installs the pinned text-to-cad runtime from the Python Package Index
+            (PyPI) the first time it starts after an install or an update. Skills reach the
+            services you ask your agent to use, such as a fabrication service’s public specifications
+            or your own printer on your local network. These requests send no personal data of ours;
+            each service sees the request’s IP address, time and user agent.
+          </li>
+        </ul>
+        <p>We share personal data with no one else, except where the law requires it.</p>
+      </LegalSection>
+
+      <LegalSection title="4. How long we keep it">
+        <ul>
+          <li>
+            Vercel, our host, records each request to step.parts, api.texttocad.dev and this website
+            in its request logs, with the IP address, time and user agent it arrived with. We use those
+            logs only to run and secure the services, and they are deleted within 30 days. step.parts
+            searches are kept only there.
+          </li>
+          <li>
+            Website analytics are kept as aggregate page-view statistics. The visitor identifier
+            Vercel derives from a request is discarded after 24 hours.
+          </li>
+          <li>
+            Telemetry is kept by PostHog for as long as our plan with it keeps events, currently one
+            year, then deleted. We do not store IP addresses with it. Your install ID travels in the
+            body of each request, which our host’s request logs do not record, and we never combine
+            telemetry with those logs. The one exception is a batch our server refuses as malformed:
+            its logs then keep the name of the rule it broke and the text-to-cad version that sent it,
+            never your install ID or any other value from it. Turning telemetry off deletes everything stored under your
+            install ID; PostHog carries the deletion out in the background, which can take some days.
+            If our server cannot be reached at that moment, text-to-cad asks again until it can.
+          </li>
+          <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="5. Your choices and controls">
+        <ul>
+          <li>
+            The plugin works without contacting us, apart from the hourly version check. step.parts
+            receives a request only when you ask your agent to search for or download a part.
+          </li>
+          <li>
+            <strong>Telemetry is on once text-to-cad has told you.</strong> The first <code>cad</code>{" "}
+            command you or your agent run says, once, in its output, that text-to-cad sends usage stats and
+            crash reports and how to turn them off, and nothing is sent before that. If we ever send more than this
+            policy describes, text-to-cad says so again before it does. Nothing is sent by default in CI or
+            from a development install. Your choice is kept on your computer, as the{" "}
+            <code>telemetry</code> setting in text-to-cad’s settings file, through restarts and updates, and
+            one choice counts for every part of text-to-cad; a no stays a no. Turning telemetry off also turns
+            off analytics in an earlier version still installed, and deletes what it sent. Nothing waits to
+            send: what a command or a model script counts, and what any part of text-to-cad counted since its
+            last send when it exits, wait in small files beside that setting until the next part of text-to-cad
+            sends them, or a sender the next command starts once they have waited five minutes; turning
+            telemetry off deletes those files too.
+          </li>
+          <li>
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry off</code>, use{" "}
+            <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
+            at the top left, over any open model), or ask your agent to turn off CAD telemetry.
+            Turning it off deletes the install ID on your computer and asks our server to delete
+            everything stored under it. Turning it on again starts a new install ID, so nothing links
+            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry status</code> shows the setting and your install ID.
+          </li>
+          <li>
+            Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}
+            before 0.9) where text-to-cad runs (your agent app’s environment, or the shell that runs a{" "}
+            <code>cad</code> command or a model script) turns telemetry off for that process and the builds it
+            asks for, whatever your setting says; <code>CAD_TELEMETRY=1</code> turns it on for that process the
+            same way.
+            Neither changes your setting, and the parts of text-to-cad that process starts to run on their
+            own, a viewer started in the background and the short-lived sender, go by your setting.
+          </li>
+          <li>
+            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.9) where text-to-cad
+            runs turns the hourly version check
+            off; CAD then never says when there is an update.
+          </li>
+          <li>
+            You can uninstall the plugin at any time. Deleting text-to-cad’s cache and state folders
+            removes everything it stored on your computer, including its recent-files list.
+          </li>
+          <li>You can block this website’s analytics with your browser’s settings or a content blocker.</li>
+          <li>
+            You can ask us what personal data we hold about you, or ask us to delete it, using the
+            contact below.
+          </li>
+        </ul>
+      </LegalSection>
+
+      <LegalSection title="6. Children">
+        <p>
+          text-to-cad is not directed to children under 13, and we do not knowingly collect their
+          personal data.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="7. Changes">
+        <p>We will post any change to this policy on this page and update the date above.</p>
+      </LegalSection>
+
+      <LegalSection title="8. Contact">
+        <p>
+          Thompson Labs LLC. For privacy questions and requests, open an issue at <IssuesLink />.
+        </p>
+      </LegalSection>
+    </LegalPage>
+  );
+}

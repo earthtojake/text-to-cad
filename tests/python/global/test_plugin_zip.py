@@ -33,18 +33,24 @@ class PluginZipTests(unittest.TestCase):
             package = plugin_zip.build(REPO_ROOT, out)
             self.assertEqual(package.errors, [])
             with zipfile.ZipFile(out) as archive:
-                names = set(archive.namelist())
-                manifest = json.loads(archive.read("cad/.codex-plugin/plugin.json"))
+                members = archive.namelist()
+                manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
+        # The plugin is at the archive's root, each folder with an entry of its own: the
+        # portal turned away a top-level folder without one as holding no plugin.
+        names = {name for name in members if not name.endswith("/")}
+        self.assertEqual({name for name in members if name.endswith("/")},
+                         {f"{folder}/" for folder in plugin_zip.folders(names)})
+        self.assertIn(".codex-plugin/", members)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
-        roots = {f"cad/{path}" for path in git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split()}
+        roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
         interface = manifest["interface"]
         pointed_at = {value for name, value in interface.items() if name in plugin_zip.ICONS}
         pointed_at.update(interface.get("screenshots", []))
         if "mcpServers" in manifest:
             self.assertEqual(manifest["mcpServers"], "./.mcp.json")
             pointed_at.add("./.mcp.json")
-        self.assertEqual(names, roots | {f"cad/{path[2:]}" for path in pointed_at})
+        self.assertEqual(names, roots | {path[2:] for path in pointed_at})
 
     def test_mcp_config_moves_to_the_root_and_refused_values_fail(self):
         manifest = {
@@ -52,15 +58,14 @@ class PluginZipTests(unittest.TestCase):
             "skills": "./skills/", "mcpServers": "./codex.mcp.json",
             "interface": {"displayName": "Demo", "shortDescription": "Demo things", "longDescription": "Demo.",
                           "developerName": "Demo", "category": "Productivity", "capabilities": []},
-            "extensions": {"com.openai": {"onboardingSkill": "./skills/cad-mcp-setup/SKILL.md"}},
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
-            (root / "skills/cad-mcp-setup").mkdir(parents=True)
-            (root / "skills/cad-mcp-setup/SKILL.md").write_text("---\nname: cad-mcp-setup\ndescription: Set up.\n---\nSteps.\n",
-                                                        encoding="utf-8")
-            (root / "codex.mcp.json").write_text('{"mcpServers": {}}\n', encoding="utf-8")
+            (root / "skills/demo").mkdir(parents=True)
+            (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
+            server = {"command": "uvx", "args": ["--from", "cad-mcp==1.0.0", "cad-mcp"]}
+            (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
 
             def build(manifest: dict, out: Path | None = None) -> list[str]:
@@ -70,20 +75,17 @@ class PluginZipTests(unittest.TestCase):
 
             self.assertEqual(build(manifest, root / "out.zip"), [])
             with zipfile.ZipFile(root / "out.zip") as archive:
-                self.assertEqual(json.loads(archive.read("demo/.codex-plugin/plugin.json"))["mcpServers"],
+                self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                self.assertEqual(archive.read("demo/.mcp.json"), b'{"mcpServers": {}}\n')
-                self.assertNotIn("demo/codex.mcp.json", archive.namelist())
+                # The package names its channel, OpenAI's directory, in its server's environment, which
+                # analytics report; CAD_AUTO_UPDATED leaves the copy to the directory, which updates it.
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
+                                 {**server, "env": {"CAD_INSTALL_CHANNEL": "openai-directory", "CAD_AUTO_UPDATED": "1"}})
+                self.assertNotIn("codex.mcp.json", archive.namelist())
 
-            # The portal refuses both: a subtitle over 30 characters (main's, until this
-            # check) and an onboarding skill named instead of given as its SKILL.md path.
-            for change, code in (
-                ({"interface": {**manifest["interface"], "shortDescription": "Give your agent CAD superpowers."}},
-                 "plugin_short_description_too_long"),
-                ({"extensions": {"com.openai": {"onboardingSkill": "setup"}}}, "onboardingSkill"),
-            ):
-                with self.subTest(code=code):
-                    self.assertTrue(any(code in error for error in build({**manifest, **change})))
+            # The portal refuses a subtitle over 30 characters (main's, until this check).
+            change = {"interface": {**manifest["interface"], "shortDescription": "Design physical products with AI."}}
+            self.assertTrue(any("plugin_short_description_too_long" in error for error in build({**manifest, **change})))
 
 
 if __name__ == "__main__":

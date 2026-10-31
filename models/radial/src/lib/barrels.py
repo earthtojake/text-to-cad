@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import geo, palette as P, spec as S
 from lib.fasteners import _wrench_head, pitch
@@ -280,7 +280,7 @@ def section_skin_band():
     (the y = 0 comb face and the h = H_SECTION step): the equivalent of
     geo.cut_with_skin for this limited cut. Intersected with the ORIGINAL barrel
     it covers the cut faces exactly and never overlaps the kept part."""
-    t = getattr(geo, "SKIN_T", 0.4)
+    t = geo.SKIN_T
     big = 4000.0
     comb = bd.Box(big, t, big, align=(bd.Align.CENTER, bd.Align.MIN, bd.Align.CENTER))
     step = bd.Pos(0, 0, H_SECTION) * bd.Box(big, big, t, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))

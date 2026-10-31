@@ -16,8 +16,8 @@ function fixture(files, run) {
 }
 test('accepts an app consuming compiled public UI exports',()=>fixture({'apps/web/src/App.tsx':"import { FileViewer } from '@text-to-cad/ui/file-viewer';"},result=>assert.deepEqual(result.errors,[])));
 test('resolves aliases and extensionless transitive reexports',()=>fixture({
-  'apps/desktop/src/renderer/main.ts':"import '@renderer/bridge';",
-  'apps/desktop/src/renderer/bridge.ts':"export * from '../../../web/src/private';",
+  'apps/docs/src/page.ts':"import '@/bridge';",
+  'apps/docs/src/bridge.ts':"export * from '../../web/src/private';",
   'apps/web/src/private.ts':'export const secret = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('app-to-app')))));
 test('rejects app imports from packages and undeclared exports',()=>fixture({
@@ -32,11 +32,6 @@ test('keeps concrete renderers out of the FileViewer import graph',()=>fixture({
   'packages/ui/src/file-viewer/index.ts':"export * from '../renderers/step';",
   'packages/ui/src/renderers/step/index.ts':'export const step = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('eagerly imports')))));
-test('rejects desktop renderer imports of main-process modules',()=>fixture({
-  'apps/desktop/src/renderer/view.ts':"import '../main/private';",
-  'apps/desktop/src/main/private.ts':'export const secret = 1;',
-},result=>assert.ok(result.errors.some(error=>error.includes('renderer imports main')))));
-
 test('requires explicit host effects, including in workers',()=>fixture({
   'packages/ui/src/renderers/model.worker.js': 'fetch(url); globalThis["fetch"](url); navigator.clipboard.writeText(value); window.localStorage.setItem(key,value); window.location.reload();',
 },result=>{for(const effect of ['raw service transport','browser clipboard','host storage','page navigation']) assert.ok(result.errors.some(error=>error.includes(effect)),effect);}));

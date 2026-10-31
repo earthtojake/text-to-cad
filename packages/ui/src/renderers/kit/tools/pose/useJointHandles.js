@@ -9,6 +9,8 @@ import {
   jointHandleAt
 } from "./jointHandleCanvas.js";
 import { add, advanceJointDrag, arcPoints, beginJointDrag, handleArmDirection, scale } from "./jointHandleMath.js";
+import { capturePointer, releasePointer } from "../../../../lib/pointerCapture.js";
+import { useControlUsage } from "../../../../usage/controls.js";
 
 // Above this many handles a model at rest shows knobs only: two dozen arms and
 // travel arcs over one model read as a hedgehog, not as controls.
@@ -91,6 +93,10 @@ function layoutJointHandles(runtime, handles, width, height) {
  * are switched off for as long as the knob is held; any other press is left alone.
  */
 export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = null, runtimeRef, hostRef, canvasRef, labelRef, layoutSeamRef, viewerReadyTick }) {
+  // A knob a person takes hold of, counted (`usage/controls.js`).
+  const usage = useControlUsage();
+  const usageRef = useRef(usage);
+  usageRef.current = usage;
   const renderedHandlesRef = useRef(handles);
   renderedHandlesRef.current = handles;
   const handlesRef = ownerHandlesRef || renderedHandlesRef;
@@ -192,7 +198,7 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
       flush();
       const live = runtimeRef.current;
       if (live?.controls) live.controls.enabled = drag.controlsWereEnabled;
-      if (host.hasPointerCapture?.(drag.pointerId)) host.releasePointerCapture(drag.pointerId);
+      releasePointer(host, drag.pointerId);
       drag = null;
       setHover(hoverId);
     };
@@ -208,8 +214,9 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
       event.stopPropagation();
       const controls = runtimeRef.current.controls;
       drag = { id: hit.id, pointerId: event.pointerId, grab, value: grab.value, pending: false, controlsWereEnabled: controls?.enabled !== false };
+      usageRef.current.used("position_knob");
       if (controls) controls.enabled = false;
-      host.setPointerCapture?.(event.pointerId);
+      capturePointer(host, event.pointerId);
       setHover(hit.id);
     };
     const handlePointerMove = (event) => {
@@ -240,6 +247,13 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
     const handlePointerLeave = () => {
       if (!drag && hoverId) setHover("");
     };
+    // The knobs share their tool with its picks: two quick presses on a knob are the knob's, never a
+    // double-click on the part under it (which would isolate it, or copy its face).
+    const handleDoubleClick = (event) => {
+      if (!jointHandleAt(layout.layouts, localPoint(event), JOINT_HANDLE_HIT_PX)) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
 
     host.addEventListener("pointerdown", handlePointerDown, true);
     host.addEventListener("pointermove", handlePointerMove, true);
@@ -247,6 +261,7 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
     host.addEventListener("pointercancel", handlePointerEnd, true);
     host.addEventListener("lostpointercapture", handlePointerEnd, true);
     host.addEventListener("pointerleave", handlePointerLeave);
+    host.addEventListener("dblclick", handleDoubleClick, true);
     frameId = window.requestAnimationFrame(paint);
 
     return () => {
@@ -259,6 +274,7 @@ export function useJointHandles({ handles = null, handlesRef: ownerHandlesRef = 
       host.removeEventListener("pointerup", handlePointerEnd, true);
       host.removeEventListener("pointercancel", handlePointerEnd, true);
       host.removeEventListener("lostpointercapture", handlePointerEnd, true);
+      host.removeEventListener("dblclick", handleDoubleClick, true);
       host.removeEventListener("pointerleave", handlePointerLeave);
       host.style.cursor = "";
       label.hidden = true;

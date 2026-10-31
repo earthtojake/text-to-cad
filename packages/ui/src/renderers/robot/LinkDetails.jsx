@@ -1,15 +1,15 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
+import { useI18n } from "@text-to-cad/ui/i18n";
 
-// The Reference panel under Links in the tool stack: what the selection IS. Its heading names
-// what is selected (`LinksSection.jsx`), so the rows never repeat the name.
+// The card of a Quick Edit chip (`robotReferences.jsx`): what a selected link or object IS. Its
+// heading names it, so the rows never repeat the name.
 //
 // A link reads back what the description says about it (its inertial properties, its
 // visual and collision geometry, its parent joint with limits and origin); a named
 // mesh object reads back the mesh facts a person uses to tell two objects of one link
 // apart. What names something else can be followed: a mesh path opens that file, a
-// link name selects that link. There is no copy button: robot formats have no
-// reference grammar a CLI or a skill parses, so a copied locator would lead nowhere.
+// link name selects that link. A click on any other value copies it.
 
 function formatCount(value) {
   return Number(value || 0).toLocaleString();
@@ -47,8 +47,9 @@ const vectorText = (vector, digits = 4) => vector.map(value => formatValue(value
 
 /** Another link of the same robot: pressing it selects that link in the tree and the viewport. */
 function LinkName({ name, onSelect, selectable = true }) {
+  const { t } = useI18n();
   if (!onSelect || !selectable) return name;
-  return <TooltipHint content="Select link"><button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
+  return <TooltipHint content={t("robot.selectLink")}><button type="button" className={LINK_CLASS} onClick={() => onSelect(name)} >{name}</button></TooltipHint>;
 }
 
 // What a primitive IS, in the description's own metres.
@@ -60,9 +61,12 @@ function dimensions(entry) {
 }
 
 // One visual or collision: the file or the primitive, then only what the description
-// bothered to say (a zero origin and a unit scale are the defaults, not facts).
-function GeometryEntry({ entry, meshPath, onOpenFile }) {
-  const path = entry.filename ? meshPath?.(entry.filename) : "";
+// bothered to say (a zero origin and a unit scale are the defaults, not facts). A mesh file
+// opens by the host path cadgen resolved for it; a reference it could not resolve to one
+// (a package:// URI) is text.
+function GeometryEntry({ entry, onOpenFile }) {
+  const { t } = useI18n();
+  const path = entry.filename ? entry.path : "";
   const detail = [
     entry.type !== "mesh" && dimensions(entry),
     entry.scale && !isUnit(entry.scale) && `scale ${vectorText(entry.scale)}`,
@@ -74,7 +78,7 @@ function GeometryEntry({ entry, meshPath, onOpenFile }) {
       {entry.color && <TooltipHint content={entry.materialName || entry.color}><span className="size-2.5 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: entry.color }}  aria-hidden="true"/></TooltipHint>}
       {entry.filename
         ? path && onOpenFile
-          ? <TooltipHint content="Open file"><button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
+          ? <TooltipHint content={t("robot.openFile")}><button type="button" className={LINK_CLASS} onClick={() => onOpenFile(path)} >{entry.filename}</button></TooltipHint>
           : <span>{entry.filename}</span>
         : <span>{entry.type}</span>}
     </span>
@@ -82,20 +86,24 @@ function GeometryEntry({ entry, meshPath, onOpenFile }) {
   </span>;
 }
 
-function GeometryRows({ label, entries, meshPath, onOpenFile }) {
+function GeometryRows({ label, entries, onOpenFile }) {
+  const { t } = useI18n();
   if (!entries) return null;
-  return <InfoRow label={label}>
+  // Its files are links, which keep their own click: nothing to copy.
+  return <InfoRow label={label} copy={false}>
     {entries.length
-      ? entries.map((entry, index) => <GeometryEntry key={`${entry.filename || entry.type}:${index}`} {...{ entry, meshPath, onOpenFile }}/>)
-      : <span className="text-muted-foreground">None</span>}
+      ? entries.map((entry, index) => <GeometryEntry key={`${entry.filename || entry.type}:${index}`} {...{ entry, onOpenFile }}/>)
+      : <span className="text-muted-foreground">{t("robot.none")}</span>}
   </InfoRow>;
 }
 
 // The six terms the description writes, laid out as the symmetric tensor they are.
 function InertiaRows({ inertia }) {
+  const { t } = useI18n();
   if (!inertia) return null;
   const rows = [["ixx", "ixy", "ixz"], ["ixy", "iyy", "iyz"], ["ixz", "iyz", "izz"]];
-  return <InfoRow label="Inertia" title="Inertia at centre of mass (kg·m²)">
+  const copy = rows.map(row => row.map(term => formatValue(inertia[term], 6)).join(", ")).join("; ");
+  return <InfoRow label={t("robot.inertia")} title={t("robot.inertiaHint")} copy={copy}>
     {/* Three columns the panel's width: a value too long for its cell truncates (the whole of it
         is its hint), never wrapping inside the number. */}
     <span className="grid w-full grid-cols-3 gap-x-2 tabular-nums">
@@ -110,51 +118,55 @@ function InertiaRows({ inertia }) {
 }
 
 function LimitRows({ joint }) {
+  const { t } = useI18n();
   const limit = joint.limit;
   if (!limit) return null;
   const angular = ANGULAR.has(joint.type);
   const unit = angular ? "rad" : "m";
   const range = Number.isFinite(limit.lower) || Number.isFinite(limit.upper);
   return <>
-    {range && <InfoRow label="Limits" title={`Limits (${angular ? "radians" : "metres"})`}>
+    {range && <InfoRow label={t("robot.limits")} title={t(angular ? "robot.limitsRadians" : "robot.limitsMetres")} copy={`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}>
       <MonoValue>{`${formatValue(limit.lower)} … ${formatValue(limit.upper)} ${unit}`}</MonoValue>
       {angular && Number.isFinite(limit.lower) && Number.isFinite(limit.upper) &&
         <span className="block text-muted-foreground">{`${degrees(limit.lower)} … ${degrees(limit.upper)}`}</span>}
     </InfoRow>}
-    {Number.isFinite(limit.effort) && <InfoRow label="Effort"><MonoValue>{`${formatValue(limit.effort)} ${angular ? "N·m" : "N"}`}</MonoValue></InfoRow>}
-    {Number.isFinite(limit.velocity) && <InfoRow label="Velocity"><MonoValue>{`${formatValue(limit.velocity)} ${angular ? "rad/s" : "m/s"}`}</MonoValue></InfoRow>}
+    {Number.isFinite(limit.effort) && <InfoRow label={t("robot.effort")}><MonoValue>{`${formatValue(limit.effort)} ${angular ? "N·m" : "N"}`}</MonoValue></InfoRow>}
+    {Number.isFinite(limit.velocity) && <InfoRow label={t("robot.velocity")}><MonoValue>{`${formatValue(limit.velocity)} ${angular ? "rad/s" : "m/s"}`}</MonoValue></InfoRow>}
   </>;
 }
 
-export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
+export function RobotLinkDetails({ facts, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
+  const { t } = useI18n();
   const joint = facts.parentJoint;
-  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
-    <InfoRow label="Type">{facts.isRoot ? "Root link" : "Link"}</InfoRow>
-    {facts.groups.length > 0 && <InfoRow label="Groups" title="Planning groups">{facts.groups.join(", ")}</InfoRow>}
-    {facts.endEffectors.length > 0 && <InfoRow label="End effector">{facts.endEffectors.join(", ")}</InfoRow>}
-    {(facts.mass !== null || facts.inertia) && <Section label="Inertial">
-      {facts.mass !== null && <InfoRow label="Mass"><MonoValue>{`${formatValue(facts.mass, 4)} kg`}</MonoValue></InfoRow>}
-      {facts.centerOfMass && <InfoRow label="Centre of mass" title="Link frame (m)"><CoordValue vector={facts.centerOfMass.xyz} digits={4}/></InfoRow>}
+  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.linkDetails")}>
+    <InfoRow label={t("robot.type")}>{facts.isRoot ? t("robot.rootLink") : t("robot.link")}</InfoRow>
+    {facts.groups.length > 0 && <InfoRow label={t("robot.groups")} title={t("robot.groupsHint")}>{facts.groups.join(", ")}</InfoRow>}
+    {facts.endEffectors.length > 0 && <InfoRow label={t("robot.endEffector")}>{facts.endEffectors.join(", ")}</InfoRow>}
+    {(facts.mass !== null || facts.inertia) && <Section label={t("robot.inertial")}>
+      {facts.mass !== null && <InfoRow label={t("robot.mass")}><MonoValue>{`${formatValue(facts.mass, 4)} kg`}</MonoValue></InfoRow>}
+      {facts.centerOfMass && <InfoRow label={t("robot.centreOfMass")} title={t("robot.centreOfMassHint")}><CoordValue vector={facts.centerOfMass.xyz} digits={4}/></InfoRow>}
       <InertiaRows inertia={facts.inertia}/>
     </Section>}
-    <Section label="Geometry">
-      <GeometryRows label="Visuals" entries={facts.visuals} {...{ meshPath, onOpenFile }}/>
-      <GeometryRows label="Collisions" entries={facts.collisions} {...{ meshPath, onOpenFile }}/>
+    <Section label={t("robot.geometry")}>
+      <GeometryRows label={t("robot.visuals")} entries={facts.visuals} onOpenFile={onOpenFile}/>
+      <GeometryRows label={t("robot.collisions")} entries={facts.collisions} onOpenFile={onOpenFile}/>
     </Section>
-    {joint && <Section label="Parent joint">
-      <InfoRow label="Joint">{joint.name}</InfoRow>
-      <InfoRow label="Joint type">{joint.type}</InfoRow>
-      <InfoRow label="Parent">{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
-      {joint.axis && <InfoRow label="Axis"><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
+    {joint && <Section label={t("robot.parentJoint")}>
+      <InfoRow label={t("robot.joint")}>{joint.name}</InfoRow>
+      <InfoRow label={t("robot.jointType")}>{joint.type}</InfoRow>
+      <InfoRow label={t("robot.parent")} copy={onSelectLink && hasLinkRow(joint.parentLink) ? false : undefined}>{/* A frame-only root has no row to go to; it is still named. */}<LinkName name={joint.parentLink} onSelect={onSelectLink} selectable={hasLinkRow(joint.parentLink)}/></InfoRow>
+      {joint.axis && <InfoRow label={t("robot.axis")}><CoordValue vector={joint.axis} digits={4}/></InfoRow>}
       <LimitRows joint={joint}/>
-      {joint.mimic && <InfoRow label="Mimic"><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {joint.mimic && <InfoRow label={t("robot.mimic")}><MonoValue>{`${joint.mimic.joint} × ${formatValue(joint.mimic.multiplier)} + ${formatValue(joint.mimic.offset)}`}</MonoValue></InfoRow>}
+      {/* A four-bar's crank follows its driver through the linkage cadgen solved: no formula to show, only the driver. */}
+      {joint.fourBar && <InfoRow label={t("robot.fourBarDriver")}><MonoValue>{joint.fourBar.driver}</MonoValue></InfoRow>}
       {joint.origin && <>
-        <InfoRow label="Origin xyz" title="Parent-frame position (m)"><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
-        {!isZero(joint.origin.rpy) && <InfoRow label="Origin rpy" title="Roll, pitch, yaw (rad)"><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
+        <InfoRow label={t("robot.originXyz")} title={t("robot.originXyzHint")}><CoordValue vector={joint.origin.xyz} digits={4}/></InfoRow>
+        {!isZero(joint.origin.rpy) && <InfoRow label={t("robot.originRpy")} title={t("robot.originRpyHint")}><MonoValue>{vectorText(joint.origin.rpy)}</MonoValue></InfoRow>}
       </>}
     </Section>}
-    {facts.childJoints.length > 0 && <Section label="Child joints">
-      <InfoRow label="Children"><span className="flex flex-col items-start">
+    {facts.childJoints.length > 0 && <Section label={t("robot.childJoints")}>
+      <InfoRow label={t("robot.children")} copy={onSelectLink ? false : undefined}><span className="flex flex-col items-start">
         {facts.childJoints.map(child => <span key={child.name}><LinkName name={child.childLink} onSelect={onSelectLink}/><span className="text-muted-foreground">{` · ${child.name} · ${child.type}`}</span></span>)}
       </span></InfoRow>
     </Section>}
@@ -162,35 +174,30 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
 }
 
 function ComponentDetails({ component }) {
+  const { t } = useI18n();
   const size = component.sizeMillimetres;
-  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
-    <InfoRow label="Type">Mesh object</InfoRow>
-    <InfoRow label="Link">{component.linkName}</InfoRow>
+  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.componentDetails")}>
+    <InfoRow label={t("robot.type")}>{t("robot.meshObject")}</InfoRow>
+    <InfoRow label={t("robot.link")}>{component.link}</InfoRow>
     {/* A cadgen mesh export groups an object BY colour, so it tells two rows of one link apart. */}
-    {component.color && <InfoRow label="Colour"><span className="inline-flex items-baseline gap-1.5">
+    {component.color && <InfoRow label={t("robot.colour")}><span className="inline-flex items-baseline gap-1.5">
       <span className="size-3 shrink-0 self-center rounded-sm border border-border/70" style={{ backgroundColor: component.color }} aria-hidden="true"/>
       <MonoValue>{component.color}</MonoValue>
     </span></InfoRow>}
-    <InfoRow label="Triangles"><MonoValue>{formatCount(component.triangleCount)}</MonoValue></InfoRow>
-    {size && <InfoRow label="Size" title="Bounding size (mm)"><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
-  </div>;
-}
-
-/** Several links at once (a modified click adds one): which, as several objects are summarised. */
-export function RobotLinksSummary({ linkNames }) {
-  return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
-    <InfoRow label="Links">{linkNames.join(", ")}</InfoRow>
+    <InfoRow label={t("robot.triangles")}><MonoValue>{formatCount(component.triangleCount)}</MonoValue></InfoRow>
+    {size && <InfoRow label={t("robot.size")} title={t("robot.sizeHint")}><MonoValue>{`${size.map(formatMillimetres).join(" × ")} mm`}</MonoValue></InfoRow>}
   </div>;
 }
 
 export default function RobotComponentDetails({ components, selectedIds }) {
+  const { t } = useI18n();
   const selected = components.filter((component) => selectedIds.includes(component.id));
   if (!selected.length) return null;
   if (selected.length > 1) {
     const triangles = selected.reduce((total, component) => total + component.triangleCount, 0);
-    return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
-      <InfoRow label="Links">{[...new Set(selected.map((component) => component.linkName))].join(", ")}</InfoRow>
-      <InfoRow label="Triangles"><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
+    return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label={t("robot.componentDetails")}>
+      <InfoRow label={t("robot.links")}>{[...new Set(selected.map((component) => component.link))].join(", ")}</InfoRow>
+      <InfoRow label={t("robot.triangles")}><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
     </div>;
   }
   return <ComponentDetails component={selected[0]} />;

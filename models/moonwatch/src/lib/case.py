@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 from lib import finishing as F
@@ -524,7 +524,7 @@ def build_bezel_ring():
 def build_bezel_insert():
     ins = bd.revolve(bd.Plane.XZ * bd.Polygon(*_INSERT_PROFILE, align=None), bd.Axis.Z)
     ins.label = "bezel_insert"
-    ins.color = bd.Color(*S.BEZEL_BLACK)
+    ins.color = bd.Color(S.BEZEL_BLACK)
     return ins
 
 
@@ -580,7 +580,7 @@ def build_tachymeter_scale():
     sk = shapes[0] + shapes[1:]
     scale = bd.Pos(0, 0, 9.14) * bd.extrude(sk, amount=0.07)   # 0.05 proud of insert
     scale.label = "tachymeter_scale"
-    scale.color = bd.Color(*S.BEZEL_FILL)
+    scale.color = bd.Color(S.BEZEL_FILL)
     return scale
 
 
@@ -624,7 +624,7 @@ def build_crystal():
         bd.make_face()
     body = bd.revolve(sk.sketch, bd.Axis.Z)
     body.label = "crystal"
-    body.color = bd.Color(*S.CRYSTAL)
+    body.color = bd.Color(S.CRYSTAL)
     return body
 
 
@@ -674,7 +674,7 @@ def build_caseback_sapphire():
     r = S.CASEBACK_SAPPHIRE_DIAMETER / 2.0 + 0.3   # seats in the 15.35 rebate
     disk = bd.Pos(0, 0, -1.0) * bd.Cylinder(r, 1.0)
     disk.label = "caseback_sapphire"
-    disk.color = bd.Color(*S.SAPPHIRE)
+    disk.color = bd.Color(S.SAPPHIRE)
     return disk
 
 

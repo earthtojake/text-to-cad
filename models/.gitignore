@@ -1,3 +1,0 @@
-# Generated unified STEP sidecars are rebuilt from the model's Python declarations.
-*.step.json
-*.stp.json

@@ -9,9 +9,6 @@
 // re-collision into an error instead of a plausible wrong image. Callers that never declare a
 // scope (the interactive viewer) keep the empty default and are unaffected: every comparison is
 // then "" === "".
-//
-// Both render asset clients share this state deliberately. They are near-verbatim forks, and the
-// guard living in only one of them is exactly how the hole stayed open.
 
 let activeAssetSourceScope = "";
 const assetSourceScopes = new WeakMap();
@@ -21,10 +18,6 @@ class RenderAssetSourceScopeError extends Error {
     super(message);
     this.name = "RenderAssetSourceScopeError";
   }
-}
-
-export function isRenderAssetSourceScopeError(error) {
-  return String(error?.name || "") === "RenderAssetSourceScopeError";
 }
 
 function normalizeScope(scope) {
@@ -39,19 +32,17 @@ export function renderAssetSourceScope() {
   return activeAssetSourceScope;
 }
 
-// The scope of a resolved render job is the DOCUMENT it renders, never a model script. The
-// snapshot driver always resolves and emits it (cadgen/snapshot_cli.py sets resolved.inputPath
-// from an already-resolved absolute path), and @text-to-cad/core already reads the same field for
-// cadPath, so this is not a new field dependency.
+// The scope of a resolved render job is the DOCUMENT it renders, never a model script. A
+// snapshot job names it (`resolved.inputPath`, an absolute path), and @text-to-cad/core already
+// reads the same field for cadPath, so this is not a new field dependency.
 //
 // A resolved job fails CLOSED: batched jobs are the ones that share a page, so a job that presents
 // a resolved packet without a usable source path must not populate those caches at all. Silently
 // coercing it to the empty default would both disable the guard for that job and claim every URL it
 // touched for "(unset)", which is worse than refusing.
 //
-// A caller that presents no resolved job — the interactive viewer, and the single-source
-// docs/viewer shape documented in packages/core/docs/render-pipeline.md — renders one source per
-// page and keeps the unscoped default, unchanged.
+// A caller that presents no resolved job (the interactive viewer) renders one source per page and
+// keeps the unscoped default.
 export function renderAssetSourceScopeForJob(job) {
   const resolved = job?.resolved;
   if (!resolved || typeof resolved !== "object" || Array.isArray(resolved)) {

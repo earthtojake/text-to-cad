@@ -1,21 +1,12 @@
-"""F1 part model: front suspension.
+"""F1 part: front suspension.
 
-The geometry `lib/suspension.py` builds, in car coordinates, as one model with its
-own STEP and record. `f1.py` links it as occurrence `#o1.19`; rebuild `f1.py`
-to pick up a change here.
+Built in car coordinates by `lib/suspension.py`; the `front_suspension` stage
+(`stages.py`) builds it.
 """
-
-from __future__ import annotations
-
-from cadgen import step
 
 from lib import suspension as suspension_lib
 
 
-@step(out="../STEP/suspension_front.step")
 def suspension_front():
-    return suspension_lib.build_suspension_front()
-
-
-if __name__ == "__main__":
-    suspension_front()
+    built = suspension_lib.build_suspension_front()
+    return built

@@ -22,7 +22,6 @@ export function useMeshScene({ entry, resources }) {
   const url = entryMeshAssetUrl(entry);
   const revision = entryMeshAssetHash(entry);
   const format = meshAssetKeyForEntry(entry);
-  const pending = entry?.catalogPending === true;
   const [state, setState] = useState({ scene: null, revision: "", busy: true, progress: READING, error: null, empty: false });
   const resourcesRef = useRef(resources);
   resourcesRef.current = resources;
@@ -34,7 +33,6 @@ export function useMeshScene({ entry, resources }) {
   };
   useEffect(() => () => adopt(null), []);
   useEffect(() => {
-    if (pending) return undefined;
     if (!url) {
       adopt(null);
       const label = format.toUpperCase();
@@ -55,6 +53,6 @@ export function useMeshScene({ entry, resources }) {
       setState({ scene: null, revision, busy: false, progress: null, error, empty: false });
     });
     return () => controller.abort();
-  }, [url, revision, format, pending]);
+  }, [url, revision, format]);
   return state;
 }

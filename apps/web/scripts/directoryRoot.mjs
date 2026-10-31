@@ -4,18 +4,16 @@ import path from "node:path";
 // @text-to-cad/core export, just like the app.
 import { pathIsInside } from "@text-to-cad/core/lib/pathUtils.mjs";
 
+// The folder the dev backend starts in, which is only where a relative `?file=`
+// resolves (`serverInfo.start`): where `npm run dev` was invoked (`INIT_CWD`),
+// else the working directory, each only when it is outside the app, else the
+// default.
 export function resolveDirectoryRoot({
-  directoryRoot = "",
   env = process.env,
   cwd = process.cwd(),
   appRoot = "",
   defaultDirectoryRoot = "",
 } = {}) {
-  const explicitRoot = directoryRoot || "";
-  if (explicitRoot) {
-    return path.resolve(cwd, explicitRoot);
-  }
-
   const resolvedAppRoot = appRoot ? path.resolve(appRoot) : "";
   for (const candidate of [env.INIT_CWD, cwd]) {
     if (!candidate) {

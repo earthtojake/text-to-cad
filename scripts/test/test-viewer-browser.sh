@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One self-contained browser gate for the CAD Viewer's format and camera
-# contracts. It runs exactly what CI runs. The project, store, Viewer, and
-# browser are all owned by this process.
+# contracts. It runs exactly what CI runs. The project, the engine daemon, the
+# Viewer, and the browser are all owned by this process.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,22 +9,21 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 source "$SCRIPT_DIR/common.sh"
 python_candidate="${VIEWER_PYTHON:-$PYTHON_BIN}"
 PYTHON="$(command -v "$python_candidate" 2>/dev/null || true)"
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cadgen/src/cadgen/_runtime/viewer}"
-FIXTURE="$REPO_ROOT/tests/fixtures/cad/import-smoke.step"
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 HOST=127.0.0.1
 
-export PYTHONPATH="$REPO_ROOT/packages/cadgen/src${PYTHONPATH:+:$PYTHONPATH}"
+# The checkout's own packages (common.sh's PACKAGE_SOURCES), ahead of whatever is installed.
+for source in "${PACKAGE_SOURCES[@]}"; do
+  sources="${sources:+$sources:}$REPO_ROOT/$source"
+done
+export PYTHONPATH="$sources${PYTHONPATH:+:$PYTHONPATH}"
 
-if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import cadgen' >/dev/null 2>&1; then
-  echo "FAIL: ${python_candidate:-python} cannot import cadgen; set VIEWER_PYTHON to the test interpreter" >&2
+if [ -z "$PYTHON" ] || ! "$PYTHON" -c 'import cad, cad_server' >/dev/null 2>&1; then
+  echo "FAIL: ${python_candidate:-python} cannot import the server; set VIEWER_PYTHON to the test interpreter" >&2
   exit 1
 fi
 if [ ! -f "$RUNTIME/index.html" ]; then
   echo "FAIL: bundled Viewer missing at $RUNTIME; run scripts/bundle/bundle.sh first" >&2
-  exit 1
-fi
-if ! head -1 "$FIXTURE" | grep -q 'ISO-10303-21'; then
-  echo "FAIL: test fixture is not STEP text: $FIXTURE" >&2
   exit 1
 fi
 
@@ -39,13 +38,13 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera, library.
+    # --only: one gate while working on it: format, camera.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
 started_at="$(date +%s)"
-# macOS Unix sockets have a 104-byte path limit. Keep the test's daemon state
-# and child-process scratch paths short as well as private.
+# macOS Unix sockets have a 104-byte path limit. Keep the test's engine daemon's
+# folder and child-process scratch paths short as well as private.
 if [ "$(uname -s)" = "Darwin" ]; then
   project="$(mktemp -d /tmp/cvb.XXXXXX)"
   export TMPDIR="$project/tmp"
@@ -55,117 +54,96 @@ else
 fi
 log="$(mktemp)"
 viewer_pidfile="$project/viewer.pid"
-export CADGEN_CACHE_DIR="$project/cache"
-export CADGEN_DAEMON=0
-export CADGEN_DAEMON_STATE_DIR="$project/daemon-state"
 # The model library every Viewer writes: the test's own, never the user's.
-export CADGEN_STATE_DIR="$project/state"
-export CADGEN_VIEWER_DIST="$RUNTIME"
-unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_DAEMON_CHILD CADGEN_ROOT_ID
-server_pid=""
-
+export CAD_STATE_DIR="$project/state"
+# The engine that builds the fixtures and serves the STEP and .xbf ones to the page: this
+# test's own daemon, one part meshed at a time, stopped on the way out.
+export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"
+export CAD_VIEWER_DIST="$RUNTIME"
 cleanup() {
-  if [ -n "$server_pid" ]; then
-    # Use the native PID written by Python: under MSYS, bash's $! is not a
-    # Windows PID. POSIX descendants share this test-owned process group;
-    # taskkill /T owns the corresponding Windows tree.
-    "$PYTHON" - "$viewer_pidfile" <<'PY' 2>/dev/null || kill "$server_pid" 2>/dev/null || true
-import os
-import signal
-import subprocess
-import sys
-import time
-from pathlib import Path
-
-pid_path = Path(sys.argv[1])
-if pid_path.is_file():
-    pid = int(pid_path.read_text(encoding="ascii"))
-    if os.name == "nt":
-        subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False, timeout=10,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    else:
-        try:
-            os.killpg(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-        for _ in range(20):
-            try:
-                os.killpg(pid, 0)
-            except ProcessLookupError:
-                break
-            time.sleep(0.05)
-        else:
-            try:
-                os.killpg(pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass
-PY
-    wait "$server_pid" 2>/dev/null || true
-  fi
+  "$PYTHON" -m cad_server.engine stop >/dev/null 2>&1 || true
   rm -rf "$project" "$log"
 }
 trap cleanup EXIT
 
-cp "$FIXTURE" "$project/smoke.step"
-
-# One imported document and one tessellation produce the mesh fixture, with no
-# model build or repository data.
-"$PYTHON" - "$project" <<'PY'
+# The STEP the gates open: one cylinder, written by build123d's own STEP export, which the engine
+# imports as it does any STEP it did not write. It is made here so that no CAD file is committed.
+"$PYTHON" - "$project/smoke.step" <<'PY'
 import sys
+
+import build123d as bd
+
+part = bd.Pos(42, 0, 2) * bd.Cylinder(3, 14)
+part.label = "smoke"
+bd.export_step(part, sys.argv[1])
+PY
+if ! head -1 "$project/smoke.step" | grep -q 'ISO-10303-21'; then
+  echo "FAIL: the STEP fixture did not export" >&2
+  exit 1
+fi
+
+# The mesh fixture is an export of the STEP fixture, by the engine.
+if ! (cd "$project" && "$PYTHON" -m cad_server.engine export smoke.step smoke.stl) >"$log" 2>&1 \
+   || [ ! -f "$project/smoke.stl" ]; then
+  echo "FAIL: the mesh fixture did not export" >&2
+  sed 's/^/    /' "$log" >&2
+  exit 1
+fi
+
+# The canonical STEP fixture is intentionally one part. A model places it twice to exercise
+# the positive STEP assembly-tree capability, with no other CAD construction or any
+# repository model dependency; its script goes once it is built.
+cat > "$project/assembly_fixture.py" <<'ASSEMBLY'
 from pathlib import Path
 
-from cadgen import build123d as bd
-from cadgen.step_export import export_build123d_step_scene
-from cadgen.step_export_target import export_cad_target
+from cad.engine import read_step, step
+import build123d as bd
 
-root = Path(sys.argv[1])
-result = export_cad_target(
-    root / "smoke.step",
-    [("stl", root / "smoke.stl")],
-    repo_root=root,
-)
-if len(result.get("files") or []) != 1:
-    raise RuntimeError(f"mesh setup did not write its output: {result}")
+HERE = Path(__file__).resolve().parent
 
-# The canonical fixture is intentionally one part. Reuse its exact solid twice
-# to exercise the positive STEP assembly-tree capability without another CAD
-# construction or any repository model dependency.
-left = bd.import_step(root / "smoke.step")
-left.label = "left_cylinder"
-right = left.moved(bd.Pos(10, 0, 0))
-right.label = "right_cylinder"
-assembly = bd.Compound(children=[left, right], label="smoke_assembly")
-export_build123d_step_scene(assembly, root / "assembly.step")
-PY
+
+@step(out="assembly.step")
+def smoke_assembly():
+    left = read_step(HERE / "smoke.step")
+    left.label = "left_cylinder"
+    right = left.moved(bd.Pos(10, 0, 0))
+    right.label = "right_cylinder"
+    return bd.Compound(children=[left, right], label="smoke_assembly")
+
+if __name__ == "__main__":
+    smoke_assembly()
+ASSEMBLY
 
 # A STEP model the camera gate saves a rebuilt revision over. Built from
 # primitives, so it imports nothing.
 cat > "$project/hinge.py" <<'HINGE'
-from cadgen import label_shape, step
-from cadgen import build123d as bd
+from cad.engine import step
+import build123d as bd
 
 
-@step
+@step("hinge.step")
 def hinge():
-    base = label_shape(bd.Box(20, 20, 4), "base")
-    arm = label_shape(bd.Pos(30, 0, 6) * bd.Box(56, 4, 4), "arm")
-    return bd.Compound(children=[base, arm])
-
+    base = bd.Box(20, 20, 4)
+    base.label = "base"
+    arm = bd.Pos(30, 0, 6) * bd.Box(56, 4, 4)
+    arm.label = "arm"
+    return bd.Compound(children=[base, arm], label="hinge")
 
 if __name__ == "__main__":
     hinge()
 HINGE
 # A SECOND revision of the same model, with an arm long enough that the model
 # no longer fits the frame the first one was fitted to. It is built into a
-# dot-directory, which the catalog scan skips, so the served root still holds
+# dot-directory, which the explorer skips, so the model's folder still holds
 # one hinge; the gate copies it over the first to stand in for a rebuild that a
-# source edit saved while the model was open.
-# The model name decides the output name, so the two revisions build side by
+# source edit saved while the model was open, and then the first one (kept there
+# too) back over it, for a rebuild that shrinks the model.
+# Each revision declares its output name, so the two revisions build side by
 # side instead of one overwriting the other. Literal substitutions only: GNU and
 # BSD sed do not spell a word boundary the same way.
 sed -e 's/bd.Pos(30, 0, 6) \* bd.Box(56, 4, 4)/bd.Pos(80, 0, 6) * bd.Box(156, 4, 4)/' \
-    -e 's/def hinge()/def hinge_grown()/' \
-    -e 's/^    hinge()$/    hinge_grown()/' \
+    -e 's/hinge()/hinge_grown()/g' \
+    -e 's/"hinge.step"/"hinge_grown.step"/' \
   "$project/hinge.py" > "$project/hinge_grown.py"
 if ! grep -q 'bd.Box(156, 4, 4)' "$project/hinge_grown.py" \
    || ! grep -q 'def hinge_grown()' "$project/hinge_grown.py"; then
@@ -174,20 +152,41 @@ if ! grep -q 'bd.Box(156, 4, 4)' "$project/hinge_grown.py" \
 fi
 
 # The served project holds artifacts only: a model script beside them would
-# enter the catalog as a buildable entry and change what the gates see.
-if ! (cd "$project" && "$PYTHON" hinge.py && "$PYTHON" hinge_grown.py \
-        && mkdir -p .revision && mv hinge_grown.step .revision/hinge.step \
-        && rm hinge.py hinge_grown.py) >"$log" 2>&1; then
-  echo "FAIL: the hinge revision fixture did not build" >&2
+# enter the catalog as an entry of its own and change what the gates see. A build
+# returns once every file it declares is on disk.
+if ! (cd "$project" && "$PYTHON" assembly_fixture.py && "$PYTHON" hinge.py && "$PYTHON" hinge_grown.py \
+        && mkdir -p .revision && mv hinge_grown.step .revision/hinge.step && cp hinge.step .revision/hinge-first.step \
+        && rm assembly_fixture.py hinge.py hinge_grown.py) >"$log" 2>&1 \
+   || [ ! -f "$project/assembly.step" ] || [ ! -f "$project/hinge.step" ]; then
+  echo "FAIL: the STEP model fixtures did not build" >&2
   sed 's/^/    /' "$log" >&2
   exit 1
 fi
 
-# Mesh export necessarily materializes source surfaces and tessellations. The
-# browser gate starts with a new store so its first STEP page remains a true
-# cold import/derive path; only this test's private cache is removed.
-rm -rf "$CADGEN_CACHE_DIR"
-mkdir -p "$CADGEN_CACHE_DIR"
+# An engine document: a plate with a hole and a peg placed on it, built as a model script runs
+# (through this test's own engine daemon). Its script goes once it is built, as the hinge's does.
+cat > "$project/smoke_xbf.py" <<'XBF'
+import build123d as bd
+from cad.engine import xbf
+
+
+@xbf(out="smoke.xbf")
+def smoke():
+    plate = bd.Box(30, 20, 4) - bd.Cylinder(3, 10)
+    plate.label = "plate"
+    peg = bd.Pos(8, 0, 6) * bd.Cylinder(2, 8)
+    peg.label = "peg"
+    return bd.Compound(children=[plate, peg], label="smoke")
+
+if __name__ == "__main__":
+    smoke()
+XBF
+if ! (cd "$project" && "$PYTHON" smoke_xbf.py && rm smoke_xbf.py) >"$log" 2>&1 \
+   || [ ! -f "$project/smoke.xbf" ]; then
+  echo "FAIL: the engine document fixture did not build" >&2
+  sed 's/^/    /' "$log" >&2
+  exit 1
+fi
 
 # A closed 20 x 12 outline on layer OUTLINE, written by ezdxf (cadgen's DXF reader) so it is a
 # DXF the backend reads: a hand-written one lacks the subclass markers it requires.
@@ -218,28 +217,10 @@ cat > "$project/smoke.urdf" <<'URDF'
 </robot>
 URDF
 
-"$PYTHON" -c 'import os, pathlib, sys; os.setsid() if os.name != "nt" else None; pathlib.Path(sys.argv[3]).write_text(str(os.getpid()), encoding="ascii"); os.chdir(sys.argv[1]); os.execv(sys.executable, [sys.executable, "-m", "cadgen.viewer", "--host", sys.argv[2], "--json", "--new", "--no-registry"])' \
-  "$project" "$HOST" "$viewer_pidfile" >"$log" 2>&1 &
-server_pid=$!
-
-port=""
-for _ in $(seq 1 30); do
-  port="$(sed -n 's/^{.*"port":\([0-9]*\).*}$/\1/p' "$log" | tail -1)"
-  [ -n "$port" ] && break
-  if ! kill -0 "$server_pid" 2>/dev/null; then
-    echo "FAIL: Viewer exited before announcing its port" >&2
-    sed 's/^/    /' "$log" >&2
-    exit 1
-  fi
-  sleep 1
-done
-if [ -z "$port" ]; then
-  echo "FAIL: Viewer did not announce a port" >&2
-  sed 's/^/    /' "$log" >&2
-  exit 1
-fi
-
-e2e_args=(--dir "$project" --url "http://$HOST:$port")
+(cd "$project" && "$PYTHON" -m cad_server.viewer --json) >"$log"
+url="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["apiUrl"])' "$log")"
+export VIEWER_TEST_TOKEN="$("$PYTHON" -c 'import json,sys; print(json.load(open(sys.argv[1]))["token"])' "$log")"
+e2e_args=(--dir "$project" --url "$url")
 [ -n "$out_dir" ] && e2e_args+=(--out "$out_dir")
 [ -n "$only_gate" ] && e2e_args+=(--only "$only_gate")
 echo "  [setup] $(( $(date +%s) - started_at ))s to fixtures, viewer and port"

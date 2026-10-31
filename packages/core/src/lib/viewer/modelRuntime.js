@@ -1,22 +1,7 @@
-import { syncSectionCaps } from "./sectionCaps.js";
-import {
-  applyDisplayRecordTransform,
-  buildStepClipPlane,
-  readBoundsCenter,
-  syncMaterialClipPlanes
-} from "../../common/cadScene.js";
-import { cadEdgeInstanceSets } from "../../common/cadEdgeInstances.js";
 import {
   clampSceneModelRadius,
   getShadowCameraSettings
 } from "./sceneScale.js";
-
-export {
-  applyDisplayRecordTransform,
-  buildStepClipPlane,
-  readBoundsCenter,
-  syncMaterialClipPlanes
-};
 
 export function toNumber(value, fallback = 0) {
   return Number.isFinite(Number(value)) ? Number(value) : fallback;
@@ -106,62 +91,4 @@ export function applyRuntimeModelBounds(THREE, runtime, bounds, sceneScaleMode, 
     boundsMax,
     radius
   };
-}
-
-export function syncObjectClipPlanes(object, clipPlanes) {
-  if (!object?.traverse) {
-    return;
-  }
-  object.traverse((child) => {
-    syncMaterialClipPlanes(child?.material, clipPlanes);
-  });
-}
-
-export function syncRuntimeStepClipPlane(runtime, clipSettings) {
-  if (!runtime?.THREE) {
-    return;
-  }
-  const clipPlane = buildStepClipPlane(
-    runtime.THREE,
-    clipSettings,
-    // The UI and snapshots measure section coordinates against authored bounds.
-    // Posing/exploding changes the scene envelope, never the slider's coordinate system.
-    runtime.zeroPoseBounds || runtime.baseBounds || runtime.modelBounds,
-    runtime.modelGroup?.position
-  );
-  // No section now and none last time: every material already has no planes (a new
-  // material is born that way), so there is nothing to reconcile. A posed frame asks
-  // for this sync each time it draws its edges, and walking every record's materials
-  // to clear what was never set was a fixed cost of every animation frame.
-  if (!clipPlane && runtime.stepClipPlaneCleared === true) {
-    return;
-  }
-  runtime.stepClipPlaneCleared = !clipPlane;
-  const clipPlanes = clipPlane ? [clipPlane] : [];
-  runtime.activeClipPlane = clipPlane;
-  runtime.activeClipPlanes = clipPlanes;
-  if (runtime.renderer) {
-    runtime.renderer.localClippingEnabled = true;
-  }
-  for (const record of Array.isArray(runtime.displayRecords) ? runtime.displayRecords : []) {
-    syncMaterialClipPlanes(record.material, clipPlanes);
-    syncMaterialClipPlanes(record.edgeMaterials, clipPlanes);
-  }
-  for (const set of cadEdgeInstanceSets(runtime)) {
-    syncMaterialClipPlanes(set.materials, clipPlanes);
-  }
-  syncObjectClipPlanes(runtime.facePickGroup, clipPlanes);
-  syncObjectClipPlanes(runtime.edgePickGroup, clipPlanes);
-  syncObjectClipPlanes(runtime.topologyDisplayEdgeLine, clipPlanes);
-  syncSectionCaps(runtime, clipPlane);
-  // Clipping changes draw materials, not occurrence membership, transforms or
-  // colours. A visual/effects pass still reconciles those independently.
-  const seenSurfaceSets = new Set();
-  for (const sets of [runtime.cadSurfaceInstanceSets, runtime.cadScene?.runtime?.cadSurfaceInstanceSets]) {
-    for (const set of sets || []) {
-      if (!set || set.disposed || seenSurfaceSets.has(set)) continue;
-      seenSurfaceSets.add(set);
-      syncMaterialClipPlanes(set.object?.material, clipPlanes);
-    }
-  }
 }

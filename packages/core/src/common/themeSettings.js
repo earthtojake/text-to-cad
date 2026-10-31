@@ -1,13 +1,10 @@
 import {
   CAMERA_PROJECTION,
-  DEFAULT_DISPLAY_EDGE_SETTINGS,
-  DISABLED_DISPLAY_EDGE_SETTINGS,
   normalizeCameraProjection
 } from "./displaySettings.js";
 
 export {
   CAD_EDGE_CLASS_IDS,
-  CAD_EDGE_COLOR,
   CAD_EDGE_HIGHLIGHT_COLOR,
   CAMERA_PROJECTION,
   normalizeCameraProjection
@@ -15,8 +12,6 @@ export {
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}){1,2}$/;
 export const MAX_THEME_FILL_COLORS = 50;
-const CAD_THEME_EDGE_SETTINGS = DEFAULT_DISPLAY_EDGE_SETTINGS;
-const DISABLED_THEME_EDGE_SETTINGS = DISABLED_DISPLAY_EDGE_SETTINGS;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -328,12 +323,6 @@ const CLAY_FILL_COLORS = Object.freeze(["#b9856e"]);
 const TERMINAL_FILL_COLORS = Object.freeze(["#073a20"]);
 
 const TERMINAL_EDGE_COLOR = "#66ff99";
-const CHARCOAL_FILL_COLORS = Object.freeze([
-  "#b6c4ce",
-  "#8f9aa3",
-  "#d3dae0",
-  "#68737d"
-]);
 
 function mixHexColors(colorA, colorB, amount = 0.5) {
   const from = normalizeColor(colorA, "#000000");
@@ -347,21 +336,6 @@ function mixHexColors(colorA, colorB, amount = 0.5) {
       .padStart(2, "0");
   };
   return `#${channel(1)}${channel(3)}${channel(5)}`;
-}
-
-function midpointPalette(primaryColors, secondaryColors) {
-  const primary = Array.isArray(primaryColors) ? primaryColors : [];
-  const secondary = Array.isArray(secondaryColors) ? secondaryColors : [];
-  const colorCount = Math.max(primary.length, secondary.length);
-  if (!colorCount) {
-    return Object.freeze(["#ffffff"]);
-  }
-
-  return Object.freeze(Array.from({ length: colorCount }, (_, index) => {
-    const primaryColor = primary[index] || primary.at(-1) || "#ffffff";
-    const secondaryColor = secondary[index] || secondary.at(-1) || primaryColor;
-    return mixHexColors(primaryColor, secondaryColor);
-  }));
 }
 
 function createFloorAxisSettings(floorColor, options = {}) {
@@ -525,152 +499,6 @@ const CINEMATIC_THEME_SETTINGS = Object.freeze({
       groundColor: "#d6e2ee",
       intensity: 1.12
     }
-  }
-});
-
-const DARK_STUDIO_THEME_SETTINGS = Object.freeze({
-  materials: {
-    defaultColor: WORKBENCH_FILL_COLORS[0],
-    fillColors: WORKBENCH_FILL_COLORS,
-    cycleColors: false,
-    overrideSourceColors: false,
-    tintMode: "blend",
-    tintStrength: 0,
-    saturation: 1.2,
-    contrast: 1.14,
-    brightness: 1.06,
-    roughness: 0.54,
-    metalness: 0.02,
-    clearcoat: 0.14,
-    clearcoatRoughness: 0.4,
-    opacity: 1,
-    envMapIntensity: 0.5,
-    emissiveIntensity: 0.03
-  },
-  background: {
-    type: "linear",
-    solidColor: "#081b2d",
-    linearStart: "#18304a",
-    linearEnd: "#030914",
-    linearAngle: 135,
-    radialInner: "#174267",
-    radialOuter: "#030914"
-  },
-  floor: {
-    mode: THEME_FLOOR_MODES.STAGE,
-    color: "#0a2238",
-    roughness: 0.38,
-    reflectivity: 0.1,
-    shadowOpacity: 0.42,
-    horizonBlend: 0.1,
-    ...createFloorGridSettings("#0a2238", { opacity: 0.22 }),
-    enabled: false
-  },
-  environment: {
-    enabled: true,
-    presetId: "studio-hdri-43",
-    intensity: 0.18,
-    rotationY: -0.25,
-    useAsBackground: false
-  },
-  lighting: {
-    toneMappingExposure: 1.22,
-    directional: {
-      enabled: true,
-      color: "#ffffff",
-      intensity: 1.42,
-      position: {
-        x: -210,
-        y: 260,
-        z: 270
-      }
-    },
-    spot: {
-      enabled: true,
-      color: "#70c4ff",
-      intensity: 0.24,
-      angle: 0.74,
-      distance: 0,
-      position: {
-        x: 190,
-        y: 210,
-        z: 170
-      }
-    },
-    point: {
-      enabled: true,
-      color: "#9bd0ff",
-      intensity: 0.36,
-      distance: 0,
-      position: {
-        x: -240,
-        y: 110,
-        z: -210
-      }
-    },
-    ambient: {
-      enabled: true,
-      color: "#c6d8ea",
-      intensity: 0.24
-    },
-    hemisphere: {
-      enabled: true,
-      skyColor: "#ffffff",
-      groundColor: "#020713",
-      intensity: 0.98
-    }
-  }
-});
-
-const CODEX_DARK_STUDIO_THEME_SETTINGS = Object.freeze({
-  ...DARK_STUDIO_THEME_SETTINGS,
-  materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
-    defaultColor: CHARCOAL_FILL_COLORS[0],
-    fillColors: CHARCOAL_FILL_COLORS
-  },
-  background: {
-    ...DARK_STUDIO_THEME_SETTINGS.background,
-    solidColor: "#151617",
-    linearStart: "#2a2b2d",
-    linearEnd: "#070809",
-    radialInner: "#303133",
-    radialOuter: "#070809"
-  },
-  floor: {
-    ...DARK_STUDIO_THEME_SETTINGS.floor,
-    color: "#171819",
-    ...createFloorGridSettings("#171819", { opacity: 0.22 })
-  }
-});
-
-const DARKOAL_FILL_COLORS = midpointPalette(
-  DARK_STUDIO_THEME_SETTINGS.materials.fillColors,
-  CODEX_DARK_STUDIO_THEME_SETTINGS.materials.fillColors
-);
-
-const DARKOAL_THEME_SETTINGS = Object.freeze({
-  ...DARK_STUDIO_THEME_SETTINGS,
-  materials: {
-    ...DARK_STUDIO_THEME_SETTINGS.materials,
-    defaultColor: DARKOAL_FILL_COLORS[0],
-    fillColors: DARKOAL_FILL_COLORS
-  },
-  background: {
-    ...DARK_STUDIO_THEME_SETTINGS.background,
-    solidColor: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.solidColor, CODEX_DARK_STUDIO_THEME_SETTINGS.background.solidColor),
-    linearStart: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.linearStart, CODEX_DARK_STUDIO_THEME_SETTINGS.background.linearStart),
-    linearEnd: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.linearEnd, CODEX_DARK_STUDIO_THEME_SETTINGS.background.linearEnd),
-    radialInner: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.radialInner, CODEX_DARK_STUDIO_THEME_SETTINGS.background.radialInner),
-    radialOuter: mixHexColors(DARK_STUDIO_THEME_SETTINGS.background.radialOuter, CODEX_DARK_STUDIO_THEME_SETTINGS.background.radialOuter)
-  },
-  floor: {
-    ...DARK_STUDIO_THEME_SETTINGS.floor,
-    color: mixHexColors(DARK_STUDIO_THEME_SETTINGS.floor.color, CODEX_DARK_STUDIO_THEME_SETTINGS.floor.color),
-    ...createFloorGridSettings(
-      mixHexColors(DARK_STUDIO_THEME_SETTINGS.floor.color, CODEX_DARK_STUDIO_THEME_SETTINGS.floor.color),
-      { opacity: 0.22 }
-    )
   }
 });
 
@@ -1081,24 +909,26 @@ const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
   }
 });
 
-// Workbench dark mode treatment: a neutral charcoal canvas. Mode
+// Workbench dark mode treatment: Preview's cool blue-grey, at its mid-tone
+// (#25272b; Preview's stage runs #2c2e31 at its centre to #202226 at its
+// edges), so the tools view and Preview read as one look. Mode
 // overrides can only swap colors, not light intensities, so dark-part
 // visibility is tuned entirely through these colors: lifted ambient and
 // hemisphere-ground fill so shaded faces of dark parts keep their form and
 // a canvas/floor luminance step for silhouette separation. Edges stay deep
 // navy so they read as subtle technical linework on light fills; wireframe
 // display relies on the automatic light-edge contrast fallback.
-const WORKBENCH_DARK_FLOOR_COLOR = "#383838";
+const WORKBENCH_DARK_FLOOR_COLOR = "#30333a";
 
 const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   ...WORKBENCH_BASE_THEME_SETTINGS,
   background: {
     ...WORKBENCH_BASE_THEME_SETTINGS.background,
-    solidColor: "#333333",
-    linearStart: "#3b3b3b",
-    linearEnd: "#2b2b2b",
-    radialInner: "#404040",
-    radialOuter: "#2b2b2b"
+    solidColor: "#25272b",
+    linearStart: "#2c2e31",
+    linearEnd: "#202226",
+    radialInner: "#2c2e31",
+    radialOuter: "#202226"
   },
   floor: {
     ...WORKBENCH_BASE_THEME_SETTINGS.floor,
@@ -1386,7 +1216,7 @@ export const THEME_PRESETS = Object.freeze([
     id: "workbench-dark",
     label: "Dark",
     preview: {
-      background: "#333333",
+      background: "#25272b",
       modelColor: "#b6c4ce"
     },
     settings: WORKBENCH_DARK_THEME_PRESET_SETTINGS
@@ -1491,13 +1321,6 @@ export const RENDER_ONLY_THEME_PRESETS = Object.freeze([SNAPSHOT_THEME_PRESET]);
 
 export const DEFAULT_THEME_PRESET_ID = "workbench-light";
 
-// The two ids that are not presets. "system" follows prefers-color-scheme;
-// "custom" is the single slot holding whatever the user has edited. Everything
-// else is a built-in preset, and presets are read-only.
-export const SYSTEM_THEME_ID = "system";
-export const CUSTOM_THEME_ID = "custom";
-export const DEFAULT_THEME_ID = SYSTEM_THEME_ID;
-
 export const DEFAULT_THEME_PRESET = Object.freeze(
   THEME_PRESETS.find((preset) => preset.id === DEFAULT_THEME_PRESET_ID) || THEME_PRESETS[0]
 );
@@ -1506,29 +1329,6 @@ export const DEFAULT_THEME_SETTINGS = Object.freeze(DEFAULT_THEME_PRESET.setting
 
 export function resolveSystemThemePresetId({ prefersDark = false } = {}) {
   return prefersDark === true ? "workbench-dark" : "workbench-light";
-}
-
-// The id the UI shows as selected, and the only ids that may be stored.
-export function normalizeThemeId(themeId) {
-  const normalized = String(themeId || "").trim();
-  if (normalized === SYSTEM_THEME_ID || normalized === CUSTOM_THEME_ID) {
-    return normalized;
-  }
-  return normalizeThemePresetId(normalized);
-}
-
-// Resolve an active theme id to the settings it renders with. "custom" uses the
-// stored custom settings; "system" and presets resolve to preset settings, which
-// is why selecting a preset is all it takes to reset a customized theme.
-export function resolveThemeSettingsForId(themeId, { custom = null, prefersDark = false } = {}) {
-  const normalizedThemeId = normalizeThemeId(themeId) || DEFAULT_THEME_ID;
-  if (normalizedThemeId === CUSTOM_THEME_ID && custom) {
-    return normalizeThemeSettings(custom);
-  }
-  const presetId = normalizedThemeId === CUSTOM_THEME_ID || normalizedThemeId === SYSTEM_THEME_ID
-    ? resolveSystemThemePresetId({ prefersDark })
-    : normalizedThemeId;
-  return cloneThemePresetSettings(presetId);
 }
 
 const PRESET_ID_SET = new Set(ENVIRONMENT_PRESETS.map((preset) => preset.id));
@@ -1827,35 +1627,7 @@ function getMatchingThemePresetId(themeSettings) {
   return null;
 }
 
-export function resolveThemeSettingsColorMode(themeSettings = {}, { prefersDark = false, systemFallback = THEME_COLOR_MODES.LIGHT } = {}) {
-  const normalizedColorMode = normalizeThemeColorMode(
-    themeSettings?.colorMode,
-    DEFAULT_THEME_SETTINGS?.colorMode || THEME_COLOR_MODES.SYSTEM
-  );
-  if (normalizedColorMode === THEME_COLOR_MODES.SYSTEM) {
-    return prefersDark === true
-      ? THEME_COLOR_MODES.DARK
-      : normalizeThemeColorMode(systemFallback, THEME_COLOR_MODES.LIGHT) === THEME_COLOR_MODES.DARK
-        ? THEME_COLOR_MODES.DARK
-        : THEME_COLOR_MODES.LIGHT;
-  }
-  return normalizedColorMode;
-}
-
-export function resolveThemeSettingsForColorMode(themeSettings = {}, options = {}) {
-  const normalized = normalizeThemeSettings(themeSettings);
-  const resolvedColorMode = resolveThemeSettingsColorMode(normalized, options);
-  const resolved = deepClone(normalized);
-  resolved.colorMode = resolvedColorMode;
-  applyThemeModeColorOverrides(resolved, normalized.modeColors?.[resolvedColorMode]);
-  return normalizeThemeSettings(resolved);
-}
-
 export function themeSettingsSupportsSystemColorMode(themeSettings = {}) {
   const normalized = normalizeThemeSettings(themeSettings);
   return normalized.colorMode === THEME_COLOR_MODES.SYSTEM;
-}
-
-export function getEnvironmentPresetById(presetId) {
-  return ENVIRONMENT_PRESETS.find((preset) => preset.id === presetId) || ENVIRONMENT_PRESETS[0];
 }

@@ -1,6 +1,9 @@
 /**
  * The canvas a drawing is painted on, and the three things a person does to it:
- * drag to pan, wheel or pinch to zoom about the pointer, double-click to fit.
+ * drag to pan, wheel or pinch to zoom about the pointer, double-click to fit —
+ * and, for the tool in hand, a tap (a press that lets go without dragging) and
+ * the pointer resting over the drawing (`onTap`, `onHover`), in the pane's CSS
+ * pixels. A drag that has gone further than a tap may is a pan, whatever the tool.
  *
  * The view lives in a REF, not in React state. A pan is a stream of pointer
  * moves and a zoom is a stream of wheel ticks; re-rendering a component tree per
@@ -12,6 +15,8 @@
  * Painting is on demand: one `requestAnimationFrame` is scheduled when
  * something changed, and an idle drawing draws nothing at all. A resize is the
  * exception: resizing the canvas wipes it, so the pane's observer paints at once.
+ * What the tools draw over the drawing (a highlight, ink) is painted in the same
+ * frame, after it (`overlay`), so a capture of the canvas holds it too.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -26,7 +31,8 @@ import {
   zoomTransform
 } from "@text-to-cad/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
-import { readDrawingThemeColors } from "./themeColors.js";
+import { capturePointer, releasePointer } from "../../lib/pointerCapture.js";
+import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js";
 
 /** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
 const WHEEL_ZOOM_SPEED = 0.0015;
@@ -34,6 +40,9 @@ const WHEEL_ZOOM_SPEED = 0.0015;
 const PINCH_WHEEL_ZOOM_SPEED = 0.01;
 const LINE_HEIGHT_PX = 16;
 const PAGE_HEIGHT_PX = 400;
+/** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
+const TAP_SLOP_PX = 4;
+const NO_LAYERS = new Set();
 function wheelZoomFactor(event) {
   const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
   const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
@@ -48,8 +57,15 @@ function wheelZoomFactor(event) {
  * @param {"light"|"dark"} options.colorScheme
  * @param {(transform: object|null) => void} options.onViewMoved  Called after the person moves the
  *   view, with the transform to remember. Never called for a fit.
+ * @param {ReadonlySet<string>} [options.hiddenLayers]  Layers not drawn.
+ * @param {(ctx: CanvasRenderingContext2D, view: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
+ *   Painted over the drawing in each frame.
+ * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
+ * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
+ *   A pointer resting over the canvas with nothing pressed (null: it left).
  */
-export function useDrawingView({ drawing, restored = null, colorScheme = "light", onViewMoved }) {
+export function useDrawingView({ drawing, restored = null, colorScheme = "light", onViewMoved, hiddenLayers = NO_LAYERS,
+  overlay = null, onTap = null, onHover = null }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -66,6 +82,14 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   schemeRef.current = colorScheme;
   const onViewMovedRef = useRef(onViewMoved);
   onViewMovedRef.current = onViewMoved;
+  const hiddenRef = useRef(hiddenLayers);
+  hiddenRef.current = hiddenLayers;
+  const overlayRef = useRef(overlay);
+  overlayRef.current = overlay;
+  const tapRef = useRef(onTap);
+  tapRef.current = onTap;
+  const hoverRef = useRef(onHover);
+  hoverRef.current = onHover;
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
 
@@ -81,7 +105,8 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     clearSurface(ctx, { width, height, pixelRatio, background });
     const drawable = drawingRef.current;
     if (drawable && transformRef.current) {
-      drawDrawing(ctx, drawable, { transform: transformRef.current, foreground, pixelRatio });
+      drawDrawing(ctx, drawable, { transform: transformRef.current, foreground, pixelRatio, hiddenLayers: hiddenRef.current });
+      overlayRef.current?.(ctx, { transform: transformRef.current, pixelRatio, width, height });
     }
   }, []);
 
@@ -101,7 +126,10 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     const drawable = drawingRef.current;
     const { width, height } = sizeRef.current;
     if (!drawable?.bounds || width <= 0 || height <= 0) return;
-    const fitted = fitTransform(drawable.bounds, width, height);
+    // The drawing frames clear of the view's tool strip, which the view measures as `--cad-tools-bottom`.
+    const frame = containerRef.current?.closest?.("[data-slot=cad-file-view]");
+    const strip = frame ? Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom")) : 0;
+    const fitted = fitTransform(drawable.bounds, width, height, { top: Number.isFinite(strip) ? strip : 0 });
     fitScaleRef.current = fitted.scale;
     if (force || !movedRef.current) {
       movedRef.current = false;
@@ -163,9 +191,9 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       contextRef.current = canvas.getContext("2d");
       refit(false);
       // A view the person framed is not taken back by a resize — but it must not keep an
-      // absolute pixel scale either, or a pane that narrows (the file tree opening, the
-      // window resizing) simply crops the drawing where it stands. So it keeps what it
-      // MEANT: the same zoom relative to the fit, still centred on what it was centred on.
+      // absolute pixel scale either, or a pane that narrows (the window resizing) simply
+      // crops the drawing where it stands. So it keeps what it MEANT: the same zoom
+      // relative to the fit, still centred on what it was centred on.
       // That is how the 3D viewports behave when their pane changes size.
       if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
         const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));
@@ -215,6 +243,9 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     frameRef.current = 0;
   }, []);
 
+  // A layer shown or hidden: the same view, without it.
+  useEffect(() => { requestPaint(); }, [hiddenLayers, requestPaint]);
+
   // ---- pointer and wheel -----------------------------------------------------
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -232,24 +263,39 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       pinchState.centre = { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
     };
 
+    // The press that may still be a tap: where it went down, until it travels or a second finger lands.
+    let press = null;
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning.
       if (event.pointerType === "mouse" && event.button !== 0) return;
-      canvas.setPointerCapture?.(event.pointerId);
-      pointers.set(event.pointerId, local(event));
+      capturePointer(canvas, event.pointerId);
+      const point = local(event);
+      pointers.set(event.pointerId, point);
+      press = pointers.size === 1 ? { id: event.pointerId, start: point, moved: false } : null;
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 1) setDragging(true);
+      hoverRef.current?.(null, null);
       event.preventDefault();
     };
     const onPointerMove = (event) => {
       const previous = pointers.get(event.pointerId);
-      if (!previous) return;
+      if (!previous) {
+        // Nothing pressed: the pointer resting over the drawing, for the tool in hand.
+        if (!pointers.size && event.pointerType !== "touch") hoverRef.current?.(local(event), event);
+        return;
+      }
       const point = local(event);
       pointers.set(event.pointerId, point);
       const transform = transformRef.current;
       if (!transform) return;
       if (pointers.size === 1) {
+        if (press && !press.moved) {
+          if (Math.hypot(point.x - press.start.x, point.y - press.start.y) <= TAP_SLOP_PX) return;
+          press.moved = true;
+          moveTo(panTransform(transform, point.x - press.start.x, point.y - press.start.y));
+          return;
+        }
         moveTo(panTransform(transform, point.x - previous.x, point.y - previous.y));
       } else if (pointers.size === 2 && fitScaleRef.current) {
         const before = { ...pinchState };
@@ -262,11 +308,16 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       }
     };
     const onPointerUp = (event) => {
+      const at = pointers.get(event.pointerId);
       if (!pointers.delete(event.pointerId)) return;
-      canvas.releasePointerCapture?.(event.pointerId);
+      releasePointer(canvas, event.pointerId);
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 0) setDragging(false);
+      const tapped = press && press.id === event.pointerId && !press.moved && event.type === "pointerup";
+      press = null;
+      if (tapped && at) tapRef.current?.(at, event);
     };
+    const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
     const onWheel = (event) => {
       if (!transformRef.current) return;
       // The page must not scroll under a drawing being zoomed, so this listener
@@ -280,6 +331,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     canvas.addEventListener("pointermove", onPointerMove);
     canvas.addEventListener("pointerup", onPointerUp);
     canvas.addEventListener("pointercancel", onPointerUp);
+    canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("dblclick", onDoubleClick);
     return () => {
@@ -287,14 +339,18 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerUp);
       canvas.removeEventListener("pointercancel", onPointerUp);
+      canvas.removeEventListener("pointerleave", onPointerLeave);
       canvas.removeEventListener("wheel", onWheel);
       canvas.removeEventListener("dblclick", onDoubleClick);
     };
   }, [fit, moveTo, zoomBy]);
 
   /**
-   * The drawing on its own, for a library card: fitted whole to `width` × `height`, in the theme's
-   * pens on its background, painted on a canvas of its own — the pane's view is left as it is.
+   * The drawing on its own, for a library card: fitted whole to `width` × `height`, painted on a
+   * canvas of its own — the pane's view is left as it is. Like a 3D card's picture it has no
+   * background (the card's picture area shows through), and its pen is the light theme's whatever
+   * the theme it was taken in: one picture serves both themes, and a dark card inverts it
+   * (`.cad-library-thumbnail[data-drawing]`).
    */
   const thumbnail = useCallback(({ width, height }) => new Promise((resolve, reject) => {
     const drawable = drawingRef.current;
@@ -304,9 +360,9 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     canvas.height = Math.max(1, Math.round(height));
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error("The browser cannot draw the drawing's picture.")); return; }
-    const { background, foreground } = readDrawingThemeColors(containerRef.current, schemeRef.current);
-    clearSurface(context, { width: canvas.width, height: canvas.height, background });
-    drawDrawing(context, drawable, { transform: fitTransform(drawable.bounds, canvas.width, canvas.height), foreground });
+    clearSurface(context, { width: canvas.width, height: canvas.height });
+    drawDrawing(context, drawable, { transform: fitTransform(drawable.bounds, canvas.width, canvas.height),
+      foreground: DRAWING_THEME_FALLBACK.light.foreground });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("The browser could not encode this drawing as a PNG."));
@@ -323,5 +379,5 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, capture, thumbnail, transformRef };
+  return { containerRef, canvasRef, dragging, fit, zoomBy, capture, thumbnail, transformRef, sizeRef, requestPaint };
 }

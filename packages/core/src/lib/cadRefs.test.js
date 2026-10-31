@@ -5,163 +5,128 @@ import test from "node:test";
 
 import {
   buildCadRefToken,
-  buildLabelAliasMap,
-  isNativeCadSelector,
-  labelRefForOccurrence,
-  normalizeCadRefSelectors,
-  parseCadRefSelector,
+  engineSelectorText,
+  isEngineRefFile,
+  isEngineSelector,
+  isLabelSelector,
+  isOccurrenceToken,
   parseCadRefToken,
-  resolveLabelSelector
+  parseEngineRef,
+  spellEngineRefs
 } from "./cadRefs.js";
 
-// The same fixture the Python suite reads. It is the only thing keeping the two grammars --
-// this module and cadgen/cad_ref_syntax.py -- from drifting, which they had already done four
-// copies deep before it existed.
+// The same fixture the Python suites read. It is the only thing keeping the engine grammar's two
+// parsers -- this module and cad/engine/refs.py -- from drifting, which the grammars had
+// already done four copies deep before it existed.
 const FIXTURE = JSON.parse(
   readFileSync(fileURLToPath(new URL("./cadRefs.parity.json", import.meta.url)), "utf8")
 );
 
-test("every selector case parses as the shared fixture says", () => {
-  for (const testCase of FIXTURE.selectorCases) {
-    const parsed = parseCadRefSelector(testCase.selector);
-    assert.ok(parsed, `${testCase.selector} should parse`);
-    assert.equal(parsed.selectorType, testCase.selectorType, testCase.selector);
-    assert.equal(parsed.occurrenceId, testCase.occurrenceId, testCase.selector);
-    assert.equal(parsed.ordinal ?? null, testCase.ordinal, testCase.selector);
-    assert.equal(parsed.canonical, testCase.canonical, testCase.selector);
-    assert.equal(parsed.label ?? "", testCase.label ?? "", testCase.selector);
+test("an element name is what the engine's naming says it is, and anything else is an owner's segment", () => {
+  const { names, notNames } = FIXTURE.elementNameCases;
+  assert.ok(names.length && notNames.length);
+  for (const name of names) assert.deepEqual(parseEngineRef(`#part/${name}`).selectors[0].element, name, name);
+  for (const text of notNames) {
+    const [selector] = parseEngineRef(`#part/${text}`).selectors;
+    assert.equal(selector.element, null, text);
+    assert.equal(selector.owner.at(-1).text, text, text);
   }
 });
 
-test("comma lists inherit as the shared fixture says", () => {
-  for (const testCase of FIXTURE.inheritanceCases) {
-    assert.deepEqual(
-      normalizeCadRefSelectors(testCase.input),
-      testCase.expected,
-      `${testCase.input}: ${testCase.why || ""}`
-    );
+test("every document the engine draws is named in its grammar: an .xbf, a STEP, a document by its id", () => {
+  for (const path of ["/w/kit.xbf", "/w/KIT.XBF", "/w/kit.step", "/w/Kit.STEP", "/w/kit.stp", "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"]) {
+    assert.ok(isEngineRefFile(path), path);
+  }
+  for (const path of ["/w/kit.xbf.py", "/w/kit.step.py", "/w/arm.urdf", "/w/plate.stl", "/w/plate.dxf", "", "6F1C2A4E-1B2C-5D3E-8F4A-0123456789AB"]) {
+    assert.ok(!isEngineRefFile(path), path);
   }
 });
 
-test("label aliases are built exactly as the shared fixture says", () => {
-  for (const testCase of FIXTURE.aliasCases) {
-    const built = buildLabelAliasMap(testCase.rows);
-    assert.deepEqual(built.aliases, testCase.aliases, testCase.why || "");
-    assert.deepEqual(built.ambiguous, testCase.ambiguous, testCase.why || "");
-  }
-});
-
-// Backwards compatibility is the point of the parse ordering: label support must not move a
-// single ref anyone has already pasted.
-test("numeric selectors never take the label branch", () => {
-  const numeric = [
-    "o1",
-    "o1.2",
-    "o1.2.3.4.5.6",
-    "o12.f19",
-    "o1.2.s3",
-    "o1.2.e3",
-    "o1.2.v3",
-    "f45",
-    "s2",
-    "e9",
-    "v4",
-    "m1",
-    "m17"
+test("any other file names a pick by a label, its token a comma list that stops at a blank", () => {
+  for (const selector of ["upper_arm", "h2F", "glb:3", "_base", "cast_rim:5spoke_2", "m1"]) assert.ok(isLabelSelector(selector), selector);
+  for (const selector of ["", " upper_arm", "5spoke", "eye#shank", "not a label", "a/b", "a,b", "arm-link", null]) assert.ok(!isLabelSelector(selector), String(selector));
+  const cases = [
+    ["/robots/arm.urdf#upper_arm", "/robots/arm.urdf", ["upper_arm"]],
+    ["/robots/arm.urdf#base_link,upper_arm,base_link note", "/robots/arm.urdf", ["base_link", "upper_arm"]],
+    ["   bracket.dxf#h2F", "bracket.dxf", ["h2F"]],
+    ["plate.stl#", "plate.stl", []],
+    ["#glb:3", "", ["glb:3"]],
+    ["\"/robots/my arm (2).urdf\"#base_link", "/robots/my arm (2).urdf", ["base_link"]]
   ];
-  for (const selector of numeric) {
-    const parsed = parseCadRefSelector(selector);
-    assert.equal(parsed.label ?? "", "", `${selector} must not be read as a label`);
+  for (const [text, cadPath, selectors] of cases) {
+    const parsed = parseCadRefToken(text);
+    assert.equal(parsed.cadPath, cadPath, text);
+    assert.deepEqual(parsed.selectors, selectors, text);
   }
-});
-
-test("mates stay opaque even though they match the label shape", () => {
-  for (const selector of ["m1", "m2", "M3"]) {
-    assert.equal(parseCadRefSelector(selector).selectorType, "opaque", selector);
+  for (const text of ["plate.stl", "\"broken name.urdf#base_link", ""]) assert.equal(parseCadRefToken(text), null, text);
+  // Written as given, once each, in order; a path with a blank or a delimiter quoted.
+  assert.equal(buildCadRefToken({ cadPath: "/robots/arm.urdf", selectors: ["upper_arm", "base_link", "upper_arm"] }), "/robots/arm.urdf#upper_arm,base_link");
+  assert.equal(buildCadRefToken({ cadPath: "plate.stl" }), "plate.stl#");
+  assert.equal(buildCadRefToken({ selector: "glb:3" }), "#glb:3");
+  assert.equal(buildCadRefToken({}), "#");
+  for (const cadPath of ["Hex Drive Screw (2).urdf", 'models/caf\u00e9 #1 "arm".urdf']) {
+    const token = buildCadRefToken({ cadPath, selectors: ["upper_arm", "base_link"] });
+    assert.deepEqual(parseCadRefToken(token), { token, cadPath, selectors: ["upper_arm", "base_link"] });
   }
+  // An older GLB names the nodes it places by an occurrence token.
+  assert.ok(isOccurrenceToken("o:4b1f9e2a7c03") && !isOccurrenceToken("o:4B1F9E2A7C03") && !isOccurrenceToken("o1.2"));
 });
 
-test("isNativeCadSelector accepts every numeric form and rejects labels", () => {
-  for (const selector of ["o1", "o1.2", "o12.f19", "f45", "s2", "e9", "v4", "m1"]) {
-    assert.ok(isNativeCadSelector(selector), selector);
-  }
-  for (const selector of ["eye_shank", "servo_end_plate.f45", "", "not a selector!"]) {
-    assert.ok(!isNativeCadSelector(selector), selector);
-  }
+// A parsed engine selector as the fixture writes it: its owner's segments, a quoted one as
+// { quoted, index }, and its element's text.
+const engineShape = ({ owner, element }) => ({
+  owner: owner ? owner.map(segment => (!segment.quoted ? segment.text : segment.index === null ? { quoted: segment.text } : { quoted: segment.text, index: segment.index })) : null,
+  element: element === null || typeof element === "string" ? element : `${element.kind} ${element.ordinal}`
 });
 
-test("a unique label resolves, bare and with an entity", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1.2", name: "eye_shank" },
-    { id: "o1.3", name: "pressure_tube" }
-  ]);
-  assert.equal(resolveLabelSelector("eye_shank", aliasMap), "o1.1.2");
-  assert.equal(resolveLabelSelector("eye_shank.f45", aliasMap), "o1.1.2.f45");
-  assert.equal(resolveLabelSelector("#eye_shank.e3", aliasMap), "o1.1.2.e3");
-});
-
-test("an ambiguous or unknown label resolves to nothing rather than guessing", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.3", name: "cast_rim:5spoke" },
-    { id: "o1.7", name: "cast_rim:5spoke" }
-  ]);
-  assert.equal(resolveLabelSelector("cast_rim:5spoke", aliasMap), "", "bare duplicate must not resolve");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_1", aliasMap), "o1.3");
-  assert.equal(resolveLabelSelector("cast_rim:5spoke_2", aliasMap), "o1.7");
-  assert.equal(resolveLabelSelector("no_such_part", aliasMap), "");
-});
-
-test("numeric selectors pass through resolution untouched", () => {
-  const aliasMap = buildLabelAliasMap([{ id: "o1.1", name: "eye_shank" }]);
-  for (const selector of ["o1.2", "o12.f19", "f45", "m1"]) {
-    assert.equal(resolveLabelSelector(selector, aliasMap), selector, selector);
-  }
-});
-
-test("labelRefForOccurrence reports the paste spelling", () => {
-  const aliasMap = buildLabelAliasMap([
-    { id: "o1.1", name: "eye_shank" },
-    { id: "o1.2", name: "tube" }
-  ]);
-  assert.equal(labelRefForOccurrence(aliasMap, "o1.1"), "#eye_shank");
-  assert.equal(labelRefForOccurrence(aliasMap, "o9.9"), "");
-});
-
-test("every token case parses as the shared fixture says", () => {
-  for (const testCase of FIXTURE.tokenCases) {
-    const parsed = parseCadRefToken(testCase.text);
-    if (testCase.selectors === null) {
-      assert.equal(parsed, null, `${testCase.text} should not be a token`);
+test("an .xbf's refs parse as cad.engine.refs parses them, case for case", () => {
+  assert.ok(FIXTURE.refCases.length);
+  for (const testCase of FIXTURE.refCases) {
+    const parsed = parseEngineRef(testCase.ref);
+    if (testCase.refused) {
+      assert.equal(parsed, null, `${JSON.stringify(testCase.ref)}: ${testCase.why}`);
       continue;
     }
-    assert.ok(parsed, `${testCase.text} should parse`);
-    assert.equal(parsed.cadPath, testCase.cadPath, testCase.text);
-    assert.deepEqual(parsed.selectors, testCase.selectors, testCase.text);
+    assert.ok(parsed, `${JSON.stringify(testCase.ref)}: ${testCase.why}`);
+    assert.equal(parsed.file, testCase.file, testCase.ref);
+    assert.deepEqual(parsed.selectors.map(engineShape), testCase.selectors, testCase.ref);
+    assert.deepEqual(parsed.selectors.map(engineSelectorText), testCase.printed, testCase.ref);
   }
 });
 
-test("a token round-trips through buildCadRefToken", () => {
-  // buildCadRefToken took a cadPath and discarded it (`void cadPath`). It no longer does, so
-  // what the viewer copies is what the grammar parses back.
-  assert.equal(buildCadRefToken({ cadPath: "plate.stl", selector: "o1.2" }), "plate.stl#o1.2");
-  assert.equal(buildCadRefToken({ selector: "o1.2" }), "#o1.2");
-  assert.equal(buildCadRefToken({ cadPath: "plate.stl" }), "plate.stl#");
-  assert.equal(buildCadRefToken({}), "#");
-  assert.equal(
-    parseCadRefToken(buildCadRefToken({ cadPath: "a/b.step.py", selectors: ["o1.2", "f3"] })).cadPath,
-    "a/b.step.py"
-  );
-});
-
-test("bare tokens carry no file prefix", () => {
-  for (const text of ["#o1", "#o1.2.f3", "#f45", "#m1", "#", "#o1.2,f3"]) {
-    assert.equal(parseCadRefToken(text).cadPath, "", `${text} must carry no prefix`);
+test("an .xbf's occurrences and elements are spelled as cad inspect answers them", () => {
+  assert.ok(FIXTURE.spellingCases.length);
+  for (const { structure, occurrences, elements, why } of FIXTURE.spellingCases) {
+    const spell = spellEngineRefs(structure.tree);
+    const entryAt = at => at.reduce((entry, index) => entry.children[index], structure.tree);
+    for (const row of occurrences) assert.equal(spell.occurrence(entryAt(row.at)), row.ref, why);
+    for (const row of elements) {
+      const entry = entryAt(row.at);
+      const name = structure.prototypes[entry.prototype][`${row.kind}Names`][String(row.ordinal)] || "";
+      assert.equal(spell.element(entry, row.kind, row.ordinal, name), row.ref, why);
+    }
+    assert.equal(spell.occurrence({ name: "elsewhere" }), "", "an entry of another tree has no ref here");
   }
 });
 
-test("imported file tokens quote and round-trip filename delimiters", () => {
-  for (const cadPath of ['Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']) {
-    const token = buildCadRefToken({cadPath, selectors:['o2','o1']});
-    assert.deepEqual(parseCadRefToken(token), {token, cadPath, selectors:['o1','o2']});
-  }
+test("an engine document's copied line is the engine's whole ref, round-tripped, a STEP's as an .xbf's", () => {
+  const cadPath = "/work/my parts/kit.xbf";
+  const selectors = ["kit/hand/finger.2/face 7", "\"M3, M4\"/e:screw.body.2", "palm"];
+  const token = buildCadRefToken({ cadPath, selectors });
+  // Written in the order given, a comma inside a quoted label left whole.
+  assert.equal(token, `"${cadPath}"#kit/hand/finger.2/face 7,"M3, M4"/e:screw.body.2,palm`);
+  assert.deepEqual(parseCadRefToken(`${token}\nmore text`), { token, cadPath, selectors });
+  // The line runs to its end: a label's spaces are its own, and the engine refuses what it refuses.
+  assert.deepEqual(parseCadRefToken("/w/kit.xbf#kit/v1.5 bracket/face 2").selectors, ["kit/v1.5 bracket/face 2"]);
+  assert.deepEqual(parseCadRefToken("/w/kit.xbf#hand/finger.2,face 3").selectors, ["hand/finger.2", "hand/finger.2/face 3"]);
+  assert.equal(parseCadRefToken("/w/kit.xbf#kit//face 1"), null);
+  assert.ok(isEngineSelector("kit/\"M3, M4\"/face 1") && !isEngineSelector("a,b") && !isEngineSelector(" a") && !isEngineSelector(""));
+  // A STEP's line is read the same way: a part labelled with spaces, a face by its name or its number.
+  const step = "/w/L bracket.step";
+  const bracket = "L bracket 80 x 60 x 6 mm";
+  const named = `${bracket}/f:bracket_body.body_bcndnk~ba6e1714f88b`;
+  const stepToken = buildCadRefToken({ cadPath: step, selectors: [named, `${bracket}/face 4`] });
+  assert.equal(stepToken, `"${step}"#${named},${bracket}/face 4`);
+  assert.deepEqual(parseCadRefToken(stepToken), { token: stepToken, cadPath: step, selectors: [named, `${bracket}/face 4`] });
+  assert.deepEqual(parseCadRefToken(`/w/kit.STP#${bracket}/edge 2`).selectors, [`${bracket}/edge 2`]);
 });

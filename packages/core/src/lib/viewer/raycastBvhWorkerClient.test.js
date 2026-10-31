@@ -3,7 +3,6 @@ import test from "node:test";
 import { Worker as Thread } from "node:worker_threads";
 import * as THREE from "three";
 import { MeshBVH } from "three-mesh-bvh";
-import { buildModel } from "../../common/cadScene.js";
 import { buildSerializedRaycastBvh, raycastBvhResultTransfers } from "./raycastBvhBuild.js";
 import { createRaycastBvhWorkerClient } from "./raycastBvhWorkerClient.js";
 import { attachAcceleratedRaycast, estimateGeometryBvhBuildBytes, estimateGeometryBvhBytes, scheduleRuntimeRaycastBvh } from "./raycastBvh.js";
@@ -144,26 +143,6 @@ test("worker acceleration preserves nonindexed geometry and Float64 positions", 
   assert.deepEqual(hits(mesh, ray), expected);
 });
 
-test("deformation guards remain authoritative while a worker is pending", async () => {
-  const { workers, options, events } = fixture();
-  const value = geometry();
-  const mesh = meshOf(value);
-  const ray = new THREE.Raycaster(new THREE.Vector3(0.6, 0.3, 5), new THREE.Vector3(0, 0, -1));
-  scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh }] }, { ...options, deferUntilRaycast: true });
-  assert.equal(hits(mesh, ray)[0].faceIndex, 0);
-  await tick();
-  mesh.userData.cadBeforeRaycast = () => {
-    value.translate(10, 0, 0);
-    value.userData.__bvhSkipped = true;
-    return false;
-  };
-  assert.deepEqual(hits(mesh, ray), []);
-  workers[0].complete();
-  await tick();
-  assert.equal(value.boundsTree, undefined);
-  assert.equal(events[1].bytes, 0);
-});
-
 test("a single FIFO releases its reservation before admitting the next request after worker failure", async () => {
   const { workers, options, events } = fixture();
   const first = geometry(), second = geometry();
@@ -255,30 +234,6 @@ test("dispose cancels idle, FIFO-queued and active work; a re-adopted geometry r
   workers[1].complete();
   await tick();
   assert.ok(active.boundsTree);
-});
-
-test("two scene owners share one pending BVH; only the last release terminates it", async () => {
-  const { workers, options, events } = fixture();
-  const value = geometry();
-  const bounds = { min: [0, 0, 0], max: [3, 1, 1] };
-  const component = { vertices: value.attributes.position.array, indices: value.index.array, bounds };
-  const source = { vertices: new Float32Array(), indices: new Uint32Array(), bounds,
-    parts: [{ id: "o1", sourceMesh: component, sourceMeshKey: "part", vertexCount: 7, triangleCount: 3, bounds }] };
-  const first = buildModel(THREE, source, { renderPartsIndividually: true });
-  const second = buildModel(THREE, source, { renderPartsIndividually: true });
-  const shared = first.displayRecords[0].geometry;
-  assert.equal(second.displayRecords[0].geometry, shared);
-  scheduleRuntimeRaycastBvh(first.runtime, options);
-  scheduleRuntimeRaycastBvh(second.runtime, options);
-  await tick();
-  assert.equal(workers.length, 1);
-  first.dispose();
-  assert.equal(workers[0].terminated, false);
-  second.dispose();
-  assert.equal(workers[0].terminated, true);
-  await tick();
-  assert.equal(shared.boundsTree, null);
-  assert.equal(events[1].bytes, 0);
 });
 
 test("worker startup and protocol failures leave the display arrays intact without inline retry", async () => {

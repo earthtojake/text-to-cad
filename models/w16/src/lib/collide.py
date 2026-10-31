@@ -1,9 +1,9 @@
 """Kinematic collision gate.
 
 Builds every moving part ONCE at theta = 0, then for each sampled crank angle
-applies the same rigid transforms the .anim.js applies (crank spin, rod
-swing, piston slide, cam spin, valve lift, follower rock) and tests the
-required pairs for interpenetration:
+applies the same rigid transforms the `crank` motion poses (`lib/kinematics.py`:
+crank spin, rod swing, piston slide, cam spin, valve lift, follower rock) and
+tests the required pairs for interpenetration:
 
   piston-valve, rod-block, rod-crank, rod-rod, valve-valve   (the brief's gate)
   + piston-head, valve-head, follower-head, cam-head, cam-follower/roller,
@@ -23,7 +23,7 @@ import math
 import sys
 import time
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import kin, spec as S
 
@@ -38,7 +38,7 @@ def _bbox(shape):
 
     box = Bnd_Box()
     BRepBndLib.Add_s(shape.wrapped, box, False)
-    xmin, ymin, zmin, xmax, ymax, zmax = box.Get()
+    xmin, ymin, zmin, xmax, ymax, zmax = (box.CornerMin().X(), box.CornerMin().Y(), box.CornerMin().Z(), box.CornerMax().X(), box.CornerMax().Y(), box.CornerMax().Z())
     return (xmin, ymin, zmin, xmax, ymax, zmax)
 
 
@@ -71,9 +71,9 @@ def _common_volume(a, b):
     try:
         from lib import geo
         from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-        from OCP.TopTools import TopTools_ListOfShape
-        args = TopTools_ListOfShape(); args.Append(a.wrapped)
-        tools = TopTools_ListOfShape(); tools.Append(b.wrapped)
+        from OCP.collections import List_TopoDS_Shape
+        args = List_TopoDS_Shape(); args.Append(a.wrapped)
+        tools = List_TopoDS_Shape(); tools.Append(b.wrapped)
         op = BRepAlgoAPI_Common(); op.SetArguments(args); op.SetTools(tools)
         op.SetFuzzyValue(1e-3); op.Build()
         if op.IsDone():
@@ -92,7 +92,7 @@ def clash_volume(a, b):
 
 
 # ---------------------------------------------------------------------------
-# Motion: rest shapes + a transform per theta (mirrors the .anim.js exactly)
+# Motion: rest shapes + a transform per theta (the `crank` motion of lib/kinematics.py)
 # ---------------------------------------------------------------------------
 
 class Mover:

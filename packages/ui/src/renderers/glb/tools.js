@@ -1,8 +1,17 @@
-// A GLB picks nothing: a native glTF scene has no references, so it has no tool strip — orbit,
-// pan and zoom are the viewport's own, and its clips play in preview mode.
+import { createToolModes } from "../kit/tools/toolModes.js";
 
-/** What a host command that needs picking is told. A GLB shows the scene as authored; it has no references. */
+// A GLB's tools: Select picks its nodes — what Quick Edit names (`model.glb#n12`, the file's
+// `nodes[12]`) — Pencil, Shapes, Measure (approximate, in glTF's metres); then Explode where it has several
+// rigid nodes that draw, and Clip, popovers from their tiles, never a tool in hand. Its clips play from
+// the file sidebar's Animation section.
+export const GLB_TOOL = Object.freeze({ SELECT: "select", PENCIL: "pencil", SHAPES: "shapes", MEASURE: "measure" });
+
+export const GLB_TOOL_MODES = createToolModes({
+  defaultMode: GLB_TOOL.SELECT,
+  modes: Object.fromEntries(Object.values(GLB_TOOL).map(mode => [mode, {}]))
+});
+
+/** What a host command a GLB cannot carry out is told. Its nodes are picked by a person. */
 export const GLB_DECLINED_LIVE_COMMANDS = Object.freeze({
-  select: "A GLB has nothing to select: it is shown as its authored glTF scene, without CAD references. Select on the STEP this GLB was exported from, or control the camera and display settings instead.",
-  clearSelection: "A GLB has no selection to clear: it is shown as its authored glTF scene, without CAD references."
+  select: "A GLB's nodes are picked by a person in the viewport under Select, and Quick Edit names them (model.glb#n12, the file's nodes[12]); a command cannot select one. Control the camera and display settings instead."
 });

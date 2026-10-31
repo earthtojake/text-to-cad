@@ -1,6 +1,7 @@
 ---
 name: dfam-check
 description: Measure mesh files against Design for Additive Manufacturing (DfAM) rules and report printability findings per process (FDM, SLS, SLA/DLP, metal PBF, MJF). Use when the user asks whether a part is printable, wants overhang/wall-thickness/support analysis of an `.stl`, `.obj`, `.ply`, or `.3mf` mesh, wants a build-orientation recommendation, or wants DfAM redesign guidance before slicing with `$gcode` or regenerating geometry with `$cad`.
+license: MIT
 ---
 
 # DfAM Check
@@ -33,8 +34,9 @@ Set `--angle-limit` to the target process's self-supporting angle from
 process changes: the aggregate support-area facts are binned against it.
 
 STEP/STP input is boundary-representation CAD, not a mesh. When the `$cad`
-skill is installed, export an STL sidecar with it first, then measure the STL
-here. Report that remediation instead of attempting raw STEP parsing. `measure`
+skill is installed, export an STL with it first, then measure the STL here.
+With `$cad`, `cad export <id> part.stl` writes one from the model (or `cad export part.step part.stl` from a STEP).
+Report that remediation instead of attempting raw STEP parsing. `measure`
 on a STEP exits 1 with `{"error": "failed to load mesh: ..."}`; that is the
 wrong-input signal, not a missing dependency — do not install extra mesh
 loaders to work around it.

@@ -19,8 +19,8 @@ function floorObjectsFor(bounds, floor = {}) {
     SCALE_SETTINGS,
     { grid: { enabled: true } }
   );
-  const grid = scene.children.find((child) => child.isGridHelper || child.type === "GridHelper");
-  const plane = scene.children.find((child) => child.isMesh);
+  const grid = scene.children.find((child) => child.userData.cadGrid);
+  const plane = scene.children.find((child) => child.isMesh && !child.userData.cadGrid);
   assert.ok(grid, "world-origin grid should have been added");
   return { grid, plane };
 }

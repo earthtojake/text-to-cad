@@ -7,15 +7,15 @@ Use smoke tests after the SDF passes bundled validation. The goal is to catch si
 ### Bundled validation
 
 ```bash
-cadgen sdf validate path/to/model.sdf
-cadgen sdf validate path/to/model.sdf --strict
+cad sdf validate path/to/model.sdf
+cad sdf validate path/to/model.sdf --strict
 ```
 
 Use `--strict` when warnings should block handoff. It is safe on any machine: the default `--gz-check auto` notes a missing `gz` as `info` rather than a finding against the file, so `--strict` fails only on the document's own warnings.
 
 ### SDFormat parser check
 
-`cadgen sdf validate` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
+`cad sdf validate` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
 
 ```bash
 gz sdf --check path/to/model.sdf
@@ -24,7 +24,7 @@ gz sdf --check path/to/model.sdf
 or make it mandatory, so a missing `gz` is an error instead of a note:
 
 ```bash
-cadgen sdf validate path/to/model.sdf --gz-check required
+cad sdf validate path/to/model.sdf --gz-check required
 ```
 
 Use the exact simulator environment that will consume the file when possible.
@@ -53,7 +53,8 @@ For each non-fixed joint:
 After generating or modifying an `.sdf`, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 - confirm direct model links, joints, frames, visuals, and collisions are placed correctly;
-- confirm includes, plugins, sensors, lights, nested models, and unsupported geometry are listed as static metadata;
+- confirm includes, plugins, sensors and lights are listed as static metadata, and nested models are drawn with the model;
+- confirm the Viewer refuses by name any geometry or mesh it cannot draw, rather than leaving it out;
 - record any simulator-only behavior that CAD Viewer cannot execute.
 
 ### Sensor and plugin check

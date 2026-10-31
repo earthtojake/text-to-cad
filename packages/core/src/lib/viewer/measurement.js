@@ -8,16 +8,20 @@
 // `segmentCount` offsets into a shared buffer rather than as points, so it can
 // never be snapped against directly.
 
+import { measureEntityPair } from "./measureEntities.js";
+
 const PLANAR_SURFACE_TYPES = new Set(["plane", "planar"]);
 const PARALLEL_NORMAL_TOLERANCE = 0.999;
-// Below this the two planes are the same plane, not two planes with a gap.
-const COPLANAR_TOLERANCE = 1e-6;
 const EPSILON = 1e-9;
 
 export const MEASURE_SNAP_LABELS = {
   vertex: "Vertex",
   edge: "Edge",
   face: "Face",
+  // A point on a mesh's triangle (`meshMeasure.js`), between its corners and sides.
+  surface: "Surface",
+  // A circle's or arc's centre, where a drawing's pick snaps to a hole.
+  center: "Centre",
   free: "Point"
 };
 
@@ -306,10 +310,6 @@ export function edgeGeometryFromSegments(segments) {
   return { kind: "arc", radius, center: centre };
 }
 
-function straightEdgeDirection(pick) {
-  return pick?.geometry?.kind === "line" ? normalizeVector3(pick.geometry.direction) : null;
-}
-
 export function classifyMeasurePick({
   reference = null,
   hitPoint = null,
@@ -399,11 +399,19 @@ export function measurePointFromReference({
 }
 
 /**
- * The relationship between two picks, in the order a CAD measure tool reports
- * it: a straight-line distance always, plus whichever of perpendicular distance
- * or angle the pair actually admits. Parallel planes have a perpendicular
- * distance and no meaningful angle; skew planes have an angle and no single
- * distance between them, so only one of the two is ever set.
+ * The reading of two picks, in the order a CAD measure tool reports it: what the two ENTITIES make
+ * (`measureEntities.js`), not what the two points picked on them do. `kind` says which it is:
+ *
+ * - `normal`: the perpendicular distance (`perpendicular`) — parallel planes, a vertex to a plane or an
+ *   edge, parallel edges;
+ * - `centers`: the centre-to-centre distance (`centerDistance`) of two circles or cylinders;
+ * - `angle`: the angle (`angleDeg`, the acute one) of two planes, or two edges that are not parallel,
+ *   with the shortest distance between them (`minDistance`);
+ * - `min`: the shortest distance between the two (`minDistance`); `distance`: that of two points;
+ * - `points`: the pair has no reading of its own, and the distance is the one between the points picked.
+ *
+ * `euclidean` and `delta` are always those of the two points picked; `ends` are the points the reading
+ * is drawn between. Picks on a mesh (`units`) are two points on its surface and approximate.
  */
 export function measurementFromPicks(pickA, pickB) {
   const pointA = isFinitePoint(pickA?.point) ? pickA.point : null;
@@ -415,101 +423,60 @@ export function measurementFromPicks(pickA, pickB) {
   if (euclidean === null) {
     return null;
   }
+  // Picks on a mesh carry the units the scene is read in and are approximate (`meshMeasure.js`);
+  // a STEP's are exact, in its millimetres.
+  const units = pickA?.units || pickB?.units || null;
+  if (units) {
+    const perWorld = Number(units.perWorld) || 1;
+    return {
+      kind: "points",
+      euclidean: euclidean * perWorld,
+      perpendicular: null,
+      centerDistance: null,
+      minDistance: null,
+      angleDeg: null,
+      delta: [0, 1, 2].map(axis => (pointB[axis] - pointA[axis]) * perWorld),
+      unit: String(units.unit || ""),
+      approximate: pickA?.approximate === true || pickB?.approximate === true
+    };
+  }
   const result = {
+    kind: "points",
     euclidean,
     perpendicular: null,
     centerDistance: null,
+    minDistance: null,
     angleDeg: null,
     delta: [pointB[0] - pointA[0], pointB[1] - pointA[1], pointB[2] - pointA[2]],
     unit: "mm"
   };
-  // Two circular edges are almost always two holes, and the number wanted there
-  // is the centre-to-centre spacing, not the gap between whichever points on the
-  // rims happened to be clicked.
-  if (pickA?.geometry?.kind === "arc" && pickB?.geometry?.kind === "arc") {
-    const centreDistance = distanceBetweenPoints(pickA.geometry.center, pickB.geometry.center);
-    if (centreDistance !== null) {
-      result.centerDistance = centreDistance < EPSILON ? 0 : centreDistance;
-    }
-  }
-  const planar = planarPairMeasurement(pickA, pickB);
-  if (planar) {
-    if (planar.perpendicular !== null) {
-      result.perpendicular = planar.perpendicular < EPSILON ? 0 : planar.perpendicular;
-    }
-    result.angleDeg = planar.angleDeg;
+  const entities = measureEntityPair(pickA, pickB);
+  if (!entities) {
     return result;
   }
-  result.angleDeg = straightEdgePairAngle(pickA, pickB);
+  result.kind = entities.kind;
+  result.angleDeg = entities.angleDeg;
+  if (entities.kind === "normal") result.perpendicular = entities.distance;
+  else if (entities.kind === "centers") result.centerDistance = entities.distance;
+  else result.minDistance = entities.distance;
+  result.ends = { start: entities.start, end: entities.end };
   return result;
-}
-
-// Both halves below insist the pick actually snapped to the entity they read.
-// A pick that fell back to "free" landed somewhere on the mesh that the
-// reference does not describe, so its plane or direction would be a fiction.
-function planarPairMeasurement(pickA, pickB) {
-  if (pickA?.snapKind !== "face" || pickB?.snapKind !== "face") {
-    return null;
-  }
-  if (!isPlanarFace(pickA?.reference) || !isPlanarFace(pickB?.reference)) {
-    return null;
-  }
-  const normalA = normalizeVector3(pickA.reference.pickData.normal);
-  const normalB = normalizeVector3(pickB.reference.pickData.normal);
-  if (!normalA || !normalB) {
-    return null;
-  }
-  // Two points on the SAME face are not a face-to-face measurement. Their
-  // separation lies entirely in the plane, so the perpendicular distance is
-  // exactly zero — which would read as "0.00 mm" and collapse the dimension line
-  // to nothing. This is the commonest measurement there is, so it has to fall
-  // through to the straight distance between the points.
-  if (pickA.referenceId && pickA.referenceId === pickB.referenceId) {
-    return null;
-  }
-  const alignment = Math.abs(dot3(normalA, normalB));
-  if (alignment < PARALLEL_NORMAL_TOLERANCE) {
-    return { perpendicular: null, angleDeg: acuteAngleDegrees(alignment) };
-  }
-  const separation = pointVector(pickA.point, pickB.point);
-  if (!separation) {
-    return null;
-  }
-  const perpendicular = Math.abs(dot3(separation, normalA));
-  // Distinct but coplanar faces — two flats milled to the same height — have
-  // nothing between them to report either.
-  if (perpendicular <= COPLANAR_TOLERANCE) {
-    return null;
-  }
-  return { perpendicular, angleDeg: null };
-}
-
-function straightEdgePairAngle(pickA, pickB) {
-  if (pickA?.snapKind !== "edge" || pickB?.snapKind !== "edge") {
-    return null;
-  }
-  const directionA = straightEdgeDirection(pickA);
-  const directionB = straightEdgeDirection(pickB);
-  if (!directionA || !directionB) {
-    return null;
-  }
-  return acuteAngleDegrees(Math.abs(dot3(directionA, directionB)));
-}
-
-// Reported as the acute angle between the two entities (0-90°), which is the
-// number a chamfer or a draft angle is quoted as. Using the signed dot of the
-// outward normals instead would make a 45° chamfer read as 135°.
-function acuteAngleDegrees(alignment) {
-  return (Math.acos(clamp(alignment, -1, 1)) * 180) / Math.PI;
 }
 
 /**
  * What a single selected entity is worth on its own — length, area, radius —
  * taken from the exact values the topology computed rather than from the
  * tessellation. This is the half of a CAD measure tool that answers "how big is
- * this thing" before any second pick is made.
+ * this thing" before any second pick is made. A face's area is cadgen's exact measure of it, which
+ * the view asks for when the face is pointed at: `faceArea` is its state, and `{state: "ready",
+ * area}` reports it.
  */
-export function entityMeasurementFromPick(pick) {
+export function entityMeasurementFromPick(pick, { faceArea = null } = {}) {
+  if (pick?.snapKind === "vertex" && isFinitePoint(pick.point)) {
+    // Where it is in the model's own coordinates, not where the viewer drew the re-centred model.
+    const offset = isFinitePoint(pick.offset) ? pick.offset : [0, 0, 0];
+    return { selectorType: "vertex", typeLabel: "vertex", unit: "mm", point: [0, 1, 2].map(axis => pick.point[axis] - offset[axis]) };
+  }
   if (pick?.snapKind !== "edge" && pick?.snapKind !== "face") {
     return null;
   }
@@ -522,7 +489,7 @@ export function entityMeasurementFromPick(pick) {
   const params = pickData.params || {};
   if (selectorType === "edge") {
     const geometry = pick.geometry || null;
-    const radius = geometry?.kind === "arc" ? finiteNumber(geometry.radius) : null;
+    const radius = geometry?.kind === "arc" ? (finiteNumber(params.radius) ?? finiteNumber(geometry.radius)) : null;
     return compactEntity({
       selectorType: "edge",
       typeLabel: edgeTypeLabel(geometry),
@@ -538,10 +505,11 @@ export function entityMeasurementFromPick(pick) {
     return compactEntity({
       selectorType: "face",
       typeLabel: surfaceType || "face",
-      area: finiteNumber(pickData.area),
+      area: faceArea?.state === "ready" ? finiteNumber(faceArea.area) : null,
       radius,
       diameter: radius === null ? null : radius * 2,
-      center: isFinitePoint(params.center) ? params.center.slice(0, 3) : null
+      center: isFinitePoint(params.center) ? params.center.slice(0, 3) : null,
+      normal: PLANAR_SURFACE_TYPES.has(surfaceType) ? normalizeVector3(pickData.normal) : null
     });
   }
   return null;
@@ -568,7 +536,8 @@ function compactEntity(entity) {
   return compact.length !== undefined ||
     compact.area !== undefined ||
     compact.radius !== undefined ||
-    compact.majorRadius !== undefined
+    compact.majorRadius !== undefined ||
+    compact.point !== undefined
     ? compact
     : null;
 }
@@ -594,13 +563,22 @@ export function formatMeasurement(measurement, { precision = 2 } = {}) {
   const value = firstFiniteQuantity([
     measurement.perpendicular,
     measurement.centerDistance,
+    measurement.minDistance,
     measurement.euclidean
   ]);
   if (value === null) {
     return "";
   }
+  if (measurement.approximate === true) {
+    // A mesh's reading: "≈", to a tenth of a millimetre or so in whatever its file measures in.
+    const unit = measurement.unit || "";
+    return `≈ ${value.toFixed(APPROXIMATE_DECIMALS[unit] ?? 2)}${unit ? ` ${unit}` : ""}`;
+  }
   return `${value.toFixed(roundedPrecision(precision))} ${measurement.unit || "mm"}`;
 }
+
+// How many decimals an approximate reading keeps, by its unit: about a tenth of a millimetre.
+const APPROXIMATE_DECIMALS = Object.freeze({ m: 4, cm: 2, mm: 1, "µm": 0, in: 3, ft: 4 });
 
 export function formatMeasurementAngle(measurement, { precision = 1 } = {}) {
   const angle = finiteNumber(measurement?.angleDeg);
@@ -632,6 +610,10 @@ export function formatEntityMeasurement(entity, { precision = 2 } = {}) {
   }
   const digits = roundedPrecision(precision);
   const unit = entity.unit || "mm";
+  if (Array.isArray(entity.point)) {
+    // A vertex: where it is, as a position reads (no unit after each axis).
+    return `${entity.point.map((value, axis) => `${"XYZ"[axis]} ${(Math.abs(value) < 0.5 * 10 ** -digits ? 0 : value).toFixed(digits)}`).join("  ")} ${unit}`;
+  }
   const parts = [];
   if (entity.diameter !== undefined) {
     parts.push(`⌀ ${entity.diameter.toFixed(digits)} ${unit}`);
@@ -643,6 +625,9 @@ export function formatEntityMeasurement(entity, { precision = 2 } = {}) {
   }
   if (entity.area !== undefined) {
     parts.push(`A ${entity.area.toFixed(digits)} ${unit}²`);
+  }
+  if (Array.isArray(entity.normal)) {
+    parts.push(`N ${entity.normal.map(value => (Math.abs(value) < 5e-3 ? 0 : value).toFixed(2)).join(" ")}`);
   }
   return parts.join("  ");
 }

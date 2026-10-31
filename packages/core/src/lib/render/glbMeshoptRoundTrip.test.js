@@ -1,64 +1,36 @@
-// A render-preset GLB must survive the loader the CAD Viewer actually uses.
+// A meshopt-compressed GLB must survive the loader the CAD Viewer actually uses.
 //
 // `EXT_meshopt_compression` is a REQUIRED extension: without the decoder registered,
-// GLTFLoader rejects the file outright rather than degrading, so every render-artifact
-// package would fail to open. This test writes a compressed GLB with the real encoder and
-// reads it back through `buildMeshDataFromGlbBuffer` -- the same entry point the main thread
-// and the GLB worker both use -- so a missing or mis-registered decoder fails here rather
-// than in the viewer.
+// GLTFLoader rejects the file outright rather than degrading, so a compressed GLB a person
+// opens would fail to. This test reads one (`fixtures/cube.meshopt.glb`: a unit cube, welded,
+// quantized and compressed; `fixtures/README.md` says how it was made) through
+// `buildMeshDataFromGlbBuffer` -- the same entry point the main thread and the GLB worker
+// both use -- so a missing or mis-registered decoder fails here rather than in the viewer.
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
-
-import { MeshoptEncoder } from "meshoptimizer";
-import { writeGlb } from "../glb/writeGlb.js";
 
 import { buildMeshDataFromGlbBuffer } from "./glbMeshData.js";
 
-/** A unit cube as a non-indexed triangle soup (12 triangles). */
-function cubeSoup() {
-  const v = [
-    [0, 0, 0], [1, 0, 0], [1, 1, 0], [0, 1, 0],
-    [0, 0, 1], [1, 0, 1], [1, 1, 1], [0, 1, 1],
-  ];
-  const faces = [
-    [0, 1, 2], [0, 2, 3], [4, 6, 5], [4, 7, 6],
-    [0, 4, 5], [0, 5, 1], [1, 5, 6], [1, 6, 2],
-    [2, 6, 7], [2, 7, 3], [3, 7, 4], [3, 4, 0],
-  ];
-  const positions = new Float32Array(faces.length * 9);
-  faces.forEach((face, index) => {
-    face.forEach((corner, slot) => {
-      positions.set(v[corner], index * 9 + slot * 3);
-    });
-  });
-  return positions;
+function fixture(name) {
+  const bytes = readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
 }
 
-async function renderPresetGlb() {
-  await MeshoptEncoder.ready;
-  return writeGlb(
-    { primitives: [{ positions: cubeSoup(), color: "#3366cc", name: "cube" }], name: "cube" },
-    { preset: "render", encoder: MeshoptEncoder }
-  );
-}
-
-test("a render-preset GLB declares EXT_meshopt_compression as required", async () => {
-  const bytes = await renderPresetGlb();
+test("the compressed sample declares EXT_meshopt_compression as required", () => {
+  const bytes = new Uint8Array(fixture("cube.meshopt.glb"));
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const jsonLength = view.getUint32(12, true);
   const json = JSON.parse(new TextDecoder().decode(bytes.subarray(20, 20 + jsonLength)));
   assert.ok(
     (json.extensionsRequired || []).includes("EXT_meshopt_compression"),
-    "the render preset must actually compress -- otherwise this test proves nothing"
+    "the sample must actually be compressed -- otherwise this test proves nothing"
   );
 });
 
-test("buildMeshDataFromGlbBuffer decodes a meshopt-compressed render artifact", async () => {
-  const bytes = await renderPresetGlb();
-  const meshData = await buildMeshDataFromGlbBuffer(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  );
+test("buildMeshDataFromGlbBuffer decodes a meshopt-compressed GLB", async () => {
+  const meshData = await buildMeshDataFromGlbBuffer(fixture("cube.meshopt.glb"));
   // 12 triangles survive the weld/quantize/compress round trip.
   assert.equal(meshData.indices.length, 36);
   assert.ok(meshData.vertices.length > 0);
@@ -68,11 +40,11 @@ test("buildMeshDataFromGlbBuffer decodes a meshopt-compressed render artifact", 
   // to CAD millimetres (GLB_CAD_UNIT_SCALE), so the 1-unit cube lands at 1000 mm; asserting
   // the scaled value pins that conversion at the same time.
   //
-  // The unit cube spans 0..1 in the writer's frame, and writeGlb declares that frame as
-  // glTF Y-up (its default), so the loader also applies the Y-up -> CAD Z-up correction
-  // (x, y, z) -> (x, -z, y): the corner at the CAD origin keeps X and Z positive and puts
-  // Y NEGATIVE. Asserting 0..1000 on all three axes only passed while that correction was
-  // being wrongly skipped for any file carrying occurrence ids.
+  // The cube spans 0..1 in glTF's frame, which the file declares Y-up (`cadUpAxis`), so the
+  // loader also applies the Y-up -> CAD Z-up correction (x, y, z) -> (x, -z, y): the corner
+  // at the CAD origin keeps X and Z positive and puts Y NEGATIVE. Asserting 0..1000 on all
+  // three axes only passed while that correction was being wrongly skipped for any file
+  // carrying occurrence ids.
   const { min, max } = meshData.bounds;
   const expectedMin = [0, -1000, 0];
   const expectedMax = [1000, 0, 1000];
@@ -88,19 +60,13 @@ test("buildMeshDataFromGlbBuffer decodes a meshopt-compressed render artifact", 
   }
 });
 
-test("render-preset normals survive quantization + meshopt as UNIT vectors", async () => {
-  // The regression this pins. Attribute buffers must be padded to their declared stride
-  // PER ELEMENT (VEC3/SHORT -> 8, VEC3/BYTE -> 4), not just at the tail: handing
-  // encodeVertexBuffer fewer bytes than count*stride decodes as corrupted attributes.
-  // Positions degrade gracefully enough to keep a recognisable silhouette, so the failure
-  // shows up as NORMALS -- a shattered, facet-noise surface. Asserting indices and bounds
-  // (as this file originally did) does not catch it; unit-length normals do.
-  const bytes = await renderPresetGlb();
-  const meshData = await buildMeshDataFromGlbBuffer(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  );
+test("quantized, compressed normals decode as UNIT vectors", async () => {
+  // Corrupted attributes keep a recognisable silhouette, so a decode that goes wrong shows up
+  // as NORMALS -- a shattered, facet-noise surface. Indices and bounds do not catch it;
+  // unit-length normals do.
+  const meshData = await buildMeshDataFromGlbBuffer(fixture("cube.meshopt.glb"));
   const normals = meshData.normals;
-  assert.ok(normals && normals.length > 0, "the render preset must emit normals");
+  assert.ok(normals && normals.length > 0, "the sample carries normals");
   let offBy = 0;
   for (let i = 0; i < normals.length; i += 3) {
     const magnitude = Math.hypot(normals[i], normals[i + 1], normals[i + 2]);
@@ -112,13 +78,8 @@ test("render-preset normals survive quantization + meshopt as UNIT vectors", asy
   assert.equal(offBy, 0, `${offBy} of ${normals.length / 3} normals are not unit length`);
 });
 
-test("an uncompressed export-preset GLB still loads with no decoder involvement", async () => {
-  const bytes = writeGlb(
-    { primitives: [{ positions: cubeSoup(), color: "#cc3366" }], name: "cube" },
-    { preset: "export" }
-  );
-  const meshData = await buildMeshDataFromGlbBuffer(
-    bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength)
-  );
-  assert.equal(meshData.indices.length, 36);
+test("an uncompressed GLB, cadgen's own, loads through the same entry point", async () => {
+  // Two boxes, 12 triangles each.
+  const meshData = await buildMeshDataFromGlbBuffer(fixture("pair.glb"));
+  assert.equal(meshData.indices.length, 72);
 });

@@ -34,7 +34,7 @@ from __future__ import annotations
 import math
 from bisect import bisect_left
 
-from cadgen import build123d as bd
+import build123d as bd
 
 # ---------------------------------------------------------------------------
 # package / hard points
@@ -632,7 +632,7 @@ def panel_regions():
                    BX_DOOR_CORNER_Z, _BIG)
         )
         rlo, rhi = (BY_ROCKER_IN + _G, _BIG) if s > 0 else (-_BIG, -BY_ROCKER_IN - _G)
-        r[f"rocker:{nm}"] = slab(BX_DOOR_R + _G, BX_DOOR_F - _G, rlo, rhi, -_BIG, BZ_ROCKER - _G)
+        r[f"rocker_panel:{nm}"] = slab(BX_DOOR_R + _G, BX_DOOR_F - _G, rlo, rhi, -_BIG, BZ_ROCKER - _G)
         ylo, yhi = (BY_COVER + _G, _BIG) if s > 0 else (-_BIG, -BY_COVER - _G)
         r[f"rear_fender:{nm}"] = slab(BX_FASCIA_R + _G, BX_DOOR_R - _G, ylo, yhi, -_BIG, _BIG)
     # scuttle deck: the centre strip plus everything under the canopy footprint

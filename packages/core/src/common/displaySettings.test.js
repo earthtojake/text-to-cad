@@ -8,37 +8,30 @@ import {
   DEFAULT_DISPLAY_SETTINGS,
   DEFAULT_EXPLODED_VIEW_SETTINGS,
   DEFAULT_PART_COLOR_SETTINGS,
-  displayModeForcesEdges,
-  displayModeShowsEdges,
-  displayModeShowsThroughEdges,
-  displayModeSurfaceOpacity,
-  displayModeUsesUnlitSurfaces,
-  displaySettingsEqual,
   normalizeDisplayEdgeSettings,
   normalizeDisplaySettings,
   normalizeExplodedViewSettings,
-  resolveDisplayMode,
   validateDisplaySettings
 } from "./displaySettings.js";
 
 test("display settings own CAD presentation fields while camera owns projection", () => {
   assert.deepEqual(normalizeDisplaySettings(), DEFAULT_DISPLAY_SETTINGS);
-  assert.equal(resolveDisplayMode({ mode: "wireframe" }), CAD_DISPLAY_MODE.WIREFRAME);
+  assert.equal(normalizeDisplaySettings({ mode: "wireframe" }).mode, CAD_DISPLAY_MODE.WIREFRAME);
   assert.throws(
     () => normalizeDisplaySettings({ projection: "perspective" }),
     /Unsupported display fields: projection/
   );
   assert.deepEqual(normalizeDisplaySettings({
     mode: "wireframe",
-    clip: { enabled: true, axis: "z", offsets: { z: 0.4 }, invert: true }
+    clip: { axis: "z", at: 12.5, invert: true }
   }), {
     mode: CAD_DISPLAY_MODE.WIREFRAME,
     clip: {
       enabled: true,
       axis: "z",
-      offset: 0.4,
-      offsets: { x: 0, y: 0, z: 0.4 },
-      invert: true
+      invert: true,
+      partColors: true,
+      at: 12.5
     },
     exploded: DEFAULT_EXPLODED_VIEW_SETTINGS,
     edges: DEFAULT_DISPLAY_EDGE_SETTINGS,
@@ -89,84 +82,14 @@ test("display settings normalize exploded view, guides, and part colors", () => 
   });
 });
 
-test("display mode vocabulary is canonical and retired values teach replacements", () => {
+test("display mode vocabulary is canonical", () => {
   for (const mode of Object.values(CAD_DISPLAY_MODE)) {
-    assert.equal(resolveDisplayMode({ mode }), mode);
+    assert.equal(normalizeDisplaySettings({ mode }).mode, mode);
   }
-  assert.throws(() => resolveDisplayMode({ mode: "solid" }), /use 'shaded_edges'/);
-  assert.throws(() => resolveDisplayMode({ mode: "rendered" }), /use 'shaded'/);
-  for (const alias of ["edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
-    assert.throws(() => resolveDisplayMode({ mode: alias }), /Unknown display mode/);
+  for (const alias of ["render", "solid", "rendered", "edges", "shaded-with-edges", "x-ray", "theme", "wire"]) {
+    assert.throws(() => normalizeDisplaySettings({ mode: alias }), /Unknown display mode/);
   }
 });
-
-test("display mode policies describe edge and surface behavior", () => {
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SHADED_EDGES), true);
-  assert.equal(displayModeForcesEdges(CAD_DISPLAY_MODE.SHADED_EDGES), true);
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.SHADED), false);
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.RENDER), false);
-  assert.equal(displayModeForcesEdges(CAD_DISPLAY_MODE.RENDER), false);
-  assert.equal(displayModeUsesUnlitSurfaces(CAD_DISPLAY_MODE.RENDER), false);
-  assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.RENDER, 0.73), 0.73);
-  assert.equal(displayModeShowsEdges(CAD_DISPLAY_MODE.WIREFRAME), true);
-  assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.HIDDEN_EDGES), true);
-  assert.equal(displayModeShowsThroughEdges(CAD_DISPLAY_MODE.TRANSPARENT), true);
-  assert.equal(displayModeUsesUnlitSurfaces(CAD_DISPLAY_MODE.UNSHADED), true);
-  assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.TRANSPARENT, 1), 0.22);
-  assert.equal(displayModeSurfaceOpacity(CAD_DISPLAY_MODE.HIDDEN_LINES_REMOVED, 1), 0.045);
-});
-
-test("render display settings share the viewer envelope and exclude camera", () => {
-  const display = normalizeDisplaySettings({
-    mode: "render",
-    render: {
-      studio: "dark",
-      quality: "preview",
-      exposure: 1,
-      lighting: { rotation: 30, size: 1.5, fill: 0.4 },
-      backdrop: { color: "#123456", transparent: false, ground: true, groundPlacement: "origin" }
-    },
-    clip: { enabled: true, axis: "x", offsets: { x: 0.25 } },
-    exploded: { enabled: true, amount: 0.5 }
-  });
-  assert.equal(display.mode, CAD_DISPLAY_MODE.RENDER);
-  assert.equal(display.render.studio, "dark");
-  assert.equal(display.clip.enabled, true);
-  assert.equal(display.exploded.amount, 0.5);
-  assert.throws(
-    () => normalizeDisplaySettings({ mode: "render", render: { camera: { preset: "front" } } }),
-    /Unsupported display\.render fields: camera/
-  );
-  assert.throws(
-    () => normalizeDisplaySettings({ mode: "shaded", render: { studio: "light" } }),
-    /requires display\.mode 'render'/
-  );
-});
-
-test("display settings compare after normalization", () => {
-  assert.equal(displaySettingsEqual(
-    { mode: "wireframe", clip: { enabled: true, axis: "x", offsets: { x: 0.5 } } },
-    { mode: CAD_DISPLAY_MODE.WIREFRAME, clip: { enabled: true, axis: "x", offsets: { x: 0.5 } } }
-  ), true);
-  assert.equal(displaySettingsEqual({ mode: "shaded" }, { mode: "wireframe" }), false);
-  assert.equal(displaySettingsEqual(
-    { mode: "shaded_edges", exploded: { enabled: true } },
-    { mode: "shaded_edges", exploded: { enabled: false } }
-  ), false);
-  assert.equal(displaySettingsEqual(
-    { mode: "shaded_edges", edges: { silhouette: true } },
-    { mode: "shaded_edges", edges: { silhouette: false } }
-  ), false);
-  assert.equal(displaySettingsEqual(
-    { guides: { grid: { enabled: false } } },
-    { guides: { grid: { enabled: true } } }
-  ), false);
-  assert.equal(displaySettingsEqual(
-    { partColor: { mode: "single", color: "#111111" } },
-    { partColor: { mode: "single", color: "#222222" } }
-  ), false);
-});
-
 
 test("grid color and opacity stay optional and validate at the shared display boundary", () => {
   const guides = { grid: { enabled: true, color: "#ABC", opacity: 0 } };
@@ -178,9 +101,6 @@ test("grid color and opacity stay optional and validate at the shared display bo
     { enabled: false });
   for (const grid of [{ color: "red" }, { opacity: -0.1 }, { opacity: 1.1 }, { opacity: true }]) {
     assert.throws(() => validateDisplaySettings({ guides: { grid } }), /display.guides.grid/);
-  }
-  for (const backdrop of [{ groundColor: "red" }, { groundOpacity: -0.1 }, { groundOpacity: true }]) {
-    assert.throws(() => validateDisplaySettings({ mode: "render", render: { backdrop } }), /display.render.backdrop/);
   }
 });
 

@@ -1,6 +1,7 @@
 ---
 name: urdf
 description: URDF robot description authoring and validation. Use when creating, editing, inspecting, validating, or debugging `.urdf` files, robot links, joints, limits, inertials, visual/collision geometry, mesh references, frame conventions, or robot-description artifacts. Use the SRDF skill for MoveIt2 semantic groups and IK/path-planning semantics; use the CAD skill for STEP/STL/3MF/DXF/GLB outputs. Open and visually review existing URDF files in CAD Viewer.
+license: MIT
 ---
 
 # URDF
@@ -13,53 +14,59 @@ Use this skill for URDF robot-description outputs. Treat URDF work as constraine
 
 ## Setup
 
-This skill's commands are thin entrypoints over the `cadgen` distribution, which
-carries the Python build runtime and the JavaScript it executes. Install it once:
+Run the server through the `cad` command its installation writes, so this skill's commands
+share one installation, and its server, with the CAD app's:
 
-```bash
-python -m pip install -r requirements.txt
-```
+- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.9.0 run`
 
-Snapshots additionally need a browser, which pip cannot supply:
-
-```bash
-python -m playwright install chromium
-```
+For first-time setup or an update, a missing `cad` command, a release it says is not
+installed, a server that is not running, or an installation or kernel load error, read
+[Setup and troubleshooting](references/setup.md).
 
 ## Core Rules
 
-1. The `.urdf` file is the source of truth. Author and edit URDF XML directly; do not build a Python generation pipeline for it. There is no `gen_urdf()` contract.
+1. The `.urdf` file is the source of truth. Author and edit URDF XML directly; do not build a Python generation pipeline for it.
 2. Before writing or changing URDF XML, establish the robot's frame, joint, geometry, unit, and assumption ledger and embed it as a comment block at the top of the `.urdf` file. See `references/design-ledger.md`.
 3. Use URDF frame semantics exactly. Joint origins, link frames, joint axes, and visual/collision/inertial origins use different reference frames. See `references/frame-semantics.md`.
 4. Do not infer spatial transforms, mesh units, handedness, axes, or joint signs from vague prose. Use CAD transforms, dimensioned drawings, measured values, existing source data, or explicit documented assumptions.
 5. Never freehand numeric values that are the result of computation — inertia tensors, centers of mass, unit conversions across many links, mirrored transforms. Compute them: closed-form formulas for primitives, or a throwaway helper script for mesh-derived values. See `references/inertials.md`.
 6. For physical links, model `inertial`, `visual`, and `collision` separately when the target consumer needs them. Frame-only links may intentionally omit mass and geometry.
-7. Validate every created or modified `.urdf` with `cadgen urdf validate` before reporting completion. See `references/validation.md`.
+7. Validate every created or modified `.urdf` with `cad urdf validate` before reporting completion. See `references/validation.md`.
 8. Helper scripts are allowed and encouraged for computation, but they are scaffolding, not the artifact's source of truth. For complex or genuinely parametric models it is reasonable to keep a model-local helper script on disk next to related source code (for example STEP generator sources) and note it in the ledger; this is optional, and the checked-in `.urdf` remains canonical.
 
 ## Show the model
 
-Show the user each file you create or change, and any they ask to see. Snapshots and
-validation don't replace this.
+Show the user each model you create or change, and any model or file they ask to see.
+A file you export is a download: give its path, do not open it.
+Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
+own work; review with `cad snapshot`.
 
-- If your tools include `cad_show` (your host may prefix it), use it, and follow its
-  description for when to call it again. `cad_view` reads what the user selected;
-  `cad_screenshot` shows you what they see. Neither is a review of your own work.
-- Otherwise run the CAD Viewer from the models directory (usually `models/`, not an
-  artifact's output folder):
+- If your tools include `cad_show` (your host may prefix it), call it with the model's id
+  or the file's absolute path, and follow its description for when to call it again.
+  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
+  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
+  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
+  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
+  nothing: its `cad_show` opens the model's page in the user's browser and answers with
+  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
+  `cad_export` are on every host. Call only the tools you have, and never say a card
+  shows a model when your host drew none.
+- Otherwise give the user the page's link once: a model's page is the `view:` line its
+  run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json --detach
+  cad viewer --json FILE [FILE ...]
   ```
 
-  `--detach` returns once the viewer answers requests and leaves it running in the
-  background: always pass it, since a foreground viewer never exits (and piping its
-  output through `tail` can hide the URL for good). It starts or reuses the viewer.
-  Read `url` from its one JSON line (never guess the port); for each file under that
-  directory return `url?file=<URL-encoded relative path>`, or `url` alone to review the
-  directory. If it fails to launch, say so.
+  The command ensures this installation's server, registers each file and prints
+  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
+  JSON line (never guess the port); the URL carries its token query. A page follows
+  every later run of its model and every rewrite of its file, so share it once.
+  Return that link to the user. If it fails to launch, say so.
 
-Review mesh scale and placement, then sweep every movable joint against the
+A `.urdf` you write is the robot's model, not an export: show it. Review mesh scale
+and placement, then sweep every movable joint against the
 design ledger. A link alone does not complete the [viewer sweep](references/validation.md);
 report any checks you could not perform.
 
@@ -70,22 +77,22 @@ report any checks you could not perform.
 3. Prepare mesh assets first when links reference meshes: one mesh per link, exported in that link's frame by the owning CAD/mesh workflow. See `references/meshes.md`.
 4. Author or edit the URDF XML directly, following `references/authoring-contract.md` for structure, ordering, and naming.
 5. Compute — never guess — inertials and other derived numbers. See `references/inertials.md`.
-6. Validate with `cadgen urdf validate`; fix findings and re-validate until clean.
+6. Validate with `cad urdf validate`; fix findings and re-validate until clean.
 7. Run the verification recipe in `references/validation.md`: external tools when available (`check_urdf`), then a viewer review sweeping every joint.
 8. Report remaining assumptions, unchecked spatial data, and validation gaps.
 
 ## Commands
 
-Run `cadgen` from the Python environment this skill's `requirements.txt` was installed into (`python -m cadgen.cli <verb>` with that interpreter is the PATH-independent equivalent). `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin — docs drift silently on a mismatched install. Validation itself needs nothing beyond the Python standard library; only snapshots need the browser. Use `cadgen <verb> --help` for the complete current interface.
+Run `cad` as Setup defines it. `cad doctor` reports the installation in use and the server's release. Validation itself needs nothing beyond the Python standard library; a snapshot draws with the CAD kernel. Use `cad <verb> --help` for the complete current interface.
 
 The validator shape is:
 
 ```bash
-cadgen urdf validate path/to/robot.urdf
-cadgen urdf validate path/to/robot.urdf --strict
-cadgen urdf validate path/to/robot.urdf --json
-cadgen urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
-cadgen urdf snapshot path/to/robot.urdf review.png
+cad urdf validate path/to/robot.urdf
+cad urdf validate path/to/robot.urdf --strict
+cad urdf validate path/to/robot.urdf --json
+cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
+cad snapshot path/to/robot.urdf review.png
 ```
 
 The validator collects all findings in one pass (severity, code, XML path) across XML structure, tree topology, joint semantics (limits, mimic, dynamics), geometry, mesh references, materials, inertial physics, and misspelled elements, and prints a summary. One run validates ONE file: `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "issues": [{"severity", "code", "message", "element", "hint"}], "summary"}`, where `element` is the XML path; `--packages NAME=PATH` resolves `package://` mesh URIs and repeats for several roots. It exits nonzero if the target fails. Relative targets resolve from the current working directory; run from the workspace that owns the files.
@@ -94,37 +101,50 @@ Validation is a guardrail, not spatial proof: a URDF can pass every structural c
 
 ## Snapshot Tool
 
-`cadgen urdf snapshot` renders the robot to a PNG still, using the same shared
-CLI and headless browser runtime every rendering skill uses — so a snapshot matches what
-the CAD Viewer shows.
+`cad snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
+rendered by OCCT:
 
 ```bash
-cadgen urdf snapshot path/to/robot.urdf review.png
+cad snapshot path/to/robot.urdf review.png
+cad snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
 ```
 
-It accepts `.urdf` only. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying at their defaults, where the CAD Viewer opens the robot (the
-`"jointValues"` job field is the same thing in a packet). The snapshot draws the robot with the
-viewer's own scene, so it shows what the viewer shows, and a link mesh that cannot be loaded
-fails it rather than leaving the link out. Robots are authored in metres and are framed on the
-robot scene scale automatically.
+The robot opens where the CAD Viewer opens it, every joint at zero. `--pose` gives
+joint values over that, in degrees (metres for a prismatic joint), each naming a
+joint a person can drive, within its limits, or the request is refused before
+anything renders: a fixed joint, a `<mimic>` follower or a `<tcad:four_bar>` input
+is refused by name (a follower follows its leader, an input its driver). Each link
+is placed by the viewer's own forward kinematics, mimic joints and four-bar
+linkages followed, and drawn in one colour of the Parts palette.
 
-A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
-Pass `--display render` for the shared photographic scene. Inline display JSON and
-JSON files use grouped settings such as `lighting`, `background`, and `floor`;
-`appearance` is `light` (default) or `dark`. Projection and focal length belong
-in `display.camera`. Top-level `--camera` and `--joint-values` remain active in every display
-mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, the
-`xray`, `hidden-line` and `wireframe` modes and the `hidden`/`off` surface styles
-describe a STEP model's CAD edges, parts and solids, and are refused by name here.
+A visual is a `box`, `cylinder` or `sphere`, which the server meshes itself, or a mesh
+file beside the description: an STL or a 3MF (its numbers scaled by the mesh's
+`scale`, the same on all three axes) or a GLB (metres). A `package://NAME/...` mesh is found
+in the ROS package the description is in: the nearest folder above the `.urdf` named
+NAME, or holding a `package.xml` that names it, so keep the description inside its
+package folder. A mesh in another format (`.dae`, `.obj`), a remote URI, a package no
+folder above the description is, or a missing file is refused by name, and a link mesh
+that cannot be loaded fails the snapshot rather than leaving the link out.
+
+A normal snapshot uses Solid mode and Light appearance. `--display` takes any of the
+viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`, ...),
+`exploded=AMOUNT`, or the display object: `appearance` (`light` or `dark`),
+`camera` (projection and focal length) and `clip` (`{"clip": {"axis": "x", "at":
+0.05}}`, `at` in metres, the file's own unit, as the viewer draws it). `--grid` draws
+the measuring grid, `--preview` draws
+Preview's photographic look, and `--camera`, `--size-profile`, `--width` and
+`--height` frame and size it. A Quick Edit packet from the viewer (inline JSON, saved
+to a temporary `.snapshot.json`, or its path) replays with
+`--annotation <packet> --camera authored`, its job's `jointValues` given as `--pose`.
+Inspect supplied annotations before editing. Without annotations, the captured
+view is optional context; render it when useful to the request.
 
 Link meshes are resolved relative to the description, so they must be present: an
-unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
+unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
-The grammar is `cadgen urdf snapshot TARGET [OUT] [flags]`, the same one every
-format door uses. Use `cadgen urdf snapshot --help` for the complete current
-interface — the flags a robot cannot act on are absent from it, not refused by it.
+OUT is written exactly as given and must be a `.png`; check the exit status before
+reading it. Use `cad snapshot --help` for the complete current interface.
 
 ## References
 

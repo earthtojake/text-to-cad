@@ -3,21 +3,9 @@ import test from "node:test";
 
 import {
   entryAssetHash,
-  entryAssetBytes,
   entryAssetUrl,
-  entryHasDisplayEdges,
-  entryHasMesh,
-  entryHasReferences,
-  entryMeshAssetBytes,
   entryMeshAssetHash,
-  entryMeshAssetSignature,
   entryMeshAssetUrl,
-  entryReferenceAssetSignature,
-  entryDisplayEdgeTopologyAssetUrl,
-  entrySelectorTopologyAssetUrl,
-  entryTopologyAssetUrl,
-  entryPoseUrl,
-  entrySourceSidecarUrl,
   entryUrdfAssetHash
 } from "./entryAssets.js";
 
@@ -27,7 +15,6 @@ function stepEntry(overrides = {}) {
     kind: "part",
     url: "/assets/bracket.glb",
     hash: "glb-hash",
-    bytes: 42,
     ...overrides
   };
 }
@@ -40,64 +27,15 @@ test("entry asset helpers normalize urls and hashes", () => {
 
   assert.equal(entryAssetUrl(entry, "glb"), "/mesh.glb");
   assert.equal(entryAssetHash(entry, "glb"), "hash-a");
-  assert.equal(entryAssetBytes(stepEntry(), "glb"), 42);
-  assert.equal(entryMeshAssetBytes(stepEntry()), 42);
   assert.equal(entryAssetUrl(entry, "missing"), "");
   assert.equal(entryAssetHash(null, "glb"), "");
-  assert.equal(entryAssetBytes(null, "glb"), 0);
 });
 
-test("entry mesh signatures distinguish assemblies from simple mesh sidecars", () => {
-  assert.equal(entryMeshAssetHash(stepEntry()), "glb-hash");
-  assert.equal(entryMeshAssetSignature(stepEntry()), "glb-hash");
-  assert.equal(entryMeshAssetSignature(stepEntry({ kind: "assembly" })), "glb-hash");
-  assert.equal(
-    entryMeshAssetSignature(stepEntry({ appearanceHash: "finish-a" })),
-    "glb-hash:finish-a"
-  );
-  assert.notEqual(
-    entryMeshAssetSignature(stepEntry({ file: "a.step", appearanceHash: "finish-a" })),
-    entryMeshAssetSignature(stepEntry({ file: "b.step", appearanceHash: "finish-b" })),
-    "saved files sharing one STEP tree still own distinct composed appearances"
-  );
-  assert.equal(
-    entryMeshAssetSignature({ kind: "stl", url: "/mesh.stl", hash: "stl-hash", appearanceHash: "ignored" }),
-    "stl-hash"
-  );
-  assert.equal(entryMeshAssetHash({
-    kind: "stl",
-    url: "/mesh.stl",
-    hash: "stl-hash"
-  }), "stl-hash");
+test("a mesh file's asset is its own", () => {
+  assert.equal(entryMeshAssetHash({ kind: "stl", url: "/mesh.stl", hash: "stl-hash" }), "stl-hash");
 });
 
-test("entry topology urls resolve to the primary STEP GLB", () => {
-  assert.equal(entrySelectorTopologyAssetUrl(stepEntry()), "/assets/bracket.glb");
-  assert.equal(entryDisplayEdgeTopologyAssetUrl(stepEntry()), "/assets/bracket.glb");
-  assert.equal(entryTopologyAssetUrl(stepEntry()), "/assets/bracket.glb");
-});
-
-test("STEP module urls are explicit catalog data instead of guessed sidecars", () => {
-  assert.equal(entryPoseUrl(stepEntry()), "");
-  assert.equal(entryPoseUrl(stepEntry({ poseUrl: " /assets/part.step.json " })), "/assets/part.step.json");
-  assert.equal(entryPoseUrl({ kind: "stl", poseUrl: "/assets/not-step.json" }), "");
-  assert.equal(entrySourceSidecarUrl(stepEntry({ sourceUrl: " /assets/part.step.json?v=2 " })), "/assets/part.step.json?v=2");
-  assert.equal(entrySourceSidecarUrl({ kind: "stl", sourceUrl: "/assets/not-step.json" }), "");
-});
-
-test("entry availability helpers preserve existing viewer gates", () => {
-  assert.equal(entryHasMesh(stepEntry()), true);
-  assert.equal(entryHasReferences(stepEntry()), true);
-  assert.equal(entryHasDisplayEdges(stepEntry()), true);
-  assert.equal(entryHasMesh(stepEntry({ artifact: { ok: false } })), true);
-  assert.equal(entryHasReferences(stepEntry({ artifact: { ok: false } })), true);
-  assert.equal(entryHasDisplayEdges(stepEntry({ artifact: { ok: false } })), true);
-  assert.equal(entryHasDisplayEdges(stepEntry({ hash: "" })), false);
-  assert.equal(entryHasReferences(stepEntry({ hash: "" })), false);
-});
-
-test("robot and reference signatures match persisted session expectations", () => {
-  assert.equal(entryReferenceAssetSignature(stepEntry()), "glb-hash");
+test("a robot's signature is its description's, and an SRDF's its URDF's too", () => {
   assert.equal(entryUrdfAssetHash({
     kind: "srdf",
     url: "/robot.srdf",
@@ -115,8 +53,8 @@ test("robot and reference signatures match persisted session expectations", () =
 
 test("a DXF entry's render asset is its own file", () => {
   // Nothing bakes a drawing: the entry's url IS the asset, and no glb relation
-  // exists for it. What the DXF pane and `cadgen dxf snapshot` actually draw is
-  // the server's flattened payload for that same file (GET /__cad/drawing).
+  // exists for it. What the DXF pane draws is the server's flattened payload for
+  // that same file (GET /__cad/drawing).
   const dxf = { file: "parts/bracket.dxf", kind: "dxf", url: "/__cad/asset?file=%2Fx%2Fbracket.dxf&v=1", hash: "h1" };
   assert.equal(entryMeshAssetUrl(dxf), dxf.url);
   assert.equal(entryMeshAssetHash(dxf), "h1");

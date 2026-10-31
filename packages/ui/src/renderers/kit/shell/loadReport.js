@@ -12,10 +12,11 @@ import { viewerLoadingState } from "../status/loadingState.js";
  *
  * @param {object} options
  * @param {{ busy?: boolean, updating?: boolean, progress?: object | null,
- *   editPending?: boolean, finding?: boolean }} options.load
+ *   editPending?: boolean, currentPreview?: boolean, finding?: boolean }} options.load
  *   The renderer's document load. `editPending`: a build of the file is queued or running, and the
- *   saved file it writes has not reached the scene yet. `finding`: the file itself is still being
- *   located.
+ *   saved file it writes has not reached the scene yet. `currentPreview`: that build's own preview
+ *   revision IS what is drawn, so the wait is over even though the write is not, and the view is
+ *   labelled a preview. `finding`: the file itself is still being located.
  * @param {object | null} options.alert  The blocking/failing alert the shell resolved.
  * @param {boolean} options.busy  The shell's own reasons to be busy, beside `load.busy`.
  * @param {boolean} options.previousView  A complete view of this file is already on screen.
@@ -25,6 +26,7 @@ export function shellLoadReport({ load, alert = null, busy = false, previousView
   return viewerLoadingState({
     busy: Boolean(load.busy) || Boolean(load.updating) || busy,
     editPending: load.editPending === true,
+    currentPreview: load.currentPreview === true,
     finding: load.finding === true,
     previousView,
     error: alert,

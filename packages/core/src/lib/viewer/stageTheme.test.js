@@ -14,11 +14,8 @@ import {
   getViewerThemeNumber,
   getViewerThemeValue,
   getStageFloorSize,
-  normalizeFloorMode,
   normalizeGradientStops,
-  resolveFloorMode,
   resolveStageFloorGlassFactor,
-  resolveWireframeEdgeColor,
   updateSpotLightTarget
 } from "./stageTheme.js";
 
@@ -28,11 +25,7 @@ function assertNear(actual, expected, message = "") {
   assert.ok(Math.abs(actual - expected) < EPSILON, `${message} expected ${expected}, received ${actual}`);
 }
 
-test("stage theme helpers normalize floor modes, theme values, and gradient stops", () => {
-  assert.equal(normalizeFloorMode("glass"), THEME_FLOOR_MODES.STAGE);
-  assert.equal(normalizeFloorMode("grid"), THEME_FLOOR_MODES.GRID);
-  assert.equal(normalizeFloorMode("unknown", THEME_FLOOR_MODES.NONE), THEME_FLOOR_MODES.NONE);
-  assert.equal(resolveFloorMode({ mode: "none" }), THEME_FLOOR_MODES.NONE);
+test("stage theme helpers read theme values and normalize gradient stops", () => {
   assert.equal(getViewerThemeValue({ edge: "#123456" }, "edge", "#ffffff"), "#123456");
   assert.equal(getViewerThemeValue({}, "edge", "#ffffff"), BASE_VIEWER_THEME.edge);
   assert.equal(getViewerThemeNumber({ edgeThickness: "2.5" }, "edgeThickness", 1), 2.5);
@@ -69,41 +62,6 @@ test("stage floor glow scales from model lighting scope instead of CAD floor min
   assert.equal(getStageFloorGlowSize(140, 22400, VIEWER_SCENE_SCALE.CAD), 1120);
   assert.equal(getStageFloorGlowSize(0.01, 22400, VIEWER_SCENE_SCALE.CAD), 8);
   assert.equal(getStageFloorGlowSize(100, 200, VIEWER_SCENE_SCALE.CAD), 48);
-});
-
-test("wireframe edge color uses contrast-safe colors on dark and light backgrounds", () => {
-  assert.equal(resolveWireframeEdgeColor({
-    edgeColor: "#132232",
-    themeSettings: {
-      background: {
-        type: "solid",
-        solidColor: "#09090b"
-      }
-    },
-    viewerTheme: BASE_VIEWER_THEME
-  }), "#dbeafe");
-
-  assert.equal(resolveWireframeEdgeColor({
-    edgeColor: "#66ff99",
-    themeSettings: {
-      background: {
-        type: "solid",
-        solidColor: "#09090b"
-      }
-    },
-    viewerTheme: BASE_VIEWER_THEME
-  }), "#66ff99");
-
-  assert.equal(resolveWireframeEdgeColor({
-    edgeColor: "#dbeafe",
-    themeSettings: {
-      background: {
-        type: "solid",
-        solidColor: "#fbfdff"
-      }
-    },
-    viewerTheme: BASE_VIEWER_THEME
-  }), "#111827");
 });
 
 test("stage plane factories return deterministic Three.js objects", () => {

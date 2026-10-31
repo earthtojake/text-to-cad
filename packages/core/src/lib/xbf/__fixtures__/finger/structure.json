@@ -1,0 +1,618 @@
+{
+ "name": "index_finger",
+ "path": "index_finger.xbf",
+ "version": "1-1",
+ "units": "mm",
+ "prototypes": [
+  {
+   "index": 0,
+   "key": "986af1e177de165f2e692dda4eee7f46",
+   "name": "base",
+   "color": null,
+   "faceNames": {
+    "1": "f:index_finger.bone.1",
+    "2": "f:index_finger.bone.2",
+    "3": "f:index_finger.bone.3",
+    "4": "f:index_finger.bone.4",
+    "5": "f:index_finger.bone.5",
+    "6": "f:index_finger.bone.6"
+   },
+   "edgeNames": {
+    "1": "e:index_finger.bone.1",
+    "2": "e:index_finger.bone.2",
+    "3": "e:index_finger.bone.3",
+    "4": "e:index_finger.bone.4",
+    "5": "e:index_finger.bone.5",
+    "6": "e:index_finger.bone.6",
+    "7": "e:index_finger.bone.7",
+    "8": "e:index_finger.bone.8",
+    "9": "e:index_finger.bone.9",
+    "10": "e:index_finger.bone.10",
+    "11": "e:index_finger.bone.11",
+    "12": "e:index_finger.bone.12"
+   },
+   "vertexNames": {
+    "1": "v:index_finger.bone.1",
+    "2": "v:index_finger.bone.2",
+    "3": "v:index_finger.bone.3",
+    "4": "v:index_finger.bone.4",
+    "5": "v:index_finger.bone.5",
+    "6": "v:index_finger.bone.6",
+    "7": "v:index_finger.bone.7",
+    "8": "v:index_finger.bone.8"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  },
+  {
+   "index": 1,
+   "key": "12670f5a3588f45c7fcea30c18f400c3",
+   "name": "proximal",
+   "color": null,
+   "faceNames": {
+    "1": "f:index_finger.bone.1",
+    "2": "f:index_finger.bone.2",
+    "3": "f:index_finger.bone.3",
+    "4": "f:index_finger.bone.4",
+    "5": "f:index_finger.bone.5",
+    "6": "f:index_finger.bone.6"
+   },
+   "edgeNames": {
+    "1": "e:index_finger.bone.1",
+    "2": "e:index_finger.bone.2",
+    "3": "e:index_finger.bone.3",
+    "4": "e:index_finger.bone.4",
+    "5": "e:index_finger.bone.5",
+    "6": "e:index_finger.bone.6",
+    "7": "e:index_finger.bone.7",
+    "8": "e:index_finger.bone.8",
+    "9": "e:index_finger.bone.9",
+    "10": "e:index_finger.bone.10",
+    "11": "e:index_finger.bone.11",
+    "12": "e:index_finger.bone.12"
+   },
+   "vertexNames": {
+    "1": "v:index_finger.bone.1",
+    "2": "v:index_finger.bone.2",
+    "3": "v:index_finger.bone.3",
+    "4": "v:index_finger.bone.4",
+    "5": "v:index_finger.bone.5",
+    "6": "v:index_finger.bone.6",
+    "7": "v:index_finger.bone.7",
+    "8": "v:index_finger.bone.8"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  },
+  {
+   "index": 2,
+   "key": "3b7a6c23130867150bbb7d88c432969f",
+   "name": "middle",
+   "color": null,
+   "faceNames": {
+    "1": "f:index_finger.bone.1",
+    "2": "f:index_finger.bone.2",
+    "3": "f:index_finger.bone.3",
+    "4": "f:index_finger.bone.4",
+    "5": "f:index_finger.bone.5",
+    "6": "f:index_finger.bone.6"
+   },
+   "edgeNames": {
+    "1": "e:index_finger.bone.1",
+    "2": "e:index_finger.bone.2",
+    "3": "e:index_finger.bone.3",
+    "4": "e:index_finger.bone.4",
+    "5": "e:index_finger.bone.5",
+    "6": "e:index_finger.bone.6",
+    "7": "e:index_finger.bone.7",
+    "8": "e:index_finger.bone.8",
+    "9": "e:index_finger.bone.9",
+    "10": "e:index_finger.bone.10",
+    "11": "e:index_finger.bone.11",
+    "12": "e:index_finger.bone.12"
+   },
+   "vertexNames": {
+    "1": "v:index_finger.bone.1",
+    "2": "v:index_finger.bone.2",
+    "3": "v:index_finger.bone.3",
+    "4": "v:index_finger.bone.4",
+    "5": "v:index_finger.bone.5",
+    "6": "v:index_finger.bone.6",
+    "7": "v:index_finger.bone.7",
+    "8": "v:index_finger.bone.8"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  },
+  {
+   "index": 3,
+   "key": "a9a8fe084622c85b386104b77f98b775",
+   "name": "distal",
+   "color": null,
+   "faceNames": {
+    "1": "f:index_finger.bone.1",
+    "2": "f:index_finger.bone.2",
+    "3": "f:index_finger.bone.3",
+    "4": "f:index_finger.bone.4",
+    "5": "f:index_finger.bone.5",
+    "6": "f:index_finger.bone.6"
+   },
+   "edgeNames": {
+    "1": "e:index_finger.bone.1",
+    "2": "e:index_finger.bone.2",
+    "3": "e:index_finger.bone.3",
+    "4": "e:index_finger.bone.4",
+    "5": "e:index_finger.bone.5",
+    "6": "e:index_finger.bone.6",
+    "7": "e:index_finger.bone.7",
+    "8": "e:index_finger.bone.8",
+    "9": "e:index_finger.bone.9",
+    "10": "e:index_finger.bone.10",
+    "11": "e:index_finger.bone.11",
+    "12": "e:index_finger.bone.12"
+   },
+   "vertexNames": {
+    "1": "v:index_finger.bone.1",
+    "2": "v:index_finger.bone.2",
+    "3": "v:index_finger.bone.3",
+    "4": "v:index_finger.bone.4",
+    "5": "v:index_finger.bone.5",
+    "6": "v:index_finger.bone.6",
+    "7": "v:index_finger.bone.7",
+    "8": "v:index_finger.bone.8"
+   },
+   "faceColors": {},
+   "material": null,
+   "faceMaterials": {}
+  }
+ ],
+ "instances": [
+  {
+   "prototype": 0,
+   "path": "index_finger/base",
+   "matrix": [
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    -30.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 1,
+   "path": "index_finger/proximal",
+   "matrix": [
+    1.0,
+    0.0,
+    2.4492935982947064e-16,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    -2.4492935982947064e-16,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 2,
+   "path": "index_finger/middle",
+   "matrix": [
+    1.0,
+    0.0,
+    4.898587196589413e-16,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    -4.898587196589413e-16,
+    0.0,
+    1.0,
+    0.0,
+    40.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  },
+  {
+   "prototype": 3,
+   "path": "index_finger/distal",
+   "matrix": [
+    1.0,
+    0.0,
+    7.347880794884119e-16,
+    0.0,
+    0.0,
+    1.0,
+    0.0,
+    0.0,
+    -7.347880794884119e-16,
+    0.0,
+    1.0,
+    0.0,
+    65.0,
+    0.0,
+    0.0,
+    1.0
+   ],
+   "color": null
+  }
+ ],
+ "tree": {
+  "name": "index_finger",
+  "children": [
+   {
+    "name": "base",
+    "prototype": 0,
+    "instance": 0
+   },
+   {
+    "name": "proximal",
+    "prototype": 1,
+    "instance": 1
+   },
+   {
+    "name": "middle",
+    "prototype": 2,
+    "instance": 2
+   },
+   {
+    "name": "distal",
+    "prototype": 3,
+    "instance": 3
+   }
+  ]
+ },
+ "kinematics": {
+  "schema": "cadgen.kinematics/2",
+  "name": "index_finger",
+  "ground": 0,
+  "links": [
+   {
+    "name": "base",
+    "instances": [
+     0
+    ],
+    "matrix": [
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     -30.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "name": "proximal",
+    "instances": [
+     1
+    ],
+    "matrix": [
+     1.0,
+     0.0,
+     2.4492935982947064e-16,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     -2.4492935982947064e-16,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "name": "middle",
+    "instances": [
+     2
+    ],
+    "matrix": [
+     1.0,
+     0.0,
+     4.898587196589413e-16,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     -4.898587196589413e-16,
+     0.0,
+     1.0,
+     0.0,
+     40.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   },
+   {
+    "name": "distal",
+    "instances": [
+     3
+    ],
+    "matrix": [
+     1.0,
+     0.0,
+     7.347880794884119e-16,
+     0.0,
+     0.0,
+     1.0,
+     0.0,
+     0.0,
+     -7.347880794884119e-16,
+     0.0,
+     1.0,
+     0.0,
+     65.0,
+     0.0,
+     0.0,
+     1.0
+    ]
+   }
+  ],
+  "pairs": [
+   {
+    "label": "index_mcp_flexion",
+    "type": "revolute",
+    "links": [
+     0,
+     1
+    ],
+    "frames": [
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      30.0,
+      0.0,
+      0.0,
+      1.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "limits": [
+     [
+      0.0,
+      90.0
+     ]
+    ],
+    "units": [
+     "deg"
+    ]
+   },
+   {
+    "label": "index_pip",
+    "type": "revolute",
+    "links": [
+     1,
+     2
+    ],
+    "frames": [
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      40.0,
+      0.0,
+      -9.797174393178826e-15,
+      1.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "limits": [
+     [
+      0.0,
+      100.0
+     ]
+    ],
+    "units": [
+     "deg"
+    ]
+   },
+   {
+    "label": "index_dip",
+    "type": "revolute",
+    "links": [
+     2,
+     3
+    ],
+    "frames": [
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      25.0,
+      0.0,
+      -1.224646799147353e-14,
+      1.0
+     ],
+     [
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      1.0
+     ]
+    ],
+    "limits": [
+     [
+      0.0,
+      70.0
+     ]
+    ],
+    "units": [
+     "deg"
+    ]
+   }
+  ],
+  "asBuilt": {
+   "index_mcp_flexion": 0.0,
+   "index_pip": 0.0,
+   "index_dip": 0.0
+  },
+  "configurations": {},
+  "couplings": {
+   "index_curl": {
+    "range": [
+     0.0,
+     1.0
+    ],
+    "terms": [
+     [
+      "index_mcp_flexion",
+      0,
+      90.0
+     ],
+     [
+      "index_pip",
+      0,
+      100.0
+     ],
+     [
+      "index_dip",
+      0,
+      70.0
+     ]
+    ]
+   }
+  },
+  "motions": {
+   "grip": {
+    "duration": 1.5,
+    "ease": "cubic",
+    "keys": [
+     {
+      "t": 0.0,
+      "values": {
+       "index_mcp_flexion": 0.0,
+       "index_pip": 0.0,
+       "index_dip": 0.0
+      }
+     },
+     {
+      "t": 1.5,
+      "values": {
+       "index_mcp_flexion": 90.0,
+       "index_pip": 100.0,
+       "index_dip": 70.0
+      }
+     }
+    ]
+   }
+  },
+  "loop": null,
+  "warnings": []
+ }
+}

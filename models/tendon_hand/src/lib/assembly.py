@@ -5,7 +5,7 @@ module data export. It currently represents an integration study; completeness
 is asserted separately before the hand is eligible for final acceptance.
 """
 from dataclasses import dataclass
-from cadgen import build123d as bd
+import build123d as bd
 from lib.layout import FINGERS, JOINTS, THUMB_CMC, THUMB_LENGTHS, THUMB_DIRECTION, TENDONS, assembled_transforms, finger_fan_matrix, drive_pulley_offset
 from lib.phalanx import make_phalanx
 from lib.pulley import make_pulley
@@ -46,7 +46,7 @@ def integration_bodies(palm_baseline=False):
     bodies=[]
     def add(shape,frame,system,kind): bodies.append(Body(shape,frame,system,kind))
     if palm_baseline:
-        from cadgen import read_step
+        from cad import read_step
         from pathlib import Path
         source=Path(__file__).resolve().parents[2]/'STEP/palm_frame_review.step'
         def leaves(node):
@@ -57,7 +57,7 @@ def integration_bodies(palm_baseline=False):
     for part in main_parts:
         kind='fastener' if 'screw' in part.label or 'washer' in part.label else 'frame'
         add(part,'wrist_flexion','palm',kind)
-    from cadgen import read_step
+    from cad import read_step
     from pathlib import Path
     little_source=Path(__file__).resolve().parents[2]/'STEP/palm_little_review.step'
     little_parts=list(read_step(little_source).children)
@@ -120,7 +120,7 @@ def integration_bodies(palm_baseline=False):
     for body in bodies:
         if body.system in fan_locations:body.shape=fan_locations[body.system]*body.shape
     # These mount factories already return assembled, fanned geometry.
-    from cadgen import read_step
+    from cad import read_step
     from pathlib import Path
     guide_source=Path(__file__).resolve().parents[2]/'STEP/phalanx_guide_mounts_review.step'
     def guide_leaves(node):
@@ -196,12 +196,14 @@ def posed_bodies(bodies,pose):
 
 
 def compound(bodies,label='tendon_hand_integration_study'):
-    from lib.palette import finish_for
-    grouped = {}
+    """The bodies under one compound, each given its palette bucket's material.
+
+    The original grouped them by bucket (``material_<bucket>`` compounds) for its
+    decorator's ``materials=`` to target; the material is set on each part here."""
+    from lib.palette import MATERIALS, finish_for
     for body in bodies:
-        bucket, _color, _material, _alpha = finish_for(body.name, body.kind)
-        grouped.setdefault(bucket, []).append(body.shape)
-    return bd.Compound(label=label, children=[
-        bd.Compound(label=f'material_{bucket}', children=grouped[bucket])
-        for bucket in grouped
-    ])
+        bucket, _color, _look, _alpha = finish_for(body.name, body.kind)
+        color = body.shape.color
+        body.shape.material = MATERIALS[bucket]
+        body.shape.color = color
+    return bd.Compound(label=label, children=[body.shape for body in bodies])

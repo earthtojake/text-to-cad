@@ -26,27 +26,108 @@ Modeling rules (repo memory):
   never accumulate pairwise.
 """
 
+from bd_materials import FinishedMaterial, glass, metals, plastics
+from bd_materials.core import RangeMaterial
+from threejs_materials import PbrProperties
+
+
 from math import cos, sin, radians
+
 
 # ---------------------------------------------------------------------------
 # Palette (linear RGBA). Theme does not override source colors.
 # ---------------------------------------------------------------------------
 
-CREAM = (0.925, 0.895, 0.815, 1.0)        # body panels, retro ivory
-CREAM_DEEP = (0.880, 0.845, 0.750, 1.0)   # under-seat body, inner covers
-SEAT_BROWN = (0.400, 0.235, 0.115, 1.0)   # saddle
-FRAME_BLACK = (0.075, 0.075, 0.085, 1.0)  # frame, fork, stand, bar
-RUBBER = (0.055, 0.055, 0.060, 1.0)       # tires, grips
-RIM_SILVER = (0.700, 0.710, 0.725, 1.0)   # cast wheels, brake disc
-ENGINE_SILVER = (0.640, 0.650, 0.650, 1.0)  # crankcase, cylinder barrel
-ENGINE_DARK = (0.330, 0.340, 0.345, 1.0)  # CVT / alternator covers
-CHROME = (0.800, 0.820, 0.850, 1.0)       # headlight shell, muffler, mirrors
-SHOCK_BODY = (0.120, 0.120, 0.130, 1.0)   # damper body
-SPRING_YELLOW = (0.900, 0.700, 0.090, 1.0)
-AMBER = (0.960, 0.520, 0.070, 0.95)       # turn-signal lenses
-RED_LENS = (0.720, 0.055, 0.060, 0.95)    # tail-light lens
-LENS_CLEAR = (0.930, 0.950, 0.960, 0.30)  # headlight lens
-STEEL = (0.600, 0.610, 0.630, 1.0)        # axles, fasteners, pipes
+CREAM = "#f6f3e9"        # body panels, retro ivory
+CREAM_DEEP = "#f1ede1"   # under-seat body, inner covers
+SEAT_BROWN = "#aa855f"   # saddle
+FRAME_BLACK = "#4d4d52"  # frame, fork, stand, bar
+RUBBER = "#424245"       # tires, grips
+RIM_SILVER = "#dadbdd"   # cast wheels, brake disc
+ENGINE_SILVER = "#d1d3d3"  # crankcase, cylinder barrel
+ENGINE_DARK = "#9b9e9f"  # CVT / alternator covers
+CHROME = "#e7eaed"       # headlight shell, muffler, mirrors
+SHOCK_BODY = "#616165"   # damper body
+SPRING_YELLOW = "#f3da55"
+AMBER = "#fabf4bf2"       # turn-signal lenses
+RED_LENS = "#dd4245f2"    # tail-light lens
+LENS_CLEAR = "#f7f9fa4c"  # headlight lens
+STEEL = "#cbcdd0"        # axles, fasteners, pipes
+
+# ---------------------------------------------------------------------------
+# Materials: what each part is made of, in the finish it wears. Every one is
+# explicit scalar PBR. The paint helper sets the native material before the
+# authored palette colour, so the material adds only the finish. Paint is a dielectric (metallic 0) under a coat.
+# ---------------------------------------------------------------------------
+
+PAINTED_STEEL = FinishedMaterial(
+    metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+    pbr=PbrProperties.create('Steel tube, gloss black paint', metalness=0.0, roughness=0.5, clearcoat=1.0,
+        clearcoat_roughness=0.1),
+)
+PAINTED_ABS = FinishedMaterial(
+    plastics.abs_().material,
+    pbr=PbrProperties.create('Moulded ABS panel, painted and clear-coated', metalness=0.0, roughness=0.45,
+        clearcoat=1.0, clearcoat_roughness=0.06),
+)
+LEATHER = FinishedMaterial(
+    RangeMaterial(name='Leather', density=860.0),
+    pbr=PbrProperties.create('Saddle leather over the seat foam', metalness=0.0, roughness=0.65,
+        clearcoat=0.2, clearcoat_roughness=0.4),
+)
+TYRE_RUBBER = FinishedMaterial(
+    RangeMaterial(name='NBR 70A', density=1250.0),
+    pbr=PbrProperties.create('Nitrile rubber: O-rings and oil seals', metalness=0.0, roughness=0.9),
+)    # tires
+GRIP_RUBBER = FinishedMaterial(
+    plastics.tpu().material,
+    pbr=PbrProperties.create('Thermoplastic polyurethane for flexible prints', metalness=0.0, roughness=0.6),
+)    # bar grips
+CAST_ALUMINIUM = FinishedMaterial(
+    metals.aluminum().material,
+    pbr=PbrProperties.create('Cast aluminium, as cast', metalness=1.0, roughness=0.6),
+)
+FORGED_ALUMINIUM = FinishedMaterial(
+    metals.aluminum().material,
+    pbr=PbrProperties.create('Aluminum 6061-T6', metalness=1.0, roughness=0.35, anisotropy=0.3),
+)  # brake levers, machined
+POLISHED_STAINLESS = FinishedMaterial(
+    metals.stainless().material,
+    pbr=PbrProperties.create('Polished stainless', metalness=1.0, roughness=0.1),
+)
+CHROMED_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Hard-chromed alloy steel', metalness=1.0, roughness=0.12),
+)
+DISC_STEEL = FinishedMaterial(
+    metals.alloy_steel().material,
+    pbr=PbrProperties.create('Ground brake disc', metalness=1.0, roughness=0.3),
+)
+SPRING_STEEL = FinishedMaterial(
+    RangeMaterial(name='Spring steel 1095', density=7850.0),
+    pbr=PbrProperties.create('Spring steel, yellow powder coat', metalness=0.0, roughness=0.35, clearcoat=0.8,
+        clearcoat_roughness=0.15),
+)
+ABS_HOUSING = FinishedMaterial(
+    plastics.abs_().material,
+    pbr=PbrProperties.create('Acrylonitrile butadiene styrene, moulded or printed', metalness=0.0,
+        roughness=0.55),
+)        # tail-light housing
+HEADLIGHT_LENS = FinishedMaterial(
+    plastics.pc().material,
+    pbr=PbrProperties.create('Tough clear thermoplastic', metalness=0.0, roughness=0.08, ior=1.586,
+        transmission=0.9),
+)
+SIGNAL_LENS = FinishedMaterial(
+    plastics.pmma().material,
+    pbr=PbrProperties.create('Clear cast or extruded acrylic sheet', metalness=0.0, roughness=0.03, ior=1.49,
+        transmission=0.95),
+)  # tail light and turn signals
+MIRROR_GLASS = FinishedMaterial(
+    glass.soda_lime().material,
+    pbr=PbrProperties.create('Silvered mirror glass', metalness=1.0, roughness=0.03, ior=1.52,
+        attenuation_color=(0.822786, 0.930111, 0.871367), attenuation_distance=0.05),
+)
 
 # ---------------------------------------------------------------------------
 # Wheels / axles

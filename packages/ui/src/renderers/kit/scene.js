@@ -1,5 +1,5 @@
 // The contract a renderer's scene exposes to the kit. It is core's
-// (`@text-to-cad/core/lib/viewer/sceneContract.js`) because the snapshot CLI's headless stage
+// (`@text-to-cad/core/lib/viewer/sceneContract.js`) because the parity page's headless stage
 // holds the same scenes the viewport does: one builder per file family, two hosts. The
 // kit's half never reaches into a scene: the viewport adopts `object3D`, the camera frames
 // `restBounds` (else `bounds`), the look hands over the surface look the Display panel

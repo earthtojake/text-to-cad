@@ -4,7 +4,7 @@
     robot: juno | consumers: CAD Viewer, external URDF consumers (RViz/MoveIt/simulators)
     units: meters, kilograms, radians | frames: +X forward, +Y robot-left, +Z up (REP-103)
     root: base_footprint (frame-only) | source of dimensions: juno.step.py / juno_parts/chain.py (mm)
-    meshes: 3MF/, one mm 3MF export per link in that link's part-local frame (scale 0.001); link
+    meshes: 3MF/, the mm 3MF src/exports.py writes of each link model of src/juno.py, in that link's part-local frame (scale 0.001); link
     frames coincide with juno_parts part-local frames, so all visual origins are identity
     inertials: CAD volume properties (OCP BRepGProp on the part solids) at a uniform ASSUMED
     density chosen so the whole robot masses 35 kg; COM and full tensor about the COM in the

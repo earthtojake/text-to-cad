@@ -5,7 +5,7 @@ r+.30 radially and +/-.12 axially. It seats at an axle's length-.6 datum,
 leaving .01 radial and .04 axial clearance to the existing groove.
 """
 from math import cos, sin, radians
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 

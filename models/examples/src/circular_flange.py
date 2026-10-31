@@ -1,8 +1,12 @@
 from __future__ import annotations
-from cadgen import step
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cad import model
 from math import tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib.part_common import circular_edges, polar_point, safe_fillet
 
@@ -16,7 +20,7 @@ BOLT_CIRCLE_DIAMETER = 60.0
 OUTER_FILLET = 1.5
 
 
-@step(out="../STEP/circular_flange.step")
+@model
 def circular_flange():
     """Return the circular flange model in millimeters."""
     with bd.BuildPart() as flange:
@@ -50,6 +54,11 @@ def circular_flange():
     edges.extend(circular_edges(part, radius=OUTER_DIAMETER / 2.0, axis="z", coordinate=THICKNESS))
     part = safe_fillet(part, edges, radius=OUTER_FILLET)
     part.label = "circular_flange_bolt_pattern"
+    part.material = FinishedMaterial(
+        metals.mild_steel(metals.MildSteel.G1018_COLD_DRAWN).material,
+        pbr=PbrProperties.create('Low-carbon mild steel, cold drawn bar', color='#c5c7c8ff', metalness=1.0,
+            roughness=0.4),
+    )
     return part
 
 

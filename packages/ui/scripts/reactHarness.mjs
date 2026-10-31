@@ -140,9 +140,6 @@ export function render(type, initialProps = {}) {
     get tree() {
       return tree;
     },
-    get result() {
-      return tree;
-    },
     update(nextProps = props) {
       if (unmounted) throw new Error("cannot update an unmounted render");
       props = nextProps;
@@ -157,8 +154,7 @@ export function render(type, initialProps = {}) {
   };
 }
 
-// A hook on its own: the "component" is the call itself, and `result` is what
-// it returned on the latest pass.
+// A hook on its own: the "component" is the call itself.
 export function renderHook(run, initialProps = {}) {
   return render(run, initialProps);
 }
@@ -169,7 +165,7 @@ function childrenOf(node) {
   return Array.isArray(children) ? children : [children];
 }
 
-export function isElement(node) {
+function isElement(node) {
   return Boolean(node) && typeof node === "object" && "props" in node && "type" in node;
 }
 
@@ -183,52 +179,4 @@ export function elements(node, found = []) {
   found.push(node);
   for (const child of childrenOf(node)) elements(child, found);
   return found;
-}
-
-/** The visible text of a node: its string children, in order. */
-export function text(node) {
-  if (node === null || node === undefined || typeof node === "boolean") return "";
-  if (Array.isArray(node)) return node.map(text).join("");
-  if (typeof node === "string" || typeof node === "number") return String(node);
-  if (!isElement(node)) return "";
-  return childrenOf(node).map(text).join("");
-}
-
-function matcher(match) {
-  if (typeof match === "function") return match;
-  return (node) => text(node).trim() === match;
-}
-
-export function queryAll(node, match) {
-  return elements(node).filter(matcher(match));
-}
-
-export function query(node, match) {
-  return queryAll(node, match)[0] || null;
-}
-
-export function get(node, match) {
-  const found = query(node, match);
-  if (!found) {
-    throw new Error(`no element matched ${typeof match === "function" ? "the predicate" : JSON.stringify(match)}`);
-  }
-  return found;
-}
-
-const CLICK_EVENT = Object.freeze({
-  shiftKey: false,
-  // Menus close themselves by walking up to their <details>; there is no DOM
-  // here, so hand back something that absorbs the write.
-  currentTarget: { closest: () => ({}) }
-});
-
-export function click(element, event = {}) {
-  const onClick = element?.props?.onClick;
-  if (typeof onClick !== "function") {
-    throw new Error(`element <${String(element?.type?.name || element?.type)}> has no onClick`);
-  }
-  if (element.props.disabled) {
-    throw new Error(`"${text(element).trim()}" is disabled and cannot be clicked`);
-  }
-  onClick({ ...CLICK_EVENT, ...event });
 }

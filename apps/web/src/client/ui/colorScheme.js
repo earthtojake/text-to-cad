@@ -7,9 +7,9 @@ export const DARK_COLOR_SCHEME_ID = "dark";
 export const DEFAULT_COLOR_SCHEME_ID = SYSTEM_COLOR_SCHEME_ID;
 
 export const COLOR_SCHEMES = Object.freeze([
-  { id: SYSTEM_COLOR_SCHEME_ID, label: "System" },
-  { id: LIGHT_COLOR_SCHEME_ID, label: "Light" },
-  { id: DARK_COLOR_SCHEME_ID, label: "Dark" }
+  { id: SYSTEM_COLOR_SCHEME_ID, label: "System", key: "appearance.system" },
+  { id: LIGHT_COLOR_SCHEME_ID, label: "Light", key: "appearance.light" },
+  { id: DARK_COLOR_SCHEME_ID, label: "Dark", key: "appearance.dark" }
 ]);
 
 const KNOWN = new Set(COLOR_SCHEMES.map((option) => option.id));

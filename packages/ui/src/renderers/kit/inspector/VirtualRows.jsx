@@ -7,7 +7,8 @@ const INITIAL_ROWS = 60;
 export const VIRTUAL_ROWS_OVERSCAN = 12;
 
 function scrollerOf(element) {
-  const panel = element.closest('[data-tool-panel-body]');
+  // In the file sidebar a section does not scroll: the bar does, as one.
+  const panel = element.closest('[data-file-sidebar-scroller]') || element.closest('[data-tool-panel-body]');
   if (panel) return panel;
   for (let node = element.parentElement; node; node = node.parentElement) {
     if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) return node;
@@ -16,12 +17,31 @@ function scrollerOf(element) {
 }
 
 /**
+ * A row of a list brought into view for something chosen elsewhere (a pick in the viewport): left
+ * where it is if it is in view already, else centred, so the rows around it come with it. The
+ * scroller's padding is not view: what is docked over its edges (the sidebar's headings) pads it.
+ * A cursor moved row by row inside the list wants `scrollIntoView({ block: "nearest" })` instead.
+ */
+export function revealRow(row) {
+  const scroller = scrollerOf(row);
+  const view = scroller?.getBoundingClientRect();
+  // A view with no layout cannot say what is in it: the row is scrolled to.
+  if (view?.height > 0) {
+    const box = row.getBoundingClientRect(), style = getComputedStyle(scroller);
+    const top = view.top + (parseFloat(style.scrollPaddingTop) || 0), bottom = view.bottom - (parseFloat(style.scrollPaddingBottom) || 0);
+    if (box.top >= top && box.bottom <= bottom) return;
+  }
+  row.scrollIntoView?.({ block: 'center' });
+}
+
+/**
  * A long list of fixed-height rows (a tree's rows, flattened), of which only the rows in view —
  * and a margin either side — are mounted. The list keeps the height every row would take and
  * places each mounted row where it would sit, so its scroller's height, scroll range and every
  * row's position are the full list's: what is drawn cannot tell the difference.
  *
- * The scroller is the list's tool-stack panel body (`[data-tool-panel-body]`), else the nearest
+ * The scroller is the file sidebar's, for a list in one of its sections; the list's tool-stack
+ * panel body (`[data-tool-panel-body]`) for one in a panel; else the nearest
  * scrolling ancestor, else the window. The window follows it on scroll and resize, and is
  * brought up to date before the browser paints, so no scrolled-to row is ever missing. A list
  * with no layout (a folded or hidden panel) keeps the rows it had.

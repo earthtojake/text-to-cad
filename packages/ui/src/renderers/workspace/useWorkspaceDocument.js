@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
+import { english } from "../../i18n/core.js";
 
 const emptyCommands = Object.freeze({});
 const emptySubscribe = () => () => {};
@@ -24,11 +26,13 @@ export function useWorkspaceDocument({ view, data }) {
   // The catalog is live: a rewritten file arrives as the same entry with a new hash.
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const modelKey = fileKey(entry);
-  const liveEntry = catalog.entries.find(item => fileKey(item) === modelKey) || entry;
+  // The live row is the same document's: joined by its id, however its path was spelled.
+  const liveEntry = catalog.entries.find(item => (entry?.id ? item.id === entry.id : fileKey(item) === modelKey)) || entry;
   const resource = useMemo(() => ({
-    kind: "workspace-file", workspaceId: view.source.id, path: view.file.path,
+    // A document the engine holds by its id alone (a model's) is referenced by that id.
+    kind: isDocumentId(view.file.path) ? "cad-model" : "workspace-file", path: view.file.path,
     revision: String(liveEntry?.documentHash || liveEntry?.hash || view.file.revision || "")
-  }), [view.source.id, view.file.path, view.file.revision, liveEntry?.documentHash, liveEntry?.hash]);
+  }), [view.file.path, view.file.revision, liveEntry?.documentHash, liveEntry?.hash]);
   const shellServices = useMemo(() => ({
     preferences, onPreferenceChange: services.preferences.update, live: services.live,
     captureRequest: commands.captureRequest, acknowledgeCommand: services.commands?.acknowledge
@@ -42,18 +46,21 @@ export function useWorkspaceDocument({ view, data }) {
  * the catalog could not be read, or the file's loader raised. With a scene
  * already on screen a failed reload can be dismissed, leaving that scene to use.
  *
- * @param {{ catalogError?: unknown, error?: any, modelKey: string, hasScene: boolean }} state
+ * Said in `t`'s language (English unless one is given).
+ *
+ * @param {{ catalogError?: unknown, error?: any, modelKey: string, hasScene: boolean,
+ *   t?: (key: string, params?: Record<string, unknown>) => string }} state
  */
-export function workspaceLoadAlert({ catalogError, error, modelKey, hasScene }) {
+export function workspaceLoadAlert({ catalogError, error, modelKey, hasScene, t = english }) {
   if (catalogError && !hasScene) return {
-    severity: "error", kind: "status", title: "Couldn’t open the model",
-    message: "The viewer couldn’t retrieve this file’s information.",
-    recovery: "Try again. If this continues, check that the viewer is running.",
+    severity: "error", kind: "status", title: t("alert.openModelFailed"),
+    message: t("alert.catalogFailed"),
+    recovery: t("alert.catalogRecovery"),
     details: catalogError, reload: true
   };
   if (!error) return null;
-  const alert = failureAlert(modelKey, error?.message || error, error?.failure);
-  return hasScene ? { ...alert, blocking: false, message: `${alert.message} The existing model remains visible.` } : alert;
+  const alert = failureAlert(modelKey, error?.message || error, error?.failure, false, t);
+  return hasScene ? { ...alert, blocking: false, message: t("alert.modelStillShown", { message: alert.message }) } : alert;
 }
 
 /**

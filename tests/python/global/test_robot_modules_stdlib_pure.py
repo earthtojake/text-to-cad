@@ -8,14 +8,8 @@ added in passing would silently destroy that property — every suite would stil
 pass, because the test environment has the kernel installed.
 
 Static check over the AST (not an import-time sys.modules probe) so an offending
-import is caught even when it is lazy, conditional, or function-local.
-
-`snapshot` is the one verb outside that promise, and deliberately: rendering a robot
-means a headless browser, so `urdf.snapshot()` cannot be extraction-ready and there
-is nothing to gain from pretending. What it MUST stay is import-cheap — the
-namespace binds a door object built by a stdlib-only factory, and the renderer is
-reached only when the verb is called. `ImportCost` below pins that half, which is
-what the static scan can no longer see.
+import is caught even when it is lazy, conditional, or function-local. Drawing a robot
+is the engine's (`cad snapshot` draws one), outside this family.
 """
 
 from __future__ import annotations
@@ -27,54 +21,54 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CADGEN_SRC = REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen"
+# Where each package of the family lives: the library's and the server's source trees.
+LIBRARY_SRC = REPO_ROOT / "packages" / "cad" / "src"
+SERVER_SRC = REPO_ROOT / "packages" / "cad-server" / "src"
+OURS = ("cad", "cad_server", "cadgen")
 
 FAMILY = [
-    "urdf_source.py",
-    "srdf_source.py",
-    "srdf_validation.py",
-    "sdf_source.py",
-    "sdf_validation.py",
-    "sdf_external.py",
-    "findings.py",
-    "xml_common.py",
-    "cli/urdf_validate.py",
-    "cli/srdf_validate.py",
-    "cli/sdf_validate.py",
-    # The public namespaces the CLIs are shells over (design/format-doors.md).
-    # They are the family's front door now, so they inherit its purity rule.
-    "urdf.py",
-    "srdf.py",
-    "sdf.py",
-    "_internal/validation_door.py",
-]
+    LIBRARY_SRC / "cad" / name for name in (
+        "urdf_source.py",
+        "srdf_source.py",
+        "srdf_validation.py",
+        "sdf_source.py",
+        "sdf_validation.py",
+        "sdf_external.py",
+        "findings.py",
+        "xml_common.py",
+        # The public namespaces the CLIs are shells over (packages/cad/README.md, law 6).
+        # They are the family's front door now, so they inherit its purity rule.
+        "urdf.py",
+        "srdf.py",
+        "sdf.py",
+        "_internal/validation_door.py",
+        "engine/mesh_uri.py",  # what every reader of a mesh reference resolves it with
+    )
+] + [SERVER_SRC / "cad_server" / "cli" / name for name in ("urdf_validate.py", "srdf_validate.py", "sdf_validate.py")]
 
-# Heavy roots that would break extraction-readiness. `cadgen` itself is allowed only
+# Heavy roots that would break extraction-readiness. The packages themselves are allowed only
 # for the family's own light members (findings, xml_common, and each other).
 FORBIDDEN_ROOTS = {"OCP", "build123d", "numpy", "ocp_tessellate", "ezdxf", "playwright"}
 ALLOWED_CADGEN = {
-    "cadgen.findings",
-    "cadgen.xml_common",
-    "cadgen.urdf_source",
-    "cadgen.srdf_source",
-    "cadgen.srdf_validation",
-    "cadgen.sdf_source",
-    "cadgen.sdf_validation",
-    "cadgen.sdf_external",
-    "cadgen.cli_logging",
-    "cadgen.cli",  # report_cli_error / shared CLI plumbing, itself lazy
-    "cadgen.results",  # the typed line protocol: dataclasses and pathlib only
-    "cadgen._internal.validation_door",  # findings -> ValidationResult, stdlib only
-    "cadgen._internal.cli_from_function",  # argparse over a signature, stdlib only
-    # The `snapshot` verb factory. Stdlib + cadgen.results at module scope; the
-    # renderer it reaches is imported inside the verb body, so it costs an import
-    # of `cadgen.urdf` nothing. Rendering itself is NOT extraction-ready (see the
-    # module docstring) — ImportCost is the guard that replaces the static one.
-    "cadgen._internal.snapshot_door",
+    "cad.findings",
+    "cad.xml_common",
+    "cad.urdf_source",
+    "cad.srdf_source",
+    "cad.srdf_validation",
+    "cad.sdf_source",
+    "cad.sdf_validation",
+    "cad.sdf_external",
+    "cad_server.cli",  # shared CLI plumbing, itself lazy
+    "cad.results",  # the typed line protocol: dataclasses and pathlib only
+    "cad._internal.validation_door",  # findings -> ValidationResult, stdlib only
+    "cad_server._internal.cli_from_function",  # argparse over a signature, stdlib only
+    # A mesh reference's scheme and local file, read the same way by the engine's stills
+    # (which may import nothing of the library outside the engine): stdlib only.
+    "cad.engine.mesh_uri",
 }
 
-# What the snapshot verb must not drag in at IMPORT time. `cadgen urdf validate`
-# runs on machines with none of these installed.
+# What importing the family must not drag in. `cad urdf validate` runs on machines with
+# none of these installed.
 HEAVY_AT_IMPORT = ("OCP", "build123d", "playwright", "numpy", "ezdxf")
 
 
@@ -85,23 +79,26 @@ def _imports(path: Path) -> set[str]:
         if isinstance(node, ast.Import):
             found.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            found.add(node.module)
+            # `from cad.engine import mesh_uri` imports the submodule, not the package's surface.
+            submodules = {f"{node.module}.{alias.name}" for alias in node.names}
+            found.update(submodules if submodules <= ALLOWED_CADGEN else {node.module})
     return found
 
 
 class RobotModulesStdlibPure(unittest.TestCase):
     def test_family_files_exist(self) -> None:
-        missing = [rel for rel in FAMILY if not (CADGEN_SRC / rel).is_file()]
+        missing = [str(path.relative_to(REPO_ROOT)) for path in FAMILY if not path.is_file()]
         self.assertEqual(missing, [], "family member moved or deleted — update FAMILY")
 
     def test_no_heavy_imports_anywhere_in_the_family(self) -> None:
         offenders: list[str] = []
-        for rel in FAMILY:
-            for module in sorted(_imports(CADGEN_SRC / rel)):
+        for path in FAMILY:
+            rel = path.relative_to(REPO_ROOT).as_posix()
+            for module in sorted(_imports(path)):
                 root = module.split(".")[0]
                 if root in FORBIDDEN_ROOTS:
                     offenders.append(f"{rel}: {module}")
-                elif root == "cadgen" and module not in ALLOWED_CADGEN:
+                elif root in OURS and module not in ALLOWED_CADGEN:
                     offenders.append(f"{rel}: {module} (not in the allowed light set)")
         self.assertEqual(
             offenders,
@@ -112,42 +109,24 @@ class RobotModulesStdlibPure(unittest.TestCase):
 
 
 class ImportCost(unittest.TestCase):
-    """Importing the family must stay free, snapshot verb and all.
+    """Importing the family must stay free.
 
     Run in a subprocess: this one has the CAD stack loaded already.
     """
 
     def test_the_namespaces_import_without_the_heavy_stack(self) -> None:
         code = (
-            "import sys, cadgen.urdf, cadgen.srdf, cadgen.sdf;"
+            "import sys, cad.urdf, cad.srdf, cad.sdf;"
             f"print('HEAVY:' + ','.join(m for m in {HEAVY_AT_IMPORT!r} if m in sys.modules))"
         )
         proc = subprocess.run(
             [sys.executable, "-c", code],
             capture_output=True,
             text=True,
-            env={"PYTHONPATH": str(CADGEN_SRC.parent), "PATH": "/usr/bin:/bin"},
+            env={"PYTHONPATH": str(LIBRARY_SRC), "PATH": "/usr/bin:/bin"},
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
         self.assertIn("HEAVY:\n", proc.stdout)
-
-    def test_the_snapshot_verb_is_bound_without_being_reached(self) -> None:
-        # The namespace exposes a real callable; nothing about the renderer has
-        # been touched to produce it.
-        code = (
-            "import sys, cadgen.urdf;"
-            "assert callable(cadgen.urdf.snapshot);"
-            "print('LOADED:' + ','.join("
-            "m for m in ('cadgen.snapshot_cli', 'cadgen.snapshot_core') if m in sys.modules))"
-        )
-        proc = subprocess.run(
-            [sys.executable, "-c", code],
-            capture_output=True,
-            text=True,
-            env={"PYTHONPATH": str(CADGEN_SRC.parent), "PATH": "/usr/bin:/bin"},
-        )
-        self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("LOADED:\n", proc.stdout)
 
 
 if __name__ == "__main__":

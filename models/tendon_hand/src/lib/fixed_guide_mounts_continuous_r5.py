@@ -2,7 +2,7 @@ from lib.phalanx_r5_boolean import common as _common,cut as _cut
 from copy import deepcopy
 """Short fixed-guide outlet clamps seated on the original phalanx side rails."""
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import _finish,_bolt,_sweep
 from lib.palm_guide_mounts import _row
 from lib.phalanx_r5_host import make_phalanx

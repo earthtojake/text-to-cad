@@ -1,10 +1,21 @@
-from copy import deepcopy
-from cadgen import build123d as bd
-from OCP.BRepAlgoAPI import BRepAlgoAPI_Common,BRepAlgoAPI_Cut
-def _run(cls,a,b):
-    a,b=deepcopy(a),deepcopy(b)
-    op=cls(a.wrapped,b.wrapped)
-    if not op.IsDone():raise ValueError('Native contact Boolean failed')
-    return bd.Part(op.Shape())
-def common(a,b):return _run(BRepAlgoAPI_Common,a,b)
-def cut(a,b):return _run(BRepAlgoAPI_Cut,a,b)
+"""The r5 clipping booleans: build123d's, never cleaned (no same-domain unification),
+as the native contact booleans they replace ran, whatever the caller's SkipClean."""
+import build123d as bd
+
+
+def _unclean(operation):
+    # SkipClean's exit turns cleaning back on: set the flag and put back what it was.
+    previous = bd.SkipClean.clean
+    bd.SkipClean.clean = False
+    try:
+        return operation()
+    finally:
+        bd.SkipClean.clean = previous
+
+
+def common(a, b):
+    return _unclean(lambda: a & b)
+
+
+def cut(a, b):
+    return _unclean(lambda: a - b)

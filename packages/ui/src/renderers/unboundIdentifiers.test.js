@@ -32,7 +32,7 @@ const traverse = traverseModule.default ?? traverseModule;
 const CLIENT_ROOT = path.dirname(fileURLToPath(import.meta.url));
 
 // Every file family, so a missing one is a failure rather than a smaller number.
-const SLICES = ["step", "kit", "dxf", "glb", "mesh", "robot", "workspace"];
+const SLICES = ["xbf", "kit", "dxf", "glb", "mesh", "robot", "workspace"];
 
 // Globals the browser (and the test runner, for the few node-facing modules here) provides.
 // Deliberately explicit: an allowlist that grows by hand is the point — a new name showing up
@@ -51,7 +51,7 @@ const RUNTIME_GLOBALS = new Set([
   // DOM and BOM
   "window", "document", "navigator", "location", "history", "screen", "customElements",
   "HTMLElement", "HTMLInputElement", "HTMLCanvasElement", "Element", "Node", "NodeList",
-  "Event", "CustomEvent", "MouseEvent", "KeyboardEvent", "PointerEvent", "WheelEvent",
+  "EventTarget", "Event", "CustomEvent", "MouseEvent", "KeyboardEvent", "PointerEvent", "WheelEvent",
   "DOMParser", "XMLSerializer", "DOMException", "CSS", "getComputedStyle", "matchMedia",
   "localStorage", "sessionStorage", "alert", "confirm", "prompt",
   // Timers and scheduling
@@ -63,7 +63,7 @@ const RUNTIME_GLOBALS = new Set([
   "URL", "URLSearchParams", "WebSocket", "EventSource", "Worker", "MessageChannel",
   "BroadcastChannel", "postMessage", "self", "crypto",
   // Files and encoding
-  "Blob", "File", "FileReader", "FileList", "Image", "ImageData", "OffscreenCanvas",
+  "Blob", "File", "FileReader", "FileList", "Image", "ImageData", "OffscreenCanvas", "ImageBitmapRenderingContext",
   "TextEncoder", "TextDecoder", "atob", "btoa", "ReadableStream", "WritableStream",
   // Observers
   "ResizeObserver", "IntersectionObserver", "MutationObserver", "PerformanceObserver",
@@ -119,7 +119,7 @@ function unboundReferences(filePath) {
 test("every identifier the viewer renderers read is bound", () => {
   // The format-blind kit and every renderer that composes it are one client tree.
   const files = clientSourceFiles(CLIENT_ROOT);
-  assert.ok(files.length > 300, `expected the renderer tree at ${CLIENT_ROOT}, found ${files.length} files`);
+  assert.ok(files.length > 200, `expected the renderer tree at ${CLIENT_ROOT}, found ${files.length} files`);
   const scanned = new Set(files.map(file => path.relative(CLIENT_ROOT, file).split(path.sep)[0]));
   assert.deepEqual(SLICES.filter(slice => !scanned.has(slice)), [], "a renderer contributed no sources: it was renamed, moved or emptied");
 

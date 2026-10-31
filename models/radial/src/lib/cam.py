@@ -26,7 +26,7 @@ from __future__ import annotations
 import math
 
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import geo, kin, palette as P, spec as S
 
@@ -192,20 +192,10 @@ def path_min_concave_radius(v):
 
 
 def cam_edge(v, y):
-    """Periodic BSpline edge of track v's lobe surface in the plane y."""
-    from OCP.GeomAPI import GeomAPI_Interpolate
-    from OCP.TColgp import TColgp_HArray1OfPnt
-    from OCP.gp import gp_Pnt
-    from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeEdge
-
+    """Periodic BSpline edge of track v's lobe surface in the plane y: build123d's
+    interpolation (OCCT's GeomAPI_Interpolate, periodic, tolerance 1e-6)."""
     pts = [envelope_point(a, v) for a in cam_samples(v)]
-    arr = TColgp_HArray1OfPnt(1, len(pts))
-    for i, (x, z) in enumerate(pts):
-        arr.SetValue(i + 1, gp_Pnt(x, y, z))
-    it = GeomAPI_Interpolate(arr, True, 1e-6)
-    it.Perform()
-    assert it.IsDone()
-    return bd.Edge(BRepBuilderAPI_MakeEdge(it.Curve()).Edge())
+    return bd.Edge.make_spline([(float(x), float(y), float(z)) for x, z in pts], periodic=True, tol=1e-6)
 
 
 # ---------------------------------------------------------------------------

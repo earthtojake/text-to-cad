@@ -15,12 +15,12 @@ import {
   normalizeThemeFillColors,
   normalizeThemeSettings,
   resolveThemeFillColor,
-  resolveThemeSettingsForColorMode,
   resolveSystemThemePresetId,
   themeSettingsSupportsSystemColorMode,
   SNAPSHOT_THEME_ID,
   normalizeThemePresetId,
-  getThemePresetById
+  getThemePresetById,
+  RENDER_ONLY_THEME_PRESETS
 } from "./themeSettings.js";
 
 const WORKBENCH_FILL_COLORS = Object.freeze([
@@ -40,18 +40,6 @@ const BLUE_FILL_COLORS = Object.freeze(["#4cc9f0"]);
 const MAGENTA_FILL_COLORS = Object.freeze(["#ff4faf"]);
 const CLAY_FILL_COLORS = Object.freeze(["#b9856e"]);
 const TERMINAL_FILL_COLORS = Object.freeze(["#073a20"]);
-const DARKOAL_FILL_COLORS = Object.freeze([
-  "#b6c4ce",
-  "#c2a1a5",
-  "#e6d1af",
-  "#b0ab85",
-  "#91ae86",
-  "#7cab9f",
-  "#7da5b9",
-  "#8996be",
-  "#988ebe",
-  "#ad8dab"
-]);
 
 test("theme presets expose a default material color", () => {
   const blue = cloneThemePresetSettings("blue");
@@ -81,6 +69,18 @@ test("workbench ships as split light and dark presets", () => {
   assert.equal(normalizeThemePresetId("workbench"), "");
   assert.equal(normalizeThemePresetId("light"), "");
   assert.equal(normalizeThemePresetId("dark"), "");
+});
+
+// Floor placement is a floor-dependent theme trait: `followModel` acts only while the theme's stage
+// floor is on, so with it off (the workbench canvases, the snapshot scene) the model stands on the
+// true z=0 plane, and no hidden setting moves the stage under it.
+test("followModel is inert while the floor is off, in every preset and in any settings", () => {
+  for (const preset of [...THEME_PRESETS, ...RENDER_ONLY_THEME_PRESETS]) {
+    const floor = normalizeThemeSettings(preset.settings).floor;
+    if (floor.enabled !== true) assert.equal(floor.followModel, false, `${preset.id}: followModel inert while the floor is off`);
+  }
+  assert.equal(normalizeThemeSettings({ floor: { enabled: false, followModel: true } }).floor.followModel, false);
+  assert.equal(normalizeThemeSettings({ floor: { enabled: true, followModel: true } }).floor.followModel, true);
 });
 
 test("workbench-light preset uses neutral material treatment while preserving source colors", () => {
@@ -141,12 +141,12 @@ test("workbench-dark preset uses the workbench dark color treatment", () => {
   assert.equal(resolveThemeFillColor(dark.materials, 3), "#b6c4ce");
   assert.equal(Object.hasOwn(dark, "edges"), false);
   assert.equal(dark.background.type, "solid");
-  assert.equal(dark.background.solidColor, "#333333");
-  assert.equal(dark.background.linearStart, "#3b3b3b");
-  assert.equal(dark.background.linearEnd, "#2b2b2b");
-  assert.equal(dark.background.radialInner, "#404040");
-  assert.equal(dark.background.radialOuter, "#2b2b2b");
-  assert.equal(dark.floor.color, "#383838");
+  assert.equal(dark.background.solidColor, "#25272b");
+  assert.equal(dark.background.linearStart, "#2c2e31");
+  assert.equal(dark.background.linearEnd, "#202226");
+  assert.equal(dark.background.radialInner, "#2c2e31");
+  assert.equal(dark.background.radialOuter, "#202226");
+  assert.equal(dark.floor.color, "#30333a");
   assert.deepEqual(dark.lighting, light.lighting);
   assert.equal(getThemePresetIdForSettings(dark), "workbench-dark");
 });

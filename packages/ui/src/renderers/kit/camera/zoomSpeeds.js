@@ -20,3 +20,6 @@ export const ACCELERATED_WHEEL_ZOOM_SPEED = 5.0;
 export const TRACKPAD_PINCH_ZOOM_SPEED = 7;
 
 export const COARSE_POINTER_PINCH_ZOOM_SPEED = 2.4;
+
+/** The zoom speed at rest, between gestures: a touch page's, whose pinch is OrbitControls' own dolly, or a desktop's. */
+export const restingZoomSpeed = coarsePointer => (coarsePointer ? COARSE_POINTER_ZOOM_SPEED : DEFAULT_ZOOM_SPEED);

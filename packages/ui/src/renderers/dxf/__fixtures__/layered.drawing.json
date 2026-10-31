@@ -1,0 +1,514 @@
+{
+ "schemaVersion": 3,
+ "units": {
+  "insunits": 4,
+  "name": "Millimeters",
+  "toMillimetres": 1.0
+ },
+ "bounds": [
+  -0.0968,
+  -8.375,
+  120.0968,
+  60
+ ],
+ "layers": [
+  {
+   "name": "CUT",
+   "color": null,
+   "entities": 3
+  },
+  {
+   "name": "BEND",
+   "color": "#00ff00",
+   "entities": 1
+  },
+  {
+   "name": "ENGRAVE",
+   "color": "#0000ff",
+   "entities": 2
+  },
+  {
+   "name": "HARDWARE",
+   "color": "#ff0000",
+   "entities": 2
+  },
+  {
+   "name": "CENTRE",
+   "color": "#808080",
+   "entities": 2
+  },
+  {
+   "name": "0",
+   "color": null,
+   "entities": 1
+  }
+ ],
+ "entities": [
+  {
+   "handle": "8F",
+   "type": "LWPOLYLINE",
+   "layer": "CUT"
+  },
+  {
+   "handle": "90",
+   "type": "CIRCLE",
+   "layer": "CUT",
+   "center": [
+    20,
+    30
+   ],
+   "radius": 6
+  },
+  {
+   "handle": "91",
+   "type": "CIRCLE",
+   "layer": "CUT",
+   "center": [
+    60,
+    30
+   ],
+   "radius": 4
+  },
+  {
+   "handle": "92",
+   "type": "LINE",
+   "layer": "BEND"
+  },
+  {
+   "handle": "93",
+   "type": "TEXT",
+   "layer": "ENGRAVE"
+  },
+  {
+   "handle": "99",
+   "type": "INSERT",
+   "layer": "HARDWARE",
+   "block": "M5_NUT"
+  },
+  {
+   "handle": "9B",
+   "type": "INSERT",
+   "layer": "HARDWARE",
+   "block": "M5_NUT"
+  },
+  {
+   "handle": "9D",
+   "type": "DIMENSION",
+   "layer": "ENGRAVE"
+  }
+ ],
+ "fonts": [
+  {
+   "family": "Arial Unicode MS",
+   "weight": 400,
+   "italic": false
+  }
+ ],
+ "primitives": [
+  {
+   "type": "path",
+   "layer": "CUT",
+   "color": null,
+   "entity": "8F",
+   "geometry": [
+    [
+     "M",
+     0,
+     0
+    ],
+    [
+     "L",
+     120,
+     0
+    ],
+    [
+     "L",
+     120,
+     60
+    ],
+    [
+     "L",
+     0,
+     60
+    ],
+    [
+     "L",
+     0,
+     0
+    ]
+   ]
+  },
+  {
+   "type": "path",
+   "layer": "CUT",
+   "color": null,
+   "entity": "90",
+   "geometry": [
+    [
+     "M",
+     26,
+     30
+    ],
+    [
+     "C",
+     26,
+     26.6863,
+     23.3137,
+     24,
+     20,
+     24
+    ],
+    [
+     "C",
+     16.6863,
+     24,
+     14,
+     26.6863,
+     14,
+     30
+    ],
+    [
+     "C",
+     14,
+     33.3137,
+     16.6863,
+     36,
+     20,
+     36
+    ],
+    [
+     "C",
+     23.3137,
+     36,
+     26,
+     33.3137,
+     26,
+     30
+    ]
+   ]
+  },
+  {
+   "type": "path",
+   "layer": "CUT",
+   "color": null,
+   "entity": "91",
+   "geometry": [
+    [
+     "M",
+     64,
+     30
+    ],
+    [
+     "C",
+     64,
+     27.7909,
+     62.2091,
+     26,
+     60,
+     26
+    ],
+    [
+     "C",
+     57.7909,
+     26,
+     56,
+     27.7909,
+     56,
+     30
+    ],
+    [
+     "C",
+     56,
+     32.2091,
+     57.7909,
+     34,
+     60,
+     34
+    ],
+    [
+     "C",
+     62.2091,
+     34,
+     64,
+     32.2091,
+     64,
+     30
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "BEND",
+   "color": "#00ff00",
+   "entity": "92",
+   "geometry": [
+    [
+     80,
+     0,
+     80,
+     60
+    ]
+   ]
+  },
+  {
+   "type": "text",
+   "layer": "ENGRAVE",
+   "color": "#0000ff",
+   "entity": "93",
+   "text": "PANEL 7",
+   "font": 0,
+   "height": 5,
+   "width": 28.7312,
+   "transform": [
+    1,
+    0,
+    0,
+    1,
+    30,
+    48
+   ]
+  },
+  {
+   "type": "path",
+   "layer": "HARDWARE",
+   "color": "#ff0000",
+   "entity": "99",
+   "geometry": [
+    [
+     "M",
+     104.6,
+     15
+    ],
+    [
+     "C",
+     104.6,
+     12.4595,
+     102.5405,
+     10.4,
+     100,
+     10.4
+    ],
+    [
+     "C",
+     97.4595,
+     10.4,
+     95.4,
+     12.4595,
+     95.4,
+     15
+    ],
+    [
+     "C",
+     95.4,
+     17.5405,
+     97.4595,
+     19.6,
+     100,
+     19.6
+    ],
+    [
+     "C",
+     102.5405,
+     19.6,
+     104.6,
+     17.5405,
+     104.6,
+     15
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "CENTRE",
+   "color": "#808080",
+   "entity": "99",
+   "geometry": [
+    [
+     94,
+     15,
+     106,
+     15
+    ]
+   ]
+  },
+  {
+   "type": "path",
+   "layer": "HARDWARE",
+   "color": "#ff0000",
+   "entity": "9B",
+   "geometry": [
+    [
+     "M",
+     104.6,
+     45
+    ],
+    [
+     "C",
+     104.6,
+     42.4595,
+     102.5405,
+     40.4,
+     100,
+     40.4
+    ],
+    [
+     "C",
+     97.4595,
+     40.4,
+     95.4,
+     42.4595,
+     95.4,
+     45
+    ],
+    [
+     "C",
+     95.4,
+     47.5405,
+     97.4595,
+     49.6,
+     100,
+     49.6
+    ],
+    [
+     "C",
+     102.5405,
+     49.6,
+     104.6,
+     47.5405,
+     104.6,
+     45
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "CENTRE",
+   "color": "#808080",
+   "entity": "9B",
+   "geometry": [
+    [
+     94,
+     45,
+     106,
+     45
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "0",
+   "color": null,
+   "entity": "9D",
+   "geometry": [
+    [
+     0,
+     -0.125,
+     0,
+     -8.375
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "0",
+   "color": null,
+   "entity": "9D",
+   "geometry": [
+    [
+     120,
+     -0.125,
+     120,
+     -8.375
+    ]
+   ]
+  },
+  {
+   "type": "filled-polygon",
+   "layer": "ENGRAVE",
+   "color": "#0000ff",
+   "entity": "9D",
+   "geometry": [
+    [
+     0.0782,
+     -7.9032
+    ],
+    [
+     -0.0968,
+     -8.0782
+    ],
+    [
+     -0.0782,
+     -8.0968
+    ],
+    [
+     0.0968,
+     -7.9218
+    ],
+    [
+     0.0782,
+     -7.9032
+    ]
+   ]
+  },
+  {
+   "type": "filled-polygon",
+   "layer": "ENGRAVE",
+   "color": "#0000ff",
+   "entity": "9D",
+   "geometry": [
+    [
+     119.9218,
+     -8.0968
+    ],
+    [
+     120.0968,
+     -7.9218
+    ],
+    [
+     120.0782,
+     -7.9032
+    ],
+    [
+     119.9032,
+     -8.0782
+    ],
+    [
+     119.9218,
+     -8.0968
+    ]
+   ]
+  },
+  {
+   "type": "lines",
+   "layer": "0",
+   "color": null,
+   "entity": "9D",
+   "geometry": [
+    [
+     0,
+     -8,
+     120,
+     -8
+    ]
+   ]
+  },
+  {
+   "type": "text",
+   "layer": "ENGRAVE",
+   "color": "#0000ff",
+   "entity": "9D",
+   "text": "12000",
+   "font": 0,
+   "height": 0.25,
+   "width": 0.9712,
+   "transform": [
+    1,
+    0,
+    0,
+    1,
+    59.5144,
+    -7.8655
+   ]
+  }
+ ]
+}

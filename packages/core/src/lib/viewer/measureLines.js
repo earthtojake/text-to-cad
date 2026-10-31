@@ -57,6 +57,12 @@ export function dimensionEndpoints(pickA, pickB, measurement) {
   if (!isFinitePoint(pointA) || !isFinitePoint(pointB)) {
     return null;
   }
+  // What the pair of entities makes is drawn where it is measured: a distance between parallel faces
+  // along their normal, a hole spacing between the two centres, not between the two points picked.
+  const ends = measurement?.ends;
+  if (isFinitePoint(ends?.start) && isFinitePoint(ends?.end)) {
+    return { start: ends.start, end: ends.end };
+  }
   // A face-to-face result is a normal distance.  Draw that normal distance, not
   // the potentially diagonal distance between the two click locations.
   const normal = measurement?.perpendicular !== null && measurement?.perpendicular !== undefined

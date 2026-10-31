@@ -5,7 +5,7 @@ import { createToolModes } from "./toolModes.js";
 
 const modes = createToolModes({
   defaultMode: "pick",
-  modes: { pick: {}, ruler: { toggles: true }, ink: { toggles: true }, play: {}, handles: {} }
+  modes: { pick: {}, ruler: {}, ink: {}, play: {}, handles: {} }
 });
 
 test("an unknown tool falls back to the default tool", () => {
@@ -20,10 +20,10 @@ test("Display is not a tool: its old mode id is unknown, so it is the default to
   assert.equal(modes.next("ink", "display"), "pick");
 });
 
-test("a toggling session ends when its tool is asked for again; other tools stay", () => {
+test("pressing the tool in hand again does nothing; pressing another takes it up", () => {
   assert.equal(modes.next("pick", "ink"), "ink");
-  assert.equal(modes.next("ink", "ink"), "pick");
-  assert.equal(modes.next("ruler", "ruler"), "pick");
+  assert.equal(modes.next("ink", "ink"), "ink");
+  assert.equal(modes.next("ruler", "ruler"), "ruler");
   assert.equal(modes.next("play", "play"), "play");
   assert.equal(modes.next("ink", "nonsense"), "pick");
 });

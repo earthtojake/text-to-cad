@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { DEFAULT_PLAYBACK, normalizePlayback } from './playbackPreferences.js';
 
-test('playback is orbit on at speed 1 and Autoplay off by default, and a speed and a loop only once they were chosen', () => {
-  assert.deepEqual(DEFAULT_PLAYBACK, { orbit: true, orbitSpeed: 1, autoplay: false });
-  for (const value of [null, undefined, {}, 'yes', { autoplay: 'yes', orbit: 'no', orbitSpeed: 'fast' }]) assert.deepEqual(normalizePlayback(value), DEFAULT_PLAYBACK);
-  assert.deepEqual(normalizePlayback({ orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false }), { orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
+test('playback is orbit speed 1 and Autoplay off by default, with no Orbit on or off, and a speed and a loop only once they were chosen', () => {
+  assert.deepEqual(DEFAULT_PLAYBACK, { orbitSpeed: 1, autoplay: false });
+  for (const value of [null, undefined, {}, 'yes', { autoplay: 'yes', orbit: true, orbitSpeed: 'fast' }]) assert.deepEqual(normalizePlayback(value), DEFAULT_PLAYBACK);
+  assert.deepEqual(normalizePlayback({ orbitSpeed: 2, autoplay: true, speed: 2, loop: false }), { orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
 });
 
 test('the orbit speed keeps stopped and fractional speeds and bounds a corrupt one; a chosen speed is bounded as the clock bounds it', () => {

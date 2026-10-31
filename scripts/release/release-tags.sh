@@ -11,6 +11,7 @@
 #   release_tag_name 0.5.0            -> v0.5.0
 #   version_from_release_tag v0.5.0   -> 0.5.0   (bare tags pass through)
 #   latest_release_tag                -> the tag (either spelling) with the highest version, or ""
+#   version_greater 0.5.1 0.5.0       -> succeeds when the first X.Y.Z is the greater
 #
 # shellcheck shell=bash
 
@@ -45,4 +46,20 @@ latest_release_tag() {
     sort -t. -k1,1n -k2,2n -k3,3n |
     tail -n 1 |
     cut -d' ' -f2-
+}
+
+# Numeric, field by field: 0.10.0 is greater than 0.9.9. Both arguments are plain X.Y.Z.
+version_greater() {
+  local left_major left_minor left_patch right_major right_minor right_patch
+  IFS=. read -r left_major left_minor left_patch <<< "$1"
+  IFS=. read -r right_major right_minor right_patch <<< "$2"
+  if [ "$((10#$left_major))" -ne "$((10#$right_major))" ]; then
+    [ "$((10#$left_major))" -gt "$((10#$right_major))" ]
+    return
+  fi
+  if [ "$((10#$left_minor))" -ne "$((10#$right_minor))" ]; then
+    [ "$((10#$left_minor))" -gt "$((10#$right_minor))" ]
+    return
+  fi
+  [ "$((10#$left_patch))" -gt "$((10#$right_patch))" ]
 }

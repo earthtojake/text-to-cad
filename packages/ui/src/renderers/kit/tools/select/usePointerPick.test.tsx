@@ -39,7 +39,8 @@ it('a tap picks at once through the scene contract; Shift adds; a drag is the ca
   expect(onPick.mock.calls[0][1]).toEqual({ multiSelect: false });
   fire(canvas, 'pointerdown', { clientX: 150, clientY: 50 });
   fire(canvas, 'pointerup', { clientX: 150, clientY: 50, shiftKey: true });
-  expect(onPick.mock.calls[1]).toEqual([null, { multiSelect: true }]);
+  // With where the pointer was, for a tool that snaps to the screen.
+  expect(onPick.mock.calls[1]).toEqual([null, { multiSelect: true }, { x: 150, y: 50, width: 200, height: 100 }]);
   // Past the tap slop the press was an orbit; a press on a control over the canvas is that control's.
   fire(canvas, 'pointerdown', { clientX: 50, clientY: 50 });
   fire(canvas, 'pointerup', { clientX: 60, clientY: 50 });

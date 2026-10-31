@@ -1,4 +1,4 @@
 interface:
   display_name: "SDF"
   short_description: "Author and validate SDFormat robot models."
-  default_prompt: "Use $sdf to author, update, and validate SDFormat/SDF robot or simulator models as direct XML, then launch CAD Viewer and return live links to the created or updated artifacts."
+  default_prompt: "Use $sdf to author or edit the SDFormat model or world I describe as direct XML, validate it with cad sdf validate, and show me the result."

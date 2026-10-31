@@ -10,7 +10,7 @@ lies INSIDE journal radius, keeping that mating face and bore unobstructed.
 Stub lengths 3.5..6 avoid shafts crossing the hand's central tendon corridors.
 """
 from math import sqrt
-from cadgen import build123d as bd
+import build123d as bd
 from .finish import finish
 
 

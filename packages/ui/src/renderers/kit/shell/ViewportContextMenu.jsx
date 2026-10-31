@@ -8,7 +8,7 @@ import {
 } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { cn } from "@text-to-cad/ui/utils";
 import { prefersCoarsePointer } from "../viewport/dom.js";
-import { FLOATING_SURFACE_CLASS } from "../tools/floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 
 // A secondary press that MOVED is a pan, not a menu. Coarse pointers wander more.
 const FINE_TAP_SLOP_PX = 4;

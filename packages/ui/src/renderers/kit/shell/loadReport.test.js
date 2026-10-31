@@ -7,8 +7,8 @@ const base = { alert: null, busy: false, previousView: false, preparing: false }
 // A renderer whose document is a plain download passes `load` and nothing else, which is
 // what glb, mesh and robot do: no edit states and no preview.
 test("a renderer that passes nothing gets the plain download report", () => {
-  assert.deepEqual(shellLoadReport({ load: { busy: false }, ...base }), { opening: false, updating: false, busy: false,
-    progress: { label: "Reading model", detail: "", counts: "", percent: null, connectionLost: null } });
+  assert.deepEqual(shellLoadReport({ load: { busy: false }, ...base }), { opening: false, updating: false, busy: false, preview: false,
+    progress: { label: "Opening model", detail: "", counts: "", percent: null, connectionLost: null } });
 });
 
 test("busy with nothing on screen opens; busy over a complete view updates", () => {

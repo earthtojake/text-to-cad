@@ -1,6 +1,8 @@
 import * as THREE from 'three';
 
-// Per viewport: at most one preparing worker and three owned PMREM textures.
+// Per GPU device (`studioEnvironmentCacheFor`: every view of the shared device draws from one, so the
+// editor can prepare what Preview will show), else per viewport: at most one preparing worker
+// and three owned PMREM textures.
 // No model geometry crosses the worker boundary. Rotation/exposure do not
 // change the cache key; size/fill/quality do.
 export function createStudioEnvironmentCache({ maxEntries = 3 } = {}) {
@@ -26,7 +28,7 @@ export function createStudioEnvironmentCache({ maxEntries = 3 } = {}) {
           worker?.terminate(); worker = null;
           data.error ? finish(new Error(data.error)) : finish(null, data);
         };
-        worker.onerror = event => stop(new Error(event.message || 'Studio preparation failed'));
+        worker.onerror = event => stop(new Error(event.message || 'Preview preparation failed'));
         worker.onmessageerror = () => stop(new Error('Invalid studio preparation response'));
         signal?.addEventListener('abort', abort, { once: true });
         if (signal?.aborted) { abort(); return; }
@@ -76,4 +78,18 @@ export function createStudioEnvironmentCache({ maxEntries = 3 } = {}) {
       entries.clear();
     },
   };
+}
+
+/**
+ * The cache a runtime prepares and draws studio environments from: its GPU device's, shared by
+ * every view of it and released with the device, or, for a renderer of its own, the runtime's.
+ */
+export function studioEnvironmentCacheFor(runtime) {
+  const device = runtime?.renderer?.sharedDevice;
+  if (device) {
+    device.studioEnvironmentCache ??= createStudioEnvironmentCache();
+    device.onDispose ??= () => device.studioEnvironmentCache?.dispose();
+    return (runtime.studioEnvironmentCache = device.studioEnvironmentCache);
+  }
+  return (runtime.studioEnvironmentCache ??= createStudioEnvironmentCache());
 }

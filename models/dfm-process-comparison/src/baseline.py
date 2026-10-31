@@ -1,10 +1,22 @@
-from cadgen import step, stl
+
+from bd_materials import FinishedMaterial, plastics
+from threejs_materials import PbrProperties
+
+from cad import model
 from lib.tray_geometry import tray
 
-@step(out="../STEP/baseline.step")
-@stl(out="../STL/baseline.stl")
+
+@model
 def baseline():
-    return tray("baseline")
+    part = tray("baseline")
+    # the thin-wall FDM starting point: PLA (README)
+    part.material = FinishedMaterial(
+        plastics.pla().material,
+        pbr=PbrProperties.create('Polylactic acid, the common FDM filament', color='#ededebff', metalness=0.0,
+            roughness=0.45),
+    )
+    return part
+
 
 if __name__ == "__main__":
     baseline()

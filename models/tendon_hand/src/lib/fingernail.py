@@ -6,7 +6,7 @@ pad-bore axes continued dorsally. No pad or routing geometry is altered.
 Screws and nominal-thread inserts stop at Z=1.65, leaving 0.30 mm to the
 immutable palmar inserts. Every factory is lazy and returns actual solids.
 """
-from cadgen import build123d as bd
+import build123d as bd
 from lib.finish import finish
 from lib.layout import FINGERS,THUMB_CMC,THUMB_LENGTHS,finger_fan_matrix
 

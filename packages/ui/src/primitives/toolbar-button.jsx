@@ -4,7 +4,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
 // The icon button every floating toolbar is made of: the CAD interaction tools,
-// the drawing tools under them, and the standalone drawing editor's toolbar.
+// the annotation tools under them.
 export const TOOLBAR_ICON_BUTTON_CLASS = "size-6 rounded-sm text-sidebar-foreground/70 shadow-none transition hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-ring/45 data-[variant=secondary]:bg-sidebar-accent data-[variant=secondary]:text-sidebar-accent-foreground data-[variant=secondary]:hover:bg-sidebar-accent";
 
 const ToolbarTooltipVisibility = createContext(true);
@@ -16,15 +16,19 @@ export function ToolbarTooltipScope({ enabled = true, children }) {
 
 /**
  * `tooltip={false}` leaves the accessible name and shows nothing on hover: for a
- * toolbar over a canvas, where a tooltip would cover what is being pointed at.
- * @param {{ label: string, active?: boolean, tooltip?: boolean, tooltipSide?: "top" | "right" | "bottom" | "left", className?: string,
- *   children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
+ * toolbar over a canvas, where a tooltip would cover what is being pointed at. A string is the
+ * tooltip's text where it is shorter than the accessible name (Display's "Display"). `shortcut`, the
+ * key that does what the button does ("V", "⇧L"), follows the name in the tooltip, muted, as a
+ * design tool's tooltips show it, and is the button's `aria-keyshortcuts`.
+ * @param {{ label: string, active?: boolean, tooltip?: boolean | string, tooltipSide?: "top" | "right" | "bottom" | "left", className?: string,
+ *   shortcut?: string, children?: import("react").ReactNode } & import("react").ButtonHTMLAttributes<HTMLButtonElement>} props
  */
 export function ToolbarButton({
   label,
   active = false,
   tooltip = true,
   tooltipSide = "bottom",
+  shortcut = "",
   className,
   children,
   ...props
@@ -38,11 +42,14 @@ export function ToolbarButton({
       size="icon-xs"
       className={cn(TOOLBAR_ICON_BUTTON_CLASS, className)}
       aria-label={label}
+      aria-keyshortcuts={shortcut ? shortcut.replace(/^⇧/, "Shift+") : undefined}
       {...props}
     >
       {children}
     </Button>
   );
   if (!tooltip) return button;
-  return <TooltipHint content={label} disabled={!tipEnabled} side={tooltipSide}>{button}</TooltipHint>;
+  const text = typeof tooltip === "string" ? tooltip : label;
+  const content = shortcut ? <span className="flex items-center gap-3">{text}<span className="text-muted-foreground" data-tooltip-shortcut="">{shortcut}</span></span> : text;
+  return <TooltipHint content={content} disabled={!tipEnabled} side={tooltipSide}>{button}</TooltipHint>;
 }

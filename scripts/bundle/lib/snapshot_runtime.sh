@@ -1,22 +1,23 @@
 #!/usr/bin/env bash
-# Builds the self-contained headless render runtime (render.html + snapshot-render.js)
-# into the packaged runtime (packages/cadgen/src/cadgen/_runtime/browser). Sourced by
-# scripts/bundle/cadgen-runtime.sh.
+# Builds the headless snapshot page of the viewer's scene (render.html + snapshot-render.js)
+# into a directory under the repository's ignored tmp/, on demand:
 #
-# The snapshot CLI drives this bundle in a Playwright page. It is built from the same
-# @text-to-cad/core entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
-# viewport; STEP models, meshes and drawings all render through it.
+#   scripts/bundle/lib/snapshot_runtime.sh [OUT_DIR]   (default: tmp/bench/snapshot-page)
 #
-# Callers set SNAPSHOT_RUNTIME_BUILD_DEPS_DIR (npm scratch) before sourcing, or accept the
-# default. Everything else is passed per call.
+# Nothing cadgen ships loads it -- cadgen's snapshots are drawn by OCCT, and the wheel does
+# not carry this page. Its one reader is the OCCT parity bench (scripts/bench/occt_parity.py),
+# which runs this before it drives the page in a headless Chromium to compare OCCT's stills
+# with the viewer's: it is built from the same @text-to-cad/core entrypoint the CAD Viewer
+# uses, so its picture is the viewport's.
+#
+# The esbuild toolchain and the pinned three/meshoptimizer are npm-installed once into
+# tmp/cadgen-snapshot-build (CAD_SNAPSHOT_BUILD_DEPS_DIR names another).
 
 SNAPSHOT_RUNTIME_ESBUILD_VERSION="${CAD_SNAPSHOT_ESBUILD_VERSION:-0.27.7}"
 
 # three and meshoptimizer are read from package-lock.json, the one
 # place their exact versions are already pinned, so a dependency bump cannot silently change
-# what ships without also changing the lockfile. This matches node_builders.sh.
-# Resolved lazily: BUNDLE_REPO_ROOT is set before the first call, not necessarily before
-# sourcing.
+# what ships without also changing the lockfile.
 snapshot_runtime_locked_version() {
   local name="$1"
   # The lockfile path travels as an ARGUMENT, not inside the script text: on
@@ -77,10 +78,9 @@ for (const [name, expected] of Object.entries(deps)) {
   return 1
 }
 
-# ensure_snapshot_runtime_deps <deps_dir> <install_allowed>
+# ensure_snapshot_runtime_deps <deps_dir>
 ensure_snapshot_runtime_deps() {
   local deps_dir="$1"
-  local install_allowed="${2:-1}"
   for tool in npm node; do
     if ! command -v "$tool" >/dev/null 2>&1; then
       echo "$tool is required to build the snapshot runtime." >&2
@@ -93,11 +93,6 @@ ensure_snapshot_runtime_deps() {
   three="$(snapshot_runtime_pinned_version three)" || exit 1
   meshoptimizer="$(snapshot_runtime_pinned_version meshoptimizer)" || exit 1
   if snapshot_runtime_need_install "$deps_dir" "$three" "$meshoptimizer"; then
-    if [ "$install_allowed" -eq 0 ]; then
-      echo "Missing or stale build dependencies in $deps_dir." >&2
-      echo "Run without --no-install to install them." >&2
-      exit 1
-    fi
     mkdir -p "$deps_dir"
     npm install --prefix "$deps_dir" --no-audit --no-fund \
       --fetch-retries=1 --fetch-timeout=10000 \
@@ -164,3 +159,14 @@ build_snapshot_runtime() {
     --alias:three="$deps_dir/node_modules/three" \
     --outfile="$target_dir/snapshot-render.js"
 }
+
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+  set -euo pipefail
+  BUNDLE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+  out_dir="${1:-$BUNDLE_REPO_ROOT/tmp/bench/snapshot-page}"
+  deps_dir="${CAD_SNAPSHOT_BUILD_DEPS_DIR:-$BUNDLE_REPO_ROOT/tmp/cadgen-snapshot-build}"
+  npm --prefix "$BUNDLE_REPO_ROOT" run build -w @text-to-cad/core >/dev/null
+  ensure_snapshot_runtime_deps "$deps_dir"
+  build_snapshot_runtime "$out_dir" "$deps_dir"
+  echo "Built the snapshot page in $out_dir"
+fi

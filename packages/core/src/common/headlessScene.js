@@ -1,5 +1,5 @@
-// A GLB, an STL, a 3MF or a robot description (URDF, SRDF, SDF) on the snapshot CLI's
-// headless stage, as the SCENE ITS VIEWER RENDERER DRAWS. There is one builder per file
+// A GLB, an STL, a 3MF, a robot description (URDF, SRDF, SDF) or an engine document on the OCCT
+// parity bench's headless page, as the SCENE ITS VIEWER RENDERER DRAWS. There is one builder per file
 // family and it lives in this package so that both hosts call it: the viewer's renderers
 // (`@text-to-cad/ui` renderers/glb, mesh, robot) and this stage. A snapshot of those files
 // therefore cannot show something the viewer does not — the same loader reads the file,
@@ -8,8 +8,7 @@
 // viewport does not: the camera fit, the studio set up once per output, and PNG encoding
 // (`renderMeshScene.js`).
 //
-// A STEP model is not here: its scene is `buildModel` (`cadScene.js`), which the viewer's
-// STEP renderer and the headless stage already share.
+// A STEP is drawn as the engine document it opens as (the xbf family below), as the viewer draws it.
 
 import { createHttpCadResourceProvider } from "../client/resources.js";
 import { loadRenderGlbDocument } from "../lib/renderAssetClient.js";
@@ -23,9 +22,10 @@ import { createGlbScene } from "../lib/render/glbScene.js";
 import { loadRenderMeshByUrl } from "../lib/render/meshLoaders.js";
 import { buildMeshScene } from "../lib/render/meshScene.js";
 import { loadRobot } from "../lib/urdf/loadRobot.js";
-import { robotOpeningPose } from "../lib/urdf/motion.js";
 import { createRobotScene } from "../lib/urdf/robotScene.js";
 import { isKitScene, sceneFramingBounds } from "../lib/viewer/sceneContract.js";
+import { loadXbfDocument } from "../lib/xbf/xbfDocument.js";
+import { createXbfScene } from "../lib/xbf/xbfScene.js";
 import { resolveSceneSurfaceLook } from "./sceneSettings.js";
 
 function jobKind(job) {
@@ -43,8 +43,8 @@ function jobFile(job) {
 }
 
 // A mesh file's decode lives in page-lifetime caches shared by every job in a packet, so a
-// resolved job declares whose it is while it loads (`renderAssetSourceScope.js`), exactly as a
-// STEP source does; the declaration never outlives the load.
+// resolved job declares whose it is while it loads (`renderAssetSourceScope.js`); the
+// declaration never outlives the load.
 async function inSourceScope(job, load) {
   const previous = renderAssetSourceScope();
   setRenderAssetSourceScope(renderAssetSourceScopeForJob(job));
@@ -75,23 +75,41 @@ const MESH_FAMILY = Object.freeze({
 
 const ROBOT_FAMILY = Object.freeze({
   name: "robot",
-  // The robot the robot renderer loads (`useRobotDocument`): the description and every link mesh.
-  load: (job, { resources }) => loadRobot(jobKind(job), {
-    url: jobUrl(job), urdfUrl: String(job?.resolved?.urdfUrl || job?.urdfUrl || "").trim(), resources
-  }),
+  // The robot the robot renderer loads (`useRobotDocument`): the payload cadgen resolved, which
+  // the job carries (`resolved.robot`), and every mesh its visuals name.
+  load: (job, { resources }) => loadRobot({ robot: job?.resolved?.robot, resources }),
   build(THREE, robot, job) {
     const scene = createRobotScene(THREE, robot);
     // Where the viewer OPENS this robot, with the joints the request names on top: one
     // write through the one path a pose takes (the scene's joint matrices).
-    scene.setJointValues({ ...robotOpeningPose(robot.description), ...jointValuesOf(job) });
+    scene.setControlValues(job?.resolved?.controls);
+    // The parts a person hid in the viewer, as a Quick Edit's view names them (`selection.hide`).
+    const hidden = hiddenPartsOf(job);
+    if (hidden.length) {
+      const unknown = hidden.filter(id => !scene.hasComponent(id));
+      if (unknown.length) {
+        scene.dispose();
+        throw new Error(`selection.hide names no part of ${jobFile(job)}: ${unknown.join(", ")}. Its parts: ${robot.parts.map(part => part.id).join(", ")}`);
+      }
+      scene.setHiddenPartIds(hidden);
+    }
     return scene;
   },
   release: () => {}
 });
 
-function jointValuesOf(job) {
-  const values = job?.jointValues ?? job?.resolved?.jointValues ?? null;
-  return values && typeof values === "object" && !Array.isArray(values) ? values : {};
+const XBF_FAMILY = Object.freeze({
+  name: "xbf",
+  // The document the xbf renderer loads (`useXbfScene`): its structure and part buffers, read
+  // from the engine that serves it (`resolved.url`, the document's API URL).
+  load: job => loadXbfDocument(jobUrl(job)),
+  build: (THREE, document) => createXbfScene(THREE, document),
+  release: document => document.release()
+});
+
+function hiddenPartsOf(job) {
+  const hide = job?.selection?.hide ?? job?.resolved?.selection?.hide;
+  return Array.isArray(hide) ? hide.map(String) : [];
 }
 
 const FAMILY_BY_KIND = Object.freeze({
@@ -100,7 +118,8 @@ const FAMILY_BY_KIND = Object.freeze({
   "3mf": MESH_FAMILY,
   urdf: ROBOT_FAMILY,
   srdf: ROBOT_FAMILY,
-  sdf: ROBOT_FAMILY
+  sdf: ROBOT_FAMILY,
+  xbf: XBF_FAMILY
 });
 
 /**
@@ -122,7 +141,8 @@ export function headlessResources() {
 /**
  * What a scene wears on this stage, from the job's resolved scene settings: the viewer's look
  * (`resolveSceneSurfaceLook`, the one the viewport resolves) and its shadow rule (the scene takes
- * shadows while the lighting is on).
+ * shadows while the lighting is on), and for a scene with CAD edges of its own the edges the mode
+ * draws (`edges`, the view's: the xbf renderer hands its scene the same).
  */
 export function headlessSceneDress(sceneSettings) {
   return {
@@ -132,7 +152,8 @@ export function headlessSceneDress(sceneSettings) {
       renderMode: sceneSettings.render.enabled,
       renderConfiguration: sceneSettings.render.configuration
     }),
-    receiveShadows: sceneSettings.view.lighting.enabled === true
+    receiveShadows: sceneSettings.view.lighting.enabled === true,
+    edges: sceneSettings.view.edges
   };
 }
 
@@ -171,17 +192,20 @@ function partIdentity(object) {
  * @param {import("../lib/viewer/sceneContract.js").KitScene} scene  A family builder's scene.
  * @param {{ look: object | null, receiveShadows: boolean }} dress  `headlessSceneDress`.
  */
-export function headlessSceneModel(THREE, scene, { look = null, receiveShadows = false } = {}) {
+export function headlessSceneModel(THREE, scene, { look = null, receiveShadows = false, edges = null } = {}) {
   if (!isKitScene(scene)) {
     throw new Error("the headless stage holds a family's scene: { object3D, bounds, dispose() } (lib/viewer/sceneContract.js)");
   }
   scene.setSurfaceLook?.(look);
+  if (edges) scene.setEdgeLook?.(edges);
   if (scene.setShadowReception) scene.setShadowReception(receiveShadows);
   else scene.object3D.traverse((object) => { if (object.isMesh) object.receiveShadow = receiveShadows; });
   const meshes = [];
   scene.object3D.traverse((object) => { if (object.isMesh) meshes.push(object); });
   const model = {
     scene,
+    // The look it wears, which the stage asks its rig for (`sceneRig.js`'s `sceneRigFor`).
+    look,
     root: scene.object3D,
     get bounds() { return scene.bounds; },
     get restBounds() { return sceneFramingBounds(scene); },

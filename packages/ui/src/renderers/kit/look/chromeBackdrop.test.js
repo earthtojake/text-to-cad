@@ -13,7 +13,7 @@ import {
 
 test("the viewer palette resolves to the written-out fallback", () => {
   assert.equal(cssColorToHex("oklch(1 0 0)"), CHROME_BACKDROP_FALLBACK.light);
-  assert.equal(cssColorToHex("oklch(0.28 0 0)"), CHROME_BACKDROP_FALLBACK.dark);
+  assert.equal(cssColorToHex("oklch(0.28 0.008 264)"), CHROME_BACKDROP_FALLBACK.dark);
 });
 
 test("oklch: percentages, hue units, chroma and `none`", () => {
@@ -69,12 +69,12 @@ test("with no document the viewer fallback pair is the answer", () => {
   assert.equal(readChromeBackgroundToken({}), "");
   assert.equal(readChromeBackgroundToken({ documentElement: {} }), "");
   assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: false }), "#ffffff");
-  assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: true }), "#292929");
+  assert.equal(resolveChromeBackdropColor({ token: "", prefersDark: true }), "#27292d");
   assert.equal(resolveChromeBackdropColor(), "#ffffff");
   // An unreadable token is a missing one, not a crash.
   assert.equal(
     resolveChromeBackdropColor({ token: "color-mix(in srgb, var(--x) 38%, transparent)", prefersDark: true }),
-    "#292929"
+    "#27292d"
   );
 });
 
@@ -96,7 +96,7 @@ test("the box behind the canvas takes the scene's edge colour", () => {
   assert.equal(sceneBackdropEdgeColor({}, "#0a0a0a"), "#0a0a0a");
   assert.equal(sceneBackdropEdgeColor(null), "#ffffff");
   assert.equal(
-    sceneBackdropEdgeColor({ type: "transparent", solidColor: "#123456" }, "#292929"),
-    "#292929"
+    sceneBackdropEdgeColor({ type: "transparent", solidColor: "#123456" }, "#27292d"),
+    "#27292d"
   );
 });

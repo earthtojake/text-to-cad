@@ -1,6 +1,10 @@
 from __future__ import annotations
-from cadgen import step
-from cadgen import build123d as bd
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cad import model
+import build123d as bd
 
 from lib.part_common import circular_edges, safe_chamfer
 
@@ -30,7 +34,7 @@ def _add_shaft_section(x_start: float, x_end: float, diameter: float):
         )
 
 
-@step(out="../STEP/stepped_shaft_keyway.step")
+@model
 def stepped_shaft_keyway():
     """Return the stepped shaft with keyway model in millimeters."""
     with bd.BuildPart() as shaft:
@@ -53,6 +57,11 @@ def stepped_shaft_keyway():
     end_edges.extend(circular_edges(part, radius=SMALL_DIAMETER / 2.0, axis="x", coordinate=TOTAL_LENGTH))
     part = safe_chamfer(part, end_edges, length=END_CHAMFER)
     part.label = "stepped_shaft_keyway"
+    part.material = FinishedMaterial(
+        metals.alloy_steel().material,
+        pbr=PbrProperties.create('Chromium-molybdenum alloy steel for shafts and gears', color='#bcbdbfff',
+            metalness=1.0, roughness=0.4),
+    )
     return part
 
 

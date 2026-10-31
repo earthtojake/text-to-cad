@@ -1,0 +1,113 @@
+{
+ "daemon": {
+  "arguments": [
+   "-P",
+   "-m",
+   "cad_server._internal.engine_daemon"
+  ],
+  "module": "cad_server._internal.engine_daemon"
+ },
+ "files": {
+  "current": "installations/current",
+  "current_bytes": "9.9.9",
+  "record": "installations/<version>.json",
+  "record_keys": [
+   "cadgen",
+   "prefix",
+   "python",
+   "registered",
+   "version"
+  ],
+  "release_command": {
+   "nt": "Scripts/cad.exe",
+   "posix": "bin/cad"
+  },
+  "release_marker": "cadgen-release.json",
+  "release_schema": "cadgen release/1",
+  "releases": "releases",
+  "switch_log": "update.log",
+  "switch_record": "update.json",
+  "token": "engines/token"
+ },
+ "ops": {
+  "http": [
+   "ok",
+   "port",
+   "token",
+   "url"
+  ],
+  "status": [
+   "installation",
+   "ok",
+   "pid",
+   "prefix",
+   "serving",
+   "version"
+  ],
+  "stop_drain": {
+   "draining": true,
+   "ok": true
+  }
+ },
+ "progress": {
+  "frame": [
+   "detail",
+   "done",
+   "elapsedMs",
+   "job",
+   "kind",
+   "outputs",
+   "stage",
+   "total"
+  ],
+  "kind": "update",
+  "line": [
+   "progress"
+  ],
+  "stages": [
+   "install",
+   "build123d",
+   "apps",
+   "restart"
+  ]
+ },
+ "setup": {
+  "command": "setup",
+  "engine_update_flag": "--engine-update",
+  "flags": [
+   "--dry-run",
+   "--engine-update",
+   "--help",
+   "--json",
+   "--no-telemetry",
+   "--only",
+   "-h"
+  ]
+ },
+ "plugin": {
+  "arguments": [
+   "plugin",
+   "--refresh"
+  ],
+  "flags": [
+   "--help",
+   "--json",
+   "--refresh",
+   "-h"
+  ]
+ },
+ "update": {
+  "command": "update",
+  "flags": [
+   "--dry-run",
+   "--help",
+   "--json",
+   "--no-telemetry",
+   "--only",
+   "--port",
+   "--previous",
+   "--switch",
+   "-h"
+  ]
+ }
+}

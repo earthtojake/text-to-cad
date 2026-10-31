@@ -1,13 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { createInspectEnvironmentResource, hasAuthoredMaterials } from "./inspectEnvironment.js";
-
-test("neutral reflection fill is demanded only by authored material parts", () => {
-  assert.equal(hasAuthoredMaterials(null), false);
-  assert.equal(hasAuthoredMaterials({ parts: [{ color: "#abcdef" }] }), false);
-  assert.equal(hasAuthoredMaterials({ parts: [{ material: { metalness: 1 } }] }), true);
-});
+import { createInspectEnvironmentResource } from "./inspectEnvironment.js";
 
 test("Inspect owns a small neutral reflection texture and disposes it once", () => {
   const resource = createInspectEnvironmentResource(THREE);

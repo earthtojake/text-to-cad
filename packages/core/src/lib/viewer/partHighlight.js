@@ -1,7 +1,5 @@
-// Shared selection/hover highlight helpers used by both `applyPartVisualState`
-// implementations (common/cadScene.js for headless renders, and
-// lib/viewer/partVisualState.js for the interactive viewer) so the two paths
-// stay visually identical.
+// The selection/hover highlight every scene lights a part with (`sceneHighlight.js`, a robot's
+// scene), in the viewer and on the parity page alike.
 
 const PART_OCCLUSION_GHOST_RENDER_ORDER = 30;
 const PART_OCCLUSION_GHOST_OPACITY = 0.9;
@@ -18,10 +16,9 @@ export const PART_HOVER_HIGHLIGHT_BLEND = 0.35;
 // Hover is a transient "this is what you would pick" affordance; selection is
 // persistent state that several parts can hold at once. Both are visible at the
 // same time — you hover one part while others stay selected — so they differ in
-// hue, and hover stays subordinate: weaker edges, weaker glow, and no occlusion
-// ghost. Ghosting on hover would strobe as the cursor sweeps an assembly and
-// would allocate a ghost mesh for every part the cursor touches.
-export const PART_HOVER_EDGE_EMPHASIS = 0.55;
+// hue, and hover stays subordinate: weaker glow, and no occlusion ghost. Ghosting
+// on hover would strobe as the cursor sweeps an assembly and would allocate a
+// ghost mesh for every part the cursor touches.
 export const PART_SELECTED_EMISSIVE_INTENSITY = 0.12;
 export const PART_HOVER_EMISSIVE_INTENSITY = 0.05;
 

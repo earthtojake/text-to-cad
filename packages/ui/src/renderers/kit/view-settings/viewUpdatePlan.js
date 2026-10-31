@@ -18,10 +18,11 @@ export function viewUpdateLabel(previous, next) {
 export function afterViewPaint() {
   // A microtask or a single rAF still runs before paint. Yield a browser task
   // after rAF so controls can paint before any synchronous scene reconciliation.
+  // The timer is the floor where no frame comes (a hidden tab). Whichever comes
+  // first settles it and the other finds it settled: nothing is cancelled, so a
+  // late timer never reaches for a frame API its page no longer has.
   return new Promise(resolve => {
-    const timer = setTimeout(done, 100);
-    let frame;
-    function done() { clearTimeout(timer); if (frame) cancelAnimationFrame(frame); resolve(); }
-    frame = requestAnimationFrame(() => setTimeout(done, 0));
+    setTimeout(resolve, 100);
+    requestAnimationFrame(() => setTimeout(resolve, 0));
   });
 }

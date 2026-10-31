@@ -4,10 +4,6 @@
 // renderer, and releases them when the source texture is disposed.
 export const INSPECT_ENVIRONMENT_ID = "inspect-neutral-hemisphere";
 
-export function hasAuthoredMaterials(meshData) {
-  return Boolean(meshData?.parts?.some((part) => part?.material));
-}
-
 export function createInspectEnvironmentResource(THREE) {
   const width = 64, height = 32;
   const pixels = new Float32Array(width * height * 4);

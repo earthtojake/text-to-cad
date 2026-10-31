@@ -1,94 +1,108 @@
-import type { DocumentDrafts, LiveTextDocument, LivePdfDocument } from './documents.js';
 import type { PromptContextPort } from '@text-to-cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
+import type { ControlCount } from '../usage/controls.js';
 
 /** Environmental effects are supplied by the app; shared UI never discovers a clipboard. */
 export interface ClipboardPort {
   /**
-   * `text` may still be on its way (a copied Quick Edit whose sketch is being saved): the write
+   * `text` may still be on its way (a copied Quick Edit whose annotation is being saved): the write
    * starts inside the gesture that asked for it and takes the text when it arrives.
    */
   writeText(text: string | Promise<string>): Promise<void>;
-  readText(): Promise<string>;
+  /** Read where the host exposes paste from its clipboard. */
+  readText?(): Promise<string>;
   writeImage(image: Blob | Promise<Blob>): Promise<void>;
 }
 /**
- * Where a picture a prompt names by path is kept: a copied Quick Edit is text, so its sketch is
- * saved as a file on this machine and the text names it. `save` answers the file's absolute path.
- * `createHttpAttachmentStore` (`@text-to-cad/core/client`) is the viewer server's.
+ * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
+ * and measurements, with one job per drawn view (`cad snapshot --annotation PACKET --camera authored` draws each).
+ * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@text-to-cad/core/client`) is the
+ * viewer server's.
  */
-export interface AttachmentStore {
-  save(image: Blob, name: string): Promise<string>;
+export interface PromptFiles {
+  create(request: {
+    name: string; input: string;
+    views: Array<Record<string, unknown> & { label: string }>;
+    annotation: Record<string, unknown> | null;
+  }): Promise<{ snapshot: string; inline?: never } | { inline: string; snapshot?: never }>;
+  read(path: string): Promise<Blob>;
 }
 /**
- * What the navbar's right end links to — the running version (its release notes, and how to
- * update), the source and the community — and how a link is followed. Build it with
+ * What the app menu links to — the running version (its release notes), the source and the
+ * community — and how a link is followed. Build it with
  * `viewerLinks` (`@text-to-cad/ui/links`), which fills in the defaults.
  */
 export interface ViewerLinks {
-  /** The version this host runs, as the navbar shows it (`0.7.4`). */
+  /**
+   * The version this host runs, as the app menu shows it and a new issue names it: `0.7.4` for the
+   * release's own build, `0.7.4-dev.<build>` for a custom build of it (`viewerLinks`' `build`).
+   */
   version: string;
-  /** That version's release notes. */
+  /** The release notes of the release it is, or a custom build was built on. */
   release: string;
   x: string;
   github: string;
   discord: string;
   /**
-   * Where a person opens a new issue (GitHub's `issues/new`): the navbar's Feedback, the home's,
-   * and an alert's Report Issue fill one in for them to finish, through GitHub's `title`, `labels`
+   * Where a person opens a new issue (GitHub's `issues/new`): the app menu's Send feedback (over
+   * every file and on the home) and an alert's Report Issue fill one in for them to finish, through GitHub's `title`, `labels`
    * and `body` parameters: a title begun ("Feedback: ", "Issue: ") and, for Report Issue, the
    * `bug` label. Empty: none of them is offered.
    */
   issues: string;
-  /**
-   * How to update, the way this host does it, each shown only when given: a command for a terminal,
-   * the same as a message for an agent, and `message`: how this host updates, said in a line, for a
-   * host whose update is not a command (a marketplace, a restart). The defaults update the skills.
-   */
-  install: { command?: string; prompt?: string; message?: string };
-  /**
-   * The newest release, for a host that checks for one, and whether it is newer than `version`:
-   * the version then reads "Update". Absent (or null), nothing was checked.
-   */
-  latest?: { version: string; url: string; newer: boolean } | null;
   /**
    * Follow a link. A host whose page cannot open one itself (a page in a sandboxed frame) supplies
    * this; without it a link opens the ordinary way, in a new tab.
    */
   open?(url: string): Promise<void>;
 }
+/** One export the page started and has not yet handed to the browser: its request and the name it downloads as. */
+export interface ExportRecord { request: import('@text-to-cad/core/client').ExportRequest; filename: string }
+/** The browser's own downloads. No picker, handle or server path crosses this port. */
+export interface DownloadPort {
+  /** Hands the browser a same-origin file URL to download as `filename`; where it goes is the browser's setting. */
+  save(url: string, filename: string): void;
+  /** The exports still under way when the page was last here, to pick up again. */
+  restore?(): ExportRecord[];
+  /** Keeps the exports under way, for `restore` after a reload; never a file. */
+  remember?(value: ExportRecord[]): void;
+}
 export interface ViewerHost {
+  downloads?: DownloadPort;
   files: FileSource;
-  documents?: { drafts: DocumentDrafts; bind(target: LiveTextDocument): () => void };
-  /** Optional URL of host-bundled PDF.js cmaps/, standard_fonts/, wasm/, and iccs/. */
-  pdf?: { assetBaseUrl?: string; bind(target: LivePdfDocument): () => void };
   fileActions?: FileActions;
   clipboard: ClipboardPort;
   promptContext: PromptContextPort;
-  /** Saves a copied prompt's picture where the prompt can name it. Absent: a copied prompt names none. */
-  attachments?: AttachmentStore;
+  /** Makes a Quick Edit's views and annotation as one snapshot JSON file. Absent: a prompt carries none of them. */
+  promptFiles?: PromptFiles;
   /**
-   * Show a file: in this view, or in a new one where the host has more than one (`target`).
-   * `panel` is the panel the file opens with, by id: the tree's, for a file picked in the tree,
-   * so the tree stays up while a person walks it file by file. Without one, a file opened in
-   * place or in a new view opens with its own default panel (`panels.js`: its controls, or
-   * nothing), and a view that already shows the file keeps whatever it has open.
-   *
-   * `home` shows the host's home in this view: what it shows with no file open. A host with a
-   * home offers it; the navbar's mark is then the way back to it from a file.
+   * Show a file, by its absolute path, in this view: a pick in the explorer, a renderer's link.
+   * `home` shows the host's home in this view: its recent models, what it shows with no file. A
+   * host with a home offers it, and the navbar's logo is the way to it from a file. A view that
+   * shows one file alone (a host's file handler, whose own file tree is its navigation) offers
+   * neither: it has no explorer, and a renderer's link to another file is plain text there.
    */
   navigation: {
-    openFile(path: string, options?: { target: 'current' | 'new'; panel?: string }): void;
+    openFile?(path: string): void;
     home?(): void;
   };
   /** The navbar's links: the version, X, Discord, GitHub and new issues. A host with none gets none. */
   links?: ViewerLinks;
   /**
+   * What the person used, for the host to count: its telemetry, never what they made. Absent, nothing is
+   * counted. `quickEdit`: a Quick Edit reached its destination -- copied, queued or sent. `controls`: which of
+   * the view's controls a person used since the last report, and how long a tool that stays on was on
+   * (`usage/controls.js`), at most every minute; absent, they are not counted.
+   */
+  usage?: { used(feature: 'quickEdit'): void; controls?(counts: ControlCount[]): void };
+  /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
    * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
-   * is a host showing the view small, inline in a conversation: a renderer draws the model there,
-   * not its tools, its corner controls, its view cube or its Quick Edit, and the view has no
-   * navbar — its frame names what it shows.
+   * is a view drawn with no chrome (the library's picture of a model, drawn out of sight): a
+   * renderer draws the model alone — not its tools, its view's controls, its cube or its Quick
+   * Edit — and the view has no navbar. `locale` is the language the view reads in, as the host
+   * resolved it (`@text-to-cad/ui/i18n`'s `useLanguage`: the person's choice, else what the context
+   * infers); one it does not speak, or none, reads English.
    */
-  environment: { colorScheme: 'light' | 'dark'; platform?: string; reducedMotion?: boolean; compact?: boolean };
+  environment: { colorScheme: 'light' | 'dark'; locale?: string; platform?: string; reducedMotion?: boolean; compact?: boolean };
 }

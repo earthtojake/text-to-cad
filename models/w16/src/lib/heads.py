@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import block, fasteners as F, geo, kin, palette as P, spec as S
 from lib.castings import fuse_all
@@ -366,23 +366,7 @@ SKIN_T = 0.45
 
 def _common_fuzzy(shape, tools, fuzzy: float = 1e-3):
     """Multi-tool intersection (the skin harvester), fuzzy like geo.cut_fuzzy."""
-    from OCP.BRepAlgoAPI import BRepAlgoAPI_Common
-    from OCP.TopTools import TopTools_ListOfShape
-
-    args = TopTools_ListOfShape()
-    args.Append(shape.wrapped)
-    tl = TopTools_ListOfShape()
-    for t in tools:
-        tl.Append(t.wrapped)
-    op = BRepAlgoAPI_Common()
-    op.SetArguments(args)
-    op.SetTools(tl)
-    op.SetFuzzyValue(fuzzy)
-    op.SetRunParallel(True)
-    op.Build()
-    if not op.IsDone():
-        raise RuntimeError("fuzzy common failed")
-    return bd.Compound(op.Shape())
+    return geo.common_fuzzy(shape, tools, fuzzy)
 
 
 def skin_boxes(bank: int):

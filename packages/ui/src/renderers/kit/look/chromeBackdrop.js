@@ -3,7 +3,7 @@
 // Inspect and Render paint their own scene backgrounds. The app's `--background`
 // token provides the fallback for the frame around that scene.
 // A missing or unreadable token falls back to the viewer's neutral light and
-// charcoal dark palette. This is app UI resolution; the standalone snapshot
+// cool blue-grey dark palette. This is app UI resolution; the standalone snapshot
 // renderer consumes its own supplied theme settings without app preferences.
 //
 // Plain functions, no `@/` imports and no React, so `node --test` loads this

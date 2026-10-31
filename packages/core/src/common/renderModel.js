@@ -1,7 +1,10 @@
-import {
-  fitCameraToModel
-} from "./cadScene.js";
 import { screenSpaceLineDeviceResolution } from "./renderEdges.js";
+import {
+  clampSceneModelRadius,
+  getSceneScaleSettings,
+  normalizeSceneScaleMode,
+  VIEWER_SCENE_SCALE
+} from "../lib/viewer/sceneScale.js";
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -10,6 +13,90 @@ function clamp(value, min, max) {
 function toFiniteNumber(value, fallback = 0) {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? numericValue : fallback;
+}
+
+function boundsCorners(THREE, bounds) {
+  const min = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
+  const max = Array.isArray(bounds?.max) ? bounds.max : [1, 1, 1];
+  return [
+    [min[0], min[1], min[2]],
+    [min[0], min[1], max[2]],
+    [min[0], max[1], min[2]],
+    [min[0], max[1], max[2]],
+    [max[0], min[1], min[2]],
+    [max[0], min[1], max[2]],
+    [max[0], max[1], min[2]],
+    [max[0], max[1], max[2]]
+  ].map((corner) => new THREE.Vector3(
+    toFiniteNumber(corner[0]),
+    toFiniteNumber(corner[1]),
+    toFiniteNumber(corner[2])
+  ));
+}
+
+function centerAndRadiusFromBounds(THREE, bounds, sceneScale) {
+  const settings = getSceneScaleSettings(sceneScale);
+  const min = Array.isArray(bounds?.min) ? bounds.min : [0, 0, 0];
+  const max = Array.isArray(bounds?.max) ? bounds.max : [1, 1, 1];
+  const center = new THREE.Vector3(
+    (toFiniteNumber(min[0]) + toFiniteNumber(max[0], 1)) / 2,
+    (toFiniteNumber(min[1]) + toFiniteNumber(max[1], 1)) / 2,
+    (toFiniteNumber(min[2]) + toFiniteNumber(max[2], 1)) / 2
+  );
+  const size = new THREE.Vector3(
+    Math.max(toFiniteNumber(max[0], 1) - toFiniteNumber(min[0]), settings.minModelRadius),
+    Math.max(toFiniteNumber(max[1], 1) - toFiniteNumber(min[1]), settings.minModelRadius),
+    Math.max(toFiniteNumber(max[2], 1) - toFiniteNumber(min[2]), settings.minModelRadius)
+  );
+  return { center, radius: clampSceneModelRadius(size.length() / 2, sceneScale) };
+}
+
+// The orthographic camera that frames `bounds` from `direction`, its box's corners spanning the
+// view inside `padding`.
+export function fitCameraToModel(THREE, camera, bounds, {
+  direction = [1, -1, 0.8],
+  up = [0, 0, 1],
+  width = 1400,
+  height = 900,
+  padding = 0.12,
+  scale = VIEWER_SCENE_SCALE.CAD,
+  lockedHalfHeight = null
+} = {}) {
+  const sceneScale = normalizeSceneScaleMode(scale);
+  const settings = getSceneScaleSettings(sceneScale);
+  const { center, radius } = centerAndRadiusFromBounds(THREE, bounds, sceneScale);
+  const viewDirection = new THREE.Vector3(...direction).normalize();
+  const viewUp = new THREE.Vector3(...up).normalize();
+  const distance = Math.max(radius * 3.2, settings.minModelRadius * 10);
+  camera.position.copy(center).add(viewDirection.multiplyScalar(distance));
+  camera.up.copy(viewUp);
+  camera.lookAt(center);
+
+  const aspect = Math.max(width / Math.max(height, 1), 0.01);
+  const right = new THREE.Vector3().crossVectors(viewDirection, viewUp).normalize();
+  const screenUp = new THREE.Vector3().crossVectors(right, viewDirection).normalize();
+  const corners = boundsCorners(THREE, bounds);
+  const xs = corners.map((corner) => corner.dot(right));
+  const ys = corners.map((corner) => corner.dot(screenUp));
+  const minSpan = settings.minModelRadius;
+  const spanX = Math.max(Math.max(...xs) - Math.min(...xs), minSpan);
+  const spanY = Math.max(Math.max(...ys) - Math.min(...ys), minSpan);
+  // Padding is bounded as framePadding() in renderOptions.js bounds it (0 .. 0.15), so the same
+  // `padding` frames alike here and in a snapshot.
+  const safeContentScale = Math.max(1 - (clamp(Number(padding) || 0, 0, 0.15) * 2), 0.1);
+  const halfHeight = lockedHalfHeight || Math.max(
+    spanY / (2 * safeContentScale),
+    spanX / (2 * aspect * safeContentScale),
+    minSpan / 2
+  );
+  camera.top = halfHeight;
+  camera.bottom = -halfHeight;
+  camera.left = -halfHeight * aspect;
+  camera.right = halfHeight * aspect;
+  camera.near = 0.01;
+  camera.far = Math.max(distance + radius * 6, sceneScale === VIEWER_SCENE_SCALE.URDF ? 10 : 1000);
+  camera.updateProjectionMatrix?.();
+  return { center, radius, halfHeight, distance };
 }
 
 function addLight(scene, light, enabled = true) {
@@ -80,7 +167,7 @@ export function renderModel(THREE, model, options = {}) {
     throw new Error("renderModel requires THREE");
   }
   if (!model?.root) {
-    throw new Error("renderModel requires a model returned by buildModel");
+    throw new Error("renderModel requires a model: { root, bounds }");
   }
   const canvas = options.canvas || undefined;
   const hostElement = options.hostElement || options.container || canvas?.parentElement || null;

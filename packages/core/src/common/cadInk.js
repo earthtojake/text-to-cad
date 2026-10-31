@@ -2,6 +2,7 @@ import {
   CAD_EDGE_CLASS_IDS,
   normalizeDisplayEdgeSettings
 } from "./displaySettings.js";
+import { GRID_AXIS_COLORS, GRID_LINE_DEFAULTS } from "../lib/viewer/stageGrid.js";
 
 // Full widths in drawing-buffer (device) pixels. Both the instanced CAD pass
 // and LineMaterial use the same values and analytic antialiasing feather.
@@ -30,13 +31,17 @@ export function resolveCadEdgeSettings(value = null) {
   };
 }
 
+// The grid's lines in its colour (graph-paper blue by default); its X and Y axes in the view cube's red and green.
 export function resolveCadGridSettings(value = null, { colorMode = "light" } = {}) {
   const dark = colorMode === "dark";
+  const axes = GRID_AXIS_COLORS[dark ? "dark" : "light"];
+  const lines = GRID_LINE_DEFAULTS[dark ? "dark" : "light"];
   return {
     enabled: value?.enabled === true,
-    centerColor: value?.color ?? (dark ? "#697786" : "#6b7280"),
-    cellColor: value?.color ?? (dark ? "#495665" : "#cbd5e1"),
-    opacity: value?.opacity ?? 0.16,
-    density: value?.density ?? 1
+    color: value?.color ?? lines.color,
+    opacity: value?.opacity ?? lines.opacity,
+    density: value?.density ?? 1,
+    xAxisColor: axes.x,
+    yAxisColor: axes.y
   };
 }

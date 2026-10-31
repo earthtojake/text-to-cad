@@ -1,0 +1,9 @@
+{
+  "name": "texttocad-api",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test src/*.test.mjs"
+  }
+}

@@ -2,7 +2,9 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import * as React from "react"
 import { Pipette } from "lucide-react"
 
+import { useI18n } from "@text-to-cad/ui/i18n"
 import { cn } from "@text-to-cad/ui/utils"
+import { capturePointer } from "../lib/pointerCapture.js"
 import { Button } from "@text-to-cad/ui/primitives/button"
 import { Input } from "@text-to-cad/ui/primitives/input"
 import {
@@ -236,6 +238,7 @@ function ColorPicker({
   disabled = false,
   ...props
 }) {
+  const { t } = useI18n();
   const normalizedValue = normalizeHexColor(value)
   const normalizedOpacity = Number.isFinite(Number(opacity)) ? clamp(Number(opacity), 0, 1) : 1
   const [format, setFormat] = React.useState("hex")
@@ -288,12 +291,12 @@ function ColorPicker({
   }, [colorNumbers.hsv.s, colorNumbers.hsv.v, commitHex])
 
   const handleSvPointerDown = (event) => {
-    svPlaneRef.current?.setPointerCapture(event.pointerId)
+    capturePointer(svPlaneRef.current, event.pointerId)
     updateFromSvPointer(event)
   }
 
   const handleHuePointerDown = (event) => {
-    hueTrackRef.current?.setPointerCapture(event.pointerId)
+    capturePointer(hueTrackRef.current, event.pointerId)
     updateFromHuePointer(event)
   }
 
@@ -339,9 +342,9 @@ function ColorPicker({
           ref={svPlaneRef}
           role="slider"
           tabIndex={0}
-          aria-label="Saturation and brightness"
-          aria-valuetext={`${Math.round(colorNumbers.hsv.s)}% saturation, ${Math.round(colorNumbers.hsv.v)}% brightness`}
-          className="relative h-32 touch-none overflow-hidden rounded-md border shadow-inner outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
+          aria-label={t("colorPicker.saturationBrightness")}
+          aria-valuetext={t("colorPicker.saturationBrightnessValue", { saturation: Math.round(colorNumbers.hsv.s), brightness: Math.round(colorNumbers.hsv.v) })}
+          className="relative h-28 touch-none overflow-hidden rounded-md border shadow-inner outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50"
           style={{
             backgroundColor: svColor,
             backgroundImage: "linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)"
@@ -367,7 +370,7 @@ function ColorPicker({
           ref={hueTrackRef}
           role="slider"
           tabIndex={0}
-          aria-label="Hue"
+          aria-label={t("colorPicker.hue")}
           aria-valuemin={0}
           aria-valuemax={360}
           aria-valuenow={Math.round(hue)}
@@ -392,7 +395,7 @@ function ColorPicker({
         {showOpacity ? (
           <div className="space-y-1">
             <div className="flex items-center justify-between gap-2 text-micro uppercase tracking-[0.08em] text-muted-foreground">
-              <span>Opacity</span>
+              <span>{t("colorPicker.opacityHeading")}</span>
               <span>{Math.round(normalizedOpacity * 100)}%</span>
             </div>
             <div className="flex items-center gap-1.5">
@@ -406,7 +409,7 @@ function ColorPicker({
                   onOpacityChange?.(clamp(event.currentTarget.value, 0, 100) / 100)
                 }}
                 className="h-7 px-1.5 text-tiny"
-                aria-label="Color opacity"
+                aria-label={t("colorPicker.opacity")}
               />
               <span className="text-micro text-muted-foreground">%</span>
             </div>
@@ -429,7 +432,7 @@ function ColorPicker({
         </div>
 
         {format === "hex" ? (
-          <div className="flex gap-2">
+          <div className="flex gap-1">
             <Input
               value={hexDraft}
               onChange={(event) => setHexDraft(event.currentTarget.value)}
@@ -440,15 +443,16 @@ function ColorPicker({
                 }
               }}
               className="h-7 px-1.5 text-tiny font-mono uppercase"
-              aria-label="Hex color"
+              aria-label={t("colorPicker.hex")}
             />
             {canUseEyeDropper ? (
-              <TooltipHint content="Eyedropper"><Button
+              <TooltipHint content={t("colorPicker.eyedropper")}><Button
                 type="button"
                 variant="outline"
                 size="icon-sm"
+                className="size-7 shrink-0"
                 onClick={pickFromScreen}
-                aria-label="Pick color from screen"
+                aria-label={t("colorPicker.pickFromScreen")}
 
               >
                 <Pipette className="h-3.5 w-3.5" strokeWidth={2} aria-hidden="true" />
@@ -458,7 +462,7 @@ function ColorPicker({
         ) : null}
 
         {format === "rgb" ? (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1">
             <ColorNumberInput label="R" value={colorNumbers.rgb.r} min={0} max={255} onChange={(nextValue) => setRgbChannel("r", nextValue)} />
             <ColorNumberInput label="G" value={colorNumbers.rgb.g} min={0} max={255} onChange={(nextValue) => setRgbChannel("g", nextValue)} />
             <ColorNumberInput label="B" value={colorNumbers.rgb.b} min={0} max={255} onChange={(nextValue) => setRgbChannel("b", nextValue)} />
@@ -466,7 +470,7 @@ function ColorPicker({
         ) : null}
 
         {format === "hsl" ? (
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-3 gap-1">
             <ColorNumberInput label="H" value={colorNumbers.hsl.h} min={0} max={360} onChange={(nextValue) => setHslChannel("h", nextValue)} />
             <ColorNumberInput label="S" value={colorNumbers.hsl.s} min={0} max={100} onChange={(nextValue) => setHslChannel("s", nextValue)} />
             <ColorNumberInput label="L" value={colorNumbers.hsl.l} min={0} max={100} onChange={(nextValue) => setHslChannel("l", nextValue)} />
@@ -508,7 +512,7 @@ function ColorPicker({
           ) : null}
         </Button>
       </PopoverTrigger>
-      <PopoverContent align={popoverAlign} className="w-64 space-y-3 p-3">{controls}
+      <PopoverContent align={popoverAlign} className="w-56 space-y-2 p-2">{controls}
       </PopoverContent>
     </Popover>
   )

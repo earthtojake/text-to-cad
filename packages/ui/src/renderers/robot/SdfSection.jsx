@@ -1,4 +1,6 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useI18n } from "@text-to-cad/ui/i18n";
+import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
 
 function formatSdfNumber(value, fallback = "0") {
@@ -14,6 +16,7 @@ function formatSdfMetadataItem(item, fields) {
 }
 
 function SdfMetadataList({ title, items, fields }) {
+  const { t } = useI18n();
   const records = Array.isArray(items) ? items.map(item => formatSdfMetadataItem(item, fields)).filter(Boolean) : [];
   if (!records.length) return null;
   return (
@@ -23,14 +26,20 @@ function SdfMetadataList({ title, items, fields }) {
         {records.slice(0, 5).map((record, index) => (
           <TooltipHint key={`${title}:${index}`} content={record} overflowOnly><div  className="truncate text-tiny leading-4 text-foreground" >{record}</div></TooltipHint>
         ))}
-        {records.length > 5 ? <div className="text-tiny leading-4 text-muted-foreground">{records.length - 5} more</div> : null}
+        {records.length > 5 ? <div className="text-tiny leading-4 text-muted-foreground">{t("sdf.more", { count: records.length - 5 })}</div> : null}
       </div>
     </div>
   );
 }
 
-/** What an SDF document says about itself beyond its links and joints: the parser's `sdf` record. */
-export default function SdfSection({ info, movableJointCount = 0 }) {
+/**
+ * What an SDF document says about itself beyond its links and joints: the payload's `sdf` record.
+ * Its counts are three tiles a row; on a phone, whose panel is 288px wide and whose type is a step
+ * larger, two, so "Nested models" and "Unsupported geom." read whole instead of truncating.
+ */
+export default function SdfSection({ info }) {
+  const { t } = useI18n();
+  const mobile = useViewerMobile();
   const sdfInfo = info && typeof info === "object" ? info : {};
   const metadata = sdfInfo.staticMetadata && typeof sdfInfo.staticMetadata === "object" ? sdfInfo.staticMetadata : {};
   const list = key => (Array.isArray(metadata[key]) ? metadata[key] : []);
@@ -38,37 +47,38 @@ export default function SdfSection({ info, movableJointCount = 0 }) {
   const nestedModelCount = Number.isFinite(Number(metadata.nestedModelCount)) ? Number(metadata.nestedModelCount) : 0;
   return (
     <div>
-      <FileSheetSubsection title="Document">
+      <FileSheetSubsection title={t("sdf.document")}>
         <FileSheetFieldGrid columns={2}>
-          <FileSheetValueField label="Version" value={String(sdfInfo.version || "unknown")} />
-          <FileSheetValueField label="Document" value={String(sdfInfo.documentKind || "model")} />
-          {sdfInfo.worldName ? <FileSheetValueField label="World" value={String(sdfInfo.worldName)} /> : null}
-          <FileSheetValueField label="Frame mode" value={sdfInfo.nativeFrameSemantics ? "native" : "compat"} />
-          <FileSheetValueField label="Root link" value={String(sdfInfo.rootLink || "")} />
-          <FileSheetValueField label="Model" value={String(sdfInfo.modelName || "SDF")} />
+          <FileSheetValueField label={t("sdf.version")} value={String(sdfInfo.version || t("sdf.unknown"))} />
+          <FileSheetValueField label={t("sdf.document")} value={String(sdfInfo.documentKind || "model")} />
+          {sdfInfo.worldName ? <FileSheetValueField label={t("sdf.world")} value={String(sdfInfo.worldName)} /> : null}
+          {/* A model whose links float free has no single root: each is listed. */}
+          <FileSheetValueField label={t("robot.rootLink")} value={String(sdfInfo.rootLink || (Array.isArray(sdfInfo.rootLinks) ? sdfInfo.rootLinks.join(", ") : ""))} />
+          <FileSheetValueField label={t("sdf.model")} value={String(sdfInfo.modelName || "SDF")} />
         </FileSheetFieldGrid>
       </FileSheetSubsection>
-      <FileSheetSubsection title="Counts">
-        <FileSheetFieldGrid columns={3}>
-          <FileSheetValueField label="Links" value={String(sdfInfo.linkCount ?? movableJointCount)} />
-          <FileSheetValueField label="Joints" value={String(sdfInfo.jointCount ?? movableJointCount)} />
-          <FileSheetValueField label="Frames" value={String(sdfInfo.frameCount ?? 0)} />
-          <FileSheetValueField label="Includes" value={String(includes.length)} />
-          <FileSheetValueField label="Plugins" value={String(plugins.length)} />
-          <FileSheetValueField label="Sensors" value={String(sensors.length)} />
-          <FileSheetValueField label="Lights" value={String(lights.length)} />
-          <FileSheetValueField label="Physics" value={String(physics.length)} />
-          <FileSheetValueField label="Nested models" value={formatSdfNumber(nestedModelCount)} />
-          <FileSheetValueField label="Unsupported geom." value={`${formatSdfNumber(sdfInfo.unsupportedVisualCount)} / ${formatSdfNumber(sdfInfo.unsupportedCollisionCount)}`} />
+      <FileSheetSubsection title={t("sdf.counts")}>
+        <FileSheetFieldGrid columns={mobile ? 2 : 3} data-sdf-counts="">
+          <FileSheetValueField label={t("robot.links")} value={String(sdfInfo.linkCount ?? 0)} />
+          <FileSheetValueField label={t("sdf.joints")} value={String(sdfInfo.jointCount ?? 0)} />
+          <FileSheetValueField label={t("sdf.frames")} value={String(sdfInfo.frameCount ?? 0)} />
+          <FileSheetValueField label={t("sdf.includes")} value={String(includes.length)} />
+          <FileSheetValueField label={t("sdf.plugins")} value={String(plugins.length)} />
+          <FileSheetValueField label={t("sdf.sensors")} value={String(sensors.length)} />
+          <FileSheetValueField label={t("sdf.lights")} value={String(lights.length)} />
+          <FileSheetValueField label={t("sdf.physics")} value={String(physics.length)} />
+          <FileSheetValueField label={t("sdf.nestedModels")} value={formatSdfNumber(nestedModelCount)} />
+          {/* The collisions whose geometry the viewer cannot draw: counted, never refused. */}
+          <FileSheetValueField label={t("sdf.unsupportedGeometry")} value={formatSdfNumber(sdfInfo.unsupportedCollisionCount)} />
         </FileSheetFieldGrid>
       </FileSheetSubsection>
       {includes.length || plugins.length || sensors.length || lights.length || physics.length ? (
-        <FileSheetSubsection title="Metadata" contentClassName="px-2">
-          <SdfMetadataList title="Includes" items={includes} fields={["name", "uri"]} />
-          <SdfMetadataList title="Plugins" items={plugins} fields={["name", "filename"]} />
-          <SdfMetadataList title="Sensors" items={sensors} fields={["name", "type"]} />
-          <SdfMetadataList title="Lights" items={lights} fields={["name", "type"]} />
-          <SdfMetadataList title="Physics" items={physics} fields={["name", "type", "default"]} />
+        <FileSheetSubsection title={t("sdf.metadata")} contentClassName="px-2">
+          <SdfMetadataList title={t("sdf.includes")} items={includes} fields={["name", "uri"]} />
+          <SdfMetadataList title={t("sdf.plugins")} items={plugins} fields={["name", "filename"]} />
+          <SdfMetadataList title={t("sdf.sensors")} items={sensors} fields={["name", "type"]} />
+          <SdfMetadataList title={t("sdf.lights")} items={lights} fields={["name", "type"]} />
+          <SdfMetadataList title={t("sdf.physics")} items={physics} fields={["name", "type", "default"]} />
         </FileSheetSubsection>
       ) : null}
     </div>

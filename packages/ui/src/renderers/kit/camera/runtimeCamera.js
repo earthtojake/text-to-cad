@@ -2,8 +2,10 @@
 // projection and lens sync, serializable perspective snapshots, eased
 // transitions, fit-to-bounds and recentring. Every function takes the runtime
 // (`{ THREE, camera, perspectiveCamera, orthographicCamera, controls, renderer,
-// modelGroup, requestRender, scheduleIdleQuality, ... }`) and plain bounds
-// (`{ min: [x, y, z], max: [x, y, z] }`); none reads what is being shown.
+// modelGroup, requestFrame, scheduleIdleQuality, ... }`) and plain bounds
+// (`{ min: [x, y, z], max: [x, y, z] }`); none reads what is being shown. A camera
+// move changes no shadow, so the frame each asks for keeps the shadow maps
+// (`requestSceneFrame`).
 
 import {
   clamp,
@@ -39,6 +41,7 @@ import {
 import {
   annotatePerspectiveSnapshot
 } from "@text-to-cad/core/lib/perspective.js";
+import { requestSceneFrame } from "../viewport/sceneFrames.js";
 
 export const DEFAULT_DAMPING_FACTOR = 0.14;
 
@@ -192,12 +195,12 @@ export function setRuntimeZoomPercent(runtime, percent) {
   camera.lookAt(runtime.controls.target);
   runtime.controls.update?.();
   runtime.scheduleIdleQuality?.();
-  runtime.requestRender?.();
+  requestSceneFrame(runtime, false);
   return true;
 }
 
-// The canvas IS the viewport: it fills the box beside the host's panel column and
-// nothing else, so the camera frames and centres in the whole of it.
+// The canvas IS the viewport: it fills the viewer's box and nothing else, so the camera
+// frames and centres in the whole of it.
 export function getViewportMetrics(runtime) {
   const canvas = runtime?.renderer?.domElement;
   const width = Math.max(1, canvas?.clientWidth || canvas?.parentElement?.clientWidth || 1);
@@ -339,7 +342,7 @@ export function syncRuntimeViewportFraming(runtime, frameMetrics = null) {
     runtime.controls.update?.();
     runtime.controls.autoRotate = autoRotateBeforeResize;
   }
-  runtime.requestRender?.();
+  requestSceneFrame(runtime, false);
   return true;
 }
 
@@ -414,7 +417,7 @@ export function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle 
     runtime.scheduleIdleQuality?.();
   }
   if (requestRender) {
-    runtime.requestRender?.();
+    requestSceneFrame(runtime, false);
   }
   return true;
 }
@@ -509,7 +512,7 @@ export function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = 
   if (scheduleIdle) {
     runtime.scheduleIdleQuality?.();
   }
-  runtime.requestRender?.();
+  requestSceneFrame(runtime, false);
   return true;
 }
 
@@ -568,7 +571,7 @@ export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
   };
   runtime.controls.enableDamping = false;
   runtime.beginInteraction?.();
-  runtime.requestRender?.();
+  requestSceneFrame(runtime, false);
   return true;
 }
 
@@ -789,7 +792,7 @@ export function transitionCameraToViewPreset(runtime, preset) {
   };
   runtime.controls.enableDamping = false;
   runtime.beginInteraction?.();
-  runtime.requestRender?.();
+  requestSceneFrame(runtime, false);
   return true;
 }
 

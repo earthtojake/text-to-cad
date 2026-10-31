@@ -1,11 +1,8 @@
-import type { CadEditingPreview } from '@text-to-cad/core/client';
-import type { Launch, Root, Server, ViewEvent } from './server';
-import { encodeBase64 } from './tunnel';
+import { encodeBase64 } from '@text-to-cad/core/client';
+import { ServerError, type Launch, type Server, type ViewEvent } from './server';
 
 /** How often a view syncs with nothing happening (the server's `views.POLL_SECONDS`). */
 export const SYNC_MS = 1_000;
-/** How soon it syncs again while a build it watches is moving: its progress, at a readable pace. */
-export const NEWS_MS = 150;
 // Syncs failing in a row before a view says its server is gone (about seven seconds, with the backoff).
 export const LOST_AFTER = 4;
 
@@ -18,15 +15,16 @@ export interface ViewSyncHandlers {
   state(): Record<string, unknown>;
   /**
    * Whether the server still answers: false once `LOST_AFTER` syncs in a row have failed (its process
-   * has gone, and the host does not start it again on its own), true when one succeeds again.
+   * has gone, and the host does not start it again on its own), true when one succeeds again. Where
+   * the server did answer, refusing the view (one from before the host restarted it), `refused` is
+   * what it said.
    */
-  connection?(connected: boolean): void;
+  connection?(connected: boolean, refused?: string): void;
 }
 
-/** What the mounted model view watches, through its client: its root's catalog. */
+/** What the mounted model view watches, through its client: its file's catalog entry. */
 export interface ViewSyncWatch {
-  root: Pick<Root, 'kind' | 'path'>;
-  /** The file on screen, as the root names it; null on the home. */
+  /** The file on screen, by its absolute path; null on the home, which watches nothing. */
   file(): string | null;
   /** The server's revision of the catalog the client last applied ('' before one). */
   revision(): string;
@@ -34,13 +32,9 @@ export interface ViewSyncWatch {
   refresh(file: string | null): Promise<unknown>;
 }
 
-type PreviewListener = { onUpdate(preview: CadEditingPreview): void; onError(error: unknown): void };
-
 export interface ViewSync {
   /** Attach the model view's watch; the returned function detaches it. */
   watch(watch: ViewSyncWatch): () => void;
-  /** A file's build feed, heard on the sync: the client's `editingPreviewFeed`. */
-  observePreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void): () => void;
   /** A person touched this view, or it shows something new: it is the one the agent's tools mean. Syncs now. */
   focus(): void;
   /** A newer view took this one's place: one last sync says so, and the loop ends. */
@@ -52,18 +46,16 @@ export interface ViewSync {
 /**
  * A view's ONE call to the server, each second (`cad_sync`). Up go what it shows (its model; its
  * state whenever that changed, which is what the agent reads; that a person just touched it) and
- * what it watches (its root's catalog, any STEP's build feed). Back come the agent's requests for
- * it, the catalog's revision — the view reads the catalog again only when it moves — and each
- * feed's status. Nothing is held open: a host relays every call through a few slots all its views
- * share, and a held one would keep the others' model loads waiting. A sync that brought news (an
- * event, a moving build) is followed by the next sooner.
+ * what it watches (its file's catalog entry). Back come the agent's requests for it and the
+ * catalog's revision — the view reads the catalog again only when it moves. Nothing is held open:
+ * a host relays every call through a few slots all its views share, and a held one would keep the
+ * others' model loads waiting. A sync that brought events is followed by the next at once.
  */
 export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
   view: { id: string; surface: string; model(): string | null }, handlers: ViewSyncHandlers): ViewSync {
   let watched: ViewSyncWatch | null = null;
   // The catalog revision a refresh was started for, so one change reads the catalog once.
   let requested = '';
-  const previews = new Map<string, { listeners: Set<PreviewListener>; cursor: string | null }>();
   let focused = false;
   let sentState = '';
   let closed = false;
@@ -100,18 +92,6 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
       wakeNow();
       return () => { if (watched === next) watched = null; };
     },
-    observePreview(file, onUpdate, onError) {
-      let slot = previews.get(file);
-      if (!slot) { slot = { listeners: new Set(), cursor: null }; previews.set(file, slot); }
-      const listener = { onUpdate, onError };
-      const owned = slot;
-      owned.listeners.add(listener);
-      wakeNow();
-      return () => {
-        owned.listeners.delete(listener);
-        if (!owned.listeners.size && previews.get(file) === owned) previews.delete(file);
-      };
-    },
     focus() { focused = true; wakeNow(); },
     async close() {
       closed = true;
@@ -124,7 +104,7 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
         while (!signal.aborted && !closed) {
           // Every view watches, seen or not: a tab in the background is current when it is shown.
           const watch = watched;
-          const files = watch ? [...previews.keys()] : [];
+          const watchedFile = watch?.file() ?? null;
           const state = changedState();
           const touched = focused;
           focused = false;
@@ -133,7 +113,7 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
               view: view.id, surface: view.surface, model: view.model(),
               ...(touched ? { focused: true } : {}),
               ...(state ? { state } : {}),
-              ...(watch ? { watch: { root: { kind: watch.root.kind, path: watch.root.path }, file: watch.file(), ...(files.length ? { previews: files } : {}) } } : {}),
+              ...(watchedFile ? { watch: { file: watchedFile } } : {}),
             }, { signal });
             if (failures >= LOST_AFTER) handlers.connection?.(true);
             failures = 0;
@@ -144,23 +124,13 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
               requested = revision;
               void watch.refresh(watch.file()).catch(() => { if (requested === revision) requested = ''; });
             }
-            let news = false;
-            for (const preview of reply.previews ?? []) {
-              const slot = previews.get(preview.file);
-              if (!slot) continue;
-              if (preview.error) { for (const listener of slot.listeners) listener.onError(new Error(preview.error)); continue; }
-              const cursor = typeof preview.feedCursor === 'string' ? preview.feedCursor : null;
-              if (cursor !== slot.cursor) news = true;
-              slot.cursor = cursor;
-              for (const listener of slot.listeners) listener.onUpdate(preview);
-            }
-            // Events may have more behind them: ask again at once. A moving build, soon. Else a second.
-            if (!reply.events.length) await pause(news ? NEWS_MS : SYNC_MS, signal);
-          } catch {
+            // Events may have more behind them: ask again at once. Else a second.
+            if (!reply.events.length) await pause(SYNC_MS, signal);
+          } catch (error) {
             if (touched) focused = true;
             if (signal.aborted) return;
             failures += 1;
-            if (failures === LOST_AFTER) handlers.connection?.(false);
+            if (failures === LOST_AFTER) handlers.connection?.(false, error instanceof ServerError ? error.message : undefined);
             await pause(Math.min(30_000, 500 * 2 ** Math.min(failures, 6)), signal);
           }
         }

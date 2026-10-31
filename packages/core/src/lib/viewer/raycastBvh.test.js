@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { builtGeometryBvhBytes, ensureFacePickBvh, estimateGeometryBvhBytes, scheduleRuntimeRaycastBvh } from "./raycastBvh.js";
+import { builtGeometryBvhBytes, estimateGeometryBvhBytes, scheduleRuntimeRaycastBvh } from "./raycastBvh.js";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-// Two triangles over four SHARED vertices (the indexed surf shape), the second
+// Two triangles over four SHARED vertices (the indexed shape of a part's mesh), the second
 // one raised so a ray down each column hits a known face index.
 function indexedGeometry() {
   const geometry = new THREE.BufferGeometry();
@@ -42,39 +42,6 @@ test("scheduleRuntimeRaycastBvh builds an indirect BVH over indexed geometry and
   assert.equal(mesh.userData.faceIds[hitLast[0].faceIndex], 12, "faceRuns keyed by triangle index resolve");
 });
 
-test("ensureFacePickBvh rebuilds when the proxy index array identity changes", async () => {
-  const proxy = {
-    facePositions: new Float32Array([0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0]),
-    faceIndices: new Uint32Array([0, 1, 2, 0, 2, 3])
-  };
-  const makeMesh = () => {
-    const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute("position", new THREE.BufferAttribute(proxy.facePositions, 3));
-    geometry.setIndex(new THREE.BufferAttribute(proxy.faceIndices, 1));
-    return new THREE.Mesh(geometry, new THREE.MeshBasicMaterial());
-  };
-  const runtime = { facePickMesh: makeMesh() };
-  ensureFacePickBvh(runtime, { proxy });
-  await tick();
-  const first = runtime.facePickMesh.geometry.boundsTree;
-  assert.ok(first, "first BVH built in idle time");
-  assert.equal(first.__builtFromIndexArray, proxy.faceIndices);
-
-  // Same arrays, fresh geometry (a selector sync): the cached BVH is reattached.
-  runtime.facePickMesh = makeMesh();
-  ensureFacePickBvh(runtime, { proxy });
-  assert.equal(runtime.facePickMesh.geometry.boundsTree, first);
-
-  // New index array (a LOD swap): the cache misses and a new BVH is built.
-  proxy.faceIndices = new Uint32Array([0, 2, 1, 0, 3, 2]);
-  runtime.facePickMesh = makeMesh();
-  ensureFacePickBvh(runtime, { proxy });
-  await tick();
-  const second = runtime.facePickMesh.geometry.boundsTree;
-  assert.ok(second && second !== first, "index identity change rebuilds the BVH");
-  assert.equal(second.__builtFromIndexArray, proxy.faceIndices);
-});
-
 test("a component released while its BVH was queued never gets a tree built for it", async () => {
   const kept = indexedGeometry();
   const released = indexedGeometry();
@@ -86,8 +53,7 @@ test("a component released while its BVH was queued never gets a tree built for 
   scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh: meshOf(kept) }, { mesh: meshOf(released) }] });
   assert.equal(released.userData.__bvhQueued, true, "both are queued before any idle slice runs");
 
-  // The publish that drops every occurrence of a component: cadScene's
-  // releaseUnusedRecordGeometry disposes the geometry and clears the flag. It
+  // A scene that drops every mesh of a geometry disposes it and clears the flag. It
   // cannot reach the already-scheduled queue, so the queue must notice.
   delete released.userData.__bvhQueued;
   released.dispose();
@@ -127,14 +93,16 @@ test("a denied BVH reservation leaves correct stock raycasting available", async
   const geometry = indexedGeometry();
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
   mesh.updateMatrixWorld();
-  const denied = [];
+  const asked = [];
   scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh }] }, {
-    reserveBuild: ({ estimatedBytes }) => ({ ok: false, detail: { requestedBytes: estimatedBytes } }),
-    onBuildDenied: (detail) => denied.push(detail),
+    reserveBuild: ({ estimatedBytes }) => {
+      asked.push(estimatedBytes);
+      return { ok: false, detail: { requestedBytes: estimatedBytes } };
+    },
   });
   await tick();
   assert.equal(geometry.boundsTree, undefined);
-  assert.equal(denied[0].requestedBytes, estimateGeometryBvhBytes(geometry));
+  assert.deepEqual(asked, [estimateGeometryBvhBytes(geometry)], "the build asked for its estimate and was refused");
   const hits = new THREE.Raycaster(
     new THREE.Vector3(0.6, 0.3, 5),
     new THREE.Vector3(0, 0, -1)
@@ -208,26 +176,6 @@ test("deferred display BVHs reject far rays and share one build after an exact f
   assert.equal(mirrorRay.intersectObject(second, false)[0]?.faceIndex, 2);
 });
 
-test("deferred BVHs honor deformation before bounds and release before the idle build", async () => {
-  const geometry = indexedGeometry();
-  geometry.computeBoundingBox();
-  const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
-  mesh.updateMatrixWorld();
-  mesh.userData.cadBeforeRaycast = () => {
-    geometry.translate(10, 0, 0);
-    geometry.computeBoundingBox();
-    delete mesh.userData.cadBeforeRaycast;
-  };
-  scheduleRuntimeRaycastBvh({ displayRecords: [{ mesh }] }, { deferUntilRaycast: true });
-  const ray = new THREE.Raycaster(new THREE.Vector3(10.6, 0.3, 5), new THREE.Vector3(0, 0, -1));
-  assert.equal(ray.intersectObject(mesh, false)[0]?.faceIndex, 0);
-  assert.equal(geometry.userData.__bvhQueued, true);
-  delete geometry.userData.__bvhQueued;
-  geometry.dispose();
-  await tick();
-  assert.equal(geometry.boundsTree, undefined, "released geometry is not built by pending demand");
-});
-
 test("deferred BVH denied admission leaves first and later picks exact", async () => {
   const geometry = indexedGeometry();
   const mesh = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ side: THREE.DoubleSide }));
@@ -241,7 +189,4 @@ test("deferred BVH denied admission leaves first and later picks exact", async (
   await tick();
   assert.equal(geometry.boundsTree, undefined);
   assert.equal(ray.intersectObject(mesh, false)[0]?.faceIndex, 0);
-  await tick();
-  mesh.userData.cadBeforeRaycast = () => false;
-  assert.deepEqual(ray.intersectObject(mesh, false), [], "deformation rejection remains authoritative");
 });

@@ -96,7 +96,6 @@ test("normalizeScreenshotCrop clamps crop rectangles to the source frame", () =>
 test("paintScreenshotImageData flattens transparent captures over a provided background", () => {
   const events = [];
   const imageData = { id: "webgl-pixels" };
-  const overlayCanvas = { id: "overlay", width: 24, height: 16 };
   const imageCanvas = {
     id: "image-canvas",
     width: 0,
@@ -125,7 +124,6 @@ test("paintScreenshotImageData flattens transparent captures over a provided bac
 
   paintScreenshotImageData(context, imageData, 24, 16, {
     backgroundColor: "rgb(250, 251, 252)",
-    overlayCanvas,
     createCanvas: () => imageCanvas
   });
 
@@ -135,8 +133,7 @@ test("paintScreenshotImageData flattens transparent captures over a provided bac
   assert.deepEqual(events, [
     ["image.putImageData", "webgl-pixels", 0, 0],
     ["main.fillRect", "rgb(250, 251, 252)", 0, 0, 24, 16],
-    ["main.drawImage", "image-canvas", 0, 0, 24, 16, 0, 0, 24, 16],
-    ["main.drawImage", "overlay", 0, 0, 24, 16, 0, 0, 24, 16]
+    ["main.drawImage", "image-canvas", 0, 0, 24, 16, 0, 0, 24, 16]
   ]);
 });
 
@@ -152,17 +149,14 @@ test("paintScreenshotImageData preserves direct image data path without a backgr
     }
   };
 
-  paintScreenshotImageData(context, imageData, 10, 8, {
-    overlayCanvas: { id: "overlay", width: 10, height: 8 }
-  });
+  paintScreenshotImageData(context, imageData, 10, 8);
 
   assert.deepEqual(events, [
-    ["putImageData", "webgl-pixels", 0, 0],
-    ["drawImage", "overlay", 0, 0, 10, 8, 0, 0, 10, 8]
+    ["putImageData", "webgl-pixels", 0, 0]
   ]);
 });
 
-test("paintScreenshotImageData crops render and overlay pixels to the visible viewport", () => {
+test("paintScreenshotImageData crops render pixels to the visible viewport", () => {
   const events = [];
   const imageData = { id: "webgl-pixels" };
   const imageCanvas = {
@@ -192,18 +186,16 @@ test("paintScreenshotImageData crops render and overlay pixels to the visible vi
 
   paintScreenshotImageData(context, imageData, 100, 60, {
     crop: { x: 8, y: 12, width: 70, height: 40 },
-    overlayCanvas: { id: "overlay", width: 100, height: 60 },
     createCanvas: () => imageCanvas
   });
 
   assert.deepEqual(events, [
     ["image.putImageData", "webgl-pixels", 0, 0],
-    ["main.drawImage", "image-canvas", 8, 12, 70, 40, 0, 0, 70, 40],
-    ["main.drawImage", "overlay", 8, 12, 70, 40, 0, 0, 70, 40]
+    ["main.drawImage", "image-canvas", 8, 12, 70, 40, 0, 0, 70, 40]
   ]);
 });
 
-test("paintScreenshotSourceCanvas copies the live framebuffer crop and registers an overlay of another pixel ratio", () => {
+test("paintScreenshotSourceCanvas copies the live framebuffer crop over its background", () => {
   const events = [];
   const context = {
     fillStyle: "#111111",
@@ -217,17 +209,13 @@ test("paintScreenshotSourceCanvas copies the live framebuffer crop and registers
 
   paintScreenshotSourceCanvas(context, { id: "webgl-canvas" }, 100, 60, {
     backgroundColor: "rgb(13, 17, 23)",
-    crop: { x: 5, y: 7, width: 70, height: 40 },
-    // The drawing editor renders at the display's pixel ratio, the viewport at
-    // its own: the same viewport, twice the pixels.
-    overlayCanvas: { id: "overlay", width: 200, height: 120 }
+    crop: { x: 5, y: 7, width: 70, height: 40 }
   });
 
   assert.equal(context.fillStyle, "#111111");
   assert.deepEqual(events, [
     ["fillRect", "rgb(13, 17, 23)", 0, 0, 70, 40],
-    ["drawImage", "webgl-canvas", 5, 7, 70, 40, 0, 0, 70, 40],
-    ["drawImage", "overlay", 10, 14, 140, 80, 0, 0, 70, 40]
+    ["drawImage", "webgl-canvas", 5, 7, 70, 40, 0, 0, 70, 40]
   ]);
 });
 

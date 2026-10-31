@@ -132,6 +132,35 @@ class ViewerPackageManagerIsDecidedByTheLockfileTest(unittest.TestCase):
         self.assertIn(resolved_viewer_package_manager(), {"npm", "pnpm"})
 
 
+class StaleRuntimeEntriesArePrunedTest(unittest.TestCase):
+    def test_an_entry_no_stage_builds_is_removed_and_the_stages_are_kept(self) -> None:
+        # The snapshot browser bundle's folder outlived its stage in a checkout and shipped in a
+        # wheel: package-data takes all of _runtime. The bundler's own function, run on a planted
+        # tree, removes what no stage owns, says so, and leaves the stages it builds.
+        bundler = VIEWER_BUNDLER.read_text(encoding="utf-8")
+        stages = re.search(r"^STAGE_DIRS=\(.*\)$", bundler, re.MULTILINE)
+        prune = re.search(r"^prune_stale_runtime\(\) \{.*?^\}\n", bundler, re.DOTALL | re.MULTILINE)
+        self.assertIsNotNone(stages, "STAGE_DIRS is gone from the runtime bundler")
+        self.assertIsNotNone(prune, "prune_stale_runtime is gone from the runtime bundler")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime = Path(temp_dir) / "_runtime"
+            for kept in ("viewer/index.html", "mcp/shell.html"):
+                (runtime / kept).parent.mkdir(parents=True, exist_ok=True)
+                (runtime / kept).write_text("built", encoding="utf-8")
+            (runtime / "browser").mkdir()
+            (runtime / "browser" / "snapshot-render.js").write_text("stale", encoding="utf-8")
+            (runtime / ".stale").write_text("stale", encoding="utf-8")
+            result = subprocess.run(
+                ["bash", "-c", f"set -euo pipefail\n{stages.group(0)}\n{prune.group(0)}\nprune_stale_runtime"],
+                check=True, capture_output=True, text=True,
+                env={**os.environ, "RUNTIME_DIR": str(runtime)},
+            )
+            self.assertEqual(sorted(path.name for path in runtime.iterdir()), ["mcp", "viewer"])
+            self.assertEqual((runtime / "viewer" / "index.html").read_text(encoding="utf-8"), "built")
+            self.assertIn("_runtime/browser: no stage builds it", result.stdout)
+            self.assertIn("_runtime/.stale: no stage builds it", result.stdout)
+
+
 class TestRunnersStartOnCurrentNodeTest(unittest.TestCase):
     def test_no_runner_passes_a_flag_current_node_rejects(self) -> None:
         # Node 24 removed --experimental-default-type, and an unknown flag is not a failed

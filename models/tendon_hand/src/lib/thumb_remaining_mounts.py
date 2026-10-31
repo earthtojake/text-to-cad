@@ -1,6 +1,6 @@
 """Remaining thumb liner datums, on their existing rigid anatomical frames."""
 import numpy as np
-from cadgen import build123d as bd
+import build123d as bd
 from lib.guide_mounts import make_phalanx_comb,_finish,_sweep
 from lib.fixed_guide_mounts import make_fixed_outlet_pair
 from lib.yaw_guide_mounts import make_yaw_reaction_mounts

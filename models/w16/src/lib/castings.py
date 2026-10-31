@@ -12,7 +12,7 @@ shop:
                   `palette.MACHINED` so the eye reads the material change.
 
 Conventions
-  * build123d algebra mode; `from cadgen import build123d as bd`.
+  * build123d algebra mode; `import build123d as bd`.
   * Every primitive is returned in its OWN local frame with the base at z=0 and
     +Z up.  The caller places it — with `locate()`, or `bd.Pos`/`bd.Rot`.
   * Millimetres.  Casting radii 3-8 mm on the block/heads/sump, 1-2 mm on small
@@ -53,7 +53,7 @@ import math
 import sys
 from typing import Callable, Iterable, Sequence
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Run BRepAlgoAPI_Check as part of is_sound(). Costs real time on big
@@ -132,12 +132,12 @@ def locate(shape, origin, z_dir, x_dir=None):
 def _is_closed(shape) -> bool:
     """Every non-degenerate edge bounded by exactly two faces."""
     from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedDataMapOfShapeListOfShape
+    from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher
     from OCP.BRep import BRep_Tool
     from OCP.TopAbs import TopAbs_ShapeEnum
     from OCP.TopoDS import TopoDS
     try:
-        m = TopTools_IndexedDataMapOfShapeListOfShape()
+        m = IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapesAndAncestors_s(
             shape.wrapped,
             TopAbs_ShapeEnum.TopAbs_EDGE,
@@ -148,7 +148,7 @@ def _is_closed(shape) -> bool:
             return False
         for i in range(1, m.Extent() + 1):
             edge = m.FindKey(i)
-            if BRep_Tool.Degenerated_s(TopoDS.Edge_s(edge)):
+            if BRep_Tool.Degenerated_s(TopoDS.Edge(edge)):
                 continue
             if m.FindFromIndex(i).Extent() != 2:
                 return False

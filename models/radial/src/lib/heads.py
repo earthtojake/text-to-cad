@@ -42,7 +42,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import castings as C
 from lib import geo, kin, palette as P, spec as S
@@ -1067,20 +1067,26 @@ def _proto_parts():
 
 
 def _step_roundtrip_ok(shape, tol=0.5):
-    """Export to STEP and read back: the bounding box must survive (a cut face
-    has once come back from STEP as a metre-long runaway surface)."""
-    import os
-    import tempfile
-    fd, path = tempfile.mkstemp(suffix=".step")
-    os.close(fd)
-    try:
-        bd.export_step(shape, path)
-        back = bd.import_step(path)
-        a, b = shape.bounding_box(), back.bounding_box()
-        return all(abs(getattr(getattr(a, m), c) - getattr(getattr(b, m), c)) <= tol
-                   for m in ("min", "max") for c in "XYZ")
-    finally:
-        os.remove(path)
+    """Export to STEP and read back, in memory: the bounding box must survive (a cut
+    face has once come back from STEP as a metre-long runaway surface). The original
+    wrote a temporary file and read it with build123d's import_step, a read past the
+    engine that would run this body on every build; the same writer writes to a
+    buffer here, and OCCT's reader reads it back from there."""
+    import io
+
+    from OCP.IFSelect import IFSelect_ReturnStatus
+    from OCP.STEPControl import STEPControl_Reader
+
+    buffer = io.BytesIO()
+    bd.export_step(shape, buffer)
+    buffer.seek(0)
+    reader = STEPControl_Reader()
+    if reader.ReadStream("roundtrip.step", buffer) != IFSelect_ReturnStatus.IFSelect_RetDone:
+        return False
+    reader.TransferRoots()
+    a, b = shape.bounding_box(), bd.BoundBox.from_topo_ds(reader.OneShape(), tolerance=1e-6, optimal=True)
+    corners = lambda box: (box.min.X, box.min.Y, box.min.Z, box.max.X, box.max.Y, box.max.Z)  # noqa: E731
+    return all(abs(p - q) <= tol for p, q in zip(corners(a), corners(b)))
 
 
 def _sane_piece(r, shape, allow_bigger=False):

@@ -13,9 +13,9 @@ Usage:
   scripts/bundle/bundle.sh [--check] [--clean]
 
 The one bundle entry point: stamps derived version metadata from VERSION, then builds
-cadgen's packaged runtime (packages/cadgen/src/cadgen/_runtime) with
+the server's packaged runtime (packages/cad-server/src/cad_server/_runtime) with
 scripts/bundle/cadgen-runtime.sh. The runtime is gitignored and ships only inside the
-wheel, so this is what produces it -- in a checkout, in CI, and before `python -m build`.
+server's wheel, so this is what produces it -- in a checkout, in CI, and before `python -m build`.
 
 Options:
   --check     Build the runtime and assert every required output exists, and check

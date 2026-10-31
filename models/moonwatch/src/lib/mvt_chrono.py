@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 from lib import finishing as F
@@ -246,7 +246,7 @@ def _pol(cx, cy, r, deg):
 
 def _finish(part, label, color):
     part.label = label
-    part.color = bd.Color(*color)
+    part.color = bd.Color(color)
     return part
 
 
@@ -294,7 +294,7 @@ def _screw_head(head_d=1.1, hh=0.24, slot_angle=0.0, color=S.BLUED):
     head = _cyl(r, hh - ch, -hh) + bd.Pos(0, 0, -ch / 2) * bd.Cone(r, r - ch, ch)
     slot = bd.Rot(0, 0, slot_angle) * bd.Box(head_d + 0.5, 0.2 * head_d, 2 * depth)
     s = head - slot
-    s.color = bd.Color(*color)
+    s.color = bd.Color(color)
     return s
 
 

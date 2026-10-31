@@ -19,7 +19,7 @@ top face sits at ``plate_top_z``; the pocket floor lands at
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 MX_HOLE = 14.0            # nominal Cherry MX plate hole, per side

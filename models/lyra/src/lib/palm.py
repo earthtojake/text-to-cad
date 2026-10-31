@@ -16,7 +16,7 @@ Articulation clearances baked into the shape:
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .chain import FINGERS, MCP_ORIGIN_MM, THUMB_CMC_ORIGIN_MM
 from .digits import (

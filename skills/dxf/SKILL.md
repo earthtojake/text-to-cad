@@ -1,6 +1,7 @@
 ---
 name: dxf
-description: Generate, regenerate, and validate 2D DXF drawings from Python build123d sources. Use for DXF files, `.py` drawing scripts, @dxf models, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Open and visually review existing DXF files in CAD Viewer.
+description: Generates, regenerates and validates 2D DXF drawings from Python build123d models, exported by text-to-cad. Use for DXF files, `.py` drawing scripts, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Opens and visually reviews existing DXF files in the CAD Viewer.
+license: MIT
 ---
 
 # DXF generation and validation
@@ -11,79 +12,104 @@ repository link is only for provenance and release review.
 
 ## Setup
 
-This skill's commands are thin entrypoints over the `cadgen` distribution, which
-carries the Python build runtime and the JavaScript it executes. Install it once:
+Run the server through the `cad` command its installation writes, so this skill's commands
+share one installation, and its server, with the CAD app's:
 
-```bash
-python -m pip install -r requirements.txt
-```
+- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.9.0 run`
 
-Drawings are build123d geometry, so a drawing build loads the CAD kernel like a
-STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs).
-`cadgen dxf snapshot` needs no Node at all: it flattens the drawing with `ezdxf`
-(which arrives with cadgen) and paints it in the bundled headless browser.
+For first-time setup or an update, a missing `cad` command, a release it says is not
+installed, a server that is not running, or an installation or kernel load error, read
+[Setup and troubleshooting](references/setup.md).
+
+Drawings are build123d geometry, so a drawing builds in the server's warm worker
+like any model: the first run of a script loads the CAD kernel (a few seconds),
+and later runs reuse it.
 
 ## Purpose
 
 Create or modify 2D DXF drawings from natural-language requirements or from CAD
-geometry, generate validated drawing artifacts, and return checked outputs. A
-DXF drawing's source of truth is a Python file named `<name>.py` defining one
-parameterless `@dxf` model function.
+geometry, export validated DXF files, and return checked outputs. A drawing's source
+of truth is a Python file named `<name>.py` defining a parameterless `@model` function
+that returns planar geometry.
 
-**A drawing is a model.** It has the same wrapper, record, freshness gate and
-build job a `@step` part has; its one output is the `.dxf` file; it has no
-geometry tree (nothing links to a drawing). Every run writes the sibling
-`<name>.dxf` (or the `out=` the decorator names); an unchanged source is a
-no-op; a drawing that calls a part model — `bracket()` inside its body — is
-stale whenever that part's GEOMETRY changes and current when it does not;
-`cadgen store why <drawing>.py` explains the verdict; `--force` rebuilds it
-anyway. The CAD Viewer and `dxf snapshot` read the `.dxf` file itself, so the
-file you hand a cutting service, the file the viewer draws and the file a
-snapshot renders are one and the same.
+**A drawing is a model.** It builds as any `$cad` model does: `python <name>.py`
+rebuilds it in the server, prints its document's `id:` and page, and writes nothing.
+The DXF is exported from that document, by build123d's own exporter, once the drawing
+checks pass: `cad export <id> drawing.dxf`. A drawing that calls a part model
+(`bracket()` in its body) builds that part in the same run. The CAD Viewer and
+`cad snapshot` read the `.dxf` itself, so the file you hand a cutting service,
+the file the viewer draws and the file a snapshot renders are one and the same.
 
 ## The contract
 
-**A `@dxf` function takes no parameters and returns build123d 2D geometry. The
-engine writes the DXF.** You never construct a document, name a file, or place
-an entity — the same division of labor `@step` has.
+**A drawing is a `@model` function that takes no parameters and returns build123d 2D
+geometry on z=0: a sketch, a face, wires or edges. `cad export` writes the DXF.**
+You never construct a document, name an entity, or write a file from the model.
 
 ```python
-from cadgen import build123d as bd
-from cadgen import dxf
-
+import build123d as bd
+from cad import model
 
 HOLE_D = 4.5
 
 
-@dxf
+@model
 def gasket():
     with bd.BuildSketch() as cut:
         bd.Rectangle(60, 40)
         bd.Circle(HOLE_D / 2, mode=bd.Mode.SUBTRACT)
-    return cut.sketch          # bare shape -> the CUT layer
+    return cut.sketch          # one shape: the CUT layer
 
 
 if __name__ == "__main__":
-    gasket()
+    gasket()                   # decoration only declares: this call builds it
 ```
 
-- **Bare shape** → one `CUT` layer. That is the whole contract for most drawings.
-- **`{layer: shape}`** → named layers, when the drawing genuinely has more than
-  one CAM operation (`CUT` / `ENGRAVE` / `SCORE`). A `Compound` whose children
-  are all labelled means the same thing.
-- **No parameters.** Dimensions are module constants (`HOLE_D = 4.5`) or
-  constants imported from the part the drawing derives from; a different
-  drawing is a different file.
+```bash
+python src/gasket.py                       # prints id: and view:
+cad export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
+```
+
+- **One shape** is one layer, `CUT`. That is the whole contract for most drawings.
+- **A layer per part** when the drawing genuinely has more than one CAM operation:
+  return a `Compound` of labelled children, each label its layer
+  (`profile.label, marks.label = "CUT", "ENGRAVE"`). Children sharing a label share
+  a layer, and several shapes make one part of a layer as
+  `bd.Compound([a, b], label="ENGRAVE")`. A layer name may not be empty or hold any
+  of `<>/\":;?*|=` and a backtick.
+- **Planar means 2D, on z=0.** The export refuses a document holding a solid
+  (`bracket is 3D: a DXF is drawn from 2D geometry a model returns`) and an edge with
+  any point more than 1e-6 mm off z=0, by its element name. A face taken from a solid
+  sits at that solid's height; relocate it (`flatten.flatten_face(face)`, or
+  `bd.Location((0, 0, -z)) * face`).
+- **No parameters.** Dimensions are module constants (`HOLE_D = 4.5`) or constants
+  imported from the part the drawing derives from; a different drawing is a
+  different `@model` function.
 - **Text** is `bd.Text(...)` engraved OUTLINES on a marking layer, never a DXF
   `TEXT` entity: cut and marking toolchains consume geometry, and font rendering
   inside CAM is unreliable.
-- **Geometry must lie in the XY plane.** A face taken from a solid sits at that
-  solid's height; relocate it (`flatten.flatten_face(face)`, or
-  `bd.Location((0, 0, -z)) * face`). The engine REFUSES off-plane geometry rather
-  than silently writing its XY shadow.
-- **Output bytes are a function of the geometry.** Layers are sorted by name and
-  entities by geometric content, so an unchanged drawing rebuilds to an identical
-  file, cold or warm, on any machine.
+- **Output bytes are a function of the geometry.** Layers are written in name order
+  and entities in an order of their content, so an unchanged drawing exports an
+  identical file, on any machine, and the file is replaced only when its bytes
+  change.
+- **Drawings delivered after every change** go in an `exports.py` beside them that
+  imports each drawing and calls `export(drawing, path)` (the model function itself,
+  or the handle its call returns):
+
+  ```python
+  # src/exports.py
+  from pathlib import Path
+
+  from cad import export
+
+  from gasket import gasket
+
+  ROOT = Path(__file__).resolve().parent.parent
+
+  if __name__ == "__main__":
+      export(gasket, ROOT / "DXF/gasket.dxf")
+  ```
 
 ## The three DXF workflows
 
@@ -93,51 +119,50 @@ Copy the full template for the applicable workflow from
 1. **Drafted from scratch** (gaskets, panels, templates, cut layouts with no 3D
    model behind them): a `<name>.py` that builds sketches and returns them.
 
-2. **Flat pattern of a generated STEP part**: a drawing script beside the model
-   it derives from, with its OWN stem (one model per file — `bracket_drawing.py`
-   beside `bracket.py`). Import the model and call it, exactly as an assembly
-   composes a child: importing never builds, and inside the drawing's build the
-   call returns the part's geometry (building the part first if it is stale).
+2. **Flat pattern of a part this project models**: a drawing script beside the
+   model it derives from, with its OWN stem (`bracket_drawing.py` beside
+   `bracket.py`). Import the model and call it, exactly as an assembly composes a
+   child: importing never builds, and inside the drawing's run the call builds the
+   part in the same run and returns its geometry.
 
    ```python
-   from cadgen import dxf, flatten
-   from bracket import bracket        # a child: tracked by its RESULT
+   from cad import flatten, model
+
+   from bracket import bracket        # the model: importing builds nothing
 
    KERF = 0.15
 
 
-   @dxf
+   @model
    def bracket_drawing():
-       return flatten.flat_pattern(bracket(), coordinate=3.0, kerf=KERF)
+       return flatten.flat_pattern(bracket().shape, coordinate=3.0, kerf=KERF)   # the top face's height
 
 
    if __name__ == "__main__":
        bracket_drawing()
    ```
 
-   The drawing's record pins the part's tree, so a part edit that changes its
-   geometry makes the drawing stale, and one that does not (a comment, a
-   refactor, a colour) leaves it current. Constants imported from the part
-   (`from bracket import THICKNESS`) are tracked by value the same way.
+   An edit to the part re-runs the drawing's body on its next run; an edit the
+   part's body does not reach (a comment, another model) re-runs nothing.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
-   read it with `cadgen.read_step` (warm from the store, the same geometry as
-   `build123d.import_step`). Like every file a build reads, it is an input:
-   replacing the vendor STEP makes the drawing stale on its own, with no `--force`.
+   read it with `read_step`, or convert it once (`cad export vendor_panel.step
+   vendor_panel.xbf`) and read the xbf with `read_xbf`, which is faster. Like every
+   file a run reads, it is an input: replacing the vendor file re-runs the drawing.
 
    ```python
    from pathlib import Path
 
-   from cadgen import dxf, flatten, read_step
+   from cad import flatten, model, read_step
 
-   _HERE = Path(__file__).resolve().parent
+   HERE = Path(__file__).resolve().parent
 
    KERF = 0.15
 
 
-   @dxf
+   @model
    def panel_flat():
-       panel = read_step(_HERE / "imported" / "vendor_panel.step")   # recorded input
+       panel = read_step(HERE / "vendor" / "vendor_panel.step")   # an input, by its bytes
        return flatten.flat_pattern(panel, coordinate=3.0, kerf=KERF)
 
 
@@ -145,24 +170,14 @@ Copy the full template for the applicable workflow from
        panel_flat()
    ```
 
-   **Never read a STEP this project generates.** Reading the `.step` a `@step`
-   model writes is not a loop, it is a drawing whose input changes on every run of
-   the model: the freshness gate can never say "current", every build is a full
-   rebuild, and the flat pattern depends on what the last run left on disk. Keep
-   source STEPs in an `imported/` directory beside the drawing, committed like any
-   other input — input path and output path being different files is the whole
-   rule. For a STEP this project DOES generate, use workflow 2 instead: import the
-   model script and call it, which is tracked by result and never touches an
-   artifact.
+   **Never read a file this project exports.** Keep source STEPs in a `vendor/`
+   directory beside the drawing, committed like any other input. For a part this
+   project models, use workflow 2: import the model and call it.
 
-One model per file is the recommendation, and a drawing gets its own script:
-a file MAY declare several models — two `@dxf` drawings, or a `@dxf` beside a
-`@step` — and each is its own record, output and job (a sole model writes
-`<file>.dxf`; models sharing a file write `<function>.dxf`), but they share the
-file's closure, so editing one rebuilds them all. A drawing composes models,
-never the reverse: calling a `@dxf` function from a `@step` body is just its 2D
-geometry and links nothing. The viewer catalog is artifacts-only: scripts never
-list; the `.dxf` the run writes is the entry the viewer renders.
+One model per file is the recommendation, and a drawing gets its own script. A
+file MAY declare several models (two drawings, or a drawing beside a part's
+`@model`): `python <file>.py` builds every one its `__main__` block calls, each with
+its own id. A drawing composes models, never the reverse.
 
 ## Use this skill when
 
@@ -177,175 +192,158 @@ SendCutSend-specific upload preflight.
 
 Use these defaults unless the user specifies otherwise:
 
-- Units: millimeters. The engine sets them; a drawing never declares units.
+- Units: millimeters. The server sets them; a drawing never declares units.
 - Geometry lives at 1:1 scale in the XY plane.
-- Cut profiles close. Open contours belong on bend/engrave/reference layers —
-  generation validation enforces this (see Validation).
+- Cut profiles close. Open contours belong on bend/engrave/reference layers:
+  the drawing checks enforce this (see Validation).
 - For CAD-backed parts, derive contours from the real topology with
-  `cadgen.flatten` rather than redrawing them: `planar_faces` selects,
+  `cad.flatten` rather than redrawing them: `planar_faces` selects,
   `flatten_face` lays a face into XY exactly, `union_faces` fuses, and
   `flat_pattern` does all of it in one call. Hand-drawn parametric outlines only
   when there is no reliable 3D topology.
 - Kerf / tool-radius compensation is `flatten.offset_profile(shape, amount)` or
   `flat_pattern(..., kerf=...)`; never hand-offset coordinates.
-- **Curves stay curves.** The union and the offset are exact OCC operations, so a
-  filleted corner exports as an `ARC` and a hole as a `CIRCLE`, kerf included. A
-  profile that comes out as hundreds of short `LINE`s means something fell back
-  to the sampled path — investigate rather than accept it.
+- **Curves stay curves.** The union and the offset are exact OCC operations, and
+  each edge is written as one entity, so a filleted corner exports as an `ARC` and a
+  hole as a `CIRCLE`, kerf included. A profile that comes out as hundreds of short
+  `LINE`s means something fell back to the sampled path: investigate rather than
+  accept it.
 - Layers carry intent: keep cut geometry and bend/fold lines on separate layers,
-  and include "bend" in bend-layer names so downstream tools classify them as
+  and name bend layers with `bend` or `fold` so downstream tools classify them as
   bends rather than cuts.
 - DXF layers are drawing structure, not STEP part/assembly structure.
 
 ## Tool
 
 ```bash
-python <drawing>.py [flags]                    # its __main__ calls the @dxf model, which writes the .dxf
-cadgen dxf snapshot <drawing.dxf> <file.png>   # render it
-cadgen store why <drawing>.py                  # why the drawing is stale or current
+python path/to/drawing.py                                   # builds every model its __main__ calls
+cad export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
+cad snapshot path/to/drawing.dxf review.png              # draws it
+cad snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
 ```
 
-**Running the script (its `__main__` call) is the only door.** There is no
-`cadgen dxf build`: a `.dxf` has no derived state a command must materialize —
-the file IS the product, and both the CAD Viewer and `dxf snapshot` draw it
-straight from its own bytes. The drawing's gate makes a rebuild cheap: an unchanged
-source whose `.dxf` still verifies and whose part children are unchanged is a
-no-op, and `--force` rebuilds anyway. The bytes are a function of the
-drawing's GEOMETRY, so a cold run and a warm daemon worker write the same
-file. Builds never wait on or cancel one another; a drawing that calls parts
-builds them in parallel like any parent.
+**Running the script is the only way to build a drawing, and exporting it the only
+way to write its DXF.** `python <drawing>.py` takes no options and writes nothing; it
+prints each model's report (`built src/gasket.py::gasket cold in 2.29s: ...`), its
+`id:` and its page, and exits 1 when a body raises. `cad export` exits 2 when the
+export refuses the drawing (3D, off the plane, a failed drawing check), naming which.
+An imported `.dxf` needs nothing at all: hand it straight to a snapshot or the viewer.
 
-An imported `.dxf` needs nothing at all — hand it straight to snapshot or the
-Viewer.
+Paths on the command line, and those `export` takes from Python, resolve from the
+working directory; anchor them on `__file__` in an `exports.py`. Keep a drawing
+script in the same directory as the geometry it derives from, named `<name>.py`.
 
-Use the active project Python interpreter; treat `python` as an interpreter
-placeholder, and use `--help` for the full interface. Target paths resolve from
-the command's current working directory; run from the workspace that owns the
-artifacts with cwd-relative target paths. Keep a drawing script in the same
-directory as the geometry it derives from, named `<name>.py`.
+`cad snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole,
+from above, fitted with a margin, in the pens the file declares (an entity with no
+pen of its own takes the paper's ink), on light paper or, with
+`--display '{"appearance": "dark"}'`, dark. `--size-profile`, `--width` and
+`--height` size it; `--camera` takes a plan view (below), `--annotation` ink on the
+sheet and `--measurements` dimensions; every other flag is refused by name, and what
+it does not draw (points, hatch patterns, images) is named in a warning. OUT is
+written exactly as given and must be a `.png`; check the exit status before reading
+it, since a refused or failed snapshot writes nothing.
 
-Flags (a model script runs itself; there is no generation CLI):
-
-- `--force` — regenerate even when the recorded output is current.
-- `--verbose`, `--json`.
-
-A run answers on stdout exactly as a STEP model's does — `built DXF/plate_drawing.dxf`
-or `current DXF/plate_drawing.dxf` — with progress on stderr; `--json` makes the
-result one JSON line (`outcome`, `document`, and `tree`, which is null for a
-drawing) and the progress one JSON line per transition.
-
-One script, one drawing: run each script you want built. Do not put output paths
-in the `@dxf` function's return value; `out=` on the decorator is the only
-place a drawing names its destination (relative to the script).
-
-`cadgen dxf snapshot` draws a drawing flat, to a PNG still — the same picture
-the CAD Viewer shows, from the same flattening, through the same drawing code:
+A Quick Edit prompt from a drawing carries a packet (inline JSON or a
+`.snapshot.json` path; save inline JSON to a file first) whose views are plan-view
+`camera` windows (`{"position": [x, y, d], "target": [x, y, 0], "up": [0, 1, 0],
+"orthographicHalfHeight": h}`, looking straight down) and whose `annotation` marks
+are in drawing coordinates, on the sheet. Draw what the person saw, each window with
+their ink and dimensions on it, before editing:
 
 ```bash
-cadgen dxf snapshot path/to/imported.dxf review.png
-cadgen dxf snapshot path/to/drawing.dxf review.png --appearance dark
+cad snapshot --job tmp/panel.snapshot.json                     # every view, into the paths its jobs name
+cad snapshot panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
 ```
 
-It takes the `.dxf` document only — a model script is refused by name (run
-`python <drawing>.py`, then snapshot the drawing it wrote). The whole drawing is
-fitted to the image and painted head on, in the pens the file declares; an
-entity with no pen of its own (ACI 7) takes the appearance's foreground on its
-background. The command flattens the drawing with `ezdxf` and renders it through
-the shared snapshot CLI (`cadgen.snapshot_cli`) and the same headless browser
-runtime every rendering skill uses.
-
-OUT — the second positional — is written exactly as given, with a relative path resolved against the
-current working directory. The target is deleted before the render starts and the
-finished image is written atomically, so: reuse one name while iterating (every read
-is provably the render you just ran), name the iterations when you genuinely need to
-compare two. Invalid request combinations fail before touching OUT; after a request is
-accepted, OUT is cleared first so a later failure leaves a missing file instead of
-a stale image. A directory (`tmp/` as OUT) is the
-don't-care case and gets a generated timestamped name inside it, printed on the
-`saved snapshot:` line.
-
-Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--appearance
-light|dark`, `--size-profile`, `--width`/`--height`, `--job`, `--debug`,
-`--json`. That is the whole surface: a drawing is not a scene, so there is no
-camera to pose, no display settings to configure, no render mode, no parts to
-list, no section to cut and no view to label — `--camera`, `--display`,
-`--mode` and `--view-labels` are not flags this command has. A `--job` file that
-carries any of them (or `scale`, an output `label`/`viewLabel`, or
-`output.padding`/`viewLabels`/`tightFrame`) is refused by name before anything
-is rendered; a job's `output.renderScale` and `output.transparent` still apply.
-
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
-directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;
-review geometry visually (see [Show the model](#show-the-model)).
+directly (it arrives with build123d), and `validate_dxf_file` for the drawing
+checks; review geometry visually (see [Show the model](#show-the-model)).
 
 ## Workflow
 
 1. Convert the request into a short brief: outline dimensions, holes and slots, layers, units, output path, and validation targets.
-2. Pick the workflow: drafted from scratch, flat pattern of a generated model (create and validate the 3D geometry with `$cad` first), or flat pattern of an imported STEP.
+2. Pick the workflow: drafted from scratch, flat pattern of a modelled part (create and validate the 3D geometry with `$cad` first), or flat pattern of an imported STEP.
 3. Write or edit the `<name>.py` source with meaningful dimensions as named constants, reusing the model's geometry helpers instead of duplicating formulas.
-4. Run each drawing script directly (`python <drawing>.py`); do not sweep directories.
+4. Run each drawing script directly (`python <drawing>.py`); do not sweep directories. Then export each drawing to its DXF:
 
 ```bash
 python path/to/source.py
-python path/to/source.py --force
+cad export "$ID" path/to/drawing.dxf
 ```
 
-5. Validate the generated DXF deterministically, then hand off and report.
+5. Validate the exported DXF deterministically, then hand off and report.
 
 ## Show the model
 
-Show the user each file you create or change, and any they ask to see. Snapshots and
-validation don't replace this.
+Show the user each model you create or change, and any model or file they ask to see.
+A file you export is a download: give its path, do not open it.
+Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
+own work; review with `cad snapshot`.
 
-- If your tools include `cad_show` (your host may prefix it), use it, and follow its
-  description for when to call it again. `cad_view` reads what the user selected;
-  `cad_screenshot` shows you what they see. Neither is a review of your own work.
-- Otherwise run the CAD Viewer from the models directory (usually `models/`, not an
-  artifact's output folder):
+- If your tools include `cad_show` (your host may prefix it), call it with the model's id
+  or the file's absolute path, and follow its description for when to call it again.
+  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
+  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
+  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
+  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
+  nothing: its `cad_show` opens the model's page in the user's browser and answers with
+  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
+  `cad_export` are on every host. Call only the tools you have, and never say a card
+  shows a model when your host drew none.
+- Otherwise give the user the page's link once: a model's page is the `view:` line its
+  run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json --detach
+  cad viewer --json FILE [FILE ...]
   ```
 
-  `--detach` returns once the viewer answers requests and leaves it running in the
-  background: always pass it, since a foreground viewer never exits (and piping its
-  output through `tail` can hide the URL for good). It starts or reuses the viewer.
-  Read `url` from its one JSON line (never guess the port); for each file under that
-  directory return `url?file=<URL-encoded relative path>`, or `url` alone to review the
-  directory. If it fails to launch, say so.
+  The command ensures this installation's server, registers each file and prints
+  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
+  JSON line (never guess the port); the URL carries its token query. A page follows
+  every later run of its model and every rewrite of its file, so share it once.
+  Return that link to the user. If it fails to launch, say so.
 
-The viewer renders saved DXF files as read-only 2D drawings; it never runs
-generation scripts. Drag to pan, wheel/pinch to zoom, double-click to fit.
+A drawing script's model has a page, but it shows a flat face in the 3D viewer, with no
+pens, layers or entity refs. The drawing a person wants is the exported `.dxf`, which the
+viewer opens as a read-only 2D drawing with its layers (it never runs drawing scripts):
+show the `.dxf` when they ask to see the drawing, and give its path otherwise. Drag to pan, wheel/pinch to zoom, double-click to fit. Its
+Select, Pencil, Shapes and Measure feed Quick Edit, whose prompt names what the person
+picked as references into the drawing by entity HANDLE: `panel.dxf#h2F` is the
+modelspace entity whose handle is `2F` (`doc.entitydb["2F"]` in ezdxf); anything a
+block reference draws is named by its INSERT, and a dimension is one entity. The
+prompt's chip reads it as the entity's type and layer ("Circle on CUT"). Measurements
+are in the unit `$INSUNITS` declares ("units" when it declares none).
 
 ## Validation
 
-Validation happens IN generation, not after: every `@dxf` build runs the drawing
-checks on the document the engine just serialized, before anything is written, and
-a build with error findings fails. The checks: cut-layer profiles must close
-(polylines, circles, or chained line/arc loops), zero-length/degenerate entities are
-rejected, exact duplicate geometry (double-cut risk) is rejected, explicitly unitless
-documents are rejected, and an empty modelspace is rejected. Open geometry is allowed
-only on bend/engrave/reference-intent layers (matched by name).
+Validation happens IN the export, not after: every DXF export runs the drawing
+checks on the document it is about to write, and an error refuses the file, naming
+the check (`[error] open_cut_profile: cut layer 'CUT' has segment endpoints that do
+not close a loop ...`). The checks: units are set, nothing is drawn twice (an exact
+duplicate is a double cut), no entity has zero length, every cut profile closes
+(polylines, circles, and chains of lines, arcs and splines), and something is drawn.
+Open geometry is allowed only on a layer whose name's words make it a bend (`bend`,
+`fold`), engraving (`engrave`, `etch`) or reference layer (`ref`, `note`,
+`construction`, `dim`, `center`, `hidden` and the like).
 
-The same checks run post-hoc on any existing `.dxf` file — including one that
-never came from a generator — through `cadgen.drawing_checks`:
+The same checks run on any existing `.dxf` file, including one that never came
+from a model:
 
 ```python
-from cadgen.drawing_checks import validate_dxf_file
+from cad.engine.export.dxf import validate_dxf_file
 
 for finding in validate_dxf_file("path/to/file.dxf"):
     print(finding.render())
 ```
 
 Beyond the built-in checks, verify requested dimensions with targeted `ezdxf` reads
-(entity counts by layer, drawing extents, every dimension the user specified) against
-the generated sibling `.dxf` (or the `out=` path when one is declared), and
-review geometry visually in the CAD Viewer:
+(entity counts by layer, drawing extents, every dimension the user specified)
+against the exported `.dxf`, and review geometry visually in the CAD Viewer:
 
 ```python
 import ezdxf
 
-doc = ezdxf.readfile("path/to/source.dxf")
+doc = ezdxf.readfile("path/to/drawing.dxf")
 msp = doc.modelspace()
 cut = msp.query('*[layer=="CUT"]')
 holes = msp.query('CIRCLE[layer=="CUT"]')
@@ -355,7 +353,8 @@ Report only checks that actually ran.
 
 ## Handoff
 
-Show every drawing you created or changed ([Show the model](#show-the-model)).
+Give the path of every `.dxf` you created or changed, and show it when the person asks to
+see the drawing ([Show the model](#show-the-model)).
 Report any failure explicitly.
 
 Final responses should include generated files, returned viewer links, validation

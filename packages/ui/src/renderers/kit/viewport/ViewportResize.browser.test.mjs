@@ -1,16 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { createServer } from 'node:http';
-import { build } from 'esbuild';
+import { harnessBundle } from '../../harness/bundle.mjs';
 import { chromium } from 'playwright';
 
-// A viewer whose box changes size in ONE layout step (the file tree opening, the tool
-// stack widened, a window snap) must paint the model at the new size in the very frame
-// that layout lands in. The canvas is sized 100% by CSS, so a drawing buffer or a render
+// A viewer whose box changes size in ONE layout step (the tool stack widened, a window
+// snap) must paint the model at the new size in the very frame that layout lands in.
+// The canvas is sized 100% by CSS, so a drawing buffer or a render
 // left for a later frame shows the old picture stretched over the new box for a frame.
 //
 // A ResizeObserver callback runs after layout and before paint, and observers are called
@@ -34,11 +32,9 @@ const FILES = { 'part.stl': Buffer.from(stlBox([20, 12, 30])) };
 const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
 
 async function serveHarness(t) {
-  const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-resize-browser-'));
   let server, browser;
-  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
-  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl', '.svg': 'dataurl' } });
-  const bundle = await readFile(join(temporary, 'harness.js'));
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); });
+  const { bundle } = await harnessBundle();
   const css = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
@@ -48,10 +44,10 @@ async function serveHarness(t) {
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: Object.entries(FILES).map(([file, data]) => (
-        { kind: file.split('.').pop(), file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
+      response.end(JSON.stringify({ entries: Object.entries(FILES).map(([file, data]) => (
+        { kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
@@ -90,7 +86,7 @@ async function serveHarness(t) {
 }
 
 // Opening over: no draw call for longer than the viewport's open-fit window. Opening settles
-// in steps (the open fit, the panel column, the projection), each a draw, and until it has been
+// in steps (the open fit, the projection), each a draw, and until it has been
 // quiet for OPEN_FIT_SETTLE_MS (600 ms, `ShellViewport.jsx`) a resize re-fits instead of
 // rescaling. Awaited as a quiet spell, however long a slow GL takes to reach it.
 const idle = page => page.waitForFunction(() => new Promise(resolve => {
@@ -193,7 +189,7 @@ function assertPaintedAtNewSize(record, ratio, settled, label) {
 test('a viewer resized in one step paints the model at its new size in that same frame', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open();
-  // Let opening settle (the open fit, the panel column, the projection) before resizing.
+  // Let opening settle (the open fit, the projection) before resizing.
   await idle(page);
   await installProbe(page);
   const ratio = await restingRatio(page);
@@ -214,15 +210,7 @@ test('a viewer resized in one step paints the model at its new size in that same
   const [widened] = await page.evaluate(() => window.__resizeProbe.records);
   assertPaintedAtNewSize(widened, ratio, await settledSignature(page), 'one-step widening');
 
-  // 3. The file explorer opens OVER the viewer: its box keeps its size, so nothing is resized.
-  await page.evaluate(() => window.__resizeProbe.mark());
-  await pane.locator('[data-file-panel][aria-label="Show files"]').click();
-  await pane.locator('[data-file-explorer]').waitFor();
-  await frames(page, 2);
-  assert.deepEqual(await page.evaluate(() => window.__resizeProbe.records), [], 'opening the explorer resized nothing');
-  await pane.locator('[data-file-panel][aria-label="Hide files"]').click();
-
-  // 4. A drag resizes once per frame; every frame is painted at its own size, and the
+  // 3. A drag resizes once per frame (the explorer floating over the view resizes nothing: `FileViewer.browser.test.mjs`); every frame is painted at its own size, and the
   //    viewport draws no more than one picture per frame to do it.
   await page.evaluate(() => window.__resizeProbe.mark());
   const drawsPerFrame = await page.evaluate(() => new Promise(resolve => {
@@ -250,10 +238,49 @@ test('a viewer resized in one step paints the model at its new size in that same
   assert.ok(Math.max(...drawsPerFrame) <= drawsPerPicture,
     `a drag draws at most one picture a frame (draw calls per frame ${drawsPerFrame.join(',')}, one picture is ${drawsPerPicture})`);
 
-  // 5. At rest again, nothing is drawn: render on demand holds.
+  // 4. At rest again, nothing is drawn: render on demand holds.
   await frames(page, 4);
   const idleBefore = await page.evaluate(() => window.__glDraws || 0);
   await frames(page, 10);
   assert.equal(await page.evaluate(() => window.__glDraws || 0), idleBefore, 'an idle viewer draws nothing');
+  assert.deepEqual(errors, []);
+});
+
+// The viewport's frame is the browser's: drawn in the next animation frame, however late that comes
+// (a GPU behind on the frames it was handed holds every frame back, and holding this one back with
+// them is what keeps the page answering), and only a HIDDEN document, which gets no animation
+// frames at all, draws its frame from a timer -- as it hides, and 120 ms after each later request
+// (`useViewerRuntime.js`, `requestRender`). The regression this holds off drew from the timer
+// whenever a frame was late, five draws for every frame shown under a software GL, and left the
+// page frozen for the GPU's backlog after every drag. It shares this file's harness.
+test('a late frame waits for the browser while the page is visible, and is drawn as the page hides', async (t) => {
+  const { open } = await serveHarness(t);
+  const { page, pane, errors } = await open();
+  await idle(page);
+  const box = await pane.locator('[aria-busy="false"] > div > canvas').first().boundingBox();
+  // Animation frames withheld, as a browser behind on its frames withholds them: the viewport's
+  // `requestAnimationFrame` never calls back. (Playwright's own waits run in a world of their own.)
+  await page.evaluate(() => {
+    window.requestAnimationFrame = () => 0;
+    window.cancelAnimationFrame = () => {};
+    window.__drawsAtMark = window.__glDraws || 0;
+  });
+  // The camera moves: a frame is asked for.
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, -120);
+  const outcome = await page.evaluate(() => new Promise(resolve => {
+    const drawn = () => (window.__glDraws || 0) - window.__drawsAtMark;
+    // Five of the timer's periods with the page visible, then the document hides: its owed frame is
+    // drawn in the event.
+    setTimeout(() => {
+      const whileVisible = drawn();
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'hidden' });
+      Object.defineProperty(document, 'hidden', { configurable: true, get: () => true });
+      document.dispatchEvent(new Event('visibilitychange'));
+      resolve({ whileVisible, onceHidden: drawn() });
+    }, 600);
+  }));
+  assert.equal(outcome.whileVisible, 0, 'a visible page draws no frame from the timer while the browser withholds its frames');
+  assert.ok(outcome.onceHidden > 0, 'the hidden document is drawn its owed frame as it hides');
   assert.deepEqual(errors, []);
 });

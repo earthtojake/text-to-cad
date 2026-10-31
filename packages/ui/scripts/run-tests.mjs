@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -54,7 +55,19 @@ const run = (files, concurrency) => files.length ? spawnSync(process.execPath, [
 
 // Both passes run, so one failing pass still reports the other's results.
 const status = run(nodeTests, 4) || 0;
-const browserStatus = run(browserTests, browserConcurrency) || 0;
+// The renderer harness every browser spec serves, bundled once for the pass (`harness/bundle.mjs`).
+let browserStatus = 0;
+if (browserTests.length) {
+  const { HARNESS_DIR, buildHarness } = await import("../src/renderers/harness/bundle.mjs");
+  const folder = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-harness-"));
+  try {
+    await buildHarness(folder);
+    process.env[HARNESS_DIR] = folder;
+    browserStatus = run(browserTests, browserConcurrency) || 0;
+  } finally {
+    fs.rmSync(folder, { recursive: true, force: true });
+  }
+}
 if (status !== 0 || browserStatus !== 0) process.exit(status || browserStatus);
 if (!requestedTests.length) {
   const unit = spawnSync(process.execPath, [path.join(packageRoot, '../../node_modules/vitest/vitest.mjs'), 'run', '--config', path.join(packageRoot, 'vitest.config.ts')], { cwd: packageRoot, env: process.env, stdio: 'inherit' });

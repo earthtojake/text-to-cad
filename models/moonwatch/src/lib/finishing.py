@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import spec as S
 
@@ -85,7 +85,7 @@ def slotted_screw(
     shank_length: float = 0.8,
     slot_width: float = S.SCREW_SLOT_WIDTH,
     slot_depth: float = S.SCREW_SLOT_DEPTH,
-    color: tuple = S.BLUED,
+    color: str = S.BLUED,
     domed: bool = True,
 ) -> bd.Part:
     """Polished slotted screw, head top at z=0, shank hanging below.
@@ -121,7 +121,7 @@ def slotted_screw(
         shank_diameter / 2, shank_length, align=(None, None, None)
     )
     screw = head + shank
-    screw.color = bd.Color(*color)
+    screw.color = bd.Color(color)
     return screw
 
 
@@ -137,7 +137,7 @@ def jewel(
     diameter: float = S.JEWEL_DIAMETER,
     thickness: float = 0.4,
     domed: bool = True,
-    color: tuple = S.RUBY,
+    color: str = S.RUBY,
 ) -> bd.Part:
     """Ruby jewel disk, top surface at z=0. Slightly domed top face."""
     r = diameter / 2.0
@@ -147,7 +147,7 @@ def jewel(
         dome = bd.Pos(0, 0, -math.sqrt(dome_r**2 - r**2)) * bd.Sphere(dome_r)
         body = body & dome
         body = bd.Pos(0, 0, 0.06) * body
-    body.color = bd.Color(*color)
+    body.color = bd.Color(color)
     return body
 
 
@@ -305,7 +305,7 @@ def train_wheel(
     rim_width_frac: float = 0.10,
     spoke_count: int = 5,
     hub_diameter: float | None = None,
-    color: tuple = S.GILT,
+    color: str = S.GILT,
     tooth_depth_frac: float = 0.12,
 ) -> bd.Part:
     """Gilded going-train wheel: toothed ring, thin rim, crossed-out web
@@ -353,7 +353,7 @@ def train_wheel(
             spokes = s if spokes is None else spokes + s
         wheel = wheel - (cut_ring - spokes)
 
-    wheel.color = bd.Color(*color)
+    wheel.color = bd.Color(color)
     return wheel
 
 
@@ -361,7 +361,7 @@ def pinion(
     leaf_count: int,
     outer_diameter: float,
     length: float,
-    color: tuple = S.STEEL_DARK,
+    color: str = S.STEEL_DARK,
 ) -> bd.Part:
     """Polished-steel pinion with `leaf_count` rounded leaves, axis Z,
     mid-plane z=0."""
@@ -376,7 +376,7 @@ def pinion(
     )
     leaves = [bd.Rot(0, 0, 360.0 * k / leaf_count) * proto for k in range(leaf_count)]
     p = body + leaves
-    p.color = bd.Color(*color)
+    p.color = bd.Color(color)
     return p
 
 
@@ -388,7 +388,7 @@ def heart_cam(
     diameter: float = 3.2,
     thickness: float = 0.5,
     bore: float = 0.5,
-    color: tuple = S.STEEL_BRIGHT,
+    color: str = S.STEEL_BRIGHT,
 ) -> bd.Part:
     """Classic polished heart-shaped reset cam, point at +Y, axis Z,
     bottom at z=0. The heart spiral profile is drawn with splines so the
@@ -409,7 +409,7 @@ def heart_cam(
         bd.make_face()
         bd.Circle(bore / 2, mode=bd.Mode.SUBTRACT)
     cam = bd.extrude(sk.sketch, amount=thickness)
-    cam.color = bd.Color(*color)
+    cam.color = bd.Color(color)
     return cam
 
 

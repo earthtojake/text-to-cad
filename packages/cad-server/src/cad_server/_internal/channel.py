@@ -1,0 +1,165 @@
+"""Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
+
+Each plugin says both in its CAD server's startup config, as the server's environment:
+``CAD_INSTALL_CHANNEL=<id>``, plus ``CAD_AUTO_UPDATED=1`` when something other than the person
+keeps that copy up to date (the store that reviewed it). The build
+that makes the plugin writes them; nothing works them out from folders, ids or a host's
+internals. The CAD Viewer the server starts inherits them. They are environment, not flags,
+because a plugin's config pins a release of cadgen that may predate a setting: a cadgen ignores an
+environment variable it does not know, where a flag it does not know would stop the server.
+
+Only the server hears it, though, and most of CAD's work is not the server's: a skill's ``cadgen``
+command, a model script and the CAD Viewer a skill opens run with nothing a plugin set -- nor is the
+counting: the server's sessions are counted by the engine, whose environment is whoever started it,
+often ``python model.py``. So the engine writes down, for its installation, the channel each plugin's stdio
+transport says as it opens a session (``remember``, from the transport's initialize): the device runs one
+installation, the current one, whose engine every transport reaches and whose ``cadgen`` command every
+skill runs. Any process of that installation
+that was not told a channel itself reports the one written down (``recorded``), re-read with each batch,
+as the engine outlives the server that wrote it. Where two plugins pin the same release on one machine
+they share an installation, and the server that started last is the one written down: the app most
+likely in use. A server no plugin named is configured by hand: what it counts says ``unknown``, unless
+a plugin's server once ran from its installation, whose channel it then shares.
+
+cadgen reads a channel as a token and nothing more: telemetry reports it, and nothing decides by
+its name but ``dev``, a development install (and a source tree, installed editable or imported from
+a checkout by path), which hears of no release and sends no telemetry by default. A process of an
+installation no plugin's server ever ran from -- a skills-only install, or cad run by hand -- is
+``unknown``. Which app runs a server is not a channel either: the MCP handshake says that
+(``clientInfo``), so a plugin several apps read names one channel.
+
+Whether a copy hears of a new release (``cad_server/updates.py``) is ``told``: not when something
+keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
+release of cadgen: its startup config says it all.
+"""
+
+from __future__ import annotations
+
+import functools
+import hashlib
+import json
+import logging
+import os
+import re
+from pathlib import Path
+
+ENV = "CAD_INSTALL_CHANNEL"
+AUTO_UPDATED_ENV = "CAD_AUTO_UPDATED"
+DEV = "dev"
+UNKNOWN = "unknown"
+_TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
+# Where each installation's channel is written down, in the state directory, and how many installations
+# it keeps: the most recently written, as uv makes a new one for each release a plugin pins.
+RECORD = "install-channels.json"
+KEPT_INSTALLATIONS = 16
+
+LOG = logging.getLogger("cad_server.channel")
+
+
+def is_channel(value: object) -> bool:
+    """Whether ``value`` is a channel a plugin can name: a short lowercase token."""
+    return isinstance(value, str) and bool(_TOKEN.fullmatch(value)) and value != UNKNOWN
+
+
+@functools.cache
+def _source_tree() -> bool:
+    """An editable install, or cadgen imported from a checkout by path -- as the engine daemon and its
+    workers are (``PYTHONPATH`` names the checkout's ``src`` first), where the first metadata found
+    can be a build's leftover rather than the editable install's record. Told by where cadgen is
+    imported from before any metadata is read: the scan costs every command that counts something
+    tens of milliseconds, and cadgen imported from a folder of installed packages is no source tree
+    (an editable install imports from its source)."""
+    package = Path(__file__).resolve().parents[1]  # cadgen/
+    if package.parent.name == "src" and (package.parents[1] / "pyproject.toml").is_file():
+        return True
+    if package.parent.name in ("site-packages", "dist-packages"):
+        return False
+    from cad_server._internal.editable import editable_source
+
+    return editable_source() is not None
+
+
+def named() -> str | None:
+    """The channel this process was told itself: what its plugin named, else ``dev`` for a source tree, else ``None``."""
+    value = str(os.environ.get(ENV) or "").strip()
+    if is_channel(value):
+        return value
+    return DEV if _source_tree() else None
+
+
+def channel() -> str:
+    """This install's channel: what its plugin named, else ``dev`` for a source tree, else the one written down for
+    this installation (``recorded``), else ``unknown``."""
+    return named() or recorded() or UNKNOWN
+
+
+def _record_path() -> Path:
+    from cad.engine.places import state_dir
+
+    return state_dir() / RECORD
+
+
+@functools.cache
+def installation() -> str:
+    """This installation's short name: its cadgen folder's."""
+    package = str(Path(__file__).resolve().parents[1])
+    return hashlib.sha256(package.encode("utf-8")).hexdigest()[:16]
+
+
+def _load(path: Path) -> dict[str, str]:
+    try:
+        kept = json.loads(path.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+    return {key: value for key, value in kept.items() if is_channel(value)} if isinstance(kept, dict) else {}
+
+
+def recorded(*, path: Path | None = None) -> str | None:
+    """The channel a plugin's server last wrote down for this installation (``remember``), or ``None``. Never
+    raises: a record that cannot be read is no record."""
+    try:
+        return _load(path or _record_path()).get(installation())
+    except Exception:  # noqa: BLE001 - a channel is only reported: nothing may fail for want of one
+        LOG.debug("could not read the install channel", exc_info=True)
+        return None
+
+
+def remember(value: str | None = None, *, path: Path | None = None) -> str | None:
+    """Write down a plugin's channel -- ``value``, what a plugin's stdio transport said as it opened a session
+    (the engine's MCP server, at initialize), else what this process's plugin named -- for every process of
+    this installation that was not told one (``recorded``). Nothing is written when there is nothing named, or
+    when it is what the record holds already. What was written, or ``None``. Never raises."""
+    value = str((os.environ.get(ENV) if value is None else value) or "").strip()
+    if not is_channel(value):
+        return None
+    try:
+        from cad._internal.atomic_replace import write_bytes_atomic
+        from cad_server._internal.file_lock import state
+
+        path = path or _record_path()
+        key = installation()
+        if _load(path).get(key) == value:  # as nearly every start finds it: no lock to wait on, nothing to write
+            return value
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with state(path.parent):  # the state folder's one lock
+            kept = _load(path)
+            if kept.get(key) == value:
+                return value
+            kept.pop(key, None)
+            kept[key] = value  # the last written is the newest: the oldest go first past the cap
+            kept = dict(list(kept.items())[-KEPT_INSTALLATIONS:])
+            write_bytes_atomic(path, (json.dumps(kept, indent=2) + "\n").encode("utf-8"))
+        return value
+    except Exception:  # noqa: BLE001 - a channel is only reported: nothing may fail for want of one
+        LOG.debug("could not write the install channel down", exc_info=True)
+        return None
+
+
+def auto_updated() -> bool:
+    """Whether this install's plugin said something other than the person keeps it up to date."""
+    return str(os.environ.get(AUTO_UPDATED_ENV) or "").strip() == "1"
+
+
+def told() -> bool:
+    """Whether this install hears of a new release: a copy nothing else updates, and not a development install."""
+    return not auto_updated() and channel() != DEV  # a record says ``dev`` only for a development install's own

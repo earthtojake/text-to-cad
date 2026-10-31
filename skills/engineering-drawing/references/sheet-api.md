@@ -1,23 +1,20 @@
-# `cadgen.eng_drawing` reference
+# `cad.eng_drawing` reference
 
 ```python
-from cadgen.eng_drawing import eng_drawing, Sheet
+from cad.eng_drawing import eng_drawing, Sheet
 ```
 
 ## Template
 
 ```python
-from pathlib import Path
-
-import cadgen
-from cadgen.eng_drawing import Sheet, eng_drawing
-# The facts the dimensions reference come from the model, not from this file.
-from enclosure import HOLES, L, H, W
+from cad.eng_drawing import Sheet, eng_drawing
+# The part, and the facts the dimensions reference, come from the model, not from this file.
+from enclosure import HOLES, L, H, W, enclosure
 
 
 @eng_drawing(out="../PDF/enclosure_drawing.pdf")
 def enclosure_drawing():
-    part = cadgen.read_step(Path(__file__).parent / "../STEP/enclosure.step")
+    part = enclosure().shape    # the model, built by the server (a replay when it holds it)
     sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
                   revision="A", general_tolerance="ISO 2768-m",
                   notes=["BREAK SHARP EDGES."])
@@ -40,7 +37,7 @@ Declares the drawing. The function returns a `Sheet` or a list of them. Calling
 it renders one PDF at `out`, a page per sheet, and returns `[path]`.
 
 `out` is required and must name a `.pdf`; a relative path resolves against the
-script. cadgen has no default location — where a document belongs is the
+script. text-to-cad has no default location — where a document belongs is the
 caller's decision. Both are checked when the module is imported, not when the
 drawing runs.
 
@@ -50,11 +47,21 @@ argument list carries that, so the decorator is the whole surface.
 
 ## The part
 
-`cadgen.read_step(path)` returns build123d geometry and reads warm from the
-store. Anchor the path on the script
-(`Path(__file__).parent / "../STEP/part.step"`) — it resolves against the
-process's working directory otherwise. A live build123d shape works too; a
-drawing takes geometry, not a file.
+Call the model: `enclosure()` is built by text-to-cad's server, a replay when the server
+already holds it, and its `.shape` is the part as a build123d tree. A part with no model is
+read from its file instead:
+
+```python
+from pathlib import Path
+
+from cad import read_step
+
+part = read_step(Path(__file__).parent / "../vendor/enclosure.step")
+```
+
+`read_xbf` reads an xbf the same way. Anchor the path on the
+script, since it resolves against the process's working directory otherwise. Any
+build123d shape works: a drawing takes geometry, not a file.
 
 ## `Sheet(size="A3", scale=1.0, title=..., part_number="", material="", revision="A", author="", units="mm", projection="THIRD ANGLE", notes=(), ink="mono", text_height=3.5, general_tolerance="", revisions=())`
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import tempfile
-from pathlib import Path
 
 from tests.python.support.paths import REPO_ROOT
 
@@ -31,16 +30,10 @@ def generated_cad_directory(*, prefix: str) -> tempfile.TemporaryDirectory[str]:
     return temporary_directory(prefix=prefix)
 
 
-def named_tmp_root(name: str) -> Path:
-    tmp_root = TMP_ROOT / name
-    tmp_root.mkdir(parents=True, exist_ok=True)
-    return tmp_root
-
-
-# ERROR_SHARING_VIOLATION -- the same error cadgen's atomic rename retries
-# (``cadgen._internal.atomic_replace``), for the same reason: the handle is
+# ERROR_SHARING_VIOLATION -- the same error the library's atomic rename retries
+# (``cad._internal.atomic_replace``), for the same reason: the handle is
 # not ours. Kept as a literal here because the support package must not
-# import cadgen to clean up a directory.
+# import the library to clean up a directory.
 WINDOWS_SHARING_VIOLATION = 32
 # Widened after the 750 ms ladder lost once more on the runner (2026-09-02):
 # the scanner's hold on a just-read file can outlast a second. ~6 s total.

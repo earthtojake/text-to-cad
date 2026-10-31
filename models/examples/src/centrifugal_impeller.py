@@ -1,8 +1,12 @@
 from __future__ import annotations
-from cadgen import step
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cad import model
 from math import asin, cos, hypot, radians, sin, tau
 
-from cadgen import build123d as bd
+import build123d as bd
 
 
 # Units: millimeters.
@@ -178,7 +182,7 @@ def _blade_root_edges(part):
     return edges
 
 
-@step(out="../STEP/centrifugal_impeller.step")
+@model
 def centrifugal_impeller():
     """Return a single solid centrifugal impeller in millimeters."""
     total_height = BACKPLATE_THICKNESS + HUB_HEIGHT_ABOVE_BACKPLATE
@@ -214,7 +218,13 @@ def centrifugal_impeller():
         part = bd.fillet(root_edges, radius=BLADE_ROOT_FILLET_RADIUS)
 
     part.label = MODEL_LABEL
-    part.color = bd.Color(0.62, 0.66, 0.70, 1.0)
+    part.color = bd.Color("#ced4da")
+    authored_color = part.color
+    part.material = FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Aluminum 6061-T6', metalness=1.0, roughness=0.35, anisotropy=0.3),
+    )
+    part.color = authored_color
     return part
 
 

@@ -4,7 +4,6 @@ import test from "node:test";
 import * as THREE from "three";
 import { toCreasedNormals } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
-import { buildPartFillIndexMap } from "../../common/cadScene.js";
 import { CREASED_NORMAL_MAX_TRIANGLES } from "./meshNormals.js";
 import { buildMeshObjects } from "./meshObjects.js";
 import { buildMeshDataFromStlGeometry } from "./stlMeshData.js";
@@ -83,10 +82,9 @@ test("a file with no authored colour leaves every object to the viewer's surface
 
 test("a palette is dealt in the order the viewer has always used, which is not file order past ten objects", () => {
   const meshData = buildMeshDataFromThreeMfGroup(THREE, threeMfGroup(Array.from({ length: 12 }, () => "#808080")), { toCreasedNormals });
-  const expected = buildPartFillIndexMap(meshData.parts);
   const objects = buildMeshObjects(THREE, meshData);
-  assert.deepEqual(objects.map(object => object.paletteIndex), meshData.parts.map(part => expected.get(part)));
-  assert.notDeepEqual(objects.map(object => object.paletteIndex), objects.map((_, index) => index));
+  // The objects' ids compared as text: `3mf:10` and `3mf:11` come before `3mf:2`.
+  assert.deepEqual(objects.map(object => object.paletteIndex), [0, 3, 4, 5, 6, 7, 8, 9, 10, 11, 1, 2]);
 });
 
 test("a decode without triangles is no objects", () => {

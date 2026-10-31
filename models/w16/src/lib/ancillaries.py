@@ -51,7 +51,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import block as B, fasteners as F, geo, heads as H, oil_system as O, palette as P, spec as S
 from lib.castings import fuse_all, is_sound, safe_fillet, soften

@@ -1,5 +1,5 @@
 """CMC arm candidates preserving the original mouth, clamp and endpoint tangents."""
-from cadgen import build123d as bd
+import build123d as bd
 from lib.yaw_guide_mounts import _mouth,_hub_clamp,_finish,make_yaw_reaction_mounts
 from lib.universal_carrier import make_universal_carrier
 

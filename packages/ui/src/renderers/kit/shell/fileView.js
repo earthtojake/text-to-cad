@@ -1,17 +1,19 @@
-import { normalizeViewSettings } from "@text-to-cad/core/common/viewSettings.js";
+import { readPreviewSettings, readViewSettings } from "@text-to-cad/core/common/viewSettings.js";
 import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 
-// A file's view: the one record the host keeps for a file in its tab, under
-// `[root, file path, renderer id]` (`@text-to-cad/ui/tab-store`). One flat, versioned object:
+// A file's view: the one record the host keeps for the file on screen in its tab, under
+// `[absolute file path, renderer id]` (`@text-to-cad/ui/tab-store`), until the tab leaves the file.
+// One flat, versioned object:
 //
-//   { version: 2, camera, display, playback, renderer }
+//   { version: 2, camera, display, preview, playback, renderer }
 //
 //   camera    the renderer's own camera value, opaque here: a perspective snapshot for a scene
 //             (`readShellCamera`), a plane transform for a drawing. Null is "fit the model".
-//   display   the Display settings, every section of them.
-//   playback  preview's Playback settings (`tools/playbar/playbackPreferences.js`): orbit on or
-//             off and its speed, Autoplay, and the speed and loop chosen for the routine.
+//   display   the Display settings: the mode, the grid, and what every mode shares (the model tools, the lens).
+//   preview   Preview's own settings: Render's lighting, background, floor and part colours.
+//   playback  the playback settings (`tools/playbar/playbackPreferences.js`): Preview's orbit speed,
+//             Autoplay, and the speed and loop chosen for the routine.
 //   renderer  the renderer's own slices of view state, each `{ signature, value }`: what the
 //             slice was written against. A slice comes back only while its signature still
 //             matches the one the renderer declares for the file on screen — a rebuilt model
@@ -30,11 +32,6 @@ export const SHELL_CAMERA_COORDINATES = "cad-z-up-v1";
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 const text = value => String(value ?? "");
 
-function readDisplay(value) {
-  if (!plainObject(value)) return normalizeViewSettings({});
-  // A record is never rewritten to fit: settings this build cannot read are the defaults.
-  try { return normalizeViewSettings(value); } catch { return normalizeViewSettings({}); }
-}
 
 /**
  * What the viewport is asked to present, as one token. The viewport echoes it back
@@ -65,7 +62,7 @@ export function plainShellCamera(camera) {
  * @param {Record<string, string>} [signatures]  Per renderer slice, what it must have been
  *   written against to come back; a slice declared without one comes back when it was
  *   written without one.
- * @returns {{ version: number, camera: unknown, display: object, playback: object, renderer: Record<string, unknown> }}
+ * @returns {{ version: number, camera: unknown, display: object, preview: object, playback: object, renderer: Record<string, unknown> }}
  */
 export function readFileView(raw, signatures = {}) {
   const record = plainObject(raw) && raw.version === FILE_VIEW_VERSION ? raw : {};
@@ -77,7 +74,10 @@ export function readFileView(raw, signatures = {}) {
   return {
     version: FILE_VIEW_VERSION,
     camera: plainObject(record.camera) ? structuredClone(record.camera) : null,
-    display: readDisplay(record.display),
+    // A record is never rewritten to fit: a setting this build cannot read (one it no longer has)
+    // is left out, and the rest kept.
+    display: readViewSettings(record.display),
+    preview: readPreviewSettings(record.preview),
     playback: normalizePlayback(record.playback),
     renderer
   };
@@ -102,10 +102,10 @@ export function readFileViewSlices(raw) {
 
 /**
  * The record for the view as it is now.
- * @param {{ camera?: unknown, display?: object, playback?: object, renderer?: Record<string, unknown>,
+ * @param {{ camera?: unknown, display?: object, preview?: object, playback?: object, renderer?: Record<string, unknown>,
  *   signatures?: Record<string, string> }} view
  */
-export function writeFileView({ camera = null, display = null, playback = null, renderer = {}, signatures = {} } = {}) {
+export function writeFileView({ camera = null, display = null, preview = null, playback = null, renderer = {}, signatures = {} } = {}) {
   const slices = {};
   for (const [slice, value] of Object.entries(plainObject(renderer) ? renderer : {})) {
     if (value === undefined) continue;
@@ -115,6 +115,7 @@ export function writeFileView({ camera = null, display = null, playback = null, 
     version: FILE_VIEW_VERSION,
     camera: plainObject(camera) ? structuredClone(camera) : null,
     display: plainObject(display) ? structuredClone(display) : null,
+    preview: plainObject(preview) ? structuredClone(preview) : null,
     playback: normalizePlayback(playback),
     renderer: slices
   };

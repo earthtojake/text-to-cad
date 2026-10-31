@@ -41,22 +41,22 @@ function harness(displaySettings) {
 }
 const pose = { position: [30, 40, 50], target: [3, 4, 5], up: [0, 0, 1], zoom: 1.4 };
 
-test('setCamera turns its controls on and applies the projection and lens it saves in display', () => {
-  const current = { mode: 'render', camera: { enabled: false }, clip: { enabled: true, offset: 0.3 } };
+test('setCamera saves shared projection and lens and applies them before reporting the camera', () => {
+  const current = { mode: 'solid', camera: { projection: 'orthographic' }, clip: { enabled: true, at: 0.3 } };
   const view = harness(current);
   view.apply({ ...pose, projection: 'perspective', focalLength: 85 });
   assert.deepEqual(view.result.applied, { ...pose, projection: 'perspective', focalLength: 85 });
-  assert.deepEqual(view.result.display, { ...current, camera: { enabled: true, projection: 'perspective', focalLength: 85 } });
+  assert.deepEqual(view.result.display, { ...current, camera: { projection: 'perspective', focalLength: 85 } });
   assert.deepEqual(view.result.perspective, view.result.applied, 'the viewport shows what was applied');
   assert.deepEqual(view.result.recorded, view.result.applied, 'and the file records it');
 });
 
 test('a pose-only setCamera inherits the configured projection and lens, and writes no display override', () => {
-  const current = { mode: 'render' };
+  const current = { mode: 'xray', camera: { projection: 'perspective', focalLength: 35 } };
   const view = harness(current);
   view.apply(pose);
   assert.deepEqual(view.result.display, current);
-  assert.deepEqual(view.result.applied, { ...pose, projection: 'perspective', focalLength: 50 });
+  assert.deepEqual(view.result.applied, { ...pose, projection: 'perspective', focalLength: 35 });
 });
 
 test('an invalid camera is refused before the viewport or the stored display is touched', () => {

@@ -1,4 +1,4 @@
-import { formatMeasurement } from "./measurement.js";
+import { formatMeasurement, formatMeasurementAngle } from "./measurement.js";
 import { dimensionEndpoints } from "./measureLines.js";
 import { projectWorldPointToClient } from "./measureRuler.js";
 
@@ -55,7 +55,19 @@ const LABEL_PADDING_X = 6;
 const LABEL_PADDING_Y = 3;
 const LABEL_MIN_MARGIN = 4;
 
+/**
+ * A measurement in words, as its dimension is labelled: what the pair of entities makes (`measurementFromPicks`):
+ * "⟂ 8.00 mm" the distance between parallel planes or from a vertex to an edge, "C-C 60.00 mm" between
+ * two holes' centres, "∠ 90.0°" the angle of two planes or two edges, "min 4.20 mm" the shortest distance
+ * between two shapes, and a plain "50.00 mm" between two points.
+ */
 export function measureLabelText(measurement, { precision = 2 } = {}) {
+  if (measurement?.kind === "angle") {
+    const angle = formatMeasurementAngle(measurement);
+    if (angle) {
+      return `∠ ${angle}`;
+    }
+  }
   const formatted = formatMeasurement(measurement, { precision });
   if (!formatted) {
     return "";
@@ -66,6 +78,9 @@ export function measureLabelText(measurement, { precision = 2 } = {}) {
   // C-C is the standard shorthand for a centre-to-centre (hole spacing) reading.
   if (measurement?.centerDistance !== null && measurement?.centerDistance !== undefined) {
     return `C-C ${formatted}`;
+  }
+  if (measurement?.kind === "min" && measurement.minDistance !== null && measurement.minDistance !== undefined) {
+    return `min ${formatted}`;
   }
   return formatted;
 }
@@ -228,6 +243,23 @@ export function screenDimensionLayout(segments, camera, rect) {
   };
 }
 
+const segmentDistance = (point, start, end) => {
+  const dx = end.x - start.x, dy = end.y - start.y;
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / ((dx * dx + dy * dy) || 1)));
+  return Math.hypot(point.x - (start.x + dx * t), point.y - (start.y + dy * t));
+};
+
+/**
+ * Whether a point (the layout's pixels) is on a drawn dimension: within `tolerance` of its
+ * dimension line or a witness line, or over its label.
+ */
+export function dimensionLayoutHit(layout, point, tolerance = 6) {
+  if (!layout || !point) return false;
+  const lines = [layout.dimensionLine, ...layout.witnesses];
+  if (lines.some(([start, end]) => segmentDistance(point, start, end) <= tolerance)) return true;
+  return Math.abs(point.x - layout.label.x) <= 36 && Math.abs(point.y - layout.label.y) <= 12;
+}
+
 function strokeSegment(context, start, end) {
   context.beginPath();
   context.moveTo(start.x, start.y);
@@ -387,7 +419,7 @@ export function drawMeasureSnapMarker(context, point, { snapKind = "free", now =
   if (!context || !point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
     return;
   }
-  const snapped = snapKind === "vertex" || snapKind === "edge" || snapKind === "face";
+  const snapped = snapKind === "vertex" || snapKind === "edge" || snapKind === "face" || snapKind === "center";
   const color = snapped ? MEASURE_SNAP_COLOR : MEASURE_SNAP_FREE_COLOR;
   const { x, y } = point;
 
@@ -428,6 +460,11 @@ export function drawMeasureSnapMarker(context, point, { snapKind = "free", now =
     context.lineTo(x, y + 4.2);
     context.lineTo(x - 4.2, y);
     context.closePath();
+    context.stroke();
+  } else if (snapKind === "center") {
+    // A circle's or arc's centre: a ring round the crosshair's point.
+    context.beginPath();
+    context.arc(x, y, 4, 0, Math.PI * 2);
     context.stroke();
   }
   context.restore();
@@ -472,4 +509,43 @@ export function drawMeasureSnapChip(context, point, text, {
   context.textAlign = "left";
   context.fillText(text, x + 7, y + (height / 2));
   context.restore();
+}
+
+
+// ---- a taken measurement as a mark the overlay draws -------------------------------------------
+
+/**
+ * A taken measurement as the overlay draws it: the two
+ * ends its dimension is drawn between (a face-to-face reading's along the faces' normal), its words
+ * as the viewer labels it, and its colour. World coordinates, the model's own units.
+ * @typedef {{ start: [number, number, number], end: [number, number, number], label: string, color: string }} MeasurementMark
+ */
+
+/** A taken measurement (`{ pickA, pickB, measurement, colorIndex }`) as a mark; null when it has no ends. */
+export function measurementMark(item) {
+  const ends = dimensionEndpoints(item?.pickA, item?.pickB, item?.measurement);
+  if (!ends) return null;
+  return { start: ends.start.map(Number), end: ends.end.map(Number), label: measureLabelText(item.measurement),
+    color: measureSeriesColor(item?.colorIndex) };
+}
+
+/** Where a mark's dimension falls on a screen `rect` seen by `camera` (`screenSpaceDimensionLayout`); null off it. */
+export function measurementMarkLayout(mark, camera, rect) {
+  return mark ? screenSpaceDimensionLayout({ point: mark.start }, { point: mark.end }, null, camera, rect) : null;
+}
+
+/**
+ * A mark's dimension drawn as the viewer draws a taken measurement: in its colour, the one in hand
+ * (`active`) full and labelled, the others fainter and lighter.
+ */
+export function drawMeasurementMark(context, layout, mark, { active = true, bounds = null } = {}) {
+  drawMeasureDimension(context, layout, {
+    color: mark.color,
+    alpha: active ? 1 : MEASURE_DIMENSION_FADED_ALPHA,
+    lineWidth: active ? 2.6 : 1.4,
+    witnessWidth: active ? 1.6 : 1,
+    ringRadius: active ? 4 : 3,
+    label: active ? mark.label : "",
+    bounds
+  });
 }

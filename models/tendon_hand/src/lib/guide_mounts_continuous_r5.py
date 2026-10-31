@@ -9,7 +9,8 @@ Guide ends shared by two adjacent liners use one clamping datum.
 from dataclasses import dataclass, field
 from collections import defaultdict
 import numpy as np
-from cadgen import build123d as bd, srgb
+import build123d as bd
+
 from lib.layout import JOINT_BY_NAME, FINGERS, finger_fan_matrix
 from lib.finger_routing import endpoint, tangent
 from lib.neutral_routes import NEUTRAL_ROUTES
@@ -61,7 +62,7 @@ def guide_end_registry(routes=None):
 def _finish(s,label,color='#9DADB5'):
     if not s.is_valid or len(s.solids())!=1 or s.volume<=0:
         raise ValueError(f'{label}: invalid mount, solids={len(s.solids())}')
-    s.label=label;s.color=srgb(color)
+    s.label=label;s.color=color
     return s
 
 

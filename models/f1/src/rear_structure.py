@@ -1,22 +1,11 @@
-"""F1 part model: rear_structure.
+"""F1 part: rear impact structure, pickup carriers, pylon pad, rear light.
 
-The rear impact structure with the pickup carriers, rear wing pylon pad and
-rear light it is cut around, in car coordinates, from `lib/drivetrain.py`.
-`drivetrain.py` links it; rebuild `drivetrain.py` (and `f1.py`) to pick up a
-change here.
+Built in car coordinates by `lib/drivetrain.py`; `drivetrain.py` calls it.
 """
-
-from __future__ import annotations
-
-from cadgen import step
 
 from lib import drivetrain as drivetrain_lib
 
 
-@step(out="../STEP/rear_structure.step")
 def rear_structure():
-    return drivetrain_lib.build_rear_structure()
-
-
-if __name__ == "__main__":
-    rear_structure()
+    built = drivetrain_lib.build_rear_structure()
+    return built

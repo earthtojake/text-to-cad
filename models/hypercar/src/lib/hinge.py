@@ -27,7 +27,7 @@ very different lead do two different jobs:
                   angle, so the door keeps rotating open after the carrier has
                   finished climbing.
 
-Net door motion, which the animation sidecar takes from the constants below:
+Net door motion, which the door mates and clip take from the constants below:
 62 deg of rotation about the tower axis while translating 310 mm *along* it --
 300 mm of lift and 80 mm forward.  The door leaves the body sideways, rises
 most of a foot and tips nose-up.  It should look impossible.
@@ -47,10 +47,10 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd, compound_from_instances
+import build123d as bd
 
 from lib import surfaces as S
-from lib.context import group
+from lib.context import compound_from_instances, group
 from lib import palette as P
 from lib.palette import style
 
@@ -120,7 +120,7 @@ def _g2l(p):
 
 
 # ---------------------------------------------------------------------------
-# MOTION CONSTANTS -- the animation sidecar derives the door from these
+# MOTION CONSTANTS -- the door mates and clip derive the door from these
 # ---------------------------------------------------------------------------
 #
 # Door pose at open fraction ``t`` (0 shut, 1 open), for one side:
@@ -151,7 +151,7 @@ HELIX_AXIS_ORIGIN = {"left": HELIX_AXIS_ORIGIN_LEFT, "right": HELIX_AXIS_ORIGIN_
 HELIX_AXIS_DIR = {"left": HELIX_AXIS_DIR_LEFT, "right": HELIX_AXIS_DIR_RIGHT}
 DOOR_SWEEP_SIGN = {"left": -1.0, "right": 1.0}
 
-# what that works out to, so the sidecar author can sanity-check the numbers
+# what that works out to, so a reader can sanity-check the numbers
 DOOR_LIFT_MM = CARRIER_TRAVEL * _U[2]           # ~300
 DOOR_FORWARD_MM = CARRIER_TRAVEL * _U[0]        # ~80
 

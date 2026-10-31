@@ -12,3 +12,6 @@ export function isEditableTarget(target) {
 export function prefersCoarsePointer() {
   return typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 }
+
+/** How far a touch reaches a mark — ink, a measurement, the eraser's ring — about a fingertip; a cursor's is a few px. */
+export const TOUCH_HIT_PX = 16;

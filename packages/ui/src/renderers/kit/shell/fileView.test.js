@@ -15,50 +15,77 @@ test("a missing, foreign or older record restores nothing and never throws", () 
   }
 });
 
-test("the camera and the display are always kept; a slice comes back only under the signature it was written against", () => {
-  const display = readFileView({ version: FILE_VIEW_VERSION, display: { mode: "render", surfaces: { colorMode: "single", color: "#00c040" } } }).display;
-  const written = writeFileView({ camera, display, renderer: { tree: { expanded: ["o1"] }, pose: { hinge: 30 }, plain: { note: 1 }, skipped: undefined },
+test("the camera, the display and Preview's settings are always kept; a slice comes back only under the signature it was written against", () => {
+  const { display, preview } = readFileView({ version: FILE_VIEW_VERSION, display: { mode: "xray", grid: true },
+    preview: { parts: { colorMode: "single", color: "#00c040" } } });
+  const written = writeFileView({ camera, display, preview, renderer: { tree: { expanded: ["o1"] }, pose: { hinge: 30 }, plain: { note: 1 }, skipped: undefined },
     signatures: { tree: "geo:1", pose: "motion:1" } });
   assert.deepEqual(Object.keys(written.renderer), ["tree", "pose", "plain"], "an undefined slice is not written");
   assert.deepEqual(written.renderer.tree, { signature: "geo:1", value: { expanded: ["o1"] } });
   const copy = JSON.parse(JSON.stringify(written));
   const same = readFileView(copy, { tree: "geo:1", pose: "motion:1" });
   assert.deepEqual(same.camera, camera);
-  assert.deepEqual([same.display.mode, same.display.surfaces.colorMode, same.display.surfaces.color], ["render", "single", "#00c040"]);
+  assert.deepEqual(same.display, { mode: "xray", grid: true });
+  assert.deepEqual(same.preview, { parts: { colorMode: "single", color: "#00c040" } });
   assert.deepEqual(same.renderer, { tree: { expanded: ["o1"] }, pose: { hinge: 30 }, plain: { note: 1 } });
   // A rebuilt model: the geometry slice is dropped, the motion slice and everything else kept.
   const rebuilt = readFileView(copy, { tree: "geo:2", pose: "motion:1" });
   assert.deepEqual(rebuilt.camera, camera);
-  assert.equal(rebuilt.display.mode, "render");
+  assert.equal(rebuilt.display.mode, "xray");
   assert.deepEqual(rebuilt.renderer, { pose: { hinge: 30 }, plain: { note: 1 } });
   // Reading is a copy: what comes back is nobody else's object.
   same.renderer.tree.expanded.push("o2");
   assert.deepEqual(readFileView(copy, { tree: "geo:1" }).renderer.tree, { expanded: ["o1"] });
-  assert.equal(fileViewsEqual(written, writeFileView({ camera, display, renderer: { tree: { expanded: ["o1"] }, pose: { hinge: 30 }, plain: { note: 1 } }, signatures: { tree: "geo:1", pose: "motion:1" } })), true);
-  assert.equal(fileViewsEqual(written, writeFileView({ camera, display })), false);
+  assert.equal(fileViewsEqual(written, writeFileView({ camera, display, preview, renderer: { tree: { expanded: ["o1"] }, pose: { hinge: 30 }, plain: { note: 1 } }, signatures: { tree: "geo:1", pose: "motion:1" } })), true);
+  assert.equal(fileViewsEqual(written, writeFileView({ camera, display, preview })), false);
 });
 
 test("a view with no display or no camera writes null for them, playback at its defaults, and a drawing's camera is whatever the drawing says", () => {
   const drawing = writeFileView({ camera: { scale: 2, offsetX: 1, offsetY: 3 } });
-  assert.deepEqual(drawing, { version: FILE_VIEW_VERSION, camera: { scale: 2, offsetX: 1, offsetY: 3 }, display: null,
-    playback: { orbit: true, orbitSpeed: 1, autoplay: false }, renderer: {} });
+  assert.deepEqual(drawing, { version: FILE_VIEW_VERSION, camera: { scale: 2, offsetX: 1, offsetY: 3 }, display: null, preview: null,
+    playback: { orbitSpeed: 1, autoplay: false }, renderer: {} });
   assert.deepEqual(readFileView(drawing).camera, { scale: 2, offsetX: 1, offsetY: 3 });
   assert.equal(writeFileView({ camera: "x" }).camera, null);
 });
 
 test("preview's playback settings are the view's: written whole, read back bounded, and the defaults for a view without them", () => {
   const written = writeFileView({ playback: { orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false, junk: 1 } });
-  assert.deepEqual(written.playback, { orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
-  assert.deepEqual(readFileView(JSON.parse(JSON.stringify(written))).playback, { orbit: false, orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
-  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, playback: { orbitSpeed: 99, speed: "fast" } }).playback, { orbit: true, orbitSpeed: 5, autoplay: false });
-  assert.deepEqual(readFileView(undefined).playback, { orbit: true, orbitSpeed: 1, autoplay: false });
+  assert.deepEqual(written.playback, { orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
+  assert.deepEqual(readFileView(JSON.parse(JSON.stringify(written))).playback, { orbitSpeed: 2, autoplay: true, speed: 2, loop: false });
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, playback: { orbitSpeed: 99, speed: "fast" } }).playback, { orbitSpeed: 5, autoplay: false });
+  assert.deepEqual(readFileView(undefined).playback, { orbitSpeed: 1, autoplay: false });
 });
 
-test("display settings this build cannot read are the defaults, and the stored record is not rewritten", () => {
+test("a chosen floor finish is kept with Preview's settings, in the record either app writes, group by group", () => {
+  const { preview } = readFileView({ version: FILE_VIEW_VERSION, preview: { floor: { finish: "glossy" } } });
+  assert.deepEqual(preview, { floor: { finish: "glossy" } });
+  const copy = JSON.parse(JSON.stringify(writeFileView({ camera, preview })));
+  assert.deepEqual(readFileView(copy).preview, { floor: { finish: "glossy" } });
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, preview: { floor: { finish: "chrome" }, lighting: { exposure: 1 } } }).preview,
+    { lighting: { exposure: 1 } });
+  assert.deepEqual(readFileView(undefined).preview, {});
+});
+
+test("legacy grouped display settings are dropped whole without migration", () => {
+  const display = { mode: "render", lighting: { exposure: 1 } };
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, display }).display, { mode: "solid" });
+  assert.deepEqual(display, { mode: "render", lighting: { exposure: 1 } });
+});
+
+test("a display setting this build cannot read is left out, the rest kept, and the stored record is not rewritten", () => {
   const raw = { version: FILE_VIEW_VERSION, display: { mode: "no-such-mode", surfaces: 7 } };
   const before = JSON.stringify(raw);
   assert.equal(readFileView(raw).display.mode, "solid");
   assert.equal(JSON.stringify(raw), before);
+  // Render is no display mode: a record left in it is one this build cannot read.
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, display: { mode: "render", modes: { solid: { flat: true } } } }).display,
+    { mode: "solid" });
+  // A tool's group is read as strictly: a clip key this build does not know is not a clip.
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, display: { mode: "xray", clip: { enabled: true, offset: 0.3 } } }).display,
+    { mode: "xray" });
+  // An older build's per-mode settings and its Grid mode are dropped, with no migration; the clip stays.
+  assert.deepEqual(readFileView({ version: FILE_VIEW_VERSION, display: { mode: "grid", modes: { solid: { flat: true, grid: { enabled: true } } },
+    clip: { enabled: true, at: 3 } } }).display, { mode: "solid", clip: { enabled: true, at: 3 } });
 });
 
 test("a stored camera is scoped to the model it frames on the way in, and stripped of its scope on the way out", () => {

@@ -87,6 +87,12 @@
 
 }
 
+/* The agents' logos on the home page: one copy's width, over and over (`AgentCarousel`). */
+@keyframes agents-carousel {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

@@ -48,7 +48,7 @@ from __future__ import annotations
 
 import math
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from lib import castings as C
 from lib import geo, palette as P, spec as S

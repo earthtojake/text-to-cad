@@ -1,18 +1,22 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* A 13px default at the normal 16px root. Rems preserve the desktop's UI
-   * scale without shrinking the spacing/radius system. Stock shadcn controls
+  /* A 13px default at the normal 16px root. Rems preserve the UI's scale
+   * without shrinking the spacing/radius system. Stock shadcn controls
    * use text-sm/text-base, so both resolve to this shared UI size. */
-  --text-ui: 0.8125rem;
+  /* Each size is a variable (`--cad-text-*`, `globals.css`) so a phone's view can take one step
+   * up the scale, menus and selects portalled out of the viewer included. */
+  --text-ui: var(--cad-text-ui);
   --text-ui--line-height: 1.5;
   --text-sm: var(--text-ui);
   --text-sm--line-height: 1.5;
   --text-base: var(--text-ui);
   --text-base--line-height: 1.5;
-  --text-micro: 10px;
+  --text-xs: var(--cad-text-xs);
+  --text-xs--line-height: 1.34;
+  --text-micro: var(--cad-text-micro);
   --text-micro--line-height: 1.2;
-  --text-tiny: 11px;
+  --text-tiny: var(--cad-text-tiny);
   --text-tiny--line-height: 1.3;
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -107,7 +111,7 @@
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
+  --accent: oklch(0.92 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0 0);
@@ -123,7 +127,7 @@
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.92 0 0);
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
@@ -176,20 +180,20 @@
 }
 
 .dark {
-  /* Neutral charcoal surfaces, using the shared shadcn token palette */
-  --background: oklch(0.28 0 0);
+  /* Cool blue-grey surfaces (Preview's hue, oklch hue 264 at chroma 0.008), on the shadcn token steps */
+  --background: oklch(0.28 0.008 264);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.31 0 0);
+  --card: oklch(0.31 0.008 264);
   --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.31 0 0);
+  --popover: oklch(0.31 0.008 264);
   --popover-foreground: oklch(0.985 0 0);
   --primary: oklch(0.922 0 0);
   --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.34 0 0);
+  --secondary: oklch(0.34 0.008 264);
   --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.34 0 0);
+  --muted: oklch(0.34 0.008 264);
   --muted-foreground: oklch(0.75 0 0);
-  --accent: oklch(0.38 0 0);
+  --accent: oklch(0.38 0.008 264);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
@@ -201,18 +205,18 @@
   --chart-3: oklch(0.769 0.188 70.08);
   --chart-4: oklch(0.627 0.265 303.9);
   --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.30 0 0);
+  --sidebar: oklch(0.30 0.008 264);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.38 0 0);
+  --sidebar-accent: oklch(0.38 0.008 264);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
 
   --background-1: var(--card);
   --background-2: var(--secondary);
-  --background-3: oklch(0.38 0 0);
+  --background-3: oklch(0.38 0.008 264);
   --foreground-inverse: var(--primary-foreground);
   --foreground-muted: var(--muted-foreground);
   --foreground-passive: var(--ring);

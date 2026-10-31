@@ -9,7 +9,7 @@ inclined socket grub screw bearing on the continuous D-shaft flat: loosen the
 screw before withdrawing the shaft. Thread envelopes are nominal, not helical.
 """
 from math import atan2, cos, sin, degrees, radians, sqrt
-from cadgen import build123d as bd
+import build123d as bd
 from lib.pulley import make_pulley
 from lib.finish import finish
 

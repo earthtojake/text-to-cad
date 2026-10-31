@@ -7,7 +7,7 @@ import still from "../assets/loading-still.webp";
  * unless the system asks for reduced motion, the page is hidden, or the host passes
  * `reducedMotion` (an app's own motion setting).
  */
-export default function LoadingIcon({ active = true, size = 96, className = "", reducedMotion = false }) {
+export default function LoadingIcon({ active = true, size = 80, className = "", reducedMotion = false }) {
   const [animate, setAnimate] = useState(false);
   const [failed, setFailed] = useState(false);
 

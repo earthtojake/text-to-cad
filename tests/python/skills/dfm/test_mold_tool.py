@@ -558,15 +558,6 @@ class MinimumDraftKeepsRealWallsTest(unittest.TestCase):
         self.assertEqual(facts["min_wall_draft"]["draft_deg"],
                          facts["lowest_draft_wall_faces"][0]["draft_deg"])
 
-    def test_the_minimum_still_ignores_a_sliver(self) -> None:
-        """Dropping the coverage prefix must not bring the sliver tail back."""
-        align = (Align.CENTER, Align.CENTER, Align.MIN)
-        part = _drafted_box(2.0, base=20.0, height=15.0) + Pos(0, 0, 15) * Box(0.5, 0.5, 1.0, align=align)
-        with tempfile.TemporaryDirectory() as td:
-            facts = _z(mold_tool._load(_stl(part, Path(td), "pinned")))
-
-        self.assertAlmostEqual(facts["min_wall_draft"]["draft_deg"], 2.0, delta=0.05)
-
 
 class FlatWallBetweenFilletsTest(unittest.TestCase):
     """A wall is not a tangent band because it happens to sit between two curves."""

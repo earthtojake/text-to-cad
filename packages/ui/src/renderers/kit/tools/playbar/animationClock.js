@@ -2,7 +2,7 @@ import { useSyncExternalStore } from "react";
 
 /**
  * A playback clock: elapsed seconds, outside React. Whoever owns an animation
- * creates one, advances it per tick, and hands it to the playbar on its runtime
+ * creates one, advances it per tick, and hands it to the Animation section on its runtime
  * (`runtime.clock`), so a playing frame re-renders nothing but the scrubber.
  *
  * @typedef {{ subscribe(listener: () => void): () => void, getAnimationClock(): number,

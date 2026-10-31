@@ -1,13 +1,24 @@
 from __future__ import annotations
-from cadgen import step
+
+from bd_materials import FinishedMaterial, metals
+from threejs_materials import PbrProperties
+
+from cad import model
 # Prompt: Pulley wheel with a central hub, outer groove, and circular through-bore.
 
 from lib.simple_model_library import make_pulley_wheel
 
 
-@step(out="../STEP/pulley_wheel.step")
+@model
 def pulley_wheel():
-    return make_pulley_wheel()
+    part = make_pulley_wheel()
+    authored_color = part.color
+    part.material = FinishedMaterial(
+        metals.aluminum().material,
+        pbr=PbrProperties.create('Aluminum 6061-T6', metalness=1.0, roughness=0.35, anisotropy=0.3),
+    )
+    part.color = authored_color
+    return part
 
 
 if __name__ == "__main__":

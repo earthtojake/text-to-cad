@@ -17,15 +17,20 @@ which `-m unittest` would run silently.
 ``--print-weights`` prints this run's measured per-file costs, the first thing to read
 when a run is slow.
 
-With ``--jobs N`` greater than one, each FILE runs in its own interpreter, N at a time,
-with its own fresh store and private daemon endpoint/auth state. Its daemon is retired
-before the temporary directories are removed, so modules cannot see one another's
-builds or stop one another's artifact workers. The per-module output is printed as each finishes and
-the final ``Ran N tests`` / ``OK`` / ``FAILED`` summary aggregates every module, so a
-log reads the same as a single-process run. The loaded test set is identical to
-`python -m unittest <files>` run from --top either way. A file still running
-``FILE_HANG_SECONDS`` after it started is hung: its interpreter prints every thread's
-stack and exits, and the run fails naming the file.
+Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
+directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
+an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
+running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
+``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own that do not exist yet, so
+nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
+installations or their ``cadgen`` command; a record that this run's cadgen writes in the
+developer's own state folder anyway, or that command written, fails the run, named with the test
+that was running (``person_places``, ``the_run_s``). The run's files share one bytecode folder
+(``PYTHONPYCACHEPREFIX``), so the CAD kernel's libraries are compiled once a run, not once a file.
+The per-module output is printed as each finishes and the final ``Ran N tests`` / ``OK`` /
+``FAILED`` summary aggregates every module. The loaded test set is identical to `python -m
+unittest <files>` run from --top. A file still running ``FILE_HANG_SECONDS`` after it started is
+hung: its interpreter prints every thread's stack and exits, and the run fails naming the file.
 """
 
 from __future__ import annotations
@@ -34,6 +39,7 @@ import argparse
 import concurrent.futures
 import faulthandler
 import importlib
+import json
 import locale
 import os
 import re
@@ -44,11 +50,16 @@ import tempfile
 import time
 import traceback
 import unittest
-import uuid
 
 # Hung, not slow: the slowest file CI has run took about four minutes. Without this a
 # hang runs out the CI job's timeout and says nothing about where it is.
 FILE_HANG_SECONDS = 15 * 60
+# A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
+# timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
+# folder) or its folder is removed (an engine whose door is gone stops).
+
+# Stopping a file's daemon waits for its workers to exit.
+ENGINE_STOP_SECONDS = 120
 
 
 def dotted_name(path: str, top: str) -> str:
@@ -110,7 +121,60 @@ def load_file(loader: unittest.TestLoader, path: str, top: str) -> unittest.Test
     return loader.loadTestsFromModule(module)
 
 
-def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: float | None = None) -> int:
+# What a person's cadgen registers in its state folder (``cad_server.engine.registry``,
+# ``cad_server._internal.installations``): documents' records, engines' records and the page token,
+# installations' records. A name ending ``.tmp`` is a write in flight (``registry.Folder``).
+REGISTERED = ("documents", "engines", "installations")
+# A file's line naming what appeared in the developer's own places while one of its tests ran.
+OUTSIDE = "OUTSIDE"
+_OUTSIDE = re.compile(rf"^{OUTSIDE}\t([^\t\n]*)\t([^\t\n]*)\n?", re.M)
+
+
+def registered(states: list[str], commands: list[str]) -> dict[str, tuple[int, int] | None]:
+    """Each entry registered in the state folders ``states``, by its path, and each of ``commands``
+    that exists, by its path with when it was written and its size."""
+    marks: dict[str, tuple[int, int] | None] = {}
+    for state in states:
+        for folder in REGISTERED:
+            try:
+                names = os.listdir(os.path.join(state, folder))
+            except OSError:
+                continue
+            marks.update((os.path.join(state, folder, name), None) for name in names if not name.endswith(".tmp"))
+    for command in commands:
+        try:
+            written = os.lstat(command)
+        except OSError:
+            continue
+        marks[command] = (written.st_mtime_ns, written.st_size)
+    return marks
+
+
+def gained(before: dict, after: dict) -> list[str]:
+    """What ``after`` has that ``before`` had not: an entry new, or a command written again."""
+    return sorted(path for path, mark in after.items() if path not in before or before[path] != mark)
+
+
+class _Watching(unittest.TextTestResult):
+    """Says of each test what appeared in the developer's own places while it ran (``OUTSIDE``),
+    which the run names it by. A test of another file running beside it saw the same."""
+
+    places: tuple[list[str], list[str]] = ([], [])
+
+    def startTest(self, test):
+        self._before = registered(*self.places)
+        super().startTest(test)
+
+    def stopTest(self, test):
+        super().stopTest(test)
+        appeared = gained(self._before, registered(*self.places))
+        if appeared:
+            sys.__stdout__.write("".join(f"{OUTSIDE}\t{path}\t{test.id()}\n" for path in appeared))
+            sys.__stdout__.flush()
+
+
+def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: float | None = None,
+                   places: tuple[list[str], list[str]] | None = None) -> int:
     if hang_seconds:
         faulthandler.dump_traceback_later(hang_seconds, exit=True)
     top = os.path.realpath(top)
@@ -120,10 +184,13 @@ def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: floa
 
     loader = unittest.TestLoader()
     suite = unittest.TestSuite(load_file(loader, path, top) for path in files)
+    if places:
+        _Watching.places = places
     runner = unittest.TextTestRunner(
         verbosity=2 if verbose else 1,
         # unittest.main enables the default warning filter unless -W was given.
         warnings=None if sys.warnoptions else "default",
+        resultclass=_Watching if places else None,
     )
     result = runner.run(suite)
     return 0 if result.wasSuccessful() else 1
@@ -150,51 +217,147 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
-def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, float]:
+# The three packages' source trees under the checkout, the library's first (common.sh's
+# PACKAGE_SOURCES): what the run's own helpers import.
+SOURCES = (("packages", "cad", "src"), ("packages", "cad-server", "src"),
+           ("packages", "cad-mcp", "src"))
+
+
+def _source_path(top: str) -> str:
+    """``PYTHONPATH`` naming the checkout's packages, then whatever this run's already names."""
+    return os.pathsep.join(filter(None, [*(os.path.join(top, *source) for source in SOURCES),
+                                         os.environ.get("PYTHONPATH", "")]))
+
+
+def stop_engine(top: str, engine_dir: str) -> None:
+    """Stop the engine daemon a file left running in its own engine directory, if it left one."""
+    try:
+        names = os.listdir(engine_dir)
+    except FileNotFoundError:
+        return
+    if not any(name.endswith((".door", ".port")) for name in names):
+        return
+    env = {**os.environ, "CAD_ENGINE_DIR": engine_dir, "PYTHONPATH": _source_path(top)}
+    stopped = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import api; api.stop()"],
+                             env=env, capture_output=True, text=True, timeout=ENGINE_STOP_SECONDS)
+    if stopped.returncode:
+        raise RuntimeError(f"the test engine daemon in {engine_dir} did not stop: {stopped.stdout}{stopped.stderr}")
+
+
+def _engine_python(top: str, code: str, **env: str) -> subprocess.CompletedProcess:
+    """``code`` run against this checkout's packages, the environment as this run's but ``env``."""
+    given = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_DIR"}
+    given["PYTHONPATH"] = _source_path(top)
+    return subprocess.run([sys.executable, "-P", "-c", code], env={**given, **env}, capture_output=True, text=True,
+                          timeout=ENGINE_STOP_SECONDS)
+
+
+def default_engine_door(top: str) -> str | None:
+    """Where the device's engine has its door when nothing names its folder
+    (``places.default_engine_dir``): the developer's own engine's place. None where it cannot be said."""
+    found = _engine_python(top, "import os; from cad.engine import places; "
+                                "print(os.path.join(places.default_engine_dir(), places.NAME + "
+                                "('.port' if os.name == 'nt' else '.door')))")
+    return (found.stdout.strip() or None) if found.returncode == 0 else None
+
+
+def engine_answers(top: str, door: str) -> bool:
+    """Whether an engine answers at ``door``'s folder (its file alone may be a dead engine's)."""
+    if not os.path.exists(door):
+        return False
+    found = _engine_python(top, "from cad.engine.client import request; "
+                                "print('yes' if request({'op': 'pid'}, start=False) else 'no')",
+                           CAD_ENGINE_DIR=os.path.dirname(door))
+    return found.stdout.strip() == "yes"
+
+
+# Where the developer keeps what their own cadgen registers, which no test may write (every file has
+# folders of its own): the state folder (``cad_server.viewer.recents.state_dir``) and the ``cadgen``
+# command (``cad_server._internal.installations.proxy_path``), as this run's environment names them and
+# as the platform does where nothing names them; and the name this run's engines give their records
+# there (``places.NAME``: one engine a device, so one record).
+_PERSON_PLACES = (
+    "import json, os\n"
+    "from cad_server._internal.installations import proxy_path\n"
+    "from cad.engine import places as engine\n"
+    "from cad_server.viewer.recents import state_dir\n"
+    "places = [(str(state_dir()), proxy_path())]\n"
+    "os.environ.pop('CAD_STATE_DIR', None)\n"
+    "os.environ.pop('CAD_LAUNCHER_DIR', None)\n"
+    "places.append((str(state_dir()), proxy_path()))\n"
+    "print(json.dumps({'places': places, 'engine': engine.NAME}))\n"
+)
+
+
+def person_places(top: str) -> tuple[list[str], list[str], str]:
+    """The developer's own state folders and ``cadgen`` commands, and the name this run's engines
+    record themselves by there (``_PERSON_PLACES``), as cadgen names them. The run cannot start where
+    cadgen cannot say."""
+    found = _engine_python(top, _PERSON_PLACES)
+    if found.returncode:
+        raise SystemExit(f"unittest_files: cadgen cannot say where the developer's state is:\n{found.stderr}")
+    said = json.loads(found.stdout)
+    return (list(dict.fromkeys(os.path.realpath(state) for state, _command in said["places"])),
+            list(dict.fromkeys(os.path.abspath(command) for _state, command in said["places"])),
+            said["engine"])
+
+
+def _within(path: str, folders: list[str]) -> bool:
+    return any(path == folder or path.startswith(folder.rstrip(os.sep) + os.sep) for folder in folders)
+
+
+def the_run_s(where: str, engine: str, top: str) -> bool:
+    """Whether what appeared at ``where`` says it is this run's cadgen's, not another one the
+    developer ran meanwhile: an engine's record named as this run's engines name theirs (``engine``),
+    and the page token; an installation's or a document's record that names a folder of this run's
+    -- its interpreter's environment, its temporary folder, the checkout (but ``models/``, which no
+    test reads, and the worktrees in ``.claude/``); the ``cadgen`` command, and anything that says
+    nothing of itself."""
+    folder, name = os.path.split(where)
+    kind = os.path.basename(folder)
+    if kind == "engines":
+        return name in (f"{engine}.json", "token")
+    if kind not in ("documents", "installations"):
+        return True
+    try:
+        with open(os.path.join(where, "document.json") if kind == "documents" else where, encoding="utf-8") as record:
+            said = json.load(record)
+        named = [os.path.realpath(path) for path in ([said["root"]] if kind == "documents"
+                                                     else [said["prefix"], said["python"]])]
+    except (OSError, ValueError, TypeError, KeyError):
+        return True
+    ours = [os.path.realpath(tempfile.gettempdir()), os.path.realpath(sys.prefix), top]
+    theirs = [os.path.join(top, "models"), os.path.join(top, ".claude")]
+    return any(_within(path, ours) and not _within(path, theirs) for path in named)
+
+
+def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
+                  places: tuple[list[str], list[str]] | None = None) -> tuple[str, int, str, float]:
     started = time.perf_counter()
-    store = tempfile.mkdtemp(prefix="cadgen-test-store.")
-    # Stores alone do not isolate lazy artifact jobs: a sibling test can stop
-    # the shared daemon while this module is reading its package. Keep auth,
-    # logs and the actual endpoint private too. The short filename avoids the
-    # Unix socket length ceiling; Windows pipe names need explicit uniqueness.
-    state = tempfile.mkdtemp(prefix="cgt-")
-    env = dict(os.environ)
-    env["CADGEN_CACHE_DIR"] = store
-    env["CADGEN_DAEMON_STATE_DIR"] = state
-    env["CADGEN_DAEMON_SOCKET"] = (rf"\\.\pipe\cadgen-test-{uuid.uuid4().hex}" if os.name == "nt"
-                                  else os.path.join(state, "d.sock"))
-    argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--jobs", "1",
+    try:
+        return _run_file(path, top, verbose, env, started, places)
+    finally:
+        stop_engine(top, env["CAD_ENGINE_DIR"])
+
+
+def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: float,
+              places: tuple[list[str], list[str]] | None = None) -> tuple[str, int, str, float]:
+    argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--file",
             "--hang-seconds", str(FILE_HANG_SECONDS)]
     if verbose:
         argv.append("--verbose")
+    if places and any(places):
+        argv += ["--places", json.dumps(places)]
     argv.append(path)
     # Files, not pipes: a process the test started and left running would hold a pipe
     # open, and this run would wait on it however its own interpreter ended.
     with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
-        try:
-            completed = subprocess.run(argv, env=env, stdout=stdout, stderr=stderr, cwd=os.getcwd())
-        finally:
-            try:
-                # No key means no daemon could have bound under this private state.
-                if any(name.endswith(".key") for name in os.listdir(state)):
-                    cleanup_env = dict(env)
-                    cleanup_env["PYTHONPATH"] = os.pathsep.join(filter(None, [
-                        os.path.join(top, "packages", "cadgen", "src"), env.get("PYTHONPATH", "")
-                    ]))
-                    cleanup = subprocess.run([
-                        sys.executable, os.path.join(top, "tests", "python", "support", "daemon_cleanup.py"),
-                        env["CADGEN_DAEMON_SOCKET"],
-                    ], env=cleanup_env, capture_output=True, text=True, timeout=15)
-                    if cleanup.returncode:
-                        raise RuntimeError(f"test daemon cleanup failed: {cleanup.stdout}{cleanup.stderr}")
-            finally:
-                shutil.rmtree(store, ignore_errors=True)
-                shutil.rmtree(state, ignore_errors=True)
-        output = "".join(_read_back(stream) for stream in (stdout, stderr))
+        completed = subprocess.run(argv, env=env, stdout=stdout, stderr=stderr, cwd=os.getcwd())
+        output = "".join(_read_all(stream) for stream in (stdout, stderr))
     return path, completed.returncode, output, time.perf_counter() - started
 
 
-def _read_back(stream) -> str:
+def _read_all(stream) -> str:
     stream.seek(0)
     # What `text=True` did to a pipe: its encoding, and universal newlines. A Windows
     # child ends lines with \r\n, and a summary line left ending in \r matches no regex.
@@ -202,33 +365,90 @@ def _read_back(stream) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
-def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
+def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
     top = os.path.realpath(top)
     started = time.perf_counter()
     totals = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0, "expected failures": 0, "unexpected successes": 0}
     durations: list[tuple[str, float]] = []
     failed_modules: list[str] = []
     unparsed: list[str] = []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
-        futures = [pool.submit(_run_one_file, path, top, verbose) for path in files]
-        for future in concurrent.futures.as_completed(futures):
-            path, code, output, seconds = future.result()
-            durations.append((path, seconds))
-            counts = _counts(output)
-            if not _RAN.search(output):
-                # The interpreter died before unittest could summarise (a crash, a
-                # SystemExit in a module body): count it as one error so the run fails
-                # closed, and show everything it said.
-                unparsed.append(path)
-                counts["errors"] = max(counts["errors"], 1)
-            for key in totals:
-                totals[key] += counts[key]
-            if code != 0:
-                failed_modules.append(path)
-            # Everything but the per-module tail, which the aggregate replaces.
-            body = _TAIL.sub("", _RAN.sub("", output)).rstrip()
-            if body:
-                sys.stderr.write(body + "\n")
+    # A test never writes where the developer's own cadgen keeps its state (``person_places``): what
+    # this run's cadgen writes there anyway (``the_run_s``) -- looked for as each file ends, and once
+    # more as the run does -- fails the run, named with the tests its files say were running then
+    # (``OUTSIDE``), else with the files that were, and is left as it is.
+    *places, engine = person_places(top)
+    places = tuple(places)
+    marks = registered(*places)
+    outside: dict[str, str] = {}  # what appeared, and when it was found
+    seen_in: dict[str, list[str]] = {}  # what appeared, and the tests running as it did
+    # Each file's engine folder is in here, its door beside its lock.
+    engines = tempfile.mkdtemp(prefix="cgt-")
+    # One bytecode folder for the run (``PYTHONPYCACHEPREFIX``, which the engine honours): the
+    # first file's worker compiles the CAD kernel's libraries, and every later engine reads them,
+    # where each file's own cache folder would compile them again (seconds a file). A test whose
+    # subject is where the engine keeps its bytecode starts that engine without it.
+    shared = {} if os.environ.get("PYTHONPYCACHEPREFIX") else {"PYTHONPYCACHEPREFIX": os.path.join(engines, "pycache")}
+    # A test never starts an engine where nothing names its folder: that is the developer's own
+    # engine's place, and one left there runs on after the run. Checked as each file ends (an engine
+    # running there before the run is the developer's, and is left alone); one found is stopped, and
+    # fails the run naming the files that were running.
+    door = default_engine_door(top)
+    developers = door is not None and engine_answers(top, door)
+    leaked: list[str] = []
+    running: set[str] = set()  # the files whose interpreters are running now
+
+    def run_one(path: str, env: dict[str, str]) -> tuple[str, int, str, float]:
+        running.add(path)
+        try:
+            return _run_one_file(path, top, verbose, env, places=places)
+        finally:
+            running.discard(path)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
+            futures = []
+            for index, path in enumerate(files):
+                # A state folder and a command folder of its own too: the engine's registry of
+                # documents (and Recents), the installations and the ``cadgen`` command are the
+                # developer's, never a test's.
+                env = {**os.environ, **shared, "CAD_ENGINE_DIR": os.path.join(engines, f"e{index}"),
+                       "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
+                       "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
+                       "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                futures.append(pool.submit(run_one, path, env))
+            for future in concurrent.futures.as_completed(futures):
+                path, code, output, seconds = future.result()
+                durations.append((path, seconds))
+                if door is not None and not developers and engine_answers(top, door):
+                    beside = ", ".join(sorted(running)) or "none"
+                    leaked.append(f"{door}, after {path} (running beside it: {beside})")
+                    _engine_python(top, "from cad.engine import api; api.stop()", CAD_ENGINE_DIR=os.path.dirname(door))
+                for where, test in _OUTSIDE.findall(output):
+                    seen_in.setdefault(where, []).append(f"{test} ({path})")
+                output = _OUTSIDE.sub("", output)
+                now = registered(*places)
+                for where in gained(marks, now):
+                    beside = ", ".join(sorted(running)) or "none"
+                    outside.setdefault(where, f"after {path} (running beside it: {beside})")
+                marks = now
+                counts = _counts(output)
+                if not _RAN.search(output):
+                    # The interpreter died before unittest could summarise (a crash, a
+                    # SystemExit in a module body): count it as one error so the run fails
+                    # closed, and show everything it said.
+                    unparsed.append(path)
+                    counts["errors"] = max(counts["errors"], 1)
+                for key in totals:
+                    totals[key] += counts[key]
+                if code != 0:
+                    failed_modules.append(path)
+                # Everything but the per-module tail, which the aggregate replaces.
+                body = _TAIL.sub("", _RAN.sub("", output)).rstrip()
+                if body:
+                    sys.stderr.write(body + "\n")
+        for where in gained(marks, registered(*places)):
+            outside.setdefault(where, "after the run's last file")
+    finally:
+        shutil.rmtree(engines, ignore_errors=True)
     elapsed = time.perf_counter() - started
     if print_weights:
         # stdout is free here: every line of a run goes to stderr. One `WEIGHT` line per
@@ -242,7 +462,28 @@ def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_
     for key in ("failures", "errors", "skipped", "expected failures", "unexpected successes"):
         if totals[key]:
             verdict_parts.append(f"{key}={totals[key]}")
-    ok = not failed_modules and not unparsed and totals["failures"] == 0 and totals["errors"] == 0
+    if leaked:
+        sys.stderr.write("a test started an engine where nothing named its folder, and left it running (stopped now):\n"
+                         + "".join(f"  {where}\n" for where in leaked))
+    # On CI no cadgen but the tests' runs, so all that appeared is theirs; beside a developer's own,
+    # what says it is another cadgen's (``the_run_s``) is said and left alone.
+    appeared = sorted(set(outside) | set(seen_in))
+    tests_wrote = [where for where in appeared if os.environ.get("CI") == "true" or the_run_s(where, engine, top)]
+    if tests_wrote:
+        found = []
+        for where in tests_wrote:
+            tests = seen_in.get(where, [])
+            when = (f"while {tests[0]} ran" if len(tests) == 1 else
+                    f"while one of these ran: {'; '.join(tests)}" if tests else outside[where])
+            found.append(f"  {where}, {when}\n")
+        sys.stderr.write("a test wrote where the developer's own cadgen keeps its state (left as it is):\n"
+                         + "".join(found))
+    meanwhile = [where for where in appeared if where not in tests_wrote]
+    if meanwhile:
+        sys.stderr.write("another cadgen wrote where the developer's own keeps its state meanwhile, by what "
+                         "each says of itself (no test's):\n" + "".join(f"  {where}\n" for where in meanwhile))
+    ok = (not failed_modules and not unparsed and not leaked and not tests_wrote
+          and totals["failures"] == 0 and totals["errors"] == 0)
     verdict = "OK" if ok else "FAILED"
     sys.stderr.write(verdict + (f" ({', '.join(verdict_parts)})" if verdict_parts else "") + "\n")
     if failed_modules:
@@ -261,26 +502,29 @@ def main(argv: list[str] | None = None) -> int:
         "--jobs",
         type=int,
         default=1,
-        help="run each test file in its own interpreter, this many at a time (default 1: one process)",
+        help="how many test files run at once, each in its own interpreter with an engine directory of its own (default 1)",
     )
     parser.add_argument(
         "--print-weights",
         action="store_true",
         help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
     )
+    # The runner's own: the interpreter it starts for one file, which runs it here.
+    parser.add_argument("--file", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--hang-seconds",
         type=float,
         help="print every thread's stack and exit 1 if the run is still going after this long",
     )
+    # The runner's own: the developer's places its file's tests are watched for (``_Watching``).
+    parser.add_argument("--places", type=json.loads, help=argparse.SUPPRESS)
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
     args = parser.parse_args(argv)
 
-    files = args.files
-
-    if args.jobs > 1 and len(files) > 1:
-        return run_in_parallel(files, args.top, args.jobs, args.verbose, args.print_weights)
-    return run_in_process(files, args.top, args.verbose, args.hang_seconds)
+    if args.file:
+        return run_in_process(args.files, args.top, args.verbose, args.hang_seconds,
+                              tuple(args.places) if args.places else None)
+    return run_files(args.files, args.top, max(1, args.jobs), args.verbose, args.print_weights)
 
 
 if __name__ == "__main__":

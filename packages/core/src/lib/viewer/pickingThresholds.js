@@ -22,26 +22,3 @@ export function worldUnitsPerPixelAtDistance(camera, viewportHeightPx, distance)
   }
   return null;
 }
-
-export function screenLimitedPickThreshold({
-  baseThreshold,
-  thresholdScale = 1,
-  maxScreenDistancePx,
-  camera,
-  viewportHeightPx,
-  distance
-} = {}) {
-  const scaledBaseThreshold = Math.max((Number(baseThreshold) || 0) * (Number(thresholdScale) || 0), 0);
-  if (!(scaledBaseThreshold > 0)) {
-    return 0;
-  }
-  const screenDistancePx = Number(maxScreenDistancePx);
-  if (!(screenDistancePx > 0)) {
-    return scaledBaseThreshold;
-  }
-  const unitsPerPixel = worldUnitsPerPixelAtDistance(camera, viewportHeightPx, distance);
-  if (!(Number.isFinite(unitsPerPixel) && unitsPerPixel > 0)) {
-    return scaledBaseThreshold;
-  }
-  return Math.min(scaledBaseThreshold, unitsPerPixel * screenDistancePx);
-}

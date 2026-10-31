@@ -4,12 +4,17 @@
       "command": "uvx",
       "args": [
         "--no-config",
+        "--managed-python",
+        "--python",
+        "3.14",
         "--from",
-        "cadgen==0.7.6",
-        "cadgen",
-        "mcp"
+        "cad-mcp==0.9.0",
+        "cad-mcp"
       ],
-      "startup_timeout_sec": 300
+      "startup_timeout_sec": 300,
+      "env": {
+        "CAD_INSTALL_CHANNEL": "codex-github"
+      }
     }
   }
 }

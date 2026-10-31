@@ -7,7 +7,7 @@ in juno.py; all builders return identity-location compounds.
 
 from __future__ import annotations
 
-from cadgen import build123d as bd
+import build123d as bd
 
 from .juno_lib import (
     ACCENT,

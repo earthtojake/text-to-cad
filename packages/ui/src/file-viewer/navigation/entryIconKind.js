@@ -27,7 +27,7 @@ export function entryIconKind(entry, {
   status = {}
 } = {}) {
   const safeStatus = status || {};
-  if (safeStatus.artifactGenerating || safeStatus.loading) {
+  if (safeStatus.loading) {
     return ENTRY_ICON_KIND.LOADING;
   }
 

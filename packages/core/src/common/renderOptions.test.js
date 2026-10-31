@@ -6,10 +6,15 @@ import * as THREE from "three";
 import {
   normalizeThemeSettings
 } from "./themeSettings.js";
+import { resolveCadGridSettings } from "./cadInk.js";
+import { THEME_FLOOR_MODES } from "../lib/themeSettings.js";
+import { sceneRadiusForBounds } from "../lib/viewer/modelRuntime.js";
+import { VIEWER_SCENE_SCALE } from "../lib/viewer/sceneScale.js";
+import { updateGridHelper } from "../lib/viewer/stageGrid.js";
+import { BASE_VIEWER_THEME } from "../lib/viewer/stageTheme.js";
 import {
   addFloor,
   applyLighting,
-  createSharedRenderOptions,
   RENDER_SCENE_SCALE,
   boundsCorners,
   boundsFromVertices,
@@ -22,8 +27,7 @@ import {
   inferRenderSceneScale,
   outputSize,
   rendererDataUrlWithOptionalLabel,
-  resolveRenderView,
-  snapshotUsesLogarithmicDepthBuffer
+  resolveRenderView
 } from "./renderOptions.js";
 
 const SCALE_SETTINGS = Object.freeze({
@@ -66,26 +70,27 @@ function groundHitAtNdc(camera, x, y, groundZ, includeBehind = false) {
   return depth > 0 || includeBehind ? { hit, depth } : null;
 }
 
-test("shared render options preserve explicit caller-owned values without defaults", () => {
-  const options = createSharedRenderOptions({
-    displayMode: "wireframe",
-    background: false,
-    renderScale: 0
-  });
-
-  assert.equal(options.themeSettings, null);
-  assert.equal(options.display, null);
-  assert.equal(Object.hasOwn(options, "displayMode"), false);
-  assert.equal(options.background, false);
-  assert.equal(options.renderScale, 0);
-});
-
-test("render display snapshots use ordinary depth for studio shadows", () => {
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({}), true);
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "solid" } }), true);
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "render" } }), false);
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "solid", lighting: {} } }), false);
-  assert.equal(snapshotUsesLogarithmicDepthBuffer({ display: { mode: "render", lighting: { enabled: false } } }), true);
+test("a snapshot draws the viewer's grid for the same settings, its density included", () => {
+  const bounds = { min: [0, 0, 0], max: [10, 10, 10] };
+  for (const grid of [{ enabled: true, density: 2, color: "#94a3b8", opacity: 0.38 }, { enabled: true }]) {
+    for (const colorMode of ["light", "dark"]) {
+      const scene = new THREE.Scene();
+      const floor = addFloor(scene, bounds, normalizeThemeSettings({ colorMode, floor: { mode: "none", enabled: false } }),
+        RENDER_SCENE_SCALE.CAD, SCALE_SETTINGS, { grid });
+      const drawn = scene.children.find((child) => child.userData.cadGrid);
+      // What the viewer draws: ShellViewport's grid over its rest box, through stageEffects.
+      const viewer = { THREE, scene: new THREE.Scene() };
+      updateGridHelper(viewer, BASE_VIEWER_THEME, sceneRadiusForBounds(THREE, bounds, VIEWER_SCENE_SCALE.CAD), 0,
+        VIEWER_SCENE_SCALE.CAD, THEME_FLOOR_MODES.NONE, { floorSettings: { grid: resolveCadGridSettings(grid, { colorMode }) } });
+      const uniforms = material => Object.fromEntries(Object.entries(material.uniforms)
+        .map(([name, { value }]) => [name, value?.isColor ? value.getHexString() : value]));
+      assert.deepEqual(uniforms(drawn.material), uniforms(viewer.gridHelper.material), `${colorMode}, density ${grid.density ?? 1}`);
+      assert.deepEqual(drawn.scale.toArray(), viewer.gridHelper.scale.toArray());
+      // And its span, which the snapshot fits its camera's depth range to, as the viewer does.
+      const half = viewer.gridConfig.size / 2;
+      assert.deepEqual(floor?.gridBounds, { min: [-half, -half, 0], max: [half, half, 0] });
+    }
+  }
 });
 
 test("view presets and azimuth/elevation camera parsing remain stable", () => {
@@ -293,9 +298,41 @@ test("macro views fit visible occurrences without collapsing depth inside an ass
       const projected = point.applyMatrix4(records[0].effectMatrix).project(camera);
       assert.ok(projected.z > -1 && projected.z < 1);
     }
-    records[0].tubeGpuState = { active: true };
+  }
+});
+
+test("a perspective closeup with nothing to fit on keeps near at a fraction of the pivot's depth", () => {
+  for (const scale of [0.001, 1, 1000]) {
+    const bounds = { min: [-100 * scale, -100 * scale, 0], max: [100 * scale, 100 * scale, 20 * scale] };
+    const camera = new THREE.PerspectiveCamera(40, 1, 0.01 * scale, 10000 * scale);
+    camera.position.set(0, -20 * scale, 15 * scale); camera.lookAt(0, 0, 10 * scale);
+    const pivot = new THREE.Vector3(0, 0, 10 * scale);
+    const pivotDepth = camera.position.distanceTo(pivot);
+    // The camera stands inside a part's own box, and another has no bounds: the closeup
+    // fit has nothing to go on and near falls to the radius safety floor.
+    const records = [
+      { partBounds: { min: [-5 * scale, -25 * scale, 0], max: [5 * scale, 5 * scale, 20 * scale] } },
+      { partBounds: null }
+    ];
     fitCameraDepthToBounds(camera, bounds, { placedObjects: records });
-    assertClose(camera.near, aggregateNear, 1e-8 * scale);
+    const collapsed = camera.near;
+    assert.ok(collapsed < pivotDepth / 1e4, "the fixture collapses near without a pivot");
+    fitCameraDepthToBounds(camera, bounds, { placedObjects: records, pivot });
+    assertClose(camera.near, pivotDepth / 256, 1e-9 * scale);
+    fitCameraDepthToBounds(camera, bounds, { placedObjects: records, pivot: pivot.toArray() });
+    assertClose(camera.near, pivotDepth / 256, 1e-9 * scale);
+    // A framed camera's own fit is far beyond the floor, and an orthographic camera has none.
+    camera.position.set(0, -400 * scale, 300 * scale); camera.lookAt(pivot);
+    fitCameraDepthToBounds(camera, bounds, { pivot });
+    const framedNear = camera.near;
+    fitCameraDepthToBounds(camera, bounds);
+    assert.equal(camera.near, framedNear);
+    const orthographic = new THREE.OrthographicCamera(-30 * scale, 30 * scale, 30 * scale, -30 * scale, 0.01 * scale, 10000 * scale);
+    orthographic.position.set(0, -20 * scale, 15 * scale); orthographic.lookAt(pivot);
+    fitCameraDepthToBounds(orthographic, bounds, { placedObjects: records });
+    const orthographicNear = orthographic.near;
+    fitCameraDepthToBounds(orthographic, bounds, { placedObjects: records, pivot });
+    assert.equal(orthographic.near, orthographicNear, "orthographic depth is linear: no floor");
   }
 });
 
@@ -377,7 +414,7 @@ test("output sizing and padding helpers preserve snapshot fallback semantics", (
   assert.equal(framePadding({ output: { padding: -0.02 } }), 0);
   assert.equal(framePadding({ output: { padding: 0.25 } }), 0.15);
   assert.equal(framePadding({ output: { padding: 0.13 } }), 0.13);
-  // One name: the retired `paddingPercent` is refused by the CLI and means nothing here.
+  // One name: `paddingPercent` is not an output key (the CLI refuses it as unknown) and means nothing here.
   assert.equal(framePadding({ output: { paddingPercent: 0.13 } }), 0.04);
 });
 
@@ -440,30 +477,31 @@ test("supersampled PNG capture resamples the complete drawing buffer to the requ
 });
 
 test("inspection grid uses explicit appearance and shared Viewer spacing", () => {
-  const scene = new THREE.Scene();
-  addFloor(
-    scene,
-    { min: [0, 0, 0], max: [10, 10, 10] },
-    normalizeThemeSettings({
-      floor: { mode: "none", enabled: false }
-    }),
-    RENDER_SCENE_SCALE.CAD,
-    SCALE_SETTINGS,
-    { grid: { enabled: true, color: "#123456", opacity: 0.37 } }
-  );
-
-  const grid = scene.children[0];
-  const materials = Array.isArray(grid.material) ? grid.material : [grid.material];
-  assert.equal(grid.type, "GridHelper");
-  assert.equal(grid.geometry.getAttribute("position").count, 4 * (112 + 1));
-  assert.equal(materials[0].opacity, 0.37);
-  assert.equal(materials[0].transparent, true);
-  assert.equal(materials[0].depthWrite, false);
+  const grid = appearance => {
+    const scene = new THREE.Scene();
+    addFloor(scene, { min: [0, 0, 0], max: [10, 10, 10] },
+      normalizeThemeSettings({ colorMode: appearance, floor: { mode: "none", enabled: false } }),
+      RENDER_SCENE_SCALE.CAD, SCALE_SETTINGS, { grid: { enabled: true, color: "#123456", opacity: 0.37 } });
+    return scene.children[0];
+  };
+  const light = grid("light");
+  assert.equal(light.userData.cadGrid, true);
+  assert.equal(light.material.uniforms.opacity.value, 0.37);
+  assert.equal(light.material.uniforms.color.value.getHexString(), "123456");
+  assert.equal(light.material.transparent, true);
+  assert.equal(light.material.depthWrite, false);
+  // Red X and green Y, a shade apart per appearance.
+  const dark = grid("dark");
+  for (const name of ["xAxisColor", "yAxisColor"]) {
+    assert.notEqual(light.material.uniforms[name].value.getHexString(), dark.material.uniforms[name].value.getHexString());
+  }
+  const { r, g } = light.material.uniforms.xAxisColor.value;
+  assert.ok(r > g, "the X axis is red");
 });
 
 test("a posed model's ground is sized from its REST placement, while the floor still drops under it", () => {
   // The viewer sizes the grid and stage from the rest pose so posing never rescales the ground;
-  // a snapshot must too, or `cadgen step snapshot --kinematics` shows a different ground than the
+  // a snapshot must too, or a posed model's snapshot shows a different ground than the
   // viewer does. Only the SIZE follows rest: a pose that reaches below the rest box still pushes
   // the floor down, or the moved part would sink through it.
   const rest = { min: [0, 0, 0], max: [10, 10, 10] };
@@ -472,10 +510,8 @@ test("a posed model's ground is sized from its REST placement, while the floor s
     const scene = new THREE.Scene();
     addFloor(scene, posed, normalizeThemeSettings({ floor: { mode: "none", enabled: false } }),
       RENDER_SCENE_SCALE.CAD, SCALE_SETTINGS, { grid: { enabled: true } }, sizeBounds);
-    const grid = scene.children.find(child => child.type === "GridHelper");
-    grid.geometry.computeBoundingBox();
-    const box = grid.geometry.boundingBox;
-    return { span: box.max.x - box.min.x, z: grid.position.z };
+    const grid = scene.children.find(child => child.userData.cadGrid);
+    return { span: grid.scale.x, z: grid.position.z };
   };
   const fromRest = gridSpan(rest);
   const fromPose = gridSpan(null);
@@ -504,15 +540,14 @@ test("display guides render independently from the studio stage floor", () => {
     { grid: { enabled: true, color: "#123456", opacity: 0.37 } }
   );
 
-  const grid = scene.children.find((child) => child.type === "GridHelper");
+  const grid = scene.children.find((child) => child.userData.cadGrid);
   const plane = scene.children.find((child) => child.material?.isMeshPhysicalMaterial);
   const shadow = scene.children.find((child) => child.material?.isShadowMaterial);
-  const gridMaterials = Array.isArray(grid.material) ? grid.material : [grid.material];
 
   assert.ok(grid);
   assert.ok(plane);
   assert.ok(shadow);
-  assert.equal(gridMaterials[0].opacity, 0.37);
+  assert.equal(grid.material.uniforms.opacity.value, 0.37);
   assert.equal(grid.position.z, 0);
   assert.equal(plane.material.color.getHexString(), "ddeeff");
   assert.equal(plane.material.roughness, 0.36);

@@ -1,18 +1,28 @@
+import { forwardRef } from "react";
 import { Settings } from "lucide-react";
 import {
-  DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
+  DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger
 } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { TOOLBAR_ICON_BUTTON_CLASS } from "@text-to-cad/ui/primitives/toolbar-button";
 import { cn } from "@text-to-cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
-import { PLAYBACK_SPEEDS } from "./playbar/ViewportAnimationBar.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
+import { PLAYBACK_SPEEDS } from "./playbar/AnimationTimeControl.js";
 import ToolPopover from "./ToolPopover.jsx";
+import { useI18n } from "@text-to-cad/ui/i18n";
+
+// The file sidebar's Animation section's Playback settings (`playbar/AnimationSection.jsx`), opening
+// down from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds
+// (`kit/shell/PreviewSettings.jsx`).
 
 export const ORBIT_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];
 
+// The cog is a toolbar tile, as the section's Play beside it is.
+const MENU_TRIGGER_CLASS = cn(TOOLBAR_ICON_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
+
 // A value's submenu: its name, the value in hand at the right against the chevron, and the radio list.
-// `name` is the accessible name, for the two Speeds under their headings.
+// `name` is the accessible name ("Animation speed").
 function SpeedSubmenu({ label, name = label, value, values, onChange }) {
   const options = values.includes(value) ? values : [...values, value].sort((a, b) => a - b);
   return <DropdownMenuSub>
@@ -27,46 +37,30 @@ function SpeedSubmenu({ label, name = label, value, values, onChange }) {
   </DropdownMenuSub>;
 }
 
+/** The menu's icon button, named. */
+const MenuTrigger = forwardRef(function MenuTrigger({ label, className, children, ...props }, ref) {
+  return <Button ref={ref} type="button" variant="ghost" size="icon-xs" aria-label={label} className={className} {...props}>{children}</Button>;
+});
+
+const keepOpen = event => event.preventDefault();
+
 /**
- * Preview mode's Playback settings: the cog in the view's top-right corner, beside the way out of
- * preview, and its dropdown, which opens down from it. For a file with routines, **Animation** — the Routine (with
- * more than one), its Speed, Loop and Autoplay (whether entering preview starts it, the person's
- * across files) — then, for every file, **Orbit**: on or off, and its Speed. Ticking a checkbox
- * leaves the menu open. Play, pause and the scrubber are the playbar under the model, for a file
- * with routines.
+ * The Animation section's Playback settings, at the end of its transport: a cog whose dropdown opens
+ * from it, with the routine's **Speed**, **Loop**, and **Autoplay** (whether entering Preview
+ * starts it). Ticking a checkbox leaves the menu open. All three are the file's, kept in its view.
  *
- * @param {{ animation?: object | null, autoplay: boolean, onAutoplayChange(value: boolean): void,
- *   orbit: boolean, onOrbitChange(value: boolean): void, orbitSpeed: number, onOrbitSpeedChange(value: number): void,
- *   onOpenChange?(open: boolean): void }} props  `animation` is the playbar runtime, or null for a static file.
+ * @param {{ animation: object, autoplay: boolean, onAutoplayChange(value: boolean): void,
+ *   side?: "top" | "bottom", disabled?: boolean }} props
+ *   `animation` is the routine runtime; `side` is where the menu opens.
  */
-export default function PlaybackMenu({ animation = null, autoplay, onAutoplayChange, orbit, onOrbitChange, orbitSpeed,
-  onOrbitSpeedChange, onOpenChange }) {
-  const clips = animation?.clips || [];
-  const keepOpen = event => event.preventDefault();
-  return <ToolPopover allowInactive side="bottom" align="end" onOpenChange={onOpenChange} label="Playback settings" className="w-44"
-    trigger={<ToolbarButton tooltip={false} label="Playback settings" className="size-6"><Settings className="size-3.5" aria-hidden="true" /></ToolbarButton>}>
-    {clips.length ? <>
-      <DropdownMenuLabel className="text-muted-foreground">Animation</DropdownMenuLabel>
-      {clips.length > 1 ? <DropdownMenuSub>
-        <DropdownMenuSubTrigger className="[&>svg:last-child]:ml-0 [&>svg:last-child]:size-3">
-          Routine<span className="ml-auto min-w-0 truncate pl-2 text-muted-foreground">{clips.find(clip => clip.id === animation.activeClipId)?.label}</span>
-        </DropdownMenuSubTrigger>
-        <DropdownMenuSubContent aria-label="Routine" className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
-          <DropdownMenuRadioGroup value={animation.activeClipId} onValueChange={animation.onClipSelect}>
-            {clips.map(clip => <DropdownMenuRadioItem key={clip.id} value={clip.id}>{clip.label}</DropdownMenuRadioItem>)}
-          </DropdownMenuRadioGroup>
-        </DropdownMenuSubContent>
-      </DropdownMenuSub> : null}
-      <SpeedSubmenu label="Speed" name="Animation speed" value={Number(animation.speed) || 1} values={PLAYBACK_SPEEDS} onChange={animation.onSpeedChange} />
-      <DropdownMenuCheckboxItem checked={animation.loopEnabled !== false} onSelect={keepOpen}
-        onCheckedChange={checked => animation.onLoopToggle(checked === true)}>Loop</DropdownMenuCheckboxItem>
-      <DropdownMenuCheckboxItem checked={autoplay === true} onSelect={keepOpen}
-        onCheckedChange={checked => onAutoplayChange?.(checked === true)}>Autoplay</DropdownMenuCheckboxItem>
-      <DropdownMenuSeparator />
-      <DropdownMenuLabel className="text-muted-foreground">Orbit</DropdownMenuLabel>
-    </> : null}
-    <DropdownMenuCheckboxItem checked={orbit} onSelect={keepOpen}
-      onCheckedChange={checked => onOrbitChange(checked === true)}>Orbit</DropdownMenuCheckboxItem>
-    <SpeedSubmenu label={clips.length ? "Speed" : "Orbit speed"} name="Orbit speed" value={orbitSpeed} values={ORBIT_SPEEDS} onChange={onOrbitSpeedChange} />
+export default function PlaybackMenu({ animation, autoplay, onAutoplayChange, side = "top", disabled = false }) {
+  const { t } = useI18n();
+  return <ToolPopover allowInactive side={side} align="end" label={t("playback.settings")} className="w-40"
+    trigger={<MenuTrigger label={t("playback.settings")} disabled={disabled} className={MENU_TRIGGER_CLASS}><Settings className="size-3.5" strokeWidth={1.5} aria-hidden="true" /></MenuTrigger>}>
+    <SpeedSubmenu label={t("playback.speed")} name={t("playback.animationSpeed")} value={Number(animation.speed) || 1} values={PLAYBACK_SPEEDS} onChange={animation.onSpeedChange} />
+    <DropdownMenuCheckboxItem checked={animation.loopEnabled !== false} onSelect={keepOpen}
+      onCheckedChange={checked => animation.onLoopToggle(checked === true)}>{t("playback.loop")}</DropdownMenuCheckboxItem>
+    <DropdownMenuCheckboxItem checked={autoplay === true} onSelect={keepOpen}
+      onCheckedChange={checked => onAutoplayChange?.(checked === true)}>{t("playback.autoplay")}</DropdownMenuCheckboxItem>
   </ToolPopover>;
 }

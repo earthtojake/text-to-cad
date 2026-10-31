@@ -136,3 +136,14 @@ test("sameTransform tells a resize's drift from a pan", () => {
   assert.ok(!sameTransform(base, null));
   assert.ok(sameTransform(null, null));
 });
+
+test("a fit keeps clear of the room at the pane's top (the view's tool strip)", () => {
+  const bounds = [0, 0, 100, 100];
+  const open = fitTransform(bounds, 400, 400);
+  const clear = fitTransform(bounds, 400, 400, { top: 80 });
+  assert.ok(clear.scale < open.scale, "smaller, to fit under the strip");
+  // The drawing's top edge (model y = 100) lands below the strip's room plus the margin.
+  assert.ok(-100 * clear.scale + clear.offsetY >= 80, "its top is clear of the strip");
+  assert.equal(-0 * clear.scale + clear.offsetY <= 400, true, "its bottom is still on the pane");
+  assert.deepEqual(fitTransform(bounds, 400, 400, { top: 0 }), open, "no room asked, the same fit");
+});
