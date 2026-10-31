@@ -107,6 +107,20 @@ def _kernel(make: bool) -> dict[str, Any] | None:
     return made(make)
 
 
+def _making() -> Any:
+    """The engine's making of the base when it is absent (``cad_server._internal.engine_host.making``)."""
+    from cad_server._internal.engine_host import making
+
+    return making()
+
+
+def _halt() -> None:
+    """The uv commands the engine runs now stopped (``cad_server._internal.engine_host.halt``)."""
+    from cad_server._internal.engine_host import halt
+
+    halt()
+
+
 # The application the engine serves on its listener; None serves the documents' routes alone (``serve``).
 HTTP_FACTORY: Callable[[Any, str, int], Any] | None = _application
 # Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
@@ -677,24 +691,51 @@ class Daemon:
         self.last = time.monotonic()
 
     def stand(self) -> None:
-        """At the daemon's start: each service's standby (``Supervisor.stand``) -- the workers', a
-        worker with the kernel loaded, so a new script's first build pays no kernel load -- nor, on
-        a fresh installation, the operating system's first look at its native libraries (macOS checks
-        each once: 43 s measured on a new uvx environment, against 2.5 s loaded again), which the
-        standby pays while nobody waits. Started in the environment of the client that started the
-        daemon (``environment``), in the engine's kernel environment, the base, once that is made -- a
-        start never makes it, so it never waits on, or asks, the network --; each standby after it in
-        that of the lease that took the last one. And the bytecode folders of installations no daemon
-        started in ``PYCACHE_UNUSED_DAYS`` go, in the background (``prune_bytecode``). With
-        ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby is enabled: none stands by, and
-        none replaces one."""
+        """At the daemon's start: the engine's kernel environment, the base, made in the background when
+        it is absent (``base.Making``): an engine a host's CAD app starts runs outside any sandbox, and an
+        agent's sandboxed first command cannot write the cache folder -- nothing waits on the making
+        (nor on the network it may ask) but what needs the kernel. Then each service's standby
+        (``Supervisor.stand``) -- the workers', a worker with the kernel loaded, so a new script's first
+        build pays no kernel load -- nor, on a fresh installation, the operating system's first look at
+        its native libraries (macOS checks each once: 43 s measured on a new uvx environment, against 2.5 s
+        loaded again), which the standby pays while nobody waits. Started in the environment of the client
+        that started the daemon (``environment``), in the base, once that is made (``made_base``); each
+        standby after it in that of the lease that took the last one. And the bytecode folders of
+        installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in the background
+        (``prune_bytecode``). With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby is
+        enabled: none stands by, and none replaces one."""
         prune_bytecode()
+        making = _making()
+        making.made = self.made_base
+        making.start()
         if not standby():
             return
         for service in SERVICES:
             if service.standby is not None:
                 self.supervisor.enable_standby(service.name)
                 self.supervisor.stand(service.name, self.environment())
+
+    def made_base(self) -> None:
+        """The base made here (``base.Making``): each service's standby, when standbys are enabled,
+        stands in it now."""
+        if self.stopping.is_set():
+            return
+        for service in SERVICES:
+            if service.standby is not None:
+                self.supervisor.stand(service.name, self.environment())
+
+    def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
+        """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
+        sandboxed ``cad run``, ``base.ensure``'s ``engine``): made here when it is not -- the making
+        under way followed, or one started (``base.Making.follow``) -- each of its lines a ``log`` frame,
+        then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one line. A base of another
+        installation's (``key``) is not this engine's to make: ``{"ok": false, "other": true}``."""
+        making = _making()
+        if request.get("key") != making.key():
+            send({"ok": False, "other": True})
+            return
+        error = making.follow(lambda line: send({"log": line}))
+        send({"ok": True, "base": True} if error is None else {"failed": error, "base": True})
 
     @staticmethod
     def environment() -> dict[str, str]:
@@ -1308,6 +1349,8 @@ class Daemon:
             send({"ok": True})
         elif op == "status":
             send(self.status())
+        elif op == "base":
+            self.base(request, send)
         elif op == "pid":
             send({"ok": True, "pid": os.getpid()})  # who answers: a client that started a daemon asks
         elif op == "stop":
@@ -1397,6 +1440,7 @@ class Daemon:
                 "cache": self.models.cache.status(),
                 "identity": self.identity if self.identity and any(self.identity.values()) else None,
                 "renders": [] if self.renders is None else self.renders.status(),
+                "base": _making().status(),
                 "sessions": (self.server.http.app.sessions() if self.server is not None
                              and hasattr(self.server.http, "app") else [])}
 
@@ -1471,6 +1515,7 @@ class Daemon:
     def shutdown(self) -> None:
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
+        _halt()  # a making of the base under way: its uv goes with the engine
         self.supervisor.stop()  # its workers, the standby and the render processes
         if self.server is not None:
             self.server.stop()

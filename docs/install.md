@@ -129,7 +129,8 @@ folder too.
    [uv's installer](https://docs.astral.sh/uv/getting-started/installation/).
 2. Run the commands under your agent app's heading below, or under
    [Other Agents](#other-agents) if it has none.
-3. Restart the app. Its first start downloads CAD's runtime, so it needs a network
+3. Restart the app. Its first start downloads CAD's runtime and makes the environment
+   models run in ([What a model runs in](#what-a-model-runs-in)), so it needs a network
    connection.
 
 The plugin for your agent app brings the skills and CAD's viewer, a local server
@@ -424,8 +425,9 @@ reaches it. A model runs where the kernel is: in one environment the server make
 in its cache folder and keeps, the library with its kernel (`texttocad[build123d]`) on the
 server's Python, 3.14. Every model runs there, and so do the server's own kernel
 processes: exports, snapshots and the meshes the viewer shows. The install command makes
-it; otherwise the first model or the first view does. A model imports what that
-environment holds: the library (`cad`), build123d and what they bring.
+it; otherwise the server makes it as it starts, in the background (with a plugin alone,
+the first start of an app's CAD app), and a first model or view waits for it. A model
+imports what that environment holds: the library (`cad`), build123d and what they bring.
 
 To run models with a Python of your own instead, install the library with its kernel
 into it: `pip install 'texttocad[build123d]'` (`pip install texttocad` is the library alone,

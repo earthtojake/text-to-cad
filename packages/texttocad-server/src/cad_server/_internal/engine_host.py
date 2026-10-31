@@ -1,5 +1,6 @@
 """The server's composition root: the CAD Viewer's and the CAD app's HTTP application on the engine's
-listener, and the environment the engine's kernel processes run in.
+listener, and the environment the engine's kernel processes run in, which the engine makes when it is
+absent.
 
 Neither the Viewer's application nor the CAD app's server is imported by anything outside them but this
 (they are the server's leaves). The engine's daemon takes its application from here
@@ -43,6 +44,20 @@ def kernel(make):
     from cad_server._internal.base import kernel as made
 
     return made(make)
+
+
+def making():
+    """The engine's making of that environment when it is absent (``cad_server._internal.base.MAKING``)."""
+    from cad_server._internal.base import MAKING
+
+    return MAKING
+
+
+def halt():
+    """The uv commands the engine runs now stopped, as it stops (``cad_server._internal.base.halt``)."""
+    from cad_server._internal.base import halt as stop
+
+    stop()
 
 
 # The variables an agent host sets in the shells it runs a command in, which name it there as

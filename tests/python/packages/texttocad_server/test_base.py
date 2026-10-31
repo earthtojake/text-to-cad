@@ -14,6 +14,7 @@ import io
 import os
 import subprocess
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -124,6 +125,66 @@ class BaseTest(unittest.TestCase):
             found = base.ensure(own)
         self.assertEqual(found, base.Environment(own.executable, own.prefix, True))
         self.assertEqual(fake.steps, [])
+
+    def test_the_engine_makes_its_base_in_the_background_and_a_follower_hears_its_lines(self) -> None:
+        # The engine that finds no base makes it (``Making``), outside the sandbox an agent's command runs in:
+        # whoever asks for it follows the making from its first line, and the engine is told once it is made
+        # (``made``: its standby stands then). Its start at the engine's own start is test_daemon's.
+        fake, making, made = Fake(), base.Making(), threading.Event()
+        making.made = made.set
+        heard: list[str] = []
+        with self.made(fake), mock.patch.object(base.Installation, "here", return_value=self.installation), \
+                contextlib.redirect_stderr(io.StringIO()) as log:
+            self.assertEqual(making.key(), base.where(self.installation).name)
+            self.assertIsNone(making.follow(heard.append), "absent: made now, and followed from its first line")
+            self.assertTrue(made.wait(30))
+            self.assertFalse(making.start(), "made: nothing to make again")
+            self.assertIsNone(making.follow(heard.append), "made: nothing more to hear")
+        env = base.where(self.installation)
+        self.assertIsNotNone(base.complete(env))
+        line = f"making the CAD kernel environment, once: texttocad[build123d] {RELEASE} on Python 3.14.2, in {env}"
+        self.assertEqual(heard, [line])
+        self.assertEqual(log.getvalue(), f"cad: {line}\n", "the engine's log")
+        self.assertEqual(fake.asked(), ["venv", "pip --offline"])
+        self.assertEqual(making.status()["state"], "made")
+
+    def test_cad_run_has_the_device_s_engine_make_the_base_and_hears_its_making(self) -> None:
+        # A sandboxed `cad run` cannot write the cache folder: the engine, which a host's CAD app started
+        # outside the sandbox, makes the base, and the command says each line of it as it comes.
+        from cad.engine import client
+
+        env = base.where(self.installation)
+        engine_uv, own_uv, asked = Fake(), Fake(), []
+
+        def engine(answer):
+            def request(message, on_log=lambda _frame: None, *, start=True, on_progress=None):
+                asked.append((message, start))
+                on_log({"log": "making the CAD kernel environment, once"})
+                if answer.get("ok"):
+                    with mock.patch.object(base, "_uv", engine_uv):
+                        base.ensure(self.installation, told=lambda _line: None)
+                return answer
+            return request
+
+        with self.made(own_uv), mock.patch.object(client, "request", side_effect=engine({"ok": True, "base": True})):
+            found = base.ensure(self.installation, told=self.said.append, engine=True)
+        self.assertEqual(asked, [({"op": "base", "key": env.name}, False)], "a running engine, never one started")
+        self.assertEqual((found.prefix, own_uv.steps), (str(env), []), "made by the engine, not here")
+        self.assertEqual(self.said, ["making the CAD kernel environment, once"])
+        refused = {"failed": "the CAD kernel environment needs the network once: dns error", "base": True}
+        with self.made(own_uv), mock.patch.object(client, "request", side_effect=engine(refused)), \
+                mock.patch.object(base, "where", return_value=self.root / "cache" / base.BASE / "another"), \
+                self.assertRaisesRegex(base.Refused, "^the CAD kernel environment needs the network once: dns error$"):
+            base.ensure(self.installation, told=self.said.append, engine=True)
+        # No engine running, one of another installation's, one that makes no base: the command makes it.
+        for answer in (None, {"ok": False, "other": True}, {"failed": "unknown request 'base'"}):
+            with self.subTest(answer=answer):
+                folder = self.root / "cache" / base.BASE / f"own-{len(own_uv.steps)}"
+                with self.made(own_uv), mock.patch.object(client, "request", return_value=answer), \
+                        mock.patch.object(base, "where", return_value=folder):
+                    self.assertEqual(base.ensure(self.installation, told=self.said.append, engine=True).prefix,
+                                     str(folder))
+        self.assertEqual(own_uv.asked(), ["venv", "pip --offline"] * 3)
 
     def test_where_the_installation_installs_from(self) -> None:
         tree = self.root / "checkout"

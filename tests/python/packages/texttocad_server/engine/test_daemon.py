@@ -857,6 +857,50 @@ class StandbyStartTest(unittest.TestCase):
         self.assertEqual([service for service, _environment in asked], ["worker"])
         self.assertEqual(asked[0][1]["PYTHONPATH"], "/mine", "without the engine's folder its starter put first")
 
+    def test_an_engine_with_no_base_makes_it_at_its_start_and_stands_its_standby_once_made(self) -> None:
+        # The plugin's server alone, as a host's CAD app installs it: the engine it starts, outside any sandbox,
+        # makes the base at its start in the background (an agent's sandboxed command cannot), and its standby
+        # stands once the base is made.
+        import contextlib
+        import dataclasses
+        import io
+        import threading
+
+        from cad_server._internal import base
+        from cad_server.engine import daemon
+
+        scratch = Path(tempfile.mkdtemp(prefix="engine-base-"))
+        self.addCleanup(shutil.rmtree, scratch, True)
+        core = dataclasses.replace(base._own(), kernel=False)
+        go = threading.Event()
+
+        def make(env, recipe, told, *, finish, marker, done):
+            told(recipe.making)
+            go.wait(30)
+            base.interpreter(env).parent.mkdir(parents=True)
+            base.interpreter(env).write_text("", encoding="utf-8")
+            written = {"schema": base.SCHEMA, "key": env.name, "path": []}
+            (env / marker).write_text(json.dumps(written), encoding="utf-8")
+            return written
+
+        engine = daemon.Daemon()
+        self.addCleanup(engine.supervisor.stop)
+        stood: list[bool] = []  # whether the base was there each time a standby was asked to stand
+        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(scratch), "CAD_ENGINE_STANDBY": "1"}), \
+                mock.patch.object(base, "MAKING", base.Making()), mock.patch.object(base, "make", side_effect=make) as made, \
+                mock.patch.object(base.Installation, "here", return_value=core), contextlib.redirect_stderr(io.StringIO()), \
+                mock.patch.object(engine.supervisor, "stand",
+                                  side_effect=lambda _service, _env: stood.append(base.complete(base.where(core)) is not None)):
+            engine.stand()
+            self.assertEqual((engine.status()["base"]["state"], stood), ("making", [False]))
+            go.set()
+            deadline = time.monotonic() + 30
+            while len(stood) < 2 and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(engine.status()["base"]["state"], "made")
+        made.assert_called_once()
+        self.assertEqual(stood, [False, True], "none to stand in at the start; the standby once the base is made")
+
     def test_with_the_switch_off_none_stands_by_and_none_replaces_one(self) -> None:
         from unittest import mock
 

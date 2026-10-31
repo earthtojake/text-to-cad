@@ -693,8 +693,9 @@ def status_text(answer: dict[str, Any]) -> str:
     """``cad status``: the server and its pool's rules -- its workers against their count cap,
     their memory against its cap -- a line per worker -- busy or idle, its script, process, builds
     and memory after its last build, where a busy one's build is (its last progress frame), how long
-    it has been busy or idle -- the standby's line (its process and memory: no script), the builds
-    waiting for a worker, the last retirements, what it serves and holds under its memory budget,
+    it has been busy or idle -- the standby's line (its process and memory: no script), the making of
+    the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
+    retirements, what it serves and holds under its memory budget,
     and each model document's state, with the command that builds again one not held."""
     import time
 
@@ -730,6 +731,12 @@ def status_text(answer: dict[str, Any]) -> str:
         lines.append(f"  standby  {'':<{width}}  {str(standby.get('pid') or ''):>6}  {'':>10}  "
                      f"{_gb(standby.get('rssMb')):>7}  "
                      + ("starting" if standby.get("starting") else f"kernel loaded · {_span(standby.get('seconds'))}"))
+    made = answer.get("base") or {}
+    if made.get("state") == "making":
+        # The engine making its kernel environment (``base.Making``): the standby, and the builds, wait for it.
+        lines.append(f"  base     making the CAD kernel environment · {made.get('line') or ''} · {_span(made.get('seconds'))}")
+    elif made.get("state") == "failed":
+        lines.append(f"  base     the CAD kernel environment was not made: {made.get('error')}")
     if answer.get("waiting"):
         waiting = answer["waiting"]
         lines.append(f"  waiting  {waiting} build{'' if waiting == 1 else 's'}, first come first served")

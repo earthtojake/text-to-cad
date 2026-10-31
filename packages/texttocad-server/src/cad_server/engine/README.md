@@ -394,11 +394,16 @@ Every process of the engine's that loads the kernel runs the base's Python (`pla
 distribution makes as `places.KERNEL`): a model's worker, the documents worker, the standby, the
 render processes, and the meshing and reading pools, whose spawned processes start on the base's own
 import path, which the marker records (`serve._spawn_in`). The engine starts and serves with no base
-made -- pages, the home, documents held in the cache, `status` -- and its start never makes one: the
-standby waits for it. The first kernel process asked for makes it, while its request waits;
-`cad setup` and `cad doctor` make it at install time, so the first build waits on nothing. A
-base that cannot be made fails the request that needed it in one line
-(`serve.KernelProcessesUnavailable`), and nothing remembers the failure.
+made -- pages, the home, documents held in the cache, `status` -- and makes it then, in the background
+(`base.Making`, its lines in the engine's log and its state in `status`): an engine a host's CAD app
+started runs outside any sandbox, where an agent's command may not write the cache folder. The standby
+stands once it is made, and a kernel process asked for meanwhile waits for it (the base's lock). A
+`cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`, its key naming
+the installation's base) and follows its making, each line said as it comes; it makes the base itself
+only when no engine of its installation answers. `cad setup` and `cad doctor` make it at install time,
+so the first build waits on nothing. A base that cannot be made fails the request that needed it in one
+line (`serve.KernelProcessesUnavailable`), and nothing remembers the failure: the next asker makes it
+again.
 
 ## Layout
 
@@ -673,7 +678,7 @@ tessellations, is under one memory budget: **Document lifetime**.)
 - **The cap never retires a watched worker.** When every idle worker has a document a page
   watches, the new worker starts past the cap. The memory cap may still retire a watched one.
 - **A standby.** One worker stands by with the kernel loaded and no script (`Supervisor.stand`): started
-  with the daemon once the base is made (a start never makes it: **Running a model**), and again each
+  with the daemon once the base is made (a start with none makes it first: **Running a model**), and again each
   time a build takes it or starts a worker of its own, while the pool has a slot for it under the cap
   and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the

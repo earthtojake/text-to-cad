@@ -25,6 +25,10 @@ processes (the standby, the documents worker, the meshing and reading pools, the
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
+- **The engine makes it** when it starts and finds none (``Making``, in the background): an engine a
+  host's CAD app starts runs outside any sandbox, so an agent's sandboxed first ``cad run``, which cannot
+  write the cache folder, asks it over its door (``ensure``'s ``engine``) and follows its making; with no
+  engine to ask, the command makes it itself.
 """
 
 from __future__ import annotations
@@ -39,6 +43,7 @@ import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,8 +51,8 @@ from typing import Any, Callable
 
 from cad.engine import places
 
-__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "Environment", "Installation", "MARKER", "Recipe", "Refused", "SCHEMA", "complete",
-           "ensure", "failure", "find_uv", "interpreter", "kernel", "make", "where"]
+__all__ = ["BASE", "EXTRA", "FIND_LINKS_ENV", "MAKING", "Environment", "Installation", "MARKER", "Making", "Recipe",
+           "Refused", "SCHEMA", "complete", "ensure", "failure", "find_uv", "halt", "interpreter", "kernel", "make", "where"]
 
 # The bases' folder in the cache folder, and the marker that makes one complete, written last: the one a
 # process in the base reads its installation from (``places.home``).
@@ -245,11 +250,12 @@ def _found(env: Path, marker: dict[str, Any]) -> Environment:
 
 
 def ensure(installation: Installation | None = None, *, make: bool = True,
-           told: Callable[[str], None] | None = None) -> Environment | None:
+           told: Callable[[str], None] | None = None, engine: bool = False) -> Environment | None:
     """The installation's base (see the module): the installation's own environment when it carries the
     kernel; else ``base/<key>`` in the cache folder, made first when it is not complete and ``make``
-    (None when it is not, and ``make`` is false), each line of the making said to ``told``. ``Refused``
-    in one line when it cannot be made."""
+    (None when it is not, and ``make`` is false), each line of the making said to ``told`` -- with
+    ``engine`` (``cad run``), made by the device's engine when one runs (``_by_the_engine``), else here.
+    ``Refused`` in one line when it cannot be made."""
     installation = installation or Installation.here()
     if installation.kernel:
         return Environment(installation.executable, installation.prefix, True)
@@ -259,7 +265,31 @@ def ensure(installation: Installation | None = None, *, make: bool = True,
         return _found(env, marker)
     if not make:
         return None
+    if engine:
+        marker = _by_the_engine(env, told or _say)
+        if marker is not None:
+            return _found(env, marker)
     return _found(env, _make(env, installation, told or _say))
+
+
+def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | None:
+    """The base at ``env`` made by the device's engine, when one runs and it is this installation's
+    (``{"op": "base"}``, ``Making``): its making followed, each line said to ``told``, and the base's
+    marker once made. None when no engine answers, or one makes no base of this installation's (another
+    installation's, a release before this one): the caller makes the base itself. ``Refused`` in the
+    engine's words when it could not make it."""
+    from cad.engine import client
+
+    try:
+        answer = client.request({"op": "base", "key": env.name}, start=False,
+                                on_log=lambda frame: told(str(frame.get("log", ""))))
+    except (ConnectionError, OSError, ValueError):
+        return None
+    if not answer or answer.get("base") is not True:
+        return None
+    if answer.get("failed"):
+        raise Refused(str(answer["failed"]))
+    return complete(env)
 
 
 def kernel(make: bool = True) -> dict[str, Any] | None:
@@ -270,6 +300,94 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
     if found is None:
         return None
     return {"python": found.python, "path": None if found.path is None else list(found.path), "own": found.own}
+
+
+class Making:
+    """The installation's base made in this process's background: the engine's, at its start when the base
+    is absent (``start``), and again for whoever needs it later (``follow``: a client's ``cad run`` over the
+    engine's door). One making at a time, under the base's own lock as every maker's (a lease that needs the
+    kernel meanwhile waits on it); its lines go to the engine's log and are kept for whoever follows it and for
+    ``status``; ``made`` is told when it is made (the engine stands its standby). Nothing remembers a
+    failure: the next start or follower makes it again."""
+
+    def __init__(self) -> None:
+        self.changed = threading.Condition()
+        self.state: str | None = None  # None: nothing made here; "making", "made" or "failed"
+        self.lines: list[str] = []
+        self.error: str | None = None
+        self.since: float | None = None
+        self.made: Callable[[], None] | None = None
+
+    def key(self) -> str | None:
+        """The name of this installation's base folder (``where``), which a client names the base it
+        needs by; None for an installation that carries the kernel."""
+        installation = Installation.here()
+        return None if installation.kernel else where(installation).name
+
+    def start(self) -> bool:
+        """The base made on a thread of its own when it is absent and none is being made here: whether it
+        is being made now."""
+        with self.changed:
+            if self.state == "making":
+                return True
+            installation = Installation.here()
+            if installation.kernel or complete(where(installation)) is not None:
+                return False
+            self.state, self.lines, self.error, self.since = "making", [], None, time.time()
+        threading.Thread(target=self._make, name="cadgen-base", daemon=True).start()
+        return True
+
+    def _said(self, line: str) -> None:
+        print(f"cad: {line}", file=sys.stderr, flush=True)  # the engine's log
+        with self.changed:
+            self.lines.append(line)
+            self.changed.notify_all()
+
+    def _make(self) -> None:
+        try:
+            ensure(told=self._said)
+            state, error = "made", None
+        except Refused as refused:
+            state, error = "failed", str(refused)
+        except Exception as failure:  # noqa: BLE001 - said, and the next asker tries again
+            state, error = "failed", f"{type(failure).__name__}: {failure}"
+        if error is not None:
+            print(f"cad: {error}", file=sys.stderr, flush=True)
+        with self.changed:
+            self.state, self.error = state, error
+            self.changed.notify_all()
+        if state == "made" and self.made is not None:
+            self.made()
+
+    def follow(self, told: Callable[[str], None]) -> str | None:
+        """The base made, by the making under way here or one started now: each of its lines said to
+        ``told``, from its first, as it comes. None once the base is made, else why not, in one line."""
+        if not self.start():
+            return None  # made already, or this installation's own environment
+        said = 0
+        while True:
+            with self.changed:
+                while len(self.lines) == said and self.state == "making":
+                    self.changed.wait()
+                lines, state, error = self.lines[said:], self.state, self.error
+            for line in lines:
+                told(line)
+            said += len(lines)
+            if state != "making":  # every line it said is among those told
+                return error if state == "failed" else None
+
+    def status(self) -> dict[str, Any] | None:
+        """The making as ``status`` says it: its state, its last line, how long it has run, and why it
+        failed; None when nothing was made here."""
+        with self.changed:
+            if self.state is None:
+                return None
+            return {"state": self.state, "line": self.lines[-1] if self.lines else None, "error": self.error,
+                    "seconds": round(time.time() - (self.since or time.time()), 1)}
+
+
+# The engine's making of its base (``Making``): one a process.
+MAKING = Making()
 
 
 # --- making it -------------------------------------------------------------------------------------
@@ -426,13 +544,39 @@ def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
     return f"cannot write {what}: {error.strerror or error}"
 
 
+# The uv commands this process runs now (``_uv``): an engine that stops takes them with it (``halt``), so
+# none goes on writing an environment the next maker removes and makes again.
+_RUNNING: set[subprocess.Popen] = set()
+_RUNNING_LOCK = threading.Lock()
+
+
 def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
     """A uv command run in the environments' folder, where no project's uv settings are read."""
     try:
-        return subprocess.run(step, cwd=folder, stdin=subprocess.DEVNULL, capture_output=True, text=True,
-                              encoding="utf-8", errors="replace")
+        process = subprocess.Popen(step, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
     except OSError as error:
         raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
+    with _RUNNING_LOCK:
+        _RUNNING.add(process)
+    try:
+        out, err = process.communicate()
+    finally:
+        with _RUNNING_LOCK:
+            _RUNNING.discard(process)
+    return subprocess.CompletedProcess(step, process.returncode, out, err)
+
+
+def halt() -> None:
+    """The uv commands this process runs now killed: the engine is stopping (a making of its base is cut
+    short, and made again by the next asker)."""
+    with _RUNNING_LOCK:
+        running = list(_RUNNING)
+    for process in running:
+        try:
+            process.kill()
+        except OSError:
+            pass
 
 
 def _unlisted(done: subprocess.CompletedProcess, release: str) -> bool:

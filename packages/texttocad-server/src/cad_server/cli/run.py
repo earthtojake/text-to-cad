@@ -3,7 +3,9 @@
 
 The environment is the installation's base (``cad_server._internal.base``): the library with the CAD
 kernel (``texttocad[build123d]``), on the engine's Python -- made once, by uv, the first time it is asked for, and said in a line
-while it is made; an installation that carries the kernel itself is its own. Its Python runs the
+while it is made: by the device's engine when one runs (an agent's sandbox may not let this command write
+the cache folder; the engine a host's CAD app started runs outside it), else here; an installation that
+carries the kernel itself is its own. Its Python runs the
 arguments, in the caller's folder and environment, with the program's own folder last on its module
 search path, not first (the library's ``cad._internal.program``): a project's ``cad.py`` never stands in
 for the library. From there the script is any program that calls its models, a client of its
@@ -32,7 +34,7 @@ def main(argv: list[str] | None = None) -> int:
     from cad_server._internal import base
 
     try:
-        env = base.ensure(told=lambda line: print(f"{PROG}: {line}", file=sys.stderr, flush=True))
+        env = base.ensure(told=lambda line: print(f"{PROG}: {line}", file=sys.stderr, flush=True), engine=True)
     except base.Refused as refused:
         print(f"{PROG}: {refused}", file=sys.stderr, flush=True)
         return 1
