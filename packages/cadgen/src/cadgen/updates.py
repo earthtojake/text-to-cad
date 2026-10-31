@@ -15,11 +15,13 @@ A release is also known with no network at all: an agent app whose plugin moved 
 release's CAD server, which says its release as it connects (``see``), and that proves the release
 exists. The newer of the two is offered.
 
-Only a copy nothing else updates is told (``told``: ``cadgen/_internal/channel.py``): a plugin the
-person installed and updates by hand, and a process no plugin started, such as the CAD Viewer of a
-skills-only install. A plugin that something else keeps up to date -- a store, once a release
-passes its review -- says so in its startup config
-(``CADGEN_AUTO_UPDATED=1``) and is never told; nor is a development install.
+Only a copy nothing else updates is told of the feed's release (``told``: ``cadgen/_internal/channel.py``):
+a plugin the person installed and updates by hand, and a process no plugin started, such as the CAD
+Viewer of a skills-only install. A plugin that something else keeps up to date -- a store, once a
+release passes its review -- says so in its startup config (``CADGEN_AUTO_UPDATED=1``) and is never
+told of it; nor is a development install. A newer server's release is offered to every copy but a
+development install: the store moved the plugin, and the device's engine is still behind it. An
+update a person asks for reads the feed whatever the copy (``checking(asked=True)``).
 
 The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update button, an icon and
 nothing else, while this install is behind; a click updates (``POST /__cad/update``). A text-only app
@@ -76,14 +78,16 @@ def parse_feed(data: Any) -> dict[str, Any] | None:
     return {"latest": data["latest"]}
 
 
-def checking() -> bool:
-    """Whether to check at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, and a copy
-    that is told -- not one something else keeps up to date, nor a development install."""
+def checking(*, asked: bool = False) -> bool:
+    """Whether to read the feed at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, and a copy
+    that is told -- not one something else keeps up to date, nor a development install -- unless a
+    person ``asked`` for an update (the update button, ``cadgen update``), which reads it whatever the
+    copy."""
     if str(os.environ.get("CADGEN_UPDATE_CHECK") or "").strip().lower() in _OFF:
         return False
     if str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF):
         return False
-    return told()
+    return asked or told()
 
 
 def _cache() -> Path:
@@ -131,14 +135,14 @@ def _get(url: str) -> Any:
 
 
 def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, path: Path | None = None,
-         get: Callable[[str], Any] | None = None) -> dict[str, Any] | None:
+         get: Callable[[str], Any] | None = None, asked: bool = False) -> dict[str, Any] | None:
     """The feed as last read, read again first (``fetch``) when that was a day ago or more -- or now,
-    ``force``: an update a person asked for."""
+    ``force``: an update a person ``asked`` for."""
     path = path or _cache()
     kept = _load(path)
     known = parse_feed(kept.get("feed"))
     now = time.time() if now is None else now
-    if fetch and checking() and (force or _due(kept, "checked", now)):
+    if fetch and checking(asked=asked) and (force or _due(kept, "checked", now)):
         # The day's attempt is spent before it is made: a process that exits mid-request, or a feed
         # that never answers, costs one wait a day.
         _save(path, now, known)
@@ -166,18 +170,18 @@ def _newest(candidates: list[Any], version: str) -> str | None:
 
 
 def newest(*, fetch: bool = True) -> str | None:
-    """The release an update moves to: the newest of the feed's -- read now (``fetch``, a person
-    asked) where checking is on -- and those agent apps' servers run (``see``), when it is newer than
-    this install's; else None."""
+    """The release an update a person asked for moves to: the newest of the feed's -- read now
+    (``fetch``) unless checking is off -- and those agent apps' servers run (``see``), when it is newer
+    than this install's; else None."""
     from cadgen import __version__
 
     try:
-        found = feed(fetch=fetch, force=True)
+        found = feed(fetch=fetch, force=True, asked=True)
     except Exception:  # noqa: BLE001 - an update that cannot read the feed goes by what it knows
         found = None
     with _seen_lock:
         candidates: list[Any] = [*_seen]
-    if found is not None and checking():
+    if found is not None and checking(asked=True):
         candidates.append(found["latest"])
     return _newest(candidates, __version__)
 
@@ -197,13 +201,14 @@ def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
 
 def notice(*, path: Path | None = None) -> dict[str, str] | None:
     """``{latest, version}``: the newer release the update button offers, from the feed as last read
-    (never read here: ``refresh``) and the releases agent apps' servers run (``see``), or ``None`` when
-    there is none, or this copy is not told."""
+    (never read here: ``refresh``) where this copy is told, and the releases agent apps' servers run
+    (``see``) for any copy but a development install; or ``None`` when there is none."""
     try:
-        if not told():
-            return None
         from cadgen import __version__
+        from cadgen._internal.channel import DEV, channel
 
+        if channel() == DEV:
+            return None
         with _seen_lock:
             candidates: list[Any] = [*_seen]
         if checking():

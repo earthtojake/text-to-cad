@@ -348,8 +348,10 @@ new one not start, and older ones go at the next update. `cadgen doctor` says
 which releases are there, which one is current, the release the engine runs, and
 each app's plugin's.
 
-Copies from a plugin directory or the Cursor Marketplace never show the button,
-since their store updates them: for those there is nothing to run.
+Copies from a plugin directory or the Cursor Marketplace are not told of a release
+from the feed, since their store updates their plugin. Once the store has moved an
+app's plugin ahead of your engine, the button shows for them too, and moves the
+engine to it.
 
 To find out a release is out, cadgen fetches `api.texttocad.dev/v1/versions` at
 most once a day: one anonymous request, with no ID, path or anything about you,

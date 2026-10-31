@@ -98,6 +98,21 @@ class UpdatesTest(unittest.TestCase):
             self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
             self.assertEqual(updates.newest(), "0.9.2")
 
+    def test_a_store_s_copy_is_offered_the_release_its_plugin_moved_to_and_reads_the_feed_when_asked(self) -> None:
+        """A store updates the plugin, never the device's engine: a newer server's release is offered to
+        its copy too (never the feed's), and an update the person asks for reads the feed; a development
+        install is offered nothing."""
+        self.read_today({"latest": "0.9.5"})
+        updates.see("0.9.2")
+        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"}):
+            self.assertEqual(updates.notice(), {"latest": "0.9.2", "version": "0.8.1"})
+            asked: list[str] = []
+            with mock.patch.object(updates, "_get", lambda url: asked.append(url) or {"latest": "0.9.6"}):
+                self.assertEqual(updates.newest(), "0.9.6")
+            self.assertEqual(len(asked), 1)
+        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "dev"}):
+            self.assertIsNone(updates.notice())
+
     def test_an_update_reads_the_feed_now_and_moves_to_the_newest_it_knows(self) -> None:
         self.read_today(FEED)  # read today: a click reads it again all the same
         asked: list[str] = []

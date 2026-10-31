@@ -918,8 +918,9 @@ date: the store that reviewed it. The Viewer the
 server starts inherits both. The server also writes its channel down in the state
 directory for its uv installation (`install-channels.json`), which its skills'
 commands share, so a skill's Viewer and its commands report it too. cadgen reports the channel
-with telemetry and says a new release is out only to a copy that is not
-auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
+with telemetry and says the feed's new release only to a copy that is not
+auto-updated (a store's copy hears of a release once its store has moved an app's
+plugin ahead of the engine; `cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
 environment, never flags: an install of `main` pins the last release, and a cadgen
 ignores a variable it does not know but refuses a flag, so a new setting would

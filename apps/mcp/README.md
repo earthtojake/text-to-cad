@@ -159,7 +159,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
   with `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to date: only a
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
-  Marketplace) is left to its store. The telemetry: the server
+  Marketplace) is left to its store, until the store moves an app's plugin ahead of the engine: then
+  the button shows there too, and moves the engine to that release. The telemetry: the server
   counts its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show (counted by format, once a day,
   as a view adds one to the library) --

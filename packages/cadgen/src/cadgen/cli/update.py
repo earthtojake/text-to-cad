@@ -41,7 +41,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         return setup.main(given, prog)
     from cadgen import __version__, updates
 
-    newest = updates.newest() if updates.checking() else None
+    newest = updates.newest() if updates.checking(asked=True) else None
     if newest is None:
         return setup.main(given, prog)
     from cadgen._internal import base, releases
