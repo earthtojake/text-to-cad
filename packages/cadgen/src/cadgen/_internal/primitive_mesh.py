@@ -21,7 +21,8 @@ import struct
 
 import numpy as np
 
-__all__ = ["PRIMITIVE_SHAPES", "primitive_glb", "primitive_segments"]
+__all__ = ["GLB_BIN_CHUNK", "GLB_JSON_CHUNK", "GLB_MAGIC", "GLB_VERSION", "PRIMITIVE_SHAPES", "primitive_glb",
+           "primitive_segments"]
 
 # The tolerance a primitive is meshed at: a sagitta of at most this share of the shape's bounding
 # diagonal (a shape 1,000 px across strays half a pixel from its exact surface), and at most this
@@ -29,6 +30,7 @@ __all__ = ["PRIMITIVE_SHAPES", "primitive_glb", "primitive_segments"]
 CHORD = 5e-4
 ANGLE = 0.35
 
+# The glTF 2.0 container, the one declaration outside the engine (a CAM result GLB is framed by it too).
 GLB_MAGIC, GLB_VERSION, GLB_JSON_CHUNK, GLB_BIN_CHUNK = 0x46546C67, 2, 0x4E4F534A, 0x004E4942
 
 #: The shapes meshed here, by the name URDF and SDF give them.

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM"
+  short_description: "Plan 3-axis milling and drilling toolpaths with FreeCAD and post G-code."
+  default_prompt: "Use $cam to plan toolpaths for a saved part with FreeCAD on the user's mill or router, fix what the checks find, post the G-code for their controller and show the result in CAD Viewer."

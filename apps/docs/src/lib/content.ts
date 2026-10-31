@@ -156,6 +156,12 @@ export const skillGroups = [
       "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
   },
   {
+    name: "CAM",
+    path: "skills/cam",
+    summary:
+      "Plans 3-axis milling and drilling toolpaths and posts G-code with FreeCAD, checked against the part.",
+  },
+  {
     name: "G-code",
     path: "skills/gcode",
     summary:

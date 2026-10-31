@@ -44,6 +44,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "urdf validate": ("cadgen.cli.urdf_validate", "validate a URDF robot description"),
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # CAM. `features` lists what a job can name on a part; `plan` plans the
+    # job's toolpaths, simulates and checks them, and posts G-code per setup
+    # beside the result GLB the viewer draws.
+    "cam features": ("cadgen.cli.cam_features", "list the faces, holes and floors a CAM job can name"),
+    "cam plan": ("cadgen.cli.cam_plan", "plan toolpaths, simulate, check and post G-code"),
     # Generic / services
     "run": ("cadgen.cli.run", "run a model script (or -m, -c) with this installation's python"),
     "doctor": ("cadgen.cli.doctor", "install: register, write the cadgen command, start the engine"),

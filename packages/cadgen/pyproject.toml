@@ -69,6 +69,9 @@ dependencies = [
   # measurements) with Pillow.
   "pillow",
   "shapely",
+  # `cadgen cam` checks FreeCAD's paths and writes its GLB with numpy arrays. build123d brings
+  # it already; it is named here because cadgen imports it itself.
+  "numpy",
 ]
 
 [project.urls]
@@ -86,6 +89,8 @@ search-path = ["src"]
 # A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
 # otherwise have src excluded by the ignore files above it and check nothing.
 use-ignore-files = false
+# `_internal/cam/freecad_job.py` runs inside FreeCAD (`freecadcmd`), whose modules no Python of cadgen's has.
+ignore-missing-imports = ["FreeCAD", "Part", "Path", "Path.*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

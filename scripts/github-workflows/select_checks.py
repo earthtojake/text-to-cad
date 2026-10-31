@@ -21,6 +21,7 @@ module's code would.
 Outputs (GITHUB_OUTPUT), one flag per job and the test paths the narrowed jobs take:
 
     cadgen  cadgen_tests          cadgen (Linux), cadgen (Windows)
+    cam                           cam (the CAM suites, with FreeCAD installed)
     core_js                       core-js
     web  web_ui  web_client
     mcp
@@ -57,7 +58,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CADGEN_SUITE = "tests/python/packages/cadgen"
 POLICY_SUITE = "tests/python/global"
 SKILL_SUITES = "tests/python/skills"
-FLAGS = ("core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
+FLAGS = ("cam", "core_js", "web_ui", "web_client", "web_viewer", "mcp", "api", "docs", "packaging")
 
 
 @dataclasses.dataclass(frozen=True)
@@ -238,6 +239,18 @@ RULES: tuple[Rule, ...] = (
         "scripts/build/**",              # core's and ui's library build
     ), EVERYTHING),
 
+    # What CAM imports from the engine and beside it, and the read a part goes through (model's
+    # read_step and read_xbf -> document -> the reader process, held by the kernel's memo): a
+    # change there reaches CAM's plans, which only the cam job (with FreeCAD) runs. Before the
+    # engine's final rule, which would stop here.
+    Rule((
+        f"{CADGEN_SRC}/engine/model.py", f"{CADGEN_SRC}/engine/document.py", f"{CADGEN_SRC}/engine/reader.py",
+        f"{CADGEN_SRC}/engine/refs.py", f"{CADGEN_SRC}/engine/kernel/imported.py",
+        f"{CADGEN_SRC}/engine/kernel/memo.py", f"{CADGEN_SRC}/engine/executables.py",
+        f"{CADGEN_SRC}/_internal/atomic_replace.py", f"{CADGEN_SRC}/_internal/primitive_mesh.py",
+        f"{CADGEN_SRC}/_internal/cli_from_function.py",
+    ), select(flags=["cam"])),
+
     # cadgen, and the runtime bundle it executes. The viewer's backend and the CAD app's
     # server reach only what names them (above).
     Rule(VIEWER_SHARED, CADGEN_CONSUMERS, final=True),
@@ -245,6 +258,13 @@ RULES: tuple[Rule, ...] = (
     Rule(MCP_CODE, _mcp_change, final=True),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(("packages/cadgen/**", "scripts/bundle/**"), CADGEN_CONSUMERS),
+    # CAM's plans need FreeCAD, which no other job installs: it, its commands, the result types it
+    # returns, its suites and their fixtures, and its skill.
+    Rule((
+        f"{CADGEN_SRC}/_internal/cam/**", f"{CADGEN_SRC}/cam.py", f"{CADGEN_SRC}/cli/cam_*",
+        f"{CADGEN_SRC}/results.py", f"{CADGEN_SUITE}/cam/**", "tests/python/support/cam_fixtures.py",
+        "skills/cam/**",
+    ), select(flags=["cam"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.
@@ -271,9 +291,11 @@ RULES: tuple[Rule, ...] = (
     Rule(("skills/**",), NOTHING),
     Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
     Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
+    # The cam skill's pages are checked against the job vocabulary cadgen reads.
+    Rule(("skills/cam/**",), select(cadgen=[f"{CADGEN_SUITE}/cam/test_cam_skill.py"])),
 
     # The test runners and the gates each one feeds.
-    Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
+    Rule(("scripts/test/test-python.sh",), select(flags=["cam"], cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),
     Rule(("scripts/test/test-global.sh",), select(policy=[POLICY_SUITE])),
     Rule(("scripts/test/test-js.sh", "scripts/test/check-*.mjs"), select(flags=["core_js", "web_ui", "web_client", "mcp"])),
     Rule(("scripts/test/test-api.sh",), select(flags=["api"])),

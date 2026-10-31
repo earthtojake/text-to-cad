@@ -370,12 +370,15 @@ src/cadgen/
   urdf.py, sdf.py,       # the robot validators: one public namespace per format, its
   srdf.py                #   `validate` verb, and the checks behind it (*_source.py,
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
-  results.py             # what a `validate` verb returns: the JSON line protocol, typed
+  results.py             # what a `validate` or `cam` verb returns: the JSON line protocol, typed
   robot_payload.py       # a robot description resolved for the viewer's page: its
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
+  cam.py                 # CAM: features (what a job can name) and plan (FreeCAD's toolpaths
+                         #   and G-code, checked against the part, one result GLB); behind it
+                         #   _internal/cam
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties
@@ -404,7 +407,8 @@ src/cadgen/
 
 Commands: `cadgen export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and
 `server` are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
-robot among them); `cadgen urdf|sdf|srdf validate` the validators; `cadgen
+robot among them); `cadgen urdf|sdf|srdf validate` the validators; `cadgen cam
+features|plan` CAM (a part and a job in, a `.cam.glb` and G-code out); `cadgen
 doctor` the setup (the installation registered, the `cadgen` command written, the engine started),
 a skill's pin and what cadgen left behind that nothing needs, which `cadgen doctor --prune` removes
 (`_internal/leftovers.py`: engine records of an older format, the bytecode of installations no longer
@@ -435,3 +439,16 @@ The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
 uses the same host and custom-header POST gates as other mutation routes, limits
 images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
 reads the clipboard. Unsupported desktop clipboard environments return an error.
+
+## CAM
+
+`cadgen cam features` and `cadgen cam plan` (`cadgen.cam`) read a part from its file -- a STEP or an
+xbf through `read_step`/`read_xbf` -- never through the engine, and resolve a job's face refs in that
+file by the engine's grammar (`engine/refs.py`), so a ref `cadgen inspect` answers or the CAD Viewer
+copies names the same face. FreeCAD, installed by the person (1.1 or newer; `CADGEN_FREECAD` names its
+`freecadcmd`), plans and posts each setup in a process of its own; cadgen checks what it plans
+against the part under `src/cadgen/_internal/cam/`, reads back what FreeCAD holds and what its post wrote
+against what cadgen set, and posts nothing a check refuses. A plan writes
+`<stem>.cam.glb`, an ordinary GLB the viewer's GLB renderer draws the job of, and the G-code for each
+setup. `cadgen cam plan --help` names the job's keys, and a key or value a job cannot take is
+refused with the ones it can.
