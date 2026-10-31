@@ -423,12 +423,16 @@ class InstallUpdateAndUninstall(Fixture):
 
     def test_a_release_sets_itself_up_from_its_own_folder(self) -> None:
         """Run from uvx's environment (the install command), a release makes its folder in the state
-        folder and runs the same command from there; a dry run only plans it."""
+        folder and runs the same command from there, with the person's PATH: uvx's environment, which
+        uvx puts first on PATH and uv's cache keeps (its uvx and its `cad`), is not theirs. A dry run only
+        plans it."""
         made = {"cadgen": str(self.root / "release-bin" / "cad")}
+        cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
         with mock.patch.object(installations, "editable", return_value=False), \
-                mock.patch.dict(os.environ, {installations.NAME_ENV: ""}), \
+                mock.patch.dict(os.environ, {installations.NAME_ENV: "",
+                                             "PATH": os.pathsep.join((str(cached), str(self.bin)))}), \
                 mock.patch.object(releases, "make", return_value=made) as make, \
-                mock.patch.object(setup.os, "execv", side_effect=SystemExit(0)) as execv, \
+                mock.patch.object(setup.os, "execve", side_effect=SystemExit(0)) as execve, \
                 mock.patch("subprocess.call", return_value=0) as call:
             code, out, _err = self.run_setup("--dry-run")
             self.assertEqual(code, 0, out)
@@ -440,9 +444,13 @@ class InstallUpdateAndUninstall(Fixture):
         make.assert_called_once_with(RELEASE, source=mock.ANY, told=mock.ANY)
         run = [made["cadgen"], "setup", "--only", "claude"]
         if os.name == "nt":
-            call.assert_called_once_with(run)
+            call.assert_called_once_with(run, env=mock.ANY)
+            environment = call.call_args.kwargs["env"]
         else:
-            execv.assert_called_once_with(made["cadgen"], run)
+            execve.assert_called_once_with(made["cadgen"], run, mock.ANY)
+            environment = execve.call_args.args[2]
+        self.assertEqual(environment["PATH"], str(self.bin))
+        self.assertEqual(environment["CAD_STATE_DIR"], str(self.state), "the rest of the environment goes along")
 
     def test_the_engine_s_own_run_says_its_stages_on_stdout_and_switches_nothing(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")

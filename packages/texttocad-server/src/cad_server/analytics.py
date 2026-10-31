@@ -222,18 +222,20 @@ def off_command() -> str:
 
 def _through_proxy(quote: Callable[[str], str]) -> str | None:
     """``cad +<version>``: the ``cad`` command (``cad_server._internal.installations``) running this installation
-    by the version its record names -- ``cad`` where that command is the one on PATH, else by its path. ``None``
-    where no record names this installation, or the command is not there."""
+    by the version its record names -- ``cad`` where that command is the one on the person's PATH (uvx's own
+    environment, first on PATH for the command it runs, is not theirs: ``providers.lasting``), else by its
+    path. ``None`` where no record names this installation, or the command is not there."""
     import shutil
 
     from cad_server._internal import installations
+    from cad_server._internal.providers import lasting
 
     record = installations.here()
     proxy = installations.proxy_path()
     if record is None or installations.proxy_status(proxy) not in (installations.OK, installations.NEWER,
                                                                      installations.STALE):
         return None
-    found = shutil.which("cad")
+    found = shutil.which("cad", path=lasting(os.environ.get("PATH", os.defpath)))
     on_path = found is not None and os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(proxy))
     return f"{'cad' if on_path else quote(proxy)} +{record['version']}"
 

@@ -17,6 +17,7 @@ import io
 import json
 import os
 import re
+import shutil
 import sys
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -129,6 +130,11 @@ class DoctorTests(unittest.TestCase):
         # that environment's own `cad` script is this installation, not another one.
         with mock.patch.object(sys, "prefix", str(venv.parent)), \
                 mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(venv), folder])}):
+            self.assertIn(f"command  {command} OK\n", _run(["--no-server"])[1])
+        # Nor is such an environment of uv's cache when a release's own command runs with that PATH.
+        cached = self.state / "uv" / "archive-v0" / "M-XQ" / "bin"
+        shutil.copytree(venv, cached)
+        with mock.patch.dict("os.environ", {"PATH": os.pathsep.join([str(cached), folder])}):
             self.assertIn(f"command  {command} OK\n", _run(["--no-server"])[1])
         if os.name != "nt":
             other.chmod(0o644)  # an earlier non-executable file does not shadow the command

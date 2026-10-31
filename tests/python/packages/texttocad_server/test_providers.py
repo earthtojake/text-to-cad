@@ -15,10 +15,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import stat
 import sys
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 from tests.python.support.tmp_root import temporary_directory
@@ -538,6 +540,32 @@ class DetectionAndPlan(Fixture):
         home.set(codex_version="0.300.0")
         self.assertEqual(providers.codex_cli(home.machine), home.machine.which("codex"))
         self.assertEqual(home.detect()["codex"].command, home.machine.which("codex"))
+
+    def test_claude_desktop_runs_the_person_s_uvx_never_one_that_goes_from_under_it(self) -> None:
+        # The install command's `cad setup` runs with uvx's own environment first on PATH (uv's cache's,
+        # which `uv cache clean` removes), a release folder holds a uvx (an update removes the folder), and so
+        # may this process's own environment: Claude Desktop's entry names the person's uvx past all three.
+        home = self.make()
+        cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
+        release = self.root / "state" / "releases" / RELEASE
+        (release / "bin").mkdir(parents=True)
+        (release / providers.RELEASE_MARKER).write_text("{}", encoding="utf-8")
+        own = self.root / "venv"
+        person = self.root / "person-bin"
+        for folder in (cached, release / "bin", own / "bin", person):
+            home.tool("uvx", folder)
+        home.machine.environ["PATH"] = os.pathsep.join(str(folder) for folder in (cached, release / "bin", own / "bin", person))
+        with mock.patch.object(sys, "prefix", str(own)):
+            self.assertEqual(providers.uvx(home.machine), os.path.abspath(shutil.which("uvx", path=str(person))))
+            self.assertEqual(providers.lasting(home.machine.environ["PATH"]), str(person))
+        # None on PATH but uv's cache's: the one where uv's installer puts it.
+        home.machine.environ["PATH"] = str(cached)
+        self.assertIsNone(providers.uvx(home.machine))
+        installed = home.home / ".local" / "bin" / ("uvx.exe" if os.name == "nt" else "uvx")
+        installed.parent.mkdir(parents=True)
+        installed.write_text("", encoding="utf-8")
+        installed.chmod(0o755)
+        self.assertEqual(providers.uvx(home.machine), str(installed))
 
 
 class ApplyReadBackAndTakeBack(Fixture):

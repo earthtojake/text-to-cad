@@ -173,16 +173,15 @@ def _apps() -> list[str]:
 
 
 def _command_path_hint(path: str) -> str:
-    """How to reach the proxy when PATH does not resolve ``cad`` to it. The running
-    interpreter's own environment is left out of the lookup: ``uvx`` puts its ephemeral
-    environment's ``bin`` first on PATH for the command it runs, so inside ``uvx ... cad doctor``
-    the environment's own ``cad`` script would otherwise read as shadowing the proxy."""
+    """How to reach the proxy when PATH does not resolve ``cad`` to it. The person's PATH is the one
+    looked in (``providers.lasting``): ``uvx`` puts its ephemeral environment's ``bin`` first on PATH
+    for the command it runs, so inside ``uvx ... cad doctor`` -- and the install command's ``cad
+    setup`` -- that environment's own ``cad`` script would otherwise read as shadowing the proxy."""
     from shutil import which
 
-    prefix = os.path.realpath(sys.prefix)
-    entries = [entry for entry in os.environ.get("PATH", "").split(os.pathsep)
-               if entry and not os.path.realpath(entry).startswith(prefix + os.sep)]
-    found = which("cad", path=os.pathsep.join(entries))
+    from cad_server._internal.providers import lasting
+
+    found = which("cad", path=lasting(os.environ.get("PATH", "")))
     if found is not None:
         if os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(path)):
             return ""

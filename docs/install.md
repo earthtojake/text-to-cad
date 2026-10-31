@@ -113,7 +113,7 @@ another release. Each app takes it the way it takes a local plugin:
 | Gemini CLI | the folder linked as its extension (`gemini extensions link`) | nothing to do: it reads the folder in place |
 | Cursor | the plugin loaded with Claude Code's; without Claude Code, a copy of the folder in its local plugins folder, `~/.cursor/plugins/local/text-to-cad` | the update copies the folder again |
 | Grok Build | the plugin loaded with Claude Code's; without Claude Code, the plugin from the `latest` branch | `grok plugin update text-to-cad`, without Claude Code |
-| Claude Desktop (Chat tab) | CAD's server in its config | the update moves the server to the new release |
+| Claude Desktop (Chat tab) | CAD's server in its config, run by your own `uvx` at its full path | the update moves the server to the new release |
 | Other agents | the skills alone, copied from the folder by the Skills CLI | the update copies them again |
 
 Nothing of it updates by itself: the folder and the copies move when you update

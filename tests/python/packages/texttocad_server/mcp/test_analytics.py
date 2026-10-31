@@ -980,6 +980,10 @@ class NoticeTest(_Tmp):
             self.assertEqual(off_command(), f"{proxy} +0.8.0-dev.20261026120000 telemetry off")
             with mock.patch.dict("os.environ", {"PATH": str(launcher)}):
                 self.assertEqual(off_command(), "cad +0.8.0-dev.20261026120000 telemetry off")
+            # uvx's own environment first on PATH, with its own `cad` (the install command's `cad setup`): not
+            # the person's PATH, so not the command they type.
+            with mock.patch.dict("os.environ", {"PATH": os.pathsep.join((str(console.parent), str(launcher)))}):
+                self.assertEqual(off_command(), "cad +0.8.0-dev.20261026120000 telemetry off")
             wheel.unlink()  # the wheel gone and nothing registered: this interpreter, as it runs now
             installations.forget("0.8.0-dev.20261026120000")
             with mock.patch("sys.argv", ["/x/cad_server/cli/__main__.py"]), mock.patch("sys.executable", "/venv/bin/python"):

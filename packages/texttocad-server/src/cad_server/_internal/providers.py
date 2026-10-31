@@ -15,7 +15,8 @@ plugin gets it from the plugin folder the server writes, ``<state>/plugin``
   (``FED_BY``), so where Claude Code has the plugin they need none of their own, and a copy of
   theirs is a second copy.
 - **Claude Desktop** (its chat): CAD's server alone, ``mcpServers.cad`` in its config file, run by
-  ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH.
+  ``uvx`` at its absolute path, since an app opened from the Dock has no shell's PATH: the person's uvx,
+  never one uv keeps in its cache or a release folder holds (``transient``), which go from under it.
 - **Codex**: the same local marketplace through its own ``plugin`` command (the app bundles a CLI of
   its own). Codex copies a local marketplace's plugin when it is added and never again by itself, so
   every update adds it again; a running session keeps the copy it started with.
@@ -425,19 +426,56 @@ def find_cli(name: str, machine: Optional[Machine] = None) -> Optional[str]:
     return machine.environ.get(f"{name.upper()}_CLI") or machine.which(name)
 
 
+# uv keeps the environments uvx makes in its cache's ``archive-v<N>`` folder, which ``uv cache clean`` (or
+# prune) removes; a release folder of text-to-cad's has its marker at its root, and an update removes the ones
+# it no longer needs (``cad_server._internal.releases``).
+_UV_ARCHIVE = re.compile(r"archive-v\d+")
+RELEASE_MARKER = "cadgen-release.json"
+
+
+def _within(path: str, folder: str) -> bool:
+    path, folder = os.path.normcase(path), os.path.normcase(folder.rstrip("/\\"))
+    return bool(folder) and (path == folder or path.startswith(folder + os.sep))
+
+
+def transient(path: Any) -> bool:
+    """Whether ``path`` (a program, or a folder on PATH) is in an environment that comes and goes, never one
+    the person keeps: this process's own virtual environment (``sys.prefix``: uvx's, as the install command
+    runs ``cad setup``), one uv keeps in its cache (``archive-v<N>``), or a release folder of text-to-cad's.
+    A command named by its path there may be gone tomorrow."""
+    plain = os.path.abspath(str(path))
+    own = {sys.prefix, os.path.realpath(sys.prefix)} if sys.prefix != sys.base_prefix else set()
+    for where in {plain, os.path.realpath(plain)}:
+        if any(_within(where, prefix) for prefix in own):
+            return True
+        if any(_UV_ARCHIVE.fullmatch(part) for part in Path(where).parts):
+            return True
+        parent = os.path.dirname(where)
+        if any(os.path.isfile(os.path.join(folder, RELEASE_MARKER)) for folder in (parent, os.path.dirname(parent))):
+            return True
+    return False
+
+
+def lasting(path: str) -> str:
+    """A PATH without its transient folders (``transient``): where the person's own commands are found."""
+    return os.pathsep.join(entry for entry in path.split(os.pathsep) if entry and not transient(entry))
+
+
 def uvx(machine: Optional[Machine] = None) -> Optional[str]:
-    """uvx at its absolute path, which an app opened from the Dock or the Start menu needs: on PATH,
-    else where uv's installer puts it."""
+    """uvx at its absolute path, which an app opened from the Dock or the Start menu needs, and one that
+    stays (never ``transient``: a ``uv cache clean`` or an update would take it from under the app): the
+    first on PATH, else where uv's installer puts it."""
     machine = _machine(machine)
     name = "uvx.exe" if machine.windows else "uvx"
-    found = machine.which("uvx")
-    if found:
-        return os.path.abspath(found)
+    for folder in lasting(machine.environ.get("PATH", os.defpath)).split(os.pathsep):
+        found = shutil.which("uvx", path=folder) if folder else None
+        if found and not transient(found):
+            return os.path.abspath(found)
     environ, home = machine.environ, machine.home
     for folder in (environ.get("UV_INSTALL_DIR"), environ.get("XDG_BIN_HOME"), str(home / ".local" / "bin"),
                    str(home / ".cargo" / "bin")):
         for candidate in ((Path(folder) / name, Path(folder) / "bin" / name) if folder else ()):
-            if candidate.is_file() and os.access(candidate, os.X_OK):
+            if candidate.is_file() and os.access(candidate, os.X_OK) and not transient(candidate):
                 return str(candidate)
     return None
 

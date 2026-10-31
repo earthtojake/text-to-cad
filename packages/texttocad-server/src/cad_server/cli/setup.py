@@ -306,11 +306,15 @@ class Installer:
             return 1
         run = [made["cadgen"], "setup", *self.argv]
         self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
+        # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
+        # person's, holding a uvx and a `cad` of its own. The release's run is given the person's PATH
+        # (``providers.lasting``), so what it writes into the apps' configs and says of the `cad` command is theirs.
+        environment = {**os.environ, "PATH": self.providers.lasting(os.environ.get("PATH", os.defpath))}
         if os.name == "nt":
-            return subprocess.call(run)
+            return subprocess.call(run, env=environment)
         sys.stdout.flush()
         sys.stderr.flush()
-        os.execv(run[0], run)
+        os.execve(run[0], run, environment)
         return 1  # not reached
 
     def _plan_lines(self, title: str, apps: dict[str, Any], steps: list[Any], extra: list[dict[str, Any]]) -> None:
