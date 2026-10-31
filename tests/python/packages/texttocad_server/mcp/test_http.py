@@ -57,11 +57,26 @@ class HttpSessionsTest(unittest.TestCase):
         changed = patch.dict(os.environ, cls.env)
         changed.start()
         cls.addClassCleanup(changed.stop)
-        from cad.engine.api import stop
-        cls.addClassCleanup(stop)
+        cls.addClassCleanup(cls.stop_engine)
         cls.endpoint = EngineClient().connect()
         cls.model = cls.root / 'part.stl'
         cls.model.write_bytes(b'solid part\nendsolid part\n')
+
+    @classmethod
+    def stop_engine(cls):
+        """The engine stopped and, on Windows, every process of the class's -- each engine it ran, their
+        workers and render processes, the shims -- gone before its folder is removed: an engine's lock
+        goes before its process does (``client.wait_gone``), and there the engine and the processes that
+        inherit its folder stand in the parent of the engine's folder (``client._working_folder``), this
+        class's folder, which cannot be removed while one does. One left is killed and fails the class.
+        On POSIX the folder goes whatever stands in it, and the engines this process started are its
+        unreaped children, which look alive: nothing is awaited there (``engine_daemon.await_exit``)."""
+        from cad.engine.api import stop
+
+        stop()
+        left = engine_daemon.survivors(cls.env) if os.name == 'nt' else []
+        if left:
+            raise AssertionError(f'no engine process of this class survives it: {left}')
 
     @classmethod
     def browser(cls, who, code):
