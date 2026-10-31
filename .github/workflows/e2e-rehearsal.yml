@@ -8,6 +8,11 @@ name: End-to-end rehearsal
 # server pins, which no index has before it is released). Dispatched by hand; no test.yml job runs it.
 on:
   workflow_dispatch:
+  # A workflow only dispatches once it exists on the default branch; this temporary one never will, so a push
+  # that touches this file starts it on the pull request's branch instead.
+  push:
+    branches: [claude/one-environment-siblings]
+    paths: ['.github/workflows/e2e-rehearsal.yml']
 
 permissions:
   contents: read
