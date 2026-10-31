@@ -233,9 +233,13 @@ PY
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
 same "$("$CADGEN_COMMAND" "+$VERSION_INSTALLED" run -c 'import sys; print(sys.prefix)')" "$VENV" \
   || fail "cadgen +$VERSION_INSTALLED run does not run the installation's python"
-missing="$("$CADGEN_COMMAND" +0.0.1 status 2>&1)" && fail "cadgen +0.0.1 ran"
-case "$missing" in "cadgen 0.0.1 is not installed: run "*) ;; *) fail "cadgen +0.0.1 said: $missing" ;; esac
-echo "   $(basename "$RECORD") and $CADGEN_COMMAND"
+# The first installation on this machine is its current one, and the command runs it whatever release a
+# skill names: nothing on the machine compares versions.
+[ "$(cat "$CADGEN_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
+  || fail "cadgen $VERSION_INSTALLED is not the current installation"
+same "$("$CADGEN_COMMAND" +0.0.1 run -c 'import sys; print(sys.prefix)')" "$VENV" \
+  || fail "cadgen +0.0.1 run does not run the current installation"
+echo "   $(basename "$RECORD"), current, and $CADGEN_COMMAND"
 
 step "Build a real model with no repo in sight"
 mkdir -p "$EMPTY/models"
