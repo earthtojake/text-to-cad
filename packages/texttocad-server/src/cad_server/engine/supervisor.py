@@ -62,7 +62,9 @@ requests following it and to ``on_progress`` too), and one answer, which may car
 one of its service's ``events`` goes to that event's hook (``on_event``), never to a request; a
 side request's answer (``question``) to its waiter, by its id. Lines that are not JSON objects
 are skipped. Whatever it prints goes to its stderr. It exits when its stdin closes; ``stop`` closes
-it, waits ``STOP_SECONDS``, then kills.
+it, waits ``STOP_SECONDS``, then kills. The supervisor holds each child from its spawn (``spawning``):
+its own ``stop`` kills one still being started, which reads nothing until it is ready (a standby
+loading the kernel), so none outlives the daemon.
 
 Locks: the supervisor's, then ``watched``'s (the server's watch lock), never the other way.
 ``drain``, ``launch``, ``stop``, ``memory``, a process's own lock and the hooks are called with
@@ -251,11 +253,13 @@ class Process:
     def start(cls, service: Service, key: str, label: str, environment: dict[str, str], cwd: str | None = None, *,
               standby: bool = False, on_progress: Callable[["Process", dict[str, Any]], None] | None = None,
               on_event: dict[str, Callable[["Process", Any, bytes], None]] | None = None,
-              memory: Callable[[], float | None] | None = None) -> "Process":
+              memory: Callable[[], float | None] | None = None,
+              spawned: Callable[[Any], None] | None = None) -> "Process":
         """A process of ``service`` started for ``key`` (``label`` as the lease gave it) in
         ``environment``, once it has said it is ready; ``standby``: its service's standby, which
-        never makes the environment it runs in; ``memory``: the cap its requests carry. ``Gone`` when
-        it does not start."""
+        never makes the environment it runs in; ``memory``: the cap its requests carry; ``spawned``:
+        told the child as soon as it exists, before it is ready (its supervisor's to kill should it
+        stop meanwhile). ``Gone`` when it does not start."""
         if service.environment == "kernel":
             found = places.kernel(make=not standby)
             if found is None:
@@ -282,6 +286,8 @@ class Process:
             argv.extend(service.standby.args)
         popen = subprocess.Popen(argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                  env=env, cwd=_home(service, label, cwd), **places.windowless())
+        if spawned is not None:
+            spawned(popen)
         process = cls(service, key, label, environment, popen, on_progress, on_event, memory)
         seconds = service.standby.ready_seconds if standby and service.standby is not None else service.ready_seconds
         process._ready(seconds)
@@ -569,13 +575,32 @@ class Supervisor:
         self.queue: list[_Ticket] = []
         self.retired: collections.deque = collections.deque(maxlen=RETIRED_KEPT)
         self.standbys = {name: _Standing() for name, service in self.services.items() if service.standby is not None}
+        # The children being started -- spawned, not yet ready: a standby loading the kernel, 40 s on a
+        # fresh installation --, held from their spawn so ``stop`` takes them too.
+        self.spawning: set[Any] = set()
         self.stopped = False
 
     def _launch(self, service: Service, key: str, label: str, environment: dict[str, str], cwd: str | None,
                 standby: bool) -> Process:
-        # ``memory`` looked up at each request: a test replaces the supervisor's.
-        return Process.start(service, key, label, environment, cwd, standby=standby, on_progress=self.on_progress,
-                             on_event=self.on_event, memory=lambda: self.memory())
+        """``Process.start``, the child held from its spawn (``spawning``): one spawned once the supervisor
+        has stopped is killed at once."""
+        held: list[Any] = []
+
+        def spawned(popen: Any) -> None:
+            with self.lock:
+                if not self.stopped:
+                    self.spawning.add(popen)
+                    held.append(popen)
+                    return
+            popen.kill()
+
+        try:
+            # ``memory`` looked up at each request: a test replaces the supervisor's.
+            return Process.start(service, key, label, environment, cwd, standby=standby, on_progress=self.on_progress,
+                                 on_event=self.on_event, memory=lambda: self.memory(), spawned=spawned)
+        finally:
+            with self.lock:
+                self.spawning.difference_update(held)
 
     def _key(self, service: Service, key: str) -> str:
         return os.path.normcase(key) if service.key == "path" else key
@@ -987,12 +1012,19 @@ class Supervisor:
 
     def stop(self) -> None:
         """Every process and standby stopped, never drained: the daemon is stopping (its documents
-        saved first, ``cache.Cache.final``)."""
+        saved first, ``cache.Cache.final``). A child still being started is killed: it reads nothing
+        until it is ready (a standby loading the kernel), and would outlive the daemon until then."""
         with self.lock:
             self.stopped = True
             every = [*self.table.values(), *(slot.ready for slot in self.standbys.values() if slot.ready is not None)]
+            starting = list(self.spawning)
             self.table.clear()
             for slot in self.standbys.values():
                 slot.ready = None
+        for popen in starting:
+            try:
+                popen.kill()
+            except OSError:
+                pass
         for process in every:
             process.stop()

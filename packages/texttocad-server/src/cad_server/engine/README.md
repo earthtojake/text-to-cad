@@ -742,7 +742,9 @@ and says what it prints on its stderr, its log. Its first frame is `{"ready": pi
 for each request, its `log`, `notice` and `progress` frames, which go to whoever asked, and one
 answer, which may say `rssMb` and `retire`. A line before a frame that is no JSON object is skipped
 (a banner). A child that answers side requests while a request runs (a worker's `where`) reads its
-stdin on a thread of its own. It exits when its stdin closes. Its memory is what it says (`rssMb`):
+stdin on a thread of its own. It exits when its stdin closes. The supervisor holds it from its spawn:
+`cad stop` kills one still being started, which reads nothing until it is ready (the standby loading
+the kernel), so none outlives the engine. Its memory is what it says (`rssMb`):
 a child that cannot measure itself is never retired for memory.
 
 The meshing pool starts with the first page, view or inspection, never with a build. A build

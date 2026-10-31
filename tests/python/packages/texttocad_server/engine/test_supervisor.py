@@ -452,6 +452,29 @@ class ProtocolTest(unittest.TestCase):
         second.join(30)
         self.assertEqual(len(failed), 2)
 
+    def test_the_supervisor_s_stop_takes_a_standby_still_starting(self) -> None:
+        # A standby reads nothing until it is ready, after its kernel loads (40 s on a fresh installation):
+        # the daemon's stop takes it then too, never leaving it loading on its own after `cad stop`.
+        service, folder = self.silent()
+        service = dataclasses.replace(service, standby=Standby((), "adopt"))
+        supervisor = Supervisor(1, (service,))
+        started, popen = [], subprocess.Popen
+
+        def recorded(*args, **kwargs):
+            started.append(popen(*args, **kwargs))
+            self.addCleanup(started[-1].kill)
+            return started[-1]
+
+        with mock.patch.object(supervised.subprocess, "Popen", side_effect=recorded):
+            supervisor.enable_standby("child")
+            supervisor.stand("child", {})
+            await_(lambda: any(folder.iterdir()), "the standby to be started")
+            supervisor.stop()
+            await_(lambda: started[0].poll() is not None, "the standby still starting to be gone")
+            await_(lambda: supervisor.readying("child") is None, "its start to be given up")
+        self.assertIsNone(supervisor.standby("child"))
+        self.assertEqual(supervisor.spawning, set())
+
     def test_a_stopped_child_ends_with_its_stdin_and_one_that_will_not_is_killed(self) -> None:
         process = self.start(self.service())
         process.stop()
