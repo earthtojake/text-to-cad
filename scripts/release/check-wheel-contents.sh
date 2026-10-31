@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assert the three distributions' wheels carry what they must, and only their own packages.
+# Assert the five distributions' wheels carry what they must, and only their own packages: the library's,
+# the server's and the shim's, and the aliases' (cadgen, text-to-cad), which carry nothing but the library
+# at the release.
 #
 # The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
@@ -21,7 +23,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-OUT_DIR="${CAD_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/cadgen-wheel-check}"
+OUT_DIR="${CAD_WHEEL_OUT_DIR:-$REPO_ROOT/tmp/wheel-check}"
 KEEP_WHEEL="${CAD_KEEP_WHEEL:-0}"
 
 PYTHON_BIN="${PYTHON_BIN:-}"
@@ -102,19 +104,21 @@ SHIM_REQUIRED=(
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
-BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-wheel-build.XXXXXX")"
+BUILD_SCRATCH="$(mktemp -d "${TMPDIR:-/tmp}/wheel-build.XXXXXX")"
 trap 'rm -rf "$BUILD_SCRATCH"' EXIT
 
 # check PROJECT DISTRIBUTION TOP REQUIRED...: build packages/PROJECT's wheel, and hold it to the paths it
-# must carry and to TOP, the top-level entries it may hold (its packages, its .pth, its dist-info).
+# must carry and to TOP, the top-level entries it may hold beside its dist-info (its packages, its .pth;
+# none for an alias).
 check() {
   local project="$1" distribution="$2" top="$3"
+  local label="${project//\//-}"
   shift 3
   echo "Building the $project wheel for its content check..."
   "$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" stage "$REPO_ROOT/packages/$project" "$BUILD_SCRATCH/$project"
-  "$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$BUILD_SCRATCH/$project" >"$OUT_DIR/$project-build.log" 2>&1 || {
+  "$PYTHON_BIN" -m build --wheel --outdir "$OUT_DIR" "$BUILD_SCRATCH/$project" >"$OUT_DIR/$label-build.log" 2>&1 || {
     echo "The $project wheel's build failed:" >&2
-    tail -40 "$OUT_DIR/$project-build.log" >&2
+    tail -40 "$OUT_DIR/$label-build.log" >&2
     echo "" >&2
     echo "If this is a missing build backend, install it: $PYTHON_BIN -m pip install build" >&2
     exit 1
@@ -127,7 +131,7 @@ check() {
   wheel="${wheels[0]}"
   echo "Built $(basename "$wheel")"
 
-  listing="$OUT_DIR/$project-contents.txt"
+  listing="$OUT_DIR/$label-contents.txt"
   "$PYTHON_BIN" -c "
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as zf:
@@ -151,8 +155,9 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
 
   # Its own packages alone: a package another distribution ships, in this one too, is two copies of one
   # module on a user's path.
-  local strays
-  strays="$(sed 's|/.*||' "$listing" | sort -u | grep -Ev "^(${top}|${distribution}-[^/]*\.dist-info)$" || true)"
+  local strays own="${distribution}-[^/]*\.dist-info"
+  [ -z "$top" ] || own="$top|$own"
+  strays="$(sed 's|/.*||' "$listing" | sort -u | grep -Ev "^(${own})$" || true)"
   if [ -n "$strays" ]; then
     echo "The $project wheel carries what is not its own: $(echo $strays)" >&2
     exit 1
@@ -169,8 +174,28 @@ with zipfile.ZipFile(sys.argv[1]) as zf:
   fi
 }
 
+# An alias, packages/aliases/PROJECT: its dist-info alone, and the library at the release (a project that
+# declares the earlier name gets the library it names).
+check_alias() {
+  local project="$1" distribution="$2"
+  check "aliases/$project" "$distribution" ""
+  "$PYTHON_BIN" - "$wheel" "$(tr -d '[:space:]' < "$REPO_ROOT/VERSION")" <<'PY'
+import sys, zipfile
+
+wheel, version = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(wheel) as archive:
+    metadata = [archive.read(name).decode() for name in archive.namelist() if name.endswith(".dist-info/METADATA")]
+requires = [line for text in metadata for line in text.splitlines() if line.startswith("Requires-Dist:")]
+if requires != [f"Requires-Dist: texttocad=={version}"]:
+    sys.exit(f"{wheel} requires {requires or 'nothing'}, not the library at the release (texttocad=={version}) alone")
+PY
+}
+
 check texttocad texttocad "cad|cadgen|texttocad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
 check texttocad-mcp texttocad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
+check_alias cadgen cadgen
+check_alias text-to-cad text_to_cad
+# The server's last: the runtime checks below read its wheel and listing.
 check texttocad-server texttocad_server "cad_server" "${SERVER_REQUIRED[@]}"
 
 # The server's runtime. A nested-glob failure usually loses MANY files at once rather than one, so
@@ -189,7 +214,7 @@ if [ "$shipped_runtime" != "$expected_runtime" ]; then
 fi
 
 "$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" verify "$wheel" "$REPO_ROOT/packages/texttocad-server"
-echo "The three wheels carry their own packages; the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
+echo "The five wheels carry their own packages (the aliases none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"
 fi

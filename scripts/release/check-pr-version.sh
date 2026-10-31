@@ -75,4 +75,4 @@ if [ "$changed" -gt 300 ]; then
 fi
 
 echo "This pull request releases $version (the target branch is at $base_version)."
-echo "Merging it releases it: Publish Release uploads cadgen $version to PyPI, then moves the latest branch."
+echo "Merging it releases it: Publish Release uploads the five projects at $version to PyPI, then moves the latest branch."

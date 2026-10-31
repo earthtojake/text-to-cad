@@ -1,21 +1,25 @@
 name: Publish Release
 
 # A release is a pull request that moves VERSION (scripts/release/bump-version.sh stamps the
-# bump, the derived metadata and every cadgen pin), and merging it starts this workflow. Test
+# bump, the derived metadata and every pin of the release's own), and merging it starts this workflow. Test
 # ran every job on it, so the gate finds that run's record of the merged tree
 # (scripts/github-workflows/tested_tree.py) and nothing is tested twice; without one -- a
 # merge that was not up to date -- every Test job runs on the release commit first. Nothing
 # ships untested.
 #
-# The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle,
-# the wheel and sdist -- and installs and exercises the wheel. The pypi job alone uploads it, in
-# the `release` environment, which deploys from main only and is the one PyPI's trusted publisher
-# names, and waits until PyPI's index lists the version. Only then does anything that installers
-# follow name it: the
+# The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle, and
+# the wheel and sdist of each of the release's five projects on PyPI (the library `texttocad`, the
+# server `texttocad-server`, the shim `texttocad-mcp`, and the aliases `cadgen` and `text-to-cad`) --
+# and installs and exercises the three wheels together. The pypi job alone uploads them, in the
+# `release` environment, which deploys from main only and is the one each project's trusted publisher
+# names: one project at a time, the library first, each listed by PyPI's index before the next goes
+# (the server and the aliases pin the library at their own release). Only then does anything that
+# installers follow name it: the
 # `latest` branch and claude.ai's `claude-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
 # version, and the tag and the GitHub Release go out. The version feed the install command and
-# cadgen's update notice read (apps/api) asks PyPI itself, but Vercel's edge keeps its answer an
+# the server's update notice read (apps/api) asks PyPI itself -- `cadgen`'s index, which the release
+# lists last -- but Vercel's edge keeps its answer an
 # hour, so the feed job purges that cache once the branches carry the release. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
 # a version minutes before PyPI has it.
@@ -259,57 +263,70 @@ jobs:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
           python3 scripts/release/sourcemaps.py collect --out "$RUNNER_TEMP/sourcemaps/files" \
-            --zip "$RUNNER_TEMP/sourcemaps/zip/cadgen-sourcemaps-$VERSION.zip"
+            --zip "$RUNNER_TEMP/sourcemaps/zip/text-to-cad-sourcemaps-$VERSION.zip"
 
       - name: Upload the source maps as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-sourcemaps-${{ needs.gate.outputs.version }}
+          name: sourcemaps-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/sourcemaps/zip/
           if-no-files-found: error
 
-      - name: Check cadgen package version matches the canonical release version
-        run: |
-          version="$(tr -d '[:space:]' < VERSION)"
-          if ! grep -Eq "^version = \"$version\"$" packages/texttocad/pyproject.toml; then
-            echo "packages/texttocad/pyproject.toml version does not match VERSION ($version)." >&2
-            exit 1
-          fi
-
       # Package data fails quietly: a glob that stops matching produces a wheel that
       # imports fine and cannot build a DXF preview or serve the Viewer.
-      - name: Check cadgen wheel contents
+      - name: Check the wheels' contents
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      - name: Build cadgen sdist and wheel
+      # The release's five projects on PyPI, a wheel and an sdist each, into one folder.
+      - name: Build the five distributions
         run: |
           python3 -m pip install --upgrade build
-          python3 -m build packages/cadgen
+          for project in texttocad texttocad-server texttocad-mcp aliases/cadgen aliases/text-to-cad; do
+            python3 -m build --outdir dist "packages/$project"
+          done
 
-      # The wheel that is about to ship, installed into a fresh venv with no repo on
-      # the path: the front door, the viewer verb and the skill pin check all answer.
-      # test-installed.sh then drives the same wheel through a real build.
-      - name: Install the built wheel and exercise it
+      # What ships is exactly the five projects' wheels and sdists at the release's version.
+      - name: Check the distributions are the release's
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          wheel="$(find packages/texttocad/dist -name '*.whl' -type f | head -n 1)"
-          [ -n "$wheel" ] || { echo "no wheel under packages/texttocad/dist" >&2; exit 1; }
+          expected=()
+          for name in texttocad texttocad_server texttocad_mcp cadgen text_to_cad; do
+            expected+=("$name-$VERSION-py3-none-any.whl" "$name-$VERSION.tar.gz")
+          done
+          found="$(cd dist && ls | sort)"
+          wanted="$(printf '%s\n' "${expected[@]}" | sort)"
+          if [ "$found" != "$wanted" ]; then
+            echo "dist holds:" >&2; echo "$found" >&2
+            echo "the release is:" >&2; echo "$wanted" >&2
+            exit 1
+          fi
+
+      # The wheels about to ship, the library's, the server's and the shim's, installed together
+      # into a fresh venv with no repo on the path: the front door, the viewer verb, the shim's command
+      # and the skill pin check all answer. test-installed.sh then drives the same wheels through a
+      # real build.
+      - name: Install the built wheels and exercise them
+        run: |
           python3 -m venv "$RUNNER_TEMP/install-test"
-          "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
+          "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps dist/texttocad-*.whl \
+            dist/texttocad_server-*.whl dist/texttocad_mcp-*.whl
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad" viewer --help >/dev/null)
+          (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cad-mcp" --help >/dev/null)
           "$RUNNER_TEMP/install-test/bin/cad" doctor --no-server skills/cad
-          scripts/test/test-installed.sh --wheel "$wheel"
+          scripts/test/test-installed.sh --wheels dist
 
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
       # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
       # built minutes earlier by a step that could fail soft, and a wheel without it
       # installs cleanly and then cannot serve a Viewer or the CAD app.
-      - name: Assert the shipping wheel carries its built runtime
+      - name: Assert the shipping server wheel carries its built runtime
         run: |
-          wheel="$(find packages/texttocad/dist -name '*.whl' -type f | head -n 1)"
-          [ -n "$wheel" ] || { echo "no wheel under packages/texttocad/dist" >&2; exit 1; }
+          wheel="$(find dist -name 'texttocad_server-*.whl' -type f | head -n 1)"
+          [ -n "$wheel" ] || { echo "no server wheel under dist" >&2; exit 1; }
           listing="$(unzip -l "$wheel")"
           echo "$listing" | grep -E 'cad_server/_runtime/' || true
           for required in \
@@ -329,11 +346,11 @@ jobs:
       # The distribution is kept whether or not it ships: a rehearsal's artifact is
       # what you inspect instead of a PyPI upload, and a main run's is the record of
       # exactly what was uploaded.
-      - name: Upload the distribution as a workflow artifact
+      - name: Upload the distributions as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-${{ needs.gate.outputs.version }}
-          path: packages/texttocad/dist/*
+          name: dist-${{ needs.gate.outputs.version }}
+          path: dist/*
           if-no-files-found: error
 
       # ---- irreversible from here: main only -------------------------------------
@@ -354,7 +371,7 @@ jobs:
         if: needs.gate.outputs.is_main != 'true'
         run: |
           echo "Rehearsal complete on $GITHUB_REF_NAME at ${{ needs.gate.outputs.release_sha }}."
-          echo "Would have uploaded: $(ls packages/texttocad/dist)"
+          echo "Would have uploaded, one project at a time: $(ls dist)"
           echo "Would have uploaded these pages' source maps to PostHog: $(ls "$RUNNER_TEMP/sourcemaps/files")"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin to latest and claude-plugin."
@@ -365,15 +382,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/installer"
           cp scripts/install/install.sh scripts/install/install.ps1 "$RUNNER_TEMP/installer/"
           (cd "$RUNNER_TEMP/installer" && sha256sum install.sh install.ps1 > SHA256SUMS)
-          for file in packages/texttocad/dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
+          for file in dist/* "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/installer/*; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
-  # `release` environment, which deploys from main only, and PyPI's trusted publisher for cadgen names
-  # this workflow AND that environment (CONTRIBUTING.md, "Repository settings"). So a run on any
-  # other branch -- build-test, or a workflow changed there -- cannot publish. Uploaded BEFORE
-  # anything an installer follows names the version; if a later job fails, dispatch this workflow
-  # again: it resumes, uploading only what PyPI does not hold yet.
+  # `release` environment, which deploys from main only, and each of the five projects' trusted
+  # publisher on PyPI names this workflow AND that environment (CONTRIBUTING.md, "Repository
+  # settings"). So a run on any other branch -- build-test, or a workflow changed there -- cannot
+  # publish. One project at a time, in scripts/release/pypi_release.py's PROJECTS order, each listed
+  # by PyPI's index before the next: the library, which the others pin at the release, first; the
+  # alias the version feed reads, `cadgen`, last but one. Uploaded BEFORE anything an installer
+  # follows names the version; if a later job fails, dispatch this workflow again: it resumes,
+  # uploading only what PyPI does not hold yet.
   pypi:
     name: PyPI
     needs:
@@ -395,52 +415,117 @@ jobs:
           ref: ${{ needs.gate.outputs.release_sha }}
           persist-credentials: false
 
-      - name: Download the distribution
+      - name: Download the distributions
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-${{ needs.gate.outputs.version }}
+          name: dist-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/built
 
-      # Nothing is skipped unseen: a file PyPI already holds is not uploaded again, and the release attaches
-      # PyPI's bytes of it, checked against the sha256 PyPI lists. A file PyPI holds that this run
-      # did not build stops the release. The upload folder is in the workspace, which the
-      # publishing action's container sees.
-      - name: Compare the distribution with what PyPI holds
-        id: held
+      # For each project: nothing is skipped unseen -- a file PyPI already holds is not uploaded again,
+      # and the release attaches PyPI's bytes of it, checked against the sha256 PyPI lists; a file PyPI
+      # holds that this run did not build stops the release. Each upload folder is in the workspace,
+      # which the publishing action's container sees. uv resolves a pin through PyPI's simple index, so
+      # the next project goes up only once the index lists this one -- usually seconds after the upload.
+      - name: Compare texttocad with what PyPI holds
+        id: library
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          python3 scripts/release/pypi_release.py --version "$VERSION" --built "$RUNNER_TEMP/built" \
-            --upload upload-to-pypi --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+          python3 scripts/release/pypi_release.py --project texttocad --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/texttocad --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
 
-      - name: Publish cadgen to PyPI
-        if: steps.held.outputs.upload == 'true'
+      - name: Publish texttocad to PyPI
+        if: steps.library.outputs.upload == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: upload-to-pypi
+          packages-dir: upload-to-pypi/texttocad
 
-      # uv resolves a pin through PyPI's simple index, so nothing names the version until the
-      # index lists it -- usually seconds after the upload.
-      - name: Wait until PyPI's index lists the release
+      - name: Wait until PyPI's index lists texttocad
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/pypi_release.py --project texttocad --version "$VERSION" --wait
+
+      - name: Compare texttocad-server with what PyPI holds
+        id: server
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
-          for _ in $(seq 60); do
-            if curl -fsS -H 'Accept: application/vnd.pypi.simple.v1+json' https://pypi.org/simple/cadgen/ |
-              python3 -c 'import json, sys; sys.exit(sys.argv[1] not in json.load(sys.stdin)["versions"])' "$VERSION"; then
-              echo "PyPI's index lists cadgen $VERSION."
-              exit 0
-            fi
-            sleep 10
-          done
-          echo "PyPI's index still does not list cadgen $VERSION ten minutes after the upload." >&2
-          exit 1
+          python3 scripts/release/pypi_release.py --project texttocad-server --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/texttocad-server --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
 
-      # What PyPI serves of the release, for the GitHub Release to attach.
-      - name: Upload the released distribution as a workflow artifact
+      - name: Publish texttocad-server to PyPI
+        if: steps.server.outputs.upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-to-pypi/texttocad-server
+
+      - name: Wait until PyPI's index lists texttocad-server
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/pypi_release.py --project texttocad-server --version "$VERSION" --wait
+
+      - name: Compare texttocad-mcp with what PyPI holds
+        id: shim
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 scripts/release/pypi_release.py --project texttocad-mcp --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/texttocad-mcp --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+
+      - name: Publish texttocad-mcp to PyPI
+        if: steps.shim.outputs.upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-to-pypi/texttocad-mcp
+
+      - name: Wait until PyPI's index lists texttocad-mcp
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/pypi_release.py --project texttocad-mcp --version "$VERSION" --wait
+
+      - name: Compare cadgen with what PyPI holds
+        id: alias_cadgen
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 scripts/release/pypi_release.py --project cadgen --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/cadgen --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+
+      - name: Publish cadgen to PyPI
+        if: steps.alias_cadgen.outputs.upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-to-pypi/cadgen
+
+      - name: Wait until PyPI's index lists cadgen
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/pypi_release.py --project cadgen --version "$VERSION" --wait
+
+      - name: Compare text-to-cad with what PyPI holds
+        id: alias_text_to_cad
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: |
+          python3 scripts/release/pypi_release.py --project text-to-cad --version "$VERSION" --built "$RUNNER_TEMP/built" \
+            --upload upload-to-pypi/text-to-cad --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
+
+      - name: Publish text-to-cad to PyPI
+        if: steps.alias_text_to_cad.outputs.upload == 'true'
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: upload-to-pypi/text-to-cad
+
+      - name: Wait until PyPI's index lists text-to-cad
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/pypi_release.py --project text-to-cad --version "$VERSION" --wait
+
+      # What PyPI serves of the release, every project's, for the GitHub Release to attach.
+      - name: Upload the released distributions as a workflow artifact
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-${{ needs.gate.outputs.version }}-released
+          name: dist-${{ needs.gate.outputs.version }}-released
           path: ${{ runner.temp }}/released/*
           if-no-files-found: error
 
@@ -535,7 +620,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_API_PROJECT_ID: ${{ secrets.VERCEL_API_PROJECT_ID }}
         run: |
-          later="the feed names cadgen $VERSION within the hour on its own"
+          later="the feed names $VERSION within the hour on its own"
           for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_API_PROJECT_ID; do
             if [ -z "${!name:-}" ]; then
               echo "$name is not set, so the version feed's CDN cache is not purged: $later."
@@ -600,14 +685,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
-      # The distribution as PyPI serves it (the pypi job's artifact: this run's upload, or
+      # The distributions as PyPI serves them (the pypi job's artifact: this run's uploads, or
       # PyPI's own bytes of what an earlier run uploaded), so the release page carries the same
       # bytes -- not a rebuild, which could legally differ.
-      - name: Download the published distribution
+      - name: Download the published distributions
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-${{ needs.gate.outputs.version }}-released
-          path: packages/texttocad/dist
+          name: dist-${{ needs.gate.outputs.version }}-released
+          path: ${{ runner.temp }}/dist
 
       # The plugin ZIP the publish job built and checked from this same commit.
       - name: Download the OpenAI plugin ZIP
@@ -621,7 +706,7 @@ jobs:
       - name: Download the pages' source maps
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-sourcemaps-${{ needs.gate.outputs.version }}
+          name: sourcemaps-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/sourcemaps
 
       # The one-line installer as this release publishes it, and the SHA-256 of each script:
@@ -646,8 +731,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/texttocad/dist "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
-          for file in packages/texttocad/dist/*.whl packages/texttocad/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
+          ls -l "$RUNNER_TEMP/dist" "$RUNNER_TEMP/plugin" "$RUNNER_TEMP/sourcemaps" "$RUNNER_TEMP/installer"
+          for file in "$RUNNER_TEMP"/dist/*.whl "$RUNNER_TEMP"/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip "$RUNNER_TEMP"/sourcemaps/*.zip \
               "$RUNNER_TEMP"/installer/install.sh "$RUNNER_TEMP"/installer/install.ps1 "$RUNNER_TEMP"/installer/SHA256SUMS; do
             [ -f "$file" ] && args+=(--asset "$file")
           done

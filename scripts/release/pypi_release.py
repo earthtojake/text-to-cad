@@ -1,8 +1,15 @@
 #!/usr/bin/env python3
-"""What a release uploads to PyPI, and what its GitHub Release attaches: this run's distribution,
-checked file by file against what PyPI already holds of the version.
+"""What a release uploads to PyPI of one of its distributions, and what its GitHub Release attaches:
+this run's files of that project, checked file by file against what PyPI already holds of the version.
 
-    python3 scripts/release/pypi_release.py --version X.Y.Z --built DIR --upload DIR --released DIR
+    python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR
+    python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --wait
+
+A release is five projects on PyPI (``PROJECTS``), uploaded in that order, each listed by PyPI's index
+before the next goes (``--wait``): the library first, since the server and the aliases pin it at their own
+release, then the server, the shim and the two aliases. Of ``--built`` (every file the run built), only
+``--project``'s files are this call's: a wheel or sdist whose name is the project's, normalized, then the
+version.
 
 A file of this run's that PyPI does not hold is copied to ``--upload`` (the PyPI step uploads that
 folder, and nothing else) and to ``--released``. A file PyPI already holds -- a resumed release, its
@@ -11,6 +18,9 @@ upload done by an earlier run -- is not uploaded again: PyPI's own bytes are dow
 exactly what PyPI serves, never a rebuild of it. A file PyPI holds of the version that this run did
 not build fails the run: what the release would name is then not what it built. Prints
 ``upload=true|false`` (whether ``--upload`` holds anything) for ``$GITHUB_OUTPUT``.
+
+``--wait`` asks PyPI's simple index, what uv resolves a pin through, until it lists the version: every
+ten seconds, for ten minutes at most.
 """
 
 from __future__ import annotations
@@ -18,15 +28,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import shutil
 import sys
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROJECT = "cadgen"
+# The release's projects on PyPI, in the order they go up.
+PROJECTS = ("texttocad", "texttocad-server", "texttocad-mcp", "cadgen", "text-to-cad")
 INDEX = "https://pypi.org/pypi"
+SIMPLE = "https://pypi.org/simple"
 TIMEOUT = 60
+WAIT_SECONDS, WAIT_TRIES = 10, 60
 
 
 def sha256(path: Path) -> str:
@@ -37,10 +52,23 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def held(version: str) -> dict[str, dict[str, str]]:
-    """The files PyPI holds of ``version``: {filename: {"sha256", "url"}} ({} when it holds none)."""
+def normalized(project: str) -> str:
+    """A project's name as its wheel's and sdist's file names spell it (``texttocad-server`` is
+    ``texttocad_server``)."""
+    return re.sub(r"[-_.]+", "_", project).lower()
+
+
+def files_of(project: str, version: str, built: list[str]) -> list[str]:
+    """The files of ``built`` that are ``project``'s at ``version``: ``<name>-<version>-...whl`` and
+    ``<name>-<version>.tar.gz``."""
+    stem = f"{normalized(project)}-{version}"
+    return sorted(name for name in built if name.startswith((f"{stem}-", f"{stem}.tar.gz")))
+
+
+def held(project: str, version: str) -> dict[str, dict[str, str]]:
+    """The files PyPI holds of ``project`` at ``version``: {filename: {"sha256", "url"}} ({} when it holds none)."""
     try:
-        with urllib.request.urlopen(f"{INDEX}/{PROJECT}/{version}/json", timeout=TIMEOUT) as answer:
+        with urllib.request.urlopen(f"{INDEX}/{project}/{version}/json", timeout=TIMEOUT) as answer:
             found = json.load(answer)
     except urllib.error.HTTPError as error:
         if error.code == 404:
@@ -68,20 +96,50 @@ def download(url: str, expected: str, destination: Path) -> None:
     temporary.replace(destination)
 
 
+def listed(project: str, version: str) -> bool:
+    """Whether PyPI's simple index lists ``project`` at ``version``."""
+    request = urllib.request.Request(f"{SIMPLE}/{project}/", headers={"Accept": "application/vnd.pypi.simple.v1+json"})
+    try:
+        with urllib.request.urlopen(request, timeout=TIMEOUT) as answer:
+            return version in json.load(answer).get("versions", [])
+    except (urllib.error.URLError, ValueError, TimeoutError):
+        return False
+
+
+def wait(project: str, version: str, *, tries: int = WAIT_TRIES, pause: float = WAIT_SECONDS) -> int:
+    for attempt in range(tries):
+        if listed(project, version):
+            print(f"PyPI's index lists {project} {version}.", file=sys.stderr)
+            return 0
+        if attempt + 1 < tries:
+            time.sleep(pause)
+    print(f"PyPI's index still does not list {project} {version} {round(tries * pause / 60)} minutes after the upload.",
+          file=sys.stderr)
+    return 1
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n", 1)[0])
+    parser.add_argument("--project", required=True, choices=PROJECTS)
     parser.add_argument("--version", required=True)
-    parser.add_argument("--built", type=Path, required=True)
-    parser.add_argument("--upload", type=Path, required=True)
-    parser.add_argument("--released", type=Path, required=True)
+    parser.add_argument("--wait", action="store_true", help="wait until PyPI's index lists the version")
+    parser.add_argument("--built", type=Path)
+    parser.add_argument("--upload", type=Path)
+    parser.add_argument("--released", type=Path)
     options = parser.parse_args(argv)
-    built = sorted(path.name for path in options.built.iterdir() if path.is_file())
+    if options.wait:
+        return wait(options.project, options.version)
+    if not (options.built and options.upload and options.released):
+        parser.error("--built, --upload and --released go together, without --wait")
+    everything = sorted(path.name for path in options.built.iterdir() if path.is_file())
+    built = files_of(options.project, options.version, everything)
     if not built:
-        raise SystemExit(f"no distribution under {options.built}")
-    on_pypi = held(options.version)
+        raise SystemExit(f"no distribution of {options.project} {options.version} under {options.built}")
+    on_pypi = held(options.project, options.version)
     upload, take, foreign = plan(built, on_pypi)
     if foreign:
-        raise SystemExit(f"PyPI holds {', '.join(foreign)} of {PROJECT} {options.version}, which this run did not build")
+        raise SystemExit(f"PyPI holds {', '.join(foreign)} of {options.project} {options.version}, "
+                         "which this run did not build")
     options.upload.mkdir(parents=True, exist_ok=True)
     options.released.mkdir(parents=True, exist_ok=True)
     for name in upload:

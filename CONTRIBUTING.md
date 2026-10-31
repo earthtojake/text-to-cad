@@ -732,8 +732,8 @@ Merging a pull request that changes `VERSION` releases it: `Publish Release`
 (`release-publish.yml`) runs on that merge. Installers never take `main` as the
 plugin: they follow the `latest` branch (see
 [The install branches](#the-install-branches)), which `Publish Release` moves
-only once PyPI serves the wheel. A cadgen pin must never reach anything an
-installer tracks before PyPI has that wheel. When installers took `main`, anyone
+only once PyPI serves the release's wheels. A pin of the release's must never reach
+anything an installer tracks before PyPI has its wheel. When installers took `main`, anyone
 who updated between a release's merge and its upload got a CAD server that would
 not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
 minutes the release took to reach PyPI.
@@ -765,9 +765,11 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 ```
 
 `bump-version.sh` sets `VERSION`
-past `main`'s and stamps the derived metadata and every `cadgen==` pin
-(`sync-version.mjs`: package, plugin and lockfile versions, the plugin server
-configs, each skill's launch command). It works from `main`'s version, not the
+past `main`'s and stamps the derived metadata and every pin of the release's own
+(`sync-version.mjs`: package, plugin and lockfile versions, the five
+`pyproject.toml`s and their `texttocad==` pins, the plugin server configs'
+`texttocad-mcp==`, each skill's launch command and `cad +<version>`, the installers'
+`texttocad-server==` fallback). It works from `main`'s version, not the
 branch's, so running it twice changes nothing and running it again after `main`
 moves moves the bump with it; it refuses a branch that does not contain `main`
 yet, whose stamps would conflict.
@@ -810,38 +812,46 @@ green: that is the release. `Publish Release`, on the merge commit:
    commit carries none of it; its `TEXT_TO_CAD_RELEASE` names the version, so
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
    `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
-   the wheel-contents check, `python -m build`, and an `unzip -l` assertion that
-   the wheel about to ship really holds `_runtime/viewer` and `_runtime/mcp`. The pages' source maps, which the bundle
+   the wheel-contents check, `python -m build` of the release's five projects on
+   PyPI into one folder (the library `texttocad`, the server `texttocad-server`, the
+   shim `texttocad-mcp`, and the aliases `cadgen` and `text-to-cad`, a wheel and an
+   sdist each, and nothing else at any other version), and an `unzip -l` assertion
+   that the server's wheel about to ship really holds `_runtime/viewer` and
+   `_runtime/mcp`. The pages' source maps, which the bundle
    builds and the wheel leaves out, are gathered too
    (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
    the CAD app can name, by the debug id its build stamped on it, with its map
    -- a page whose maps PostHog could not use stops the release here.
-4. **Install test.** The built wheel into a fresh venv — `cad --help`,
-   `cad viewer --help`, `cad doctor --no-server skills/cad` — then
-   `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
-   uploaded as a workflow artifact (`cadgen-<version>`).
+4. **Install test.** The library's, the server's and the shim's wheels together
+   into a fresh venv — `cad --help`, `cad viewer --help`, `cad-mcp --help`,
+   `cad doctor --no-server skills/cad` — then
+   `scripts/test/test-installed.sh --wheels <the built folder>`; the distributions
+   are uploaded as a workflow artifact (`dist-<version>`).
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
    (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
    id, which the chunk's text and its map decide together
    (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
-   uploads it once. Then the `pypi` job uploads the wheel and sdist: the only job
-   that may mint a PyPI token, in the `release` environment (below, "Repository
-   settings"). It uploads only what PyPI does not hold yet
-   (`scripts/release/pypi_release.py`), so a resumed release uploads nothing twice,
-   and what PyPI already holds is downloaded and checked against PyPI's sha256 for
-   the GitHub Release to attach; a file PyPI holds that the run did not build stops
-   the release. Then the job waits until PyPI's simple index, which uv resolves a
-   pin through, lists the version: usually seconds.
+   uploads it once. Then the `pypi` job uploads the five projects, one at a time:
+   the only job that may mint a PyPI token, in the `release` environment (below,
+   "Repository settings"). The library goes first, since the server and the aliases
+   pin it at their own release, then the server, the shim, `cadgen` (whose index the
+   version feed reads) and `text-to-cad` (`PROJECTS` in
+   `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
+   uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
+   It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
+   twice, and what PyPI already holds is downloaded and checked against PyPI's
+   sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
+   build stops the release.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
    alone onto `latest` and `claude-plugin`, in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
-   tag and the GitHub Release, with the wheel and sdist as PyPI serves them (the
-   `pypi` job's artifact, `cadgen-<version>-released`),
-   the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
+   tag and the GitHub Release, with the five projects' wheels and sdists as PyPI
+   serves them (the `pypi` job's artifact, `dist-<version>-released`),
+   the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
    install channel; the release page is the provenance copy), and beside them the
    one-line installer, `install.sh` and `install.ps1`, with their `SHA256SUMS`: the
@@ -852,7 +862,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    effort, and nothing waits on it.
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
-wheel. Only an install of `main` itself sees that: a command that names no
+wheels. Only an install of `main` itself sees that: a command that names no
 branch, and the Cursor Marketplace, which takes the repository.
 
 When two pull requests bump at once, the first merged wins. The other then
@@ -1106,9 +1116,12 @@ requests `Prepare Release` opens start their checks. It needs Contents and Pull
 requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
-`release`, whose deployment branches are `main` alone, and cadgen's trusted publisher on
-PyPI names this repository, `release-publish.yml` and that environment, so no run on
-another branch (or a workflow changed on one) can mint a token PyPI takes. No other
+`release`, whose deployment branches are `main` alone, and the trusted publisher of each
+of the five projects on PyPI (`texttocad`, `texttocad-server`, `texttocad-mcp`, `cadgen`,
+`text-to-cad`) names this repository, `release-publish.yml` and that environment, so no
+run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
+project PyPI does not have yet takes a pending publisher, the same three names, before
+its first release. No other
 job asks for `id-token`. `build-test` is protected as `main` is (a pull request to
 change it, no force pushes or deletions): a push there runs `Publish Release`, and
 its irreversible steps are skipped by the workflow, not by who may push. The

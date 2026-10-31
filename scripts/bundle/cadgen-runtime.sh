@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build cadgen's non-Python runtime INTO THE PACKAGE (packages/texttocad-server/src/cad_server/_runtime).
+# Build the server's non-Python runtime INTO ITS PACKAGE (packages/texttocad-server/src/cad_server/_runtime).
 #
-# cadgen ships two things it does not write in Python: the CAD Viewer's built client
+# The server ships two things it does not write in Python: the CAD Viewer's built client
 # (`cad viewer` serves it) and the one-file CAD app an agent host renders (`cad-mcp`
 # serves it). (The OCCT parity bench's headless page of the viewer's scene is not one of
-# them: cadgen's snapshots are OCCT's, so lib/snapshot_runtime.sh builds that page into
+# them: the engine's snapshots are OCCT's, so lib/snapshot_runtime.sh builds that page into
 # tmp/ when the bench asks for it, never into the wheel.)
-# cadgen resolves them inside the distribution, so there is one copy and one builder of
+# The server resolves them inside its distribution, so there is one copy and one builder of
 # that copy: this script. scripts/bundle/bundle.sh is the entry point that calls it (after
 # stamping derived version metadata); call this directly only when debugging one stage.
 #
@@ -261,10 +261,10 @@ if [ "$MODE" = "check" ]; then
   fi
   if [ "$missing" -ne 0 ]; then
     echo "" >&2
-    echo "The bundler ran but did not produce everything cadgen needs. This is a bundler" >&2
+    echo "The bundler ran but did not produce everything the server needs. This is a bundler" >&2
     echo "or dependency failure, not a stale checkout: rerun scripts/bundle/bundle.sh --clean" >&2
     echo "and read the build output above." >&2
     exit 1
   fi
-  echo "cadgen packaged runtime builds and is complete."
+  echo "The server's packaged runtime builds and is complete."
 fi

@@ -18,7 +18,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 
 ## Index
 
-`bundle/` — cadgen's packaged runtime (`packages/texttocad-server/src/cad_server/_runtime`).
+`bundle/` — the server's packaged runtime (`packages/texttocad-server/src/cad_server/_runtime`).
 None of it is committed: the directory is gitignored end to end and the wheel is
 where those files ship, so these scripts are what produces them.
 
@@ -105,7 +105,7 @@ where those files ship, so these scripts are what produces them.
 - `bump-version.sh major|minor|patch|X.Y.Z [--base REF] [--dry-run]` — makes a
   branch a release: sets `VERSION` past the one on `REF` (default `origin/main`,
   fetched first; it must already be merged into the branch) and stamps the
-  derived metadata and every cadgen pin (`sync-version.mjs`). Relative to `REF`,
+  derived metadata and every pin of the release's own (`sync-version.mjs`). Relative to `REF`,
   so a second run changes nothing. `--check-incremented-from REF` compares
   `VERSION` against a ref, for `check-version.sh`. Run by hand and by
   `release-prepare.yml`; see `CONTRIBUTING.md`, "Shipping a release".
@@ -114,26 +114,36 @@ where those files ship, so these scripts are what produces them.
   branch; otherwise the bump must come from a branch of this repository (never a
   fork) and pass both the target's version and the latest tag. Called by
   `test.yml` (Version Check).
-- `pypi_release.py --version X.Y.Z --built DIR --upload DIR --released DIR` —
-  what a release uploads to PyPI and what its GitHub Release attaches: a file of
-  the run's that PyPI does not hold goes to `--upload`; one PyPI already holds (a
-  resumed release) is not uploaded again, and PyPI's own bytes, checked against
-  the sha256 PyPI lists, go to `--released`; a file PyPI holds that the run did
-  not build fails it. Called by `release-publish.yml`'s `pypi` job.
-- `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
-  skill's main file and setup guide pin `cadgen==VERSION` or run `cad +VERSION`, the one-line
-  installer falls back to `VERSION`, and (with the flag)
+- `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
+  (or `--wait`) — what a release uploads to PyPI of one of its five projects
+  (`PROJECTS`: `texttocad`, `texttocad-server`, `texttocad-mcp`, `cadgen`,
+  `text-to-cad`, in the order they go up) and what its GitHub Release attaches: of
+  the run's files, that project's at the version; one PyPI does not hold goes to
+  `--upload`; one PyPI already holds (a resumed release) is not uploaded again, and
+  PyPI's own bytes, checked against the sha256 PyPI lists, go to `--released`; a
+  file PyPI holds that the run did not build fails it. `--wait` asks PyPI's simple
+  index until it lists the version (ten minutes at most). Called by
+  `release-publish.yml`'s `pypi` job, project by project.
+- `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the five
+  `pyproject.toml`s are `VERSION` and pin the library at it, every skill's main file and setup
+  guide pin `texttocad-server==VERSION` or run `cad +VERSION`, the one-line installer falls back
+  to `VERSION`, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (Version Check), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
-  lockfile and `pyproject.toml` metadata, the cadgen pins, the skills' `cad +VERSION` in each
+  lockfile and `pyproject.toml` metadata, the `texttocad`, `texttocad-server` and `texttocad-mcp`
+  pins, the skills' `cad +VERSION` in each
   skill's main file and `references/setup.md`, and the one-line installer's fallback release) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
-- `check-wheel-contents.sh` — builds the wheel and asserts the Python modules,
-  the engine's page, environment image and README, and `_runtime/{viewer,mcp}` with each
-  one's third-party notice are inside it, and nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled source, and that
-  no engine test golden is. The only gate on package data, which fails quietly. Called by
-  `test.yml` and `release-publish.yml`.
+- `check-wheel-contents.sh` — builds the five wheels and asserts each carries its own
+  top-level packages alone (the aliases none, and only the library at the release as
+  their requirement); that the library's and the shim's carry their Python modules, the
+  library's the engine's page and environment image; that the server's carries its modules,
+  the engine's README and `_runtime/{viewer,mcp}` with each one's third-party notice, and
+  nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled
+  source; and that no engine test golden ships. The only gate on package data, which fails
+  quietly. `CAD_KEEP_WHEEL=1` keeps the wheels in `CAD_WHEEL_OUT_DIR`. Called by `test.yml`
+  and `release-publish.yml`.
 - `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin
   submission portal takes (`cad/` holding `.codex-plugin/`, `skills/`,
   `LICENSE` and every file the manifest names, with the MCP config as the root

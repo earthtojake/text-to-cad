@@ -136,6 +136,13 @@ class VersionSyncMirrorTests(unittest.TestCase):
             manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["version"], "9.9.9")
             self.assertIn("texttocad-mcp==9.9.9", manifest["mcpServers"]["cad"]["args"])
+            # The five distributions are the release, and the server and the aliases pin the library at it.
+            for project in ("texttocad", "texttocad-server", "texttocad-mcp", "aliases/cadgen", "aliases/text-to-cad"):
+                text = (root / "packages" / project / "pyproject.toml").read_text(encoding="utf-8")
+                self.assertIn('\nversion = "9.9.9"\n', text, project)
+                if project not in ("texttocad", "texttocad-mcp"):
+                    self.assertIn('"texttocad==9.9.9"', text, project)
+                    self.assertNotRegex(text, r"texttocad==(?!9\.9\.9)", project)
             # The one-line installer falls back to the release it ships with, and pins nothing else:
             # its `texttocad-server==$version` is the release it found.
             installer = (root / "scripts/install/install.sh").read_text(encoding="utf-8")

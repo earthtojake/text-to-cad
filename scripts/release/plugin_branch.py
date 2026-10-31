@@ -3,7 +3,7 @@
 
 Installers clone a branch and take its tree as the plugin. On `main` that tree is the
 monorepo: thousands of files, a workspace npm installs, workflows and binaries that claude.ai's
-directory holds for a reviewer -- and a cadgen pin from the merge on, before PyPI has the
+directory holds for a reviewer -- and a release's pins from the merge on, before PyPI has the
 wheel. So installers follow branches that only Publish Release writes, once the wheel is on
 PyPI: one commit per release whose tree is only the plugin -- the manifests and the icon, the
 MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a file outside
@@ -18,7 +18,7 @@ Two copies, differing in what they carry and the channel each config names:
 
 Each MCP config names the channel its installs come from in its server's environment,
 `CAD_INSTALL_CHANNEL`, and `CAD_AUTO_UPDATED=1` where a store keeps the copy up to
-date (`COPIES`; cadgen's `_internal/channel.py`). A config the copy does not override keeps
+date (`COPIES`; the server's `_internal/channel.py`). A config the copy does not override keeps
 main's: on `main` the Claude config names `claude-github`, and the Cursor one the Cursor
 Marketplace, which reads `main`.
 

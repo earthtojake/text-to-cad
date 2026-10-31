@@ -160,7 +160,7 @@ def collect(root: Path) -> Package:
 
 def with_channel(package: Package, data: bytes) -> bytes:
     """The server config naming OpenAI's directory as the install's channel, in its server's
-    environment (cadgen's `_internal/channel.py`): this package goes only there. Analytics report
+    environment (the server's `_internal/channel.py`): this package goes only there. Analytics report
     it, and `CAD_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
     try:
         config = json.loads(data)
