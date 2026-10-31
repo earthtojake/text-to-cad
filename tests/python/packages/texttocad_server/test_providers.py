@@ -690,6 +690,25 @@ class ApplyReadBackAndTakeBack(Fixture):
         undo = providers.uninstall_plan(home.detect(), None, machine=home.machine, folder=home.folder)
         self.assertEqual([(step.app, step.action) for step in undo], [("gemini", "remove")])
 
+    def test_a_loose_skill_moved_aside_leaves_the_skills_cli_s_record_too(self) -> None:
+        # `npx skills update` installs again what its record names once the repository's skills change: a loose
+        # copy from GitHub, moved aside, goes from it; one it installed from the plugin folder stays.
+        home = self.make(("gemini",))
+        home.machine.environ.pop("XDG_STATE_HOME", None)
+        home.skill(home.home / ".gemini" / "skills")
+        lock = providers.skills_lock(home.machine)
+        self.assertEqual(lock, home.home / ".agents" / ".skill-lock.json")
+        github = {"source": providers.REPOSITORY, "sourceType": "github", "sourceUrl": f"{providers.REPOSITORY_URL}.git",
+                  "ref": "latest", "skillPath": "skills/cad/SKILL.md"}
+        local = {"source": str(home.folder / "skills"), "sourceType": "local"}
+        lock.parent.mkdir(parents=True)
+        lock.write_text(json.dumps({"version": 3, "skills": {"cad": github, "dxf": local}, "dismissed": {}}), encoding="utf-8")
+        (step,) = [step for step in home.plan() if step.action == "remove duplicate"]
+        ok, (record,) = providers.apply(step, home.machine, aside=self.root / "aside")
+        self.assertTrue(ok)
+        self.assertEqual(json.loads(lock.read_text(encoding="utf-8")), {"version": 3, "skills": {"dxf": local}, "dismissed": {}})
+        self.assertEqual(record["unlocked"], str(lock))
+
 
 class SkillsForAgentsWithoutAPlugin(Fixture):
     """The agents the Skills CLI knows and no plugin reaches: the skills, by one ``npx skills add``."""

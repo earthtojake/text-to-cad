@@ -44,13 +44,15 @@ An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
 install, the GitHub catalog), this repository's skills installed loose, a server someone added by hand
-that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted. A loose skill is
-ours when its ``SKILL.md`` names one of this repository's skills (``SKILLS``) and says where it is
-maintained (``PROVENANCE``). The one folder two kinds of agent share, ``~/.agents/skills`` (Codex and
-Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI agent's while one that uses it is
-here: Codex and Gemini CLI then list those skills beside their plugin's, which the plan says. A store's copy
-(claude.ai's directory, the app directory of Codex's maker, the Cursor Marketplace) is the store's
-to update and to remove: it is reported, never touched, and no copy of ours is added beside it.
+that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted, and out of
+the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would put
+them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
+(``SKILLS``) and says where it is maintained (``PROVENANCE``). The one folder two kinds of agent share,
+``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
+agent's while one that uses it is here: Codex and Gemini CLI then list those skills beside their
+plugin's, which the plan says. A store's copy (claude.ai's directory, the app directory of Codex's
+maker, the Cursor Marketplace) is the store's to update and to remove: it is reported, never touched,
+and no copy of ours is added beside it.
 
 Nothing here imports the packages, and the file parses on any Python 3 the development installer may
 run on. Every path comes from a :class:`Machine` -- its home, its environment, its platform and how it
@@ -1811,6 +1813,31 @@ def copy_plugin(source: Any, target: Any) -> Dict[str, Any]:
     return mark
 
 
+def skills_lock(machine: Optional[Machine] = None) -> Path:
+    """The Skills CLI's record of the skills it installed, one entry by name with where it came from, which
+    ``npx skills update`` installs again from: ``$XDG_STATE_HOME/skills/.skill-lock.json``, else
+    ``~/.agents/.skill-lock.json``."""
+    machine = _machine(machine)
+    state = machine.environ.get("XDG_STATE_HOME")
+    return Path(state) / "skills" / ".skill-lock.json" if state else machine.home / ".agents" / ".skill-lock.json"
+
+
+def unlock_skill(name: str, machine: Optional[Machine] = None) -> bool:
+    """The Skills CLI's entry for the skill ``name`` removed where it came from this repository on GitHub: a
+    loose copy, moved aside, which ``npx skills update`` would put back once the repository's skills change.
+    One it installed from the plugin folder (this installer's, for an agent without a plugin) stays. Whether
+    one was removed; a record that cannot be read is left as it is."""
+    path = skills_lock(machine)
+    data, problem = _json(path)
+    skills = data.get("skills") if isinstance(data, dict) else None
+    entry = skills.get(name) if isinstance(skills, dict) else None
+    if problem or not isinstance(entry, dict) or not any(_same_repository(entry.get(key)) for key in ("source", "sourceUrl")):
+        return False
+    del skills[name]
+    write_json(path, data)
+    return True
+
+
 def move_aside(path: Any, folder: Any) -> Path:
     """``path`` moved into ``folder`` (a new name when one is taken): a loose skill kept, not deleted."""
     path, folder = Path(path), Path(folder)
@@ -1880,6 +1907,10 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
             target = move_aside(edit["path"], folder)
             say(f"move {shown(edit['path'], machine)} to {shown(target, machine)}")
             record.update({"kind": "move", "path": edit["path"], "to": str(target)})
+            # The Skills CLI's record of it goes too, so its `update` does not install it again.
+            if unlock_skill(Path(edit["path"]).name, machine):
+                say(f"remove {Path(edit['path']).name} from {shown(skills_lock(machine), machine)}")
+                record["unlocked"] = str(skills_lock(machine))
         elif edit["op"] == "restore":
             said = restore_servers(edit)
             say(f"{shown(edit['path'], machine)}: {said}")
