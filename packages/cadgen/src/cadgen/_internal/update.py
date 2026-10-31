@@ -64,18 +64,21 @@ class Update:
 
     def start(self, server: Any) -> dict[str, Any]:
         """The update started for the engine whose HTTP server is ``server`` (its port, and its drain:
-        ``server.retire``), unless one runs or has handed over; its state."""
+        ``server.retire``), unless one runs or has handed over; its state. The feed is read with no lock
+        held (``updates.newest``, a few seconds at most): the page's reads of the state never wait on it."""
         from cadgen import updates
 
         with self.lock:
             if self.state["state"] in ("working", "restarting"):
                 return dict(self.state)
-            target = updates.newest()
+            self.state = {"state": "working", "target": None, "progress": None, "error": None}
+            self.started = time.monotonic()
+        target = updates.newest()
+        with self.lock:
             if target is None:
                 self.state = {"state": "idle", "target": None, "progress": None, "error": None}
                 return dict(self.state)
-            self.state = {"state": "working", "target": target, "progress": None, "error": None}
-            self.started = time.monotonic()
+            self.state = {**self.state, "target": target}
             self.thread = threading.Thread(target=self._run, args=(target, server), name="cadgen-update", daemon=True)
             self.thread.start()
             return dict(self.state)
@@ -110,9 +113,11 @@ class Update:
         """The release's own ``cadgen setup --engine-update``, its progress frames taken as they come:
         its exit status, and the last line it said when it failed."""
         errors: list[str] = []
+        # The release runs its own cadgen: no import path of this engine's (a source tree's) goes with it.
+        env = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
         with subprocess.Popen([command, "setup", "--engine-update"], stdin=subprocess.DEVNULL,
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8",
-                              errors="replace", env={**os.environ, "PYTHONUNBUFFERED": "1"}) as process:
+                              errors="replace", env={**env, "PYTHONUNBUFFERED": "1"}) as process:
             reading = threading.Thread(target=lambda: errors.extend(process.stderr or ()), daemon=True)
             reading.start()
             for line in process.stdout or ():
