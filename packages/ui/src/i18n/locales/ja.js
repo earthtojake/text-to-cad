@@ -29,12 +29,15 @@ export default {
   "navbar.forward": "進む",
   "navbar.fileActions": "ファイルの操作",
   "navbar.fullSize": "フルサイズ",
-  "navbar.openInBrowser": "ブラウザで開く",
 
   "file.copyPath": "パスをコピー",
   "file.revealFinder": "Finder で表示",
   "file.revealExplorer": "エクスプローラーで表示",
   "file.revealFileManager": "ファイルマネージャーで表示",
+  "file.openIn": "次で開く",
+  "file.browser": "ブラウザ",
+  "file.fileExplorer": "エクスプローラー",
+  "file.fileManager": "ファイルマネージャー",
 
   "menu.backToHome": "ホームへ戻る",
   "menu.theme": "テーマ",

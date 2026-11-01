@@ -1,9 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { isMissingFileError } from '@text-to-cad/core/client';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
+import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../../dist/primitives/dropdown-menu.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
@@ -43,11 +44,11 @@ it('draws the navbar over every file, named by its name, and over the home with 
   const back = vi.fn();
   open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } }, file: null,
     history: { canGoBack: true, canGoForward: false, back, forward() {} },
-    update: <button type="button" aria-label="Update to 0.7.5" />, navbarActions: <button type="button" aria-label="Export" />,
+    update: <button type="button" aria-label="Update to 0.7.5" />, navbarActions: <button type="button" aria-label="Full size" />,
     presentation: { home: <p>home</p> } } as any);
   await screen.findByText('home');
   expect([labels(), document.querySelector('[data-file-name]'), document.querySelector('[data-view-controls]')])
-    .toEqual([['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Export'], null, null]);
+    .toEqual([['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Full size'], null, null]);
   expect((screen.getByRole('button', { name: 'Forward' }) as HTMLButtonElement).disabled).toBe(true);
   await userEvent.setup().click(screen.getByRole('button', { name: 'Back' }));
   expect(back).toHaveBeenCalledOnce();
@@ -76,7 +77,7 @@ it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): o
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home() {} } };
   const everything = { host: homed, chrome: 'bare', history: { canGoBack: true, canGoForward: false, back() {}, forward() {} },
     update: <button type="button" aria-label="Update to 0.7.5" />,
-    navbarActions: <button type="button" aria-label="Export" />, presentation: { home: <p>home</p> } };
+    navbarActions: <button type="button" aria-label="Full size" />, presentation: { home: <p>home</p> } };
   open(everything);
   await screen.findByText('shown');
   expect([navbar(), document.querySelector('[data-file-name]'), screen.queryAllByRole('button').map(button => button.getAttribute('aria-label'))]).toEqual([null, null, []]);
@@ -88,10 +89,10 @@ it('draws no navbar where the host asks for the view alone (`chrome: "bare"`): o
   // The default is the page's chrome: the same props draw the navbar.
   open({ ...everything, chrome: undefined });
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Export']);
+  expect(labels()).toEqual(['Menu', 'Back', 'Forward', 'Update to 0.7.5', 'Full size']);
 });
 
-it('keeps the right of the navbar for the host\'s update button and its actions, and hides the navbar while the renderer says its Preview is up', async () => {
+it('keeps the right of the navbar for the host\'s update button and its actions (Full size) alone, and hides the navbar while the renderer says its Preview is up', async () => {
   // A renderer whose Preview a test opens and closes, as the CAD shell reports it.
   let report: ((previewing: boolean) => void) | undefined;
   const previewed = defineFileRenderer({
@@ -103,9 +104,9 @@ it('keeps the right of the navbar for the host\'s update button and its actions,
     } }),
   });
   render(<FileViewer file={FILE} host={host as any} renderers={[previewed]} state={{}} onStateChange={() => {}}
-    update={<button type="button" aria-label="Update to 0.7.5" />} navbarActions={<button type="button" aria-label="Export" />} />);
+    update={<button type="button" aria-label="Update to 0.7.5" />} navbarActions={<button type="button" aria-label="Full size" />} />);
   await screen.findByText('shown');
-  expect([labels(), document.querySelector('[data-view-controls]')]).toEqual([['Update to 0.7.5', 'Export'], null]);
+  expect([labels(), document.querySelector('[data-view-controls]')]).toEqual([['Update to 0.7.5', 'Full size'], null]);
   act(() => report!(true));
   expect([navbar(), screen.getByText('shown')]).toEqual([null, expect.anything()]);
   act(() => report!(false));
@@ -134,7 +135,7 @@ it('draws Back and Forward between the logo and the file\'s name where the host 
 });
 
 it('opens the app menu from the logo: Back to home where the host has a home, the person\'s settings and the host\'s links; its ⋯ offers what the host can do with the file', async () => {
-  const user = userEvent.setup();
+  const user = userEvent.setup({ skipHover: true });
   const home = vi.fn();
   const share = vi.fn();
   const perform = { 'copy-path': vi.fn(), reveal: vi.fn() };
@@ -159,8 +160,11 @@ it('opens the app menu from the logo: Back to home where the host has a home, th
   await user.click(screen.getByRole('menuitem', { name: 'Back to home' }));
   expect(home).toHaveBeenCalledOnce();
   await user.click(screen.getByRole('button', { name: 'File actions' }));
-  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Show in Explorer']);
-  await user.click(screen.getByRole('menuitem', { name: 'Show in Explorer' }));
+  // Copy path, then Open in: the file manager by its name (Windows': File Explorer), no Browser where the host has none.
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in']);
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  expect(within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['File Explorer']);
+  await user.click(screen.getByRole('menuitem', { name: 'File Explorer' }));
   expect(perform.reveal).toHaveBeenCalledWith({ path: FILE, kind: 'file' });
   cleanup();
   // A host with no home still has the menu, without Back to home; one that can only copy offers only that.
@@ -282,6 +286,43 @@ it('has no file menu on a document with no file of its own, which its name names
   await waitFor(() => expect(list).toHaveBeenCalledWith('/home/me/last', expect.anything()));
   expect(kept).toHaveBeenCalledWith('/home/me/last');
   expect(labels()).not.toContain('File actions');
+});
+
+it('puts Open in › Browser and the host\'s own items (Export) in the file menu, a model\'s too, which has no Copy path nor file manager', async () => {
+  // No hover: jsdom lays nothing out, so a pointer leaving a submenu's trigger for its items closes it.
+  const user = userEvent.setup({ skipHover: true });
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const exported = vi.fn();
+  const perform = { 'copy-path': vi.fn(), reveal: vi.fn(), browser: vi.fn() };
+  // The host's items as the CAD viewer's Export hands them: a submenu of formats.
+  const exportMenu = <DropdownMenuSub><DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger><DropdownMenuSubContent aria-label="Export">
+    <DropdownMenuItem data-export-format="step" onSelect={() => exported('step')}>STEP</DropdownMenuItem>
+  </DropdownMenuSubContent></DropdownMenuSub>;
+  const model = { ...host, fileActions: { platform: 'darwin', perform }, files: { id: 'one',
+    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, kind: 'file' as const, extension: 'xbf', size: 0 }) } };
+  render(<FileViewer file={id} host={model as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Open in', 'Export']);
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  expect(within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Browser']);
+  await user.click(screen.getByRole('menuitem', { name: 'Browser' }));
+  // The document's page, by its own name (a model's id), as the host opens it.
+  expect(perform.browser).toHaveBeenCalledWith({ path: id, kind: 'file' });
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  await user.click(screen.getByRole('menuitem', { name: 'Export' }));
+  await user.click(document.querySelector<HTMLElement>('[data-export-format="step"]')!);
+  expect(exported).toHaveBeenCalledWith('step');
+  cleanup();
+  // A file on disk: Copy path, Open in (Browser, then Finder on a Mac), then Export.
+  open({ host: { ...host, fileActions: { platform: 'darwin', perform } }, fileMenuItems: exportMenu } as any);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in', 'Export']);
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  expect(within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Browser', 'Finder']);
+  await user.click(screen.getByRole('menuitem', { name: 'Browser' }));
+  expect(perform.browser).toHaveBeenLastCalledWith({ path: FILE, kind: 'file' });
 });
 
 it('says why a file will not open, and that it does not exist when it is missing', async () => {

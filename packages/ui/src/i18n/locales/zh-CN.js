@@ -30,12 +30,15 @@ export default {
   "navbar.forward": "前进",
   "navbar.fileActions": "文件操作",
   "navbar.fullSize": "全尺寸",
-  "navbar.openInBrowser": "在浏览器中打开",
 
   "file.copyPath": "复制路径",
   "file.revealFinder": "在 Finder 中显示",
   "file.revealExplorer": "在资源管理器中显示",
   "file.revealFileManager": "在文件管理器中显示",
+  "file.openIn": "打开方式",
+  "file.browser": "浏览器",
+  "file.fileExplorer": "文件资源管理器",
+  "file.fileManager": "文件管理器",
 
   "menu.backToHome": "返回主页",
   "menu.theme": "主题",

@@ -35,13 +35,17 @@ export default {
   "navbar.forward": "Forward",
   "navbar.fileActions": "File actions",
   "navbar.fullSize": "Full size",
-  "navbar.openInBrowser": "Open in browser",
 
-  // The ⋯ menu's actions on the file.
+  // The file's actions: a home card's ⋯, and the navbar's ⋯ (Copy path, and Open in: Browser, the
+  // file manager by its name — Finder, a product's, is the same in every language and no key).
   "file.copyPath": "Copy path",
   "file.revealFinder": "Reveal in Finder",
   "file.revealExplorer": "Show in Explorer",
   "file.revealFileManager": "Show in file manager",
+  "file.openIn": "Open in",
+  "file.browser": "Browser",
+  "file.fileExplorer": "File Explorer",
+  "file.fileManager": "File manager",
 
   // The app's menu, from the navbar's logo.
   "menu.backToHome": "Back to home",

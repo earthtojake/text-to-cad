@@ -1,16 +1,10 @@
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import { ArrowDownToLine } from 'lucide-react';
 import { toast } from 'sonner';
 import { ExportRequestError, exportPause, type ExportJob, type ExportRequest, type ExportService } from '@text-to-cad/core/client';
 import type { DownloadPort, ExportRecord } from '../host/types.js';
 import { ViewerElementContext } from '../host/context.js';
-import { Button } from '../primitives/button.jsx';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../primitives/dropdown-menu.jsx';
+import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../primitives/dropdown-menu.jsx';
 import { Toaster } from '../primitives/sonner.jsx';
-import { TooltipHint } from '../primitives/tooltip.jsx';
-import { FLOATING_SURFACE_CLASS } from '../lib/floatingSurface.js';
-import { NAVBAR_CONTROL_CLASS } from '../lib/navbarRow.js';
-import { cn } from '../lib/utils.js';
 import { useI18n } from '../i18n/index.js';
 import { useViewerMobile } from '../file-viewer/responsive.js';
 import { ExportContext, type ExportView } from './context.js';
@@ -119,13 +113,17 @@ function ExportToaster() {
     toastOptions={{ closeButtonAriaLabel: t('export.dismiss'), classNames: TOAST_CLASSES }} />;
 }
 
+/**
+ * Export, for the document on screen: `menu`, a submenu of the formats its kind writes, which the
+ * view puts in the file's ⋯ menu (`FileViewerProps.fileMenuItems`), and `overlay`, the exports'
+ * toasts. Both need the host's downloads and the client's exports; neither is there without them.
+ */
 export function ExportControls({ service, downloads, file, children }: {
   service?: ExportService; downloads?: DownloadPort; file: string;
-  children(slots: { navbar: ReactNode; overlay: ReactNode }): ReactNode;
+  children(slots: { menu: ReactNode; overlay: ReactNode }): ReactNode;
 }) {
   const { t } = useI18n();
   const [source, setSource] = useState<ExportView | null>(null);
-  const [open, setOpen] = useState(false);
   const translate = useRef(t); translate.current = t;
   // The exports still under way, kept in the tab so that a reload picks each up again; one leaves
   // as its file is handed over or it fails.
@@ -167,19 +165,13 @@ export function ExportControls({ service, downloads, file, children }: {
   };
   const enabled = Boolean(service && downloads);
   const label = t('export.button');
-  // A dropdown of the formats, the file menu's own: a choice closes it and starts that export.
-  const navbar = enabled && choices.length ? <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
-    <TooltipHint content={label} side="bottom" disabled={open}>
-      <DropdownMenuTrigger asChild><Button type="button" variant="ghost" size="icon-xs" aria-label={label} className={NAVBAR_CONTROL_CLASS} data-export-menu="">
-        <ArrowDownToLine className="size-3.5" />
-      </Button></DropdownMenuTrigger>
-    </TooltipHint>
-    {/* Closes with no exit animation, so a quick second press always reaches the button. */}
-    <DropdownMenuContent align="end" sideOffset={6} collisionPadding={8} aria-label={label}
-      className={cn(FLOATING_SURFACE_CLASS, 'data-[state=closed]:animate-none!')}>
+  // The file menu's Export: a submenu of the formats, a choice closing the menu and starting that export.
+  const menu = enabled && choices.length ? <DropdownMenuSub>
+    <DropdownMenuSubTrigger data-export-menu="">{label}</DropdownMenuSubTrigger>
+    <DropdownMenuSubContent aria-label={label}>
       {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.label}</DropdownMenuItem>)}
-    </DropdownMenuContent>
-  </DropdownMenu> : null;
+    </DropdownMenuSubContent>
+  </DropdownMenuSub> : null;
   const overlay = enabled ? <ExportToaster /> : null;
-  return <ExportContext.Provider value={enabled ? setSource : null}>{children({ navbar, overlay })}</ExportContext.Provider>;
+  return <ExportContext.Provider value={enabled ? setSource : null}>{children({ menu, overlay })}</ExportContext.Provider>;
 }

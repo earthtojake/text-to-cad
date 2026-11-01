@@ -25,7 +25,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -108,15 +108,19 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     : path && !isDocumentId(path) ? path : null;
   const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
   const folder = navigationPath ? null : explorerFolder;
-  // What the host can do with the file on screen: its ⋯ menu.
+  // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
+  // disk (none for a document with no file of its own, a model's), its page in the browser whatever
+  // it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
   const fileMenu = useMemo(() => {
-    const capabilities = new Set(Object.keys(perform ?? {}) as EntryAction[]);
-    return navigationPath && capabilities.size ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities,
-      onAction: (action: EntryAction, target: string) => { void Promise.resolve(perform?.[action]?.({ path: target, kind: "file" })).catch(error => onError?.(error)); },
+    const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
+      .filter(action => action === "browser" ? Boolean(path) : Boolean(navigationPath)));
+    const target = (action: EntryAction) => action === "browser" ? path : navigationPath;
+    return path && (capabilities.size || fileMenuItems) ? {
+      platform: host.fileActions?.platform ?? "linux", capabilities, items: fileMenuItems,
+      onAction: (action: EntryAction) => { void Promise.resolve(perform?.[action]?.({ path: target(action) ?? "", kind: "file" })).catch(error => onError?.(error)); },
     } : null;
-  }, [navigationPath, perform, host.fileActions?.platform, onError]);
+  }, [path, navigationPath, perform, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

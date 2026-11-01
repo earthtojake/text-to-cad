@@ -29,12 +29,15 @@ export default {
   "navbar.forward": "앞으로",
   "navbar.fileActions": "파일 작업",
   "navbar.fullSize": "전체 크기",
-  "navbar.openInBrowser": "브라우저에서 열기",
 
   "file.copyPath": "경로 복사",
   "file.revealFinder": "Finder에서 보기",
   "file.revealExplorer": "파일 탐색기에서 보기",
   "file.revealFileManager": "파일 관리자에서 보기",
+  "file.openIn": "다음에서 열기",
+  "file.browser": "브라우저",
+  "file.fileExplorer": "파일 탐색기",
+  "file.fileManager": "파일 관리자",
 
   "menu.backToHome": "홈으로",
   "menu.theme": "테마",

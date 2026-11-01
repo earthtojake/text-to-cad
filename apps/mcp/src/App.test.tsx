@@ -18,7 +18,7 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // What the host hands the navbar, and its notice (the file handler's corner), drawn as the real viewer would.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.openInBrowser ?? null}{props.notice ?? null}</>; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.notice ?? null}</>; },
   };
 });
 
@@ -27,6 +27,10 @@ vi.mock('sonner', async original => ({ ...await original<object>(), toast: Objec
 
 beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
+/** The file menu's Open in › Browser, as the host hands it to the viewer (`fileActions.perform.browser`), where it has one. */
+const browser = () => viewer.props!.host.fileActions?.perform?.browser;
+/** Open in › Browser chosen over the document on screen, as the file menu does it. */
+const openInBrowser = () => browser()!({ path: viewer.props!.file, kind: 'file' });
 
 const POLICY = 'https://www.texttocad.dev/privacy-policy';
 type Answer = (body: any, url: URL) => unknown;
@@ -235,12 +239,13 @@ it('an inline host gets the whole viewer in a card of a height it is told, with 
 it('every view has the navbar but the file handler: the sidebar\'s home, a thread\'s tab, an agent\'s tab and an inline card are page chrome, with the host\'s controls in it; the file handler is bare, its corner the host\'s notice', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const page = 'http://127.0.0.1:3245/id-p?token=t';
-  // The inline card: the navbar, with Full size and Open in browser in it, and no corner.
+  // The inline card: the navbar, with Full size at its right and Open in › Browser in the file menu, and no corner.
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline"
     launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'inline', view: 'cad-1-c', order: { createdAt: 1, seq: 1 }, browser: page }} />);
   expect(viewer.props!.chrome).toBe('page');
-  expect([viewer.props!.fullSize, viewer.props!.openInBrowser, viewer.props!.notice]).toEqual([expect.anything(), expect.anything(), undefined]);
-  expect(screen.getByRole('button', { name: 'Open in browser' })).toBeTruthy();
+  expect([viewer.props!.fullSize, viewer.props!.notice]).toEqual([expect.anything(), undefined]);
+  expect(browser()).toEqual(expect.any(Function));
+  expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
   expect(container.querySelector('[data-card-corner]')).toBeNull();
   // A tab host's views: the sidebar's home, a thread's tab and the agent's, each under its navbar.
   for (const launch of [{ ...home, surface: 'sidebar', browser: 'http://127.0.0.1:3245/?token=t' },
@@ -249,14 +254,13 @@ it('every view has the navbar but the file handler: the sidebar\'s home, a threa
     cleanup();
     render(<App bridge={bridge as any} server={server as any} launch={launch} />);
     expect([viewer.props!.chrome, viewer.props!.notice, document.querySelector('[data-card-corner]')]).toEqual(['page', undefined, null]);
-    expect(screen.getByRole('button', { name: 'Open in browser' })).toBeTruthy();
+    expect(browser()).toEqual(expect.any(Function));
     expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   }
   // The file handler: the view alone, no navbar to hand anything, and no Open in browser even where a page is known.
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/part.step', surface: 'file', browser: page }} />);
-  expect([viewer.props!.chrome, viewer.props!.update, viewer.props!.fullSize, viewer.props!.openInBrowser]).toEqual(['bare', undefined, undefined, undefined]);
-  expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
+  expect([viewer.props!.chrome, viewer.props!.update, viewer.props!.fullSize, browser()]).toEqual(['bare', undefined, undefined, undefined]);
 });
 
 it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice: Full size there where an inline host offers it, the update button under it', () => {
@@ -269,27 +273,29 @@ it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice:
   expect(screen.getByRole('button', { name: 'Update to 0.9.0' }).closest('[data-card-corner]')).not.toBeNull();
 });
 
-it("Open in browser is the navbar's last control where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {
+it("Open in › Browser is the file menu's where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { openLinks: {} });
   let display = true;
   server.answers['/api/v1/local/browser/open'] = () => display ? { opened: true } : new Status(503, { error: 'there is no display to open a browser on' });
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a b.step', browser: 'http://127.0.0.1:3245/id-a?token=t' }} />);
-  const button = screen.getByRole('button', { name: 'Open in browser' });
-  act(() => button.click());
+  // Never a navbar button: the file menu's item, the host's file action.
+  expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
+  // The library's cards keep their own menu: Copy path and Reveal, the browser no host card's.
+  expect(Object.keys(viewer.props!.host.fileActions!.perform!).sort()).toEqual(['browser', 'copy-path', 'reveal']);
+  act(() => { void openInBrowser(); });
   // The request names the document, never a URL; the server opened it, so the host is asked nothing.
   await waitFor(() => expect(server.asked('/api/v1/local/browser/open')).toEqual([{ model: '/work/a b.step' }]));
   display = false;
-  act(() => button.click());
+  act(() => { void openInBrowser(); });
   await waitFor(() => expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'http://127.0.0.1:3245/id-a?token=t' }));
   expect(bridge.request.mock.calls.filter(([method]) => method === 'ui/open-link')).toHaveLength(1);
-  // A launch with no page (the engine gave none) has no button.
+  // A launch with no page (the engine gave none) has no Browser.
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step' }} />);
-  expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
-  expect(viewer.props!.openInBrowser).toBeNull();
+  expect(browser()).toBeUndefined();
 });
 
-it("Open in browser follows what the view shows: each launch's page, the agent's shows bringing theirs, and the web viewer's home for a file no launch named; a host that opens no links gets a plain link", async () => {
+it("Open in › Browser follows what the view shows: each launch's page, the agent's shows bringing theirs, and the web viewer's home for a file no launch named; a host that opens no links gets a plain link", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const replies: ((reply: { events: unknown[] }) => void)[] = [];
   server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
@@ -298,17 +304,16 @@ it("Open in browser follows what the view shows: each launch's page, the agent's
   vi.stubGlobal('open', open);
   const opened = async (url: string) => {
     open.mockClear();
-    act(() => screen.getByRole('button', { name: 'Open in browser' }).click());
+    act(() => { void openInBrowser(); });
     await waitFor(() => expect(open).toHaveBeenCalledWith(url, '_blank', 'noopener,noreferrer'));
   };
   render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar', browser: 'http://127.0.0.1:3245/?token=t' }} />);
+  // The person opens c from the home: no launch named it, so the web viewer's home, where it leads the library.
+  await act(async () => viewer.props!.library!.open({ path: '/work/c.step', name: 'c.step', folder: 'work', pinned: false, thumbnail: null, opened: 1 } as any));
   await opened('http://127.0.0.1:3245/?token=t');
   // The agent shows b, with its page.
   await act(async () => { replies.shift()!({ events: [{ seq: 1, type: 'show', launch: { protocol: 9, page: 'viewer', model: '/work/b.step', browser: 'http://127.0.0.1:3245/id-b?token=t' } }] }); });
   await opened('http://127.0.0.1:3245/id-b?token=t');
-  // The person opens c from the home: no launch named it, so the web viewer's home, where it leads the library.
-  await act(async () => viewer.props!.library!.open({ path: '/work/c.step', name: 'c.step', folder: 'work', pinned: false, thumbnail: null, opened: 1 } as any));
-  await opened('http://127.0.0.1:3245/?token=t');
   expect(bridge.request.mock.calls.filter(([method]) => method === 'ui/open-link')).toEqual([]);
 });
 

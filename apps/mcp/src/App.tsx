@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
-import { ExternalLink, Maximize2 } from 'lucide-react';
+import { Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { translator, useI18n, useLanguage } from '@text-to-cad/ui/i18n';
 import { UpdateButton, useUpdate } from '@text-to-cad/ui/update';
@@ -154,17 +154,6 @@ async function openBrowserPage({ tunnel, direct, bridge, model, page }: {
   else plain();
 }
 
-/** The view's page in the person's browser (`openBrowserPage`): the navbar's last control, over every file and on the home. */
-function OpenInBrowserButton({ open }: { open: () => void }) {
-  const { t } = useI18n();
-  const label = t('navbar.openInBrowser');
-  return <TooltipHint content={label}>
-    <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label={label} onClick={open}>
-      <ExternalLink className="size-3.5" aria-hidden="true" />
-    </Button>
-  </TooltipHint>;
-}
-
 /** A view a newer one replaced: its last frame, and where to look now. */
 function Superseded({ still, label }: { still: string | null; label: string }) {
   return <div className="relative flex h-full items-center justify-center bg-background" data-cad-superseded="">
@@ -217,8 +206,6 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // the view keeps its model, and says so.
   const [lost, setLost] = useState<boolean | string>(false);
   const shown = useRef<string | null>(null);
-  // What the view shows, for its page in the browser: the launch's until the view says.
-  const [showingModel, setShowingModel] = useState<string | null>(() => initial.model ? normalizePath(initial.model) : null);
   // The pages the launches carried: the first one's, then each the agent's shows bring.
   const [pages, setPages] = useState<Pages>(() => withPage(new Map(), initial));
   // The model the agent last showed here, until the view shows it (or anything after it): a capture
@@ -241,7 +228,6 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     showing(model) {
       shown.current = model;
       asked.current = null;
-      setShowingModel(model);
       sync.focus();
     },
   }), [sync]);
@@ -310,10 +296,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, build: BUILD, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
-  // The view's page in the browser, last in the navbar, where a launch carried one; never in the file
-  // handler, which shows its file alone.
-  const page = alone ? null : pageOf(pages, showingModel);
-  const openInBrowser = page ? () => void openBrowserPage({ tunnel, direct: Boolean(direct), bridge, model: showingModel, page }) : null;
+  // The document's page in the browser, the file menu's Open in › Browser, where a launch carried a
+  // page; never in the file handler, which shows its file alone.
+  const browsable = !alone && pages.size > 0;
+  const openInBrowser = useMemo(() => browsable ? (model: string) => {
+    const page = pageOf(pages, model);
+    if (page) void openBrowserPage({ tunnel, direct: Boolean(direct), bridge, model, page });
+  } : undefined, [browsable, pages, tunnel, direct, bridge]);
   const { launch } = showing;
   if (superseded) {
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} floatingComposer={floatingComposer}><Superseded still={still} label={translator(locale)('cad.superseded')} /></Frame>;
@@ -324,7 +313,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
-      openInBrowser={openInBrowser ? <OpenInBrowserButton open={openInBrowser} /> : null}
+      openInBrowser={openInBrowser}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />
   </Frame>;
 }

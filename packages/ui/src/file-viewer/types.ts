@@ -157,8 +157,13 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
-  /** Additive host actions at the navbar right, and persistent feedback below it. */
+  /** Additive host actions at the navbar right (the CAD app's Full size), and persistent feedback below it. */
   navbarActions?: ReactNode;
+  /**
+   * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
+   * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the CAD viewer's Export. Over a document only.
+   */
+  fileMenuItems?: ReactNode;
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;

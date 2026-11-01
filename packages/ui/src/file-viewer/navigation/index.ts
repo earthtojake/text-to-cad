@@ -7,6 +7,8 @@ export type { EntryAction, Platform, EntryMenuItem } from "./types.js";
 export const ENTRY_ACTIONS = runtime.ENTRY_ACTIONS as typeof Contract.ENTRY_ACTIONS;
 export const entryMenu = runtime.entryMenu as typeof Contract.entryMenu;
 export const revealLabel = runtime.revealLabel as typeof Contract.revealLabel;
+export const openInMenu = runtime.openInMenu as typeof Contract.openInMenu;
+export const fileManagerName = runtime.fileManagerName as typeof Contract.fileManagerName;
 export const FolderExplorer = runtime.FolderExplorer as typeof Contract.FolderExplorer;
 export const folderTrail = runtime.folderTrail as typeof Contract.folderTrail;
 export const parentFolder = runtime.parentFolder as typeof Contract.parentFolder;

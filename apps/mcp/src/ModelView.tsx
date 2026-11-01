@@ -27,13 +27,13 @@ export interface ViewReporter {
 /**
  * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
  * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
- * app menu, Back and Forward, the file's name and menus, and the host's update, Full size and Open in
- * browser. A view browses from its model's folder, shows what is opened in place, and adds what it
+ * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
+ * the file manager), and at the right the host's update and Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
  * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone (`chrome: "bare"`): the host's
- * own file tree is its navigation, so it has no navbar, no home and no Open in browser; what the
+ * own file tree is its navigation, so it has no navbar, no home and no file menu (no Open in › Browser); what the
  * navbar would carry that it still has (the update notice, Full size where the host offers it) is its
  * corner (`CardCorner`) at the viewport's top-right.
  */
@@ -68,8 +68,11 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   update?: ReactNode;
   /** Inline, the card's way to full size, where the host can show it so: in the navbar before the host's other actions; the corner's first in the file handler. */
   fullSize?: ReactNode;
-  /** The view's page in the person's browser, where a launch carried one: last in the navbar. Never in the file handler. */
-  openInBrowser?: ReactNode;
+  /**
+   * Open a document's page (a file's path, a model's id) in the person's browser, where a launch carried
+   * a page: the file menu's Open in › Browser (`fileActions.perform.browser`). Never in the file handler.
+   */
+  openInBrowser?: (document: string) => void;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
   // has neither the home nor the explorer (a source that cannot list or search offers none).
@@ -105,8 +108,12 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     [chat.queue, chat.send, bridge]);
   useEffect(() => () => chatContext?.dispose(), [chatContext]);
   const promptContext = chatContext ?? unavailablePromptContext;
-  // The file menu: its path, and Reveal in the desktop's file manager (the server is on this machine).
-  const fileActions = useMemo(() => createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path) }), [platform, client]);
+  // The file menu: its path, Reveal in the desktop's file manager (the server is on this machine),
+  // and, in a view with a home, the document's page in the browser (Open in › Browser).
+  const fileActions = useMemo(() => {
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path) });
+    return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
+  }, [platform, client, homed, openInBrowser]);
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);
@@ -152,6 +159,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory}
-    {...homed ? { update, fullSize, openInBrowser } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
+    {...homed ? { update, fullSize } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }
