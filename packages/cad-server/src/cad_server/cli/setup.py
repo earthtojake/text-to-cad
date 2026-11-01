@@ -95,6 +95,12 @@ DEFAULT_PROG = "cad setup"
 SCHEMA = 1
 RECEIPT = "install-receipt.json"
 LOCK = "install.lock"
+# What text-to-cad keeps in the two folders ``--purge`` removes. A folder of that name that holds other things
+# and none of these is another program's that shares the name, and purge leaves it as it is (the engine's own
+# cache touches only its ``documents/``, ``engine/cache.py``).
+STATE_OURS = frozenset({"installations", "engines", "documents", "recents", "releases", "plugin", "settings.json",
+                        "settings.lock", "plugin.lock", "versions.json", "install-channels.json", RECEIPT})
+CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
 ASIDE = "install-aside"
 # How long an older installation's ``cad stop`` may take.
@@ -1024,7 +1030,13 @@ class Installer:
         import shutil
 
         shown = self.providers.shown
-        for folder in (state, cache):
+        for folder, ours in ((state, STATE_OURS), (cache, CACHE_OURS)):
+            held = {entry.name for entry in folder.iterdir()} - {LOCK} if folder.is_dir() else set()
+            if held and not held & ours:
+                with contextlib.suppress(OSError):
+                    (folder / LOCK).unlink()  # only the lock this uninstall took there
+                self.say(f"folders  left {shown(folder, self.machine)}: it holds nothing text-to-cad made")
+                continue
             shutil.rmtree(folder, ignore_errors=True)
             self.say(f"folders  removed {shown(folder, self.machine)}" if not folder.exists()
                      else f"folders  {shown(folder, self.machine)} could not be removed whole")

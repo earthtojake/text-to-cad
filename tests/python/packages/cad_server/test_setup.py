@@ -572,6 +572,16 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertFalse(self.state.exists())
         self.assertFalse(self.cache.exists())
 
+    def test_purge_leaves_a_folder_of_the_same_name_that_another_program_keeps(self) -> None:
+        for folder in (self.state, self.cache):
+            folder.mkdir(parents=True, exist_ok=True)
+            (folder / "theirs.db").write_text("theirs", encoding="utf-8")
+        code, out, _err = self.run_uninstall("--purge")
+        self.assertEqual(code, 0, out)
+        for folder in (self.state, self.cache):
+            self.assertEqual([entry.name for entry in folder.iterdir()], ["theirs.db"], folder)
+        self.assertEqual(out.count("it holds nothing text-to-cad made"), 2, out)
+
     def test_an_agent_without_a_plugin_gets_the_skills_once_per_release_and_uninstall_takes_them_back(self) -> None:
         command(self.bin, "npx", NPX)
         folder = self.home / ".codeium" / "windsurf" / "skills"
