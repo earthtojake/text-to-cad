@@ -25,6 +25,7 @@ import numpy as np
 from cad.engine import build as engine_build
 from cad.engine import mesh, serve
 from cad.engine.serve import FACT, FACT_BYTES, MESH, Server
+from tests.python.support.http_listener import listener
 
 MODEL = """
 import build123d as bd
@@ -53,7 +54,7 @@ class ServeTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
         self.script = self.folder / "rack.py"
         self.write(4)
-        self.server = Server(port=0, mesh_mode="inline")  # a test asks for the pool itself
+        self.server = Server(mesh_mode="inline", http_factory=listener)  # a test asks for the pool itself
         self.server.start()
         self.addCleanup(self.server.stop)
         self.ident = self.server.add(self.folder / "XBF/rack.xbf")
@@ -213,7 +214,7 @@ class DeclaredFileTest(unittest.TestCase):
         from cad.engine import document
 
         self.build(4)
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline")
         self.addCleanup(server.stop)
         ident = server.add(self.path)
         before = server.document(ident)
@@ -258,7 +259,7 @@ class ServedStepTest(unittest.TestCase):
         reports = engine_build.build(script, ["shelf"], cwd=self.folder)
         self.assertTrue(reports[-1]["ok"], reports)
         self.step = self.folder / "shelf.step"
-        self.server = Server(port=0, mesh_mode="inline")
+        self.server = Server(mesh_mode="inline")
         self.addCleanup(self.server.stop)
 
     def test_a_step_is_read_by_a_reader_process_and_held_by_its_bytes(self) -> None:
@@ -346,16 +347,25 @@ class ServerUrlTest(unittest.TestCase):
 
         binds = []
 
-        def listener(server, host, port):
+        def stand_in(server, host, port):
             binds.append(host)
             return SimpleNamespace(server_address=(host, 4242))
 
         for host, url in (("0.0.0.0", "http://127.0.0.1:4242"), ("127.0.0.1", "http://127.0.0.1:4242"),
                           ("::", "http://[::1]:4242"), ("::1", "http://[::1]:4242")):
-            server = Server(host=host, mesh_mode="inline", http_factory=listener)
+            server = Server(host=host, mesh_mode="inline", http_factory=stand_in)
             self.addCleanup(server.mesher.stop)
             self.assertEqual(server.url, url, host)
         self.assertEqual(binds, ["0.0.0.0", "127.0.0.1", "::", "::1"], "the bind is the address asked for")
+
+    def test_a_server_of_its_own_binds_nothing(self) -> None:
+        # A render process's server (and any with no ``http_factory``) is read in process alone.
+        server = Server(mesh_mode="inline")
+        server.start()
+        self.addCleanup(server.stop)
+        self.assertEqual((server.http, server.port, server.url), (None, None, None))
+        status, body = server.read("/api/v1/look")
+        self.assertEqual(status, 200, body)
 
 
 class NamedKeyTest(unittest.TestCase):
@@ -398,7 +408,7 @@ class NamedKeyTest(unittest.TestCase):
         [stranger] = document.Loaded(named).prototypes
         self.assertNotEqual(stranger.key, keys[0], "the key a file names is not taken on its word")
 
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
 
@@ -449,7 +459,7 @@ class InspectionReadTest(unittest.TestCase):
     before anyone asks."""
 
     def setUp(self) -> None:
-        self.server = Server(port=0, mesh_mode="inline")
+        self.server = Server(mesh_mode="inline", http_factory=listener)
         self.server.start()
         self.addCleanup(self.server.stop)
         self.kernel = mock.patch("cad.engine.mesh.measured", side_effect=kernel_facts).start()
@@ -523,7 +533,7 @@ class PoolFactsTest(unittest.TestCase):
     facts queue; a part asked while its batch waits is not measured again."""
 
     def setUp(self) -> None:
-        self.server = Server(port=0, isolated=True)
+        self.server = Server(isolated=True)
         self.addCleanup(self.server.stop)
         self.server.mesher.workers = 4  # the fake pool's capacity, independent of the test host
         self.batches: list[tuple] = []

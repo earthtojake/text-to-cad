@@ -18,6 +18,7 @@ import numpy as np
 from cad.engine import build as engine_build
 from cad.engine import mesh
 from cad.engine.serve import Server
+from tests.python.support.http_listener import listener
 
 
 def classes(part: mesh.Mesh) -> dict[str, int]:
@@ -200,7 +201,7 @@ class FactsTest(unittest.TestCase):
         script.write_text(textwrap.dedent(MODEL), encoding="utf-8")
         reports = engine_build.build(script, ["plate"], cwd=cls.folder)
         assert reports[-1]["ok"], reports
-        cls.server = Server(port=0, mesh_mode="inline")
+        cls.server = Server(mesh_mode="inline", http_factory=listener)
         cls.server.start()
         cls.ident = cls.server.add(cls.folder / "XBF/plate.xbf")
 
@@ -325,7 +326,7 @@ class SurfaceFactsTest(unittest.TestCase):
         script = folder / "solids.py"
         script.write_text(textwrap.dedent(SOLIDS), encoding="utf-8")
         self.assertTrue(engine_build.build(script, ["solids"], cwd=folder)[-1]["ok"])
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         ident = server.add(folder / "XBF/solids.xbf")

@@ -62,7 +62,7 @@ class BrowserPageTest(unittest.TestCase):
 
         folder = Path(tempfile.mkdtemp(prefix='browser-page-'))
         self.addCleanup(shutil.rmtree, folder, ignore_errors=True)
-        server = Server(port=0, mesh_mode='inline')
+        server = Server(mesh_mode='inline')
         self.addCleanup(server.stop)
         path = folder / 'part.xbf'
         ident = server.put(path, {'version': 'one', 'prototypes': [], 'name': 'part'}, {})

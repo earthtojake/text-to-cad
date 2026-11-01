@@ -471,11 +471,11 @@ def draw_here_each(document: Path, stills: list[Any], *, source: Any = None) -> 
             report["timings"] = {"readMs": opened["readMs"], **report["timings"]}
         return drawn
     if source is not None:
-        server = Server(port=0, mesh_mode="inline", cache=MESHES)
+        server = Server(mesh_mode="inline", cache=MESHES)
         ident = server.put(document, source.structure,
                            {p["key"]: source.shape_data(p["key"]) for p in source.structure["prototypes"]})
     else:
-        server = Server(port=0)
+        server = Server()
     try:
         if source is None:
             ident = server.add(document)

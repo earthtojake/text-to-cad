@@ -174,7 +174,7 @@ def served(document: Path) -> tuple[dict, dict[str, bytes]]:
     """The document as the engine serves it, and every part's buffer, meshed in this process."""
     from cad.engine.serve import Server
 
-    server = Server(port=0, mesh_mode="inline")
+    server = Server(mesh_mode="inline")
     try:
         doc = server.document(server.add(document))
         server.mesh_all(doc, None)

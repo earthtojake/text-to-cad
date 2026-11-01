@@ -17,6 +17,7 @@ import numpy as np
 from cad.engine.render.finish import cube_faces, decode_hdr, sample
 from cad.engine.render.look import LOOK
 from cad.engine.serve import Server
+from tests.python.support.http_listener import listener
 
 FIXTURE = Path(__file__).resolve().parents[5] / "packages" / "core" / "src" / "lib" / "xbf" / "__fixtures__" / "look.json"
 REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import json; from cad.engine.render.look "
@@ -25,7 +26,7 @@ REGENERATE = ("regenerate it: PYTHONPATH=packages/cad/src python -c \"import jso
 
 class LookTest(unittest.TestCase):
     def test_the_engine_serves_the_record_and_its_environment(self) -> None:
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         # As a page reads it (core's ``fetchXbfLook``): the record, then the image at the URL it names.

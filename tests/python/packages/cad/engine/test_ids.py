@@ -184,10 +184,11 @@ class IdsTest(unittest.TestCase):
 class ServedByIdTest(unittest.TestCase):
     def setUp(self) -> None:
         from cad.engine.serve import Server
+        from tests.python.support.http_listener import listener
 
         self.folder = Path(tempfile.mkdtemp(prefix="engine-ids-"))
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.server = Server(port=0, mesh_mode="inline")
+        self.server = Server(mesh_mode="inline", http_factory=listener)
         self.addCleanup(self.server.stop)
 
     def test_the_page_s_document_route_serves_by_id(self) -> None:

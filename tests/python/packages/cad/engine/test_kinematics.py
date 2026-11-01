@@ -28,6 +28,7 @@ import numpy as np
 from cad.engine import build as engine_build
 from cad.engine import document, mechanism
 from cad.engine.serve import Server
+from tests.python.support.http_listener import listener
 from tests.python.support import opengl
 
 HINGE = """
@@ -338,7 +339,7 @@ class HingeTest(_Folder):
 
     def test_a_document_is_served_at_a_pose_and_a_bad_pose_is_refused(self) -> None:
         self.hinge()
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         ident = server.add(self.folder / "XBF/hinge.xbf")
@@ -369,7 +370,7 @@ class HingeTest(_Folder):
         from cad.engine import serve
 
         self.hinge()
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         ident = server.add(self.folder / "XBF/hinge.xbf")

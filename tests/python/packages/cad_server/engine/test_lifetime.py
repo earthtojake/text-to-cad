@@ -53,7 +53,7 @@ class BudgetTest(unittest.TestCase):
     def setUp(self) -> None:
         self.folder = Path(tempfile.mkdtemp(prefix="engine-lifetime-")).resolve()
         self.addCleanup(shutil.rmtree, self.folder, ignore_errors=True)
-        self.server = Server(port=0, mesh_mode="inline", budget=64 * MIB)
+        self.server = Server(mesh_mode="inline", budget=64 * MIB)
         self.addCleanup(self.server.stop)
 
     def file(self, name: str, size: int) -> str:

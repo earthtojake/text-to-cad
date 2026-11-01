@@ -1375,11 +1375,12 @@ the xbf it declares among them: no run sends a file's page anything (**Document 
 The CAD Viewer and its document reads share the daemon's HTTP listener. The page
 reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `parts/<key>`) and
 waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
-(`/api/doc/<id>...`, `serve.py`'s, which nothing serves over HTTP but the standalone server).
+(`/api/doc/<id>...`, `serve.py`'s, which binds no listener of its own: the engine's reads are served
+only through the daemon's).
 XBF/STEP loading and geometry facts run in child processes. A launcher starts or reuses the
 engine's one page, prints its authenticated URL -- a file's page, `/<id>`, for each file it names,
-else the home's -- and exits. The standalone engine's
-minimal page (`/<id>`) and snapshot server remain available without the enclosing application.
+else the home's -- and exits. A library server made without the daemon's listener (a render
+process's) binds nothing and is read in process.
 
 **The look.** The regular display modes draw a document as OCCT's PBR raster draws it, one frozen
 record (`render/look.py`) that the OCCT prototype (`render/occt.py`, its finishes and light in
@@ -1574,7 +1575,7 @@ whose drawing checks fail) fails with its reason. A changed source is refused, s
 this interface.
 
 The enclosing distribution owns the HTTP queue, the browser download and temporary
-artifact lifetime; the standalone engine owns revision validation and
+artifact lifetime; the library's engine owns revision validation and
 translation only. One explicit job names one temporary output, with no intermediate
 XBF, no source and no registry (law 2). Cancellation takes effect between worker operations, discarding an in-flight
 result without killing a worker shared with another caller.
@@ -2393,8 +2394,8 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
 too (`cad inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
-API's own paths (`/api/v1/look`, `/api/v1/look/environment`), the ones its record names, so the
-standalone server answers a page as the engine does.
+API's own paths (`/api/v1/look`, `/api/v1/look/environment`), the ones its record names, which the
+daemon's listener serves as they are.
 
 `GET /api/v1/documents/<kind>/<id>/structure` returns the structure as JSON: prototypes (key, name,
 colour, `faceNames`, `edgeNames`, `vertexNames`, `faceColors` by ordinal, `material` and

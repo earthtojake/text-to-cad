@@ -25,6 +25,7 @@ from cad.engine.render import context
 from cad.engine.serve import Server
 from cad.engine.snapshot import (SnapshotRefused, authored, parse_annotation, parse_camera, parse_display, parse_measurements, snapshot)
 from tests.python.support import opengl
+from tests.python.support.http_listener import listener
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
@@ -580,7 +581,7 @@ class AccessTest(unittest.TestCase):
     own law. No origin, a page on this machine's included, is named as a reader."""
 
     def test_no_page_of_another_origin_is_named_a_reader(self) -> None:
-        server = Server(port=0, mesh_mode="inline")
+        server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         for origin in ("http://127.0.0.1:3245", "http://localhost:5173", "https://example.com", "null"):

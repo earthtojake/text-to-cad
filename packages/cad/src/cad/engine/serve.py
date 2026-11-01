@@ -96,7 +96,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass, field
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import parse_qs, unquote, urlparse
@@ -1072,36 +1072,27 @@ class Server:
         # Per served document (its id), its build: the last progress frame of the build writing it
         # now, the last build of it that failed, and a count that moves with either (``build_of``).
         self.builds: dict[str, dict[str, Any]] = {}
-        server = self
-
-        class Handler(BaseHTTPRequestHandler):
-            protocol_version = "HTTP/1.1"
-
-            def log_message(self, *args: Any) -> None:
-                pass
-
-            def do_GET(self) -> None:  # noqa: N802
-                server.touch()
-                server.route(self, "GET")
-
-            def do_POST(self) -> None:  # noqa: N802
-                server.touch()
-                server.route(self, "POST")
-
-        try:
-            self.http = (http_factory(self, host, port) if http_factory is not None
-                         else ThreadingHTTPServer((host, port), Handler))
-        except BaseException:
-            self.mesher.stop()  # a listener that could not bind leaves no meshing pool behind
-            raise
-        self.http.daemon_threads = True
-        self.port = self.http.server_address[1]
-        self.url = f"http://{reachable_host(host)}:{self.port}"
+        # The listener a page reads the server over: the daemon's (``http_factory``, the engine's one
+        # authenticated listener), or none -- a server of its own (a render process's, a test's)
+        # binds nothing and is read in process (``route``, ``document``, ``read``).
+        self.http: Any = None
+        self.port: int | None = None
+        self.url: str | None = None
+        if http_factory is not None:
+            try:
+                self.http = http_factory(self, host, port)
+            except BaseException:
+                self.mesher.stop()  # a listener that could not bind leaves no meshing pool behind
+                raise
+            self.http.daemon_threads = True
+            self.port = self.http.server_address[1]
+            self.url = f"http://{reachable_host(host)}:{self.port}"
         self.thread: threading.Thread | None = None
 
     def start(self) -> None:
-        self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
-        self.thread.start()
+        if self.http is not None:
+            self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
+            self.thread.start()
         if self.budget is not None:
             threading.Thread(target=self._pressured, name="cadgen-memory-pressure", daemon=True).start()
 
@@ -1137,7 +1128,8 @@ class Server:
         self.pressure.wake.set()
         if self.thread is not None:  # shutdown waits for a loop that runs
             self.http.shutdown()
-        self.http.server_close()
+        if self.http is not None:
+            self.http.server_close()
         self.on_close()
         self.mesher.stop()
         with self.foreign_lock:
