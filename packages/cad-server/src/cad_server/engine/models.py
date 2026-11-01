@@ -528,8 +528,11 @@ class Models:
         order = {"op": "result", "script": source["script"], "name": source["name"]}
         if leaving is None and not whole and self.daemon.supervisor.holds(worker):
             replies = []
-            # Asked of the worker that built it (``via``): a child model's is its parent's script's.
-            self.daemon.handle({**order, "env": worker.environment, "via": worker.label}, replies.append)
+            # Asked of the worker that built it (``via``, in the Python it runs): a child model's is its
+            # parent's script's.
+            held = getattr(worker, "python", None)
+            self.daemon.handle({**order, "env": worker.environment, "via": worker.label,
+                                **({"python": held} if held else {})}, replies.append)
             answer = next((row for row in reversed(replies) if "done" in row or "failed" in row), {})
             payload = base64.b64decode(answer.get("payload", ""))
         else:

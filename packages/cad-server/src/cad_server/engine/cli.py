@@ -692,7 +692,8 @@ def status_text(answer: dict[str, Any]) -> str:
     """``cad status``: the server and its pool's rules -- its workers against their count cap,
     their memory against its cap -- a line per worker -- busy or idle, its script, process, builds
     and memory after its last build, where a busy one's build is (its last progress frame), how long
-    it has been busy or idle -- the standby's line (its process and memory: no script), the making of
+    it has been busy or idle, and the Python it runs where that is its script's own, not the server's --
+    the standby's line (its process and memory: no script), the making of
     the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
     retirements, what it serves and holds under its memory budget,
     and each model document's state, with the command that builds again one not held."""
@@ -723,8 +724,10 @@ def status_text(answer: dict[str, Any]) -> str:
             # export's or a snapshot's frame says its kind the same way: ``exporting``, ``drawing``).
             verb = {"export": "exporting", "snapshot": "drawing"}.get(str(frame.get("kind")), "building")
             doing = f"{verb} {frame.get('job')} · {describe(frame)} · {doing}"
+        # A worker in the Python its script was run with, not the server's own: that Python.
+        python = f" · {worker['python']}" if worker.get("python") else ""
         lines.append(f"  {'busy' if worker.get('busy') else 'idle'}  {name:<{width}}  {str(worker.get('pid')):>6}  "
-                     f"{builds:>10}  {_gb(worker.get('rssMb')):>7}  {doing}")
+                     f"{builds:>10}  {_gb(worker.get('rssMb')):>7}  {doing}{python}")
     if standby:
         # The kernel loaded and no script: the next new script's worker.
         lines.append(f"  standby  {'':<{width}}  {str(standby.get('pid') or ''):>6}  {'':>10}  "

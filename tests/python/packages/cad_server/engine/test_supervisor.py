@@ -208,9 +208,40 @@ class SchedulingTest(unittest.TestCase):
 
     def test_a_declaration_is_refused_by_what_it_does_not_offer(self) -> None:
         for change, said in ((dict(env="parent"), "env is 'parent'"), (dict(environment="python3"), "absolute path"),
-                             (dict(concurrency=2), "concurrency is 2"), (dict(stderr="drop"), "stderr is 'drop'")):
+                             (dict(concurrency=2), "concurrency is 2"), (dict(stderr="drop"), "stderr is 'drop'"),
+                             (dict(interpreter="caller"), "interpreter is 'caller'")):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, said):
                 dataclasses.replace(WORKERS, **change)
+
+    def test_a_key_leased_in_its_caller_s_python_is_a_process_of_its_own_and_never_the_standby(self) -> None:
+        own = dataclasses.replace(WORKERS, interpreter="lease")
+        supervisor = self.supervisor(4, (own, RENDERS))
+        started: list = []
+
+        def launch(service, key, label, environment, cwd, standby, python=None):
+            started.append((label, python))
+            return Fake(self.said, service, key, label, environment, cwd, standby)
+
+        supervisor.launch = launch
+        spare = self.standing(supervisor)
+        base = supervisor.lease("worker", "a.py", {})
+        self.assertIs(base, spare, "the server's own Python: the standby, taken")
+        await_(lambda: supervisor.standby("worker") is not None, "another standby")
+        theirs = supervisor.lease("worker", "a.py", {}, python="/venv/bin/python")
+        self.assertIsNot(theirs, base)
+        self.assertIsNotNone(supervisor.standby("worker"), "a lease in its caller's Python takes no standby")
+        other = supervisor.lease("worker", "a.py", {}, python="/other/bin/python")
+        for process in (base, theirs, other):
+            supervisor.release(process)
+        self.assertEqual(started[-2:], [("a.py", "/venv/bin/python"), ("a.py", "/other/bin/python")])
+        # Each Python's own, again, and never another's: one script from three Pythons is three processes.
+        self.assertIs(supervisor.lease("worker", "a.py", {}, python="/venv/bin/python"), theirs)
+        self.assertIs(supervisor.live("worker", "a.py", "/other/bin/python"), other)
+        self.assertIs(supervisor.live("worker", "a.py"), base)
+        self.assertFalse(any(process.stopped for process in (base, theirs, other)))
+        self.assertEqual(list(supervisor.retired), [], "no Python replaced another's process")
+        with self.assertRaisesRegex(ValueError, "a render runs its own environment's Python"):
+            supervisor.lease("render", "doc", {}, python="/venv/bin/python")
 
 
 # The child a protocol test starts: the frames as a service's process sends them, by request.

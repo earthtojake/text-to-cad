@@ -483,7 +483,7 @@ class BuildFilesTest(unittest.TestCase):
         engine = daemon.Daemon()
         self.addCleanup(engine.supervisor.stop)
         self.assertEqual(engine._routed({"source": {"path": str(declared)}, "cwd": str(self.folder)}),
-                         ("documents", str(self.folder)))
+                         ("documents", str(self.folder), None))
 
     def test_a_derived_decorator_alone_writes_its_one_file(self) -> None:
         script = self.write("solo.py", """

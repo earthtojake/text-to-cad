@@ -573,23 +573,25 @@ def bytecode_tag() -> str:
     return hashlib.sha256(material.encode()).hexdigest()[:12]
 
 
-# The environment every process of the engine's that loads the kernel runs in -- a model's worker, the
-# standby, the documents worker, the meshing and reading pools, the render processes -- as the server
-# makes it (``cad_server._internal.base.kernel``: the installation's base): ``KERNEL(make)`` answers
-# ``{"python", "path", "own"}``, or None when it is not made and ``make`` is false, and raises, saying
-# why, when it cannot be made. None (no server in this process: a model's own process, a worker): this
-# interpreter's own (``kernel``).
+# The environment every process of the engine's that loads the kernel runs in -- a model's worker (but
+# one a script names its own Python for: ``contract.interpreter``), the standby, the documents worker,
+# the meshing and reading pools, the render processes -- as the server makes it
+# (``cad_server._internal.base.kernel``: the installation's base): ``KERNEL(make)`` answers
+# ``{"python", "prefix", "path", "own"}``, or None when it is not made and ``make`` is false, and raises,
+# saying why, when it cannot be made. None (no server in this process: a model's own process, a worker):
+# this interpreter's own (``kernel``).
 KERNEL: Callable[[bool], dict[str, Any] | None] | None = None
 
 
 def kernel(make: bool = True) -> dict[str, Any] | None:
-    """The environment the engine's kernel processes run in (``KERNEL``): ``{"python", "path", "own"}``
-    -- ``own``: this interpreter's environment, whose engine folder a process started there is given and
-    whose import path a spawned process is handed as it is -- or None when it is not made and ``make``
-    is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying why: no kernel process
-    starts without it, and nothing remembers the failure."""
+    """The environment the engine's kernel processes run in (``KERNEL``): ``{"python", "prefix", "path",
+    "own"}`` -- ``prefix``: the environment, which a build in its caller's Python is told from (the
+    server's ``Daemon.caller``); ``own``: this interpreter's environment, whose engine folder a process
+    started there is given and whose import path a spawned process is handed as it is -- or None when it
+    is not made and ``make`` is false. ``serve.KernelProcessesUnavailable`` when it cannot be made, saying
+    why: no kernel process starts without it, and nothing remembers the failure."""
     if KERNEL is None:
-        return {"python": sys.executable, "path": None, "own": True}
+        return {"python": sys.executable, "prefix": sys.prefix, "path": None, "own": True}
     try:
         return KERNEL(make)
     except Exception as error:  # noqa: BLE001 - the server's refusal, carried in one line

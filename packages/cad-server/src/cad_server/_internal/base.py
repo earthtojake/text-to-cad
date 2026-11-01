@@ -294,12 +294,13 @@ def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | N
 
 def kernel(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's kernel processes run in, as the engine is handed it
-    (``cad.engine.places.KERNEL``): the base's Python, its import path and whether it is this
+    (``cad.engine.places.KERNEL``): the base's Python, its folder, its import path and whether it is this
     installation's own; None when it is not made and ``make`` is false. ``Refused`` when it cannot be."""
     found = ensure(make=make, told=lambda _line: None)
     if found is None:
         return None
-    return {"python": found.python, "path": None if found.path is None else list(found.path), "own": found.own}
+    return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
+            "own": found.own}
 
 
 class Making:
