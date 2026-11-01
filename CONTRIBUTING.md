@@ -852,7 +852,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    -- a page whose maps PostHog could not use stops the release here.
 4. **Install test.** The library's, the server's and the shim's wheels together
    into a fresh venv — `cad --help`, `cad viewer --help`, `cad-mcp --help`,
-   `cad doctor --no-server skills/cad` — then
+   `cad doctor --no-server` — then
    `scripts/test/test-installed.sh --wheels <the built folder>`; the distributions
    are uploaded as a workflow artifact (`dist-<version>`).
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
@@ -974,7 +974,7 @@ hold each one:
 | `claude.mcp.json` on `main` and `latest` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
 | `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
 | `gemini-extension.json` | `gemini-github` | yes | the checked-in file |
-| the README's Claude Desktop config | `claude-desktop` | yes | the README |
+| `docs/install.md`'s Claude Desktop config, and the one the install command writes | `claude-desktop` | yes | `docs/install.md`; `cad_server/cli/setup.py` |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
@@ -1046,8 +1046,8 @@ The server's hourly version check reads `api.texttocad.dev/v1/versions`
 index lists, the index uv resolves every pin through, so the feed names a
 release the moment it can be installed (Vercel's edge keeps a reply an hour, which
 `Publish Release` purges once the install branches carry the release), and no release
-deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The plugin
-branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
+deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The install
+branches" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
 store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
 change to `apps/api` on `main`) needs the project's PostHog settings in Vercel, which

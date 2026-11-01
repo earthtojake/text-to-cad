@@ -98,6 +98,10 @@ where those files ship, so these scripts are what produces them.
   (`npx --no-install playwright install chromium`). Runs the format and camera
   gates, exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
+- `check-dependencies.mjs`, `check-kit-boundaries.mjs`, `check-ui-strings.mjs` (each with its
+  `.test.mjs`) — the JS workspaces' import graph, the renderer kit's format-blindness, and every
+  string the CAD Viewer and the CAD app show read through the locale files. Run by `test-js.sh`
+  (the first two also as `npm run check:boundaries`).
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
   resolution, path narrowing, fail-closed unittest loading, the per-file
   parallel run). Sourced by the runners.
@@ -148,7 +152,7 @@ where those files ship, so these scripts are what produces them.
   quietly. `CAD_KEEP_WHEEL=1` keeps the wheels in `CAD_WHEEL_OUT_DIR`. Called by `test.yml`
   and `release-publish.yml`.
 - `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin
-  submission portal takes (`cad/` holding `.codex-plugin/`, `skills/`,
+  submission portal takes (the archive's root holding `.codex-plugin/`, `skills/`,
   `LICENSE` and every file the manifest names, with the MCP config as the root
   `.mcp.json`) and checks it against the portal's documented package rules.
   Called by `release-publish.yml`; tested by
@@ -171,14 +175,22 @@ where those files ship, so these scripts are what produces them.
   `0.4.x` releases before 0.5.0) and for comparing versions. Sourced by
   `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
   `release-publish.yml`.
+- `unavailable-versions.txt` — the versions no release can take (the PyPI project `cad`'s
+  earlier owner published them); `check-version.sh` and `bump-version.sh` refuse a `VERSION` on
+  it, and `CONTRIBUTING.md` lists the same ("Versions a release cannot take").
+- `sourcemaps.py collect --out DIR [--zip FILE]` — gathers the pages' source maps, each chunk
+  with its map under its debug id, for the PostHog upload and the GitHub Release. Called by
+  `release-publish.yml`.
+- `wheel_contents.py` — `check-wheel-contents.sh`'s Python half: the server wheel's runtime
+  against the bundled source, and its plugin against the repository's files.
 
 `github-workflows/` — scripts a workflow runs whole.
 
 - `select_checks.py [--paths PATH...]` — what a change can break: maps every
   changed path through a table of the tests that read it (`RULES`) to the
   `test.yml` jobs that run and the test files the narrowed jobs take, and names
-  the run's record, `tested-<tree>-<scope>`. A path no rule or `INERT` entry
-  names runs everything. `--paths` prints the selection for a list of paths.
+  the run's record, `tested-<tree>-<scope>`. A path no rule names runs
+  everything. `--paths` prints the selection for a list of paths.
   Called by `test.yml`'s first job; held to the tree by
   `tests/python/global/test_ci_workspace_selection.py`. See `CONTRIBUTING.md#ci`.
 - `tested_tree.py NAME...` — finds the successful `test.yml` run of this
@@ -254,10 +266,12 @@ only their pure helpers are tested (`tests/python/global/test_bench_helpers.py`)
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, cadgen pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, the release's pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel, runs the installed-mode tests, and serves that bundle's viewer through the backend to the launch smoke test and the browser gates. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `pypi` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload (its own `pypi` job in the `release` environment, the only job that may mint a PyPI token; a file PyPI already holds is taken from PyPI, not uploaded again), a wait until PyPI's index lists the version, the plugin committed onto `latest` and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
+| `deploy-api.yml` (`Deploy API`) | pushes to `main` that change `apps/api`; manual dispatch | Deploys `api.texttocad.dev` (`apps/api`) to Vercel production after its tests (`test-api.sh`). It follows no release. |
+| `install-windows.yml` (`Windows installer rehearsal`) | manual dispatch; pushes to `main` that change `install.ps1` or what it runs | Runs `install.ps1` on a fresh Windows runner against the wheel the tree builds: a rehearsal, not a release gate. |
 
 `Prepare Release` opens a release pull request, or a pull request carries its own
 bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,

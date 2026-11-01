@@ -19,7 +19,7 @@ before loading either URDF.
 Every model of the old corpus is ported, but for tendon_hand's 56 review models (reviews
 and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git history) and
 `tom`, the arm, which lives in its own repository. One file is no model:
-`tests/unported/joint_playground.urdf`, named nowhere, kept with its README.
+`tests/unported/joint_playground/joint_playground.urdf`, named nowhere, kept with its README.
 
 **Where does a new model go?** A standalone part that is one script goes in
 `examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
@@ -38,7 +38,7 @@ project delivers them and because something outside the model reads them:
 
 | Project | Files | How | Why |
 | --- | --- | --- | --- |
-| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `apps/docs/scripts/sync-hero-glb.mjs`, which calls `cad.export(model, path)` | the docs site's hero plays its `meshCycle` clip; a hand step, which checks what it writes (no CI job reads the model) |
+| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
 | `examples` (`mounting_plate`, `spur_gear_blank`) | `STL/`, `3MF/`, `GLB/<name>.*` | `@stl`, `@threemf`, `@glb` on the model | the example of declared files: a print part whose files every run writes |
 | `branding` (the three logos) | `STEP/logo_*.step` | `src/exports.py` | the STEP deliverable, kept current by an `exports.py` |
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |

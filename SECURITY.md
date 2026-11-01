@@ -46,7 +46,7 @@ credentials, all made from one token:
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
 an upgrade. `cad server --rotate-token`, with every server stopped
-(`cad stop`, with each version that runs one), replaces the token, and with
+(`cad stop`), replaces the token, and with
 it every link and every session made before. Behind the credentials:
 
 - A Host check refuses DNS rebinding.

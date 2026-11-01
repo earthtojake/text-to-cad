@@ -29,7 +29,7 @@ cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run pr
 | `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `motorcycle_shock_absorber` | Coilover damper; the rod rides a linear joint, `damper_stroke` |
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
 | `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |
-| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`apps/docs/scripts/sync-hero-glb.mjs` exports it) |
+| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`cad export` writes it, by hand: `apps/docs/README.md`) |
 | `planetary_gear_stage/planetary_gear_stage.py` | `planetary_gear_stage` | Simplified planetary gear stage (`lib/gear_teeth.py`) |
 | `research_humanoid/research_humanoid.py` | `research_humanoid` | Adult-scale humanoid: 28 body joints, and 15 per hand from `lib.build_hand(side)` |
 | `robotic_hand_end_effector/robotic_hand_end_effector.py` | `robotic_hand_end_effector` | Cybernetic robotic hand end-effector |
@@ -43,8 +43,7 @@ cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run pr
 - `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
   imported directly. Nothing else reads these models' STEP, so no model declares
   one; `cad export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
-  is the planetary gear's, written by the docs site's `sync-hero-glb.mjs` with
-  `cadgen.export(model, path)`.
+  is the planetary gear's, written by hand with `cad export`.
 - No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
   hands are plain functions called in the one body (the hand models' two scripts
   are gone). The engine places a part used twice as one prototype.

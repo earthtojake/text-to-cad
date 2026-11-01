@@ -15,7 +15,7 @@ where it is.
 
 ## Environment
 
-- Python: the repo's `.venv/bin/python` (cadgen is installed there, from
+- Python: the repo's `.venv/bin/python` (the library is installed there, from
   `requirements-dev.txt`). CLI: `.venv/bin/cad`.
 - Project root: `models/radial`. Run everything from there. Scratch work goes in
   `tmp/` (gitignored).

@@ -19,7 +19,7 @@ Each case is a `@model`; a run writes nothing, and prints the document's id and 
 
 ## Run manually
 
-From each case's folder, with the engine's environment (`cadgen` on the path):
+From each case's folder, with the engine's environment (the library on the path):
 
 ```bash
 # Keep manual runs on a daemon of their own.
