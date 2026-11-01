@@ -48,7 +48,8 @@ install, the GitHub catalog), this repository's skills installed loose, a server
 that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted, and out of
 the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would put
 them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
-(``SKILLS``) and says where it is maintained (``PROVENANCE``). The one folder two kinds of agent share,
+(``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
+earlier release's body). The one folder two kinds of agent share,
 ``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
 agent's while one that uses it is here: Codex and Gemini CLI then list those skills beside their
 plugin's, which the plan says.
@@ -103,8 +104,9 @@ GITHUB_MARKETPLACE = "earthtojake"
 # The file the installer marks its copy of the folder in Cursor's local plugins folder with: where it was
 # copied from, its version and when.
 COPY_MARK = ".text-to-cad-copy"
-# Every SKILL.md of this repository's says where it is maintained; a loose skill saying so, under
-# one of this repository's skill names (its skills/ folder), is ours.
+# Every SKILL.md of this repository's names it (its front matter's metadata.repository; an earlier
+# release's said so in its body); a loose skill naming it, under one of this repository's skill names
+# (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
 SKILLS = ("bambu-labs", "cad", "dfam-check", "dfm", "dxf", "engineering-drawing", "gcode", "sdf", "sendcutsend",
           "srdf", "step-parts", "urdf")
@@ -623,7 +625,7 @@ def _skill_name(text: str) -> Optional[str]:
 
 def loose_skills(folders: Iterable[Path]) -> List[Path]:
     """This repository's skills installed loose in ``folders`` (by the Skills CLI, or copied or linked
-    by hand): a ``SKILL.md`` naming one of ``SKILLS`` that says where it is maintained."""
+    by hand): a ``SKILL.md`` naming one of ``SKILLS`` and this repository."""
     found = []
     for folder in folders:
         for skill in sorted(Path(folder).glob("*/SKILL.md")) if Path(folder).is_dir() else []:

@@ -2,13 +2,11 @@
 name: sdf
 description: SDFormat/SDF model and world authoring, validation, and simulator handoff. Use for `.sdf` files, SDFormat XML, models, worlds, links, joints, poses, frames, inertials, visual/collision geometry, mesh URIs, sensors, lights, physics, plugins, includes, Gazebo, static SDF review, or simulator-specific metadata. Do not use for signed-distance-field geometry. Open and visually review existing SDF files in CAD Viewer.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # SDF
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 Use this skill when the deliverable is an SDFormat document. SDFormat describes simulator and world behavior: models, worlds, frames, poses, links, joints, inertials, visuals, collisions, sensors, lights, physics, plugins, includes, and simulator metadata.
 
@@ -18,15 +16,17 @@ The `.sdf` file is the source of truth: author and edit the XML directly.
 
 ## Setup
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.10.0 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Core rules
 

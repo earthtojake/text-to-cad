@@ -3,13 +3,11 @@ name: step-parts
 description: >-
   Find, evaluate, and download common purchasable CAD parts from step.parts, including named off-the-shelf actuators, servos, motors, electronics boards, connectors, screws, bolts, nuts, washers, bearings, standoffs, and other catalog components. Use when a CAD model needs a real purchasable part: search the hosted step.parts catalog before creating simplified placeholder geometry, resolve fuzzy part names, standards, aliases, or dimensions, choose a matching part, fetch a canonical .step file, verify checksums, or use the step.parts API/OpenAPI/catalog endpoints for standard part discovery.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # STEP Parts
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 ## Overview
 
@@ -24,7 +22,7 @@ When a CAD assembly includes named off-the-shelf actuators, servos, motors, elec
    - `category`, `family`, `standard`, or `tag` when the user gives an exact facet.
 2. Search `/v1/parts` and inspect `items`, `total`, and `facets`. For actuator model numbers, retry likely aliases, dropped letters, vendor names, and relevant family facets before treating an empty result as a miss.
 3. If results are ambiguous, present the best few options with `id`, `name`, `standard`, and key attributes before choosing. If one result clearly matches, return the selected record details without downloading unless the user asked for a local STEP file.
-4. When an exact or near-exact off-the-shelf actuator model is found, prefer downloading and using its STEP file unless there is a clear assembly-time reason to use a simplified envelope. Record that choice explicitly. For a `$cad` model, convert the STEP once with `cad export part.step part.xbf` and read the xbf in the model.
+4. When an exact or near-exact off-the-shelf actuator model is found, prefer downloading and using its STEP file unless there is a clear assembly-time reason to use a simplified envelope. Record that choice explicitly. For a text-to-cad model, convert the STEP once with `cad export part.step part.xbf` and read the xbf in the model.
 5. When the user asks to download or save a STEP file, download its `stepUrl`, then verify the file with the record's `sha256` when present.
 6. Return the local path when downloaded, plus the selected part id and page/API URLs so the user can trace provenance.
 

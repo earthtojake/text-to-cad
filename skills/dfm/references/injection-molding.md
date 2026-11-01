@@ -20,7 +20,7 @@ python scripts/mold_tool.py pulls part.stl
 ```
 
 Input is a mesh (`.stl`, `.obj`, `.ply`, `.3mf`). For a STEP, export an STL
-with `$cad` first: `cad export <id> part.stl` writes one from the model (or `cad export part.step part.stl` from a STEP) with `$cad`'s launch command.
+first: for a text-to-cad model, `cad export <id> part.stl` writes one (or `cad export part.step part.stl` from a STEP).
 Its mesh comes at one fixed tolerance; the tool splits faces further where it
 needs to, so a 1 mm feature gets facets of its own.
 
@@ -126,11 +126,11 @@ built. Choose a pull from measured area, not by eye.
 
 ### Not measured here
 
-**Wall thickness.** Use `$dfam-check`'s `measure`, and ignore its `max_mm`: it
-casts one ray along the face normal, which reads a plate's LENGTH rather than
-its thickness. The thin end — `min_mm` and the thin samples — is what it gets
-right, and the thin end is what fill depends on. Neither tool sees a sealed
-void. State the method with any thickness finding.
+**Wall thickness.** Measure it on the CAD model, or on the mesh with a tool
+that casts rays, and trust only the thin end of a ray cast: one ray along the
+face normal reads a plate's LENGTH rather than its thickness. The thin end —
+the minimum and the thin samples — is what it gets right, and the thin end is
+what fill depends on. No ray cast sees a sealed void. State the method with any thickness finding.
 
 ## Review
 

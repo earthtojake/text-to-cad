@@ -53,14 +53,14 @@ if __name__ == "__main__":
   `@model` on a file decorator is refused. The function's name is the model's name:
   rename the function to rename it.
 - **A model takes no parameters and returns a build123d shape**: a part, or a
-  `Compound` of labelled children (an assembly). A 2D drawing returns 2D geometry and
-  belongs to `$dxf`.
+  `Compound` of labelled children (an assembly). A 2D drawing returns 2D geometry
+  instead.
 - **A script is plain Python, loaded afresh by each run.** Its folder is on the module
   search path, last, after everything installed, so a module beside it imports by its own
   name unless an installed module has that name. A script inside a
   package (its folder holds an `__init__.py`) is that package's module, so its relative
-  imports (`from ..lib.dims import WIDTH`) work under `python proj/parts/block.py` and
-  `python -m proj.parts.block` alike. An edit to any module it imports is read on the
+  imports (`from ..lib.dims import WIDTH`) work under `cad run proj/parts/block.py` and
+  `cad run -m proj.parts.block` alike. An edit to any module it imports is read on the
   next run.
 - **`import build123d as bd` costs nothing until it is used.** The library makes the import of
   `build123d` (and `OCP`) lazy: the module binds at once and the kernel loads on the
@@ -343,7 +343,7 @@ it again.
 
 ## Progress and the report
 
-A run says where it is: on a terminal, `python model.py` draws a bar on stderr, and the
+A run says where it is: on a terminal, `cad run model.py` draws a bar on stderr, and the
 viewer's page shows the same. Nothing in the model says it: while a body runs, the bar
 names each `@memo` call and each child model it calls, by its function's name, as it
 begins, and counts it when it ends. A long body split into `@memo` stages (`finger`,
@@ -376,5 +376,5 @@ returns the same report as data, a dict per model in `.models`: `id`, `memo`, `b
 `children`:
 
 ```bash
-python -c "import bracket; print(bracket.bracket.build().models[0]['retention'])"
+cad run -c "import bracket; print(bracket.bracket.build().models[0]['retention'])"
 ```

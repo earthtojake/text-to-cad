@@ -2,7 +2,7 @@
 
 Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a model in
 another pose, a part on its own, a project's standing deliverables, or a vendor STEP
-converted for use in a model. 2D DXF belongs to `$dxf`.
+converted for use in a model. A 2D DXF drawing is not covered here.
 
 ## Contents
 
@@ -91,7 +91,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/exports.py
+cad run src/exports.py
 ```
 
 Write `exports.py` only when the person wants files kept current; a one-off file is a
@@ -116,7 +116,7 @@ def arm_folded():
 ```
 
 ```bash
-python src/arm_poses.py                          # prints arm_folded's id
+cad run src/arm_poses.py                          # prints arm_folded's id
 cad export "$FOLDED_ID" STEP/arm_folded.step
 ```
 
@@ -164,7 +164,7 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   and materials through the materials extension.
 - **STL**: binary, every placed triangle, in millimetres.
 - **xbf**: of a model, or of a STEP (converting a vendor file).
-- **DXF**: of a planar document only (`$dxf`); a solid is refused.
+- **DXF**: of a planar document only (a 2D drawing); a solid is refused.
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance
 (a chord deviation of 0.25% of the mean side of each part's bounding box, and

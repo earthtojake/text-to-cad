@@ -35,7 +35,7 @@ exact version, ask which one. A release pull request comes one of two ways:
 - **On the pull request that should carry it**: on its branch,
   `scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>` sets `VERSION` past
   `main`'s and stamps the derived metadata and every pin of the release's own
-  (`cad==`, `cad-server==`, `cad-mcp==`, `cad +<VERSION>`) with it.
+  (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
@@ -75,14 +75,14 @@ server runs as `uvx ... --from cad-server==<VERSION> cad <verb>` (`cad_server._i
 The server installs the library with its `build123d` extra, with uv, into one base environment per
 installation that every model and kernel process runs in (`cad_server._internal.base`), a program's
 own folder last on its path. That installation registers itself and writes the `cad` command,
-`~/.local/bin/cad`; every skill that uses the server runs `cad +<VERSION>` through it (uvx cannot
-start in an agent's sandbox, the command can). Every requirement on the library names its release
-exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`): PyPI's `cad` project holds unrelated 1.x
-releases an open requirement would resolve to. The release stamps every pin and `+<VERSION>`
-(`sync-version.mjs`), with the installer's fallback release, and
+`~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
+sandbox, the command can), which runs the current installation, so no skill names a release. Every
+requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
+PyPI's `cad` project holds unrelated 1.x releases an open requirement would resolve to. The release
+stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. The device runs one
 server, the current installation's (`<state>/installations/current`): the CAD app, every thread and
-every skill command share one daemon whatever release each names, and only an update moves it to
+every skill command share one daemon, and only an update moves it to
 another ([CONTRIBUTING.md, "Development dependencies"](CONTRIBUTING.md#development-dependencies)).
 A test or an experiment gets a server of its own with its own `CAD_STATE_DIR` and
 `CAD_ENGINE_DIR`. In a checkout, install `requirements-dev.txt` (the three editable, the library
@@ -171,8 +171,8 @@ which points both at the checkout.
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
 - Shared runtime comes from the **`cad-server` distribution**. A skill that uses it
-  defines `cad` and `python` in its SKILL.md as `cad +<VERSION>` above
-  (the release stamps every pin); no skill installs the server or the library
+  runs the `cad` command, names no release, and says how to get the command in its
+  SKILL.md's setup block (the same in each); no skill installs the server or the library
   any other way (no `requirements.txt` naming either), because a second installation
   is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
   parser and behaviour live in `cad_server.cli`. The server draws every snapshot with

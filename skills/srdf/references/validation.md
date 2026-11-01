@@ -41,4 +41,4 @@ These are semantic decisions: document them in the ledger and verify interactive
 
 ## Failure Handling
 
-When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (`$urdf` for structure), then re-run the validator on the pair.
+When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (the URDF for structure), then re-run the validator on the pair.

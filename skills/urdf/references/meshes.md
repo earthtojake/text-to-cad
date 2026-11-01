@@ -10,7 +10,7 @@ The unit of export is the **link**, not the assembly and not the CAD feature tre
 2. Never point multiple links at one combined assembly mesh with compensating origins. If two links share a source body, the body must be split at the joint in CAD before export.
 3. Export each link's mesh **in that link's own frame** — the frame the ledger defines, coincident with the parent joint frame at zero position. Done right, every `<visual><origin>` is identity (`0 0 0`, `0 0 0`), which is the convention to follow and the easiest state to audit.
 4. If an export cannot be re-framed (vendor mesh, scanned part), a nonzero visual origin is acceptable but must be recorded in the ledger with its source; it is a per-link constant, not a tuning knob.
-5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow (`$cad`, `$step-parts` when installed): with `$cad`, each link is a model of its own returning the link's part in the link's frame, and `cad export <id> link.stl` writes its mesh. Do not attempt to fix a wrong split by editing URDF origins.
+5. Splitting, re-framing, and exporting STEP/STL/3MF/GLB assets belongs to the owning CAD workflow: with a text-to-cad model, each link is a model of its own returning the link's part in the link's frame, and `cad export <id> link.stl` writes its mesh. Do not attempt to fix a wrong split by editing URDF origins.
 
 Checklist after export, before authoring:
 

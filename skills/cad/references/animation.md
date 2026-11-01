@@ -71,7 +71,7 @@ def hinged_box_showcase():
 ```
 
 ```bash
-python src/hinged_box.py                             # prints the model's id
+cad run src/hinged_box.py                             # prints the model's id
 cad export "$ID" GLB/hinged_box_showcase.glb
 ```
 

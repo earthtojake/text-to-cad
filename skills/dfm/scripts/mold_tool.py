@@ -14,8 +14,7 @@ Usage:
 `measure` reports three fact families for one pull axis: draft, undercut
 candidates, and projection. `pulls` repeats the draft and undercut summaries
 for x, y, z and the mesh's own principal axes. Wall thickness is NOT measured
-here; use `$dfam-check`'s `measure` for it, and ignore its `max_mm`, which
-reads a plate's length rather than its thickness.
+here: the injection-molding reference says how to measure it.
 
 Draft is measured per triangle as the angle between the face and the pull
 axis: 0 means the face is parallel to the pull (no draft), 90 means it is

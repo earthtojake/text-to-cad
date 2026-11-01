@@ -1,26 +1,26 @@
 ---
 name: dxf
-description: Generates, regenerates and validates 2D DXF drawings from Python build123d models, exported by text-to-cad. Use for DXF files, `.py` drawing scripts, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Opens and visually reviews existing DXF files in the CAD Viewer.
+description: Generates, regenerates and validates 2D DXF drawings from Python build123d models, exported by text-to-cad. Use for DXF files, `.py` drawing scripts, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Opens and visually reviews existing DXF files in the CAD Viewer. Covers the 2D drawing, not the 3D part or assembly it derives from, and not a cutting service's order preflight.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # DXF generation and validation
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
-
 ## Setup
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.10.0 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 Drawings are build123d geometry, so a drawing builds in the server's warm worker
 like any model: the first run of a script loads the CAD kernel (a few seconds),
@@ -33,7 +33,7 @@ geometry, export validated DXF files, and return checked outputs. A drawing's so
 of truth is a Python file named `<name>.py` defining a parameterless `@model` function
 that returns planar geometry.
 
-**A drawing is a model.** It builds as any `$cad` model does: `python <name>.py`
+**A drawing is a model.** It builds as any text-to-cad model does: `cad run <name>.py`
 rebuilds it in the server, prints its document's `id:` and page, and writes nothing.
 The DXF is exported from that document, by build123d's own exporter, once the drawing
 checks pass: `cad export <id> drawing.dxf`. A drawing that calls a part model
@@ -67,7 +67,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/gasket.py                       # prints id: and view:
+cad run src/gasket.py                   # prints id: and view:
 cad export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
 ```
 
@@ -176,7 +176,7 @@ Copy the full template for the applicable workflow from
 
 One model per file is the recommendation, and a drawing gets its own script. A
 file MAY declare several models (two drawings, or a drawing beside a part's
-`@model`): `python <file>.py` builds every one its `__main__` block calls, each with
+`@model`): `cad run <file>.py` builds every one its `__main__` block calls, each with
 its own id. A drawing composes models, never the reverse.
 
 ## Use this skill when
@@ -184,9 +184,6 @@ its own id. A drawing composes models, never the reverse.
 Use this skill when the user asks for DXF files, 2D drawings, profiles, outlines,
 templates, gaskets, panels, flat patterns, or cut layouts for laser, plasma,
 waterjet, or CNC routing.
-
-Use `$cad` for the 3D part or assembly a DXF derives from. Use `$sendcutsend` for
-SendCutSend-specific upload preflight.
 
 ## Defaults
 
@@ -216,14 +213,14 @@ Use these defaults unless the user specifies otherwise:
 ## Tool
 
 ```bash
-python path/to/drawing.py                                   # builds every model its __main__ calls
+cad run path/to/drawing.py                               # builds every model its __main__ calls
 cad export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
 cad snapshot path/to/drawing.dxf review.png              # draws it
 cad snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
 ```
 
 **Running the script is the only way to build a drawing, and exporting it the only
-way to write its DXF.** `python <drawing>.py` takes no options and writes nothing; it
+way to write its DXF.** `cad run <drawing>.py` takes no options and writes nothing; it
 prints each model's report (`built src/gasket.py::gasket cold in 2.29s: ...`), its
 `id:` and its page, and exits 1 when a body raises. `cad export` exits 2 when the
 export refuses the drawing (3D, off the plane, a failed drawing check), naming which.
@@ -262,12 +259,12 @@ checks; review geometry visually (see [Show the model](#show-the-model)).
 ## Workflow
 
 1. Convert the request into a short brief: outline dimensions, holes and slots, layers, units, output path, and validation targets.
-2. Pick the workflow: drafted from scratch, flat pattern of a modelled part (create and validate the 3D geometry with `$cad` first), or flat pattern of an imported STEP.
+2. Pick the workflow: drafted from scratch, flat pattern of a modelled part (create and validate the 3D model first), or flat pattern of an imported STEP.
 3. Write or edit the `<name>.py` source with meaningful dimensions as named constants, reusing the model's geometry helpers instead of duplicating formulas.
-4. Run each drawing script directly (`python <drawing>.py`); do not sweep directories. Then export each drawing to its DXF:
+4. Run each drawing script directly (`cad run <drawing>.py`); do not sweep directories. Then export each drawing to its DXF:
 
 ```bash
-python path/to/source.py
+cad run path/to/source.py
 cad export "$ID" path/to/drawing.dxf
 ```
 

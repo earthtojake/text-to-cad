@@ -20,7 +20,7 @@ You never construct a document, name a file in the model, or think about entitie
   layers must hold closed profiles, and open geometry belongs on a
   bend/engrave/reference-named layer.
 - Decoration only declares: the script's `__main__` block calls the drawing, and
-  `python <name>.py` builds what it calls and prints each drawing's id. Then
+  `cad run <name>.py` builds what it calls and prints each drawing's id. Then
   `cad export <id> DXF/<name>.dxf` writes the file.
 
 ## 1. Standalone drafting (DXF from scratch)
@@ -84,7 +84,7 @@ toolchains consume geometry, and font rendering inside CAM is unreliable.
 
 ## 2. Flat pattern of a modelled part
 
-For a profile of a `$cad` model. The drawing imports the model and calls it,
+For a profile of a text-to-cad model. The drawing imports the model and calls it,
 exactly as an assembly composes a child: importing a model never builds it, and
 the call inside the drawing's run builds the part in the same run and returns its
 geometry. An edit to the part re-runs the drawing's body on its next run; a constant

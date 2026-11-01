@@ -1,28 +1,28 @@
 ---
 name: urdf
-description: URDF robot description authoring and validation. Use when creating, editing, inspecting, validating, or debugging `.urdf` files, robot links, joints, limits, inertials, visual/collision geometry, mesh references, frame conventions, or robot-description artifacts. Use the SRDF skill for MoveIt2 semantic groups and IK/path-planning semantics; use the CAD skill for STEP/STL/3MF/DXF/GLB outputs. Open and visually review existing URDF files in CAD Viewer.
+description: URDF robot description authoring and validation. Use when creating, editing, inspecting, validating, or debugging `.urdf` files, robot links, joints, limits, inertials, visual/collision geometry, mesh references, frame conventions, or robot-description artifacts. Covers the robot's structure, not MoveIt2 semantic groups or IK/path-planning semantics (SRDF), and not the STEP/STL/3MF/DXF/GLB files its meshes come from. Open and visually review existing URDF files in CAD Viewer.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # URDF
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 Use this skill for URDF robot-description outputs. Treat URDF work as constrained kinematic modeling, not just XML writing. The main correctness risks are frame placement, joint-axis semantics, unit consistency, mesh scale, and inertial data.
 
 ## Setup
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.10.0 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Core Rules
 

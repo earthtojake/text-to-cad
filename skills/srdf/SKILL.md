@@ -1,14 +1,12 @@
 ---
 name: srdf
-description: MoveIt2 SRDF authoring, validation, and planning-semantics workflow. Use when creating, editing, inspecting, or validating `.srdf` files, MoveIt planning groups, virtual joints, passive joints, end effectors, group states, disabled collisions, URDF-paired planning semantics, or SRDF handoff for live review. Use the URDF skill for robot structure and the SDF skill for simulator descriptions. Open and visually review existing SRDF files in CAD Viewer.
+description: MoveIt2 SRDF authoring, validation, and planning-semantics workflow. Use when creating, editing, inspecting, or validating `.srdf` files, MoveIt planning groups, virtual joints, passive joints, end effectors, group states, disabled collisions, URDF-paired planning semantics, or SRDF handoff for live review. Covers MoveIt planning semantics, not the robot's structure (URDF) or simulator descriptions (SDF). Open and visually review existing SRDF files in CAD Viewer.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # SRDF
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 Use this skill for MoveIt semantic robot descriptions on top of an existing valid URDF. SRDF defines planning semantics; it does not define physical robot structure. The `.srdf` file is the source of truth: author and edit the XML directly.
 
@@ -16,15 +14,17 @@ SRDF correctness is a **planning semantics** problem. The common failure is not 
 
 ## Setup
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.10.0 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Format boundary
 
@@ -71,7 +71,7 @@ correctness.
 
 ## Required workflow
 
-1. **Start from a valid URDF.** Author or fix the URDF first with `$urdf` and validate it. The SRDF pairs with that URDF by colocation and robot name, and every name in the SRDF must exist in it.
+1. **Start from a valid URDF.** Author or fix the URDF first and validate it (`cad urdf validate`). The SRDF pairs with that URDF by colocation and robot name, and every name in the SRDF must exist in it.
 2. **Extract the URDF table.** Before writing any SRDF XML, list the URDF's robot name, links, joints (with type, parent, child, limits, mimic flags). Copy names from this table only; never type them from memory. See `references/srdf-workflow.md`.
 3. **Identify the planning task.** Record whether the goal is arm IK, gripper control, mobile base planning, dual-arm planning, tool use, or local smoke testing.
 4. **Create or update the planning ledger.** Use `references/planning-ledger.md` before writing XML; keep a compact copy as a comment block in the `.srdf`.

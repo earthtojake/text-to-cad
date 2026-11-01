@@ -71,7 +71,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/plate.py
+cad run src/plate.py
 ```
 
 and a `.gitignore` beside `src/`:
@@ -91,7 +91,7 @@ A second run replays the model and changes nothing. Then a part with configurati
 `src/assembly.py`, as in [models](model-contract.md#assemblies-call-their-parts):
 
 ```bash
-python src/assembly.py
+cad run src/assembly.py
 cad inspect "$ID"
 ```
 
@@ -110,7 +110,7 @@ what it was built from.
 | Motion | build123d joints in the assembly's body, then `cad.ap242`. See [kinematics](kinematics.md). |
 | An explode or a showcase | `cad.gltf`'s `animation()`. See [animation](animation.md). |
 | Materials | `from bd_materials import metals`; `part.material = metals.aluminum()`. See [colour and materials](build123d-modeling.md#colour-and-materials). |
-| 2D drawing | A separate drawing script using `$dxf`. |
+| 2D drawing | A separate drawing script, beside the models it projects. |
 | Vendor CAD | The vendor STEP under `vendor/`, converted once with `cad export vendor/motor.step vendor/motor.xbf` and read with `read_xbf` (an anchored path). |
 
 ## Imports and shared code
@@ -122,8 +122,8 @@ imports work, and the folder above its topmost package is on the path too, so
 `src/chassis/frame.py` imports `lib.holes` as well. Both run alike:
 
 ```bash
-python src/chassis/frame.py
-cd src && python -m chassis.frame
+cad run src/chassis/frame.py
+cd src && cad run -m chassis.frame
 ```
 
 Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src python
@@ -140,7 +140,7 @@ that read it, and a comment re-runs nothing
 ## Assemblies and model boundaries
 
 A parent calls its child models inside its body, and each child builds in the same run:
-**running the root is the whole rebuild** (`python src/assembly.py`). Running a child
+**running the root is the whole rebuild** (`cad run src/assembly.py`). Running a child
 alone rebuilds the child and leaves the assemblies that use it as they were.
 
 A child model has its own document and page; a helper runs within its caller and is no

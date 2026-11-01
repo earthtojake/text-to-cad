@@ -1,14 +1,12 @@
 ---
 name: dfam-check
-description: Measure mesh files against Design for Additive Manufacturing (DfAM) rules and report printability findings per process (FDM, SLS, SLA/DLP, metal PBF, MJF). Use when the user asks whether a part is printable, wants overhang/wall-thickness/support analysis of an `.stl`, `.obj`, `.ply`, or `.3mf` mesh, wants a build-orientation recommendation, or wants DfAM redesign guidance before slicing with `$gcode` or regenerating geometry with `$cad`.
+description: Measure mesh files against Design for Additive Manufacturing (DfAM) rules and report printability findings per process (FDM, SLS, SLA/DLP, metal PBF, MJF). Use when the user asks whether a part is printable, wants overhang/wall-thickness/support analysis of an `.stl`, `.obj`, `.ply`, or `.3mf` mesh, wants a build-orientation recommendation, or wants DfAM redesign guidance before slicing or regenerating geometry. Measures meshes; it does not slice, print or edit the model.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # DfAM Check
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 Use this skill to produce conservative, evidence-backed DfAM reports for mesh
 files before slicing or printing. It measures geometry facts locally and
@@ -33,9 +31,9 @@ Set `--angle-limit` to the target process's self-supporting angle from
 `references/process-limits.md` before measuring, and re-run when the target
 process changes: the aggregate support-area facts are binned against it.
 
-STEP/STP input is boundary-representation CAD, not a mesh. When the `$cad`
-skill is installed, export an STL with it first, then measure the STL here.
-With `$cad`, `cad export <id> part.stl` writes one from the model (or `cad export part.step part.stl` from a STEP).
+STEP/STP input is boundary-representation CAD, not a mesh: export an STL first,
+then measure the STL here. For a text-to-cad model, `cad export <id> part.stl` writes one
+(or `cad export part.step part.stl` from a STEP).
 Report that remediation instead of attempting raw STEP parsing. `measure`
 on a STEP exits 1 with `{"error": "failed to load mesh: ..."}`; that is the
 wrong-input signal, not a missing dependency — do not install extra mesh
@@ -103,6 +101,6 @@ Compare only trustworthy pairs of evidence.
 For every `❌ fail`, include a concrete, plain-language redesign instruction
 with target numbers (for example "thicken the wall at [12.4, 3.0, 8.1] from
 0.6 mm to ≥1.2 mm" or "chamfer the overhang at [23.3, 10.0, 52.0] to ≥45°").
-When the `$cad` skill is installed, offer to apply the redesign instructions
-with it and re-measure the regenerated geometry here, repeating until no
-`❌ fail` findings remain.
+When the model's source can be edited, offer to apply the redesign
+instructions to it and re-measure the regenerated geometry here, repeating
+until no `❌ fail` findings remain.

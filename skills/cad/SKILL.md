@@ -1,13 +1,12 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
+description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer. Covers 3D parts and assemblies, including the part a 2D drawing projects, not the 2D DXF drawing itself or URDF, SRDF and SDF robot descriptions.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # CAD modeling and inspection
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files for the current interface.
 
 A model is a Python function; running its script rebuilds it in text-to-cad's warm server, and
 the page the person has open updates. Files are exports, made when asked.
@@ -27,23 +26,19 @@ the page the person has open updates. Files are exports, made when asked.
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
 
-A project built with cadgen 0.7 may need migrating; one built with 0.8 runs as it is: see
-[migrations](references/migrations.md).
-
-For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
-Use the corresponding robot-description skill for URDF, SRDF or SDF.
-
 ## Setup and paths
 
-Run the server through the `cad` command its installation writes, so this skill's commands
-share one installation, and its server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.10.0 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cad` command, a release it says is not
-installed, a server that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
@@ -51,8 +46,7 @@ and the documents it holds; `cad stop` stops it, and any older one left running.
 A build cut off by the shell's time limit keeps running in the server; run the same
 command again and it waits for that build and replays it (`cad status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
-background. A command that ends with 'the system denies text-to-cad's local engine' is
-another case: [Setup and troubleshooting](references/setup.md#diagnose-a-failure).
+background.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
@@ -97,7 +91,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/bracket.py
+cad run src/bracket.py
 ```
 
 ```text
@@ -155,8 +149,7 @@ is the script's folder; two explicit names in it must differ.
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
   saved), the page, `cad inspect <id>` and `cad_show` print the command that brings it
   back (`cad run src/bracket.py`). Run it.
-- Model units are millimetres, +Z up. `$step-parts` finds real vendor models of
-  purchasable parts such as fasteners, bearings and servos.
+- Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
   revision decide how its numbers read. A missing or conflicting dimension that changes
   the result is the person's to settle; a value chosen in its place is an assumption.

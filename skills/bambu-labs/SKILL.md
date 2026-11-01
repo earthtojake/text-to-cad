@@ -2,13 +2,11 @@
 name: bambu-labs
 description: Send prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app for printing from other software, or Bambu Studio. Use when the user wants to print a sliced `.gcode.3mf`, a Bambu `.gcode` or an unsliced model on a Bambu Lab printer, over Bambu Cloud or LAN. The agent opens the file in the app; the user picks the printer and starts the print there.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # Bambu Labs
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
 
 Bambu Lab printers take print jobs from other software only through Bambu
 Connect, Bambu Lab's desktop app for third-party tools
@@ -28,9 +26,9 @@ Connect is still in development, use Bambu Studio.
 
 | What the user has | Handoff |
 | --- | --- |
-| A sliced `.gcode.3mf`, from `$gcode` or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
+| A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a `$cad` model: `cad export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ## Open a file in Bambu Connect
 
@@ -66,4 +64,4 @@ printer, and the app shows the job and its progress.
 Starting, pausing or cancelling prints without the user, and reading printer
 status: Bambu Lab's firmware takes those from other software only through Bambu
 Connect, or in Developer Mode, which is LAN-only and disconnects the printer
-from Bambu Cloud. For slicing, use `$gcode` or Bambu Studio.
+from Bambu Cloud. Slicing is OrcaSlicer's or Bambu Studio's.

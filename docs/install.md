@@ -135,7 +135,9 @@ folder too.
    [Other Agents](#other-agents) if it has none.
 3. Restart the app. Its first start downloads CAD's runtime and makes the environment
    models run in ([What a model runs in](#what-a-model-runs-in)), so it needs a network
-   connection.
+   connection, and it may outlast the app's server start timeout (Claude Code: 30 s by
+   default, raised by setting `MCP_TIMEOUT` in milliseconds; Codex: the plugin asks for
+   300 s); a restart resumes the download.
 
 The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cad-mcp`). For an agent without a plugin, install the skills alone. Install
@@ -348,10 +350,9 @@ The command asks which agents to install for, and where. To skip the questions,
 name the agent and install for your user:
 `npx skills add earthtojake/text-to-cad#latest -g -a <agent> -y`.
 
-Each skill runs text-to-cad's server through the `cad` command, pinned to the skill's
-release, which a run of `cad doctor` through uvx registers once (each skill's setup guide
-gives it), so uv must be installed. Without the plugin there is no CAD server, so the
-skills open models in the CAD Viewer in your browser.
+Each skill runs text-to-cad's server through the `cad` command, which the install command
+writes (each skill's setup says so), so run it once. Without the plugin there is no CAD
+server, so the skills open models in the CAD Viewer in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
 `add` re-fetches the package and overwrites what is already installed, so it both
