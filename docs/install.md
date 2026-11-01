@@ -35,10 +35,11 @@ checksum. It:
 4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
-5. Stops the server of a release from before 0.10 (0.8's cadgen) on CAD's port
-   (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
-   own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
-   build) is left running, and the plan says how to stop it.
+5. Stops 0.8's server, where 0.8 is installed, with that installation's own
+   `cadgen stop`, and says what it stopped: 0.10 never talks to anything of 0.8's itself.
+   An app still running the 0.8 plugin goes on with 0.8 alone until it restarts (step 11
+   lists the apps to restart); a 0.8 server it starts again keeps CAD's port (3245, or
+   `CAD_ENGINE_PORT`), and 0.10's serves on the next free port, and says so.
 6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
    Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
    starts.

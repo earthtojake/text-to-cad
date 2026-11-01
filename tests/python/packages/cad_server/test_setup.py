@@ -5,8 +5,8 @@ uninstall`` (``cad_server.cli.uninstall``), and the one-line installer's scripts
 The verb runs against a temporary home: its state, cache and ``cad`` command folders inside it,
 fake app commands on a PATH of their own, Claude Desktop's config file named by
 ``CLAUDE_DESKTOP_CONFIG``, and a plugin of the test's own that the plugin folder is written from
-(``cad_server._internal.plugin``). The engine is never asked: what serves the port, an earlier release's
-``cad stop``, this one's, the switch and the plugin folder following it are stood in for, as is the
+(``cad_server._internal.plugin``). The engine is never asked: what serves the port, 0.8's ``cadgen stop``,
+this release's ``cad stop``, the switch and the plugin folder following it are stood in for, as is the
 telemetry choice, so nothing here reaches the network or the developer's own engine, settings and
 apps. Every run is at a terminal that would answer no, and asks it nothing.
 """
@@ -161,7 +161,7 @@ class Fixture(unittest.TestCase):
         for patch in (mock.patch.object(providers.Machine, "here", return_value=self.machine),
                       mock.patch.object(setup, "engine_on", side_effect=lambda port: self.serving),
                       mock.patch.object(setup, "port_held", side_effect=lambda port: self.held),
-                      mock.patch.object(setup, "stop_installation", return_value=(True, "stopped")),
+                      mock.patch.object(setup, "stop_earlier", return_value=(True, [], "")),
                       mock.patch.object(switch, "handover", return_value=None),
                       # The release now current's own `cad plugin --refresh`, a process of its own.
                       mock.patch.object(switch, "follow", return_value=True),
@@ -212,15 +212,18 @@ class Fixture(unittest.TestCase):
                 "args": [*LAUNCHER[1:], f"cad-mcp=={release}", "cad-mcp"],
                 "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}}
 
-    def older_installation(self, version: str = "0.0.1") -> dict:
-        """An older release's installation, registered, and the status its engine on the port answers."""
+    def earlier_installation(self, version: str = "0.8.4") -> dict:
+        """A 0.8 installation, its environment and its record as 0.8 wrote it, in 0.8's own state folder: the
+        state folder this test names (``cad.engine.places.earlier_state_dir``)."""
         scripts = self.root / f"env-{version}" / "bin"
         scripts.mkdir(parents=True)
-        for path in (scripts / "cad", scripts / "python"):
+        for path in (scripts / "cadgen", scripts / "python"):
             path.write_text("", encoding="utf-8")
-        installations.register(version, (str(scripts / "cad"), str(scripts / "python"), str(scripts.parent)))
-        return {"ok": True, "pid": 4242, "version": version, "installation": version, "prefix": str(scripts.parent),
-                "holders": 0, "watched": 0, "active": False, "busy": 0, "serving": {"port": PORT}}
+        record = {"version": version, "python": str(scripts / "python"), "cadgen": str(scripts / "cadgen"),
+                  "prefix": str(scripts.parent), "registered": "2026-10-30T12:00:00+0000"}
+        (self.state / "installations").mkdir(parents=True, exist_ok=True)
+        (self.state / "installations" / f"{version}.json").write_text(json.dumps(record, indent=1), encoding="utf-8")
+        return record
 
 
 class TheCommand(Fixture):
@@ -256,6 +259,7 @@ class TheCommand(Fixture):
         command(self.bin, "claude", CLAUDE)
         self.desktop_with({"other": {"command": "node", "args": ["server.js"]}})
         (self.home / ".cursor").mkdir()
+        earlier = self.earlier_installation()
         before = self.snapshot()
         code, out, _err = self.run_setup("--dry-run")
         self.assertEqual(code, 0, out)
@@ -271,13 +275,15 @@ class TheCommand(Fixture):
         self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
         self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
+        self.assertIn(["0.8", "stop", f"text-to-cad 0.8.4's server, if it runs: "
+                                      f"`{providers.shown(earlier['cadgen'], self.machine)} stop`"], rows)
         self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
         self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
         self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
-        setup.stop_installation.assert_not_called()
+        setup.stop_earlier.assert_not_called()
 
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
@@ -301,19 +307,23 @@ class TheCommand(Fixture):
 
 
 class InstallUpdateAndUninstall(Fixture):
-    def test_an_install_stops_the_older_idle_engine_registers_and_keeps_a_receipt_and_the_next_run_changes_nothing(self) -> None:
+    def test_an_install_stops_0_8_s_server_by_its_own_stop_registers_keeps_a_receipt_and_the_next_run_changes_nothing(self) -> None:
         original = self.desktop_with({"other": {"command": "node"}})
+        earlier = self.earlier_installation()
+        self.held = "another text-to-cad (python3.14, pid 4242)"  # 0.8's server on the port, as the system names it
+        stopped = ["/tmp/cadgen-engine/0123456789ab.door"]
+        # Its own `cadgen stop` stops it: the port is free after.
+        setup.stop_earlier.side_effect = lambda record: (setattr(self, "held", None), (True, stopped, ""))[1]
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.serving = self.older_installation()
-            # Its own `cad stop` stops it: the port is free after.
-            setup.stop_installation.side_effect = lambda record: (setattr(self, "serving", None), (True, "stopped"))[1]
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        (call,) = setup.stop_installation.call_args_list
-        self.assertEqual(call.args[0]["version"], "0.0.1", "stopped by that installation's own cad stop")
-        self.assertRegex(out, rf"engine +stop +text-to-cad 0\.0\.1's engine \(pid 4242\) on port {PORT}, idle: stopped by "
-                              r"its own `cad stop`")
-        self.assertIn("engine   stopped text-to-cad 0.0.1's engine (pid 4242)", out)
+        (call,) = setup.stop_earlier.call_args_list
+        self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
+        console = re.escape(providers.shown(earlier["cadgen"], self.machine))
+        self.assertRegex(out, rf"\n  0\.8 +stop +text-to-cad 0\.8\.4's server, if it runs: `{console} stop`\n")
+        self.assertIn(f"port {PORT} is held by another text-to-cad (python3.14, pid 4242): if 0.8's stop above does "
+                      "not free it, the engine serves on the next free port, and says so", out)
+        self.assertIn("0.8      stopped text-to-cad 0.8.4's server (its own `cadgen stop`)", out)
         config = json.loads(self.desktop.read_text(encoding="utf-8"))
         self.assertEqual(config["mcpServers"], {"other": {"command": "node"}, "cad": self.entry()})
         self.assertEqual(self.desktop.with_name(self.desktop.name + ".bak").read_bytes(), original)
@@ -323,21 +333,22 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual((receipt["schema"], receipt["release"]), (1, RELEASE))
         self.assertEqual([(action["app"], action["action"], action["kind"]) for action in receipt["actions"]],
                          [("plugin", "write", "plugin"), ("claude-desktop", "install", "edit")])
-        self.assertEqual([(found["release"], found["pid"]) for found in receipt["stopped"]], [("0.0.1", 4242)])
+        self.assertEqual([(found["release"], found["servers"]) for found in receipt["stopped"]], [("0.8.4", stopped)])
         self.assertEqual(receipt["launcher"]["path"], str(proxy))
         self.assertIn("verify   Claude Desktop: text-to-cad " + RELEASE, out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
         self.assertIn(providers.RESTART["claude-desktop"], out)
-        # Run again: nothing to do, nothing written, nothing stopped.
-        self.serving = None
+        # Run again: nothing to do and nothing written; 0.8's own stop runs again, and stops nothing.
+        setup.stop_earlier.side_effect = None
         before = self.snapshot()
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
+        self.assertIn("0.8      text-to-cad 0.8.4's server was not running", out)
         self.assertIn(f"text-to-cad {RELEASE} is already up to date here.", out)
         self.assertIn(f"verify   engine port {PORT}: not running; the next CAD session starts one", out)
         self.assertNotIn("Restart", out)
-        self.assertEqual(setup.stop_installation.call_count, 1)
+        self.assertEqual(setup.stop_earlier.call_count, 2)
         self.assertEqual({path: found for path, found in self.snapshot().items() if not path.endswith(setup.LOCK)},
                          {path: found for path, found in before.items() if not path.endswith(setup.LOCK)})
 
@@ -358,49 +369,42 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn(f"mcpServers.cad in {where}: text-to-cad 99.0.0, newer than {RELEASE}, left alone", out)
         self.assertEqual(self.desktop.read_bytes(), written)
 
-    def test_an_older_engine_in_use_is_left_running_and_said_and_the_apps_are_installed(self) -> None:
+    def test_a_0_8_stop_that_fails_is_said_and_the_apps_are_installed(self) -> None:
         self.desktop_with({})
+        self.earlier_installation()
+        gone = self.earlier_installation("0.8.3")
+        os.remove(gone["cadgen"])  # uv's cache cleaned of it: nothing of 0.8.3 is left to run
+        setup.stop_earlier.return_value = (False, None, "Traceback (most recent call last):\nOSError: no")
         with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.serving = {**self.older_installation(), "holders": 2}
             code, out, _err = self.run_setup()
         self.assertEqual(code, 0, out)
-        console = self.root / "env-0.0.1" / "bin" / "cad"
-        self.assertIn(f"text-to-cad 0.0.1's engine (pid 4242) on port {PORT}: in use by 2 app servers, left running; "
-                      f"once that is closed, `{console} stop` stops it", out)
-        setup.stop_installation.assert_not_called()
+        self.assertEqual([call.args[0]["version"] for call in setup.stop_earlier.call_args_list], ["0.8.4"])
+        self.assertIn("0.8      text-to-cad 0.8.4's `cadgen stop` failed: OSError: no; its server may still run", out)
+        self.assertNotIn("0.8.3", out)
         self.assertIn("cad", json.loads(self.desktop.read_text(encoding="utf-8"))["mcpServers"])
         self.assertEqual(self.receipt()["stopped"], [])
 
-    def test_an_engine_no_record_names_or_another_program_on_the_port_is_said_with_how_to_stop_it(self) -> None:
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.serving = {**self.older_installation(), "prefix": str(self.root / "elsewhere")}
-            code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertIn(f"idle, and no installation record names it; the stop command of that installation "
-                      f"({self.root / 'elsewhere'}) stops it", out)
-        self.serving, self.held = None, "node (pid 77)"
+    def test_another_program_on_the_port_is_said_with_what_the_engine_does(self) -> None:
+        self.held = "node (pid 77)"
         code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
         self.assertIn(f"port {PORT} is held by node (pid 77): the engine serves on the next free port, and says so", out)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_PORT": "3300"}):
             code, out, _err = self.run_setup("--dry-run")
         self.assertIn("port 3300 is held by node (pid 77): stop it, or set another CAD_ENGINE_PORT", out)
-        setup.stop_installation.assert_not_called()
+        setup.stop_earlier.assert_not_called()
 
-    def test_the_device_s_engine_is_switched_and_an_earlier_release_s_stopped_whatever_their_versions(self) -> None:
-        """Nothing compares versions: the device's engine (its door the engine's own name) moves to this
-        release at the switch, and another release's engine on the port is an earlier release's to stop."""
-        idle = {"ok": True, "pid": 9, "version": "99.0.0", "installation": "99.0.0", "prefix": "/newer",
-                "holders": 0, "watched": 0, "active": False, "busy": 0, "serving": {"port": PORT}}
-        self.serving = {**idle, "device": True}
-        code, out, _err = self.run_setup("--dry-run")
-        self.assertEqual(code, 0, out)
-        self.assertRegex(out, rf"engine +switch +text-to-cad 99\.0\.0's engine \(pid 9\) on port {PORT}: drains, then "
-                              rf"text-to-cad {re.escape(RELEASE)}'s takes its place")
-        with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
-            self.serving = {**self.older_installation("99.0.0"), "device": False}
+    def test_the_device_s_engine_is_switched_whatever_its_release(self) -> None:
+        """Nothing compares versions: the device's engine moves to this release at the switch, a later
+        release's as an earlier one's."""
+        for version, prefix in (("99.0.0", "/newer"), ("0.0.1", str(self.root / "older"))):
+            self.serving = {"ok": True, "pid": 9, "version": version, "installation": version, "prefix": prefix,
+                            "serving": {"port": PORT}}
             code, out, _err = self.run_setup("--dry-run")
-        self.assertRegex(out, rf"engine +stop +text-to-cad 99\.0\.0's engine \(pid 4242\) on port {PORT}, idle: stopped by "
-                              r"its own `cad stop`")
+            self.assertEqual(code, 0, out)
+            self.assertRegex(out, rf"engine +switch +text-to-cad {re.escape(version)}'s engine \(pid 9\) on port {PORT}: "
+                                  rf"drains, then text-to-cad {re.escape(RELEASE)}'s takes its place")
+        setup.stop_earlier.assert_not_called()
 
     def test_the_switch_comes_last_and_says_what_it_did(self) -> None:
         self.desktop_with({})
@@ -689,22 +693,26 @@ class ThePluginCommand(Fixture):
         self.assertEqual(self.receipt()["actions"][-1]["app"], "claude-desktop")
 
 
-class TheOlderInstallationsOwnStop(unittest.TestCase):
-    def test_it_runs_that_installation_s_console_script_told_the_version_it_cannot_know(self) -> None:
-        record = {"version": "0.0.1-dev.5", "cad": "/env/bin/cad", "python": "/env/bin/python", "prefix": "/env"}
-        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "stopped\n", "")) as ran:
-            self.assertEqual(setup.stop_installation(record), (True, "stopped"))
+class ZeroEightsOwnStop(unittest.TestCase):
+    def test_it_runs_0_8_s_cadgen_stop_in_0_8_s_own_environment_with_telemetry_off(self) -> None:
+        record = {"version": "0.8.4", "cadgen": "/env/bin/cadgen", "python": "/env/bin/python", "prefix": "/env"}
+        answer = json.dumps({"ok": True, "stopped": ["/t/cadgen-engine/0123456789ab.door"]}, indent=2) + "\n"
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, answer, "")) as ran, \
+                mock.patch.dict(os.environ, {"PYTHONPATH": "/a/checkout/src", "CADGEN_TELEMETRY": "1"}):
+            self.assertEqual(setup.stop_earlier(record), (True, ["/t/cadgen-engine/0123456789ab.door"], answer.strip()))
         (call,) = ran.call_args_list
-        self.assertEqual(call.args[0], ["/env/bin/cad", "stop"])
-        self.assertEqual(call.kwargs["env"][installations.NAME_ENV], "0.0.1-dev.5")
-        # It runs on the person's behalf, its words read by no one: whatever its release (0.8's cadgen
-        # among them), it counts, sends and tells nothing, so it never takes a notice nobody read for a yes.
-        self.assertEqual((call.kwargs["env"]["CADGEN_TELEMETRY"], call.kwargs["env"]["CAD_TELEMETRY"]), ("0", "0"))
-        # A release knows its own name: none is passed on to it.
-        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 1, "", "no\n")) as ran, \
-                mock.patch.dict(os.environ, {installations.NAME_ENV: "9.9.9-dev.1"}):
-            self.assertEqual(setup.stop_installation({**record, "version": "0.0.1"}), (False, "no"))
-        self.assertNotIn(installations.NAME_ENV, ran.call_args.kwargs["env"])
+        self.assertEqual(call.args[0], ["/env/bin/cadgen", "stop", "--json"])
+        # It runs on the person's behalf, its words read by no one: it counts, sends and tells nothing, so it
+        # never takes a notice nobody read for a yes; and it imports its own release, never this one.
+        self.assertEqual(call.kwargs["env"]["CADGEN_TELEMETRY"], "0")
+        self.assertNotIn("PYTHONPATH", call.kwargs["env"])
+        for done, expected in ((subprocess.CompletedProcess([], 0, '{"ok": true, "stopped": []}\n', ""), (True, [])),
+                               (subprocess.CompletedProcess([], 0, "no engine server is running\n", ""), (True, None)),
+                               (subprocess.CompletedProcess([], 1, "", "boom\n"), (False, None))):
+            with mock.patch.object(subprocess, "run", return_value=done):
+                self.assertEqual(setup.stop_earlier(record)[:2], expected, done)
+        with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory")):
+            self.assertEqual(setup.stop_earlier(record)[:2], (False, None))
 
 
 class TheOneLineInstaller(unittest.TestCase):

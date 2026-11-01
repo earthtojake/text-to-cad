@@ -12,14 +12,16 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. It installs
-0.10 in every agent app and the `cad` command, moves 0.8's state into 0.10's folder (step 5),
-and stops 0.8's server on port 3245 when nothing is using it. An 0.8 server still in use
-(an app's session on the 0.8 plugin, a page watching a model, a build) is left running, and
-the installer says so: it keeps port 3245, and 0.10's server serves on the next free port
-(3246), says so once, and keeps that port until 0.8's is gone: once the app is restarted,
-run the stop command the installer names for it (0.8's own `cadgen stop`, by its path), or
-restart your computer. The next time 0.10's server starts (after `cad stop`, an update or a
-restart), it is back on 3245.
+0.10 in every agent app and the `cad` command, moves what 0.10 keeps of 0.8's state into
+its own folder (step 5), and stops 0.8's server with 0.8's own `cadgen stop`. Upgrading is
+a cutover: 0.10 never talks to anything of 0.8's, so an app still running the 0.8 plugin
+goes on with 0.8 alone until you restart it, and a CAD page left open from 0.8 needs a new
+link from your agent (step 7). A 0.8 server started again meanwhile keeps port 3245, and
+0.10's serves on the next free port (3246) and says so; the next time 0.10's server starts
+with 3245 free (after `cad stop`, an update or a restart), it is back on 3245. An app that
+updates 0.8's plugin by itself (Codex fetches 0.8's catalog from GitHub) brings 0.10 without
+the install command: 0.10's server then runs beside 0.8's in the same way, until the install
+command stops 0.8's.
 
 Each app's plugin now comes from a folder on your computer that the release writes,
 `plugin` in the new state folder (step 5), rather than from GitHub: the installer takes out

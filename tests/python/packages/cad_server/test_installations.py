@@ -63,6 +63,21 @@ class RegistryTests(Fixture):
         self.assertEqual(installations.register("1.2.3", moved, self.state)[1], installations.REGISTERED)
         self.assertEqual(installations.records(self.state)[0]["python"], moved[1])
 
+    def test_0_8_s_records_are_read_where_0_8_left_them_and_no_record_of_this_release_s_is_one(self) -> None:
+        installations.register("0.10.0", self.environment("env-0.10"), self.state)
+        earlier = self.root / "cadgen" / "installations"
+        earlier.mkdir(parents=True)
+        zero_eight = {"version": "0.8.4", "python": "/e/bin/python", "cadgen": "/e/bin/cadgen", "prefix": "/e"}
+        (earlier / "0.8.4.json").write_text(json.dumps(zero_eight), encoding="utf-8")
+        (earlier / "0.8.3.json").write_text(json.dumps({**zero_eight, "version": "0.8.2"}), encoding="utf-8")
+        (earlier / "0.8.1.json").write_text("{", encoding="utf-8")
+        (earlier / "current").write_text("0.8.4", encoding="utf-8")
+        self.assertEqual(installations.earlier(self.root / "cadgen"), [{**zero_eight, "path": str(earlier / "0.8.4.json")}])
+        # Side by side in one folder (a state folder a test names), each release reads its own records alone.
+        (self.root / "state" / "installations" / "0.8.4.json").write_text(json.dumps(zero_eight), encoding="utf-8")
+        self.assertEqual([record["version"] for record in installations.records(self.state)], ["0.10.0"])
+        self.assertEqual([record["version"] for record in installations.earlier(self.root / "state")], ["0.8.4"])
+
     def test_an_upgrade_in_place_takes_over_its_environment_s_record(self) -> None:
         found = self.environment("tool")
         installations.register("0.8.0", found, self.state)

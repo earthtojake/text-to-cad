@@ -20,12 +20,14 @@ current installation's
    and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
    3245); and build123d, the CAD kernel. ``--dry-run`` stops there and writes nothing. Nothing is asked.
-3. **An earlier release's engine.** An engine of an earlier release serving that port (one whose door
-   is not the device's engine's) that nothing uses (no app server holds it, no page watches it, no
-   request is underway) is stopped by that installation's own ``stop``, found by its record -- an 0.8
-   one's among the records this release moved from the earlier state folder
-   (``cad.engine.places.adopt_earlier``, before the plan) -- with its telemetry off (``NO_TELEMETRY``).
-   One still in use, or one no record names, is left running and said, with how to stop it.
+3. **0.8's server.** Where 0.8 is installed -- an installation's record in 0.8's own state folder
+   whose Python and console script are still there (``cad_server._internal.installations.earlier``) --
+   that installation's own stop, ``cadgen stop``, is run, with its telemetry off (``NO_TELEMETRY``), and
+   what it did is said: no process of this release asks 0.8's server anything, whether it runs or what
+   uses it. A stop that fails is said, and the run goes on. With 0.8's server stopped, this release's
+   engine takes the port as it would on a computer that never had 0.8; a 0.8 server that still holds the
+   port (an app not yet restarted started it again) keeps it, and this release's serves on the next free
+   port and says so.
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
@@ -59,7 +61,7 @@ current installation's
    and changed nothing.
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
-steps 2 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
+steps 2 and 4 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
 each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
@@ -103,8 +105,10 @@ STATE_OURS = frozenset({"installations", "engines", "documents", "recents", "rel
 CACHE_OURS = frozenset({"base", "documents", "pycache"})
 # Where loose copies of the skills are moved, rather than deleted.
 ASIDE = "install-aside"
-# How long an older installation's ``cad stop`` may take.
+# How long 0.8's own ``cadgen stop`` may take.
 STOP_SECONDS = 60.0
+# How long setup waits for the device's engine to say what it serves: a wedged engine never wedges setup.
+ASK_SECONDS = 5.0
 # The server's install channel in Claude Desktop's config (``cad_server._internal.channel``).
 DESKTOP_CHANNEL = "claude-desktop"
 
@@ -191,27 +195,30 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG, *, uninsta
 
 
 def engine_on(port: int) -> dict[str, Any] | None:
-    """The ``status`` of the engine in this engine folder whose HTTP server is on ``port``, asked
-    read-only (``cad_server.engine.daemon._ask``, bounded), or None when no engine there serves it; with
-    ``device`` true when it is the device's engine (``cad.engine.places.NAME``'s door), false for an
-    earlier release's."""
-    from cad_server.engine import daemon
-    from cad.engine import places
+    """The device's engine's ``status`` when its HTTP server is on ``port``, asked read-only through its door
+    and bounded (``ASK_SECONDS``), or None when none runs or it serves elsewhere."""
+    import threading
 
-    try:
-        doors = sorted(places.engine_dir().glob("*.port" if places.WINDOWS else "*.door"))
-    except OSError:
-        return None
-    for door in doors:
-        status = daemon._ask(door, {"op": "status"})
-        serving = (status or {}).get("serving")
-        if isinstance(serving, dict) and serving.get("port") == port:
-            return {**status, "device": door.stem == places.NAME}
-    return None
+    from cad.engine import client
+
+    answers: list[Any] = []
+
+    def ask() -> None:
+        try:
+            answers.append(client.request({"op": "status"}, start=False))
+        except (OSError, ValueError):
+            pass
+
+    asking = threading.Thread(target=ask, daemon=True)
+    asking.start()
+    asking.join(ASK_SECONDS)
+    status = answers[0] if answers and isinstance(answers[0], dict) and answers[0].get("ok") else None
+    serving = (status or {}).get("serving")
+    return status if isinstance(serving, dict) and serving.get("port") == port else None
 
 
 def port_held(port: int) -> str | None:
-    """Who listens on ``port`` when no engine of this engine folder does, in words, or None."""
+    """Who listens on ``port`` when the device's engine does not, in words, or None."""
     from cad_server.engine import daemon
 
     if not daemon._answers("127.0.0.1", port):
@@ -219,31 +226,33 @@ def port_held(port: int) -> str | None:
     return daemon._who(port)
 
 
-# The switches that keep a process of any release from counting, sending or telling its telemetry notice
-# (0.8's ``cadgen``, then this release's): set for an earlier installation's stop, which runs on the person's
-# behalf, its words read by no one -- a notice it told there would read to it as told, so as their yes.
-NO_TELEMETRY = {"CADGEN_TELEMETRY": "0", "CAD_TELEMETRY": "0"}
+# The switch that keeps 0.8's ``cadgen`` from counting, sending or telling its telemetry notice: set for its
+# stop, which runs on the person's behalf, its words read by no one -- a notice it told there would read to
+# it as told, so as their yes.
+NO_TELEMETRY = {"CADGEN_TELEMETRY": "0"}
 
 
-def stop_installation(record: dict[str, Any]) -> tuple[bool, str]:
-    """That installation's own ``stop``, run by its console script as the ``cad`` command
-    runs it (told the version it is registered as when it cannot know it: ``installations.named``),
-    with telemetry off for it (``NO_TELEMETRY``): whether it stopped, and what it said."""
+def stop_earlier(record: dict[str, Any]) -> tuple[bool, list[str] | None, str]:
+    """0.8's own stop, ``cadgen stop --json``, run by the console script of the 0.8 installation ``record``
+    names (``installations.earlier``) in its own environment -- no import path of this release's -- with
+    telemetry off for it (``NO_TELEMETRY``): whether it ran, the servers it says it stopped (None when it
+    said nothing this reads), and what it said."""
     from cad_server._internal import installations
 
-    environment = {**os.environ, **NO_TELEMETRY}
-    told = installations.named(record)
-    if told:
-        environment[installations.NAME_ENV] = told
-    else:
-        environment.pop(installations.NAME_ENV, None)
+    environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
+    environment.update(NO_TELEMETRY)
     try:
-        done = subprocess.run([record["cad"], "stop"], env=environment, stdin=subprocess.DEVNULL,
-                              capture_output=True, text=True, timeout=STOP_SECONDS)
+        done = subprocess.run([record[installations.EARLIER_CONSOLE], "stop", "--json"], env=environment,
+                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
+                              errors="replace", timeout=STOP_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:
-        return False, f"{type(error).__name__}: {error}"
+        return False, None, f"{type(error).__name__}: {error}"
     said = "\n".join(part.strip() for part in (done.stdout, done.stderr) if part and part.strip())
-    return done.returncode == 0, said
+    try:
+        stopped = json.loads(done.stdout).get("stopped")
+    except (ValueError, AttributeError):
+        stopped = None
+    return done.returncode == 0, stopped if isinstance(stopped, list) else None, said
 
 
 class Installer:
@@ -266,7 +275,8 @@ class Installer:
         # Under --json the result is the one thing on stdout: what is said goes to stderr.
         self.out = sys.stderr if args.json or self.engine_update else sys.stdout
         self.actions: list[dict[str, Any]] = []
-        self.stopped: dict[str, Any] | None = None
+        # The servers of 0.8 this run stopped (``_stop_earlier``).
+        self.stopped: list[dict[str, Any]] = []
         # Whether Claude Code has the plugin after this run, so Cursor and Grok Build load it.
         self.fed = False
 
@@ -438,29 +448,26 @@ class Installer:
 
     # --- the engine ---------------------------------------------------------------------------
 
-    def _record_of(self, status: dict[str, Any]) -> dict[str, Any] | None:
-        """The installation record naming the environment an engine runs in (its ``prefix``), when
-        that installation is still there (``installations.alive``)."""
+    def _earlier(self) -> list[dict[str, Any]]:
+        """Step 3's rows: each 0.8 installation still here (``installations.earlier``: its Python and console
+        script there), whose own ``cadgen stop`` stops its server (``_stop_earlier``) if it runs -- which no
+        process of this release asks it."""
         from cad_server._internal import installations
 
-        prefix = status.get("prefix")
-        if not isinstance(prefix, str):
-            return None
-        try:
-            found = installations.records()
-        except OSError:
-            return None
-        mine = [record for record in found if installations._same_place(record["prefix"], prefix)
-                and installations.alive(record)]
-        named = status.get("installation") or status.get("version")
-        return next((record for record in mine if record["version"] == named), None) or (mine[0] if mine else None)
+        rows: list[dict[str, Any]] = []
+        for record in installations.earlier():
+            console = record[installations.EARLIER_CONSOLE]
+            if not (os.path.isfile(record["python"]) and os.path.isfile(console)):
+                continue
+            rows.append({"app": "0.8", "label": "0.8", "action": "stop", "release": record["version"],
+                         "record": record, "subject": f"text-to-cad {record['version']}'s server, if it runs: "
+                                                      f"`{self.providers.shown(console, self.machine)} stop`"})
+        return rows
 
-    def _engine(self) -> dict[str, Any]:
+    def _engine(self, earlier: list[dict[str, Any]] | None = None) -> dict[str, Any]:
         """What serves the engine's port, asked read-only, and what this run does about it: the device's
-        engine is switched to this release (``_switch``), and an earlier release's that nothing uses is
-        stopped by its own ``stop``."""
-        from cad_server.engine import daemon
-
+        engine is switched to this release (``_switch``); another program on the port is said, and what
+        the engine does about it -- once ``earlier``'s stops (0.8's servers) are done, when there are any."""
         port = self.port
         row: dict[str, Any] = {"app": "engine", "label": "engine", "action": "leave"}
         if not port:
@@ -472,6 +479,8 @@ class Installer:
                 return {**row, "subject": f"port {port}: no engine running; the first CAD view or build starts one"}
             then = ("the engine serves on the next free port, and says so" if self.source == "default"
                     else "stop it, or set another CAD_ENGINE_PORT")
+            if earlier:
+                then = f"if 0.8's stop above does not free it, {then}"
             return {**row, "subject": f"port {port} is held by {held}: {then}"}
         name = status.get("installation") or status.get("version") or "?"
         who = f"text-to-cad {name}'s engine (pid {status.get('pid')}) on port {port}"
@@ -479,22 +488,7 @@ class Installer:
         if isinstance(prefix, str) and os.path.normcase(os.path.realpath(prefix)) == \
                 os.path.normcase(os.path.realpath(sys.prefix)):
             return {**row, "subject": f"{who}: this installation's"}
-        if status.get("device"):
-            return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
-        record = self._record_of(status)
-        # Its own command's stop, the one that reaches it whatever its release: the `cad` command runs the
-        # current installation, and an earlier release's engine (0.8's) is no door the current one stops.
-        stop = f"`{record['cad']} stop`" if record else f"the stop command of that installation ({prefix})"
-        uses = daemon._uses(status)
-        if uses is None:
-            return {**row, "subject": f"{who}: it cannot be asked whether it is in use; {stop} stops it"}
-        if uses:
-            return {**row, "subject": f"{who}: in use by {' and '.join(uses)}, left running; once that is "
-                                      f"closed, {stop} stops it"}
-        if record is None:
-            return {**row, "subject": f"{who}: idle, and no installation record names it; {stop} stops it"}
-        return {**row, "action": "stop", "release": name, "pid": status.get("pid"), "record": record,
-                "subject": f"{who}, idle: stopped by its own `cad stop`"}
+        return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
 
     def _kernel(self) -> dict[str, Any] | None:
         """The CAD kernel environment, the base every build and the engine's own kernel processes start
@@ -551,16 +545,21 @@ class Installer:
                  + ("; the release before runs again" if done.get("restored") else ""))
         return True, done
 
-    def _stop_older(self, engine: dict[str, Any]) -> None:
-        """An earlier release's idle engine on the port stopped by its installation's own ``stop``."""
-        ok, said = stop_installation(engine["record"])
-        if ok:
-            self.stopped = {"release": engine["release"], "pid": engine["pid"], "port": self.port,
-                            "at": self.providers.stamp()}
-            self.say(f"engine   stopped text-to-cad {engine['release']}'s engine (pid {engine['pid']})")
-            return
-        self.say(f"engine   text-to-cad {engine['release']}'s `cad stop` failed; it is left running"
-                 + (f": {said.splitlines()[-1]}" if said else ""))
+    def _stop_earlier(self, row: dict[str, Any]) -> None:
+        """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what
+        it did said; a stop that fails is said, and the run goes on."""
+        release = row["release"]
+        ok, stopped, said = stop_earlier(row["record"])
+        last = f": {said.splitlines()[-1]}" if said else ""
+        if not ok:
+            self.say(f"0.8      text-to-cad {release}'s `cadgen stop` failed{last}; its server may still run")
+        elif stopped is None:
+            self.say(f"0.8      ran text-to-cad {release}'s `cadgen stop`{last}")
+        elif not stopped:
+            self.say(f"0.8      text-to-cad {release}'s server was not running")
+        else:
+            self.stopped.append({"release": release, "servers": stopped, "at": self.providers.stamp()})
+            self.say(f"0.8      stopped text-to-cad {release}'s server (its own `cadgen stop`)")
 
     # --- the cad command -------------------------------------------------------------------
 
@@ -674,9 +673,9 @@ class Installer:
     # --- install --------------------------------------------------------------------------------
 
     @staticmethod
-    def _public(engine: dict[str, Any]) -> dict[str, Any]:
-        """The engine's plan row as the plan shows it: without the installation record it acts by."""
-        return {key: value for key, value in engine.items() if key != "record"}
+    def _public(row: dict[str, Any]) -> dict[str, Any]:
+        """A plan row as the plan shows it: without the installation record it acts by."""
+        return {key: value for key, value in row.items() if key != "record"}
 
     # --- the plugin folder ----------------------------------------------------------------------
 
@@ -786,7 +785,9 @@ class Installer:
             release = ([{"app": "release", "label": "release", "action": "make",
                          "subject": f"text-to-cad {self.release} in {providers.shown(str(home), self.machine)}, once"}]
                        if home is not None and not os.path.isdir(home) else [])
-            extra = [*release, self._plugin_row(), self._public(self._engine()), *([kernel] if kernel else [])]
+            earlier = self._earlier()
+            extra = [*release, self._plugin_row(), *map(self._public, earlier), self._public(self._engine(earlier)),
+                     *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             self.say("Dry run: nothing was changed.")
             return self._result(steps, extra, None, [], 0)
@@ -804,14 +805,15 @@ class Installer:
             steps = providers.plan(apps, release=self.release, folder=self.folder, desktop_entry=self._desktop_entry(),
                                    only=self.only, machine=self.machine, skills=receipt.get("skills"))
             self.fed = providers.feeds(apps, self.only or providers.APPS)
-            engine = self._engine() if not self.engine_update else {"app": "engine", "label": "engine",
-                                                                     "action": "leave", "subject": "this engine's own update"}
+            earlier = self._earlier() if not self.engine_update else []
+            engine = self._engine(earlier) if not self.engine_update else {
+                "app": "engine", "label": "engine", "action": "leave", "subject": "this engine's own update"}
             kernel = self._kernel()
-            extra = [self._plugin_row(), self._public(engine), *([kernel] if kernel else [])]
+            extra = [self._plugin_row(), *map(self._public, earlier), self._public(engine), *([kernel] if kernel else [])]
             self._plan_lines(title, apps, steps, extra)
             work = [step for step in steps if step.changes]
-            if engine["action"] == "stop":
-                self._stop_older(engine)
+            for row in earlier:
+                self._stop_earlier(row)
             registered = self._register()
             made = kernel is not None and kernel["action"] == "make"
             # The kernel that cannot be made fails the run and keeps the engine where it is; an app whose
@@ -848,7 +850,7 @@ class Installer:
                 receipt.update({"release": self.release, "updated": providers.stamp()})
                 receipt["actions"] = list(receipt.get("actions") or []) + self.actions
                 if self.stopped:
-                    receipt["stopped"] = list(receipt.get("stopped") or []) + [self.stopped]
+                    receipt["stopped"] = list(receipt.get("stopped") or []) + self.stopped
                 if launcher["written"]:
                     receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
                 self._keep(receipt)
