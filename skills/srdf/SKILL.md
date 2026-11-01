@@ -132,9 +132,11 @@ person can drive, within its limits, or the request is refused before anything
 renders: a fixed joint or a `<mimic>` follower is refused by name (a follower
 follows its leader). Each link is placed by the viewer's own forward kinematics and
 drawn in one colour of the Parts palette. A visual is a `box`, `cylinder` or
-`sphere`, which the server meshes itself, or an STL, 3MF or GLB file beside the URDF;
-a mesh in another format (`.dae`, `.obj`), a `package://` or remote URI, or a
-missing file is refused by name, and a link mesh that cannot be loaded fails the
+`sphere`, which the server meshes itself, or an STL, 3MF or GLB file beside the URDF
+or in its ROS package (`package://NAME/...`: the nearest folder above the URDF named
+NAME, or holding a `package.xml` that names it); a mesh in another format (`.dae`,
+`.obj`), a remote URI, a package no folder above the URDF is, or a missing file is
+refused by name, and a link mesh that cannot be loaded fails the
 snapshot rather than leaving the link out.
 
 A normal snapshot uses Solid mode and Light appearance. `--display` takes any of the
@@ -142,8 +144,7 @@ viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`, ...),
 `exploded=AMOUNT`, or the display object: `appearance` (`light` or `dark`),
 `camera` (projection and focal length) and `clip` (`{"clip": {"axis": "x", "at":
 0.05}}`, `at` in metres, the file's own unit, as the viewer draws it). `--grid` draws
-the measuring grid, `--preview` draws
-Preview's photographic look, and `--camera`, `--size-profile`, `--width` and
+the measuring grid, and `--camera`, `--size-profile`, `--width` and
 `--height` frame and size it. A Quick Edit packet from the viewer (inline JSON, saved
 to a temporary `.snapshot.json`, or its path) replays with
 `--annotation <packet> --camera authored`, its job's `jointValues` given as `--pose`.

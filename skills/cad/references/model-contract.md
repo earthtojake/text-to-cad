@@ -55,8 +55,9 @@ if __name__ == "__main__":
 - **A model takes no parameters and returns a build123d shape**: a part, or a
   `Compound` of labelled children (an assembly). A 2D drawing returns 2D geometry and
   belongs to `$dxf`.
-- **A script is plain Python, loaded afresh by each run.** Its folder is first on the
-  module search path, so a module beside it imports by its own name. A script inside a
+- **A script is plain Python, loaded afresh by each run.** Its folder is on the module
+  search path, last, after everything installed, so a module beside it imports by its own
+  name unless an installed module has that name. A script inside a
   package (its folder holds an `__init__.py`) is that package's module, so its relative
   imports (`from ..lib.dims import WIDTH`) work under `python proj/parts/block.py` and
   `python -m proj.parts.block` alike. An edit to any module it imports is read on the
@@ -292,7 +293,7 @@ from the script's path and the function's name, the same in every process
 name. `@model(name="bracket")` (or `name=` on a file decorator) derives the id from the
 script's folder and that name, independent of which file in the folder declares it; two explicit
 names in one folder are refused with both declaration locations. A model's name is its identity
-within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
+within its namespace, the function's name by default, `name=` gives it another. The namespace
 is the script's folder, with no project detection. Moving a named model to another file of its folder
 keeps its id: run the file it left with `cad run` (or delete it) first, since until then the server
 knows that file by its last run, and refuses the new file's declaration naming both. The page is

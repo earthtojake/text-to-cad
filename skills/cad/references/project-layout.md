@@ -115,8 +115,8 @@ what it was built from.
 
 ## Imports and shared code
 
-Models use ordinary Python imports. A script's folder is first on the module search
-path, so flat scripts import their siblings and `lib/` directly. A script inside a
+Models use ordinary Python imports. A script's folder is on the module search path,
+so flat scripts import their siblings and `lib/` directly. A script inside a
 package (`src/chassis/` holds an `__init__.py`) is that package's module: its relative
 imports work, and the folder above its topmost package is on the path too, so
 `src/chassis/frame.py` imports `lib.holes` as well. Both run alike:

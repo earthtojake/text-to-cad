@@ -167,8 +167,7 @@ viewer's display modes (`parts`, `xray`, `hidden-line`, `wireframe`, ...),
 `exploded=AMOUNT`, or the display object: `appearance` (`light` or `dark`),
 `camera` (projection and focal length) and `clip` (`{"clip": {"axis": "x", "at":
 0.05}}`, `at` in metres, the file's own unit, as the viewer draws it). `--grid` draws
-the measuring grid, `--preview` draws
-Preview's photographic look, and `--camera`, `--size-profile`, `--width` and
+the measuring grid, and `--camera`, `--size-profile`, `--width` and
 `--height` frame and size it. A Quick Edit packet from the viewer (inline JSON, saved
 to a temporary `.snapshot.json`, or its path) replays with
 `--annotation <packet> --camera authored`, its job's `jointValues` given as `--pose`.
