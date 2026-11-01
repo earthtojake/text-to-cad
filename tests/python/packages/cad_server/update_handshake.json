@@ -29,6 +29,28 @@
   "switch_record": "update.json",
   "token": "engines/token"
  },
+ "http": {
+  "server": {
+   "route": "/api/v1/server",
+   "status": 200,
+   "type": "application/json; charset=utf-8",
+   "keys": [
+    "instance",
+    "notice",
+    "release",
+    "update"
+   ]
+  },
+  "page": {
+   "route": "/<id>",
+   "status": 200,
+   "type": "text/html; charset=utf-8"
+  },
+  "app": {
+   "route": "/app",
+   "routed": true
+  }
+ },
  "ops": {
   "http": [
    "ok",

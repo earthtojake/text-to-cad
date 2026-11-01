@@ -5,7 +5,11 @@ code, and B's reading what A wrote. A's engine runs B's ``setup --engine-update`
 progress frames; A's helper starts B's engine with B's Python by the daemon module's name, asks it
 ``status`` and ``http``, stops it with ``stop`` (``drain``), and runs the release it leaves current's
 ``plugin --refresh`` (the plugin folder following it); B reads the ``current`` file, the installation
-records, the release folders, the token and the switch's record that A wrote. So all of
+records, the release folders, the token and the switch's record that A wrote. And across the
+update, what A's pages and a host's kept card shell read of B's engine over HTTP (``http``): the
+page a tab is at (``/<id>``), the CAD app's module a kept shell imports (``/app``), and
+``GET /api/v1/server``'s ``release`` and ``instance`` (with ``notice`` and ``update``), which a page
+reloads on and a card follows its update by. So all of
 it must stay as it is across releases, and this test fails when any of it changes: a change here is
 one made on purpose, for every release still installed, never one made in passing. Change the golden
 file with it, and say in the change why releases before it still update.
@@ -36,6 +40,41 @@ class Started(Exception):
 
 def _flags(parser) -> list[str]:
     return sorted(option for action in parser._actions for option in action.option_strings)
+
+
+def _ask(app, path: str) -> tuple[int, str, bytes]:
+    """``app``'s answer to ``GET path``, in process: its status, its content type and its body."""
+    from cad_server.mcp.tunnel import _CapturedHandler
+    from cad_server.viewer.response import Request, Response
+
+    handler = _CapturedHandler()
+    app.handle(Request(raw_method="GET", path=path, query=[], headers={}, read_body=lambda: b""), Response(handler))
+    return handler.status, handler.headers.get("content-type", ""), handler.wfile.getvalue()
+
+
+def http_surface() -> dict:
+    """What a page or a kept card shell of one release reads of another release's engine over HTTP."""
+    import tempfile
+
+    from cad_server.mcp import tunnel
+    from cad_server.viewer.http_app import create_cad_app
+
+    with tempfile.TemporaryDirectory() as dist:
+        Path(dist, "index.html").write_text("<!doctype html><title>page</title>", encoding="utf-8")
+        app = create_cad_app(host="127.0.0.1", port=0, dist_dir=dist)
+        status, kind, body = _ask(app, "/api/v1/server")
+        server = json.loads(body) if status == 200 else {}
+        page = _ask(app, "/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab")
+        module = _ask(app, tunnel._APP_ROUTE)
+    # The CAD app's module is the route's whether or not this install has a build of it: never the page.
+    routed = module[1].startswith("text/javascript") or (
+        module[0] == 404 and json.loads(module[2]).get("error") == "this install has no CAD app build")
+    return {
+        "server": {"route": "/api/v1/server", "status": status, "type": kind,
+                   "keys": sorted(key for key in ("instance", "notice", "release", "update") if key in server)},
+        "page": {"route": "/<id>", "status": page[0], "type": page[1]},
+        "app": {"route": tunnel._APP_ROUTE, "routed": routed},
+    }
 
 
 def surface() -> dict:
@@ -95,6 +134,7 @@ def surface() -> dict:
         "progress": {"line": sorted({"progress": frame}), "frame": sorted(frame), "kind": frame["kind"],
                      "stages": list(update.STAGES)},
         "daemon": {"arguments": started[1:], "module": client.DAEMON_MODULE},
+        "http": http_surface(),
         "ops": {"status": sorted(key for key in ("ok", "pid", "prefix", "serving", "installation", "version")
                                  if key in status[0]),
                 "stop_drain": stopped[0], "http": sorted(endpoint)},
