@@ -2385,7 +2385,9 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
-too (`cad inspect`), never served over the engine's HTTP listener.
+too (`cad inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
+API's own paths (`/api/v1/look`, `/api/v1/look/environment`), the ones its record names, so the
+standalone server answers a page as the engine does.
 
 `GET /api/v1/documents/<kind>/<id>/structure` returns the structure as JSON: prototypes (key, name,
 colour, `faceNames`, `edgeNames`, `vertexNames`, `faceColors` by ordinal, `material` and

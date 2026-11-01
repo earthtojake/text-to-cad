@@ -27,8 +27,8 @@ The stages keep ownership narrow:
   prototype over its XBM2 buffer's own typed-array views, one placed group per instance, CAD
   edges by class from the edge table, faces, edges and vertices picked by ordinal; the
   document's edges are the view's `edges`, which the scene wears through `setEdgeLook`; its
-  regular modes are drawn in the engine's look, `GET /api/look`, and its environment image,
-  `GET /api/look/environment`, read beside the document: `lib/xbf/xbfLook.js`). Each returns the
+  regular modes are drawn in the engine's look, `GET /api/v1/look`, and its environment image,
+  `GET /api/v1/look/environment`, read beside the document: `lib/xbf/xbfLook.js`). Each returns the
   scene contract of
   `lib/viewer/sceneContract.js`, and each scene gives a sibling (`createSibling()`): a
   second scene of the same file with its own objects, materials and look over the first's

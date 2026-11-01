@@ -2,7 +2,7 @@
 
 ``occt.py`` draws it on OCCT's PBR raster (``finish.py``; X-ray on its Phong program), the engine
 serves it as JSON (``GET /api/v1/look``, its environment at ``GET /api/v1/look/environment``:
-``serve.py``'s ``/api/look``, which the engine's API answers), and the CAD Viewer draws an engine document's regular modes by it through three's
+``serve.py``), and the CAD Viewer draws an engine document's regular modes by it through three's
 physical materials (core's ``lib/xbf/xbfLook.js``). Preview's photographic look is not here.
 
 **The light.** One key, a directional light at ``intensity`` (radiance: a white surface facing it

@@ -584,7 +584,7 @@ class AccessTest(unittest.TestCase):
         server.start()
         self.addCleanup(server.stop)
         for origin in ("http://127.0.0.1:3245", "http://localhost:5173", "https://example.com", "null"):
-            for path in ("/api/look", "/api/docs", "/"):
+            for path in ("/api/v1/look", "/api/docs", "/"):
                 with self.subTest(origin=origin, path=path):
                     request = urllib.request.Request(f"{server.url}{path}", headers={"Origin": origin})
                     with urllib.request.urlopen(request, timeout=60) as answer:

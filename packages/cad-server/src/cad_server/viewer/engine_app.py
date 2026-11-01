@@ -121,7 +121,7 @@ def bounce_page(location):
 
 class DocumentResponse:
     """Adapt the engine's socket-shaped writer to the application's response, in process: one of the
-    engine's own document reads (``route``: ``/api/doc/<id>...``, ``/api/look...``, which
+    engine's own document reads (``route``: ``/api/doc/<id>...``, ``/api/v1/look...``, which
     ``cad/engine/serve.py`` answers), asked for an ``/api/v1`` route. ``page``: the request is the
     browser page's (the engine's own app), not an MCP view's tunnel; ``prefetch``: a structure read
     starts meshing the parts a page asks for next."""

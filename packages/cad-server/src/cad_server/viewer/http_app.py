@@ -561,7 +561,7 @@ class CadApp:
                                            "PUT": lambda: send_json(response, 200, self._change_settings(request))})
         if head == "look" and rest in ([], ["environment"]):
             # The look the regular display modes draw in, and its environment, as the engine serves them.
-            return self._methods(request, {"GET": lambda: self._relay(request, response, "/api/look" + "".join(
+            return self._methods(request, {"GET": lambda: self._relay(request, response, "/api/v1/look" + "".join(
                 "/" + part for part in rest))})
         if head == "documents":
             return self._documents(request, response, rest)
@@ -883,7 +883,7 @@ class CadApp:
 
     def _read(self, request, route: str, query=(), prefetch=True) -> tuple[int, str, dict, bytes]:
         """The engine's answer to one of its document reads (``route``: ``/api/doc/<id>...``,
-        ``/api/look...``): ``(status, content type, headers, body)``; ``prefetch``: a structure read
+        ``/api/v1/look...``): ``(status, content type, headers, body)``; ``prefetch``: a structure read
         starts meshing its parts, which a page reads next. Documents are the engine's: an
         application with none under it serves none."""
         raise ApiError(404, "documents are served by the installation's engine",

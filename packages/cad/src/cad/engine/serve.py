@@ -34,9 +34,10 @@ with ``{"pose": NAME | {joint or coupling: value}}`` serves the document at that
 its own (``<id>~<digest>``): its structure's instances where the mechanism places them,
 every other route the document's; what the pose names wrong is refused by name (400).
 The structure carries the document's mechanism as ``kinematics`` (``mechanism.block``),
-from which a page poses it itself. ``GET /api/look`` is the look the regular display modes
+from which a page poses it itself. ``GET /api/v1/look`` is the look the regular display modes
 draw a document in (``render/look.py``), which a page lights and dresses its scene by, and
-``GET /api/look/environment`` the image its environment is. ``/`` is a page that shows
+``GET /api/v1/look/environment`` the image its environment is (the paths the record names, the
+engine's API's own). ``/`` is a page that shows
 one (``page/``), with three.js served from a ``node_modules`` folder (``--three``, or the
 nearest one above the working directory).
 
@@ -1960,9 +1961,11 @@ class Server:
                     return self.file(handler, target)
             if parts == ["api", "docs"]:
                 return self.json(handler, self.listing())
-            if parts == ["api", "look"]:
+            # The look, at the paths its record advertises (``LOOK.json``'s ``environment.url``): the
+            # engine's API's own, so a page reads it the same from this server and through the engine's.
+            if parts == ["api", "v1", "look"]:
                 return self.json(handler, LOOK.json())
-            if parts == ["api", "look", "environment"]:
+            if parts == ["api", "v1", "look", "environment"]:
                 return self.send(handler, 200, LOOK.environment_path.read_bytes(), "image/vnd.radiance")
             ident, pose = self.poses.get(parts[2], (parts[2], None)) if len(parts) >= 3 else ("", None)
             if parts[:2] == ["api", "doc"] and ident and not self.holds(ident) and is_id(ident):
