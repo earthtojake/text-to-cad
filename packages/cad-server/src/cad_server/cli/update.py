@@ -54,7 +54,7 @@ def main(argv: Sequence[str] | None = None, prog: str = DEFAULT_PROG) -> int:
         print(f"Once that is fixed, run `cad update` again, or the install command: {updates.command()}",
               file=sys.stderr, flush=True)
         return 1
-    run = [made["cadgen"], "setup", *given]
+    run = [made["cad"], "setup", *given]
     if os.name == "nt":
         return subprocess.call(run)
     os.execv(run[0], run)

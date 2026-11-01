@@ -465,7 +465,7 @@ class LeftoversTest(PrivateFolders):
         for name in ("python", "cad"):
             self.file(f"env/bin/{name}")
         record = {"version": "1.0.0", "python": str(environment / "bin" / "python"),
-                  "cadgen": str(environment / "bin" / "cad"), "prefix": str(environment)}
+                  "cad": str(environment / "bin" / "cad"), "prefix": str(environment)}
         self.file("state/installations/1.0.0.json", json.dumps(record))
         registered = self.file(f"cache/pycache/aaaaaaaaaaaa/{self.mirror(environment)}/x.pyc").parents[0]
         self.file(f"cache/pycache/bbbbbbbbbbbb/{self.mirror(self.root / 'uninstalled')}/x.pyc", "y" * 2048)

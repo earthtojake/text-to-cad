@@ -426,7 +426,7 @@ class InstallUpdateAndUninstall(Fixture):
         folder and runs the same command from there, with the person's PATH: uvx's environment, which
         uvx puts first on PATH and uv's cache keeps (its uvx and its `cad`), is not theirs. A dry run only
         plans it."""
-        made = {"cadgen": str(self.root / "release-bin" / "cad")}
+        made = {"cad": str(self.root / "release-bin" / "cad")}
         cached = self.root / "uv" / "archive-v0" / "M-XQ" / "bin"
         with mock.patch.object(installations, "editable", return_value=False), \
                 mock.patch.dict(os.environ, {installations.NAME_ENV: "",
@@ -442,12 +442,12 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup("--only", "claude")
         self.assertEqual(code, 0, out)
         make.assert_called_once_with(RELEASE, source=mock.ANY, told=mock.ANY)
-        run = [made["cadgen"], "setup", "--only", "claude"]
+        run = [made["cad"], "setup", "--only", "claude"]
         if os.name == "nt":
             call.assert_called_once_with(run, env=mock.ANY)
             environment = call.call_args.kwargs["env"]
         else:
-            execve.assert_called_once_with(made["cadgen"], run, mock.ANY)
+            execve.assert_called_once_with(made["cad"], run, mock.ANY)
             environment = execve.call_args.args[2]
         self.assertEqual(environment["PATH"], str(self.bin))
         self.assertEqual(environment["CAD_STATE_DIR"], str(self.state), "the rest of the environment goes along")
@@ -691,7 +691,7 @@ class ThePluginCommand(Fixture):
 
 class TheOlderInstallationsOwnStop(unittest.TestCase):
     def test_it_runs_that_installation_s_console_script_told_the_version_it_cannot_know(self) -> None:
-        record = {"version": "0.0.1-dev.5", "cadgen": "/env/bin/cad", "python": "/env/bin/python", "prefix": "/env"}
+        record = {"version": "0.0.1-dev.5", "cad": "/env/bin/cad", "python": "/env/bin/python", "prefix": "/env"}
         with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, "stopped\n", "")) as ran:
             self.assertEqual(setup.stop_installation(record), (True, "stopped"))
         (call,) = ran.call_args_list

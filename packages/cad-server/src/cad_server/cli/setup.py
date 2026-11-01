@@ -238,7 +238,7 @@ def stop_installation(record: dict[str, Any]) -> tuple[bool, str]:
     else:
         environment.pop(installations.NAME_ENV, None)
     try:
-        done = subprocess.run([record["cadgen"], "stop"], env=environment, stdin=subprocess.DEVNULL,
+        done = subprocess.run([record["cad"], "stop"], env=environment, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, timeout=STOP_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:
         return False, f"{type(error).__name__}: {error}"
@@ -319,7 +319,7 @@ class Installer:
 
             self.say(f"Once that is fixed, run the install command again: {command()}")
             return 1
-        run = [made["cadgen"], "setup", *self.argv]
+        run = [made["cad"], "setup", *self.argv]
         self.say(f"release  text-to-cad {self.release} in {self.providers.shown(str(home), self.machine)}")
         # uvx puts its own environment's folder first on PATH for the command it runs: uv's cache's, not the
         # person's, holding a uvx and a `cad` of its own. The release's run is given the person's PATH
@@ -484,7 +484,7 @@ class Installer:
         record = self._record_of(status)
         # Its own command's stop, the one that reaches it whatever its release: the `cad` command runs the
         # current installation, and an earlier release's engine (0.8's) is no door the current one stops.
-        stop = f"`{record['cadgen']} stop`" if record else f"the stop command of that installation ({prefix})"
+        stop = f"`{record['cad']} stop`" if record else f"the stop command of that installation ({prefix})"
         uses = daemon._uses(status)
         if uses is None:
             return {**row, "subject": f"{who}: it cannot be asked whether it is in use; {stop} stops it"}

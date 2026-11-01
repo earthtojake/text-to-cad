@@ -178,9 +178,9 @@ def current() -> dict[str, Any] | None:
     except ValueError:
         return None
     if not isinstance(record, dict) or record.get("version") != version or not all(
-            isinstance(record.get(key), str) for key in ("python", "cadgen", "prefix")):
+            isinstance(record.get(key), str) for key in ("python", "cad", "prefix")):
         return None
-    return record if os.path.isfile(record["python"]) and os.path.isfile(record["cadgen"]) else None
+    return record if os.path.isfile(record["python"]) and os.path.isfile(record["cad"]) else None
 
 
 def register() -> None:

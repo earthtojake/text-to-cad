@@ -401,20 +401,20 @@ HOME: dict[str, Any] | None = home()
 def installation_record(data: bytes | None) -> dict[str, Any] | None:
     """An installation's record (``installations/<version>.json``) as its bytes hold it, or None for one
     that is no record: ``version``, the absolute paths of its ``python`` and its console script
-    (``cadgen``), its environment (``prefix``)."""
+    (``cad``), its environment (``prefix``)."""
     try:
         record = json.loads(data) if data is not None else None
     except ValueError:
         return None
     if not isinstance(record, dict) or not all(isinstance(record.get(key), str)
-                                               for key in ("version", "python", "cadgen", "prefix")):
+                                               for key in ("version", "python", "cad", "prefix")):
         return None
     return record
 
 
 def alive(record: dict[str, Any]) -> bool:
     """Whether the installation of ``record`` is there: its interpreter and its console script."""
-    return os.path.isfile(record["python"]) and os.path.isfile(record["cadgen"])
+    return os.path.isfile(record["python"]) and os.path.isfile(record["cad"])
 
 
 def _read(path: Path) -> bytes | None:

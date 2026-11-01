@@ -52,9 +52,8 @@ def choose(found: dict | None, records: list[dict]) -> dict:
 
 
 def command(record: dict, args: list[str]) -> list[str]:
-    """What runs: the installation's console script (its record's ``cadgen``, the key every release's
-    records name it by)."""
-    return [record["cadgen"], *args]
+    """What runs: the installation's console script (its record's ``cad``)."""
+    return [record["cad"], *args]
 
 
 def main(argv: list[str] | None = None) -> int:

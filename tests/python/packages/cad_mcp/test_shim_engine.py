@@ -40,10 +40,10 @@ class StartTest(unittest.TestCase):
         """An installation registered and current, its Python and console script there."""
         bin_ = self.elsewhere / "bin"
         bin_.mkdir(parents=True, exist_ok=True)
-        python, console = bin_ / "python", bin_ / "cadgen"
+        python, console = bin_ / "python", bin_ / "cad"
         for path in (python, console):
             path.write_text("", encoding="utf-8")
-        record = {"version": version, "python": str(python), "cadgen": str(console), "prefix": str(self.elsewhere)}
+        record = {"version": version, "python": str(python), "cad": str(console), "prefix": str(self.elsewhere)}
         folder = self.state / "installations"
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{version}.json").write_text(json.dumps(record), encoding="utf-8")

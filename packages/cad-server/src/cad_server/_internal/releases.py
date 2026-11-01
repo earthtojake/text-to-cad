@@ -108,7 +108,7 @@ def make(version: str, *, python: str | None = None, source: str | None = None,
 
     def finish(steps: list[list[str]], seconds: float) -> dict[str, Any]:
         return {"schema": SCHEMA, "version": version, "python": str(base.interpreter(env)),
-                "cadgen": str(console(env)), "source": source, "commands": steps, "seconds": round(seconds, 2),
+                "cad": str(console(env)), "source": source, "commands": steps, "seconds": round(seconds, 2),
                 "made": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
 
     return base.make(env, recipe(version, python or sys.executable, source), told or base._say, finish=finish,

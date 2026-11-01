@@ -7,8 +7,8 @@ cannot start in one: uv writes its cache before it does anything else. The envir
 starts fine there. So an installation registers itself, and one command runs the current one:
 
 - ``<state>/installations/<version>.json``, the installation's record: ``version``, the absolute
-  paths of its ``python`` and its ``cad`` console script, its environment (``prefix``) and when
-  it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
+  paths of its ``python`` and of its console script (``cad``), its environment (``prefix``) and
+  when it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
   it, as it writes everything there.
 - ``<state>/installations/current``, the version of the installation that is the device's: its
   engine is the one every client starts or attaches to (``cad.engine.client``), whatever its own
@@ -54,7 +54,7 @@ WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
 MARK = "cad proxy: "
-REVISION = 6
+REVISION = 7
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -155,9 +155,9 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
         raise OSError(f"this installation has no console script to register ({sys.prefix})")
     console, python, prefix = found
     before = installation_record(folder.read(inside))
-    if before and (before["cadgen"], before["python"], before["prefix"]) == (console, python, prefix):
+    if before and (before["cad"], before["python"], before["prefix"]) == (console, python, prefix):
         return path, OK
-    record = {"version": version, "python": python, "cadgen": console, "prefix": prefix,
+    record = {"version": version, "python": python, "cad": console, "prefix": prefix,
               "registered": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     # One key a line, the python's alone: the proxy's sh reads that line (``script``).
     text = json.dumps(record, indent=1, sort_keys=True, ensure_ascii=False) + "\n"
@@ -392,13 +392,13 @@ case $current in ''|*[!0-9A-Za-z.+_-]*) current= ;; esac
 if [ -n "$current" ]; then
   record="$state/installations/$current.json"
   python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
-  console=$(sed -n 's/^ *"cadgen": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
+  console=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record" 2>/dev/null)
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 fi
 for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2>/dev/null); do
   record="$state/installations/$name"
   python=$(sed -n 's/^ *"python": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
-  console=$(sed -n 's/^ *"cadgen": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
+  console=$(sed -n 's/^ *"cad": "\\(.*\\)",\\{{0,1\\}}$/\\1/p' "$record")
   # Alive as ``alive`` says it: its python and its console script (an uninstalled server leaves the python).
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 done
@@ -419,21 +419,21 @@ if defined current if exist "!state!\\installations\\!current!.json" (\r
   set "python="\r
   set "console="\r
   for /f usebackq^ tokens^=4^ delims^=^\" %%p in (`findstr /c:"\\"python\\":" "!state!\\installations\\!current!.json"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cadgen\\":" "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
+  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cad\\":" "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
   if defined python if defined console (\r
     set "python=!python:\\\\=\\!"\r
     set "console=!console:\\\\=\\!"\r
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-rem A record's python and cadgen (its console script's) lines are: space "KEY": "PATH", -- split at each\r
+rem A record's python and cad (its console script's) lines are: space "KEY": "PATH", -- split at each\r
 rem quote, PATH is the fourth piece. Alive as alive() says it: its python and its console script (an\r
 rem uninstalled server leaves the python), else the next record.\r
 for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') do (\r
   set "python="\r
   set "console="\r
   for /f usebackq^ tokens^=4^ delims^=^" %%p in (`findstr /c:"\\"python\\":" "!state!\\installations\\%%n"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cadgen\\":" "!state!\\installations\\%%n"`) do set "console=%%c"\r
+  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cad\\":" "!state!\\installations\\%%n"`) do set "console=%%c"\r
   if defined python if defined console (\r
     set "python=!python:\\\\=\\!"\r
     set "console=!console:\\\\=\\!"\r

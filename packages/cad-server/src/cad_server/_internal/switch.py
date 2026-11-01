@@ -266,8 +266,7 @@ def follow(told: Callable[[str], None] | None = None) -> bool:
     """The plugin folder follows the release now current (``cad_server._internal.plugin``): that
     installation's own ``cad plugin --refresh`` writes it again -- nothing changes when that release's
     setup already did -- and, should that change it (a switch that went back), brings the copies apps
-    keep of it to it. Run once no lock of the installer's is held. Whether it ran and succeeded; a
-    release before 0.10 has no such command, and its plugin no folder."""
+    keep of it to it. Run once no lock of the installer's is held. Whether it ran and succeeded."""
     from cad_server._internal import installations
 
     told = _said(told)
@@ -281,7 +280,7 @@ def follow(told: Callable[[str], None] | None = None) -> bool:
     else:
         environment.pop(installations.NAME_ENV, None)
     try:
-        done = subprocess.run([record["cadgen"], "plugin", "--refresh"], env=environment, stdin=subprocess.DEVNULL,
+        done = subprocess.run([record["cad"], "plugin", "--refresh"], env=environment, stdin=subprocess.DEVNULL,
                               capture_output=True, text=True, encoding="utf-8", errors="replace",
                               timeout=FOLLOW_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:

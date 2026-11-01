@@ -55,8 +55,8 @@ class RegistryTests(Fixture):
         path, status = installations.register("1.2.3", found, self.state)
         self.assertEqual((Path(path), status), (self.root / "state/installations/1.2.3.json", installations.REGISTERED))
         record = json.loads(Path(path).read_text(encoding="utf-8"))
-        self.assertEqual({key: record[key] for key in ("version", "cadgen", "python", "prefix")},
-                         {"version": "1.2.3", "cadgen": found[0], "python": found[1], "prefix": found[2]})
+        self.assertEqual({key: record[key] for key in ("version", "cad", "python", "prefix")},
+                         {"version": "1.2.3", "cad": found[0], "python": found[1], "prefix": found[2]})
         self.assertIn("registered", record)
         self.assertEqual(installations.register("1.2.3", found, self.state)[1], installations.OK)
         moved = self.environment("moved")  # the same version installed again elsewhere (a purged uv cache)
@@ -150,7 +150,7 @@ class CurrentTests(Fixture):
                          "the version alone, which cmd's set /p and sh's sed read as it is")
         installations.point("2.0.0", self.state)
         self.assertEqual(installations.current(self.state)["prefix"], later["prefix"])
-        os.unlink(later["cadgen"])
+        os.unlink(later["cad"])
         self.assertIsNone(installations.current(self.state), "an installation that is gone is no current one")
         self.assertEqual(installations.current_version(self.state), "2.0.0")
         with self.assertRaises(ValueError):
@@ -289,7 +289,7 @@ class ProxyFileTests(Fixture):
             reads = re.findall(r'tokens\^=(\d+)\^ delims\^=\^" %%(\w) in \(`findstr /c:"\\"(\w+)\\":" '
                                r'"!state!\\installations\\' + re.escape(named) + r'"`\) do set "(\w+)=%%\2"', text)
             self.assertEqual(sorted((key, name) for _taken, _letter, key, name in reads),
-                             [("cadgen", "console"), ("python", "python")], named)
+                             [("cad", "console"), ("python", "python")], named)
             for taken, _letter, key, _name in reads:
                 (line,) = [row for row in lines if f'"{key}":' in row]
                 pieces = [piece for piece in line.split('"') if piece]
@@ -308,7 +308,7 @@ class ProxyFileTests(Fixture):
             Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}"\n', encoding="utf-8")
             os.chmod(record["python"], 0o755)
         os.utime(self.root / "state/installations/1.0.0.json", (1, 1))  # 2.0.0 registered last...
-        os.remove(record["cadgen"])  # ...and uninstalled from its environment: its python stays
+        os.remove(record["cad"])  # ...and uninstalled from its environment: its python stays
         ran = subprocess.run([installations.proxy_path(where, windows=False), "status"], capture_output=True,
                              text=True, env=environment, cwd=self.root)
         self.assertEqual(ran.stdout, "1.0.0\n", ran.stderr)
@@ -340,9 +340,9 @@ class ResolutionTests(Fixture):
     def test_every_verb_run_too_execs_the_current_installations_console_script(self) -> None:
         # ``cad run`` is the installation's verb: it runs the script in its CAD kernel environment.
         self.assertEqual(proxy.command(self.old, ["run", "model.py", "--force"]),
-                         [self.old["cadgen"], "run", "model.py", "--force"])
+                         [self.old["cad"], "run", "model.py", "--force"])
         installations.point("0.8.0", self.state)
-        run = [self.old["cadgen"], "run", "model.py", "a"]
+        run = [self.old["cad"], "run", "model.py", "a"]
         with mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state")}), \
                 mock.patch.object(proxy.os, "execve") as execve, \
                 mock.patch("subprocess.call", return_value=3) as call:
@@ -351,7 +351,7 @@ class ResolutionTests(Fixture):
             call.assert_called_once_with(run, env=mock.ANY)
             self.assertEqual((code, execve.call_count), (3, 0))
         else:
-            execve.assert_called_once_with(self.old["cadgen"], run, mock.ANY)
+            execve.assert_called_once_with(self.old["cad"], run, mock.ANY)
             self.assertEqual(call.call_count, 0)
 
     def test_a_development_installation_is_told_its_version_and_a_release_is_not(self) -> None:
@@ -372,8 +372,8 @@ class ResolutionTests(Fixture):
             proxy.main(["doctor"])
             installations.point("0.8.0")
             proxy.main(["doctor"])
-        self.assertEqual(ran[self.dev["cadgen"]][installations.NAME_ENV], "0.9.0-dev.20261024")
-        self.assertNotIn(installations.NAME_ENV, ran[self.old["cadgen"]])
+        self.assertEqual(ran[self.dev["cad"]][installations.NAME_ENV], "0.9.0-dev.20261024")
+        self.assertNotIn(installations.NAME_ENV, ran[self.old["cad"]])
         self.assertEqual([installations.named(record) for record in (self.old, self.new, self.dev)],
                          [None, None, "0.9.0-dev.20261024"])
 

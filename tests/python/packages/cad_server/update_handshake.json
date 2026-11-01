@@ -12,7 +12,7 @@
   "current_bytes": "9.9.9",
   "record": "installations/<version>.json",
   "record_keys": [
-   "cadgen",
+   "cad",
    "prefix",
    "python",
    "registered",

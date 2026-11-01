@@ -49,7 +49,7 @@ class Fixture(unittest.TestCase):
             path.write_text("", encoding="utf-8")
         (folder / releases.MARKER).write_text(json.dumps({"schema": releases.SCHEMA, "version": version}), encoding="utf-8")
         installations.register(version, (str(console), str(python), str(folder)))
-        return {"python": str(python), "cadgen": str(console), "prefix": str(folder)}
+        return {"python": str(python), "cad": str(console), "prefix": str(folder)}
 
 
 class SwitchTest(Fixture):
@@ -149,7 +149,7 @@ class SwitchTest(Fixture):
                 self.assertEqual(switch.helper("1.2.0", port=4567, previous="1.1.0"), 0 if held else 1)
             self.assertIn("cad update: Codex: update text-to-cad@text-to-cad", log.getvalue(), "its lines go to the log")
             (call,) = run.call_args_list
-            self.assertEqual(call.args[0], [installations.current()["cadgen"], "plugin", "--refresh"])
+            self.assertEqual(call.args[0], [installations.current()["cad"], "plugin", "--refresh"])
             self.assertNotIn("PYTHONPATH", call.kwargs["env"], "the release runs its own code")
         # With no installation current there is nothing to write it from.
         installations.state().remove(installations.CURRENT)
@@ -256,7 +256,7 @@ class UpdateJobTest(Fixture):
             command = self.root / "cad.cmd"
             command.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
         else:
-            command = self.root / "cadgen"
+            command = self.root / "cad"
             command.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
             command.chmod(0o755)
         return str(command)
@@ -276,7 +276,7 @@ class UpdateJobTest(Fixture):
         command = self.setup_script(json.dumps(frame))
         job, server = update.Update(), Server()
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
-                mock.patch.object(releases, "make", return_value={"cadgen": command}) as made, \
+                mock.patch.object(releases, "make", return_value={"cad": command}) as made, \
                 mock.patch.object(switch, "spawn") as spawned:
             started = job.start(server)
             self.assertEqual((started["state"], started["target"]), ("working", "1.2.0"))
@@ -299,7 +299,7 @@ class UpdateJobTest(Fixture):
         made.assert_not_called()
         command = self.setup_script(code=1, said="the CAD kernel environment needs the network once: dns error")
         with mock.patch("cad_server.updates.newest", return_value="1.2.0"), \
-                mock.patch.object(releases, "make", return_value={"cadgen": command}):
+                mock.patch.object(releases, "make", return_value={"cad": command}):
             job.start(server)
             state = self.wait(job, "failed", "restarting")
         self.assertEqual((state["state"], state["error"]),

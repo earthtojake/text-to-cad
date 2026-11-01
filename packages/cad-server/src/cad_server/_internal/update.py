@@ -114,7 +114,7 @@ class Update:
             self._frame("install", f"text-to-cad {target}")
             made = releases.make(target, told=lambda _line: None)
             self._frame("build123d")
-            code, said = self._setup(made["cadgen"])
+            code, said = self._setup(made["cad"])
             if code != 0:
                 self._failed(said or f"text-to-cad {target}'s setup failed (exit status {code})")
                 return
