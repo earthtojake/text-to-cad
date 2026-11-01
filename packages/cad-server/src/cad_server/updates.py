@@ -1,8 +1,8 @@
 """Whether a newer text-to-cad is out, which the update button says, and which release an update moves to.
 
-At most once an hour, cadgen reads the version feed (``GET /versions``, ``cad_server/_internal/api.py``)::
+At most once an hour, the server reads the version feed (``GET /v1/versions``, ``cad_server/_internal/api.py``)::
 
-    {"latest": "0.9.0"}
+    {"latest": "0.10.0"}
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CAD_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
@@ -27,7 +27,7 @@ The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update b
 nothing else, while this install is behind; a click updates (``POST /api/v1/local/update``). A text-only app
 gets one line (``line``) with its first ``cad_show`` result: the release, and the install command
 (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's), which updates text-to-cad in
-every agent app on the computer (``cad setup``). A skill's ``cadgen`` command says nothing.
+every agent app on the computer (``cad setup``). A skill's ``cad`` command says nothing.
 
 None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
 the background (``refresh``) or for the update a person asked for (``newest``), so no start, request
@@ -71,8 +71,8 @@ def _release(value: Any) -> tuple[int, ...] | None:
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
-    """The feed as cadgen reads it: a release as ``latest`` (``None`` when there is none). Anything
-    else in it is left out, so the feed can grow without a release of cadgen."""
+    """The feed as the server reads it: a release as ``latest`` (``None`` when there is none). Anything
+    else in it is left out, so the feed can grow without a release of text-to-cad."""
     if not isinstance(data, dict) or _release(data.get("latest")) is None:
         return None
     return {"latest": data["latest"]}

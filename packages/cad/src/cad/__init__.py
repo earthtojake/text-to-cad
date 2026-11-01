@@ -1,13 +1,13 @@
-"""cadgen: CAD models as Python, built by its engine (``cad.engine``) into documents (``.xbf``)
+"""cad: CAD models as Python, built by its engine (``cad.engine``) into documents (``.xbf``)
 and the files they declare.
 
 The root exports exactly the engine's surface -- ``model``, the decorators (``xbf``, ``step``,
 ``glb``, ``stl``, ``threemf``, ``dxf``), ``memo``, face painting (``paint``), the readers (``read_step``, ``read_xbf``, ``read_mesh``) -- its operations on
 documents as functions (``export``, ``snapshot``, ``inspect``) and ``__version__``; process
-control (``cad serve``, ``status``, ``stop``, ``server``) is the ``cadgen`` command's alone. Two
+control (``cad serve``, ``status``, ``stop``, ``server``) is the ``cad`` command's alone. Two
 namespaces hold the standards' names: ``cad.ap242`` the mechanism's (``mechanism_state``,
 ``configuration_sequence``, ``gear_pair``, ``rack_and_pinion_pair``, ``screw_pair``, ``posed``) and
-``cad.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cadgen``
+``cad.gltf`` a GLB's own ``animation``. Every name loads on first use: ``import cad``
 imports no CAD kernel, and ``import build123d`` binds a module the kernel loads into on its
 first attribute (``_internal/lazy_kernel.py``).
 """
@@ -15,15 +15,15 @@ first attribute (``_internal/lazy_kernel.py``).
 from functools import cache as _cache
 from typing import TYPE_CHECKING as _TYPE_CHECKING
 
-# Before anything imports build123d, which every cadgen entry point eventually does:
+# Before anything imports build123d, which every entry point of the library eventually does:
 # build123d parses EVERY font in the system font folders at import time, with no
 # per-file guard, so one malformed file aborts the import and every cad command
 # with it (issue #322, upstream in build123d's register_folder), as does a font with
 # no family name, whose empty name OCCT refuses (#636). This hides the fonts build123d
 # cannot register from that one listing.
 #
-# It belongs here rather than in a launcher because the `cadgen` front door, the engine's
-# warm workers and `python -m cadgen.X` children all reach cadgen by different routes, and a
+# It belongs here rather than in a launcher because the `cad` command, the engine's
+# warm workers and `python -m cad.X` children all reach the library by different routes, and a
 # fix that covered only one of them would leave the builds it spawns still broken.
 #
 # Cost where nothing is wrong: one str.endswith per glob call. CAD_FONT_GUARD=0
@@ -32,7 +32,7 @@ from cad._internal.font_scan import install_font_guard as _install_font_guard
 from cad._internal.lazy_kernel import install as _install_lazy_kernel
 
 # ``import build123d as bd`` binds a module the kernel loads into on its first attribute
-# (``_internal/lazy_kernel.py``). The wheel's cadgen-lazy-kernel.pth installs it at interpreter
+# (``_internal/lazy_kernel.py``). The wheel's cad-lazy-kernel.pth installs it at interpreter
 # start; this covers an editable install, where that file is not placed. Idempotent.
 _install_lazy_kernel()
 del _install_lazy_kernel
@@ -91,7 +91,7 @@ if _TYPE_CHECKING:
 def _resolve_version() -> str:
     """The version declared beside this very package (``_internal.version.declared_version``):
     the source tree's pyproject for a checkout, the dist-info beside it for an install.
-    Never the first ``cadgen`` metadata on ``sys.path``, which can be another install's.
+    Never the first ``cad`` metadata on ``sys.path``, which can be another install's.
     Resolved once per process: the code that answers cannot change under a running one."""
     import pathlib
 

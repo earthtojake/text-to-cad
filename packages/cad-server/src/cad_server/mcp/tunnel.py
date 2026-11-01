@@ -36,7 +36,7 @@ A drawing whose bytes the viewer holds no answer for renders off the request
 (``cad_server.viewer.drawings``): here a request waits on it only briefly
 (``DRAWING_HOLD_SECONDS``), since calls share a host's few slots, and the 202
 has the page ask again a moment later (``DRAWING_RETRY_MS``). So does a STEP or
-an ``.xbf`` the cadgen engine is still reading (``cad_server.viewer.documents``:
+an ``.xbf`` the engine is still reading (``cad_server.viewer.documents``:
 ``ENGINE_HOLD_SECONDS``, ``ENGINE_RETRY_MS``); and the page's wait for its next
 version is answered at once rather than held: the page asks again a second later.
 """

@@ -11,7 +11,7 @@ search path, not first (the library's ``cad._internal.program``): a project's ``
 for the library. From there the script is any program that calls its models, a client of its
 installation's engine, and the engine's worker for it runs in the same environment.
 
-The ``cadgen`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
+The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
 
 from __future__ import annotations

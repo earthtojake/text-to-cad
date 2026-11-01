@@ -1,7 +1,7 @@
 # cad.engine
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. Everything below is how the engine makes, holds and serves documents.
 
@@ -171,7 +171,7 @@ Every document has one id (law 6), a lower-case UUID string (the library's `cad.
 and its name its function's (`model_id`), worked out in the script's own process (`Model.id`) as in
 the engine; a file's is its canonical path and no name (`file_id`), inside the engine only; a shape
 handed over is its calling script's (or the working folder's) and its name. Identity is namespace
-plus name: in 0.8 a model's namespace is its script's folder, with no project detection.
+plus name: a model's namespace is its script's folder, with no project detection.
 A model's name is its identity within its namespace, the function's name by default, `name=` gives
 it another. `@model(name="arm")` and `@step("arm.step", name="arm")` use the folder and explicit
 name in the same formula, independent of the declaring file. An explicit name is refused at
@@ -416,7 +416,7 @@ again.
 | Module | What it is |
 | --- | --- |
 | `model.py` | the decorators (`out`, `name=`), `@model` or file decorators and never both; `Model` (the function, `.id`, `.build` the debug seam); its id (`ids.model_id` of its script and function, or its folder and explicit name; `claim`: one explicit name per namespace), and a build's report of every model a program's call builds, wherever the model is defined; a call returning the document's handle; a child model called in a body is a sub-assembly built in the same run, its call its handle with the result in the worker, and the models a target's run ran (`BuildContext.children`); `model(shape, name=)` handing a shape over; `@memo` and its calls; a script's module and package (`module_of`); `paint`, `mechanism_state`, `configuration_sequence`; `read_step`, `read_xbf` |
-| `api.py` | the verbs as functions, through the daemon: `export`, `snapshot`, `inspect` (the root's `cad.export`, ...), and `serve`, `status`, `stop`, which only the CLI calls (process control is the CLI's alone; deleting a document is `cli.delete`), and `build_script`, a script's models built by `Model.build()`; `Document`, the handle a model call returns (`.shape` transferred by id on first access: `result`); `hand_over`, a shape made a document in the caller and handed to the daemon; `observers`, told after each build, export and snapshot what it did, as plain facts (kinds, counts, times, the worker's part, an error's type and frames): the engine counts nothing, and cadgen's telemetry is an observer cadgen appends |
+| `api.py` | the verbs as functions, through the daemon: `export`, `snapshot`, `inspect` (the root's `cad.export`, ...), and `serve`, `status`, `stop`, which only the CLI calls (process control is the CLI's alone; deleting a document is `cli.delete`), and `build_script`, a script's models built by `Model.build()`; `Document`, the handle a model call returns (`.shape` transferred by id on first access: `result`); `hand_over`, a shape made a document in the caller and handed to the daemon; `observers`, told after each build, export and snapshot what it did, as plain facts (kinds, counts, times, the worker's part, an error's type and frames): the engine counts nothing, and the server's telemetry is an observer the server appends |
 | `colors.py` | a colour as the author gives it (sRGB hex, 0-255 integers, a build123d `Color`) held linear, and the way back (**Materials**) |
 | `mechanism.py` | kinematics: build123d's joints harvested into AP242's links and pairs, couplings (`gear_pair`, `rack_and_pinion_pair`, `screw_pair`), mechanism states (`mechanism_state`), the document's subtree, the structure's `kinematics`, poses (forward kinematics from the ground; `posed`, an assembly copied at a state), and configuration sequences (`configuration_sequence`, a function's samples, `Timeline`: a sequence's pair values over time) |
 | `build.py` | one build: load the script afresh (as Python imports it: a package's module by its dotted name), one memo run, document, element names, files: every model's that ran |
@@ -867,12 +867,12 @@ A client reaches the daemon on POSIX through named pipes in the engine's folder,
 port's bind), while they let a command make and open files in its temporary folder, where the
 engine's folder is, FIFOs among them. Windows keeps its loopback port and port file, the token
 shown first, in the same hello (`daemon._admitted`, **The door's protocol** below). The engine's
-folder (law 2; `daemon.default_state_dir`) is one only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
+folder (law 2; `places.default_engine_dir`) is one only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
 the one the system names, `/var/folders/...`, whatever `$TMPDIR` a sandbox sets, so a sandboxed client
 finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cadgen-<uid>`; on Windows, in the
 temporary folder.
 
-- **The door.** The daemon makes one FIFO beside its lock, `<tag>.door` (`daemon.door_path`), and
+- **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
   holds it open for reading, and for writing too, so it never reads as closed. A door nobody reads
   refuses a writer's open (`ENXIO`): that is "no engine", and what `stop`, `status` and `wait_gone`
   ask (`door.answering`), opening and closing it with nothing written. No process is signalled
@@ -933,7 +933,7 @@ variable the distribution names, `client.SANDBOXES`) and finds no door is refuse
 no engine runs and this shell's sandbox cannot start one; open a CAD card (the plugin's server
 starts the engine) or run `cad server` outside the sandbox (`client.SANDBOXED`). A daemon
 started where it may not bind a loopback port (`daemon._can_listen`, before it makes its door) or
-take its lock writes why beside its lock (`<tag>.failed`, `places.failure_path`) and exits 1;
+take its lock writes why beside its lock (`engine.failed`, `places.failure_path`) and exits 1;
 the client that started it says that reason at once, never after a timeout.
 
 **A hold.** `cad-mcp`, the stdio peer an agent host starts, connects to the engine as it starts
@@ -1215,7 +1215,7 @@ Where none can be read, the budget alone applies. `Pressure.simulate` is the tes
 command that builds it again: `cad run` and the script that defines its model -- never a
 program that imported it and called it, a check script, whose next run may do something else -- the engine that says it is the one `cad run` reaches, and its
 python has the kernel a bare `python` may lack -- from the daemon's record of it, or after a
-restart the registry's. The program is quoted for the shell a person pastes it into (`registry.rerun`):
+restart the registry's. The program is quoted for the shell a person pastes it into (`records.rerun`):
 `shlex.quote` on POSIX; on Windows the double quotes cmd.exe and PowerShell both read, only where a
 space or a quote needs them (`subprocess.list2cmdline`), since to cmd.exe a single quote is part of
 the path. A shape handed over has none: its words say that a program the engine did
@@ -2224,7 +2224,7 @@ two places is made again, with its settings, on a copy whose every sub-shape sta
 (`BRepBuilderAPI_Copy`: the same geometry; `kernel/memo.py`, `_one_place`, counted: the memo's
 `copied_apart`); one that succeeds is the kernel's, untouched, so no name or face moves where
 nothing failed. cadgen 0.7 handed every child model's result over re-made, each sub-shape at one
-place; 0.8 hands a child's or a `@memo` stage's result on live, so the remaking is the unify's.
+place; since 0.8 a child's or a `@memo` stage's result is handed on live, so the remaking is the unify's.
 
 build123d's own operations never change a shape they are given in place. `ShapeFix_Shape`
 does (it fixes the sub-shapes it is handed): run by a model on a shape a placement shares,
@@ -2359,20 +2359,22 @@ it reads is `refs.ELEMENT_NAME`.
 kinds `viewer/kinds.py`); the pages are at the root -- `/` the home, `/<id>` a document's page,
 `/app` the CAD app's module a card's shell imports. The version is in the path: within v1 a route
 or a key is only ever added, and a removal or a rename is a v2. Every answer is JSON but a file's
-bytes; every refusal is `{"error", "hint"}` -- what is wrong and what to do -- with its status: 404
+bytes; every refusal is `{"error", "hint"}` -- what is wrong and what to do -- with its status: 400
+for a body or query the route cannot read, 404
 for an unknown route, kind or id (a document's names its `state` where the engine says one), 405
-naming the methods the route takes (`Allow`), 413 for a body over its route's limit, and 409 where
+naming the methods the route takes (`Allow`), 413 for a body over its route's limit, 409 where
 the server's state refuses a change: a telemetry answer to a server that keeps no usage stats
 (`settings`), an update with no engine under the page (`local/update`), an export of a session
-that restarted or of a source that changed since the page showed it. Every request that changes something (POST, PUT, PATCH, DELETE)
-carries `x-cadgen-viewer`, the gate a cross-site form cannot pass. The families:
+that restarted or of a source that changed since the page showed it, and 410 for an export's file
+already fetched or past its window. Every request that changes something (POST, PUT, PATCH, DELETE)
+carries `x-cadgen-viewer`, the gate a cross-site form cannot pass (403 without it). The families:
 
 | Route | What it answers |
 | --- | --- |
 | `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
-| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}`, the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}` (`telemetry` null where the server keeps none, `saved` beside it after a change), the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
-| `GET /api/v1/documents` | Recents: `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
+| `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
 | `PATCH /api/v1/documents` | a change to Recents (`{"action", "path", "png"?}`), answered with Recents |
 | `GET\|DELETE /api/v1/documents/<id>` | the envelope -- `id`, `kind`, `name`, `version`, `state`, `source`, `producers`, `api`, `exports`, the row (`entry`) and its digest (`revision`), `held` for a document the engine serves -- or the document forgotten (204) |
@@ -2827,7 +2829,7 @@ Why that holds, checked:
   same set, each on the same geometry (a face's area and centre, an edge's length and
   centre, a vertex's point), and refs resolve to the same elements through `cad inspect`.
   `test_memo_marker.py` holds the same for a cold build, a replay and a second cold build.
-- **`--verify` reads it as `same`.** A leaf whose BRep differs only in order measures alike
+- **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
 The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf` and `read_step`
@@ -2839,13 +2841,13 @@ A model's document is its own cache, as a FreeCAD document is: opened, it is wha
 computed, and only what changed is computed again. It is kept in the engine's cache (**The
 cache**), and written as the model's xbf where one is declared, the same bytes. Its main label names what
 wrote it (`cadgen.engine xbf/9 (cadgen <release>)`, `document.Loaded.writer`) and holds the model's build
-closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cad.engine
+closure (`previous.py`, a `TDataStd_AsciiString` beside the writer's, schema `cadgen.engine
 closure/2`), pointers and digests only (law 1), and nothing of a version control's -- the engine calls
 no git. It names what the document was built from and what built it, the toolchain:
 
 ```
 schema    "cadgen.engine closure/2"
-engine    {"release": "cadgen 0.8.1", "format": "xbf/9", "digest": ...}   the format (keyed); the release and
+engine    {"release": "cadgen 0.10.0", "format": "xbf/9", "digest": ...}  the format (keyed); the release and
                                                                      the engine's code digest (information only)
 libs      {"build123d": "0.13.0", "OCP": "8.0.1.1",                   geometry and materials libraries (keyed);
            "bd_materials": "...", "threejs_materials": "..."}         OCP leads with the OCCT it wraps

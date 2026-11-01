@@ -14,7 +14,7 @@ ordinary Python scripts call decorated models explicitly.
 SRC and DOC are an on-disk CAD file's path or a document's id (``ids``): a model's id is what
 ``python SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
 
-cadgen's command line runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
+The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
 is said once where its command ends (``answered``): under ``--json`` as ``{"ok": false, "error": ...}``
 on stdout, exit 1; else its words on stderr, exit 2 for a request refused by name before anything ran

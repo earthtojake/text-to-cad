@@ -12,7 +12,7 @@ page, which it serves, built from their JavaScript packages and bundled in at bu
 all three.
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SDF) or something derived from code: a model, built by the engine. Documents exist so that a
+3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by the engine. Documents exist so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. The laws below say how they are made, named, kept and served.
 
