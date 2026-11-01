@@ -2381,7 +2381,7 @@ The families:
 | `GET /api/v1/documents`, `/api/v1/documents/<kind>` | Recents (of one kind): `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
 | `PATCH /api/v1/documents` | a change to Recents (`{"action", "path", "png"?}`), answered with Recents |
-| `GET\|DELETE /api/v1/documents/<id>` | the envelope -- `id`, `kind`, `name`, `version`, `state`, `source`, `producers`, `api`, `exports`, the row (`entry`) and its digest (`revision`), `held` for a document the engine serves -- or the document forgotten (204) |
+| `GET\|DELETE /api/v1/documents/<id>` | the envelope -- `id`, `kind`, `name`, `version`, `state`, `source` (a model's script or a file's path, with `present`: whether that file is there now), `producers`, `api`, `exports`, the row (`entry`) and its digest (`revision`), `held` for a document the engine serves -- or the document forgotten (204) |
 | `GET /api/v1/documents/<id>/version`, `.../thumbnail` | its version, waited on (**Progress**); its picture, the PNG the page kept, as it kept it (a `?v=` the page adds is ignored: it keeps an older picture out of a cache) |
 | `POST /api/v1/documents/<id>/exports` | an export of it, its job (202); `GET /api/v1/exports[/<job>[/file]]` the session's epoch, a job, its file |
 | `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |

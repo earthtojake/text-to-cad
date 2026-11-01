@@ -57,7 +57,8 @@ test('a document the engine holds by its id alone keeps its id, is named by its 
   const stat = await source.stat(id, options);
   expect(stat).toMatchObject({ path: id, name: 'bracket', navigationPath: null, extension: 'xbf', mediaType: 'cad-document' });
   expect('folder' in stat).toBe(false);
-  // No script named, no file to act on; one named is its file menu's (`sourceFile`), never a place to browse from.
+  // No script there (the client's row carries one only while the file is present), no file to act on; one
+  // there is its file menu's (`sourceFile`), never a place to browse from.
   expect('sourceFile' in stat).toBe(false);
   const scripted = createCadFileSource(cadClient([{ id, file: id, name: 'bracket', sourcePath: null, script: 'C:\\m\\parts.py', kind: 'xbf', bytes: 0 }]) as never);
   expect(await scripted.stat(id, options)).toMatchObject({ path: id, navigationPath: null, sourceFile: 'C:/m/parts.py' });

@@ -62,10 +62,11 @@ export const API = '/api/v1';
 /**
  * Documents' envelopes (`GET /api/v1/documents/<id>`, `?path=`) as the catalog the client keeps: their
  * rows and, for the one asked for, its row's digest. A model's row carries the script that builds it
- * (the envelope's `source.path`) as `script`, where the envelope names one: its file menu acts on it.
+ * (the envelope's `source.path`) as `script` only while that file is there (`source.present`): its
+ * file menu acts on it, and a script gone or never kept is no item at all, never an error.
  */
-const scriptOf = (envelope) => (envelope?.source?.type === 'script' && typeof envelope.source.path === 'string' && envelope.source.path
-  ? envelope.source.path : null);
+const scriptOf = (envelope) => (envelope?.source?.type === 'script' && envelope.source.present === true
+  && typeof envelope.source.path === 'string' && envelope.source.path ? envelope.source.path : null);
 const rowOfEnvelope = (envelope) => (envelope?.entry && scriptOf(envelope) ? { ...envelope.entry, script: scriptOf(envelope) } : envelope?.entry);
 const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter(Boolean),
   revision: envelopes.length === 1 ? envelopes[0]?.revision ?? '' : '' });

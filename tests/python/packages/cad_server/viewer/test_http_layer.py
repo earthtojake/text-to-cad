@@ -286,7 +286,7 @@ class Documents(HttpLayerTestCase):
         self.assertEqual(list(envelope), ["id", "kind", "name", "version", "state", "source", "producers", "api",
                                           "exports", "schemaVersion", "entry", "revision"])
         self.assertEqual((envelope["id"], envelope["kind"], envelope["name"], envelope["state"]), (ident, "stl", "part.stl", "live"))
-        self.assertEqual(envelope["source"], {"type": "file", "path": str(part).replace(os.sep, "/")})
+        self.assertEqual(envelope["source"], {"type": "file", "path": str(part).replace(os.sep, "/"), "present": True})
         self.assertEqual((envelope["producers"], envelope["api"]), ([], f"/api/v1/documents/stl/{ident}"))
         self.assertEqual(envelope["exports"], ["threemf", "glb"])
         entry = envelope["entry"]
@@ -330,7 +330,11 @@ class Documents(HttpLayerTestCase):
             self.assertEqual((row["id"], row["file"], row["sourcePath"], row["hash"]), (ident, ident, None, "model:v1"))
             self.assertEqual((found["kind"], found["name"], found["version"], found["state"], found["held"]),
                              ("model", "cube", "v1", "held", True))
-            self.assertEqual(found["source"], {"type": "script", "path": script, "function": "cube"})
+            # Its script, and whether it is there now: one named but gone (or never kept) is not.
+            self.assertEqual(found["source"], {"type": "script", "path": script, "function": "cube", "present": False})
+            os.makedirs(os.path.dirname(script), exist_ok=True)
+            Path(script).write_text("")
+            self.assertEqual(envelope()[1]["source"]["present"], True)
             self.assertEqual(found["producers"], [{"tool": "cad", "release": None, "at": 12.5}])
             self.assertEqual((found["api"], found["exports"]), (f"/api/v1/documents/model/{ident}",
                                                                 ["step", "stl", "threemf", "glb", "dxf", "xbf"]))

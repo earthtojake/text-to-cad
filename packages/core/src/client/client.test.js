@@ -432,13 +432,17 @@ test('an id the engine does not hold carries the state the engine names for it',
   client.dispose();
 });
 
-test("a model's row carries the script that builds it, from its envelope's source; a file's row carries none", async () => {
+test("a model's row carries the script that builds it while that file is there; one named but gone, and a file's row, carry none", async () => {
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  let present = true;
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url) => (String(url).includes(id)
-    ? json({ id, kind: 'model', source: { type: 'script', path: '/m/parts.py', function: 'cube' }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
-    : json({ documents: [{ id: 'f', kind: 'step', source: { type: 'file', path: '/m/a.step' }, entry: { id: 'f', file: '/m/a.step' }, revision: 'r2' }] })) });
+    ? json({ id, kind: 'model', source: { type: 'script', path: '/m/parts.py', function: 'cube', present }, entry: { id, file: id, name: 'cube', sourcePath: null }, revision: 'r1' })
+    : json({ documents: [{ id: 'f', kind: 'step', source: { type: 'file', path: '/m/a.step', present: true }, entry: { id: 'f', file: '/m/a.step' }, revision: 'r2' }] })) });
   assert.equal((await client.resolveEntry(id)).script, '/m/parts.py');
   assert.equal((await client.resolveEntry('/m/a.step')).script, undefined);
+  present = false;  // an ephemeral script, or one deleted since: the model keeps its page, its row no script
+  await client.refresh({ file: id });
+  assert.equal(client.entryOf(id).script, undefined);
   client.dispose();
 });
 

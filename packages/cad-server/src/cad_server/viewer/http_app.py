@@ -65,6 +65,11 @@ _THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
 _CAD_EXTENSIONS = ", ".join(sorted(VIEWER_EXTENSIONS))
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
+
+def _is_file(path: object) -> bool:
+    """Whether ``path`` names a file there now (a model's script may be ephemeral, or gone since)."""
+    return isinstance(path, str) and bool(path) and os.path.isfile(path)
+
 def hostname_only(host_header) -> str:
     value = str(host_header or "").strip()
     if value.startswith("["):
@@ -708,7 +713,8 @@ class CadApp:
         """A document as every page reads it first: its ``id`` and ``kind``, its ``name``, its
         ``version``, its ``state`` (a model's, the engine's: ``live`` while a worker holds it,
         ``held``, ``building``, ``failed``; a file's ``live``: it follows its disk), its ``source``
-        (the script and function that build a model, a file's path), who made it (``producers``),
+        (the script and function that build a model, a file's path, and whether that file is there
+        now, ``present``: a page offers what acts on the file only then), who made it (``producers``),
         where its kind's reads are (``api``), the formats it exports (``exports``) -- and its catalog
         row as the page shows it (``entry``) with that row's digest (``revision``, which a page that
         only watches for change compares). A document the engine serves (a model's, an ``.xbf``'s,
@@ -724,13 +730,14 @@ class CadApp:
             found = {"name": str(source.get("name") or row.get("name") or ""),
                      "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
                      "state": state,
-                     "source": {"type": "script", "path": source.get("script"), "function": source.get("name")},
+                     "source": {"type": "script", "path": source.get("script"), "function": source.get("name"),
+                                "present": _is_file(source.get("script"))},
                      "producers": [{"tool": "cad", "release": __version__ if state == "live" else None,
                                     "at": model.get("builtAt")}]}
         else:
             kind = file_kind(row["file"])
             found = {"name": node_basename(row["file"]), "version": str(row.get("hash") or ""), "state": "live",
-                     "source": {"type": "file", "path": row["file"]}, "producers": []}
+                     "source": {"type": "file", "path": row["file"], "present": _is_file(row["file"])}, "producers": []}
         if kind in ENGINE_KINDS:
             # Held: read and served now (``serve.Server.listing``), or a live model's, registered; a
             # file only known by its id is not.

@@ -52,7 +52,8 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
       signal.throwIfAborted();
       // A document known by its id alone (a model's) keeps its id for a path, is named by its
       // function, and has no file to browse from (`navigationPath: null`); its file menu acts on
-      // the script that builds it, where the engine names one (`sourceFile`).
+      // the script that builds it (`sourceFile`), which the client's row carries only while that file
+      // is there (`script`, from the envelope's `source.present`): a script gone is no item at all.
       const byId = entry.sourcePath === null;
       const file = byId ? entry.file : normalizePath(entry.file);
       const name = entry.name || baseName(file);
