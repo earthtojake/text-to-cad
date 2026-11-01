@@ -296,6 +296,27 @@ test('an engine document is read through this server, with the client\'s fetch, 
   client.dispose();
 });
 
+test('an open the server stays silent on fails after its 10 s, as every read does', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  // A wedged engine: the open is sent and never answered, until the client gives up on it.
+  const wedged = (_url, { signal }) => new Promise((_resolve, reject) => {
+    signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: wedged });
+  t.after(() => client.dispose());
+  for (const open of [() => client.engineDocument('/m/a.step'), () => client.drawing('/m/sheet.dxf')]) {
+    const failed = assert.rejects(open(), (error) => {
+      assert.equal(error.failure.kind, 'timeout');
+      assert.equal(error.failure.method, 'POST');
+      assert.match(error.failure.detail, /did not respond within 10 seconds/);
+      return true;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    t.mock.timers.tick(10_000);
+    await failed;
+  }
+});
+
 test('a drawing refused by the server raises the classified failure an alert is built from', async () => {
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (_url, options) => (options.method === 'POST'
     ? opened('dxf') : { ok: false, status: 400, statusText: 'Bad Request',

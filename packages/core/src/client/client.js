@@ -112,7 +112,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     for (const listener of listeners) listener();
   }
 
-  async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, operation = 'request' } = {}) {
+  async function request(path, { signal, file = '', params = {}, method = 'GET', headers = {}, body, timeoutMs = 0, idempotent = false, operation = 'request' } = {}) {
     if (disposed || signal?.aborted) throw abortError();
     const controller = new AbortController();
     const abort = () => controller.abort(signal?.reason);
@@ -122,7 +122,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       const payload = await requestViewerJson(cadApiUrl(path, { origin, file, params }), {
         method, headers, signal: controller.signal, cache: 'no-store',
         ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-      }, operation, { timeoutMs, fetch: fetchImpl });
+      }, operation, { timeoutMs, idempotent, fetch: fetchImpl });
       if (disposed || controller.signal.aborted) throw abortError();
       return payload;
     } catch (error) {
@@ -240,7 +240,9 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     if (apis.has(key)) return apis.get(key);
     const reply = isDocumentId(file)
       ? await request(`${API}/documents/${encodeURIComponent(file)}`, { signal, timeoutMs: 10_000, operation })
-      : await request(`${API}/documents`, { method: 'POST', headers: JSON_POST, body: { path: file }, signal, operation });
+      // An open is safe to give up on and ask again: its 10 s is the time the server may stay silent.
+      : await request(`${API}/documents`, { method: 'POST', headers: JSON_POST, body: { path: file }, signal, operation,
+        timeoutMs: 10_000, idempotent: true });
     apis.set(key, reply.api);
     return reply.api;
   }
@@ -395,11 +397,12 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       // large STEP takes a while: the server answers 202 { state: 'reading', retryMs, building }
       // until the engine holds it -- `building` the last frame of its import, where the engine says
       // one (its reader parsing the file, then collecting its parts, counted), handed to
-      // `onProgress` -- and the client asks again after `retryMs`.
+      // `onProgress` -- and the client asks again after `retryMs`; each request's 10 s is the time the
+      // server may stay silent (an open is safe to give up on and ask again).
       if (!file) throw new Error('Missing file');
       for (;;) {
         const reply = await request(`${API}/documents`, { method: 'POST', headers: JSON_POST, signal, operation: 'engine-document',
-          body: isDocumentId(file) ? { id: file } : { path: file } });
+          body: isDocumentId(file) ? { id: file } : { path: file }, timeoutMs: 10_000, idempotent: true });
         if (reply?.state !== 'reading') return { doc: reply.id, kind: reply.kind, url: viewerOriginUrl(origin, reply.api), fetch: fetchImpl };
         if (reply.building && typeof reply.building === 'object' && typeof onProgress === 'function') onProgress(reply.building);
         await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), ENGINE_RETRY_MAX_MS), signal);

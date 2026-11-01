@@ -51,18 +51,19 @@ function readJson(response, onProgress) {
 }
 
 /**
- * One request to the viewer, answered as JSON. A GET given `timeoutMs` is bounded by how long the
- * server stays SILENT, never by how long the answer takes: the bound runs until the response's
+ * One request to the viewer, answered as JSON. A GET given `timeoutMs` -- or a request of another
+ * method its caller says is safe to give up on and ask again (`idempotent`: a document's open,
+ * `POST /api/v1/documents`) -- is bounded by how long the server stays SILENT, never by how long the answer takes: the bound runs until the response's
  * headers arrive, and then again from each part of its body to the next, and stops when the body
  * is in (parsing it is this page's work, not the server's). A server that stopped answering still
  * fails, and an answer that is long, or long to arrive a part at a time, does not.
  */
-export async function requestViewerJson(url, options, operation, { timeoutMs = 0, fetch: fetchImpl = globalThis.fetch } = {}) {
+export async function requestViewerJson(url, options, operation, { timeoutMs = 0, idempotent = false, fetch: fetchImpl = globalThis.fetch } = {}) {
   const requestUrl = typeof window !== "undefined" && window.location?.href
     ? new URL(url, window.location.href).href : url;
   const context = { operation, url: requestUrl, method: options?.method || "GET" };
   const parentSignal = options?.signal;
-  const timed = Number(timeoutMs) > 0 && context.method === "GET";
+  const timed = Number(timeoutMs) > 0 && (context.method === "GET" || idempotent);
   const controller = timed ? new AbortController() : null;
   const seconds = Math.round(Number(timeoutMs) / 1000);
   // What a timeout says: the server never answered, or it stopped part way through its answer.
