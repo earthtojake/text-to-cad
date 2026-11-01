@@ -116,7 +116,7 @@ function withPage(pages: Pages, launch: Launch): Pages {
 
 /**
  * The page of what the view shows: the one its launch named, else (a file the person opened from the
- * home, which no launch named) the web viewer's home with the same day link, where that file leads
+ * home, which no launch named) the web viewer's home with the same link, where that file leads
  * the library. Null where no launch carried a page.
  */
 export function pageOf(pages: Pages, model: string | null): string | null {

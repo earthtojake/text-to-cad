@@ -261,7 +261,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   `host/shell.ts`, built by `vite.shell.config.mjs`), named by the engine's release and
   its build (`ui://cad/<release>/<build>/app.html`). It loads the app from the engine that
   answers it (`GET /app`, `dist/app.js`): through `cad_http` where the host
-  carries the card's calls, else straight from the engine with the launch's day link,
+  carries the card's calls, else straight from the engine with the launch's link,
   never a cookie. So a card a host kept runs the engine's release, and an update needs no
   new resource. The app is one module, with its styles, scripts and workers (as blobs)
   inside it, and the build fails if anything would be left outside the two: the host
@@ -306,7 +306,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     CAD plugin could not be reached.").
 - **No channel, then the engine directly.** Every launch a tool hands an inline card carries,
   where the engine gives a page, `browser` (the CAD Viewer's page of what it shows, the same
-  day link — a page URL's `?token=`, good for 24 hours ([the web README](../web/README.md#launching))
+  link — a page URL's `?token=`, good until the token is rotated ([the web README](../web/README.md#launching))
   — a text client's `cad_show` gives, loopback only) and `engine`
   (its origin), so the card needs no call to read them (`cad_server/mcp/server.py`, `_reach`); a
   tab host's launches, and the shows its sync carries, carry `browser` alone (for Open in
@@ -318,7 +318,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   (the agent cannot read or capture it), and its client polls its catalog itself. For that
   read to pass, an inline host's resource names the engine's origin among its
   `connectDomains` (a host must not allow an origin it was not given; a tab host's resource
-  is unchanged), and the engine answers exactly that request's CORS: a day link in the
+  is unchanged), and the engine answers exactly that request's CORS: a link in the
   `Authorization` header, from the origin that sent it, with no credentials
   (`cad_server/viewer/engine_app.py`). A host may still refuse the origin (an `http:` loopback
   one), block the fetch in its sandbox, or ask about local network access; any failure ends
@@ -367,14 +367,14 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | --- | --- |
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown; a failed request's `kind` (the host refused it, it timed out, the page closed) |
 | `channel.ts` | whether the host carries the page's calls to its server: what it declared (`serverTools`, `openLinks`), then what its calls showed (`Connection.tsx` routes the card by it) |
-| `direct.ts` | the engine reached over HTTP where the host carries no call: the launch's `engine` and day link, the probe, and the `fetch` that swaps for the tunnel's |
+| `direct.ts` | the engine reached over HTTP where the host carries no call: the launch's `engine` and link, the probe, and the `fetch` that swaps for the tunnel's |
 | `server.ts` | typed calls to the page's three tools: its sync, its answer to a capture, and `cad_http` |
 | `capture.ts` | a capture once the view shows the model asked about, loaded and drawn (`captureSettled`, within `CAPTURE_SETTLE_MS`), and the PNG shrunk to fit one reply (`fitCapture`) |
 | `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's day link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
@@ -397,7 +397,7 @@ actions at the navbar's right, over a file and on the home (the corner's first i
 handler); with the update button after it, outermost, it is all the navbar's right end holds. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
-with the day link, or the home's), and for a file the person opened that no launch named, the
+with the link, or the home's), and for a file the person opened that no launch named, the
 web viewer's home with the same link, where that file leads the library. The server opens it
 itself, on this computer: a choice posts the document the view shows (its path or id, never a
 URL) to `POST /api/v1/local/browser/open`, a `cad_http` route of the app's alone, and the server opens

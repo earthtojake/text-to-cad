@@ -32,7 +32,7 @@ it('a whole body comes in one reply, and a refusal of the server\'s is said', as
   await expect(viaTunnel({ callTool: async () => refused } as any, 't')).rejects.toThrow('That view is not open.');
 });
 
-it('where the host carries no call, the shell reads the app from the engine with the launch\'s day link, never a cookie', async () => {
+it('where the host carries no call, the shell reads the app from the engine with the launch\'s link, never a cookie', async () => {
   const fetch = vi.fn(async () => new Response('app()', { status: 200 }));
   const launch = { browser: 'http://127.0.0.1:3245/abc?token=day-link', engine: 'http://127.0.0.1:3245' };
   expect(await viaEngine(launch, fetch as any)).toBe('app()');

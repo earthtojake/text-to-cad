@@ -71,7 +71,7 @@ describe('the channel to CAD\'s server', () => {
 describe('the engine reached directly', () => {
   const reach = { origin: 'http://127.0.0.1:3245', link: '1893456000.mac' };
 
-  it('takes the engine and its day link from a launch that carries a page of that engine, else none', () => {
+  it('takes the engine and its link from a launch that carries a page of that engine, else none', () => {
     expect(engineReach({ browser: 'http://127.0.0.1:3245/abc?token=1893456000.mac', engine: 'http://127.0.0.1:3245' }))
       .toEqual({ ...reach, page: 'http://127.0.0.1:3245/abc?token=1893456000.mac' });
     expect(engineReach({ browser: 'http://127.0.0.1:3245/abc', engine: 'http://127.0.0.1:3245' })).toBeNull();

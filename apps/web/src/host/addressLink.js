@@ -1,20 +1,18 @@
 /**
  * The page's address keeps a working link (`?token=<expires>.<mac>`), so the address copied into
- * another browser on this machine opens the same page there. The server leaves the link a page was
- * opened with in its address; a page loaded without one (a reload the session cookie admitted) or
- * with one about to expire is given a fresh one (`GET /api/v1/local/link`), written in place
- * (`history.replaceState`: the same path, the rest of the query and the hash kept) -- when the page
- * loads, and again whenever it is shown or focused.
+ * another browser on this machine opens the same page there. A link lasts until the token is
+ * rotated, so the server leaves the link a page was opened with in its address; a page loaded
+ * without one (a bare or bookmarked address reloaded on the session cookie), or with one an earlier
+ * release printed that has since expired, is given a fresh one (`GET /api/v1/local/link`), written in
+ * place (`history.replaceState`: the same path, the rest of the query and the hash kept) -- when the
+ * page loads, and again whenever it is shown or focused.
  */
 
-/** A link this close to its expiry, or past it, is replaced. */
-export const LINK_REFRESH_SECONDS = 12 * 60 * 60;
-
-/** Whether the address `search` needs a fresh link at `now` (Unix seconds). */
+/** Whether the address `search` needs a fresh link at `now` (Unix seconds): none, or one past its expiry. */
 export function addressNeedsLink(search, now) {
   const link = new URLSearchParams(search).get("token") || "";
   const expires = Number(link.split(".")[0]);
-  return !link.includes(".") || !Number.isFinite(expires) || expires - now < LINK_REFRESH_SECONDS;
+  return !link.includes(".") || !Number.isFinite(expires) || expires <= now;
 }
 
 /**

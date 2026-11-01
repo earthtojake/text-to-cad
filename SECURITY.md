@@ -35,13 +35,17 @@ credentials, all made from one token:
 - **A link** is what every URL text-to-cad prints or opens carries (`cad_show`'s,
   `cad viewer`'s, a build's `view:` line, the page it opens in your
   browser): `?token=` with an expiry and the token's signature of it. It works
-  for 24 hours. It stays in the page's address, and the open page keeps it
-  fresh, so the address copied into another browser on this machine opens the
+  until you rotate the token (`cad server --rotate-token`, which ends every link
+  and every session at once), as a Jupyter server's URL token does; the token is
+  kept in your state folder and survives restarts, reboots and updates, and so do
+  links. It stays in the page's address (a page opened without one is given
+  one), so the address copied into another browser on this machine opens the
   same page. A link works only from this machine: the server listens on
   loopback (unless you bind another `--host`, below) and refuses any other Host. It never leaves in a Referer
-  (every page is sent `Referrer-Policy: no-referrer`). Past its day it opens
-  the viewer only in a browser that holds a session; anywhere else its page
-  says it has expired and to ask your agent to open the model again. A page's
+  (every page is sent `Referrer-Policy: no-referrer`). A link an earlier
+  release printed was good for a day: past it, it opens the viewer only in a
+  browser that holds a session; anywhere else its page says it has expired and
+  to ask your agent to open the model again. A page's
   and a CAD app card's **Copy link** copy a fresh one; the card asks for it
   through its tunnel, with a capability that already reaches everything a link
   does, so this widens nothing.
@@ -64,7 +68,7 @@ it every link and every session made before. Behind the credentials:
 - A state-changing request also needs a custom header, so a cross-site form or
   fetch cannot make one.
 - One cross-origin case is answered, and only that one: a request whose
-  `Authorization` header carries a link within its day, and that request's
+  `Authorization` header carries a link, and that request's
   preflight, get CORS headers for the origin that sent it, so a CAD card whose
   host carries none of its calls back can read the server from its sandbox
   (`cad_server.viewer.engine_app`). A browser never sends that header by itself, so
@@ -118,7 +122,7 @@ and check it against the release's `SHA256SUMS`.
 - `api.texttocad.dev`: anything beyond its documented behaviour (version feed,
   consented analytics).
 
-Out of scope: what someone who already has your token, a link within its day or
+Out of scope: what someone who already has your token, a link or
 your session cookie, or already runs code as you, can do; and effects on your
 own machine that you start yourself, such as building your own script.
 

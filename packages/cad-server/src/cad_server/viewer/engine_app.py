@@ -29,10 +29,12 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # The page's credentials all come from the user's one token (``engines/token``, read at the start:
 # ``cad_server.engine.daemon.bind``), which only the user's own clients present, as a Bearer header: the
 # door hands it to them. Every URL a launch prints or opens carries a link instead,
-# ``?token=<expires>.<mac>``, good for a day (``LINK_SECONDS``), and a browser that opens one is given
+# ``?token=<expires>.<mac>``, good until the token is rotated (``LINK_SECONDS``: its expiry a century
+# out, as a Jupyter server's URL token lasts until it is revoked; one an earlier release printed, good
+# for a day, still reads and still expires), and a browser that opens one is given
 # the session cookie, ``<expires>.<mac>`` too, good for 30 days from its last use, which renews it
 # (``SESSION_SECONDS``, ``EngineApp._admitted``). The link stays in the page's address, which the page
-# keeps fresh (``GET /api/v1/local/link``), so the address copied into another browser on this machine
+# gives one where it has none (``GET /api/v1/local/link``), so the address copied into another browser on this machine
 # opens the same page; it never leaves in a Referer (every page is sent ``Referrer-Policy:
 # no-referrer``). A mac is the token's HMAC of the credential's kind and expiry, so each is checked by
 # recomputing it: no engine keeps a session, every engine of this user -- on any port, of any
@@ -40,7 +42,9 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # every link and session at once. The cookie is named for the token too (``EngineApp.cookie``): one
 # name on every port of the host, while another user's engine, or one with a rotated token, reads a
 # name of its own and never sees, refuses or replaces this one.
-LINK_SECONDS = 24 * 60 * 60
+# A link lasts until ``cad server --rotate-token``: the signed ``<expires>.<mac>`` form is kept (links are
+# read across releases), its expiry a hundred years out.
+LINK_SECONDS = 100 * 365 * 24 * 60 * 60
 SESSION_SECONDS = 30 * 24 * 60 * 60
 
 
@@ -81,7 +85,7 @@ TOKEN_NEEDED_PAGE = (_PAGE_HEAD + "<h1>This browser can't open CAD yet.</h1>" + 
 
 
 # A CAD card whose host carries none of its calls back (``apps/mcp``'s direct transport) reads the
-# engine from its own sandbox's origin, with the day link its launch carries as a Bearer credential.
+# engine from its own sandbox's origin, with the link its launch carries as a Bearer credential.
 # That one case is answered with the card's origin's CORS allowance (``EngineApp._card``): a link in
 # the Authorization header -- which a browser never attaches by itself, so only a page already holding
 # the link can send it -- and nothing that rides by itself or in a URL: not the cookie (no

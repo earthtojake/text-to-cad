@@ -126,20 +126,21 @@ reuses the one page, and its folder replaces the last launch's as the one its re
 
 The JSON record includes `url`, `apiUrl`, `token`, `port`, `pid`, `start` (the folder the home
 shows), `documents` (`{id, file, url}` for each FILE) and `action` (`started` or `reused`,
-referring to the page). Each URL, and `token`, carries a fresh link, good for a day
-(`--api-only`'s `token` is the user's token itself, for the dev proxy). The URL is usable
+referring to the page). Each URL, and `token`, carries a fresh link, good until the token is
+rotated (`cad server --rotate-token`) (`--api-only`'s `token` is the user's token itself, for the dev proxy). The URL is usable
 as soon as it is printed. Opening it gives the browser an HttpOnly, SameSite=Strict session
 cookie, one for every port of the host, that lasts 30 days from its last use, and the page is
 served with its link left in the address bar (no redirect; `Referrer-Policy: no-referrer`). The
-page keeps that link fresh (`src/host/addressLink.js`, `GET /api/v1/local/link`: on load, and when
-shown or focused, whenever the address has none or one within 12 hours of its expiry), so the
+page gives its address a link where it has none (`src/host/addressLink.js`, `GET /api/v1/local/link`:
+on load, and when shown or focused, whenever the address has none, or one an earlier release printed
+that has expired), so the
 address copied into another browser on this machine opens the same page. Programmatic clients send the link or the token as a Bearer header. Every route,
 including documents, requires one. The loopback Host check,
 cross-site POST guard and raw-file response headers remain. Binding `--host`
 off loopback exposes these same authenticated routes; anyone with a link or the cookie has
 local-file access. Keep the URL private. Vite remains on its own strict port, 5173.
 A refused page load is answered 403 with a static page of a few lines, no script and no asset: a
-link past its day says it has expired, any other (no link, a session 30 days unused, or a link or
+link past its expiry (one an earlier release printed, good for a day) says it has expired, any other (no link, a session 30 days unused, or a link or
 cookie from before `cad server --rotate-token`) that this browser can't open CAD yet, and both
 say to ask your agent to open the model again and use the new link. A
 loaded page whose engine stops under it says the engine is not running, in the person's

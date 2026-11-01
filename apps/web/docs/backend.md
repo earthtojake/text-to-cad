@@ -142,7 +142,7 @@ straight in the browser (a robot description's XML can carry an XHTML
 bytes, which neither header affects. No `Access-Control-*` header is ever
 served to a page by its cookie or a link in its URL, so another site can make the
 browser send a request but never read the answer. The one exception is the
-engine's, before any route: a request carrying a day link as its `Authorization`
+engine's, before any route: a request carrying a link as its `Authorization`
 Bearer (a CAD card reading the engine directly, `apps/mcp`), and its preflight,
 are answered for the origin that sent them, with no credentials
 (`cad_server.viewer.engine_app.EngineApp.preflight`).
@@ -215,7 +215,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 
 Every request that changes something (POST, PUT, PATCH, DELETE) must send `x-cadgen-viewer: 1`.
 The custom header forces a browser preflight for cross-origin requests, and the engine answers that preflight only when it asks for
-`authorization` among the card's headers; the request it clears must then carry a day link as
+`authorization` among the card's headers; the request it clears must then carry a link as
 its Bearer credential (above). When
 bound to loopback, Host validation also refuses non-local names as a
 DNS-rebinding defense. The trust model is documented in

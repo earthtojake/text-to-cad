@@ -211,8 +211,9 @@ holds them under one memory budget that never evicts a watched one (**Document l
 
 The installation's door (**The door**) supplies its HTTP token, which programmatic clients send as a
 Bearer header; no URL carries it. A page URL the engine prints or opens carries a link instead, good
-for a day, for which a browser is given a SameSite=Strict session cookie (the link stays in the
-page's address, which the page keeps fresh: `GET /api/v1/local/link`), one name on every port of
+until the token is rotated (`LINK_SECONDS`, its expiry a century out; one an earlier release printed
+still expires after its day), for which a browser is given a SameSite=Strict session cookie (the link
+stays in the page's address, which the page gives one where it has none: `GET /api/v1/local/link`), one name on every port of
 the host, that lasts 30 days from its last use (a page load renews it, as any request does once it
 is a day old): both are the token's signatures of an expiry, checked by signing again, so no engine
 keeps a session (`viewer.engine_app`: `EngineApp.link`, `sign`, `standing`). A request whose
@@ -305,7 +306,7 @@ its own `registry.ENGINE_SCHEMA`), and the token is the user's one file beside i
 which every engine serves with, whatever its release (`registry.Registry.token`; both this user's
 alone, 0600), so a link outlives an update too. So a page link
 -- the `cad viewer` output, a model's `view:` line, the CAD app's card -- works across `cad
-stop`, a crash and a reboot for its day, the session it left in a browser for 30 days past that
+stop`, a crash, a reboot and an update until the token is rotated, the session it left in a browser for 30 days past that
 browser's last use of it, on any port, and a page that lost its engine keeps asking the same address
 and reloads itself when the engine answers again. Whoever holds a live link or session reaches the
 user's folders whenever the engine runs. `cad server --rotate-token` replaces the token, with no

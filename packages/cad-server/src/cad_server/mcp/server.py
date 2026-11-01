@@ -268,7 +268,7 @@ class Server:
         self.page = page or AppPage()
         # The engine's own origin (``http://127.0.0.1:<port>``), which an inline host is asked to let
         # the card reach (``_resource_meta``): where the host carries no tool call back, the card
-        # reads the engine directly with its launch's day link (``_reach``).
+        # reads the engine directly with its launch's link (``_reach``).
         self._engine_origin = engine_origin
         self.sync_document = sync_document
         self.warm = warm  # the engine's meshing pool, started when a view is launched (``Server.warm``)

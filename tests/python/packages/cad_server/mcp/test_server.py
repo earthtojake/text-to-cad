@@ -650,7 +650,7 @@ class InlineServerTest(_Session):
             return "http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab?token=1.mac"
 
         self.server._viewer_url = page
-        # Without a call: the page a text client's cad_show links, day link and all, and its origin.
+        # Without a call: the page a text client's cad_show links, link and all, and its origin.
         launch = self.launch("cad_show", {"source": self.bracket})
         self.assertEqual((launch["browser"], launch["engine"], asked),
                          ("http://127.0.0.1:3245/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab?token=1.mac", "http://127.0.0.1:3245", [self.bracket]))

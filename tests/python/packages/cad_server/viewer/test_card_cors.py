@@ -1,5 +1,5 @@
 """The engine's one cross-origin allowance: a CAD card whose host carries none of its calls back
-(``apps/mcp``'s direct transport) reads the engine from its sandbox's origin with the day link its
+(``apps/mcp``'s direct transport) reads the engine from its sandbox's origin with the link its
 launch carries, as a Bearer credential. That request, and its preflight, are answered with the card's
 origin; nothing else is -- not the cookie, not a link in the URL, not the user's token, not ``/mcp``."""
 from __future__ import annotations

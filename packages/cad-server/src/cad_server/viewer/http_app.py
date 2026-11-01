@@ -16,7 +16,7 @@ browser gates defend against cross-origin requests:
 No ``Access-Control-*`` headers are served here, deliberately: their absence is what
 makes the same-origin policy block cross-origin reads and what makes that
 preflight fail. Do not add them. The engine in front of this router makes one
-exception, outside it: a CAD card's request that carries a day link in its
+exception, outside it: a CAD card's request that carries a link in its
 ``Authorization`` header, and that request's preflight, are answered with the
 card's own origin and no credentials (``engine_app.EngineApp.preflight``).
 """

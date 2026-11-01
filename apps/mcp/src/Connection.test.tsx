@@ -47,7 +47,7 @@ it('a host that refuses every call before any comes back gets one plain notice, 
   expect(viewer.props).toBeNull();
   expect(container.textContent).not.toMatch(/IPC|Content Security|library/i);
   expect(channel.state).toBe('none');
-  // The probe asked the engine once, directly, with the page's day link as a Bearer credential.
+  // The probe asked the engine once, directly, with the page's link as a Bearer credential.
   expect(fetchImpl).toHaveBeenCalledTimes(1);
   // The host opens links: the link goes through it.
   act(() => link.click());
@@ -67,7 +67,7 @@ it('a host that declared it carries calls, and refused them anyway, ends on the 
   expect(fetchImpl).not.toHaveBeenCalled();
 });
 
-it('an engine the probe reaches runs the whole card over direct HTTP: the day link as its credential, no host call and no sync', async () => {
+it('an engine the probe reaches runs the whole card over direct HTTP: the link as its credential, no host call and no sync', async () => {
   const { bridge, server, channel } = host({}, refuse);
   const asked: { url: string; headers: Headers; credentials?: string }[] = [];
   const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {

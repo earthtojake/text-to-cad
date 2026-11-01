@@ -86,7 +86,7 @@ export async function viaTunnel(bridge: Pick<CadShell['bridge'], 'callTool'>, to
   return new TextDecoder().decode(whole);
 }
 
-/** The CAD app's code from the engine directly, with the launch's day link: a host that carries no call. */
+/** The CAD app's code from the engine directly, with the launch's link: a host that carries no call. */
 export async function viaEngine(launch: Pick<Launch, 'browser' | 'engine'>, fetchImpl: typeof fetch = globalThis.fetch): Promise<string> {
   let origin: string, link: string | null;
   try {
