@@ -402,9 +402,8 @@ for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2
   # Alive as ``alive`` says it: its python and its console script (an uninstalled server leaves the python).
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 done
-case $1 in +?*) version=${{1#+}} ;; *) version= ;; esac
-echo "text-to-cad${{version:+ $version}} is not installed: run \\`uvx --no-config --managed-python --python {python} \\
---from cad-server${{version:+==$version}} cad doctor\\` once, outside any sandbox or with its permission" >&2
+echo "text-to-cad is not installed: run \\`uvx --no-config --managed-python --python {python} --from cad-server \\
+cad doctor\\` once, outside any sandbox or with its permission" >&2
 exit 1
 """
 

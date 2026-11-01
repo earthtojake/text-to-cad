@@ -308,7 +308,7 @@ def _setup() -> list[str]:
                                                 else "registered" if status == setup.REGISTERED else "OK"))
         path, status, error = proxy
         said = {setup.OK: "OK", setup.NEWER: "OK (a later release's)",
-                setup.FOREIGN: "is not text-to-cad's (left alone): remove it to run cad +<version> by it",
+                setup.FOREIGN: "is not text-to-cad's (left alone): remove it to run cad by it",
                 setup.MISSING: "missing", setup.STALE: "stale"}[status]
 
         path_hint = _command_path_hint(path)

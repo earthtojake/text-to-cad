@@ -8,9 +8,8 @@ a. the current installation, while its interpreter and console script are there;
 b. else the installation registered last (no installation is current yet: one from before there was
    a current one).
 
-There is one installation a command runs, and nothing here compares versions: a ``+<version>`` as the
-first argument -- what the skills stamp -- is taken off and runs the current installation like any
-other command. With no installation at all it says, in one line, the command that installs one.
+There is one installation a command runs, and nothing here compares versions: the arguments go to it as
+they are. With no installation at all it says, in one line, the command that installs one.
 
 The console script runs by ``exec``, so the proxy adds no process and no output of its own -- or,
 when the installation chosen is the one this interpreter is (the usual case), as its console script
@@ -36,11 +35,6 @@ class Refused(Exception):
     """What the proxy says instead of running anything: one line."""
 
 
-def arguments(args: list[str]) -> list[str]:
-    """The arguments to run: a first ``+<version>`` (a skill's stamp) taken off."""
-    return args[1:] if args and args[0].startswith("+") else args
-
-
 def _same(one: str, other: str) -> bool:
     return os.path.normcase(os.path.realpath(one)) == os.path.normcase(os.path.realpath(other))
 
@@ -64,7 +58,7 @@ def command(record: dict, args: list[str]) -> list[str]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = arguments(list(sys.argv[1:] if argv is None else argv))
+    args = list(sys.argv[1:] if argv is None else argv)
     try:
         from cad_server._internal.installations import current, records
 

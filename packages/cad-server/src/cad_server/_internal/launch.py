@@ -10,21 +10,20 @@ whatever interpreter a GUI app's PATH happens to find first.
 
 The skills cannot run ``uvx``: an agent's shell is often a sandbox, and uv writes its cache before
 it starts. So the installation registers itself and writes the proxy, ``~/.local/bin/cad``
-(``cad_server._internal.installations``), and every skill runs ``cad +<version> ...``, which runs
-the current installation (``cad_server._internal.proxy``): the same installation, so the server,
-every thread and every skill command share one daemon. A skill names ``uvx`` once, as the
-command that installs, registers and writes them (``cad doctor``) when they are missing.
+(``cad_server._internal.installations``), and every skill runs ``cad ...``, which runs the current
+installation (``cad_server._internal.proxy``): the same installation, so the server, every thread and
+every skill command share one daemon. Where no installation is registered, the command says the
+``uvx`` line that installs, registers and writes them (``cad doctor``).
 
-Error hints and ``cad doctor`` print these from here; the plugin's server configs and the
-skills carry the same strings, stamped by the release and held to these by a repository test.
+Error hints and ``cad doctor`` print these from here; the plugin's server configs carry the same
+strings, stamped by the release and held to these by a repository test.
 """
 
 from __future__ import annotations
 
 # The one Python line the server runs on: the installation uvx makes runs it, so the engine does, and the
 # environment every model and kernel process runs in (``base``) is made with the engine's own
-# interpreter. The plugin's server configs, the install scripts and the skills' setup pages carry the
-# same line as text.
+# interpreter. The plugin's server configs and the install scripts carry the same line as text.
 PYTHON = "3.14"
 LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", PYTHON, "--from")
 # The server's distribution and its command; the CAD app's transport (the shim's) and its command.
@@ -47,9 +46,3 @@ def mcp_command(version: str | None = None) -> list[str]:
         from cad_server import __version__ as version
     return [*LAUNCHER, f"{SHIM}=={version}", SHIM_COMMAND]
 
-
-def pinned(version: str | None = None) -> str:
-    """``cad +<version>``: the command a skill runs this version by, through the proxy."""
-    if version is None:
-        from cad_server import __version__ as version
-    return f"cad +{version}"

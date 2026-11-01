@@ -374,7 +374,7 @@ command, the viewer's server, and the numpy, ezdxf and Pillow they read meshes, 
 pictures with) depends on the library (`cad`) without its kernel, and the CAD kernel (OCP,
 build123d and the rest) is the library's `build123d` extra. The library's layer over it (the model
 API, `kernel/`'s memo, naming and determinism settings) is the build123d integration, named for its
-technology as its extra is. So the installation the install command and `cad +<version>` run (the
+technology as its extra is. So the installation the install command and the `cad` command run (the
 server, as uvx installs it) runs no model itself: it makes one
 environment, **the base**, and every process that loads the kernel starts from it
 (`cad_server._internal.base`).

@@ -154,7 +154,7 @@ class DoctorTests(unittest.TestCase):
         installations.register("1.2.3-dev.1", found)
         environment = {key: value for key, value in os.environ.items() if key != installations.NAME_ENV}
         environment["PYTHONPATH"] = str(Path(cad_server.__file__).resolve().parent.parent)  # this server, however installed
-        done = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.proxy", "+1.2.3-dev.1", "doctor",
+        done = subprocess.run([sys.executable, "-P", "-m", "cad_server._internal.proxy", "doctor",
                                "--no-server"], capture_output=True, text=True, env=environment, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
         lines = done.stdout.splitlines()

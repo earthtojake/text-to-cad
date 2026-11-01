@@ -189,8 +189,8 @@ def notice_text() -> str:
 
 def off_command() -> str:
     """``cad telemetry off`` as a command that runs this installation when pasted, never one naming a
-    version it is not (a development wheel's is on no index): the ``cad`` command with the version this
-    installation is registered as (``cad +<version>``, ``_through_proxy``) where it is registered; else, for
+    version it is not (a development wheel's is on no index): the ``cad`` command (``_through_proxy``) where
+    this installation is registered; else, for
     an installation uvx made, the ``uvx`` line that makes it from what it was installed from (``_installed_from``:
     the release's requirement, or the wheel); else ``cad`` where the ``cad`` on PATH is the script that runs
     now, that script by its path, or this interpreter with ``-m cad_server.cli``."""
@@ -221,8 +221,8 @@ def off_command() -> str:
 
 
 def _through_proxy(quote: Callable[[str], str]) -> str | None:
-    """``cad +<version>``: the ``cad`` command (``cad_server._internal.installations``) running this installation
-    by the version its record names -- ``cad`` where that command is the one on the person's PATH (uvx's own
+    """``cad``: the ``cad`` command (``cad_server._internal.installations``), where a record names this
+    installation -- ``cad`` where that command is the one on the person's PATH (uvx's own
     environment, first on PATH for the command it runs, is not theirs: ``providers.lasting``), else by its
     path. ``None`` where no record names this installation, or the command is not there."""
     import shutil
@@ -237,7 +237,7 @@ def _through_proxy(quote: Callable[[str], str]) -> str | None:
         return None
     found = shutil.which("cad", path=lasting(os.environ.get("PATH", os.defpath)))
     on_path = found is not None and os.path.normcase(os.path.realpath(found)) == os.path.normcase(os.path.realpath(proxy))
-    return f"{'cad' if on_path else quote(proxy)} +{record['version']}"
+    return "cad" if on_path else quote(proxy)
 
 
 def _installed_from() -> str | None:

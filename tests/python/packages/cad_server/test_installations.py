@@ -69,7 +69,7 @@ class RegistryTests(Fixture):
         installations.register("0.8.1", found, self.state)  # the same environment, upgraded
         self.registered("0.7.0")
         self.assertEqual(sorted(record["version"] for record in installations.records(self.state)), ["0.7.0", "0.8.1"],
-                         "0.8.0's code is gone from it: `cad +0.8.0` must not run 0.8.1")
+                         "0.8.0's code is gone from it: no record names it")
 
     def test_prune_removes_only_records_whose_interpreter_is_gone(self) -> None:
         gone, live = self.registered("1.0.0"), self.registered("2.0.0")
@@ -266,14 +266,12 @@ class ProxyFileTests(Fixture):
             Path(record["python"]).write_text(f'#!/bin/sh\necho "{version}" "$@"\n', encoding="utf-8")
             os.chmod(record["python"], 0o755)
         os.utime(self.root / "state/installations/2.0.0.json", (1, 1))  # 1.0.0 registered last
-        ran = subprocess.run([proxy_file, "+2.0.0", "a b"], capture_output=True, text=True, env=environment,
+        ran = subprocess.run([proxy_file, "export", "a b"], capture_output=True, text=True, env=environment,
                              cwd=self.root)
-        self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy +2.0.0 a b\n", "no current: the last registered")
+        self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy export a b\n", "no current: the last registered")
         installations.point("2.0.0", self.state)
-        ran = subprocess.run([proxy_file, "+1.0.0", "status"], capture_output=True, text=True, env=environment,
-                             cwd=self.root)
-        self.assertEqual(ran.stdout, "2.0.0 -P -m cad_server._internal.proxy +1.0.0 status\n",
-                         "the current one, whatever version the command names")
+        ran = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment, cwd=self.root)
+        self.assertEqual(ran.stdout, "2.0.0 -P -m cad_server._internal.proxy status\n", "the current one")
         (self.root / "state/installations/current").write_text("2.0.0; echo planted", encoding="utf-8")
         ran = subprocess.run([proxy_file, "status"], capture_output=True, text=True, env=environment, cwd=self.root)
         self.assertEqual(ran.stdout, "1.0.0 -P -m cad_server._internal.proxy status\n", "a current that is no version is none")
@@ -322,13 +320,9 @@ class ResolutionTests(Fixture):
         self.old, self.new, self.dev = self.registered("0.8.0"), self.registered("0.9.0"), self.registered("0.9.0-dev.20261024")
         self.records = installations.records(self.state)
 
-    def test_the_current_installation_runs_whatever_version_the_command_names(self) -> None:
+    def test_the_current_installation_runs(self) -> None:
         installations.point("0.8.0", self.state)
         self.assertEqual(proxy.choose(installations.current(self.state), self.records)["version"], "0.8.0")
-        # A skill's stamp is taken off and compared with nothing.
-        self.assertEqual(proxy.arguments(["+0.9.0", "export", "a.xbf"]), ["export", "a.xbf"])
-        self.assertEqual(proxy.arguments(["+0.8.0 --index-url https://example.invalid/simple", "status"]), ["status"])
-        self.assertEqual(proxy.arguments(["status", "+1"]), ["status", "+1"])
 
     def test_with_none_current_the_installation_registered_last_runs(self) -> None:
         stamped = [{**record, "registered": f"2026-10-0{index}"} for index, record in enumerate(self.records, 1)]
@@ -341,7 +335,7 @@ class ResolutionTests(Fixture):
         with mock.patch("os.getcwd", side_effect=FileNotFoundError(2, "No such file or directory")), \
                 mock.patch("cad_server._internal.installations.records", return_value=[]), \
                 mock.patch("cad_server._internal.installations.current", return_value=None):
-            self.assertEqual(proxy.main(["+0.8.0", "status"]), 1, "refused in its line, never a traceback")
+            self.assertEqual(proxy.main(["status"]), 1, "refused in its line, never a traceback")
 
     def test_every_verb_run_too_execs_the_current_installations_console_script(self) -> None:
         # ``cad run`` is the installation's verb: it runs the script in its CAD kernel environment.
@@ -352,7 +346,7 @@ class ResolutionTests(Fixture):
         with mock.patch.dict("os.environ", {"CAD_STATE_DIR": str(self.root / "state")}), \
                 mock.patch.object(proxy.os, "execve") as execve, \
                 mock.patch("subprocess.call", return_value=3) as call:
-            code = proxy.main(["+0.9.0", "run", "model.py", "a"])
+            code = proxy.main(["run", "model.py", "a"])
         if os.name == "nt":  # no exec on Windows: the installation's cad is a child, its exit code the proxy's
             call.assert_called_once_with(run, env=mock.ANY)
             self.assertEqual((code, execve.call_count), (3, 0))

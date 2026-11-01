@@ -972,8 +972,8 @@ class NoticeTest(_Tmp):
             wheel.write_bytes(b"")
             (record / "direct_url.json").write_text(json.dumps({"url": wheel.as_uri(), "archive_info": {}}), encoding="utf-8")
             self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off")
-            # Registered (its CAD app's server started, or `cad doctor` ran): the `cad` command, by the version
-            # the record names -- by its path while it is not the `cad` on PATH.
+            # Registered (its CAD app's server started, or `cad doctor` ran): the `cad` command -- by its path
+            # while it is not the `cad` on PATH.
             python, console = made / "bin" / "python", made / "bin" / "cad"
             for path in (python, console):
                 path.parent.mkdir(exist_ok=True)
@@ -982,13 +982,13 @@ class NoticeTest(_Tmp):
             self.assertEqual(off_command(), f"{uvx} {wheel} cad telemetry off", "no `cad` command to run it")
             installations.write_proxy()
             proxy = installations.proxy_path()
-            self.assertEqual(off_command(), f"{proxy} +0.8.0-dev.20261026120000 telemetry off")
+            self.assertEqual(off_command(), f"{proxy} telemetry off")
             with mock.patch.dict("os.environ", {"PATH": str(launcher)}):
-                self.assertEqual(off_command(), "cad +0.8.0-dev.20261026120000 telemetry off")
+                self.assertEqual(off_command(), "cad telemetry off")
             # uvx's own environment first on PATH, with its own `cad` (the install command's `cad setup`): not
             # the person's PATH, so not the command they type.
             with mock.patch.dict("os.environ", {"PATH": os.pathsep.join((str(console.parent), str(launcher)))}):
-                self.assertEqual(off_command(), "cad +0.8.0-dev.20261026120000 telemetry off")
+                self.assertEqual(off_command(), "cad telemetry off")
             wheel.unlink()  # the wheel gone and nothing registered: this interpreter, as it runs now
             installations.forget("0.8.0-dev.20261026120000")
             with mock.patch("sys.argv", ["/x/cad_server/cli/__main__.py"]), mock.patch("sys.executable", "/venv/bin/python"):

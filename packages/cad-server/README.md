@@ -50,9 +50,9 @@ src/cad_server/
   _internal/             # the environment models run in (base: the installation's base,
                          #   cad[build123d], made by uv), the launch commands (launch), the
                          #   installations' registry, which one is current, and the proxy it
-                         #   writes (installations: ~/.local/bin/cad, which the skills run as
-                         #   `cad +<version>`; written by `cad doctor`, `cad setup` and a CAD
-                         #   app's first registration), the proxy (proxy), the releases an update
+                         #   writes (installations: ~/.local/bin/cad, which the skills run;
+                         #   written by `cad doctor`, `cad setup` and a CAD app's first
+                         #   registration), the proxy (proxy), the releases an update
                          #   installs (releases), the update the button starts (update) and its
                          #   switch (switch), the plugin folder every agent app is pointed at
                          #   (plugin), the agent apps setup reads and writes (providers),
@@ -94,9 +94,9 @@ the release left current after every switch of the engine (`cad plugin --refresh
 the way it takes a local plugin (`_internal/providers.py`): a local catalog that Claude Code reads in
 place and Codex copies, an extension Gemini CLI links, a copy in Cursor's local plugins folder, the
 skills copied by the Skills CLI for the agents without a plugin. An update writes the folder for the
-new release and brings the copies along; nothing updates by itself. A model builds by running its script: `cad run model.py`, or
-`cad +<version> run model.py` through the `cad` command, which runs the current installation, else
-the one registered last (`_internal/proxy.py`; a `+<version>` is taken off). The CAD app an agent
+new release and brings the copies along; nothing updates by itself. A model builds by running its script: `cad run model.py`, through
+the `cad` command, which runs the current installation, else the one registered last
+(`_internal/proxy.py`). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
 The state folder is `cad` in the platform's place for state (`cad-state` on Windows),
