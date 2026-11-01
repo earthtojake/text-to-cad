@@ -49,21 +49,21 @@ describe('the channel to CAD\'s server', () => {
     const never = createChannel(true);
     const tunnel = createTunnelFetch(createServer(bridge, 'app-capability', never));
     // The fetch fails as fetch does, in words of ours: never the host's.
-    const failed = await tunnel(`${TUNNEL_ORIGIN}/__cad/recents`).catch(error => error);
+    const failed = await tunnel(`${TUNNEL_ORIGIN}/api/v1/documents`).catch(error => error);
     expect([failed instanceof TypeError, failed.message]).toEqual([true, 'This chat cannot connect the CAD viewer to its engine.']);
     expect(never.state).toBe('none');
     // A chat whose calls came back: a later refusal is the plugin stopping, which the sync says.
     refuse = false;
     const carried = createChannel(false);
     const server = createServer(bridge, 'app-capability', carried);
-    await server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/__cad/server`, headers: {}, body: '' });
+    await server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/api/v1/server`, headers: {}, body: '' });
     refuse = true;
-    await expect(server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/__cad/server`, headers: {}, body: '' })).rejects.toThrow(REFUSAL);
+    await expect(server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/api/v1/server`, headers: {}, body: '' })).rejects.toThrow(REFUSAL);
     expect(carried.state).toBe('open');
     // The engine's own refusal is an answer: the channel is open, and its words are the reason shown.
     const stale = createChannel(false);
     const engine = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'This CAD view was opened before CAD restarted: close it and open CAD again.' }] }) }, 'app-capability', stale));
-    await expect(engine(`${TUNNEL_ORIGIN}/__cad/server`)).rejects.toThrow('This CAD view was opened before CAD restarted');
+    await expect(engine(`${TUNNEL_ORIGIN}/api/v1/server`)).rejects.toThrow('This CAD view was opened before CAD restarted');
     expect(stale.state).toBe('open');
   });
 });
@@ -95,10 +95,10 @@ describe('the engine reached directly', () => {
       sent.push({ url, method: init.method, headers: Object.fromEntries(new Headers(init.headers)), body: new TextDecoder().decode(init.body as ArrayBuffer) });
       return new Response('{}');
     }) as any);
-    await direct(`${TUNNEL_ORIGIN}/__cad/recents?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1', 'x-cadgen-app': 'session', 'content-type': 'application/json' }, body: '{"a":1}' });
-    expect(sent).toEqual([{ url: 'http://127.0.0.1:3245/__cad/recents?x=1', method: 'POST', body: '{"a":1}',
+    await direct(`${TUNNEL_ORIGIN}/api/v1/documents?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1', 'x-cadgen-app': 'session', 'content-type': 'application/json' }, body: '{"a":1}' });
+    expect(sent).toEqual([{ url: 'http://127.0.0.1:3245/api/v1/documents?x=1', method: 'POST', body: '{"a":1}',
       headers: { authorization: 'Bearer 1893456000.mac', 'content-type': 'application/json', 'x-cadgen-viewer': '1' } }]);
     const blocked = createDirectFetch(reach, (async () => { throw new TypeError('net::ERR_BLOCKED_BY_CSP'); }) as any);
-    await expect(blocked(`${TUNNEL_ORIGIN}/__cad/server`)).rejects.toThrow('The CAD engine could not be reached.');
+    await expect(blocked(`${TUNNEL_ORIGIN}/api/v1/server`)).rejects.toThrow('The CAD engine could not be reached.');
   });
 });

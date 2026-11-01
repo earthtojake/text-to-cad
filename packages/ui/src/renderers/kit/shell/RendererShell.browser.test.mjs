@@ -50,8 +50,8 @@ async function serve(t, route = () => false) {
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
     else if (route(url, root, response)) return;
-    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ entries: [] })); }
-    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' })); }
+    else if (url.pathname.endsWith('/api/v1/documents')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ documents: ([]).map(entry => ({ entry, revision: entry.hash })) })); }
+    else if (url.pathname.endsWith('/api/v1/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' })); }
     else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
@@ -113,13 +113,13 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   const catalogFiles = [];
   const origin = await serve(t, (url, root, response) => {
     requests.push(url.pathname);
-    if (url.pathname.endsWith('/__cad/catalog')) {
+    if (url.pathname.endsWith('/api/v1/documents')) {
       // The catalog holds the files on screen: asked for one by its absolute path, it lists it.
       response.setHeader('Content-Type', 'application/json');
-      catalogFiles.push({ root, file: url.searchParams.get('file') });
-      const entries = url.searchParams.get('file') === '/models/part.stl'
+      catalogFiles.push({ root, file: url.searchParams.get('path') });
+      const entries = url.searchParams.get('path') === '/models/part.stl'
         ? [{ kind: 'stl', file: '/models/part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] : [];
-      response.end(JSON.stringify({ entries }));
+      response.end(JSON.stringify({ documents: entries.map(entry => ({ entry, revision: entry.hash })) }));
       return true;
     }
     if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); return true; }
@@ -273,9 +273,9 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
 
 test('every view draws through the one GPU device: a view that goes leaves it and no listener on the page, and a lost device is recovered for the view on screen', async (t) => {
   const origin = await serve(t, (url, root, response) => {
-    if (url.pathname.endsWith('/__cad/catalog')) {
+    if (url.pathname.endsWith('/api/v1/documents')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: [{ kind: 'stl', file: '/models/part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] }));
+      response.end(JSON.stringify({ documents: ([{ kind: 'stl', file: '/models/part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }]).map(entry => ({ entry, revision: entry.hash })) }));
       return true;
     }
     if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); return true; }
@@ -372,10 +372,10 @@ const widePlate = `solid plate\n${WIDE_TRIANGLES.map(triangle =>
 
 test('a file opens framed at 100% of its own ruler: the open fit is the fit, whatever lens it was taken under', async (t) => {
   const origin = await serve(t, (url, root, response) => {
-    if (url.pathname.endsWith('/__cad/catalog')) {
+    if (url.pathname.endsWith('/api/v1/documents')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: [
-        { kind: 'stl', file: '/models/plate.stl', url: '/plate.stl', hash: root, bytes: widePlate.length }] }));
+      response.end(JSON.stringify({ documents: ([
+        { kind: 'stl', file: '/models/plate.stl', url: '/plate.stl', hash: root, bytes: widePlate.length }]).map(entry => ({ entry, revision: entry.hash })) }));
       return true;
     }
     if (url.pathname.endsWith('/plate.stl')) { response.end(widePlate); return true; }

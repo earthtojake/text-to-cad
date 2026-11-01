@@ -193,7 +193,7 @@ class HttpSessionsTest(unittest.TestCase):
         first, second = self.proxy(), self.proxy()
         self.assertNotEqual(first.session, second.session)
         # Over the real transport, a request without the page's capability is refused, never routed.
-        refused = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/__cad/analytics'})
+        refused = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/api/v1/settings'})
         self.assertTrue(refused['isError'])
         self.assertNotIn('structuredContent', refused)
         info = request({'op': 'status'})
@@ -207,7 +207,7 @@ class HttpSessionsTest(unittest.TestCase):
         # Each host connection has its own capability: another's view reaches nothing here.
         self.assertNotEqual(self.tool(second, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
         self.assertTrue(self.tool(second, 'cad_sync', {'view': 'one', 'surface': 'agent', 'app': token})['isError'])
-        reply = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/__cad/server', 'headers': {'x-cadgen-app': token}})['structuredContent']
+        reply = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/api/v1/server', 'headers': {'x-cadgen-app': token}})['structuredContent']
         self.assertEqual(reply['status'], 200)
         self.assertEqual(json.loads(base64.b64decode(reply['body']))['pid'], info['pid'])
         first.close()
@@ -290,7 +290,7 @@ class HttpSessionsTest(unittest.TestCase):
         client = EngineClient()
 
         def version():
-            status, _, body = client.call('GET', '/__cad/version')
+            status, _, body = client.call('GET', '/api/v1/server')
             self.assertEqual(status, 200, body)
             return json.loads(body)
 

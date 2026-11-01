@@ -106,14 +106,14 @@ async function newPage() {
     const parsed = new URL(url);
     // A file is named by its absolute path in every request: the page addresses documents by id
     // (`/<id>`) and asks for a file by the path its row gives.
-    if (parsed.pathname === "/__cad/catalog") {
-      const file = parsed.searchParams.get("file") || "";
+    if (parsed.pathname === "/api/v1/documents" && parsed.searchParams.has("path")) {
+      const file = parsed.searchParams.get("path") || "";
       if (file && !/^(?:\/|[a-z]:\/)/i.test(file)) {
         errors.push(`a relative file reached ${parsed.pathname}: ${file}`);
       }
     }
     // The page reads its own origin alone: a document the cadgen engine serves is read through
-    // the viewer (`/__cad/api/...`), never from the engine's own port.
+    // the page's own origin (`/api/v1/...`), never from the engine's own port.
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
       errors.push(`a request to another origin: ${request.method()} ${url} (${request.resourceType()})`);
       await route.abort("blockedbyclient");
@@ -139,7 +139,7 @@ async function newPage() {
   }
   page.setDefaultTimeout(30_000);
   page.on("response", response => {
-    if (response.status() < 400 || !response.url().startsWith(`${viewerOrigin}/__cad/`)) return;
+    if (response.status() < 400 || !response.url().startsWith(`${viewerOrigin}/api/`)) return;
     const read = response.text().then(body => {
       const request = response.request();
       const payload = request.postData();
@@ -211,14 +211,14 @@ async function newPage() {
 
 async function openFile(page, file) {
   // A page names its document by id, `/<id>`: the file's, which the server derives from its canonical
-  // path and registers when the catalog is asked for it (as Select File and the home do).
+  // path and registers when its envelope is asked for by that path (as Select File and the home do).
   const base = args.url.replace(/\/$/, "");
   // These one-off Node requests can be separated by more than the server's idle timeout.
   // Close them from first use so its connection pool cannot race an idle socket closing.
-  const catalog = await page.request.get(`${base}/__cad/catalog?file=${encodeURIComponent(path.join(root, file))}`, {
+  const catalog = await page.request.get(`${base}/api/v1/documents?path=${encodeURIComponent(path.join(root, file))}`, {
     headers: { Connection: "close" },
   });
-  const id = (await catalog.json()).entries?.[0]?.id;
+  const id = (await catalog.json()).documents?.[0]?.id;
   if (!id) fail(`the catalog gave ${file} no document id`);
   await page.goto(`${base}/${id}`, {
     waitUntil: "domcontentloaded",

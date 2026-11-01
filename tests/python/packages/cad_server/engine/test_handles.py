@@ -221,13 +221,18 @@ if __name__ == "__main__":
 
 
 def _served(url: str, ident: str) -> dict:
-    """The document a page serves (``/api/doc/<id>``), with the token its URL carries."""
+    """The document a page serves (its envelope's ``api``, ``/api/v1/documents/<kind>/<id>``: its
+    ``structure``), with the token its URL carries."""
     page, _, query = url.partition("?")
     base = page.rsplit("/", 1)[0]
     token = dict(part.split("=", 1) for part in query.split("&") if "=" in part).get("token", "")
-    request = urllib.request.Request(f"{base}/api/doc/{ident}", headers={"Authorization": "Bearer " + token})
-    with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - the engine's own server
-        return json.loads(response.read())
+
+    def read(path: str) -> dict:
+        request = urllib.request.Request(f"{base}{path}", headers={"Authorization": "Bearer " + token})
+        with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310 - the engine's own server
+            return json.loads(response.read())
+
+    return read(read(f"/api/v1/documents/{ident}")["api"] + "/structure")
 
 
 def _glb_json(path: Path) -> dict:

@@ -7,7 +7,7 @@ import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 
 // The drawing under test is a COMMITTED payload: exactly what
-// `GET /__cad/drawing` answered for `__fixtures__/sample.dxf`, so this test
+// a DXF document's `drawing` answered for `__fixtures__/sample.dxf`, so this test
 // needs neither Python nor ezdxf and cannot drift from the route by accident.
 // `__fixtures__/README.md` says how to regenerate the pair.
 const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
@@ -29,18 +29,30 @@ before(async () => {
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
     const root = url.pathname.split('/')[1];
+    if (url.pathname.endsWith('/api/v1/documents') && request.method === 'POST') {
+      // A file opened by its path: its document's reads are under its kind, by an id (here its name).
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const file = String(JSON.parse(body || '{}').path || '').split('/').pop();
+        response.statusCode = 201;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ id: file, kind: file.split('.').pop(), api: `/api/v1/documents/${file.split('.').pop()}/${file}` }));
+      });
+      return;
+    }
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/drawing')) {
-      // Asked for by the file's absolute path, which names the fixture last.
-      const drawing = DRAWINGS[String(url.searchParams.get('file')).split('/').pop()];
+    else if (url.pathname.endsWith('/drawing')) {
+      // Asked for under the document's id, which names the fixture.
+      const drawing = DRAWINGS[url.pathname.split('/').at(-2)];
       response.setHeader('Content-Type', 'application/json');
       response.end(JSON.stringify(drawing));
-    } else if (url.pathname.endsWith('/__cad/catalog')) {
+    } else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: files.map(file => (
-        { kind: 'dxf', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.end(JSON.stringify({ documents: (files.map(file => (
+        { kind: 'dxf', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 }))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });

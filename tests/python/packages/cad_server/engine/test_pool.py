@@ -577,7 +577,7 @@ class DaemonPoolTest(unittest.TestCase):
         served = self.cli("serve", "XBF/a.xbf")
         self.assertEqual(served.returncode, 0, served.stderr)
         url = urlsplit(served.stdout.strip())
-        version = f"{url.scheme}://{url.netloc}/api/doc/{url.path.strip('/')}/version?wait=0"
+        version = f"{url.scheme}://{url.netloc}/api/v1/documents/{url.path.strip('/')}/version?wait=0"
         token = parse_qs(url.query)["token"][0]
         with urllib.request.urlopen(urllib.request.Request(version, headers={"Authorization": "Bearer " + token}),
                                     timeout=60) as response:  # a page's sync: the file is watched now

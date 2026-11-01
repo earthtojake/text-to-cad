@@ -25,12 +25,12 @@ for (const reconnects of [true, false]) {
         signal.addEventListener('abort', () => reject(signal.reason), { once: true });
       });
     });
-    const served = { url: 'https://cad.test/api/doc/one', fetch };
+    const served = { url: 'https://cad.test/api/v1/documents/xbf/one', fetch };
     const client = { engineDocument: vi.fn().mockResolvedValueOnce(served) };
     if (reconnects) client.engineDocument.mockResolvedValueOnce(served);
     else client.engineDocument.mockRejectedValueOnce(reconnectFailure);
     const document = (version: string) => ({
-      version, source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one' },
+      version, source: { url: served.url, origin: 'https://cad.test', base: 'https://cad.test', doc: 'one', kind: 'xbf' },
       structure: { instances: [{}] }, parts: new Map(), look: {}, fetch: globalThis.fetch,
       load: { fetched: [], kept: [], structureMs: 0, partsMs: 0, bytes: 0 }, release: vi.fn(),
     });

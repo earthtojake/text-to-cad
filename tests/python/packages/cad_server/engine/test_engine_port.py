@@ -440,7 +440,7 @@ class EnginePortTest(unittest.TestCase):
         self.stop()
         moved = self.launch(CAD_ENGINE_PORT=str(free_port()))
         self.assertNotEqual((moved["pid"], moved["port"]), (first["pid"], named))
-        self.assertEqual(self.ask(moved["port"], "/__cad/server", Cookie=cookie)[0], 200)
+        self.assertEqual(self.ask(moved["port"], "/api/v1/server", Cookie=cookie)[0], 200)
         self.assertEqual(self.ask(moved["port"], f"/?token={link}")[0], 302)
         self.stop()
         # --port on ``cad server`` outranks CAD_ENGINE_PORT; --rotate-token retires every link

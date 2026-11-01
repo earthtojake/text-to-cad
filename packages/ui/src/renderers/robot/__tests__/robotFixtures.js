@@ -26,7 +26,7 @@ export function fixtureGlb(url) {
   return fixtureBytes(String(url).replace(/^.*\/(primitives|meshes)\//, "$1/"));
 }
 
-/** `GET /__cad/robot`'s answer for a fixture description: `fixturePayload("arm.srdf")`. */
+/** A robot document's `structure` (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`) for a fixture description: `fixturePayload("arm.srdf")`. */
 export function fixturePayload(name) {
   const [stem, kind] = [name.slice(0, name.lastIndexOf(".")), name.slice(name.lastIndexOf(".") + 1)];
   return JSON.parse(readFileSync(path.join(FIXTURES, `${stem}.${kind}.robot.json`), "utf8"));

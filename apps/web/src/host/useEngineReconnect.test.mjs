@@ -18,12 +18,12 @@ test('a page that lost its engine asks the same address, backing off, and reload
     const answer = answers.shift() ?? 'back';
     if (answer === 'refused') throw new TypeError('Failed to fetch');
     if (answer === 'forbidden') return new Response(JSON.stringify({ error: 'engine token required' }), { status: 403 });
-    return new Response(JSON.stringify({ pid: 2 }), { status: 200 });
+    return new Response(JSON.stringify({ instance: 'b' }), { status: 200 });
   };
-  const ask = () => fetch('/__cad/server').then(response => (response.ok ? response.json() : null));
+  const ask = () => fetch('/api/v1/server').then(response => (response.ok ? response.json() : null));
   const queued = [];
   const reloads = [];
-  const options = { pid: 1, ask, reload: () => reloads.push(asked.length),
+  const options = { instance: 'a', ask, reload: () => reloads.push(asked.length),
     schedule: (run, delayMs) => { const timer = { run, delayMs }; queued.push(timer); return timer; },
     cancel: timer => queued.splice(queued.indexOf(timer), 1) };
   let gone = false;
@@ -43,7 +43,7 @@ test('a page that lost its engine asks the same address, backing off, and reload
     await render();
     await advance();
     assert.deepEqual(delays, [1000, 2000, 4000, 5000], 'a second first, backing off to five');
-    assert.deepEqual(asked, Array(4).fill('/__cad/server'), 'the same address each time, its token the cookie');
+    assert.deepEqual(asked, Array(4).fill('/api/v1/server'), 'the same address each time, its token the cookie');
     assert.deepEqual(reloads, [4], 'reloaded into the same document once a new engine answered');
     assert.equal(queued.length, 0, 'and it stops asking');
   } finally {
@@ -60,7 +60,7 @@ test('the engine the page loaded from answering again was a blip: nothing is rel
   const queued = [];
   const reloads = [];
   function Probe() {
-    useEngineReconnect(true, { pid: 1, ask: async () => ({ pid: 1 }), reload: () => reloads.push(1),
+    useEngineReconnect(true, { instance: 'a', ask: async () => ({ instance: 'a' }), reload: () => reloads.push(1),
       schedule: (run, delayMs) => { queued.push({ run, delayMs }); return queued.at(-1); }, cancel: () => {} });
     return null;
   }
@@ -82,10 +82,10 @@ test('while its engine restarts for an update the page asks often, and an engine
   for (const [key, value] of Object.entries({ window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   const queued = [];
   const reloads = [];
-  // The same process answering with another release cannot happen, so the release alone says it: an update.
-  const answers = [null, { pid: 1, release: '0.9.1' }];
+  // The same start of the engine answering with another release cannot happen, so the release alone says it: an update.
+  const answers = [null, { instance: 'a', release: '0.9.1' }];
   function Probe() {
-    useEngineReconnect(true, { pid: 1, release: '0.9.0', fast: true, ask: async () => answers.shift(), reload: () => reloads.push(1),
+    useEngineReconnect(true, { instance: 'a', release: '0.9.0', fast: true, ask: async () => answers.shift(), reload: () => reloads.push(1),
       schedule: (run, delayMs) => { queued.push({ run, delayMs }); return queued.at(-1); }, cancel: () => {} });
     return null;
   }
@@ -114,12 +114,12 @@ test('an engine that refuses the page\'s token is told apart from none answering
     const answer = answers.shift();
     if (answer === 'down') return null;
     if (answer === 'forbidden') return { refused: true };
-    return { pid: 2 };
+    return { instance: 'b' };
   };
   const queued = [];
   const reloads = [];
   const said = [];
-  const options = { pid: 1, ask, reload: () => reloads.push(answers.length),
+  const options = { instance: 'a', ask, reload: () => reloads.push(answers.length),
     schedule: (run, delayMs) => { const timer = { run, delayMs }; queued.push(timer); return timer; },
     cancel: timer => queued.splice(queued.indexOf(timer), 1) };
   function Probe() { said.push(useEngineReconnect(true, options)); return null; }

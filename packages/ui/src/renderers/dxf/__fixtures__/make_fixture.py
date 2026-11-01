@@ -1,5 +1,5 @@
 """Write the DXF renderer's browser-test fixture: one tiny drawing, and the
-payload ``GET /__cad/drawing`` answers for it.
+payload ``GET /api/v1/documents/dxf/<id>/drawing`` answers for it.
 
 The drawing is deliberately one of each thing the renderer has to get right:
 

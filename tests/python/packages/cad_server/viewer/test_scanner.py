@@ -22,9 +22,9 @@ from cad_server.viewer.scanner import catalog_entry, is_served_cad_asset, source
 
 
 def asset_query(url: str) -> dict:
-    """The ``file`` and ``v`` an asset URL carries."""
+    """The ``path`` and ``v`` a files URL carries."""
     parsed = urlsplit(url)
-    assert parsed.path == "/__cad/asset", url
+    assert parsed.path == "/api/v1/local/files", url
     return {key: values[0] for key, values in parse_qs(parsed.query).items()}
 
 
@@ -100,7 +100,7 @@ class EntryShape(ScannerTestCase):
         path = self.write("sub dir/a b(c)*d~e.stl", "x")
         stat_result = os.stat(path)
         query = asset_query(self.entry("sub dir/a b(c)*d~e.stl")["url"])
-        self.assertEqual(query["file"], path)
+        self.assertEqual(query["path"], path)
         # The ?v= token: base36(size)-base36(mtime_ns), from one stat.
         self.assertEqual(query["v"], scanner.file_version(stat_result.st_size, stat_result.st_mtime_ns))
 
@@ -130,7 +130,7 @@ class EngineDocumentRows(ScannerTestCase):
         self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes"])
         self.assertEqual((entry["kind"], entry["bytes"]), ("step", len(body)))
         self.assertEqual(entry["hash"], hashlib.sha256(body.encode()).hexdigest())
-        self.assertEqual(asset_query(entry["url"])["file"], self.path("part.step"))
+        self.assertEqual(asset_query(entry["url"])["path"], self.path("part.step"))
         self.write("part.step", body + "\n")
         changed = self.entry("part.step")
         self.assertNotEqual((changed["hash"], changed["url"]), (entry["hash"], entry["url"]))
@@ -155,7 +155,7 @@ class SrdfPairing(ScannerTestCase):
         relation = self.entry("arm.srdf")["relations"]["urdf"]
         self.assertEqual(list(relation), ["file", "url", "hash", "bytes"])
         self.assertEqual(relation["file"], self.path("arm.urdf").replace(os.sep, "/"))
-        self.assertEqual(asset_query(relation["url"])["file"], self.path("arm.urdf"))
+        self.assertEqual(asset_query(relation["url"])["path"], self.path("arm.urdf"))
 
     def test_a_prolog_of_declaration_comment_and_doctype_is_skipped(self):
         self.write("z.urdf", '<robot name="z"/>')

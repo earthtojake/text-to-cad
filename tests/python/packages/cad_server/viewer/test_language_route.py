@@ -1,4 +1,4 @@
-"""The app menu's Language: read and changed through `/__cad/language`, kept in the person's settings,
+"""The app menu's Language: read and changed through `/api/v1/settings`, kept in the person's settings,
 where every CAD view -- another viewer, the CAD app -- reads the same choice."""
 
 from __future__ import annotations
@@ -39,19 +39,23 @@ class ViewerLanguageTest(unittest.TestCase):
             headers = {"content-type": "application/json"} if body is not None else {}
             if body is not None and guard:
                 headers["x-cadgen-viewer"] = "1"
-            connection.request(method, "/__cad/language", body=json.dumps(body) if body is not None else None, headers=headers)
+            payload = None if body is None else {"language": body}
+            connection.request(method, "/api/v1/settings", body=json.dumps(payload) if payload is not None else None, headers=headers)
             response = connection.getresponse()
             data = response.read()
-            return response.status, json.loads(data) if data else None
+            answer = json.loads(data) if data else None
+            return response.status, answer["language"] if response.status == 200 else answer
         finally:
             connection.close()
 
     def test_automatic_until_chosen_and_kept_for_every_view(self) -> None:
         self.assertEqual(self.request("GET"), (200, {"locale": None}))
-        self.assertEqual(self.request("POST", {"locale": "fr"})[0], 400)
-        self.assertEqual(self.request("POST", {"locale": "ja"}), (200, {"locale": "ja"}))
+        self.assertEqual(self.request("PUT", {"locale": "fr"})[0], 400)
+        self.assertEqual(self.request("PUT", {"locale": "ja"}), (200, {"locale": "ja"}))
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["language"], {"locale": "ja"})
-        self.assertEqual(self.request("POST", {"locale": None}), (200, {"locale": None}))
+        self.assertEqual(self.request("PUT", {"locale": None}), (200, {"locale": None}))
+        # A change without the guard header is a cross-site one: refused, and nothing changes.
+        self.assertEqual(self.request("PUT", {"locale": "ja"}, guard=False)[0], 403)
         self.assertEqual(self.request("GET"), (200, {"locale": None}))
 
 

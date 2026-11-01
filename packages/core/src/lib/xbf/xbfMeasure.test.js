@@ -28,12 +28,12 @@ const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFOR
 /** The bracket's scene, read from an engine that answers the fixture. */
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith("/api/look")) return new Response(read("look.json"));
-    if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith("/api/v1/look")) return new Response(read("look.json"));
+    if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
+    const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : JSON.stringify(STRUCTURE));
   };
-  const document = await loadXbfDocument("http://127.0.0.1:9/api/doc/bracket", { fetch });
+  const document = await loadXbfDocument("http://127.0.0.1:9/api/v1/documents/xbf/bracket", { fetch });
   return createXbfScene(THREE, document);
 }
 

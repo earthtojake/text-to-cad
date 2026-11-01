@@ -62,7 +62,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         ], **overrides}
 
     def test_a_prompt_writes_replayable_json_without_rendering_or_image_files(self) -> None:
-        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request())
         answer = json.loads(body)
         snapshot_path = self.files / "part-1.snapshot.json"
         self.assertEqual((status, answer), (200, {"ok": True, "snapshot": str(snapshot_path)}))
@@ -79,7 +79,7 @@ class PromptFilesRouteTest(unittest.TestCase):
              "outputs": [{"path": str(self.files / "part-1-view-1.png"), "label": "view 1", "width": 640, "height": 480}]},
             {**common, "camera": "iso", "outputs": [{"path": str(self.files / "part-1-view-2.png"), "label": "view 2"}]},
         ]})
-        status, _, content_type = self.call("GET", "/__cad/prompt-files/part-1.snapshot.json")
+        status, _, content_type = self.call("GET", "/api/v1/local/prompt-files/part-1.snapshot.json")
         self.assertEqual((status, content_type), (200, "application/json; charset=utf-8"))
 
     def test_the_parts_hidden_where_the_ink_was_drawn_are_the_packets_and_each_views_own(self) -> None:
@@ -91,7 +91,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
         def packet(annotation, *displays):
             views = [{"label": f"view {at + 1}", "camera": CAMERA, "display": display} for at, display in enumerate(displays)]
-            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=annotation, views=views))
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=annotation, views=views))
             self.assertEqual(status, 200, body)
             answer = json.loads(body)
             return json.loads(answer["inline"] if "inline" in answer else Path(answer["snapshot"]).read_text(encoding="utf-8"))
@@ -109,7 +109,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         drawing = self.tmp / "panel.dxf"
         drawing.write_text("0\nSECTION\n", encoding="utf-8")
         plan = {"position": [50, 30, 120], "target": [50, 30, 0], "up": [0, 1, 0], "orthographicHalfHeight": 30}
-        status, body, _ = self.call("POST", "/__cad/prompt-files", {
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {
             "name": "panel.dxf", "input": str(drawing), "annotation": ANNOTATION,
             "views": [{"label": "view 1", "camera": plan, "width": 1600, "height": 900}]})
         self.assertEqual(status, 200, body)
@@ -121,8 +121,8 @@ class PromptFilesRouteTest(unittest.TestCase):
                                                          "width": 1600, "height": 900}])
 
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
-        _, first, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))
-        _, second, _ = self.call("POST", "/__cad/prompt-files", self.request(annotation=None))
+        _, first, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
+        _, second, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
         self.assertNotIn("annotation", json.loads(first))
         packet = json.loads(json.loads(second)["inline"])
         self.assertIn("part-2-view-1.png", packet["jobs"][0]["outputs"][0]["path"])
@@ -134,7 +134,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         request.pop("acceptInline")
         for acceptance in (None, False, True):
             body_request = request if acceptance is None else {**request, "acceptInline": acceptance}
-            status, body, _ = self.call("POST", "/__cad/prompt-files", body_request)
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", body_request)
             self.assertEqual(status, 200, body)
             answer = json.loads(body)
             if acceptance is True:
@@ -152,7 +152,7 @@ class PromptFilesRouteTest(unittest.TestCase):
         # The view's label is said once in the packet whatever its length past the 48 characters
         # its file name takes, so it pads the packet a byte at a time; its last, `é`, is two.
         def post(label: str) -> dict:
-            status, body, _ = self.call("POST", "/__cad/prompt-files",
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files",
                                         self.request(annotation=None, views=[{"label": label, "camera": CAMERA}]))
             self.assertEqual(status, 200, body)
             return json.loads(body)
@@ -170,14 +170,14 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def test_a_packets_input_is_a_files_path_or_a_documents_id_and_never_a_script(self) -> None:
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
-        status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=ident, name="bracket"))
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(input=ident, name="bracket"))
         self.assertEqual(status, 200, body)
         packet = json.loads(Path(json.loads(body)["snapshot"]).read_text(encoding="utf-8"))
         self.assertEqual(packet["input"], ident)
         script = self.tmp / "parts.py"
         script.write_text("print(1)\n", encoding="utf-8")
         for named in (str(script), f"{script}::cube"):
-            status, body, _ = self.call("POST", "/__cad/prompt-files", self.request(input=named))
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(input=named))
             self.assertEqual(status, 400, named)
 
     def test_a_request_snapshot_would_refuse_is_refused_before_anything_renders(self) -> None:
@@ -202,28 +202,30 @@ class PromptFilesRouteTest(unittest.TestCase):
             # a file snapshot does not draw
             (self.request(input=str(self.notes)), "is no file cad snapshot draws"),
         ):
-            status, body, _ = self.call("POST", "/__cad/prompt-files", request)
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
             self.assertEqual(status, 400, request)
-            self.assertEqual(json.loads(body)["ok"], False)
+            # Refused: never ``ok``, whether the packet's own check or the API's funnel said why.
+            self.assertNotEqual(json.loads(body).get("ok"), True)
             self.assertIn(said, json.loads(body)["error"])
         self.assertEqual(sorted(path.name for path in self.files.iterdir()) if self.files.exists() else [], [])
 
     def test_retired_save_route_does_not_write(self):
-        self.assertEqual(self.call("POST", "/__cad/prompt-files/save", {"kind": "annotation", "data": ANNOTATION})[0], 404)
+        # A prompt's file is read by its name; nothing is written there.
+        self.assertEqual(self.call("POST", "/api/v1/local/prompt-files/save", {"kind": "annotation", "data": ANNOTATION})[0], 405)
         self.assertFalse(self.files.exists())
 
     def test_render_polling_is_not_an_endpoint(self) -> None:
-        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=nope")[0], 404)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=nope")[0], 405)
 
     def test_files_are_served_from_the_prompt_files_directory_only_and_to_the_viewer_only(self) -> None:
-        _, body, _ = self.call("POST", "/__cad/prompt-files", self.request())
+        _, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request())
         (self.files / "part-1-view-1.png").write_bytes(PNG)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files/part-1-view-1.png")[0], 404)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files/part-1-view-1.png")[0], 404)
         (self.tmp / "secret.json").write_text("{}", encoding="utf-8")
         for name in ("..%2Fsecret.json", "../secret.json", "missing.png", "part-1.job.txt", ""):
-            self.assertEqual(self.call("GET", f"/__cad/prompt-files/{name}")[0], 404, name)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files/part-1-current.png", guard=False)[0], 403)
-        self.assertEqual(self.call("GET", "/__cad/prompt-files?id=old", guard=False)[0], 404)
+            self.assertEqual(self.call("GET", f"/api/v1/local/prompt-files/{name}")[0], 404, name)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files/part-1-current.png", guard=False)[0], 403)
+        self.assertEqual(self.call("GET", "/api/v1/local/prompt-files?id=old", guard=False)[0], 405)
 
 
 if __name__ == "__main__":

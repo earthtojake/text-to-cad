@@ -1,5 +1,6 @@
-"""Write the robot renderer's browser-test fixtures: what ``GET /__cad/robot`` answers for each
-description here, and the primitive meshes cadgen makes for them.
+"""Write the robot renderer's browser-test fixtures: what a robot document's ``structure``
+(``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``) answers for each description here, and
+the primitive meshes cadgen makes for them.
 
 The descriptions are committed as they are (``arm.urdf``, the ``arm.srdf`` paired with it,
 ``swing.sdf``, ``chain.urdf``, ``linkage.urdf`` (a four-bar linkage closed through

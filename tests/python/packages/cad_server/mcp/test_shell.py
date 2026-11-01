@@ -1,5 +1,5 @@
 """The CAD app as a host keeps it (``cad_server.mcp.ui``): the resource is the shell, addressed by the
-engine's release and its build, and the app it loads is the engine's own (``GET /__cad/mcp-app``),
+engine's release and its build, and the app it loads is the engine's own (``GET /app``),
 read through the call a card's host carries back (``cad_http``) as any viewer route is."""
 
 from __future__ import annotations
@@ -38,7 +38,7 @@ class ShellTest(unittest.TestCase):
         self.assertTrue(page.owns("ui://cad/0.0.1/0123456789abcdef/app.html"), "any build's shell reads as this one")
 
     def test_the_engine_serves_its_app_to_the_shell_through_the_card_s_call(self) -> None:
-        answer = ViewerTunnel().serve(method="GET", url="http://cad.invalid/__cad/mcp-app", headers={}, body=b"")
+        answer = ViewerTunnel().serve(method="GET", url="http://cad.invalid/app", headers={}, body=b"")
         self.assertEqual(answer["status"], 200, answer)
         self.assertTrue(answer["headers"]["content-type"].startswith("text/javascript"))
         self.assertEqual(base64.b64decode(answer["body"]), b"export const app = 1;\n")
@@ -47,7 +47,7 @@ class ShellTest(unittest.TestCase):
         os.utime(self.page / ui.APP, ns=(1, 1))
         self.assertEqual(ui.app_code(), b"export const app = 2;\n")
         (self.page / ui.APP).unlink()
-        missing = ViewerTunnel().serve(method="GET", url="http://cad.invalid/__cad/mcp-app", headers={}, body=b"")
+        missing = ViewerTunnel().serve(method="GET", url="http://cad.invalid/app", headers={}, body=b"")
         self.assertEqual(missing["status"], 404)
 
 

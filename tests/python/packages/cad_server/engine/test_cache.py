@@ -213,7 +213,7 @@ class CacheTest(unittest.TestCase):
 
     def page(self, ident: str) -> tuple[int, dict]:
         serving = self.ask({"op": "status"})["serving"]
-        return get(f"{serving['url']}/api/doc/{ident}", self.ask({"op": "http"}).get("token", ""))
+        return get(f"{serving['url']}/api/v1/documents/model/{ident}/structure", self.ask({"op": "http"}).get("token", ""))
 
     def ran(self, name: str) -> bool:
         return (self.project / f"{name}.ran").exists()
@@ -239,9 +239,9 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(self.ask({"op": "status"})["cache"]["written"], written + 1)
 
     def home(self, action: str, path: str) -> tuple[int, dict]:
-        """A change to the home's library, as the engine's page posts it (``/__cad/recents``)."""
+        """A change to the home's library, as the engine's page sends it (``PATCH /api/v1/documents``)."""
         serving = self.ask({"op": "status"})["serving"]
-        request = urllib.request.Request(f"{serving['url']}/__cad/recents", method="POST",
+        request = urllib.request.Request(f"{serving['url']}/api/v1/documents", method="PATCH",
                                          data=json.dumps({"action": action, "path": path}).encode(),
                                          headers={"Authorization": "Bearer " + self.ask({"op": "http"})["token"],
                                                   "x-cadgen-viewer": "1", "content-type": "application/json"})
@@ -278,7 +278,7 @@ class CacheTest(unittest.TestCase):
         self.assertEqual(self.home("remove", cube)[0], 400, "a model's row is deleted, never removed")
         status, body = self.home("delete", cube)
         self.assertEqual(status, 200, body)
-        self.assertNotIn(cube, [row.get("id") for row in body["recents"]])
+        self.assertNotIn(cube, [row.get("id") for row in body["documents"]])
         self.assertEqual(self.record(cube), {})
         self.assertFalse(self.file(cube).parent.exists())
         self.assertEqual(self.page(cube)[0], 404)
@@ -370,7 +370,7 @@ class CacheTest(unittest.TestCase):
         view = urllib.parse.urlsplit(next(line.split()[1] for line in stdout.splitlines() if line.strip().startswith("view:")))
         link = urllib.parse.parse_qs(view.query)["token"][0]
         wait = f"?after={after}&wait=1" if after else ""
-        request = urllib.request.Request(f"{view.scheme}://{view.netloc}/__cad/api/doc{view.path}/version{wait}",
+        request = urllib.request.Request(f"{view.scheme}://{view.netloc}/api/v1/documents{view.path}/version{wait}",
                                          headers={"Authorization": f"Bearer {link}"})
         with urllib.request.urlopen(request, timeout=30) as answer:
             return json.loads(answer.read())["version"]

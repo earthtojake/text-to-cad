@@ -73,9 +73,9 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
   const fetchImpl = vi.fn(async (url: string, init: RequestInit) => {
     asked.push({ url, headers: new Headers(init.headers), credentials: init.credentials });
     const path = new URL(url).pathname;
-    if (path === '/__cad/server') return json({ app: 'cad-viewer' });
-    if (path === '/__cad/recents') return json({ recents: [] });
-    if (path === '/__cad/analytics') return json({ sharing: false, policy: 'https://www.texttocad.dev/privacy-policy' });
+    if (path === '/api/v1/server') return json({ app: 'cad-viewer', notice: null });
+    if (path === '/api/v1/documents') return json({ documents: [] });
+    if (path === '/api/v1/settings') return json({ language: { locale: null }, telemetry: { sharing: false, policy: 'https://www.texttocad.dev/privacy-policy' } });
     return json({ notice: null });
   });
   render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
@@ -84,7 +84,7 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
   // The client's requests (its library here) go to the engine's origin, path and query unchanged.
   await act(async () => { await viewer.props!.client.recents(); });
   expect(asked.every(request => request.url.startsWith(`${ENGINE}/`))).toBe(true);
-  expect(asked.map(request => new URL(request.url).pathname)).toEqual(expect.arrayContaining(['/__cad/server', '/__cad/recents']));
+  expect(asked.map(request => new URL(request.url).pathname)).toEqual(expect.arrayContaining(['/api/v1/server', '/api/v1/documents']));
   for (const request of asked) {
     expect(request.headers.get('authorization')).toBe('Bearer 1893456000.mac');
     expect(request.headers.has('x-cadgen-app')).toBe(false);
@@ -96,7 +96,7 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
 
 it('a host that carries calls without declaring it is checked once, then the card runs through it; a tab host is never checked', async () => {
   const answered = async (name: string, args: any) => name === 'cad_sync' ? new Promise(() => {})
-    : { structuredContent: { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(new URL(args.url).pathname === '/__cad/server' ? { app: 'cad-viewer' } : {})) } };
+    : { structuredContent: { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(new URL(args.url).pathname === '/api/v1/server' ? { app: 'cad-viewer' } : {})) } };
   const quiet = host({}, answered);
   const fetchImpl = vi.fn();
   const { container } = render(<Connection bridge={quiet.bridge as any} server={quiet.server} channel={quiet.channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);
@@ -104,12 +104,12 @@ it('a host that carries calls without declaring it is checked once, then the car
   expect(viewer.props).toBeNull();
   await waitFor(() => expect(viewer.props).not.toBeNull());
   expect(quiet.channel.state).toBe('open');
-  expect(quiet.bridge.callTool.mock.calls[0].slice(0, 2)).toMatchObject(['cad_http', { method: 'GET', url: 'http://cad.invalid/__cad/server' }]);
+  expect(quiet.bridge.callTool.mock.calls[0].slice(0, 2)).toMatchObject(['cad_http', { method: 'GET', url: 'http://cad.invalid/api/v1/server' }]);
   cleanup();
   viewer.props = null;
   const tab = host({}, answered);
   render(<Connection bridge={tab.bridge as any} server={tab.server} channel={tab.channel} launch={{ ...launch, surface: 'tab' }} presentation="tabs" fetchImpl={fetchImpl as any} />);
   expect(viewer.props).not.toBeNull();
-  expect(tab.bridge.callTool.mock.calls.some(([, args]) => String(args.url).endsWith('/__cad/server'))).toBe(false);
+  expect(tab.bridge.callTool.mock.calls.some(([, args]) => String(args.url).endsWith('/api/v1/server'))).toBe(false);
   expect(fetchImpl).not.toHaveBeenCalled();
 });

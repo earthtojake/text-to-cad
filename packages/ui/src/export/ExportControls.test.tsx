@@ -43,7 +43,7 @@ function server() {
     status: vi.fn((id: string, _sequence: number, signal: AbortSignal) => new Promise((resolve, reject) => {
       waiting.set(id, { resolve, reject }); signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     })),
-    fileUrl: vi.fn((id: string) => `/s/session/__cad/exports/${id}/file`),
+    fileUrl: vi.fn((id: string) => `/s/session/api/v1/exports/${id}/file`),
   };
   const answer = async (id: string, change: object) => act(async () => waiting.get(id)!.resolve({ ...jobs.get(id), sequence: 1, ...change }));
   const finish = (id: string) => answer(id, { state: 'ready', stage: 'Ready to save', bytes: 5, finishedAt: Date.now() / 1000, expiresAt: Date.now() / 1000 + 3600 });
@@ -140,7 +140,7 @@ it('a ready file is handed to the browser once, and its toast goes that moment: 
   await finish(id);
   await waitFor(() => expect(toasts()).toEqual([]));
   expect(downloads.save).toHaveBeenCalledTimes(1);
-  expect(downloads.save).toHaveBeenCalledWith(`/s/session/__cad/exports/${id}/file`, 'part.step');
+  expect(downloads.save).toHaveBeenCalledWith(`/s/session/api/v1/exports/${id}/file`, 'part.step');
   expect(seen).toEqual(['loading']);
   // Handed over, it is no longer kept, and its job is not asked about again.
   expect(downloads.remember).toHaveBeenLastCalledWith([]);
@@ -202,7 +202,7 @@ it('an export under way when the page reloaded picks up again by its request; on
   await waitFor(() => expect(toasts().map(item => [item.dataset.type, item.querySelector('[data-title]')?.textContent])).toEqual([
     ['error', 'The export session restarted. Open Export again.']]));
   expect(downloads.save).toHaveBeenCalledTimes(1);
-  expect(downloads.save).toHaveBeenCalledWith('/s/session/__cad/exports/kept/file', 'kept.step');
+  expect(downloads.save).toHaveBeenCalledWith('/s/session/api/v1/exports/kept/file', 'kept.step');
   // Each names the session it was made in: a server restarted since refuses it, never runs it again.
   expect(service.epoch).not.toHaveBeenCalled();
   expect(downloads.remember).toHaveBeenLastCalledWith([]);

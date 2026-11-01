@@ -46,10 +46,12 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     change(next: HostContext) { context = { ...context, ...next }; for (const listener of [...listeners]) listener(context); },
   };
   const answers: Record<string, Answer> = {
-    '/__cad/analytics': body => ({ sharing: Boolean(body?.share), policy: POLICY }),
-    '/__cad/version': () => ({ notice: null }),
-    '/__cad/recents': () => ({ recents: [] }),
-    '/__cad/reveal': () => null,
+    // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`).
+    '/api/v1/settings': body => ({ language: { locale: body?.language?.locale ?? null },
+      telemetry: { sharing: Boolean(body?.telemetry?.share), policy: POLICY } }),
+    '/api/v1/server': () => ({ notice: null }),
+    '/api/v1/documents': () => ({ documents: [] }),
+    '/api/v1/local/reveal': () => null,
   };
   const requests: { path: string; body: any }[] = [];
   const server = {
@@ -67,6 +69,9 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     }),
     answers,
     asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
+    /** The settings' reads (each of the language's and the consent's), and the telemetry answers sent. */
+    telemetry: () => requests.filter(request => request.path === '/api/v1/settings' && !request.body?.language)
+      .map(request => request.body && request.body.telemetry),
   };
   return { bridge, server };
 }
@@ -118,7 +123,7 @@ it('a model opened from the home is shown in place, joins the library with its p
   // On screen, it joins the library every CAD view shares, and its picture is kept there.
   await act(async () => viewer.props!.onShown!('/work/parts/a.step'));
   await act(async () => { await viewer.props!.onThumbnail!(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }), '/work/parts/a.step'); });
-  expect(server.asked('/__cad/recents')).toEqual([{ action: 'open', path: '/work/parts/a.step' },
+  expect(server.asked('/api/v1/documents').filter(Boolean)).toEqual([{ action: 'open', path: '/work/parts/a.step' },
     { action: 'thumbnail', path: '/work/parts/a.step', png: 'iVA=' }]);
   // Home again (the view's history goes there, as a show of the home does).
   act(() => viewer.props!.onShow(''));
@@ -133,7 +138,7 @@ it('a model opened from the home is shown in place, joins the library with its p
   const { perform, platform } = viewer.props!.host.fileActions!;
   expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);
   await act(async () => perform!.reveal!({ path: '/work/parts/a.step', kind: 'file' }));
-  expect(server.asked('/__cad/reveal')).toEqual([{ path: '/work/parts/a.step' }]);
+  expect(server.asked('/api/v1/local/reveal')).toEqual([{ path: '/work/parts/a.step' }]);
 });
 
 it('every view has the home and browses from its file\'s folder, but the host\'s file handler shows its file alone', () => {
@@ -247,12 +252,12 @@ it('the file handler\'s corner is the viewport\'s top-right, the host\'s notice:
 it("Open in browser is the navbar's last control where a launch carried the page: the server opens it from this computer, and only where it cannot is the launch's page opened through the host", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { openLinks: {} });
   let display = true;
-  server.answers['/__cad/browser/open'] = () => display ? { opened: true } : new Status(503, { error: 'there is no display to open a browser on' });
+  server.answers['/api/v1/local/browser/open'] = () => display ? { opened: true } : new Status(503, { error: 'there is no display to open a browser on' });
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a b.step', browser: 'http://127.0.0.1:3245/id-a?token=t' }} />);
   const button = screen.getByRole('button', { name: 'Open in browser' });
   act(() => button.click());
   // The request names the document, never a URL; the server opened it, so the host is asked nothing.
-  await waitFor(() => expect(server.asked('/__cad/browser/open')).toEqual([{ model: '/work/a b.step' }]));
+  await waitFor(() => expect(server.asked('/api/v1/local/browser/open')).toEqual([{ model: '/work/a b.step' }]));
   display = false;
   act(() => button.click());
   await waitFor(() => expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'http://127.0.0.1:3245/id-a?token=t' }));
@@ -268,7 +273,7 @@ it("Open in browser follows what the view shows: each launch's page, the agent's
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const replies: ((reply: { events: unknown[] }) => void)[] = [];
   server.sync = vi.fn(() => new Promise(resolve => { replies.push(resolve); }));
-  server.answers['/__cad/browser/open'] = () => new Status(503, { error: 'there is no display to open a browser on' });
+  server.answers['/api/v1/local/browser/open'] = () => new Status(503, { error: 'there is no display to open a browser on' });
   const open = vi.fn();
   vi.stubGlobal('open', open);
   const opened = async (url: string) => {
@@ -372,18 +377,18 @@ it('a Quick Edit queues into a tab host\'s composer always, into an inline host\
 
 it('a Quick Edit that reached its destination is counted by the CAD app\'s server, told nothing of the edit', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: { text: {} } });
-  server.answers['/__cad/analytics/activity'] = () => null;
+  server.answers['/api/v1/local/activity'] = () => null;
   render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 7, page: 'viewer', model: '/work/part.stl' }} />);
   viewer.props!.host.usage.used('quickEdit');
-  await vi.waitFor(() => expect(server.asked('/__cad/analytics/activity')).toEqual([{ quickEdit: true }]));
+  await vi.waitFor(() => expect(server.asked('/api/v1/local/activity')).toEqual([{ quickEdit: true }]));
 });
 
 it("the controls a person used reach the CAD app's server as the shared viewer counted them, by name and seconds", async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
-  server.answers['/__cad/analytics/activity'] = () => null;
+  server.answers['/api/v1/local/activity'] = () => null;
   render(<App bridge={bridge as any} server={server as any} presentation="tabs" launch={{ protocol: 7, page: 'viewer', model: '/work/part.stl' }} />);
   viewer.props!.host.usage.controls([{ control: 'measure', count: 1, seconds: 42 }]);
-  await vi.waitFor(() => expect(server.asked('/__cad/analytics/activity')).toEqual([{ controls: [{ control: 'measure', count: 1, seconds: 42 }] }]));
+  await vi.waitFor(() => expect(server.asked('/api/v1/local/activity')).toEqual([{ controls: [{ control: 'measure', count: 1, seconds: 42 }] }]));
 });
 
 it('nothing asks about usage stats: the app menu shows the answer, and its toggle changes it', async () => {
@@ -393,13 +398,14 @@ it('nothing asks about usage stats: the app menu shows the answer, and its toggl
   // cadgen's telemetry is on by default once a `cad` command has said so: the page never asks.
   expect(queryByRole('dialog')).toBeNull();
   expect(viewer.props!.notice).toBeFalsy();
-  expect(server.asked('/__cad/analytics')).toEqual([null]);
+  // The settings read once by each of the language and the consent: no answer sent.
+  expect(server.telemetry()).toEqual([null, null]);
   expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
-  expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: true });
+  expect(server.telemetry().at(-1)).toEqual({ share: true });
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
-  expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: false });
+  expect(server.telemetry().at(-1)).toEqual({ share: false });
   expect(viewer.props!.appSettings![0].checked).toBe(false);
 });
 
@@ -408,20 +414,19 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   let releaseStaleRead: (value: unknown) => void = () => {};
   render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
-  // The click's own focus sends a read that answers late, with the answer from before it.
-  const answer = server.answers['/__cad/analytics'];
-  server.answers['/__cad/analytics'] = () => {
-    server.answers['/__cad/analytics'] = answer;
-    return new Promise(resolve => { releaseStaleRead = resolve; });
-  };
+  // The click's own focus sends reads that answer late, with the settings from before it.
+  const answer = server.answers['/api/v1/settings'];
+  const stale: ((value: unknown) => void)[] = [];
+  server.answers['/api/v1/settings'] = body => (body ? answer(body, new URL('http://cad.invalid')) : new Promise(resolve => { stale.push(resolve); }));
+  releaseStaleRead = value => { server.answers['/api/v1/settings'] = answer; for (const resolve of stale) resolve(value); };
   act(() => { window.dispatchEvent(new Event('focus')); });
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
-  await act(async () => releaseStaleRead({ sharing: false, policy: POLICY }));
+  await act(async () => releaseStaleRead({ language: { locale: null }, telemetry: { sharing: false, policy: POLICY } }));
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   cleanup();
   // DO_NOT_TRACK: the setting says so, and cannot be changed here.
   const fixed = host({ displayMode: 'fullscreen' });
-  fixed.server.answers['/__cad/analytics'] = () => ({ sharing: false, reason: 'environment', policy: POLICY });
+  fixed.server.answers['/api/v1/settings'] = () => ({ language: { locale: null }, telemetry: { sharing: false, reason: 'environment', policy: POLICY } });
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));
@@ -434,15 +439,17 @@ it('a newer release is the update button, an icon: a click updates through the e
   // The launch carries the notice as the server last read it: the button draws with the page, over the home too.
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
   let release = '0.8.1';
-  server.answers['/__cad/update'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0', progress: { stage: 'restart', done: 3, total: 4 } } });
-  server.answers['/__cad/version'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0' } });
+  // The engine answers nothing until the button is drawn: the launch said it, nothing read for it.
+  let answering = false;
+  server.answers['/api/v1/local/update'] = () => ({ notice, release, update: { state: 'restarting', target: '0.9.0', progress: { stage: 'restart', done: 3, total: 4 } } });
+  server.answers['/api/v1/server'] = () => (answering ? { notice, release, update: { state: 'restarting', target: '0.9.0' } } : new Promise(() => {}));
   const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
   const update = await findByRole('button', { name: 'Update to 0.9.0' });
   expect(update.closest('[data-card-corner]')).toBeNull();
   expect(update.textContent).toBe('');  // an icon, and nothing else: no card opens
-  expect(server.asked('/__cad/version')).toEqual([]);  // nothing read: the launch said it
+  answering = true;
   await act(async () => update.click());
-  await waitFor(() => expect(server.asked('/__cad/update')).toHaveLength(1));
+  await waitFor(() => expect(server.asked('/api/v1/local/update')).toHaveLength(1));
   await findByRole('status', { name: 'Restarting with 0.9.0' });
   expect(reload).not.toHaveBeenCalled();  // the engine has not come back yet
   release = '0.9.0';  // the engine came back with the new release: the card loads its app in place
@@ -456,8 +463,8 @@ it('a switch that fails and goes back ends the card\'s restart: the update offer
   vi.stubGlobal('__cadShell', { reload });
   const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
   let update: Record<string, unknown> = { state: 'restarting', target: '0.9.0' };
-  server.answers['/__cad/update'] = () => ({ notice, release: '0.8.1', update });
-  server.answers['/__cad/version'] = () => ({ notice, release: '0.8.1', update });
+  server.answers['/api/v1/local/update'] = () => ({ notice, release: '0.8.1', update });
+  server.answers['/api/v1/server'] = () => ({ notice, release: '0.8.1', update });
   const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice, version: '0.8.1' }} />);
   const button = await findByRole('button', { name: 'Update to 0.9.0' });
   await act(async () => button.click());

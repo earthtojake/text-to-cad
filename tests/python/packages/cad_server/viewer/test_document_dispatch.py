@@ -1,11 +1,12 @@
-"""Exact document routes and response headers survive the in-process HTTP adapter."""
+"""Exact document reads and response headers survive the in-process adapter: the engine's own
+vocabulary (``/api/doc/<id>...``, ``cad/engine/serve.py``'s), which ``/api/v1``'s routes read."""
 import io
 import json
 import unittest
 from unittest.mock import Mock
 
 from cad.engine.serve import Server
-from cad_server.viewer.engine_app import DocumentResponse, document_route
+from cad_server.viewer.engine_app import DocumentResponse, document_read
 from cad_server.viewer.response import Request
 
 
@@ -23,7 +24,7 @@ class DocumentDispatchTest(unittest.TestCase):
                                         ('/api/docs/', 'GET', 404), ('/api//docs', 'GET', 404),
                                         ('/api/docs', 'GET', 200), ('/api/doc/absent/mesh', 'GET', 405)):
             with self.subTest(path=path, method=method):
-                handler = DocumentResponse(request(path, method))
+                handler = DocumentResponse(request(path, method), path)
                 server.route(handler, method)
                 self.assertEqual(handler.status, expected)
                 if expected == 405:
@@ -39,11 +40,10 @@ class DocumentDispatchTest(unittest.TestCase):
             handler.send_header('Content-Disposition', 'attachment; filename="model.json"')
             handler.send_header('Access-Control-Allow-Origin', '*')
             handler.wfile.write(b'{"error":"Method not allowed"}')
-        response = Mock()
-        document_route(Mock(route=route), request('/api/docs', 'HEAD'), response)
-        status, body, kind, headers = response.send_bytes.call_args.args
-        self.assertEqual(status, 405)
+        status, kind, headers, body = document_read(Mock(route=route), request('/api/v1/look', 'HEAD'), '/api/docs')
+        self.assertEqual((status, kind), (405, 'application/json'))
         self.assertTrue(body, 'Response suppresses the HEAD body after computing its GET length')
+        headers = list(headers.items())
         self.assertEqual(dict(headers)['allow'], 'POST')
         self.assertEqual(dict(headers)['etag'], 'revision-1')
         self.assertIn('content-disposition', dict(headers))
@@ -66,11 +66,12 @@ class BrowserPageTest(unittest.TestCase):
         self.addCleanup(server.stop)
         path = folder / 'part.xbf'
         ident = server.put(path, {'version': 'one', 'prototypes': [], 'name': 'part'}, {})
-        version = request(f'/__cad/api/doc/{ident}/version', query=[('after', ''), ('wait', '0')])
-        document_route(server, version, Mock(), page=False)  # an MCP view's, through its tunnel
+        version = request(f'/api/v1/documents/{ident}/version')
+        route, query = f'/api/doc/{ident}/version', [('after', ''), ('wait', '0')]
+        document_read(server, version, route, query, page=False)  # an MCP view's, through its tunnel
         server.sync(ident)  # and its heartbeat
         self.assertFalse(server.in_page(str(path)))
-        document_route(server, version, Mock(), page=True)
+        document_read(server, version, route, query, page=True)
         self.assertTrue(server.in_page(str(path)))
         self.assertTrue(server.in_page(ident))
         other = server.put(folder / 'other.xbf', {'version': 'one', 'prototypes': [], 'name': 'other'}, {})

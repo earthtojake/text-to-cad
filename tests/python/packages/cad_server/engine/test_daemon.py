@@ -1470,7 +1470,7 @@ class DaemonTest(unittest.TestCase):
         self.assertNotIn("address", first, "a report names its document by its id alone")
         url = urlparse(first["url"])
         doc = url.path.strip("/")
-        endpoint = f"{url.scheme}://{url.netloc}/api/doc/{doc}"
+        endpoint = f"{url.scheme}://{url.netloc}/api/v1/documents/model/{doc}/structure"
         token = parse_qs(url.query)["token"][0]
         before = get_json(endpoint, token)
         (self.folder / "bracket.py").write_text(textwrap.dedent(BARE.format(size=2)), encoding="utf-8")
@@ -1688,14 +1688,14 @@ if __name__ == '__main__':
         url = urlsplit(served.stdout.strip())
         base, query = f"{url.scheme}://{url.netloc}", parse_qs(url.query)
         ident, token = url.path.strip("/"), query["token"][0]
-        api = f"{base}/api/doc/{ident}"
-        before = get_json(api, token)
+        api = f"{base}/api/v1/documents/xbf/{ident}"
+        before = get_json(f"{api}/structure", token)
         for prototype in before["prototypes"]:  # the page has every part
-            self.assertEqual(get(f"{api}/part/{prototype['key']}", token)[:4], b"XBM2")
+            self.assertEqual(get(f"{api}/parts/{prototype['key']}", token)[:4], b"XBM2")
         self.script.write_text(textwrap.dedent(PAIR.format(size=12)), encoding="utf-8")
         ran = self.run_script("pair.py")
         self.assertEqual(ran.returncode, 0, ran.stderr)
-        answer = get_json(f"{api}/version?after={before['version']}&wait=60", token)
+        answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
         stat = (self.folder / "XBF/pair.xbf").stat()
         self.assertEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
         self.assertNotIn("patch", answer, "nothing of the run reached the page")
@@ -1900,7 +1900,7 @@ if __name__ == '__main__':
         url = urlsplit(served.stdout.strip())
         base, query = f"{url.scheme}://{url.netloc}", parse_qs(url.query)
         ident, token = url.path.strip("/"), query["token"][0]
-        before = get_json(f"{base}/api/doc/{ident}", token)
+        before = get_json(f"{base}/api/v1/documents/xbf/{ident}/structure", token)
         stl = self.folder / "pair.stl"
         written = stl.stat().st_mtime_ns
         self.script.write_text(slow.format(size=12), encoding="utf-8")
@@ -1908,7 +1908,7 @@ if __name__ == '__main__':
         building = subprocess.Popen([sys.executable, "pair.py"], cwd=self.folder, env=self.env,
                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(building.wait)
-        answer = get_json(f"{base}/api/doc/{ident}/version?after={before['version']}&wait=60", token)
+        answer = get_json(f"{base}/api/v1/documents/{ident}/version?after={before['version']}&wait=60", token)
         self.assertNotEqual(answer["version"], before["version"])
         self.assertEqual(stl.stat().st_mtime_ns, written, "the viewer moved before the STL was written")
         gate.touch()

@@ -94,8 +94,8 @@ class _Tmp(unittest.TestCase):
     def consent(self, server: Server, share: bool | None = None) -> dict:
         """The app menu's Share anonymous usage data toggle: read, or the person's answer."""
         if share is None:
-            return self.http(server, "GET", "/__cad/analytics")[1]
-        return self.http(server, "POST", "/__cad/analytics", {"share": share})[1]
+            return self.http(server, "GET", "/api/v1/settings")[1]["telemetry"]
+        return self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": share}})[1]["telemetry"]
 
 
 class ConsentTest(_Tmp):
@@ -247,7 +247,7 @@ class OneAnswerTest(_Tmp):
     def test_only_a_page_answers_and_its_toggle_changes_it_whenever(self) -> None:
         server, sent = self.serve("claude-github", client="some-terminal-agent")
         with self.assertRaisesRegex(RpcError, "unknown tool"):  # a client with no page has no cad_http
-            self.agent(server, "POST", "/__cad/analytics", {"share": True})
+            self.agent(server, "PUT", "/api/v1/settings", {"telemetry": {"share": True}})
         self.assertEqual(status(path=self.path)["reason"], "untold")
         server, sent = self.serve("claude-github")
         self.consent(server, True)
@@ -274,8 +274,8 @@ class ServerCountsTest(_Tmp):
         # The view adds the models it shows to the library (one a person browsed to as well): files
         # worked on. The home's re-reads of the library are plumbing, never counted.
         for model in (secret, plate):
-            self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
-        self.http(server, "GET", "/__cad/recents")
+            self.http(server, "PATCH", "/api/v1/documents", {"action": "open", "path": str(model)})
+        self.http(server, "GET", "/api/v1/documents")
         # A view's syncs: plumbing, never a tool count. One nobody touched notes nothing (a view left
         # open sends nothing); a touch is view activity.
         for _ in range(3):
@@ -312,7 +312,7 @@ class ServerCountsTest(_Tmp):
         # own route: counted only under the person's yes.
         server, sent = self.serve("claude-directory")
         report = {"controls": [{"control": "pencil", "count": 2, "seconds": 95}, {"control": "display_xray", "count": 1, "seconds": 0}]}
-        self.assertEqual(self.http(server, "POST", "/__cad/analytics/activity", report)[0], 204)
+        self.assertEqual(self.http(server, "POST", "/api/v1/local/activity", report)[0], 204)
         self.assertFalse(server.analytics.flush(), "nobody told, nothing said yes: nothing goes")
         self.consent(server, True)
         for activity in (report, {"controls": [
@@ -323,9 +323,9 @@ class ServerCountsTest(_Tmp):
             {"control": "clip", "count": 1, "seconds": 7200},  # more than one report says
             {"control": "explode", "count": 0, "seconds": 0},
         ]}):
-            self.assertEqual(self.http(server, "POST", "/__cad/analytics/activity", activity)[0], 204)
+            self.assertEqual(self.http(server, "POST", "/api/v1/local/activity", activity)[0], 204)
         # The agent cannot speak for the person's hands.
-        self.assertTrue(self.agent(server, "POST", "/__cad/analytics/activity", report)["isError"])
+        self.assertTrue(self.agent(server, "POST", "/api/v1/local/activity", report)["isError"])
         self.assertTrue(server.analytics.flush())
         self.assertEqual(sent[-1]["schema"], 8)
         self.assertEqual([event for event in sent[-1]["events"] if event["name"] == "control"], [
@@ -335,7 +335,7 @@ class ServerCountsTest(_Tmp):
         self.assertNotIn("secret", json.dumps(sent))
         # Off, nothing more is noted or sent.
         self.consent(server, False)
-        self.http(server, "POST", "/__cad/analytics/activity", report)
+        self.http(server, "POST", "/api/v1/local/activity", report)
         self.assertFalse(server.analytics.flush())
         self.assertEqual(len(sent), 1)
 
@@ -603,7 +603,7 @@ class ServerCountsTest(_Tmp):
         model = self.tmp / "bracket.step"
         model.write_text("ISO-10303-21;", encoding="utf-8")
         self.call(server, "cad_view")
-        self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
+        self.http(server, "PATCH", "/api/v1/documents", {"action": "open", "path": str(model)})
         self.assertTrue(server.analytics.flush())
         self.assertEqual(sent[0]["events"], [{"name": "files", "kind": "step", "count": 1},
                                              {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0}])
@@ -624,10 +624,12 @@ class ServerCountsTest(_Tmp):
         # The agent reads and changes nothing: without the page's capability its request is refused.
         for payload in (None, {"share": False}, {"share": True}):
             with self.subTest(payload=payload):
-                self.assertTrue(self.agent(server, "GET" if payload is None else "POST", "/__cad/analytics", payload)["isError"])
+                self.assertTrue(self.agent(server, "GET" if payload is None else "PUT", "/api/v1/settings",
+                                           None if payload is None else {"telemetry": payload})["isError"])
         self.assertTrue(status(path=self.path)["sharing"])
         with mock.patch.object(server.analytics, "choose", wraps=server.analytics.choose) as choose:
-            code, off = self.http(server, "POST", "/__cad/analytics", {"share": False})
+            code, off = self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": False}})
+            off = off["telemetry"]
             choose.assert_called_once_with(False, by="app")
         self.assertEqual(code, 200)
         self.assertEqual((off["sharing"], off["saved"]), (False, True))
@@ -646,8 +648,8 @@ class ServerCountsTest(_Tmp):
         server, _ = self.serve("claude-directory")
         server.analytics.choose(True, by="app")
         with mock.patch("cad_server.settings.write_bytes_atomic", side_effect=OSError("read only")):
-            code, answer = self.http(server, "POST", "/__cad/analytics", {"share": False})
-        self.assertEqual((code, answer["sharing"], answer["saved"]), (200, False, False))
+            code, answer = self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": False}})
+        self.assertEqual((code, answer["telemetry"]["sharing"], answer["telemetry"]["saved"]), (200, False, False))
 
 class SenderTest(_Tmp):
     """Every batch says who sent it (``PROCESSES``), whichever process holds the recorder: the engine

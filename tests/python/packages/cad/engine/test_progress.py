@@ -518,7 +518,7 @@ class DaemonProgressTest(unittest.TestCase):
             self.assertEqual(served.returncode, 0, served.stderr)
             page = urlsplit(served.stdout.strip())
             token = parse_qs(page.query)["token"][0]
-            base = f"{page.scheme}://{page.netloc}/api/doc/{page.path.strip('/')}/version"
+            base = f"{page.scheme}://{page.netloc}/api/v1/documents/{page.path.strip('/')}/version"
 
             def get(query: str) -> dict:
                 with urllib.request.urlopen(urllib.request.Request(f"{base}?{query}",

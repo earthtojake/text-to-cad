@@ -11,7 +11,7 @@ import LAYERED from './__fixtures__/layered.drawing.json';
 
 // The DXF tab's chrome and its answers to the host, mounted the way a host mounts it: the
 // FileViewer over the real DXF registration and a real CAD client, whose backend is a fetch that
-// answers with the committed `/__cad/drawing` payload. Only the canvas's 2D context and PNG
+// answers with the committed drawing payload (a DXF document's `drawing`). Only the canvas's 2D context and PNG
 // encoder are stand-ins — what is PAINTED is the browser suite's; what the tab offers, what the
 // cursor says and what a host is told are decided here, above the pixels.
 
@@ -58,13 +58,16 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 /** One pane of the harness: a host, a workspace, host commands and a live binding, and the tab. */
 async function openDrawing(destinationKind = 'composer', notice: ReactNode = null, promptFiles?: any, { drawn = true } = {}) {
-  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
-    if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ entries: [{ kind: 'dxf', file: FILE, url: '/sample.dxf', hash: revision, bytes: 4096 }] });
+    if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
+      return new Response(JSON.stringify({ id: 'sample', kind: 'dxf', api: '/api/v1/documents/dxf/sample' }), { status: 201, headers: { 'content-type': 'application/json' } });
     }
-    if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/__cad/drawing')) return readDrawing();
+    if (url.pathname.endsWith('/api/v1/documents')) {
+      return json({ documents: [{ entry: { kind: 'dxf', file: FILE, url: '/sample.dxf', hash: revision, bytes: 4096 }, revision }] });
+    }
+    if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
+    if (url.pathname.endsWith('/api/v1/documents/dxf/sample/drawing')) return readDrawing();
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });

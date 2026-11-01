@@ -367,7 +367,7 @@ class LifetimeDaemonTest(unittest.TestCase):
     def page(self, ident: str) -> tuple[int, dict]:
         serving = self.ask({"op": "status"})["serving"]
         token = self.ask({"op": "http"}).get("token", "")
-        return get(f"{serving['url']}/api/doc/{ident}", token)
+        return get(f"{serving['url']}/api/v1/documents/model/{ident}/structure", token)
 
     def test_a_held_document_exports_by_id_with_no_worker_of_its_script(self) -> None:
         ident = self.built("bracket")

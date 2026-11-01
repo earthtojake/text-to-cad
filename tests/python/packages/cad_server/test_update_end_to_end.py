@@ -2,7 +2,7 @@
 ``releases``): release A set up by its own ``cad setup`` in a home of this test's own, its engine
 started as any client starts it; release B published -- its wheel in a folder uv reads beside the
 index (``CAD_UPDATE_FIND_LINKS``), and named by a version feed served here (``CAD_API_URL``);
-then the button's request (``POST /__cad/update``, ``cad_server.viewer.http_app``), and the engine back on
+then the button's request (``POST /api/v1/local/update``, ``cad_server.viewer.http_app``), and the engine back on
 the same port, with the same token, running B -- the answer a page reloads on --, A's folder kept as
 the way back.
 
@@ -266,10 +266,10 @@ class UpdateEndToEndTest(unittest.TestCase):
                         pass
 
     def version(self, token: str) -> tuple[int | None, dict]:
-        """``GET /__cad/version`` on the port, as the page asks it: ``(status, answer)``; no status with no engine there."""
+        """``GET /api/v1/server`` on the port, as the page asks it: ``(status, answer)``; no status with no engine there."""
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         try:
-            connection.request("GET", "/__cad/version", headers={"Authorization": f"Bearer {token}"})
+            connection.request("GET", "/api/v1/server", headers={"Authorization": f"Bearer {token}"})
             response = connection.getresponse()
             body = response.read()
         except OSError:
@@ -317,6 +317,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         token = json.loads(started.stdout.strip().splitlines()[-1])["token"]
         status, answer = self.version(token)
         self.assertEqual((status, answer.get("release"), answer.get("notice")), (200, A, None), answer)
+        instance = answer["instance"]
 
         # B is published: its wheels where uv reads, the feed naming it.
         release(B, self.wheels)
@@ -325,7 +326,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         # The click.
         clicked = time.monotonic()
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
-        connection.request("POST", "/__cad/update", body=b"{}", headers={
+        connection.request("POST", "/api/v1/local/update", body=b"{}", headers={
             "Authorization": f"Bearer {token}", "x-cadgen-viewer": "1", "Content-Type": "application/json"})
         response = connection.getresponse()
         answer = json.loads(response.read())
@@ -347,6 +348,8 @@ class UpdateEndToEndTest(unittest.TestCase):
                 self.fail(f"the engine answered {status}: {answer}\n{self.said()}")
             elif answer["release"] == B:
                 back = time.monotonic()
+                # Another start of the engine: a page reloads on it as on the release.
+                self.assertNotEqual(answer["instance"], instance)
                 break
             else:
                 update = answer["update"]

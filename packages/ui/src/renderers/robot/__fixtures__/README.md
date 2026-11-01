@@ -11,7 +11,7 @@ refuses: `gone.urdf`, whose link mesh is missing, and `lonely.srdf`, with no URD
 beside it.
 
 Beside each is what cadgen resolves it to: `<name>.<kind>.robot.json` is exactly
-what `GET /__cad/robot` answers for it (`cad_server.robot_payload`), with every
+what a robot document's `structure` (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`) answers for it (`cad_server.robot_payload`), with every
 visual's mesh named by the URL the browser test's server answers; `primitives/`
 holds the meshes cadgen made for the shapes (one GLB per shape and size, named
 by the sha256 of its bytes); `refusals.json` holds the sentence cadgen refuses the two

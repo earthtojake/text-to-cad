@@ -16,11 +16,11 @@ test("meshFormatFromUrl routes native mesh URLs to the correct loader family", (
 
 test("meshFormatFromUrl routes CAD asset URLs using the file query extension", () => {
   assert.equal(
-    meshFormatFromUrl("/__cad/asset?file=%2Fworkspace%2Frobots%2Ftom%2F3MF%2Fsts3250.3mf&v=abc123"),
+    meshFormatFromUrl("/api/v1/local/files?path=%2Fworkspace%2Frobots%2Ftom%2F3MF%2Fsts3250.3mf&v=abc123"),
     RENDER_FORMAT.THREE_MF
   );
   assert.equal(
-    meshFormatFromUrl("/__cad/asset?file=%2Fworkspace%2Frobots%2Ftom%2Fmeshes%2Ftool.glb"),
+    meshFormatFromUrl("/api/v1/local/files?path=%2Fworkspace%2Frobots%2Ftom%2Fmeshes%2Ftool.glb"),
     RENDER_FORMAT.GLB
   );
 });
@@ -36,7 +36,7 @@ test("resolveMeshFormatFromUrl allows viewer consumers to preserve STL fallback 
     RENDER_FORMAT.STL
   );
   assert.equal(
-    resolveMeshFormatFromUrl("/__cad/asset?file=%2Fworkspace%2Frobots%2Ftom%2F3MF%2Fsts3250.3mf", { fallback: RENDER_FORMAT.STL }),
+    resolveMeshFormatFromUrl("/api/v1/local/files?path=%2Fworkspace%2Frobots%2Ftom%2F3MF%2Fsts3250.3mf", { fallback: RENDER_FORMAT.STL }),
     RENDER_FORMAT.THREE_MF
   );
 });

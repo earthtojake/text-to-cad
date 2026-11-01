@@ -1,5 +1,6 @@
 """The regular display modes' look (``render/look.py``): one record, served at ``GET /api/look``
-as the viewer reads it with its environment image at ``GET /api/look/environment``, and the copy
+(the engine's own read, which its API answers at ``GET /api/v1/look``) as the viewer reads it, with
+its environment image at ``GET /api/look/environment`` (``GET /api/v1/look/environment``), and the copy
 of it the viewer's tests parse (``packages/core/src/lib/xbf/__fixtures__/look.json``) the same
 record; the image decodes as three's HDRLoader decodes it, and maps onto the cube map OCCT reads."""
 
@@ -30,8 +31,9 @@ class LookTest(unittest.TestCase):
         with urllib.request.urlopen(f"{server.url}/api/look", timeout=30) as answer:
             served = json.loads(answer.read())
         self.assertEqual(served, LOOK.json())
-        url = f"{server.url}{served['environment']['url']}"
-        with urllib.request.urlopen(url, timeout=30) as answer:
+        # The page reads the image where the engine's API answers it.
+        self.assertEqual(served["environment"]["url"], "/api/v1/look/environment")
+        with urllib.request.urlopen(f"{server.url}/api/look/environment", timeout=30) as answer:
             self.assertEqual(answer.read(), LOOK.environment_path.read_bytes())
 
     def test_the_viewers_copy_is_the_record(self) -> None:
