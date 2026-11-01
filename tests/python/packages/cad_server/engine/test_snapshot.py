@@ -576,16 +576,16 @@ def _model(script: Path, name: str):
 
 
 class AccessTest(unittest.TestCase):
-    """The engine's own routes answer its own page alone: its standalone page (``page/``) reads them
-    from its origin, and every other page goes through the viewer's relay of them, which keeps its
-    own law. No origin, a page on this machine's included, is named as a reader."""
+    """The engine's own routes name no reader of another origin: every page reads them through the
+    viewer's relay of them, which keeps its own law. No origin, a page on this machine's included,
+    is named as a reader."""
 
     def test_no_page_of_another_origin_is_named_a_reader(self) -> None:
         server = Server(mesh_mode="inline", http_factory=listener)
         server.start()
         self.addCleanup(server.stop)
         for origin in ("http://127.0.0.1:3245", "http://localhost:5173", "https://example.com", "null"):
-            for path in ("/api/v1/look", "/api/docs", "/"):
+            for path in ("/api/v1/look", "/api/docs"):
                 with self.subTest(origin=origin, path=path):
                     request = urllib.request.Request(f"{server.url}{path}", headers={"Origin": origin})
                     with urllib.request.urlopen(request, timeout=60) as answer:

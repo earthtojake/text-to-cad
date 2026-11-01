@@ -237,7 +237,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
         # The engine is no leaf: every build, export, snapshot and served document is its.
         for path in ("packages/cad/src/cad/geometry.py", "packages/cad/src/cad/engine/api.py",
-                     "packages/cad/src/cad/engine/page/viewer.js",
+                     "packages/cad/src/cad/engine/serve.py",
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
                      "packages/aliases/cadgen/pyproject.toml"):

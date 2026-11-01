@@ -904,7 +904,7 @@ class Daemon:
                 try:
                     self.server, where = bind(
                         host, int(request["port"]) if request.get("port") else self.port,
-                        lambda port, token: Server(port=port, three=request.get("three"), touch=self.touch,
+                        lambda port, token: Server(port=port, touch=self.touch,
                                                    provenance=self.provenance, cache=MESHES, isolated=True, host=host,
                                                    http_factory=HTTP_FACTORY, budget=memory_budget(), token=token))
                 except PortHeld as refusal:

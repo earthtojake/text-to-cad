@@ -37,9 +37,8 @@ The structure carries the document's mechanism as ``kinematics`` (``mechanism.bl
 from which a page poses it itself. ``GET /api/v1/look`` is the look the regular display modes
 draw a document in (``render/look.py``), which a page lights and dresses its scene by, and
 ``GET /api/v1/look/environment`` the image its environment is (the paths the record names, the
-engine's API's own). ``/`` is a page that shows
-one (``page/``), with three.js served from a ``node_modules`` folder (``--three``, or the
-nearest one above the working directory).
+engine's API's own). The server binds no listener of its own: these routes are answered in
+process (``route``), and reached over HTTP only through the daemon's listener, which relays them.
 
 **A file follows its disk.** A file is read once, when it is first served, and again whenever
 its modification time or size is not what was read: they are compared each time the document is
@@ -88,7 +87,6 @@ import hashlib
 import itertools
 import json
 import math
-import mimetypes
 import os
 import sys
 import tempfile
@@ -104,13 +102,11 @@ from urllib.parse import parse_qs, unquote, urlparse
 from cad.engine.atomic_replace import replace_atomic
 from cad.engine.render.look import LOOK
 
-__all__ = ["FactCache", "MeshCache", "NotHeld", "PARALLEL_BYTES", "Pressure", "Served", "Server", "find_three",
-           "memory_budget"]
+__all__ = ["FactCache", "MeshCache", "NotHeld", "PARALLEL_BYTES", "Pressure", "Served", "Server", "memory_budget"]
 
 from cad.engine.addresses import document_id, key as document_key
 from cad.engine.ids import canonical, file_id, is_id
 
-PAGE = Path(__file__).resolve().parent / "page"
 # A part whose shape bytes reach this is meshed with the kernel's face parallelism inside
 # its pool process: measured one part at a time on two large documents, parts above it
 # meshed 1.1-1.5x faster with it and parts below it no faster, some slower. (A whole
@@ -132,20 +128,6 @@ FOREIGN = (".step", ".stp")
 # How many STEP reads are held by their bytes: a read a served document holds stays in memory
 # with it whatever this says; past it, the least recently served read goes.
 FOREIGN_HELD = 8
-
-
-def find_three(start: Path | None = None) -> Path | None:
-    """The ``three`` package folder: ``CAD_ENGINE_THREE``, else the nearest
-    ``node_modules/three`` above ``start`` (the working directory) or above this file."""
-    override = os.environ.get("CAD_ENGINE_THREE")
-    if override:
-        return Path(override)
-    for base in (Path(start or os.getcwd()).resolve(), Path(__file__).resolve()):
-        for folder in (base, *base.parents):
-            candidate = folder / "node_modules" / "three"
-            if (candidate / "build" / "three.module.js").is_file():
-                return candidate
-    return None
 
 
 class MeshCache:
@@ -971,7 +953,7 @@ def reachable_host(host: str) -> str:
 
 
 class Server:
-    def __init__(self, port: int = 0, three: str | None = None, touch: Callable[[], None] = lambda: None,
+    def __init__(self, port: int = 0, touch: Callable[[], None] = lambda: None,
                  host: str = "127.0.0.1", mesh_mode: str | None = None,
                  provenance: Callable[[str, str, str, int], dict[str, Any] | None] | None = None,
                  cache: MeshCache | None = None, isolated: bool = False, http_factory=None,
@@ -1033,7 +1015,6 @@ class Server:
         self.isolated = isolated
         self.mesher = Mesher("processes" if isolated else mesh_mode,
                              workers=1 if isolated and (mesh_mode or os.environ.get("CAD_ENGINE_MESH")) == "inline" else None)
-        self.three = Path(three) if three else find_three()
         self.touch = touch
         self.clients_active = lambda: False
         self.on_close = lambda: None
@@ -1943,18 +1924,10 @@ class Server:
                 if handler.command != "HEAD":
                     handler.wfile.write(body)
                 return
-            if not parts or (len(parts) == 1 and is_id(parts[0])):
-                return self.file(handler, PAGE / "index.html")  # ``/<id>``: the document's page
-            if parts[0] == "page" and len(parts) == 2:
-                return self.file(handler, PAGE / parts[1])
-            if parts[0] == "three" and self.three is not None:
-                target = (self.three / "/".join(parts[1:])).resolve()
-                if self.three.resolve() in target.parents:
-                    return self.file(handler, target)
             if parts == ["api", "docs"]:
                 return self.json(handler, self.listing())
             # The look, at the paths its record advertises (``LOOK.json``'s ``environment.url``): the
-            # engine's API's own, so a page reads it the same from this server and through the engine's.
+            # engine's API's own, which the daemon's listener relays as they are.
             if parts == ["api", "v1", "look"]:
                 return self.json(handler, LOOK.json())
             if parts == ["api", "v1", "look", "environment"]:
@@ -2110,14 +2083,6 @@ class Server:
 
     # --- responses -------------------------------------------------------------------
 
-    def file(self, handler: BaseHTTPRequestHandler, path: Path) -> None:
-        if not path.is_file():
-            return self.error(handler, 404, "not found")
-        kind = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
-        if path.suffix == ".js":
-            kind = "text/javascript"
-        self.send(handler, 200, path.read_bytes(), kind)
-
     def read(self, path: str, counted: Callable[[int, int, str], None] | None = None) -> tuple[int, bytes]:
         """A document read (``GET /api/doc/<id>...``) answered in process, as a page would be
         answered over HTTP: its status and body -- but for the structure's, which meshes nothing
@@ -2165,8 +2130,8 @@ class Server:
         handler.send_header("Content-Type", kind)
         handler.send_header("Content-Length", str(len(data)))
         handler.send_header("Cache-Control", "max-age=31536000, immutable" if cache else "no-store")
-        # No Access-Control-* header: the engine's own page (``page/``) reads it from its origin, and
-        # the viewer's relay of these routes answers every other page (``cad_server.viewer.engine_app``).
+        # No Access-Control-* header: the viewer's relay of these routes answers every page
+        # (``cad_server.viewer.engine_app``).
         handler.end_headers()
         if handler.command != "HEAD":
             handler.wfile.write(data)

@@ -6,7 +6,7 @@ ordinary Python scripts call decorated models explicitly.
     cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
-    cad serve DOC [--port N] [--three DIR]
+    cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
     cad delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
     cad inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
@@ -49,7 +49,6 @@ def _export_arguments(export: argparse.ArgumentParser) -> None:
 def _serve_arguments(serve: argparse.ArgumentParser) -> None:
     serve.add_argument("document", help="an .xbf, a STEP, or a document id")
     serve.add_argument("--port", type=int, default=0)
-    serve.add_argument("--three", help="the three.js package folder (default: the nearest node_modules/three)")
 
 
 def _status_arguments(status: argparse.ArgumentParser) -> None:
@@ -356,7 +355,7 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     from cad.engine import api
 
     try:
-        print(api.serve(args.document, args.port, args.three).url)
+        print(api.serve(args.document, args.port).url)
     except ValueError as error:
         raise Failed(str(error), 2) from None
     except api.EngineError as error:

@@ -677,18 +677,13 @@ def _document(source: Any, verb: str, named: str | None = None) -> Path | str:
     return path
 
 
-def serve(source: Any, port: int = 0, three: str | None = None) -> Served:
+def serve(source: Any, port: int = 0) -> Served:
     """Serve a document (``.xbf``, ``.step``, or a document id the engine holds) from the daemon;
     its page's URL, ``/<id>``."""
     from cad.engine.addresses import key
 
     path = _document(source, "serve")
-    if three is None:
-        from cad.engine.serve import find_three
-
-        found = find_three()
-        three = str(found) if found else None
-    answer = _ask({"op": "serve", "path": str(path), "port": port, "three": three})
+    answer = _ask({"op": "serve", "path": str(path), "port": port})
     return Served(answer["url"], answer["port"])
 
 

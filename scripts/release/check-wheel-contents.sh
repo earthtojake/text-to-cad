@@ -60,10 +60,7 @@ LIBRARY_REQUIRED=(
   "cad/engine/worker.py"
   "cad/engine/client.py"
   "cad/engine/places.py"
-  # The engine's data: the page `serve` shows a document in and the environment image its look
-  # lights the display modes with.
-  "cad/engine/page/index.html"
-  "cad/engine/page/viewer.js"
+  # The engine's data: the environment image its look lights the display modes with.
   "cad/engine/render/studio.hdr"
 )
 SERVER_REQUIRED=(

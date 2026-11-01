@@ -169,8 +169,7 @@ retires a worker), `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
 **Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
 tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
 `0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo
-hits), `CAD_ENGINE_BODIES=0` (no body replay), `CAD_ENGINE_MESH=processes|inline`,
-`CAD_ENGINE_THREE` (the three.js folder `cad serve` pages load) and
+hits), `CAD_ENGINE_BODIES=0` (no body replay), `CAD_ENGINE_MESH=processes|inline` and
 `CAD_VIEWER_WARM=0` (no engine warm-up at `cad viewer`'s launch). What the
 engine builds is written beside a project only as the files models declare or a command
 exports. Beside the person's settings, in the state folder, it keeps one record per model or
