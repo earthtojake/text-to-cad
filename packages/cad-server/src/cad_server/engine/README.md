@@ -1,5 +1,10 @@
 # cad.engine
 
+A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
+3MF, DXF, URDF, SDF) or something derived from code: a model, built by this engine. A document exists so that a
+person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
+annotate, select, quick edit. Everything below is how the engine makes, holds and serves documents.
+
 A model is a parameterless function that returns a build123d shape, declared
 with `@model` (a document with no file) or one or more file decorators (a document with those
 files) -- never both: `@model` stacked with a file decorator is refused. The engine runs it in a warm

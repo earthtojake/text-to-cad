@@ -231,6 +231,10 @@ may rely on.
 
 ## CAD document updates
 
+A document is what a person reviews: a file in a format the viewer reads, or a model the engine built from
+code. The viewer exists so that a person can review an agent's subjective output and answer it through the
+tools, annotate, select and quick edit; every renderer serves that review.
+
 A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
 reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/__cad/xbf`) — its structure and one buffer per part — and reads no source or sidecar. A
