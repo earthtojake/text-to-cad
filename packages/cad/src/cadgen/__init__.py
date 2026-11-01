@@ -4,7 +4,9 @@ Every name of ``cadgen`` is the library's own (``cad``), and every module ``cadg
 ``cad.<x>`` itself -- the same object, never a second copy -- so ``from cadgen import model``, ``from
 cadgen.geometry import overlap_volume`` and ``from cadgen.gltf import animation`` resolve to what the
 ``cad`` spellings do, and ``cadgen.ap242 is cad.ap242``. Nothing is said of it. Only the library has
-this name: the server and the stdio transport have none.
+this name: the server and the stdio transport have none. A name 0.7 had and 0.8 took out (``build123d``,
+``read_scene``, ...) fails as any missing name does; a program ``cad run`` runs then says the guide from 0.7
+to 0.8 too (``cad._internal.program``).
 """
 
 from __future__ import annotations

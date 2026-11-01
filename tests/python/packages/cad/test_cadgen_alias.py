@@ -14,8 +14,10 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import textwrap
 import unittest
+from pathlib import Path
 
 from tests.python.support.paths import SOURCE_PATH
 
@@ -82,6 +84,37 @@ class AliasTest(unittest.TestCase):
             print(json.dumps({"missing": missing}))
         """)
         self.assertEqual(found, {"missing": "cadgen.no_such_module_here"})
+
+
+class EarlierProgramTest(unittest.TestCase):
+    """A program written for cadgen 0.7 that ``cad run`` runs (``cad._internal.program``) stops at its first
+    import of a name 0.8 took out, as Python says it, then names the guide from 0.7 to 0.8; any other import
+    failure is said as Python says it alone."""
+
+    def run_program(self, source: str) -> subprocess.CompletedProcess:
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "model.py"
+            script.write_text(source, encoding="utf-8")
+            return subprocess.run([sys.executable, "-P", "-m", "cad._internal.program", str(script)],
+                                  capture_output=True, text=True, cwd=folder, timeout=120,
+                                  env={**os.environ, "PYTHONPATH": SOURCE_PATH})
+
+    def test_a_name_0_7_had_names_the_guide(self) -> None:
+        guide = "https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.7-to-0.8.md"
+        for source, said in (("from cadgen import build123d\n", "cannot import name 'build123d' from 'cadgen'"),
+                             ("import cadgen.no_such_module_here\n", "No module named 'cadgen.no_such_module_here'")):
+            with self.subTest(source=source):
+                done = self.run_program(source)
+                self.assertEqual(done.returncode, 1, done.stderr)
+                *failure, last = done.stderr.rstrip().splitlines()
+                self.assertIn(said, failure[-1])
+                self.assertTrue(last.endswith(guide), done.stderr)
+
+    def test_another_import_failure_names_no_guide(self) -> None:
+        done = self.run_program("from no_such_module_here import x\n")
+        self.assertEqual(done.returncode, 1, done.stderr)
+        self.assertIn("No module named 'no_such_module_here'", done.stderr)
+        self.assertNotIn("migrating", done.stderr)
 
 
 if __name__ == "__main__":
