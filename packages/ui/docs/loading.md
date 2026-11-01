@@ -21,9 +21,9 @@ geometry, measurements or explicit mesh-export tolerances.
 
 ## 1. Opening a document
 
-The page asks its viewer where to read the file (`client.engineDocument`, `GET /__cad/xbf`):
-the viewer asks the engine's daemon to serve it and answers the document's API URL through
-itself (`/__cad/api/doc/<id>`), or 202 while the engine still reads a large STEP, and the
+The page asks its viewer where to read the file (`client.engineDocument`, `POST /api/v1/documents`):
+the viewer asks the engine's daemon to serve it and answers the document's API URL
+(`/api/v1/documents/<kind>/<id>`), or 202 while the engine still reads a large STEP, and the
 client asks again after the server's `retryMs`. The page then reads the structure (prototypes
 with their names, geometry keys, colours and element names by ordinal; instances with world
 matrices; the tree; the version) and one XBM2 buffer per prototype, six at a time

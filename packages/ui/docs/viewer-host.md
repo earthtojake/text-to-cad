@@ -60,7 +60,7 @@ are for reading and maintaining the contracts.
 | `FileSource` (`stat`, and `list` and `search` where the host has them), `FileActions`, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
 | `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
 | `CadWorkspaceService` (the catalog of the files on screen, `folder`, `search`), `createCadClient` (`{ origin, fetch, … }`), `isMissingFileError`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
-| `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /__cad/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@text-to-cad/core/client` |
+| `createHttpPromptFiles` (the viewer server's `PromptFiles`: `POST /api/v1/local/prompt-files`, writes JSON and returns paths) | [Prompt files](../../core/src/client/promptFiles.js) | `@text-to-cad/core/client` |
 | `XbfRendererOptions` (an `.xbf` and a STEP), `LiveViewBinding`, `LiveViewController` | [Engine document registration](../src/renderers/xbf/index.ts) | `@text-to-cad/ui/renderers/xbf` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
@@ -330,10 +330,10 @@ sends it with the rest of cadgen's telemetry, only with the person's yes.
 
 `ViewerHost.promptFiles` is a `PromptFiles`: `create({ name, input, views, annotation })`
 answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, and `read(path)` fetches JSON. `createHttpPromptFiles({ origin, fetch })` from
-`@text-to-cad/core/client` posts to `POST /__cad/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
+`@text-to-cad/core/client` posts to `POST /api/v1/local/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
 snapshot and returns its path with HTTP 200. The client advertises `acceptInline: true`;
 requests without it always receive a saved path, so already-open clients remain compatible. There is no render worker
-or polling endpoint. Guarded `GET /__cad/prompt-files/<name>` serves JSON only;
+or polling endpoint. Guarded `GET /api/v1/local/prompt-files/<name>` serves JSON only;
 The files
 are scratch in the system's temporary directory and outlive the viewer until the
 system clears them. The response and persisted snapshot name input and output
@@ -532,8 +532,8 @@ menu follows. The colour scheme is the menu's Theme row (`colorScheme`, a `CadVi
 prop), over a file and on the home alike; no host has a light/dark button of its own, and
 Display holds no appearance control. `language` (`{ locale, inferred, choice, onChoiceChange }`, a `CadViewer` prop) is the person's
 language for the app menu's Language row: `choice` null is Automatic, `inferred` what Automatic
-means; both apps keep the choice in the person's settings (`/__cad/language`, the `language`
-section of `settings.json`), so it holds for every CAD view. `appSettings` (`{ id, label, checked, info?, disabled?, onCheckedChange }[]`, `info` the
+means; both apps keep the choice in the person's settings (`/api/v1/settings`' `language`, the
+`language` section of `settings.json`), so it holds for every CAD view. `appSettings` (`{ id, label, checked, info?, disabled?, onCheckedChange }[]`, `info` the
 hint of an info icon beside the name; a `CadViewer` prop) are the host's own on/off settings: checkbox items of the app menu, in the
 order they come (Telemetry, in both apps), the same in the
 logo's menu and the home's; nothing of them reaches a renderer, and Display holds none. The
@@ -547,12 +547,13 @@ has said so. The host supplies the call and where the answer is kept.
 first among the navbar's right-hand controls, over every file and over the home; a host with no
 navbar puts it in its corner, as the CAD app's file handler does), an icon and nothing else, with
 no popover; and `useUpdate(calls, initial)`, which starts on the notice the host already has (a CAD
-app's launch carries it; the web page reads it with its server's description), so the button draws
-with the page, and reads the host's `read` again when the page regains focus. A press is the update:
-the host's `start` (`POST /__cad/update`), after which the hook reads the update's state every half
+app's launch carries it; the web page reads it with its server's description, `GET /api/v1/server`,
+which `read` reads again), so the button draws with the page, and reads the host's `read` again when
+the page regains focus. A press is the update: the host's `start` (`POST /api/v1/local/update`), after which the hook reads the update's state every half
 second (`UPDATE_POLL_MS`): the button is a ring that fills while the release installs and the apps
 update, then a spinner while the engine restarts, and a failure is a toast in the update's words, the
-button offered again. The host reloads its page once its engine answers with the new release, and
+button offered again. The host reloads its page once its engine answers with the new release (or,
+for the web page, as another start of it: `/api/v1/server`'s `instance`), and
 only once nothing on it is unsaved (`reloadWhenClean`, with the host's own `reload`: the shared UI
 never navigates the page). Nothing it does is an answer the server keeps: the button stays while the
 install is behind and goes once the update lands. The shell handles placement and hides the toolbar in

@@ -189,7 +189,8 @@ document; the viewer's document reads (by id) and its Recents key by the same fu
 serves one document and keeps one Recents entry for it too, while a page names a file by the path
 it was given. The server keys everything by the id: its served documents and
 the models registered to be served, their watchers and syncs, their builds, the documents a build
-holds; `GET /api/doc/<id>` takes it, and a document served at a pose is `<id>~<digest>`. The
+holds; its API takes it (`/api/v1/documents/<id>`, `/api/v1/documents/<kind>/<id>/...`: **Wire
+format**), and a document served at a pose is `<id>~<digest>`. The
 daemon keys by it the worker that built each model document (`builders`, from which `connected`
 asks the server's watched ids; a file the build wrote is no key there) and the live models' book
 (`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
@@ -251,7 +252,7 @@ stops an engine to start another: an engine runs on until `cad stop`, an update,
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
 An update moves the device to another release in one step, and only when the person asks: the update
-button in the CAD Viewer and the CAD app (`POST /__cad/update`, `cad_server._internal.update`), `cad
+button in the CAD Viewer and the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad
 update`, or the install command run again (both `cad setup`). Each installs the release in a folder
 of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
 where it holds it), makes that release's base (**Running a model**), writes the plugin folder every
@@ -1219,7 +1220,8 @@ restart the registry's. The program is quoted for the shell a person pastes it i
 space or a quote needs them (`subprocess.list2cmdline`), since to cmd.exe a single quote is part of
 the path. A shape handed over has none: its words say that a program the engine did
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
-reads it from its document's 404 (`GET /api/doc/<id>`: `{"error", "state", "rebuild"}`),
+reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of
+its kind's, `{"error", "state", "rebuild", "hint"}`),
 `cad inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
 and no restart runs code to bring a document back.
 Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`): the server answers
@@ -1344,7 +1346,7 @@ and the stage's words as its `stage`, and a status asked `afterSequence` wakes w
 viewer export's job hears its worker's the same way. An export's or a snapshot's frames are the
 request's, never its document's build: no page is woken by them (`Daemon.progressed`).
 
-**The page's route.** `GET /api/doc/<id>/version?after=V&progress=N&wait=S` answers
+**The page's route.** `GET /api/v1/documents/<id>/version?after=V&progress=N&wait=S` answers
 `{"version", "building", "failed", "progress"}` once the version is not `V`, or the
 count `progress` is not `N`, or after `S` seconds (60 at most); without `progress=` it waits on
 the version alone. `building` is the last frame of the build of the model's document now, null when
@@ -1359,7 +1361,8 @@ reader process (**The server**), and while that runs the server says where it is
 `<name> (<size>)`), then `collect` with `done` of `total` as the parts' shapes are collected (the
 reader writes its counts to a file the server reads every quarter second while it waits),
 `building` null once the document is in, or `failed` with the reader's error. The viewer's
-`GET /__cad/xbf` answers `202 {"state": "reading", "building"}` with the last frame while the import
+open (`POST /api/v1/documents`) answers `202 {"id", "kind", "api", "state": "reading", "retryMs",
+"building"}` with the last frame, and `Retry-After`, while the import
 runs, held up to two seconds or until the frame moves, so the page's loading line says each stage as
 it comes ("Collecting parts 120/628").
 A file's version is its modification time and size: the server
@@ -1370,10 +1373,12 @@ the xbf it declares among them: no run sends a file's page anything (**Document 
 ## The viewer and the snapshot
 
 The CAD Viewer and its document reads share the daemon's HTTP listener. The page
-reads `/__cad/api/doc/<id>` and waits on its `/version` route; dispatch calls the
-engine directly. XBF/STEP loading and geometry facts run in child processes. A
-launcher starts or reuses the engine's one page, prints its authenticated URL -- a file's page,
-`/<id>`, for each file it names, else the home's -- and exits. The standalone engine's
+reads its document's kind's routes (`/api/v1/documents/<kind>/<id>/structure`, `parts/<key>`) and
+waits on `/api/v1/documents/<id>/version`; dispatch calls the engine's own reads directly, in process
+(`/api/doc/<id>...`, `serve.py`'s, which nothing serves over HTTP but the standalone server).
+XBF/STEP loading and geometry facts run in child processes. A launcher starts or reuses the
+engine's one page, prints its authenticated URL -- a file's page, `/<id>`, for each file it names,
+else the home's -- and exits. The standalone engine's
 minimal page (`/<id>`) and snapshot server remain available without the enclosing application.
 
 **The look.** The regular display modes draw a document as OCCT's PBR raster draws it, one frozen
@@ -1397,8 +1402,8 @@ approximates (`render/finish.py`): a clear coat eases the base's roughness towar
 OCCT drops anisotropy, and transmission is opacity over the colour tinted
 by the transmission colour.
 Edges are unlit in their class's ink, 1 px; X-ray's faces are lit at 0.22 opacity, Hidden line's
-are the backdrop's colour. The engine serves the record as `GET /api/look` and its image as
-`GET /api/look/environment`; the page reads both once per engine, beside the document, and the
+are the backdrop's colour. The engine serves the record as `GET /api/v1/look` and its image as
+`GET /api/v1/look/environment`; the page reads both once per engine, beside the document, and the
 document's scene brings them as its own lighting and surface rule (the bundled
 `@text-to-cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
 up in place of the theme's. Preview is drawn as any file's is.
@@ -2282,8 +2287,9 @@ refinement missing symmetric extrema (`BRepBndLib.AddOptimal`); analytic surface
 shapes without faces still use `AddOptimal`. A failed distance measurement is an error.
 
 What the kernel measures of an element is asked for, never extracted ahead:
-`GET /api/doc/<id>/part/<key>/face/<ordinal>` is its area, centroid, surface
-type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and
+`GET /api/v1/documents/<kind>/<id>/parts/<key>/faces/<ordinal>` (`serve.py`'s
+`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad inspect` asks it through the door) is its
+area, centroid, surface type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and
 whether the part's tessellation has it (`meshed`: null while the part is not meshed --
 an inspection meshes nothing);
 `.../edge/<ordinal>` its length, curve type, class, faces and endpoints (and a
@@ -2326,9 +2332,9 @@ key beside its tessellation (`serve.FactCache`), under the same memory budget an
 tessellations (**Document lifetime**), and written nowhere: a memo of them beside the document or
 in the cache folder would be a derived file (law 2), and the cache holds a document's bytes alone.
 They are measured once, whichever document or version holds the part, so an edit measures only
-the parts whose key it changed. `GET /api/doc/<id>/volumes` (`?keys=K,...` for some) answers every
-part's at once, and `.../part/<key>/volume` one part's: the parts no one measured yet go to the pool
-together, in batches of about a megabyte of shape bytes (`serve.FACT_BYTES`: a light document is one
+the parts whose key it changed. `GET /api/v1/documents/<kind>/<id>/measure` (`?keys=K,...` for some;
+the engine's `/api/doc/<id>/volumes`) answers every part's at once, and `.../parts/<key>/volume`
+one part's: the parts no one measured yet go to the pool together, in batches of about a megabyte of shape bytes (`serve.FACT_BYTES`: a light document is one
 job, a heavy one spread over the pool a page warmed, else over two processes at most,
 `serve.FACT_PROCESSES_COLD`, so an inspection with no page open starts no more), each in the pool's
 queue for facts, which a free process takes before any mesh waiting (**The engine server and its
@@ -2349,12 +2355,45 @@ it reads is `refs.ELEMENT_NAME`.
 
 ## Wire format
 
-`GET /api/doc/<id>` returns the structure as JSON: prototypes (key, name,
+**The HTTP API.** Everything a page calls is under `/api/v1` (`cad_server/viewer/http_app.py`, its
+kinds `viewer/kinds.py`); the pages are at the root -- `/` the home, `/<id>` a document's page,
+`/app` the CAD app's module a card's shell imports. The version is in the path: within v1 a route
+or a key is only ever added, and a removal or a rename is a v2. Every answer is JSON but a file's
+bytes; every refusal is `{"error", "hint"}` -- what is wrong and what to do -- with its status: 404
+for an unknown route, kind or id (a document's names its `state` where the engine says one), 405
+naming the methods the route takes (`Allow`), 413 for a body over its route's limit, 409 for what
+the document's state refuses. Every request that changes something (POST, PUT, PATCH, DELETE)
+carries `x-cadgen-viewer`, the gate a cross-site form cannot pass. The families:
+
+| Route | What it answers |
+| --- | --- |
+| `GET /api/v1/server` | who this engine is (release, `identityToken`, platform, home, start, pick, port, pid), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"sharing", "reason", "policy"}}`, the person's, one for every view; PUT a part of it |
+| `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
+| `GET /api/v1/documents` | Recents: `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
+| `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
+| `PATCH /api/v1/documents` | a change to Recents (`{"action", "path", "png"?}`), answered with Recents |
+| `GET\|DELETE /api/v1/documents/<id>` | the envelope -- `id`, `kind`, `name`, `version`, `state`, `source`, `producers`, `api`, `exports`, the row (`entry`) and its digest (`revision`), `held` for a document the engine serves -- or the document forgotten (204) |
+| `GET /api/v1/documents/<id>/version`, `.../thumbnail` | its version, waited on (**Progress**); its picture |
+| `POST /api/v1/documents/<id>/exports` | an export of it, its job (202); `GET /api/v1/exports[/<job>[/file]]` the session's epoch, a job, its file |
+| `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |
+| `/api/v1/local/...` | a local engine's: `update` (GET, POST: the button), `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
+
+A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
+`faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
+`POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `urdf`, `srdf`, `sdf` --
+`structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
+`serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
+`parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
+too (`cad inspect`), never served over the engine's HTTP listener.
+
+`GET /api/v1/documents/<kind>/<id>/structure` returns the structure as JSON: prototypes (key, name,
 colour, `faceNames`, `edgeNames`, `vertexNames`, `faceColors` by ordinal, `material` and
 `faceMaterials` by ordinal -- each every field of the `Material`, named in camelCase
 (`youngModulus`, `transmissionColor`, ...), its colour the base colour it is drawn in, SI
 -- and once meshed `unmeshed`/`unmeshedCheck`), instances (prototype, path, a 4x4 world matrix,
-colour), the tree, the document's version, and for an assembly with joints `kinematics`: the
+colour), the tree, the document's version, and for an assembly with joints `kinematics` (also its
+own route, `.../kinematics`): the
 links (name, the instances each moves, its frame as built), the pairs (label, type, the two
 links, the two frames as 4x4 matrices in their links' frames, limits and units per value), the
 ground link, `asBuilt` and `configurations` (name → joint → value: a number, or a list for a
@@ -2362,16 +2401,16 @@ cylindrical or spherical pair), `couplings` (name → `{range, terms}`), `motion
 `{duration, ease, keys}`, each key `{t, configuration}` or `{t, values}`), `loop` (the pairs
 closing a loop, or null) and the build's `warnings`. A page poses the instances from it: each link's
 placement at the values over its placement as built, applied to its instances.
-`POST /api/doc/<id>/pose` (`{"pose": NAME | {joint: value}}`) answers the id of the
-document served at that pose, its `kinematics.pose` the values it stands at.
-`GET /api/look` is the look the regular display modes are drawn in (**The viewer and the
-snapshot**), the same for every document; `GET /api/look/environment` is its environment, the
+`POST .../pose` (`{"pose": NAME | {joint: value}}`) answers the id of the
+document served at that pose, where it is read (`api`), and its `kinematics.pose` the values it stands at.
+`GET /api/v1/look` is the look the regular display modes are drawn in (**The viewer and the
+snapshot**), the same for every document; `GET /api/v1/look/environment` is its environment, the
 Radiance image `render/studio.hdr`.
-`GET /api/doc/<id>/version?after=V&wait=S` answers as soon as the version is not
+`GET /api/v1/documents/<id>/version?after=V&wait=S` answers as soon as the version is not
 `V` (or after `S` seconds, at most 60): the page waits on it, so a model's new build,
 or a file's new bytes, reaches it at once.
 
-`GET /api/doc/<id>/part/<key>` returns one part's buffer. A client reads it
+`GET .../parts/<key>` returns one part's buffer. A client reads it
 with typed-array views, without parsing. It is sent immutable, so a page asks
 for it with the structure's `tessellation` (`?tessellation=0.25-28.5`, the
 mesh constants by name) and never draws a buffer an engine made at others. The header grew from 64 to 80 bytes in
@@ -2397,7 +2436,7 @@ same ones its element names use. Selecting a face reads a range of the index
 buffer, an edge a range of the polyline buffer, a vertex a row of the vertex
 table.
 
-`POST /api/doc/<id>/mesh?mode=inline|processes[&drop=1]` meshes every part not
+`POST .../mesh?mode=inline|processes[&drop=1]` meshes every part not
 held yet (with `drop=1`, every part again), in parallel, and returns the time it
 took, the bytes, the triangles and the unmeshed faces.
 

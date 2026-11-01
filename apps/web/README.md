@@ -13,7 +13,7 @@ the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
 persistence, the file menu's reveal route, and the app menu's links (the update notice is
-the server's, read from `/__cad/version`).
+the server's, read from `/api/v1/server`).
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@text-to-cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
@@ -54,7 +54,8 @@ and assets, so the app does not scan another package's source.
 - **Document boundary**: everything renders from the file. A STEP and an `.xbf`
   render from what the engine serves of them — the structure (names,
   colours, materials, the mechanism) and one buffer per part, read through the
-  viewer (`/__cad/xbf`, [docs/backend.md](docs/backend.md)) — and every other
+  viewer (`POST /api/v1/documents`, then its kind's `/api/v1/documents/<kind>/<id>/...`,
+  [docs/backend.md](docs/backend.md)) — and every other
   format from its own bytes or what the server resolved from them. The viewer never
   reads model source and never triggers a source build: a build of a document a
   view shows reaches it as the engine's next version, at once, and only the parts
@@ -87,7 +88,7 @@ without changing that folder. It is only the folder a launch's relative files ar
 
 Dev announces itself to the same engine with
 `python -m cad_server.viewer --api-only --json` (a launch, from its folder), then
-proxies `/__cad` with the engine token. Vite owns the client and closing it leaves the engine
+proxies the engine's API, `/api`, with the engine token. Vite owns the client and closing it leaves the engine
 running. `VIEWER_PYTHON` names the interpreter with the server installed (default `python3`).
 `VIEWER_BACKEND_URL` and `CAD_ENGINE_TOKEN` attach to an existing engine
 using its `apiUrl` and `token`. The token is named outside `VIEWER_`, the prefix Vite hands
@@ -159,9 +160,9 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   on the way to the engine's cache (`~/.cache/texttocad`, each model's
   `documents/<id>/document.xbf`), which it lists.
   [docs/backend.md](docs/backend.md) has the rules.
-- **Verify a link by loading the page**, never by curling `/__cad/asset` —
-  that route serves raw files; an engine document is read through `/__cad/xbf` and
-  `/__cad/api/doc/<id>`, so probing it 404s whether or not anything is wrong.
+- **Verify a link by loading the page**, never by curling `/api/v1/local/files` —
+  that route serves raw files; an engine document is opened with `POST /api/v1/documents` and
+  read under `/api/v1/documents/<kind>/<id>`, so probing it says nothing of the page.
 - **Warm work survives navigation.** The app retains one client across navigation, so the
   caches keyed to its resources stay valid across file switches. The engine holds
   every document it served and each part's mesh under one memory budget (a quarter of the
@@ -360,7 +361,7 @@ text goes through the clipboard port's `writeText`, which takes pending text: a
 `ClipboardItem` holding the promise, so the write starts inside the gesture, or the
 text itself once it arrives where the browser takes no pending item. At the press,
 the server prepares a packet through the host's `promptFiles` (`createHttpPromptFiles`,
-over `/__cad/prompt-files`), with the shared annotation, the current view and distinct
+over `/api/v1/local/prompt-files`), with the shared annotation, the current view and distinct
 drawn views (Measure's measurements are the person's: a packet carries none). Up to 1024 bytes of compact UTF-8 JSON goes directly
 into the prompt; larger packets are written as `.snapshot.json` and named by absolute path.
 No snapshot is written while drawing or typing, and no image is rendered.
@@ -373,7 +374,7 @@ gutters, 44px under the navbar). It starts with one control row of 24px
 controls: "Recent" at the left, a 17px heading on the row's line, and at the right the type filter, a dropdown
 ("All ▾": All, Models, Files) where both kinds are listed, the search, the grid/list
 switch and, where the server's computer has a file chooser (`pick` in its info), **Open**,
-which opens the desktop's own chooser (`POST /__cad/pick`, `cad_server._internal.picker`) and shows
+which opens the desktop's own chooser (`POST /api/v1/local/pick`, `cad_server._internal.picker`) and shows
 the file picked. The grid's tiles are transparent with a 1px border, at least 280px wide (three across
 the full column): a picture on the muted fill, then, in a compact caption, the kind's glyph (a model's cube, a
 file's plain file outline, whatever its kind) beside its name over its last activity with its verb ("Edited now",
@@ -398,19 +399,19 @@ names: "This model is not saved" (`unsaved`) or "This model’s script is gone" 
 that is not there shows "File does not exist".
 
 A file is opened by its path (the name menu, the home) and shown by its id: the page asks the
-catalog for the file (`GET /__cad/catalog?file=<abs>`), whose row carries the document's `id`,
+server for the file's envelope (`GET /api/v1/documents?path=<abs>`), whose row carries the document's `id`,
 and moves to `/<id>`. Rows join by that id (`client.entryOf`), so a symlinked or case-variant
 spelling of one file is one row. A model (a document with no file of its own) has no file menu;
 its Files lists the folder the explorer was last in this tab, else the person's home folder
 (`home` in the server's info); a file's its own folder.
 
-The home reads the library over `GET /__cad/recents`, each row with three times, `updated` (a
+The home reads the library over `GET /api/v1/documents`, each row with three times, `updated` (a
 file's time on disk, a model's run), `opened` (when a page last opened it) and `created` (when the
 engine first made its record: a model's first run, a file's first open; null for a record from before
 it was kept), ordered pinned
 first, then by the later of the two; it pins, unpins, removes a file's record (`remove`) and
-deletes a model's document (`delete`) over `POST /__cad/recents`, and draws each card's picture
-from `GET /__cad/thumbnail`. A model's script is never read for any of it. The document on
+deletes a model's document (`delete`) over `PATCH /api/v1/documents`, and draws each card's picture
+from `GET /api/v1/documents/<id>/thumbnail`. A model's script is never read for any of it. The document on
 screen says it was opened once the catalog has it (`{action: "open"}`: a file joins the
 library, a model's record notes the time), and its picture
 once it has settled — the model framed whole from the default direction, whatever the
@@ -422,9 +423,9 @@ user's state directory, shared with the CAD app.
 The server's usage stats (`cad_server/analytics.py`) are on by default once a `cad` command has said
 so, once, in its output; nothing in the Viewer asks. **Telemetry** in the app menu turns
 them off or on, and the answer is kept in the user's state directory, so one answer counts for
-both apps. The page reads and answers it through the CAD client (`consent`, `/__cad/analytics`),
-and reports a person touching the page (at most every 2 s) to `/__cad/analytics/activity`; a
-file shown is counted as it joins the library (`/__cad/recents`). A Quick Edit copied is counted
+both apps. The page reads and answers it through the CAD client (`consent`, `/api/v1/settings`' `telemetry`),
+and reports a person touching the page (at most every 2 s) to `/api/v1/local/activity`; a
+file shown is counted as it joins the library (`PATCH /api/v1/documents`). A Quick Edit copied is counted
 through the host's `usage`, and the page's own crashes -- an error nothing caught, or one a view's
 boundary caught (`main.tsx`) -- are reported as core's `crashOf` makes them: the error's type and its
 script frames, never its message, each once a page. The build gives every chunk a hidden source map and
@@ -441,14 +442,14 @@ from `cad_server.analytics.CONTROLS`, telemetry schema 7). The server holds all 
 
 The web `FileSource` is `createCadFileSource` from `@text-to-cad/ui/catalog` over
 the CAD client, the one the CAD app uses: a file's catalog row, one folder's entries
-(`GET /__cad/folder`) and the CAD files under a folder (`GET /__cad/search`), with no
+(`GET /api/v1/local/folder`) and the CAD files under a folder (the same, with `q`), with no
 writes or native filesystem mutations. Catalog content/revision changes are
 distinct from transient metadata progress, so progress updates do not restart a
 prepared document. Native path copying and file reveal are the host's file actions
 (the shared `createCadFileActions`, in `App.tsx`), which the navbar's ⋯ shows. Path
-copying uses the clipboard port. Reveal is the client's guarded `POST /__cad/reveal` with
+copying uses the clipboard port. Reveal is the client's guarded `POST /api/v1/local/reveal` with
 the file's absolute path; the backend opens the native file manager without a shell. The
-menu uses the server's platform (`/__cad/server`) to label Finder, Explorer, or the Linux
+menu uses the server's platform (`/api/v1/server`) to label Finder, Explorer, or the Linux
 file manager. Path copies form the first menu section. Reference copying belongs to the
 renderer's selection action, rather than the file menu.
 
@@ -477,9 +478,9 @@ supplies the links (`src/host/viewerLinks.js`): its version (with its build's id
 `v0.8.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
-hourly version check, read from `/__cad/version` with the server's description as the page
+hourly version check, read from `/api/v1/server` with the server's description as the page
 starts (`main.tsx`) and again whenever the person comes back to it. A press updates
-(`POST /__cad/update`): the engine installs the release, updates each agent app and restarts on it,
+(`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,
 on the same port with the same token; the button fills while it works and spins while the engine
 restarts, the page reconnects every quarter second meanwhile (`useEngineReconnect`), and it reloads
 once the engine answers with the new release and nothing on the page is unsaved. Should the switch fail,
@@ -496,7 +497,7 @@ app's, exported alongside the docs brand assets. See
 [the brand recipe](../../scripts/brand/README.md).
 
 The web camera action copies only the viewport PNG through guarded
-`POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local
+`POST /api/v1/local/clipboard`, avoiding browser clipboard permission prompts. The local
 backend writes the server machine's native clipboard on macOS or Linux (wl-copy/xclip);
 this is not the remote phone's clipboard when accessing a shared server. Failures
 use the viewer's error presentation; successful actions are silent. A host with a
@@ -505,7 +506,7 @@ composer has no camera action: its note to the agent is Quick Edit.
 ## Live models
 
 A model's page is `/<id>`, its document's id, which `python SCRIPT.py` prints (`view:`). The
-page reads the document the engine holds, by id (`GET /__cad/catalog?id=`); it never builds or
+page reads the document the engine holds, by id (`GET /api/v1/documents/<id>`); it never builds or
 imports a script, and no folder lists one. A model has no file of its own: no file menu; its
 name menu opens on Models, and its Files lists the folder the explorer was last in this tab
 (the tab's settings), else the person's home folder (the server's `home`): never the folder

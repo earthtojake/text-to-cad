@@ -145,8 +145,8 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   (`@text-to-cad/ui/update`), an icon and nothing else, first among its controls, over a
   file and over the home; the file handler, which has no navbar, shows it in its corner,
   under Full size. A launch carries the notice the server last read, so the button draws
-  with the page; the page reads it again (`/__cad/version`) when the person comes back to
-  it. A press is the update (`POST /__cad/update`, through `cad_http`): the engine installs
+  with the page; the page reads it again (`/api/v1/server`) when the person comes back to
+  it. A press is the update (`POST /api/v1/local/update`, through `cad_http`): the engine installs
   the release, updates each agent app's plugin and restarts on it, on the same port with
   the same token (`cad_server/_internal/update.py`). Meanwhile the button is a ring that fills
   as the update goes, then a spinner while the engine restarts; once the engine answers
@@ -179,7 +179,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   id is the one its edited text and map decide (`@text-to-cad/core/chunk-ids`), never the
   id of the unedited chunk the CAD Viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
-  switch (`appSettings`, through `/__cad/analytics`) changes the answer, one answer for
+  switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
   this app and the browser viewer. The channel is reported with the
   counts; it decides nothing there. No tool of the agent's reads or changes it:
   the person answers in the menu or with `cad telemetry`. Opt-out deletes the
@@ -218,10 +218,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   over its own model library and analytics. Everything the page asks of the
   server travels this way, as the web page asks its own: the models -- a STEP's
   and an `.xbf`'s reads too, dispatched directly to the engine's document router
-  that serves them (`/__cad/api/...`) -- the
+  that serves them (`/api/v1/documents/<kind>/<id>/...`) -- the
   library and its pictures, Reveal, the person's analytics
   answer and language, the update check. One route is the server's own, not the
-  viewer's: `/__cad/browser/open`, which opens the web viewer's page of what the view shows
+  viewer's: `/api/v1/local/browser/open`, which opens the web viewer's page of what the view shows
   in the person's browser, for Open in browser. Only the clipboard stays the host's: a
   view copies through its frame. `cad_sync`, `cad_capture_reply` and `cad_http` are
   app-only and absent in text-only hosts. Every
@@ -253,7 +253,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   and may keep as long as it likes, is a small shell (`dist/shell.html`: `src/shell.ts`,
   `host/shell.ts`, built by `vite.shell.config.mjs`), named by the engine's release and
   its build (`ui://cad/<release>/<build>/app.html`). It loads the app from the engine that
-  answers it (`GET /__cad/mcp-app`, `dist/app.js`): through `cad_http` where the host
+  answers it (`GET /app`, `dist/app.js`): through `cad_http` where the host
   carries the card's calls, else straight from the engine with the launch's day link,
   never a cookie. So a card a host kept runs the engine's release, and an update needs no
   new resource. The app is one module, with its styles, scripts and workers (as blobs)
@@ -277,7 +277,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
     the server never sees the view open, so `cad_view` and `cad_screenshot` answer that it
     has not opened. The card knows its channel: at `ui/initialize` a host that declares
     `serverTools` carries calls (a tab host is trusted as before, whatever it declares), one
-    that says nothing gets a single `GET /__cad/server` before anything is drawn, and a call
+    that says nothing gets a single `GET /api/v1/server` before anything is drawn, and a call
     the host itself refuses (a JSON-RPC error: not a timeout, not the engine's answer) before
     any call came back means none. The card then tries the engine directly (below); failing
     that it shows one notice and nothing else, no home and no library: "This chat can't
@@ -304,7 +304,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   (its origin), so the card needs no call to read them (`cad_server/mcp/server.py`, `_reach`); a
   tab host's launches, and the shows its sync carries, carry `browser` alone (for Open in
   browser), its card always having its channel; the file handler's carry neither.
-  With no channel, the card reads `GET <engine>/__cad/server` with the link's token as a
+  With no channel, the card reads `GET <engine>/api/v1/server` with the link's token as a
   Bearer credential (`host/direct.ts`, at most five seconds). If it answers, the whole card
   runs over direct HTTP: the tunnel's fetch is swapped for one that sends the same paths to
   the engine, so no caller changes; the view makes no sync, which only the host could carry
@@ -350,7 +350,7 @@ app capability as an argument, as `cad_http` takes it as a header, and refuse a 
 without it or with another session's; a page from an earlier build says CAD was updated.
 Protocol 8 replaced protocol 7: reopen restored views so their launch carries the
 app capability. `cad_telemetry` is removed, with no alias.
-The obsolete `/__cad/features` route and shared client's `features()` are removed.
+The obsolete features route and shared client's `features()` are removed.
 Quick Edit has no enable/disable setting in either app; stale `features.quickEdit`
 values have no reader and cannot hide it. Settings files need no conversion.
 
@@ -367,7 +367,7 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
-| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/__cad/mcp-app`), a long one a part at a time, else from the engine with the launch's day link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
+| `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's day link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
@@ -392,7 +392,7 @@ page of what the view shows: the page each launch carries (`browser`: the docume
 with the day link, or the home's), and for a file the person opened that no launch named, the
 web viewer's home with the same link, where that file leads the library. The server opens it
 itself, on this computer: a press posts the document the view shows (its path or id, never a
-URL) to `POST /__cad/browser/open`, a `cad_http` route of the app's alone, and the server opens
+URL) to `POST /api/v1/local/browser/open`, a `cad_http` route of the app's alone, and the server opens
 the browser on an owner-only redirect file, so the token is on no command line (a host need
 not follow a link to a loopback page, and Codex does not). Only where the server can open no
 browser (503: no display, a remote shell), or the card reaches the engine directly, does the

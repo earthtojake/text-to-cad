@@ -222,15 +222,15 @@ cannot overwrite a newer file revision. `folder(path)` lists one folder and
 
 `CadWorkspaceService` exposes a scoped `resources` provider and, where its host serves
 the engine, where the page reads a document the engine serves
-(`engineDocument`: an `.xbf`, or a STEP, read through the viewer at
-`/__cad/api/doc/<id>` with the client's own fetch). Its HTTP adapter owns the protocol; renderers
+(`engineDocument`: an `.xbf`, a STEP or a model, opened with `POST /api/v1/documents` and read
+at its kind's API, `/api/v1/documents/<kind>/<id>`, with the client's own fetch). Its HTTP adapter owns the protocol; renderers
 consume domain results and resource tickets. See [workspace services and resource
 transport](docs/workspace-resources.md) for worker transfer, nested dependencies,
 cache generations and the standalone static-HTTP default. No client reads model
 source or starts a source build.
 
 `createHttpPromptFiles({ origin, fetch })` is the viewer server's maker of a Quick
-Edit's files: `create(request)` posts its views and annotation to `POST /__cad/prompt-files`,
+Edit's files: `create(request)` posts its views and annotation to `POST /api/v1/local/prompt-files`,
 validates the packet without rendering and answers `{ inline: compactJson }` up to
 1024 UTF-8 bytes, otherwise writes one `.snapshot.json` and answers `{ snapshot: absolutePath }`.
 The client sends `acceptInline: true`; without this capability the server always saves

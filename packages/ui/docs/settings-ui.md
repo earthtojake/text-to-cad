@@ -97,7 +97,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the **grid/list switch**, two `icon-xs` buttons, the chosen one on the `muted` fill; and last,
   where the host's computer has a file chooser (`ModelLibrarySource.pick`), **Open**, a stock
   `xs` button (24px) with the folder icon and "Open", which opens the desktop's own chooser
-  (`POST /__cad/pick`) and shows the file picked. Then the
+  (`POST /api/v1/local/pick`) and shows the file picked. Then the
   documents opened or built before, pinned first, then by last activity. The home is the
   library and Open alone: no folder of a launch. It is a **centred column**, 1128px wide at most,
   on 24px gutters of its own (not the navbar's 16px, which the logo keeps), 44px under the navbar,
