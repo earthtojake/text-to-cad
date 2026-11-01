@@ -16,14 +16,14 @@ open them do.
 
 `cube.meshopt.glb` is a unit cube (12 triangles, #3366CC), welded, quantized
 (`KHR_mesh_quantization`) and meshopt-compressed (`EXT_meshopt_compression`, required):
-cadgen writes no compressed GLB, but a GLB a person opens can be one, and the loader
+The engine writes no compressed GLB, but a GLB a person opens can be one, and the loader
 decodes it. It was written by the JS writer this repository once kept for test fixtures
 (`git log --diff-filter=D -- packages/core/src/lib/glb/writeGlb.js` names the commit that
 deleted it). Both extensions are ratified glTF, so any writer of them can replace it
 (meshoptimizer's `gltfpack -c` over a cube) as long as `glbMeshoptRoundTrip.test.js` still
 describes it.
 
-`animation.glb` and `motion.glb` are the engine's GLB export, baked by today's cadgen from the
+`animation.glb` and `motion.glb` are the engine's GLB export, baked by today's engine from the
 two small models `tests/python/packages/cad/engine/test_animation.py` writes (`CHANNELS` and
 `MOTION`), and that test holds them to what the baker writes now, key for key. `animation.glb`
 carries the motion-free box's `animation()`, `showcase` (2 s): every channel path (translation,

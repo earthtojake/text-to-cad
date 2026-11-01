@@ -7,7 +7,7 @@ number of matches, a depth and a deadline, says when it stopped early, skips hid
 folders, and never walks a folder twice (a link back into one is how a walk would never end).
 
 The one hidden folder both reads reach is the engine's cache (``places.cache_dir``: by default
-``~/.cache/cadgen``), and every folder on the way to it: it holds each model's ``document.xbf``
+``~/.cache/texttocad``), and every folder on the way to it: it holds each model's ``document.xbf``
 (``documents/<id>/``), an xbf being as much a CAD file of the viewer's as any other.
 
 Paths are absolute in and out, with ``/`` separators on every platform. A path comes in by the one
