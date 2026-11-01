@@ -155,13 +155,13 @@ class PublishGate(unittest.TestCase):
         for line in doctors:
             self.assertIn("doctor --no-server", line)
 
-    def test_the_release_builds_the_five_projects_and_installs_its_three_wheels_together(self):
+    def test_the_release_builds_the_four_projects_and_installs_its_three_wheels_together(self):
         publish = JOBS["publish"]
-        self.assertIn("for project in cad cad-server cad-mcp aliases/cadgen aliases/text-to-cad; do\n"
+        self.assertIn("for project in cad cad-server cad-mcp aliases/cadgen; do\n"
                       "            python3 -m build --outdir dist \"packages/$project\"", publish)
-        # Exactly the five projects' wheels and sdists at the release, nothing else.
+        # Exactly the four projects' wheels and sdists at the release, nothing else.
         check = publish.split("- name: Check the distributions are the release's\n", 1)[1].split("\n      - name: ", 1)[0]
-        self.assertIn("for name in cad cad_server cad_mcp cadgen text_to_cad; do", check)
+        self.assertIn("for name in cad cad_server cad_mcp cadgen; do", check)
         self.assertEqual({project.replace("-", "_") for project in pypi_release.PROJECTS},
                          set(re.search(r"for name in ([\w ]+); do", check)[1].split()))
         install = publish.split("- name: Install the built wheels and exercise them\n", 1)[1].split("\n      - name: ", 1)[0]
@@ -296,13 +296,12 @@ class PypiRelease(unittest.TestCase):
 
     def test_each_call_is_one_project_s_files_at_the_release(self):
         built = ["cad-1.0.0-py3-none-any.whl", "cad-1.0.0.tar.gz", "cad_server-1.0.0-py3-none-any.whl",
-                 "cad_server-1.0.0.tar.gz", "cad_mcp-1.0.0.tar.gz", "text_to_cad-1.0.0.tar.gz",
+                 "cad_server-1.0.0.tar.gz", "cad_mcp-1.0.0.tar.gz",
                  "cadgen-1.0.0-py3-none-any.whl", "cad-0.9.9.tar.gz", "cad-1.0.0rc1.tar.gz"]
         self.assertEqual(pypi_release.files_of("cad", "1.0.0", built),
                          ["cad-1.0.0-py3-none-any.whl", "cad-1.0.0.tar.gz"])
         self.assertEqual(pypi_release.files_of("cad-server", "1.0.0", built),
                          ["cad_server-1.0.0-py3-none-any.whl", "cad_server-1.0.0.tar.gz"])
-        self.assertEqual(pypi_release.files_of("text-to-cad", "1.0.0", built), ["text_to_cad-1.0.0.tar.gz"])
         self.assertEqual(pypi_release.files_of("cadgen", "1.0.0", built), ["cadgen-1.0.0-py3-none-any.whl"])
 
     def test_waiting_ends_once_the_index_lists_the_release_and_fails_when_it_never_does(self):

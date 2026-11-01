@@ -121,16 +121,15 @@ where those files ship, so these scripts are what produces them.
   fork) and pass both the target's version and the latest tag. Called by
   `test.yml` (Version Check).
 - `pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR`
-  (or `--wait`) — what a release uploads to PyPI of one of its five projects
-  (`PROJECTS`: `cad`, `cad-server`, `cad-mcp`, `cadgen`,
-  `text-to-cad`, in the order they go up) and what its GitHub Release attaches: of
+  (or `--wait`) — what a release uploads to PyPI of one of its four projects
+  (`PROJECTS`: `cad`, `cad-server`, `cad-mcp`, `cadgen`, in the order they go up) and what its GitHub Release attaches: of
   the run's files, that project's at the version; one PyPI does not hold goes to
   `--upload`; one PyPI already holds (a resumed release) is not uploaded again, and
   PyPI's own bytes, checked against the sha256 PyPI lists, go to `--released`; a
   file PyPI holds that the run did not build fails it. `--wait` asks PyPI's simple
   index until it lists the version (ten minutes at most). Called by
   `release-publish.yml`'s `pypi` job, project by project.
-- `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the five
+- `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the four
   `pyproject.toml`s are `VERSION` and pin the library at it, every skill's main file and setup
   guide pin `cad-server==VERSION` or run `cad +VERSION`, the one-line installer falls back
   to `VERSION`, and (with the flag)
@@ -141,9 +140,9 @@ where those files ship, so these scripts are what produces them.
   pins, the skills' `cad +VERSION` in each
   skill's main file and `references/setup.md`, and the one-line installer's fallback release) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
-- `check-wheel-contents.sh` — builds the five wheels and asserts each carries its own
-  top-level packages alone (the aliases none, and only the library at the release as
-  their requirement); that the library's and the shim's carry their Python modules, the
+- `check-wheel-contents.sh` — builds the four wheels and asserts each carries its own
+  top-level packages alone (the alias none, and only the library at the release as
+  its requirement); that the library's and the shim's carry their Python modules, the
   library's the engine's page and environment image; that the server's carries its modules,
   the engine's README and `_runtime/{viewer,mcp,plugin}` with each page's third-party notice, and
   nothing else at the top of `_runtime`, the runtime with bytes identical to the bundled

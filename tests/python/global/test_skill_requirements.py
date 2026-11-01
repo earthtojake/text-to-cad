@@ -124,6 +124,7 @@ class SkillLaunchCommand(unittest.TestCase):
                 if manifest.is_file():
                     lines = [line.split("#")[0].strip() for line in manifest.read_text(encoding="utf-8").splitlines()]
                     names = {re.sub(r"[-_.]+", "-", re.match(r"[A-Za-z0-9._-]*", line).group(0)).lower() for line in lines}
+                    # text-to-cad is the product's name, unpublished: a requirement on it would install whatever claims it.
                     self.assertFalse(names & {"cad", "cad-server", "cad-mcp", "cadgen", "text-to-cad"}, manifest)
 
     def test_the_launch_command_and_the_refusal_are_the_servers_own(self) -> None:

@@ -32,7 +32,7 @@ from pathlib import Path
 
 from tests.python.support.paths import LIBRARY, PROJECTS, REPO_ROOT, SOURCES
 
-# Every pyproject.toml a distribution is built from: the three packages' and the aliases'.
+# Every pyproject.toml a distribution is built from: the three packages' and the alias's.
 PYPROJECTS = (*(project / "pyproject.toml" for project in PROJECTS),
               *sorted((REPO_ROOT / "packages" / "aliases").glob("*/pyproject.toml")))
 

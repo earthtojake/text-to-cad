@@ -5,9 +5,9 @@ this run's files of that project, checked file by file against what PyPI already
     python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --built DIR --upload DIR --released DIR
     python3 scripts/release/pypi_release.py --project NAME --version X.Y.Z --wait
 
-A release is five projects on PyPI (``PROJECTS``), uploaded in that order, each listed by PyPI's index
-before the next goes (``--wait``): the library first, since the server and the aliases pin it at their own
-release, then the server, the shim and the two aliases. Of ``--built`` (every file the run built), only
+A release is four projects on PyPI (``PROJECTS``), uploaded in that order, each listed by PyPI's index
+before the next goes (``--wait``): the library first, since the server and the alias pin it at their own
+release, then the server, the shim and the alias. Of ``--built`` (every file the run built), only
 ``--project``'s files are this call's: a wheel or sdist whose name is the project's, normalized, then the
 version.
 
@@ -37,7 +37,7 @@ import urllib.request
 from pathlib import Path
 
 # The release's projects on PyPI, in the order they go up.
-PROJECTS = ("cad", "cad-server", "cad-mcp", "cadgen", "text-to-cad")
+PROJECTS = ("cad", "cad-server", "cad-mcp", "cadgen")
 INDEX = "https://pypi.org/pypi"
 SIMPLE = "https://pypi.org/simple"
 TIMEOUT = 60

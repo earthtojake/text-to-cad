@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Assert the five distributions' wheels carry what they must, and only their own packages: the library's,
-# the server's and the shim's, and the aliases' (cadgen, text-to-cad), which carry nothing but the library
-# at the release.
+# Assert the four distributions' wheels carry what they must, and only their own packages: the library's,
+# the server's and the shim's, and the alias's (cadgen), which carries nothing but the library at the
+# release.
 #
 # The server ships JavaScript it serves (the CAD Viewer's built client, the CAD app page) and
 # non-Python data it reads (collation.json); the library ships the page `serve` shows a document
@@ -202,7 +202,6 @@ PY
 check cad cad "cad|cadgen|cad-lazy-kernel\.pth" "${LIBRARY_REQUIRED[@]}"
 check cad-mcp cad_mcp "cad_mcp" "${SHIM_REQUIRED[@]}"
 check_alias cadgen cadgen "build123d kernel"
-check_alias text-to-cad text_to_cad build123d
 # The server's last: the runtime checks below read its wheel and listing.
 check cad-server cad_server "cad_server" "${SERVER_REQUIRED[@]}"
 
@@ -226,7 +225,7 @@ fi
 plugin_files=()
 while IFS= read -r plugin_file; do plugin_files+=("$plugin_file"); done < <("$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --print-plugin-files)
 "$PYTHON_BIN" "$SCRIPT_DIR/wheel_contents.py" plugin "$wheel" "$REPO_ROOT" "${plugin_files[@]}"
-echo "The five wheels carry their own packages (the aliases none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
+echo "The four wheels carry their own packages (the alias none, only the library at the release); the server's carries its runtime ($runtime_count entries under cad_server/_runtime)."
 if [ "$KEEP_WHEEL" != "1" ]; then
   rm -rf "$OUT_DIR"
 fi

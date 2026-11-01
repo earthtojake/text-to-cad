@@ -3,7 +3,7 @@
 # The PyPI project `cad` (the library's distribution) was transferred to this project on
 # 2026-10-31. Before the transfer its previous owner published the versions below. PyPI never
 # accepts a filename twice (yanking or deleting a release frees nothing), so a release of any of
-# them could not upload the library, and all five distributions share one VERSION.
+# them could not upload the library, and every distribution shares one VERSION.
 #
 # check-version.sh and bump-version.sh refuse a VERSION on this list (a trailing `.0` is
 # insignificant to PyPI, so `1.0` is 1.0.0 too). CONTRIBUTING.md lists the same versions; a test

@@ -11,8 +11,8 @@ usage() {
 Usage:
   scripts/release/check-version.sh [--incremented-from REF]
 
-Checks that VERSION contains a valid canonical release version, that the five
-distributions (the library, the server, the shim and the two aliases) are that
+Checks that VERSION contains a valid canonical release version, that the four
+distributions (the library, the server, the shim and the alias) are that
 version and pin each other at it (`cad==<version>`), that it is not one PyPI will never take
 (scripts/release/unavailable-versions.txt), that every skill's
 SKILL.md and setup guide (references/setup.md) name exactly that version: its
@@ -72,17 +72,16 @@ if [ -n "$BASE_REF" ]; then
   "$SCRIPT_DIR/bump-version.sh" --check-incremented-from "$BASE_REF"
 fi
 
-# Every skill's install command and `cad +<version>` must name THIS version, and so must the five
+# Every skill's install command and `cad +<version>` must name THIS version, and so must the four
 # distributions' versions and their pins of the library. The release PR stamps them (sync-version.mjs)
 # alongside VERSION; another version means the two moved separately.
 stale=0
 # A pin names the library (`cad`, with an extra or not), the server or the shim, standing alone: `cad` at
-# the end of another name (`text-to-cad==`) is none of them. grep -o keeps the character before the name,
+# the end of another name (`my-cad==`) is none of them. grep -o keeps the character before the name,
 # which `pins` takes off.
 PIN='(^|[^[:alnum:]_.-])cad(-server|-mcp)?(\[[a-z0-9_,.-]+\])?==[^[:space:]`"'"'"']+'
 pins() { grep -oE -- "$PIN" "$1" | sed -E 's/^[^c]//' || true; }
-for project in packages/cad packages/cad-server packages/cad-mcp packages/aliases/cadgen \
-               packages/aliases/text-to-cad; do
+for project in packages/cad packages/cad-server packages/cad-mcp packages/aliases/cadgen; do
   declared="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$project/pyproject.toml")"
   if [ "$declared" != "$version" ]; then
     echo "$project/pyproject.toml is ${declared:-unversioned}; expected $version" >&2
@@ -121,4 +120,4 @@ if [ "$stale" -ne 0 ]; then
   echo "Run node scripts/release/sync-version.mjs to stamp the pins from VERSION." >&2
   exit 1
 fi
-echo "The five distributions, their pins, the skills' pins and versions and the installer's fallback match VERSION ($version)."
+echo "The four distributions, their pins, the skills' pins and versions and the installer's fallback match VERSION ($version)."

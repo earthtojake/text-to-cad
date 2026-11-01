@@ -84,5 +84,5 @@ replaces.
 
 Installing the library into a Python of your own instead of the install command: it is
 `cad` on PyPI now (`pip install 'cad[build123d]==0.10.0'`; pin it, the release you run), beside the
-server, `cad-server`, and the CAD app's, `cad-mcp`; `cadgen` and `text-to-cad` install `cad` at the
+server, `cad-server`, and the CAD app's, `cad-mcp`; `cadgen` installs `cad` at the
 same release (`cadgen[kernel]`, 0.8's spelling, as `cad[build123d]`).

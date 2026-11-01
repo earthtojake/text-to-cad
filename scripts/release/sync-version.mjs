@@ -20,18 +20,17 @@ export const jsonTargets = [
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
 ];
 
-// The five distributions released together: the library, the server, the shim and the aliases.
+// The four distributions released together: the library, the server, the shim and the alias.
 export const tomlTargets = [
   "packages/cad/pyproject.toml",
   "packages/cad-server/pyproject.toml",
   "packages/cad-mcp/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
-  "packages/aliases/text-to-cad/pyproject.toml",
 ];
 
 // A requirement pinning one of the three distributions at a release: the library (`cad==`, with its
 // build123d extra or not), the server (`cad-server==`) and the shim (`cad-mcp==`). The name stands
-// alone: `cad` at the end of another name (`text-to-cad==`) pins no distribution of the release.
+// alone: `cad` at the end of another name (`my-cad==`) pins no distribution of the release.
 export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
 // Every skill that runs the server names the version its installation registers as
@@ -55,13 +54,12 @@ function skillLaunchTargets() {
 // Files that pin a release by a requirement string rather than a version field: the commands the
 // agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
 // config and the command it says the installer runs, every skill's install command and `cad +<version>`,
-// and the distributions that pin the library at their own release (the server, the aliases). A file may
+// and the distributions that pin the library at their own release (the server, the alias). A file may
 // also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
 // change, not over it.
 export const pinTargets = [
   "packages/cad-server/pyproject.toml",
   "packages/aliases/cadgen/pyproject.toml",
-  "packages/aliases/text-to-cad/pyproject.toml",
   "codex.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",

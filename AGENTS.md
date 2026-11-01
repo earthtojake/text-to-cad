@@ -42,8 +42,8 @@ pass: the merge is the release. `Test` runs every job for a `VERSION` change, an
 its Version Check vets the bump (a branch of this repository only, a version past
 `main`'s and the latest tag, every stamp in step). `Publish Release`
 (`release-publish.yml`) runs on the merge: it builds the plugin ZIP, the bundle
-and the wheel and sdist of each of the release's five projects on PyPI (`cad`,
-`cad-server`, `cad-mcp`, and the aliases `cadgen` and `text-to-cad`), uploads
+and the wheel and sdist of each of the release's four projects on PyPI (`cad`,
+`cad-server`, `cad-mcp`, and the alias `cadgen`), uploads
 them one project at a time, the library first, waiting until PyPI lists each,
 and only then writes the install branches (`latest`, `claude-plugin`), deploys
 the docs site, tags `v<VERSION>` and publishes the GitHub Release. A run that
@@ -120,7 +120,7 @@ which points both at the checkout.
   app's server half (`cad_server/mcp`), and the JS assets they serve (`cad_server/_runtime`, built
   by `scripts/bundle/cadgen-runtime.sh`).
   `packages/cad-mcp` ([README](packages/cad-mcp/README.md)) is the shim, and
-  `packages/aliases/` the `cadgen` and `text-to-cad` aliases. Skills consume the server as an
+  `packages/aliases/` the `cadgen` alias. Skills consume the server as an
   installed distribution.
   `packages/core` ([README](packages/core/README.md)) is `@text-to-cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))

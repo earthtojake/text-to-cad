@@ -198,9 +198,9 @@ def _shim_change(path: str) -> Select:
 # (``cad_server.viewer.xbf``), the CAD app's views open them through the viewer's routes, and the
 # library's root names are its. A change to it reaches whatever the packages reach.
 ENGINE_CODE = (f"{LIBRARY_SRC}/engine/**", f"{SERVER_SRC}/engine/**")
-# The packages' projects, and the alias distributions (one-file projects, each a pin of the library).
+# The packages' projects, and the alias distribution (a one-file project, a pin of the library).
 PACKAGE_PROJECTS = ("packages/cad", "packages/cad-server", "packages/cad-mcp")
-ALIAS_PROJECTS = ("packages/aliases/cadgen", "packages/aliases/text-to-cad")
+ALIAS_PROJECTS = ("packages/aliases/cadgen",)
 
 _MARKDOWN_LINK = re.compile(r"\[[^\]]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 

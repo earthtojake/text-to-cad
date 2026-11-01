@@ -58,7 +58,7 @@ third-party technology and the application layer over it are an integration, nam
 technology, and its extra carries the same name.
 
 **DEPENDED ON BY** — the server, `cad-server`, which pins it at its own release, and through
-the server every skill that runs `cad`; the aliases `cadgen` and `text-to-cad`, which install it.
+the server every skill that runs `cad`; the alias `cadgen`, which installs it.
 The CAD Viewer is the server's: it serves `cad_server.viewer`’s client, HTTP application and
 every STEP and `.xbf` a page opens on one authenticated listener, without a relay.
 
@@ -248,8 +248,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 
     **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
     the `cadgen` import is the library itself, every name and every module of it `cad`'s own
-    object (one copy, and nothing said of it), and the `cadgen` and `text-to-cad` distributions
-    install the library at their own release. Nothing else of 0.8's names is kept: the `cadgen`
+    object (one copy, and nothing said of it), and the `cadgen` distribution
+    installs the library at its own release. Nothing else of 0.8's names is kept: the `cadgen`
     command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
 
 

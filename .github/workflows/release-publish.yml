@@ -8,12 +8,12 @@ name: Publish Release
 # ships untested.
 #
 # The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle, and
-# the wheel and sdist of each of the release's five projects on PyPI (the library `cad`, the
-# server `cad-server`, the shim `cad-mcp`, and the aliases `cadgen` and `text-to-cad`) --
+# the wheel and sdist of each of the release's four projects on PyPI (the library `cad`, the
+# server `cad-server`, the shim `cad-mcp`, and the alias `cadgen`) --
 # and installs and exercises the three wheels together. The pypi job alone uploads them, in the
 # `release` environment, which deploys from main only and is the one each project's trusted publisher
 # names: one project at a time, the library first, each listed by PyPI's index before the next goes
-# (the server and the aliases pin the library at their own release). Only then does anything that
+# (the server and the alias pin the library at their own release). Only then does anything that
 # installers follow name it: the
 # `latest` branch and claude.ai's `claude-plugin` get the plugin alone
 # (scripts/release/plugin_branch.py); after them, the docs deploy moves the site's header
@@ -279,21 +279,21 @@ jobs:
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      # The release's five projects on PyPI, a wheel and an sdist each, into one folder.
-      - name: Build the five distributions
+      # The release's four projects on PyPI, a wheel and an sdist each, into one folder.
+      - name: Build the four distributions
         run: |
           python3 -m pip install --upgrade build
-          for project in cad cad-server cad-mcp aliases/cadgen aliases/text-to-cad; do
+          for project in cad cad-server cad-mcp aliases/cadgen; do
             python3 -m build --outdir dist "packages/$project"
           done
 
-      # What ships is exactly the five projects' wheels and sdists at the release's version.
+      # What ships is exactly the four projects' wheels and sdists at the release's version.
       - name: Check the distributions are the release's
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: |
           expected=()
-          for name in cad cad_server cad_mcp cadgen text_to_cad; do
+          for name in cad cad_server cad_mcp cadgen; do
             expected+=("$name-$VERSION-py3-none-any.whl" "$name-$VERSION.tar.gz")
           done
           found="$(cd dist && ls | sort)"
@@ -388,12 +388,12 @@ jobs:
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The upload alone, and the one job that may mint a token PyPI takes (id-token): it runs in the
-  # `release` environment, which deploys from main only, and each of the five projects' trusted
+  # `release` environment, which deploys from main only, and each of the four projects' trusted
   # publisher on PyPI names this workflow AND that environment (CONTRIBUTING.md, "Repository
   # settings"). So a run on any other branch -- build-test, or a workflow changed there -- cannot
   # publish. One project at a time, in scripts/release/pypi_release.py's PROJECTS order, each listed
   # by PyPI's index before the next: the library, which the others pin at the release, first; the
-  # alias the version feed reads, `cadgen`, last but one. Uploaded BEFORE anything an installer
+  # alias the version feed reads, `cadgen`, last. Uploaded BEFORE anything an installer
   # follows names the version; if a later job fails, dispatch this workflow again: it resumes,
   # uploading only what PyPI does not hold yet.
   pypi:
@@ -503,25 +503,6 @@ jobs:
         env:
           VERSION: ${{ needs.gate.outputs.version }}
         run: python3 scripts/release/pypi_release.py --project cadgen --version "$VERSION" --wait
-
-      - name: Compare text-to-cad with what PyPI holds
-        id: alias_text_to_cad
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: |
-          python3 scripts/release/pypi_release.py --project text-to-cad --version "$VERSION" --built "$RUNNER_TEMP/built" \
-            --upload upload-to-pypi/text-to-cad --released "$RUNNER_TEMP/released" >> "$GITHUB_OUTPUT"
-
-      - name: Publish text-to-cad to PyPI
-        if: steps.alias_text_to_cad.outputs.upload == 'true'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: upload-to-pypi/text-to-cad
-
-      - name: Wait until PyPI's index lists text-to-cad
-        env:
-          VERSION: ${{ needs.gate.outputs.version }}
-        run: python3 scripts/release/pypi_release.py --project text-to-cad --version "$VERSION" --wait
 
       # What PyPI serves of the release, every project's, for the GitHub Release to attach.
       - name: Upload the released distributions as a workflow artifact

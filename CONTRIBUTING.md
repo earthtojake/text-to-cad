@@ -510,7 +510,7 @@ Canonical source directories are:
   the server talks to: a Vercel project of its own, with no dependencies.
 - `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
   Python distributions (the library, the server with its bundled runtime assets, and the shim), and
-  `packages/aliases/` for the `cadgen` and `text-to-cad` alias distributions.
+  `packages/aliases/` for the `cadgen` alias distribution.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
@@ -682,7 +682,7 @@ on every push:
   `npx skills add`. `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law.
 
-Every pin of the release's own in the tree — the five `pyproject.toml`s, the plugin server
+Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
 configs and each skill's launch command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
 bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
 skill pin equals `VERSION` — so a stale pin fails the `Version Check` job.
@@ -701,7 +701,7 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 ## Releases
 
 A pull request that changes `VERSION` is a release: merging it starts `Publish
-Release`, which uploads the release's five projects to PyPI and only then moves the branches
+Release`, which uploads the release's four projects to PyPI and only then moves the branches
 installers follow, so the canonical repo version, the skill pins, the Git tag,
 the PyPI wheels and the GitHub Release all describe one commit. Normal
 development PRs leave `VERSION` alone. A PR that touches release state must keep
@@ -746,7 +746,7 @@ Where the built things live instead:
 The PyPI project `cad` (the library's distribution) was transferred to this project on
 2026-10-31, and its previous owner published these versions before the transfer: `0.8.0`, `0.8.1`, `0.8.2`, `0.8.3`, `0.8.4`, `0.8.5`, `0.9.0`, `0.9.1`, `0.9.5`, `0.9.6`, `0.9.7`, `0.9.8`, `0.9.9.1`, `0.9.9.3`, `1.0`, `1.0.1`, `1.0.2`, `1.0.3`, `1.0.4`, `1.1.1`, `1.1.2`.
 PyPI never accepts a filename again, yanked or deleted or not, so no release of text-to-cad can
-carry any of them (`VERSION` is one number for all five distributions, which is why the release that
+carry any of them (`VERSION` is one number for every distribution, which is why the release that
 was to be 0.9.0 is 0.10.0). `scripts/release/unavailable-versions.txt` is the
 machine-checked source: `check-version.sh` and `bump-version.sh` (which `Prepare Release` runs) refuse a
 `VERSION` on it (1.0.0 too, since a trailing `.0` is insignificant to PyPI), and a test keeps
@@ -792,7 +792,7 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 
 `bump-version.sh` sets `VERSION`
 past `main`'s and stamps the derived metadata and every pin of the release's own
-(`sync-version.mjs`: package, plugin and lockfile versions, the five
+(`sync-version.mjs`: package, plugin and lockfile versions, the four
 `pyproject.toml`s and their `cad==` pins, the plugin server configs'
 `cad-mcp==`, each skill's launch command and `cad +<version>`, the installers'
 `cad-server==` fallback). It works from `main`'s version, not the
@@ -839,9 +839,9 @@ green: that is the release. `Publish Release`, on the merge commit:
    commit carries none of it; its `TEXT_TO_CAD_RELEASE` names the version, so
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
    `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
-   the wheel-contents check, `python -m build` of the release's five projects on
+   the wheel-contents check, `python -m build` of the release's four projects on
    PyPI into one folder (the library `cad`, the server `cad-server`, the
-   shim `cad-mcp`, and the aliases `cadgen` and `text-to-cad`, a wheel and an
+   shim `cad-mcp`, and the alias `cadgen`, a wheel and an
    sdist each, and nothing else at any other version), and an `unzip -l` assertion
    that the server's wheel about to ship really holds `_runtime/viewer` and
    `_runtime/mcp`. The pages' source maps, which the bundle
@@ -860,11 +860,11 @@ green: that is the release. `Publish Release`, on the merge commit:
    (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
-   uploads it once. Then the `pypi` job uploads the five projects, one at a time:
+   uploads it once. Then the `pypi` job uploads the four projects, one at a time:
    the only job that may mint a PyPI token, in the `release` environment (below,
-   "Repository settings"). The library goes first, since the server and the aliases
-   pin it at their own release, then the server, the shim, `cadgen` (whose index the
-   version feed reads) and `text-to-cad` (`PROJECTS` in
+   "Repository settings"). The library goes first, since the server and the alias
+   pin it at their own release, then the server, the shim and `cadgen`, whose index the
+   version feed reads (`PROJECTS` in
    `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
    uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
    It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
@@ -876,7 +876,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
-   tag and the GitHub Release, with the five projects' wheels and sdists as PyPI
+   tag and the GitHub Release, with the four projects' wheels and sdists as PyPI
    serves them (the `pypi` job's artifact, `dist-<version>-released`),
    the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
@@ -1146,8 +1146,7 @@ requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
 `release`, whose deployment branches are `main` alone, and the trusted publisher of each
-of the five projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`,
-`text-to-cad`) names this repository, `release-publish.yml` and that environment, so no
+of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`) names this repository, `release-publish.yml` and that environment, so no
 run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
 project PyPI does not have yet takes a pending publisher, the same three names, before
 its first release. No other

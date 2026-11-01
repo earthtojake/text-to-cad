@@ -8,7 +8,7 @@ that support the applications in `apps/docs`, `apps/web` and `apps/mcp`:
 | [cad](cad/README.md) | Python distribution `cad`, imported as `cad` (and `cadgen`, an alias) | The library: what a model imports and what runs in a worker -- the model API, the kernel-side engine, the document model and the protocol a client speaks; the CAD kernel is its `build123d` extra |
 | [cad-server](cad-server/README.md) | Python distribution `cad-server`, imported as `cad_server` | The server: the engine's daemon, the command, the CAD Viewer's and the CAD app's servers, the installations, and the bundled runtime outputs |
 | [cad-mcp](cad-mcp/README.md) | Python distribution `cad-mcp`, imported as `cad_mcp` | The shim: the stdio transport an agent app starts, the standard library alone |
-| `aliases/` | Python distributions `cadgen` and `text-to-cad` | The library under its earlier and the product's names: each a pin of `cad` at the same release, nothing of its own |
+| `aliases/` | Python distribution `cadgen` | The library under its earlier name: a pin of `cad` at the same release, nothing of its own |
 | [core](core/README.md) | `@text-to-cad/core` | Framework-independent JS/TS geometry, rendering and explicit CAD service client |
 | [ui](ui/README.md) | `@text-to-cad/ui` | Complete shared FileViewer, injectable renderers, navigation, controls and styles |
 

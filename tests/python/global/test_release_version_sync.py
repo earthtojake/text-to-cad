@@ -136,8 +136,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
             manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["version"], "9.9.9")
             self.assertIn("cad-mcp==9.9.9", manifest["mcpServers"]["cad"]["args"])
-            # The five distributions are the release, and the server and the aliases pin the library at it.
-            for project in ("cad", "cad-server", "cad-mcp", "aliases/cadgen", "aliases/text-to-cad"):
+            # The four distributions are the release, and the server and the alias pin the library at it.
+            for project in ("cad", "cad-server", "cad-mcp", "aliases/cadgen"):
                 text = (root / "packages" / project / "pyproject.toml").read_text(encoding="utf-8")
                 self.assertIn('\nversion = "9.9.9"\n', text, project)
                 if project not in ("cad", "cad-mcp"):
@@ -179,7 +179,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
 
     def test_the_version_check_holds_the_installer_s_fallback_to_the_release(self) -> None:
         """check-version.sh refuses an installer script that would fall back to another release."""
-        # The five distributions' pyprojects, which it checks too, as they are.
+        # The four distributions' pyprojects, which it checks too, as they are.
         projects = json.loads(_node("const { tomlTargets } = await import(%s);\nconsole.log(JSON.stringify(tomlTargets));"
                                     % json.dumps(SYNC_SCRIPT.as_uri())))
         with tempfile.TemporaryDirectory() as scratch:
