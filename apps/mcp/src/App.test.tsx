@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
 import { version } from '../package.json';
 import App from './App';
+import { frameClipboard } from './host/clipboard';
 import type { HostContext } from './host/bridge';
 import type { Launch } from './host/server';
 
@@ -280,8 +281,8 @@ it("Open in › Browser is the file menu's where a launch carried the page: the 
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a b.step', browser: 'http://127.0.0.1:3245/id-a?token=t' }} />);
   // Never a navbar button: the file menu's item, the host's file action.
   expect(screen.queryByRole('button', { name: 'Open in browser' })).toBeNull();
-  // The library's cards keep their own menu: Copy path and Reveal, the browser no host card's.
-  expect(Object.keys(viewer.props!.host.fileActions!.perform!).sort()).toEqual(['browser', 'copy-path', 'reveal']);
+  // The library's cards keep their own menu: Copy path, Copy link and Reveal, the browser no host card's.
+  expect(Object.keys(viewer.props!.host.fileActions!.perform!).sort()).toEqual(['browser', 'copy-link', 'copy-path', 'reveal']);
   act(() => { void openInBrowser(); });
   // The request names the document, never a URL; the server opened it, so the host is asked nothing.
   await waitFor(() => expect(server.asked('/api/v1/local/browser/open')).toEqual([{ model: '/work/a b.step' }]));
@@ -293,6 +294,24 @@ it("Open in › Browser is the file menu's where a launch carried the page: the 
   cleanup();
   render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: '/work/a.step' }} />);
   expect(browser()).toBeUndefined();
+});
+
+it("Copy link copies the engine's own page of the document with a fresh link asked through the tunnel, never the tunnel's origin", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  server.answers['/api/v1/local/link'] = () => ({ link: '1767225600.abc', expires: 1767225600 });
+  const written = vi.spyOn(frameClipboard, 'writeText').mockImplementation(async () => {});
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: id,
+    engine: 'http://127.0.0.1:3245', browser: `http://127.0.0.1:3245/${id}?token=launch` }} />);
+  await act(async () => { await viewer.props!.host.fileActions!.perform!['copy-link']!({ path: id, kind: 'file' }); });
+  expect(server.asked('/api/v1/local/link')).toEqual([null]);
+  // Handed to the frame's clipboard still on its way, inside the press; it arrives as the page's address.
+  expect(await written.mock.calls[0][0]).toBe(`http://127.0.0.1:3245/${id}?token=1767225600.abc`);
+  written.mockRestore();
+  // A launch that names no engine nor page has no origin to link: no Copy link.
+  cleanup();
+  render(<App bridge={bridge as any} server={server as any} launch={{ protocol: 9, page: 'viewer', model: id }} />);
+  expect(viewer.props!.host.fileActions!.perform!['copy-link']).toBeUndefined();
 });
 
 it("Open in › Browser follows what the view shows: each launch's page, the agent's shows bringing theirs, and the web viewer's home for a file no launch named; a host that opens no links gets a plain link", async () => {

@@ -105,6 +105,9 @@ class Sessions:
                          start=options.get('cwd') if isinstance(options.get('cwd'), str) else None)
         app.analytics = self.engine.analytics
         app.consent_by = "app"
+        # A fresh link to the engine's own page (``GET /api/v1/local/link``), for a card's Copy link:
+        # the card's capability already reaches everything a link does.
+        app.issue_link = self.engine.fresh_link
         def viewer_url(model=None):
             from .browser import ViewerUnavailable
             answer = self.engine.launch({'start': app.start, 'files': [model] if model else []})

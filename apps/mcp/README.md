@@ -30,7 +30,9 @@ terminal UI show none and are served as text clients.
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
-  the file menu: Copy path, then Open in › Browser and Finder (File Explorer, File manager), a
+  the file menu: Copy path, Copy link (the engine's own page of the document,
+  `<engine origin>/<id>?token=<fresh link>`, the origin from the launch and the link asked through the
+  tunnel; never the tunnel's address), then Open in › Browser and Finder (File Explorer, File manager), a
   model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
   script was moved or deleted; Browser needs none), then the apps the server finds on this computer
   for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App

@@ -271,11 +271,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   // The type filter is there only where there is something to tell apart: models and files both listed.
   const kinds = all.some(deletes) && all.some(item => !deletes(item));
   const now = Date.now();
-  // What the host can do with a file on disk: a file's menu items. A model is no file: it has none.
+  // What the host can do with a card's document: Copy path, Copy link and Reveal for a file on disk;
+  // a model is no file, and takes Copy link alone (its page needs no file).
   const fileItems = entryMenu(fileActions?.platform ?? "linux", new Set(Object.keys(fileActions?.perform ?? {}) as EntryAction[]), t);
+  const modelItems = fileItems.filter(entry => entry.action === "copy-link");
+  const HOME_CONTROLS = { "copy-path": "home_copy_path", "copy-link": "home_copy_link", reveal: "home_reveal" } as const;
   const perform = (action: EntryAction, item: Model) => {
-    usage.used(action === "reveal" ? "home_reveal" : "home_copy_path");
-    void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file" })).catch(fail);
+    if (action in HOME_CONTROLS) usage.used(HOME_CONTROLS[action as keyof typeof HOME_CONTROLS]);
+    void Promise.resolve(fileActions?.perform?.[action]?.({ path: item.path, kind: "file", ...(item.id ? { id: item.id } : {}) })).catch(fail);
   };
   // A card's pin and its one menu (Open, what the host can do with a file on disk, Pin or Unpin, then
   // Delete), there while the pointer is on the card (Figma's star): the pin toggles, and a pinned
@@ -291,7 +294,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-40">
         <DropdownMenuItem disabled={item.missing} onSelect={() => open(item)}>{t("home.menuOpen")}</DropdownMenuItem>
-        {!deletes(item) ? fileItems.map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>) : null}
+        {(deletes(item) ? modelItems : fileItems).map(entry => <DropdownMenuItem key={entry.action} onSelect={() => perform(entry.action, item)}>{entry.label}</DropdownMenuItem>)}
         <DropdownMenuItem onSelect={() => pin(item)}>{t(item.pinned ? "home.unpin" : "home.pin")}</DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem variant="destructive" onSelect={() => setConfirming(item)}>{t("home.delete")}</DropdownMenuItem>

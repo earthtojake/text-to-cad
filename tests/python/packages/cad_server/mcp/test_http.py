@@ -215,6 +215,20 @@ class HttpSessionsTest(unittest.TestCase):
         self.assertEqual(request({'op': 'status'})['pid'], info['pid'])
         self.assertFalse((self.root / 'state' / 'sidebar-views').exists())
 
+    def test_a_cards_fresh_link_comes_through_its_tunnel_and_opens_the_engines_page(self):
+        # A card's Copy link: the engine's own fresh link, asked through the card's tunnel.
+        from urllib.request import urlopen
+
+        proxy = self.proxy()
+        token = self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken']
+        reply = self.tool(proxy, 'cad_http', {'method': 'GET', 'url': '/api/v1/local/link', 'headers': {'x-cadgen-app': token}})['structuredContent']
+        self.assertEqual(reply['status'], 200)
+        fresh = json.loads(base64.b64decode(reply['body']))
+        self.assertEqual((set(fresh), int(fresh['link'].split('.')[0])), ({'link', 'expires'}, fresh['expires']))
+        self.assertGreater(fresh['expires'], time.time() + 3600)
+        with urlopen(f"{self.endpoint['url']}/?token={fresh['link']}", timeout=10) as page:
+            self.assertEqual(page.status, 200, 'it opens the page')
+
     def test_inspect_export_tools_run_without_a_view(self):
         proxy = self.proxy()
         def finished(name, arguments):

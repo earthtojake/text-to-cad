@@ -62,8 +62,8 @@ _API_PREFIXES = ("/api/v1/",)
 # Beside the API, the CAD app's module (``GET /app``), which a card's shell loads through its host.
 _APP_ROUTE = "/app"
 # The routes whose effect belongs to the host: a view copies through its host's frame, never
-# through the server's clipboard, and a card carries its own link, never the page's address's.
-_HOST_EFFECT_ROUTES = frozenset({"/api/v1/local/clipboard", "/api/v1/local/link"})
+# through the server's clipboard. (A fresh link, ``local/link``, is the card's too: its Copy link.)
+_HOST_EFFECT_ROUTES = frozenset({"/api/v1/local/clipboard"})
 # How long one catalog read answers every view of a file that asks for its revision: views sync
 # each second, and N of them on one file then cost one read, not N.
 CATALOG_REVISION_SECONDS = 0.75

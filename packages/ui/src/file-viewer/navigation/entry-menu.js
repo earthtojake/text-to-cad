@@ -13,13 +13,14 @@
 import { english } from "../../i18n/core.js";
 
 /**
- * Every action a host can perform on a document: its path to the clipboard, the file shown in the
- * desktop's file manager, and the document's page opened in the person's browser (the CAD app's).
+ * Every action a host can perform on a document: its path to the clipboard, a link to its page with
+ * a fresh link to the clipboard, the file shown in the desktop's file manager, and the document's
+ * page opened in the person's browser (the CAD app's).
  */
-export const ENTRY_ACTIONS = Object.freeze(["copy-path", "reveal", "browser"]);
+export const ENTRY_ACTIONS = Object.freeze(["copy-path", "copy-link", "reveal", "browser"]);
 
 /**
- * @typedef {"copy-path"|"reveal"|"browser"} EntryAction
+ * @typedef {"copy-path"|"copy-link"|"reveal"|"browser"} EntryAction
  * @typedef {"darwin"|"win32"|"linux"} Platform
  * @typedef {{ action: EntryAction, label: string, enabled?: boolean, reason?: string }} EntryMenuItem
  *   `enabled` false: drawn disabled, `reason` its hint (Open in's entries; a home card's are always enabled).
@@ -57,8 +58,8 @@ export function fileManagerName(platform, t = english) {
 }
 
 /**
- * A home card's file actions: Copy path, then the file shown in the file manager, each where the
- * host can do it, in a fixed order.
+ * A home card's actions: Copy path, Copy link, then the file shown in the file manager, each where
+ * the host can do it, in a fixed order (a model's card, which has no file, takes Copy link alone).
  *
  * @param {Platform} platform
  * @param {ReadonlySet<EntryAction>} capabilities What this host can perform.
@@ -66,7 +67,8 @@ export function fileManagerName(platform, t = english) {
  * @returns {EntryMenuItem[]}
  */
 export function entryMenu(platform, capabilities, t = english) {
-  return [{ action: "copy-path", label: t("file.copyPath") }, { action: "reveal", label: revealLabel(platform, t) }]
+  return [{ action: "copy-path", label: t("file.copyPath") }, { action: "copy-link", label: t("file.copyLink") },
+    { action: "reveal", label: revealLabel(platform, t) }]
     .filter((item) => capabilities.has(item.action));
 }
 

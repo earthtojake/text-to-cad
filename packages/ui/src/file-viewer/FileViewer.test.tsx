@@ -302,7 +302,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   const user = userEvent.setup({ skipHover: true });
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
   const exported = vi.fn();
-  const perform = { 'copy-path': vi.fn(), reveal: vi.fn(), browser: vi.fn() };
+  const perform = { 'copy-path': vi.fn(), 'copy-link': vi.fn(), reveal: vi.fn(), browser: vi.fn() };
   // The host's items as the CAD viewer's Export hands them: a submenu of formats.
   const exportMenu = <DropdownMenuSub><DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger><DropdownMenuSubContent aria-label="Export">
     <DropdownMenuItem data-export-format="step" onSelect={() => exported('step')}>STEP</DropdownMenuItem>
@@ -316,7 +316,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   render(<FileViewer file={id} host={modelHost('/m/parts.py') as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'File actions' }));
-  expect(top()).toEqual(['Copy path', 'Open in', 'Export']);
+  expect(top()).toEqual(['Copy path', 'Copy link', 'Open in', 'Export']);
   await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
   expect(perform['copy-path']).toHaveBeenCalledWith({ path: '/m/parts.py', kind: 'file' });
   await user.click(screen.getByRole('button', { name: 'File actions' }));
@@ -340,11 +340,11 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   cleanup();
   // A model whose script was moved or deleted, where nothing in Open in can open (the web viewer's: no
   // Browser): Copy path stays (where it was), and Open in is drawn disabled, its hint saying why.
-  const web = { 'copy-path': perform['copy-path'], reveal: perform.reveal };
+  const web = { 'copy-path': perform['copy-path'], 'copy-link': perform['copy-link'], reveal: perform.reveal };
   render(<FileViewer file={id} host={modelHost('/m/parts.py', { missing: true, actions: web }) as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'File actions' }));
-  expect(top()).toEqual(['Copy path', 'Open in', 'Export']);
+  expect(top()).toEqual(['Copy path', 'Copy link', 'Open in', 'Export']);
   const openInRow = screen.getByRole('menuitem', { name: 'Open in' });
   expect([openInRow.getAttribute('aria-disabled'), openInRow.closest('[data-disabled-reason]')]).toEqual(['true', expect.anything()]);
   await user.hover(openInRow.closest('[data-disabled-reason]')!);
@@ -352,6 +352,11 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   expect(screen.queryByRole('menu', { name: 'Open in' })).toBeNull();
   await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
   expect(perform['copy-path']).toHaveBeenLastCalledWith({ path: '/m/parts.py', kind: 'file' });
+  // Copy link needs no source: enabled, and it names the document itself, never its script.
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getByRole('menuitem', { name: 'Copy link' }).getAttribute('aria-disabled')).toBeNull();
+  await user.click(screen.getByRole('menuitem', { name: 'Copy link' }));
+  expect(perform['copy-link']).toHaveBeenLastCalledWith({ path: id, kind: 'file' });
   cleanup();
   // The card's: Browser needs no source, so Open in and Browser stay enabled and Finder is disabled, saying why.
   render(<FileViewer file={id} host={modelHost('/m/parts.py', { missing: true }) as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
@@ -375,7 +380,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   render(<FileViewer file={id} host={modelHost() as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'File actions' }));
-  expect(top()).toEqual(['Open in', 'Export']);
+  expect(top()).toEqual(['Copy link', 'Open in', 'Export']);
   await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
   expect(openIn()).toEqual(['Browser']);
   cleanup();
@@ -383,7 +388,7 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   open({ host: { ...host, fileActions: { platform: 'darwin', perform } }, fileMenuItems: exportMenu } as any);
   await screen.findByText('shown');
   await user.click(screen.getByRole('button', { name: 'File actions' }));
-  expect(top()).toEqual(['Copy path', 'Open in', 'Export']);
+  expect(top()).toEqual(['Copy path', 'Copy link', 'Open in', 'Export']);
   await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
   expect(openIn()).toEqual(['Browser', 'Finder']);
   await user.click(screen.getByRole('menuitem', { name: 'Browser' }));

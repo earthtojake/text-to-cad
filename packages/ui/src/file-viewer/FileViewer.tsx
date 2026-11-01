@@ -120,8 +120,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const sourceMissing = Boolean(shown?.file.sourceMissing);
   const fileMenu = useMemo(() => {
     const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
-      .filter(action => action === "browser" ? Boolean(path) : Boolean(onDisk)));
-    const target = (action: EntryAction) => action === "browser" ? path : onDisk;
+      .filter(action => action === "browser" || action === "copy-link" ? Boolean(path) : Boolean(onDisk)));
+    // The page's own actions (Browser, Copy link) name the document; the rest, its file on disk.
+    const target = (action: EntryAction) => action === "browser" || action === "copy-link" ? path : onDisk;
     const document = { path: path ?? "", kind: "file" as const };
     const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
     return path && (capabilities.size || fileMenuItems) ? {

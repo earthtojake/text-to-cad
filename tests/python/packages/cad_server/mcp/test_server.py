@@ -418,8 +418,11 @@ class TabServerTest(_Session):
         # nothing outside the API and the CAD app's module is the tunnel's.
         self.assertEqual([self.http("POST", path, {})[0] for path in ("/api/v1/local/clipboard", "/api/v1/shutdown", "/index.html")],
                          [404, 404, 404])
-        # A card carries its own link: the page's fresh link for its address is not the tunnel's.
+        # A fresh link (a card's Copy link) passes the tunnel to the app, which answers it where it can
+        # make one (the engine's, ``mcp/http.py``): none here, and with one, its answer.
         self.assertEqual(self.http("GET", "/api/v1/local/link")[0], 404)
+        with mock.patch.object(self.server.tunnel.app, "issue_link", lambda: {"link": "1.mac", "expires": 1}):
+            self.assertEqual(self.http("GET", "/api/v1/local/link"), (200, {"link": "1.mac", "expires": 1}))
 
     def test_a_view_keeps_the_library_and_the_persons_settings_in_this_servers_own(self) -> None:
         # The model on screen joins the library this server lists on the home (each path in this

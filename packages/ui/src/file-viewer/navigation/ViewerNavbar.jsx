@@ -21,7 +21,7 @@ import { useControlUsage } from "../../usage/controls.js";
 
 // The file menu's items as telemetry names them (`usage/controls.js`): an app chosen in Open in is
 // `file_open_app`, never which app; Open in's Browser is counted by none.
-const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", reveal: "file_reveal", app: "file_open_app" });
+const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "copy-link": "file_copy_link", reveal: "file_reveal", app: "file_open_app" });
 // The name menu's tabs as telemetry names them: Files is the explorer.
 const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 
@@ -124,7 +124,7 @@ function useOpenInApps(open, apps) {
 
 /**
  * The ⋯ after the file's name: what can be done with the document. Copy path (where its source is,
- * or was); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
+ * or was); Copy link (its page, with a fresh link: every document, its source there or not); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
  * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
  * the source's apps, each export's apps and Default app, a separator between groups); then the
  * host's own items (`items`: the CAD viewer's Export submenu). Each only where the host can do it,
@@ -137,8 +137,10 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
   const [open, setOpen] = useState(false);
   const files = useOpenInApps(open, apps);
   const copy = capabilities.has("copy-path");
+  // A link to the page needs no source: always there where the host can make one.
+  const copyLink = capabilities.has("copy-link");
   const openIn = openInMenu(platform, capabilities, t, { sourceMissing, files });
-  if (!copy && !openIn.length && !hostItems) return null;
+  if (!copy && !copyLink && !openIn.length && !hostItems) return null;
   const perform = (action, app) => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action, app); };
   const openable = openIn.some(item => item.enabled);
   const label = t("file.openIn");
@@ -150,6 +152,7 @@ function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, 
     </button></DropdownMenuTrigger>
     <DropdownMenuContent align="start" sideOffset={6}>
       {copy ? <DropdownMenuItem onSelect={() => perform("copy-path")}>{t("file.copyPath")}</DropdownMenuItem> : null}
+      {copyLink ? <DropdownMenuItem onSelect={() => perform("copy-link")}>{t("file.copyLink")}</DropdownMenuItem> : null}
       {openIn.length ? <DropdownMenuSub>
         {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
         <DropdownMenuSubContent aria-label={label}>

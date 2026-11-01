@@ -61,9 +61,11 @@ export default function App({ client, server, tabStore, notice = null, language:
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages(),
     (key, params) => sayRef.current(key, params)), []);
   // The file menu: the file's path to the clipboard, Reveal in the file manager of the machine the
-  // server runs on, labeled for its platform, and Open in's apps there (the server's own table).
+  // server runs on, labeled for its platform, Copy link, and Open in's apps there (the server's own table).
   const fileActions = useMemo(() => createCadFileActions({ platform: server.platform, clipboard: browserClipboard,
-    reveal: path => client.reveal(path), openIn: client }), [server.platform, client]);
+    reveal: path => client.reveal(path), openIn: client,
+    // Copy link: this page's own origin, and a fresh link from the server.
+    link: { origin: () => window.location.origin, client } }), [server.platform, client]);
   // A copied Quick Edit's annotation, saved by the server beside it on this machine.
   const promptFiles = useMemo(() => createHttpPromptFiles({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.

@@ -57,7 +57,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   document; where it cannot it is plain text. The ⋯
   is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), the menu and each
   submenu shadcn's own width (`min-w-[8rem]`, sized to its items: no width of their own), in this order:
-  **Copy path**; **Open in**, a submenu of **Browser** (the document's page in the person's
+  **Copy path**; **Copy link** (the document's page with a fresh link, `<engine origin>/<id>?token=<link>`,
+  the address the page itself holds: on every document, model or file of any kind, always enabled,
+  its source there or not; copied silently, as Copy path is; `fileActions.perform["copy-link"]`); **Open in**, a submenu of **Browser** (the document's page in the person's
   browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
   and the desktop's file manager by its plain name — **Finder** on macOS, **File Explorer** on
   Windows, **File manager** on Linux (`reveal`); then, where the host has this computer's apps
@@ -140,12 +142,12 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   name, then its `updated` and `created` ages with no verb, muted, in two 160px columns (Created dropped under a 560px page), transparent with the
   hover fill. Each has a **pin** toggle and **one ⋯ menu** (a stock DropdownMenu), shown on hover
   or focus, at a tile's picture's top-right (Figma's star) or a row's end; a pinned one keeps its
-  filled pin at rest. The menu holds Open, a file's Copy path and Reveal where the host can, Pin or
+  filled pin at rest. The menu holds Open, a file's Copy path, Copy link (every card's) and a file's Reveal where the host can, Pin or
   Unpin, a rule, then Delete (destructive), which asks first in a stock AlertDialog saying
   what goes and what stays on disk ("Delete wheel?"), Cancel / Delete; the card leaves the
   list at once. Every model is a tile and a row of its own, nothing folded, opened, pinned and
   deleted alone, and nothing on the Home or in the menus ties a model to the script it was
-  built from: a model shows its name, its glyph and its age; its menu is Open, Pin or Unpin and
+  built from: a model shows its name, its glyph and its age; its menu is Open, Copy link, Pin or Unpin and
   Delete, with no Copy path or Reveal (a file's alone); a search matches a model's name (a
   file's name and path); and the Delete dialog's words name no path.
   A file that will not open

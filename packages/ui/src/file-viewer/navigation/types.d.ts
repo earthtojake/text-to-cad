@@ -6,14 +6,14 @@ import type { FileSource } from "../types.js";
 /* The file menu                                                         */
 /* -------------------------------------------------------------------- */
 
-/** What a host can do with a document: its path copied, its file shown in the file manager, its page opened in the browser. */
-export type EntryAction = "copy-path" | "reveal" | "browser";
+/** What a host can do with a document: its path copied, a link to its page copied, its file shown in the file manager, its page opened in the browser. */
+export type EntryAction = "copy-path" | "copy-link" | "reveal" | "browser";
 export type Platform = "darwin" | "win32" | "linux";
 /** One item; Open in's say whether they can open now (`enabled`) and why not (`reason`, their hint). */
 export type EntryMenuItem = { action: EntryAction; label: string; enabled?: boolean; reason?: string };
 
 export const ENTRY_ACTIONS: readonly EntryAction[];
-/** A home card's file actions: Copy path, then Reveal in the file manager, each where the host can do it. */
+/** A home card's actions: Copy path, Copy link, then Reveal in the file manager, each where the host can do it. */
 export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string): EntryMenuItem[];
 export function revealLabel(platform: Platform, t?: (key: string) => string): string;
 /** Open in's groups, in order; the drawing parts them with separators. */

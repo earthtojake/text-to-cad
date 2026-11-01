@@ -33,6 +33,7 @@ export default {
   "navbar.fullSize": "全尺寸",
 
   "file.copyPath": "复制路径",
+  "file.copyLink": "复制链接",
   "file.revealFinder": "在 Finder 中显示",
   "file.revealExplorer": "在资源管理器中显示",
   "file.revealFileManager": "在文件管理器中显示",

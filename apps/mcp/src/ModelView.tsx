@@ -37,7 +37,7 @@ export interface ViewReporter {
  * navbar would carry that it still has (the update notice, Full size where the host offers it) is its
  * corner (`CardCorner`) at the viewport's top-right.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -73,6 +73,11 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
    * a page: the file menu's Open in › Browser (`fileActions.perform.browser`). Never in the file handler.
    */
   openInBrowser?: (document: string) => void;
+  /**
+   * The engine's own HTTP origin (the launch's `engine`), where a launch named one: Copy link's
+   * address, `<origin>/<id>?token=<fresh link>`, the link asked for through the tunnel. Never the tunnel's.
+   */
+  engineOrigin?: string;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
   // has neither the home nor the explorer (a source that cannot list or search offers none).
@@ -112,9 +117,10 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // and, in a view with a home, the document's page in the browser (Open in › Browser).
   const fileActions = useMemo(() => {
     // Open in's apps too, through the tunnel as Reveal is: the server opens them on this computer.
-    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client });
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client,
+      ...(engineOrigin ? { link: { origin: engineOrigin, client } } : {}) });
     return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
-  }, [platform, client, homed, openInBrowser]);
+  }, [platform, client, homed, openInBrowser, engineOrigin]);
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);

@@ -268,8 +268,8 @@ class CadApp:
     relative files were read from; the explorer never opens there, and it bounds nothing.
     """
 
-    # A fresh link for the page's own address (``GET /api/v1/local/link``): the engine's page app's
-    # alone (``EngineApp.default_app``). An MCP session's tunnel has none: its card has its own link.
+    # A fresh link for the engine's page (``GET /api/v1/local/link``): the page's own address
+    # (``EngineApp.default_app``) and a CAD app card's Copy link (``mcp/http.py``). None: no link here.
     issue_link = None
 
     def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None, documents=None):

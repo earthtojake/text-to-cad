@@ -40,7 +40,12 @@ menu (the navbar's ⋯) offers only where it is given: `copy-path` and `reveal` 
 disk (a model's: its script, `sourceFile`), and `browser` opens the document's page in the person's
 browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
 The ⋯ draws them as Copy path and Open in › Browser and the file manager by its name; a home
-card's ⋯ offers Copy path and Reveal alone. A host that can open the document's files in this
+card's ⋯ offers Copy path, Copy link and Reveal (a model's card, Copy link alone). `copy-link` copies
+the document's page with a fresh link, `<engine origin>/<document id>?token=<link>`; an entry may carry
+its document's `id` (a home card's does). `createCadFileActions({ link: { origin, client } })` makes it
+from a CAD client's `link()` (`GET /api/v1/local/link`) and `entryOf`: the web viewer hands its page's
+origin, the CAD app the engine's origin from its launch (never its tunnel's), its fresh link asked
+through the tunnel. A host that cannot make a link offers no Copy link. A host that can open the document's files in this
 computer's apps adds `apps(entry, { signal })` — the files (`source`, a model's `export:<format>`s),
 whether each is on disk and the apps that take it (`OpenInFiles`, `GET /api/v1/local/open-in`'s
 answer; asked as the menu opens, null or a failure and the menu is as without) — and

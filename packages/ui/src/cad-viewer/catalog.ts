@@ -79,20 +79,37 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
  * The file menu's host actions for a file on this machine: its path to the clipboard, and the
  * file shown in the system's file manager where the host can reveal one.
  */
-export function createCadFileActions({ platform, clipboard, reveal, openIn }: {
+export function createCadFileActions({ platform, clipboard, reveal, openIn, link }: {
   platform?: string; clipboard: Pick<ClipboardPort, 'writeText'>; reveal?: (path: string) => Promise<void>;
+  /**
+   * Copy link: the engine's origin (the page's own on the web, the launch's in the CAD app, never a
+   * tunnel's) and the client that makes a fresh link (`link()`, `GET /api/v1/local/link`) and names a
+   * file's document (`entryOf`). The link copied is `<origin>/<document id>?token=<fresh link>`, the
+   * page's own address. Without it, no Copy link.
+   */
+  link?: { origin: string | (() => string); client: Pick<CadWorkspaceService, 'link' | 'entryOf'> };
   /**
    * Open in's apps, through a CAD client (`openInApps`, `openIn`): a document is asked for by its id,
    * a file's from the client's row of it (`entryOf`).
    */
   openIn?: Pick<CadWorkspaceService, 'openInApps' | 'openIn' | 'entryOf'>;
 }): FileActions {
-  const idOf = (path: string) => (isDocumentId(path) ? path : String(openIn?.entryOf?.(normalizePath(path))?.id || '') || null);
+  const clientOf = openIn?.entryOf ? openIn : link?.client;
+  const idOf = (path: string, given?: string) => given || (isDocumentId(path) ? path : String(clientOf?.entryOf?.(normalizePath(path))?.id || '') || null);
   return {
     platform: platform === 'darwin' || platform === 'win32' || platform === 'linux' ? platform : 'linux',
     perform: {
       'copy-path': (entry: { path: string }) => clipboard.writeText(normalizePath(entry.path)),
       ...(reveal ? { reveal: (entry: { path: string }) => reveal(normalizePath(entry.path)) } : {}),
+      ...(link ? { 'copy-link': async (entry: { path: string; id?: string }) => {
+        const id = idOf(entry.path, entry.id);
+        if (!id) throw new Error('This document has no page to link to yet.');
+        const origin = (typeof link.origin === 'function' ? link.origin() : link.origin).replace(/\/+$/, '');
+        // The address still on its way: a host's clipboard starts the write inside the press that
+        // asked for it (a browser refuses one begun after the link's request), then fills it in.
+        await clipboard.writeText(link.client.link().then(({ link: fresh }) =>
+          `${origin}/${encodeURIComponent(id)}?token=${encodeURIComponent(fresh)}`));
+      } } : {}),
     },
     ...(openIn ? {
       apps: async (entry: { path: string }, options: { signal?: AbortSignal } = {}) => {

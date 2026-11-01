@@ -154,6 +154,12 @@ async function openBrowserPage({ tunnel, direct, bridge, model, page }: {
   else plain();
 }
 
+/** A URL's origin, or null for none or one that does not parse. */
+function originOf(url: unknown): string | null {
+  if (typeof url !== 'string' || !url) return null;
+  try { return new URL(url).origin; } catch { return null; }
+}
+
 /** A view a newer one replaced: its last frame, and where to look now. */
 function Superseded({ still, label }: { still: string | null; label: string }) {
   return <div className="relative flex h-full items-center justify-center bg-background" data-cad-superseded="">
@@ -299,6 +305,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // The document's page in the browser, the file menu's Open in › Browser, where a launch carried a
   // page; never in the file handler, which shows its file alone.
   const browsable = !alone && pages.size > 0;
+  // The engine's own HTTP origin, from the launches (their `engine`, else a page they carried): what
+  // Copy link's address starts with, never the tunnel's.
+  const engineOrigin = useMemo(() => originOf(showing.launch.engine) ?? originOf(initial.engine)
+    ?? originOf(pages.values().next().value), [showing.launch, initial, pages]);
   const openInBrowser = useMemo(() => browsable ? (model: string) => {
     const page = pageOf(pages, model);
     if (page) void openBrowserPage({ tunnel, direct: Boolean(direct), bridge, model, page });
@@ -313,7 +323,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       tabStore={tabStore} live={live} links={links} appSettings={appSettings}
       update={updater.notice || updater.phase.phase !== 'idle' ? <UpdateButton notice={updater.notice} phase={updater.phase} onUpdate={updater.update} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
-      openInBrowser={openInBrowser}
+      openInBrowser={openInBrowser} engineOrigin={engineOrigin ?? undefined}
       colorScheme={colorScheme} theme={theme} locale={locale} language={language} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />
   </Frame>;
 }

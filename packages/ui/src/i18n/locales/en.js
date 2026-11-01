@@ -40,6 +40,7 @@ export default {
   // The file's actions: a home card's ⋯, and the navbar's ⋯ (Copy path, and Open in: Browser, the
   // file manager by its name — Finder, a product's, is the same in every language and no key).
   "file.copyPath": "Copy path",
+  "file.copyLink": "Copy link",
   "file.revealFinder": "Reveal in Finder",
   "file.revealExplorer": "Show in Explorer",
   "file.revealFileManager": "Show in file manager",

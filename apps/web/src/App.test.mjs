@@ -70,6 +70,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/server' ? { notice }
       : url === '/api/v1/local/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
       : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
+      : url === '/api/v1/local/link' ? { link: '1767225600.abc', expires: 1767225600 }
       : url !== '/api/v1/settings' ? { ok: true }
       : { language: { locale: null }, telemetry };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
@@ -90,7 +91,12 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(window.history.length, historyAtStart);
     assert.equal(viewer().host.files.id, 'local');
     assert.equal(viewer().tabStore, tabStore);
-    assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-path', 'reveal']);
+    assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-link', 'copy-path', 'reveal']);
+    // Copy link: this page's origin, the document's id and a fresh link -- the page's own address.
+    const copied = [];
+    Object.defineProperty(window.navigator, 'clipboard', { configurable: true, value: { writeText: async text => { copied.push(text); } } });
+    await viewer().host.fileActions.perform['copy-link']({ path: ONE, kind: 'file' });
+    assert.deepEqual(copied, [`http://cad.local/${ONE}?token=1767225600.abc`]);
     assert.equal(viewer().host.fileActions.platform, 'darwin', 'Reveal is labeled for the machine the server runs on');
     await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);

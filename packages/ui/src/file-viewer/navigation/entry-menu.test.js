@@ -6,6 +6,8 @@ import { entryMenu, fileManagerName, openInMenu, revealLabel } from "./entry-men
 test("a home card's file menu offers what the host can do, copy before reveal, named the platform's way", () => {
   const all = new Set(["copy-path", "reveal", "browser"]);
   assert.deepEqual(entryMenu("darwin", all), [{ action: "copy-path", label: "Copy path" }, { action: "reveal", label: "Reveal in Finder" }]);
+  // Copy link after Copy path, where the host can make a link.
+  assert.deepEqual(entryMenu("darwin", new Set(["reveal", "copy-link", "copy-path"])).map(item => item.label), ["Copy path", "Copy link", "Reveal in Finder"]);
   assert.deepEqual(entryMenu("win32", new Set(["reveal"])), [{ action: "reveal", label: "Show in Explorer" }]);
   assert.deepEqual(entryMenu("linux", new Set()), []);
   assert.equal(revealLabel("linux"), "Show in file manager");

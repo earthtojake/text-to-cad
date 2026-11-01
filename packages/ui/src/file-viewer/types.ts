@@ -54,7 +54,12 @@ export interface OpenInTarget { target: string; kind: string; name: string; pres
 export interface OpenInFiles { targets: readonly OpenInTarget[]; fileManager?: string }
 export interface FileActions {
   platform?: Platform;
-  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
+  /**
+   * Each action the host can perform on a document, by its path (a model's: its id) and, where the
+   * caller knows it, its document's id: `copy-path`, `copy-link` (its page with a fresh link, to the
+   * clipboard), `reveal`, `browser`.
+   */
+  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }) => void | Promise<void>>>;
   /**
    * Open in's apps, where the host can open a document's files in this computer's apps: the files
    * and their apps for the document on screen (asked as its file menu opens, never before; null or a

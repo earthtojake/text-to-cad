@@ -403,11 +403,11 @@ CONTROLS = frozenset({
     "look_at", "isolate", "view_cube", "view_cube_drag", "fit",
     "quick_edit_copy", "quick_edit_queue", "quick_edit_send",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
-    "file_copy_path", "file_reveal", "file_open_app", "home",
+    "file_copy_path", "file_copy_link", "file_reveal", "file_open_app", "home",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",
     "export_step", "export_stl", "export_threemf", "export_glb", "export_dxf", "export_xbf", "export_original",
     "home_search", "home_filter_all", "home_filter_models", "home_filter_files", "home_layout_grid", "home_layout_list",
-    "home_open", "home_pick", "home_copy_path", "home_reveal", "home_pin", "home_unpin", "home_delete",
+    "home_open", "home_pick", "home_copy_path", "home_copy_link", "home_reveal", "home_pin", "home_unpin", "home_delete",
     "home_delete_cancel",
 })
 # The most one page's report (``Recorder.controlled``) may say of a control: a page reports at least every minute

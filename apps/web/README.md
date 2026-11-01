@@ -183,8 +183,9 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 
 ## Export and job status
 
-**Export** is the last item of the file menu (the ⋯ beside the file's name, after Copy path and
-Open in › Finder / File Explorer / File manager) of a STEP, XBF, held model (a model's document
+**Export** is the last item of the file menu (the ⋯ beside the file's name, after Copy path, Copy
+link — this page's origin, the document's id and a fresh link from `GET /api/v1/local/link`, on every
+document — and Open in › Finder / File Explorer / File manager) of a STEP, XBF, held model (a model's document
 the engine holds), GLB, STL or 3MF page: a submenu of the formats that page's file writes, there at once, as nothing is
 inspected first. A held model's menu also has Copy path and Open in › Finder (File Explorer,
 File manager) on the script that builds it; where that script was moved or deleted, Open in is
