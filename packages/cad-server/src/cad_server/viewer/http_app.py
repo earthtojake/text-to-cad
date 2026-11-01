@@ -268,6 +268,10 @@ class CadApp:
     relative files were read from; the explorer never opens there, and it bounds nothing.
     """
 
+    # A fresh link for the page's own address (``GET /api/v1/local/link``): the engine's page app's
+    # alone (``EngineApp.default_app``). An MCP session's tunnel has none: its card has its own link.
+    issue_link = None
+
     def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None, documents=None):
         from cad_server._internal.picker import available
 
@@ -962,7 +966,8 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the update, the explorer,
-        files by path, Quick Edit's files, Reveal, the clipboard, Open's chooser, the page's activity."""
+        files by path, Quick Edit's files, Reveal, the clipboard, Open's chooser, the page's fresh link, the
+        page's activity."""
         route = rest[0] if rest else ""
         if rest == ["update"]:
             return self._methods(request, {"GET": lambda: send_json(response, 200, self._version()),
@@ -981,6 +986,8 @@ class CadApp:
             return self._methods(request, {"POST": lambda: self._clipboard(request, response)})
         if rest == ["pick"]:
             return self._methods(request, {"POST": lambda: self._handle_pick(response)})
+        if rest == ["link"] and self.issue_link is not None:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self.issue_link())})
         if rest == ["activity"] and self.analytics is not None:
             return self._methods(request, {"POST": lambda: self._activity(request, response)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)

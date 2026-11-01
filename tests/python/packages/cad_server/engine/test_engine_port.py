@@ -197,7 +197,7 @@ class EnginePortTest(unittest.TestCase):
 
     @staticmethod
     def ask(port: int, route: str, **headers: str) -> tuple[int, dict, bytes]:
-        """``GET route`` of the engine on ``port``, redirects not followed."""
+        """``GET route`` of the engine on ``port``."""
         import http.client
 
         connection = http.client.HTTPConnection("127.0.0.1", port, timeout=20)
@@ -434,14 +434,14 @@ class EnginePortTest(unittest.TestCase):
         from cad_server.viewer.engine_app import TOKEN_NEEDED_PAGE
 
         link = parse_qs(urlsplit(first["url"]).query)["token"][0]
-        status, headers, _ = self.ask(named, f"/?token={link}")
-        self.assertEqual(status, 302)
+        status, headers, _ = self.ask(named, f"/api/v1/server?token={link}")
+        self.assertEqual(status, 200)
         cookie = headers["set-cookie"].split(";")[0]
         self.stop()
         moved = self.launch(CAD_ENGINE_PORT=str(free_port()))
         self.assertNotEqual((moved["pid"], moved["port"]), (first["pid"], named))
         self.assertEqual(self.ask(moved["port"], "/api/v1/server", Cookie=cookie)[0], 200)
-        self.assertEqual(self.ask(moved["port"], f"/?token={link}")[0], 302)
+        self.assertEqual(self.ask(moved["port"], f"/api/v1/server?token={link}")[0], 200)
         self.stop()
         # --port on ``cad server`` outranks CAD_ENGINE_PORT; --rotate-token retires every link
         # and every session: each page then needs a new link.

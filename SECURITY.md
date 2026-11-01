@@ -35,13 +35,18 @@ credentials, all made from one token:
 - **A link** is what every URL text-to-cad prints or opens carries (`cad_show`'s,
   `cad viewer`'s, a build's `view:` line, the page it opens in your
   browser): `?token=` with an expiry and the token's signature of it. It works
-  for 24 hours. After that it opens the viewer only in a browser that holds a
-  session; anywhere else its page says it has expired and to run
-  `cad viewer` for a new one.
-- **The session cookie** is what a browser is given for a link: HttpOnly,
-  SameSite=Strict, one name for every port of this host, holding the token's
-  signature of its own expiry, never the token. It lasts 30 days from its last
-  use: every page load renews it, and so does any request once it is a day old.
+  for 24 hours. It stays in the page's address, and the open page keeps it
+  fresh, so the address copied into another browser on this machine opens the
+  same page. A link works only from this machine: the server listens on
+  loopback (unless you bind another `--host`, below) and refuses any other Host. It never leaves in a Referer
+  (every page is sent `Referrer-Policy: no-referrer`). Past its day it opens
+  the viewer only in a browser that holds a session; anywhere else its page
+  says it has expired and to ask your agent to open the model again.
+- **The session cookie** is what a browser is given for a link it opens:
+  HttpOnly, SameSite=Strict, one name for every port of this host, holding the
+  token's signature of its own expiry, never the token. It lasts 30 days from
+  its last use: every page load renews it, and so does any request once it is a
+  day old. It is what lets a reloaded page get a fresh link for its address.
 
 A server checks a link or a cookie by signing it again, so it keeps no
 sessions: links and cookies outlive a restart, a reboot, a port that moved and
@@ -66,7 +71,9 @@ it every link and every session made before. Behind the credentials:
 
 **The credentials are the boundary.** Whoever holds the token, a link within its
 day, or a session cookie can read any CAD file on your machine by its path, list
-folders, export, and use every Viewer action. So keep links private. Do not bind
+folders, export, and use every Viewer action. So keep links private: treat a
+link, and the address of an open CAD page, as you would a password for your
+files on this computer. Do not bind
 a non-loopback `--host` unless you mean to offer exactly that to everyone who
 can reach the port.
 

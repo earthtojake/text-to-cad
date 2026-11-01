@@ -418,6 +418,8 @@ class TabServerTest(_Session):
         # nothing outside the API and the CAD app's module is the tunnel's.
         self.assertEqual([self.http("POST", path, {})[0] for path in ("/api/v1/local/clipboard", "/api/v1/shutdown", "/index.html")],
                          [404, 404, 404])
+        # A card carries its own link: the page's fresh link for its address is not the tunnel's.
+        self.assertEqual(self.http("GET", "/api/v1/local/link")[0], 404)
 
     def test_a_view_keeps_the_library_and_the_persons_settings_in_this_servers_own(self) -> None:
         # The model on screen joins the library this server lists on the home (each path in this

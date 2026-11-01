@@ -31,12 +31,15 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # door hands it to them. Every URL a launch prints or opens carries a link instead,
 # ``?token=<expires>.<mac>``, good for a day (``LINK_SECONDS``), and a browser that opens one is given
 # the session cookie, ``<expires>.<mac>`` too, good for 30 days from its last use, which renews it
-# (``SESSION_SECONDS``, ``EngineApp._admitted``). A mac is the token's HMAC of the credential's kind and expiry, so
-# each is checked by recomputing it: no engine keeps a session, every engine of this user -- on any
-# port, of any installation, after any restart -- admits what another issued, and ``cad server
-# --rotate-token`` ends every link and session at once. The cookie is named for the token too
-# (``EngineApp.cookie``): one name on every port of the host, while another user's engine, or one
-# with a rotated token, reads a name of its own and never sees, refuses or replaces this one.
+# (``SESSION_SECONDS``, ``EngineApp._admitted``). The link stays in the page's address, which the page
+# keeps fresh (``GET /api/v1/local/link``), so the address copied into another browser on this machine
+# opens the same page; it never leaves in a Referer (every page is sent ``Referrer-Policy:
+# no-referrer``). A mac is the token's HMAC of the credential's kind and expiry, so each is checked by
+# recomputing it: no engine keeps a session, every engine of this user -- on any port, of any
+# installation, after any restart -- admits what another issued, and ``cad server --rotate-token`` ends
+# every link and session at once. The cookie is named for the token too (``EngineApp.cookie``): one
+# name on every port of the host, while another user's engine, or one with a rotated token, reads a
+# name of its own and never sees, refuses or replaces this one.
 LINK_SECONDS = 24 * 60 * 60
 SESSION_SECONDS = 30 * 24 * 60 * 60
 
@@ -64,24 +67,17 @@ def standing(master, kind, value):
 
 # What a page load without a credential this engine admits is answered with (``EngineApp._refused``):
 # a link past its day says so (``LINK_EXPIRED_PAGE``); any other -- none, or one the token never
-# signed, from before ``cad server --rotate-token`` -- that the page needs a link
-# (``TOKEN_NEEDED_PAGE``). Each names the one thing to do.
+# signed, from before ``cad server --rotate-token`` -- that this browser cannot open CAD yet
+# (``TOKEN_NEEDED_PAGE``). Each speaks to a person and names the one thing to do: no command.
 _PAGE_HEAD = (
     '<!doctype html><html lang="en"><head><meta charset="utf-8">'
     '<meta name="viewport" content="width=device-width, initial-scale=1"><title>CAD</title>'
     '<style>body{font:15px/1.5 system-ui,sans-serif;max-width:32rem;margin:15vh auto;padding:0 1rem}</style>'
     '</head><body>'
 )
-LINK_EXPIRED_PAGE = (
-    _PAGE_HEAD + '<h1>This CAD Viewer link has expired</h1>'
-    '<p>A link opens the viewer for a day. Run <code>cad viewer</code> and open the link it '
-    'prints.</p></body></html>\n'
-).encode('utf-8')
-TOKEN_NEEDED_PAGE = (
-    _PAGE_HEAD + '<h1>This CAD Viewer page needs its link</h1>'
-    '<p>This browser has not opened the viewer in the last 30 days, or its links were replaced '
-    'since. Run <code>cad viewer</code> and open the link it prints.</p></body></html>\n'
-).encode('utf-8')
+_ASK_AGAIN = '<p>Ask your agent to open the model again, then use the new link.</p></body></html>\n'
+LINK_EXPIRED_PAGE = (_PAGE_HEAD + '<h1>This CAD link has expired.</h1>' + _ASK_AGAIN).encode('utf-8')
+TOKEN_NEEDED_PAGE = (_PAGE_HEAD + "<h1>This browser can't open CAD yet.</h1>" + _ASK_AGAIN).encode('utf-8')
 
 
 # A CAD card whose host carries none of its calls back (``apps/mcp``'s direct transport) reads the
@@ -267,6 +263,11 @@ class EngineApp:
         """A fresh link for a URL this engine prints or opens: good for ``LINK_SECONDS``."""
         return sign(self.token, 'link', LINK_SECONDS)
 
+    def fresh_link(self):
+        """``GET /api/v1/local/link``: a fresh link for the page's own address, and when it expires."""
+        link = self.link()
+        return {'link': link, 'expires': int(link.partition('.')[0])}
+
     def launch(self, options):
         """A launch of the one page (``cad viewer``, a text-only host's link, the dev client's
         ``--api-only``): each file it names (``files``: on-disk CAD files, a relative one read from its
@@ -327,6 +328,7 @@ class EngineApp:
                                           dist_dir=dist or resolve_dist_dir(''))
                 self._default.analytics = self.viewer_analytics  # the browser viewer's page
                 self._default.page = True
+                self._default.issue_link = self.fresh_link
             elif dist:
                 self._default.dist_dir = os.path.abspath(dist)
             return self._default
@@ -357,7 +359,8 @@ class EngineApp:
         # Any one credential suffices: a cookie the token never signed is not one, and never outranks
         # the link of the URL a launch just printed.
         bearer = request.header('authorization').removeprefix('Bearer ')
-        offered = {named(bearer), named(request.query.get('token', ''))}
+        linked = named(request.query.get('token', ''))
+        offered = {named(bearer), linked}
         session = saved if saved and standing(self.token, 'session', saved) == 'ok' else ''
         if 'ok' not in offered and not session:
             return self._refused(request, response, 'expired' in offered)
@@ -377,7 +380,7 @@ class EngineApp:
             self.active_requests += 1
         self.server.touch()
         try:
-            return self._admitted(request, response, session)
+            return self._admitted(request, response, session, linked == 'ok')
         finally:
             with self.lock:
                 self.active_requests -= 1
@@ -415,25 +418,19 @@ class EngineApp:
         return ('set-cookie', f'{self.cookie}={sign(self.token, "session", SESSION_SECONDS)}; Path=/; '
                               f'Max-Age={SESSION_SECONDS}; HttpOnly; SameSite=Strict')
 
-    def _admitted(self, request, response, session):
+    def _admitted(self, request, response, session, linked=False):
         """A request past the Host and token gates: by a credential it names, else by its ``session``
-        cookie's value."""
-        if 'token' in request.query and request.method == 'GET':
-            # A link (or the token) is exchanged for a session and dropped from the address; one past
-            # its day that the session admitted is just dropped.
-            query = {k: v for k, v in request.query if k != 'token'}
-            location = request.path + ('?' + urlencode(query) if query else '')
-            cookie = self._session_cookie()
-            if request.header('sec-fetch-site') in ('', 'none', 'same-origin'):
-                return response.send_bytes(302, b'', '', [('location', location), cookie,
-                                                          ('referrer-policy', 'no-referrer')])
-            # Arrived from another origin (the browser opened on a redirect file, ``browser_open``): a
-            # redirect would carry that origin on, and the browser would hold back the SameSite=Strict
-            # cookie it was just given. The page's own navigation is this origin's, so it is sent.
-            return response.send_bytes(200, bounce_page(location), 'text/html; charset=utf-8', [cookie,
-                ('referrer-policy', 'no-referrer'), ('cache-control', 'no-store'),
-                ('content-security-policy', "default-src 'none'; frame-ancestors 'self'")])
-        if session and (_navigation(request) or int(session.partition('.')[0]) < time.time() + SESSION_SECONDS - 86400):
+        cookie's value. ``linked``: its URL carries a good link (or the token)."""
+        if _navigation(request) or 'token' in request.query:
+            # A page's address holds its link (the module's head), so the page never sends it on.
+            response.also = (*response.also, ('referrer-policy', 'no-referrer'))
+        if linked and request.method == 'GET':
+            # A link opened is given a session and served as it is, the link left in the address: no
+            # redirect, so a navigation from another site (the browser opened on a redirect file,
+            # ``browser_open``) is admitted by its URL, and the page's own requests after it, of this
+            # origin, carry the SameSite=Strict cookie it was just given. Every answer is no-store.
+            response.also = (*response.also, self._session_cookie())
+        elif session and (_navigation(request) or int(session.partition('.')[0]) < time.time() + SESSION_SECONDS - 86400):
             # Each page load renews it, and any request once it is a day old, so a tab left open
             # keeps it too: 30 days from the last use.
             response.also = (*response.also, self._session_cookie())
@@ -447,10 +444,10 @@ class EngineApp:
         """A request without a credential this engine admits: refused, 403, whatever it asks for -- a
         route, a page or an asset. A page load is told why in a static page of a few lines (no script,
         no asset, nothing of the person's), never raw JSON: a link past its day that it ``expired``
-        (``LINK_EXPIRED_PAGE``), else that it needs a link (``TOKEN_NEEDED_PAGE``). An expired link
-        followed from another site is first asked again from this origin, so the browser sends the
-        session it holds (SameSite=Strict withholds it from the other site's navigation), which
-        admits it; a request with no link is never. Every other refusal is the JSON error."""
+        (``LINK_EXPIRED_PAGE``), else that this browser cannot open CAD yet (``TOKEN_NEEDED_PAGE``). An
+        expired link followed from another site is first asked again from this origin, so the browser
+        sends the session it holds (SameSite=Strict withholds it from the other site's navigation),
+        which admits it; a request with no link is never. Every other refusal is the JSON error."""
         if _navigation(request):
             if expired and 'token' in request.query and request.header('sec-fetch-site') in ('cross-site', 'same-site'):
                 return response.send_bytes(200, bounce_page(request.path + '?' + urlencode(list(request.query))),

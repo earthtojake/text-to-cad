@@ -211,7 +211,8 @@ holds them under one memory budget that never evicts a watched one (**Document l
 
 The installation's door (**The door**) supplies its HTTP token, which programmatic clients send as a
 Bearer header; no URL carries it. A page URL the engine prints or opens carries a link instead, good
-for a day, which a browser exchanges for a SameSite=Strict session cookie, one name on every port of
+for a day, for which a browser is given a SameSite=Strict session cookie (the link stays in the
+page's address, which the page keeps fresh: `GET /api/v1/local/link`), one name on every port of
 the host, that lasts 30 days from its last use (a page load renews it, as any request does once it
 is a day old): both are the token's signatures of an expiry, checked by signing again, so no engine
 keeps a session (`viewer.engine_app`: `EngineApp.link`, `sign`, `standing`). A request whose
@@ -2386,6 +2387,7 @@ The families:
 | `POST /api/v1/documents/<id>/exports` | an export of it, its job (202); `GET /api/v1/exports[/<job>[/file]]` the session's epoch, a job, its file |
 | `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |
 | `/api/v1/local/...` | a local engine's: `update` (GET, POST: the button), `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
+| `GET /api/v1/local/link` | `{"link", "expires"}`: a fresh link (`<expires>.<mac>`, `expires` in Unix seconds) the page keeps in its address, so a copied address opens it in another browser on this machine; the page's alone, never a card's tunnel |
 
 A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and its
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,

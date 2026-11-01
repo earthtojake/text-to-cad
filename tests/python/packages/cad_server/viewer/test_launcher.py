@@ -127,48 +127,60 @@ class LauncherTest(unittest.TestCase):
         master, link = self.master(), launch['token']
         self.assertNotIn(master, json.dumps(launch), 'a printed launch carries a link, never the token')
         self.assertEqual(launch['url'], f"{launch['apiUrl']}/?token={link}")
-        # The link (or the token itself) is exchanged for a session cookie, which is neither.
-        status, headers, _ = self.get(launch, f'{page}?token={link}', token=False)
-        self.assertEqual((status, headers['location']), (302, page))
+        # A link (or the token itself) opened is served as it is, the link left in the address: the
+        # page, a session cookie (which is neither), no redirect, no Referer and nothing cached.
+        navigation = {'Sec-Fetch-Dest': 'document'}
+        status, headers, body = self.get(launch, f'{page}?token={link}', token=False, headers=navigation)
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
+        self.assertEqual((headers['referrer-policy'], headers['cache-control']), ('no-referrer', 'no-store'))
         cookie = self.session(headers)
         status, headers, _ = self.get(launch, f'{page}?token={master}', token=False)
-        self.assertEqual(status, 302)
+        self.assertEqual(status, 200)
         for value in (master, link):
             self.assertNotIn(value, headers['set-cookie'] + cookie['Cookie'])
         name = cookie['Cookie'].split('=')[0]
         for stale in ({'Cookie': f'{name}=gone'}, {'Cookie': f'{name}={sign("x" * 43, "session", 60)}'}):
-            status, _, body = self.get(launch, '/', token=False, headers={**stale, 'Sec-Fetch-Dest': 'document'})
+            status, _, body = self.get(launch, '/', token=False, headers={**stale, **navigation})
             self.assertEqual((status, body), (403, TOKEN_NEEDED_PAGE), stale)
             # ... and never outranks the link of the URL a launch just printed.
-            self.assertEqual(self.get(launch, f'{page}?token={link}', token=False, headers=stale)[0], 302)
-        self.assertEqual(self.get(launch, '/?token=gone', token=False, headers={'Sec-Fetch-Dest': 'document'})[2],
-                         TOKEN_NEEDED_PAGE)
-        # Arrived from another origin (the browser opened on the launcher's redirect file): the
-        # cookie, and a page of this origin that navigates on, so the browser sends the cookie.
-        status, headers, body = self.get(launch, f'{page}?token={link}', token=False, headers={'Sec-Fetch-Site': 'cross-site'})
-        self.assertEqual(status, 200)
-        self.session(headers)
-        self.assertIn(b'http-equiv="refresh" content="0;url=/"', body)
-        self.assertNotIn(link.encode(), body)
-        # A link past its day says so, alone; with a session it is just dropped from the address, and
-        # one followed from another site is asked again from this origin, where the session is sent.
+            self.assertEqual(self.get(launch, f'{page}?token={link}', token=False, headers=stale)[0], 200)
+        self.assertEqual(self.get(launch, '/?token=gone', token=False, headers=navigation)[2], TOKEN_NEEDED_PAGE)
+        # Arrived from another site (the browser opened on the launcher's redirect file, or the address
+        # pasted into another browser): admitted by its URL's link, which stays, and given the cookie;
+        # the page's own requests after it are this origin's, which carry the cookie alone.
+        status, headers, body = self.get(launch, f'{page}?token={link}', token=False,
+                                         headers={**navigation, 'Sec-Fetch-Site': 'cross-site'})
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
+        arrived = self.session(headers)
+        self.assertEqual(self.get(launch, '/api/v1/server', token=False,
+                                  headers={**arrived, 'Sec-Fetch-Site': 'same-origin'})[0], 200)
+        # A link past its day says so, alone; with a session it is served too, the page left to put a
+        # fresh one in its address; one followed from another site is asked again from this origin,
+        # where the session is sent.
         expired = sign(master, 'link', -60)
-        navigation = {'Sec-Fetch-Dest': 'document'}
         self.assertEqual(self.get(launch, f'/?token={expired}', token=False, headers=navigation)[::2],
                          (403, LINK_EXPIRED_PAGE))
-        status, headers, _ = self.get(launch, f'/?token={expired}', token=False, headers={**cookie, **navigation})
-        self.assertEqual((status, headers['location']), (302, '/'))
+        status, headers, body = self.get(launch, f'/?token={expired}', token=False, headers={**cookie, **navigation})
+        self.assertEqual((status, body, 'location' in headers), (200, b'<html>viewer</html>', False))
         for sent, site in ((sent, site) for sent in ({}, cookie) for site in ('cross-site', 'same-site')):
             status, headers, body = self.get(launch, f'/?token={expired}', token=False,
                                              headers={**sent, **navigation, 'Sec-Fetch-Site': site})
             self.assertEqual((status, 'set-cookie' in headers), (200, False), (sent, site))
             self.assertIn(f'url=/?token={expired}'.encode(), body)
+        # The page's fresh link for its own address: the cookie's, as every route's, and none without.
+        status, _, data = self.get(launch, '/api/v1/local/link', token=False, headers={**cookie, 'Sec-Fetch-Site': 'same-origin'})
+        fresh = json.loads(data)
+        self.assertEqual((status, set(fresh)), (200, {'link', 'expires'}))
+        self.assertEqual(int(fresh['link'].split('.')[0]), fresh['expires'])
+        self.assertGreater(fresh['expires'], time.time() + 23 * 3600)
+        self.assertEqual(self.get(launch, f"/?token={fresh['link']}", token=False)[0], 200, 'it opens the page')
+        self.assertEqual(self.get(launch, '/api/v1/local/link', token=False)[0], 403)
         for body in (TOKEN_NEEDED_PAGE, LINK_EXPIRED_PAGE):
             self.assertNotIn(b'<script', body)
             self.assertNotIn(b'?token=', body)
         # Each page load the session admits renews it, 30 days from then; a read only once it is a day old.
         status, headers, _ = self.get(launch, '/', token=False, headers={**cookie, **navigation})
-        self.assertEqual(status, 200)
+        self.assertEqual((status, headers['referrer-policy']), (200, 'no-referrer'))
         self.session(headers)
         self.assertNotIn('set-cookie', self.get(launch, '/api/v1/server', token=False, headers=cookie)[1])
         old = {'Cookie': f'{name}={sign(master, "session", 30 * 86400, now=time.time() - 2 * 86400)}'}

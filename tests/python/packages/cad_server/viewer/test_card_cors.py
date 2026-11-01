@@ -90,7 +90,7 @@ class CardCorsTest(unittest.TestCase):
         requests = {
             # The user's token is a native client's, which needs no CORS.
             "the user's token": ("/api/v1/server", {"Origin": CARD, "Authorization": f"Bearer {self.app.token}"}),
-            # A link in the URL is exchanged for a cookie, which a cross-origin read never carries.
+            # A link in the URL rides by itself, wherever the URL goes: no CORS for it.
             "a link in the URL": (f"/api/v1/server?token={link}", {"Origin": CARD}),
             "a link past its day": ("/api/v1/server", {"Origin": CARD, "Authorization": f"Bearer {sign(self.app.token, 'link', -60)}"}),
             "a session cookie": ("/api/v1/server", {"Origin": CARD, "Sec-Fetch-Site": "cross-site",
