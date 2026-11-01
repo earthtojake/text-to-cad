@@ -24,7 +24,7 @@ it, the file sidebar, Quick Edit, the view cube and Preview, with Preview's own 
 their tools, their tools' rows, their sidebar sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
 
-| The host (web, desktop) supplies | The shared UI decides |
+| The host (web, the CAD app) supplies | The shared UI decides |
 | --- | --- |
 | Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
 | `chrome` (the navbar, `"page"`, or the view alone, `"bare"`), `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings), `colorScheme` (the person's theme and how it changes) | The navbar's order and look, over a file and over the home, the app menu (one menu in the viewer and on the home) and what a new issue says |
@@ -59,9 +59,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right, only what a host or a file adds: first, the
-  update — a blue download button, there only when the host
-  found a newer release, whose menu says the step to it, how this host updates and what
-  is new. Then, while a person has put an alert card away: the card's own icon (a circle
+  update — the blue update button (a download icon and nothing else, no popover), there only while the host's
+  install is behind, which updates when pressed. Then, while a person has put an alert card away: the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
   navbar action. Then the host's own actions: inline, where the host can show the view full size,
@@ -120,8 +119,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   built from: a model shows its name, its glyph and its age; its menu is Open, Pin or Unpin and
   Delete, with no Copy path or Reveal (a file's alone); a search matches a model's name (a
   file's name and path); and the Delete dialog's words name no path.
-  The update shows only for a release
-  later than the version the page names, whatever the host says. A file that will not open
+  A file that will not open
   shows a page under the navbar: "File does not exist" and the file's path, or "Could not
   open that file" and the reason, each with **Go home** where the host has a home. A view
   drawn as a picture (`compact`, the home's thumbnails) has no navbar either, and draws the
@@ -154,7 +152,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   own, starts it where the explorer was last in this tab (the tab's `explorer.folder`, kept as
   it moves), else in the person's home folder (the server's `home`), never in the folder of the
   script that built it. It lists one folder at a time — its subfolders, then its CAD files,
-  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/cadgen` and the
+  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/texttocad` and the
   folders on the way to it), which holds each model's `documents/<id>/document.xbf` — in compact rows: one 24px
   line of 12px text each, its kind a small light glyph in one column 5px in from the row's
   left end and 4px before the name (a folder its disclosure chevron, with no folder icon; a
@@ -746,12 +744,12 @@ what the host supplies, the person's settings in the order Language, Telemetry, 
   **Discord**.
 - Last, in gray, a footer of two rows: "v<version>", a link to its release notes, and under
   it "Made by @<handle>", the handle a link to the host's X account. A build that is not the release's
-  own adds its id to the version: `v0.7.15-dev.b80844940`, the commit it was built from.
+  own adds its id to the version: `v0.10.0-dev.b80844940`, the commit it was built from.
 
 Nothing of a file is in it: a file's view is
 [Display](#display-settings-and-section-primitives)'s. Every setting is the person's, not a
 view's or a tab's: the host keeps it where every view of theirs reads it (both apps: their
-settings, `settings.json` in cadgen's state directory), and a view reads it again whenever
+settings, `settings.json` in text-to-cad's state directory), and a view reads it again whenever
 the person comes back to the page.
 
 Every string of the chrome reads through `@text-to-cad/ui/i18n` (`useI18n().t`), English
@@ -759,7 +757,7 @@ first: `en.js` holds every key, each other locale the same keys (a parity test),
 locale misses reads English. No view spells a word itself: `scripts/test/check-ui-strings.mjs`
 refuses English in JSX text, the attributes a person reads and a table's labels across
 `packages/ui/src`, `apps/web/src` and `apps/mcp/src` (a table entry says its `key` beside its
-English `label`), with an allow-list for what is no language. What a file or cadgen says (an alert's own title and message,
+English `label`), with an allow-list for what is no language. What a file or the engine says (an alert's own title and message,
 a part's name) stays as it was written. The loading and view-update lines are a closed
 vocabulary (`kit/status/loadingState.js`), English in the code and said in the view's language
 on screen (`kit/status/statusLabels.js`).

@@ -9,7 +9,7 @@ Preview, the keyboard — are the
 
 There is one renderer per file family over a shared, format-blind [kit](#kit) and
 [shell](#shell). A STEP opens in the [engine document renderer](#engine-document-renderer)
-(`src/renderers/xbf`), as an `.xbf` does: the page reads what the cadgen engine serves of it.
+(`src/renderers/xbf`), as an `.xbf` does: the page reads what the engine serves of it.
 Applications use the registrations and the shared
 `FileViewer`; they do not import another application's source.
 
@@ -352,8 +352,8 @@ it, the file sidebar, Quick Edit at the top-right.
   sentence over the empty pane, not an error. A non-200 becomes the ordinary actionable
   alert card (`ViewerAlertCard`) carrying the SERVER's sentence (`failureAlert`,
   `kind: "http"`); a payload from
-  a cadgen that disagrees about `schemaVersion` gets its own alert whose recovery is to
-  update cadgen and the app together.
+  a server that disagrees about `schemaVersion` gets its own alert whose recovery is to
+  update text-to-cad.
 - **Host commands**: `resetCamera` fits the drawing again, `capture` hands over the
   PNG, `clearSelection` lets go of the picks, and `readState` reports `camera: null`,
   an empty `display`, the selection as references and `selectedEntities` (handles).
@@ -400,7 +400,7 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
   node a mesh belongs to, marked on load (`userData.gltfNode`, `glbMeshData.js`), named
   `n<index>` after the file's `nodes[index]`; a selection is any number of nodes, each a chip
   in Quick Edit (its name, told apart by its id where several share it) whose card says
-  `nodes[i]`, its triangles and, for a GLB cadgen exported, the STEP occurrence it came from;
+  `nodes[i]`, its triangles and, for a GLB the engine exported, the STEP occurrence it came from;
   the scene lights it with a STEP part's highlight ink (`sceneHighlight.js`). Measure takes
   points on its surface and reads glTF's metres, approximately (see
   [Measure on a mesh](#measure-on-a-mesh)). Explode moves the rigid nodes that draw along the
@@ -482,16 +482,16 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
 ## Robot renderer
 
 `createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
-`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: cadgen
+`.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: the engine
 resolves the description (its document's `structure`, `cad_server.robot_payload`) into the
 articulation the page plays, played by core's `common/articulation.js`, the visuals it
 draws (each mesh at its rest placement: a link's mesh file, or a box, cylinder, sphere or
-capsule cadgen meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
+capsule the engine meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
 semantics on it (group states as named poses, end effectors, planning groups), an SDF a
 robot with one more section (a model nested in its model is part of it, its links and
-joints named by scope: `arm::elbow`). The page parses nothing: a description cadgen refuses (its
+joints named by scope: `arm::elbow`). The page parses nothing: a description the engine refuses (its
 validators' findings, a mesh the page cannot draw, a `package://` or remote mesh, an SRDF
-with no single URDF beside it) is refused at the door, in cadgen's words. Nothing below
+with no single URDF beside it) is refused at the door, in the engine's words. Nothing below
 the loader asks which format it was.
 
 - **Scene** (core's `lib/urdf/robotScene.js`, no React, no DOM): a scene GRAPH
@@ -512,21 +512,21 @@ the loader asks which format it was.
   mesh's link; a named object of a link's mesh is itself.
 - **Parts** (core's `lib/urdf/robotParts.js`): built once per load. One part per visual of
   the payload, or per NAMED object of a visual's mesh (`head:v1/object/0`), with its link,
-  rest placement, source mesh and palette place. A primitive cadgen meshed carries no name
+  rest placement, source mesh and palette place. A primitive the engine meshed carries no name
   and is never an object. Geometries wrap the loader's arrays and are shared by visuals
   that name one mesh.
 - **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`):
   `loadRenderRobot` (the payload, cached by the description's
   revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most six
-  at a time; a primitive is served by cadgen by its digest, its document's `parts/<hash>`).
+  at a time; a primitive is served by the engine by its digest, its document's `parts/<hash>`).
   Progress reads "Loading URDF", "Loading meshes 3/13",
   "Building robot". The robot is published once, whole. A mesh that cannot be fetched
   fails the load. A warm file is on screen on the first render; a new revision loads
   behind the robot on screen and keeps the pose it was left in while its controls and
   named poses are unchanged (`poseLogic`), and opens at its opening pose when they
-  changed. An SRDF cadgen could not pair (the ONE `.urdf` in the same folder whose
-  `<robot name>` matches) raises an alert that says what was looked for, around cadgen's
-  sentence; any other refusal is the load alert, with cadgen's sentence as its reason.
+  changed. An SRDF the engine could not pair (the ONE `.urdf` in the same folder whose
+  `<robot name>` matches) raises an alert that says what was looked for, around the engine's
+  sentence; any other refusal is the load alert, with the engine's sentence as its reason.
 - **Look**: a robot authors no finish, so Solid wears the viewer's surface and
   Render the studio's. Colour, in order: the colour the description gives the
   visual; else the colours the mesh brought (per vertex, graded as a material
@@ -593,7 +593,7 @@ the loader asks which format it was.
 ## Engine document renderer
 
 `createXbfRenderer` (`@text-to-cad/ui/renderers/xbf`, id `xbf`, `src/renderers/xbf`) shows a
-cadgen engine document: an `.xbf`, and a `.step` or `.stp`, which the engine reads and serves as
+engine document: an `.xbf`, and a `.step` or `.stp`, which the engine reads and serves as
 one. The strip is Select with its menu's chevron, Pencil and Shapes, Measure with its own, Explode for two or more
 parts, and Clip; the file sidebar an assembly's Model tree, then Position where the document
 carries a mechanism; and selection, hover, the menus, isolation, Escape and Quick Edit's chips
@@ -720,8 +720,8 @@ URL/history, title, navigation, browser storage and application color scheme. It
 `client.dispose()` when the connection is no longer owned.
 
 A registration (`createXbfRenderer`, and every other) accepts an existing client or an
-async function receiving `PrepareContext`. The latter lets desktop obtain the local backend only when
-opening a CAD file. The host owns backend startup, authorization, and any
+async function receiving `PrepareContext`. The latter lets a host obtain the engine's connection only when
+opening a CAD file. The host owns the connection, authorization, and any
 runtime recovery actions. Construction does not fetch files or load Three.js.
 Preparation resolves metadata with the viewer's abort signal; the component
 and viewport are imported lazily after renderer selection.
@@ -826,8 +826,8 @@ and scrolls it into view; the model tree is on screen whenever Select is.
 Repeating the request reveals the existing selection again without toggling it off; a face-group
 reference keeps the group highlighted and reveals its active face.
 Both toolbar capture and host capture commands use the same implementation.
-Hosts can provide `acknowledge(kind, key)` to consume an admitted command. Desktop
-binds commands to the active project/tab/path and removes only the matching
+Hosts can provide `acknowledge(kind, key)` to consume an admitted command; one that does
+binds commands to the active tab and path and removes only the matching
 nonce, so an old acknowledgement cannot clear a newer request or replay after a
 remount. A capture waits for ready geometry; a selected reference waits until it
 can resolve against the current model.
@@ -1485,7 +1485,7 @@ and shows the joint between them as muted text (`shoulder_pan · revolute`); the
 visual components (`robotComponents` in core's `lib/urdf/robotParts.js`) are leaves under that
 link, after its child links. Every visual contributes a component, including STL
 meshes and built-in primitives, named as the payload labels it (`visuals[].label`,
-minted by cadgen: the visual's URDF `name` or, without one, its geometry —
+minted by the engine: the visual's URDF `name` or, without one, its geometry —
 `bucket.stl`, `box`). A mesh with named objects still splits into
 those objects; an unsliceable mesh stays whole as one selectable component. Every link appears once: a cycle, a second parent or a
 missing parent cannot hang the builder or drop a link, and orphans become
@@ -1526,7 +1526,7 @@ Hidden component ids are the `visibility` slice of the file view, saved against 
 payload's revision beside the pose (`robot/useRobotVisibility.js`); a live reload
 retains only ids still present.
 
-The `tcad:four_bar` extension is a nonlinear mimic: cadgen's URDF reader resolves it
+The `tcad:four_bar` extension is a nonlinear mimic: the engine's URDF reader resolves it
 (`cad_server.robot_payload`) and core's articulation player follows it (`common/articulation.js`). Its dependent joint has no Position slider or joint handle;
 its chip card names its four-bar driver instead of an affine mimic formula.
 The authoring contract specifies the namespace, geometry and range constraints.
@@ -1539,11 +1539,11 @@ its mesh path or its primitive with dimensions, plus only what the description
 bothered to say: a scale that is not 1, an origin that is not zero, the visual's
 colour); the **Parent joint** (name, type, parent link, axis, lower/upper limits
 as written plus degrees, effort, velocity, mimic, origin); and the **Child
-joints**. cadgen keeps those facts as the description wrote them, in the payload's
+joints**. The engine keeps those facts as the description wrote them, in the payload's
 `links` and `joints` (`joints[].origin`, `limit`, `mimic`; `links[].inertial` with
 `origin` and `inertia`, `visuals` and `collisions`, each mesh file with the host path
-cadgen resolved for it), beside the articulation it renders from. An SDF model
-reports only what cadgen records of it. A named object shows its link, colour,
+the engine resolved for it), beside the articulation it renders from. An SDF model
+reports only what the engine records of it. A named object shows its link, colour,
 triangles and size.
 
 What names something else can be followed. A mesh path is a link that opens
@@ -1581,7 +1581,7 @@ The shared dark UI and the tools view's canvas take Preview's cool blue-grey (hu
 tokens at chroma 0.008 on the shadcn lightness steps, the canvas Preview's stage mid-tone
 `#25272b` (its stage runs `#2c2e31` to `#202226`), so the two views read as one look; light
 app appearance selects its light basis.
-The shared loading star and desktop wordmark/icon use blue branding.
+The shared loading star and the marks use blue branding.
 
 ## Inspect, Render and live revisions
 
@@ -1616,7 +1616,7 @@ after the alert, is the first of the navbar's right-hand controls after the upda
 too, dismissible while the model is on screen:
 there is no other place a problem is listed. Full diagnostics stay expandable under
 Details; Retry uses FileViewer's renderer reload,
-which reopens the file and does not restart the desktop window, and Report Issue,
+which reopens the file and does not restart the host, and Report Issue,
 where the host has a tracker, opens a new issue titled "Issue: ", labelled `bug`, filled in
 from the card, with the file's name and no path of the machine.
 

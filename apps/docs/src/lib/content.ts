@@ -153,7 +153,7 @@ export const skillGroups = [
     name: "DFM",
     path: "skills/dfm",
     summary:
-      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
+      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh.",
   },
   {
     name: "G-code",

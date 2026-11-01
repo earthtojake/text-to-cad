@@ -5,7 +5,7 @@ What the viewport does in the background between "a file was selected" and
 model that is being rebuilt while you watch.
 
 A STEP and an `.xbf` open in the engine document renderer (`renderers/xbf`), read from the
-cadgen engine that serves them. A triangle mesh (STL, 3MF) and a
+engine that serves them. A triangle mesh (STL, 3MF) and a
 GLB are drawn as they are: their renderers load the file whole, parse it once per revision
 (an STL in a worker) and keep the decode cached, so reopening one fetches and parses nothing
 (see [Mesh renderer](cad-renderer.md#mesh-renderer)).

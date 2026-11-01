@@ -22,7 +22,7 @@ The stages keep ownership narrow:
 
 - A family builder owns its scene: `createGlbScene` (`lib/render/glbScene.js`),
   `buildMeshScene` (`lib/render/meshScene.js`), `createRobotScene`
-  (`lib/urdf/robotScene.js`), `createXbfScene` (`lib/xbf/xbfScene.js`, a cadgen engine
+  (`lib/urdf/robotScene.js`), `createXbfScene` (`lib/xbf/xbfScene.js`, an engine
   document read by `loadXbfDocument` from the engine that serves it: one geometry per
   prototype over its XBM2 buffer's own typed-array views, one placed group per instance, CAD
   edges by class from the edge table, faces, edges and vertices picked by ordinal; the
@@ -63,7 +63,7 @@ The stages keep ownership narrow:
   as the other: three sorts each object back to front and draws a two-sided one back faces first,
   OCCT draws them as they were displayed, which is most of what still differs.
 - `captureModel` draws the scene headless and returns its pictures, with no filesystem
-  writes. cadgen's stills are OCCT's (`cad snapshot`); this headless scene is what the
+  writes. the engine's stills are OCCT's (`cad snapshot`); this headless scene is what the
   renderer parity measurement drives beside OCCT (`scripts/bench/occt_parity.py`).
 
 ## Modules
@@ -551,7 +551,7 @@ that rest box.
 It does not write files: its caller does. Consumers use compiled `@text-to-cad/core`
 exports; the OCCT parity bench bundles this entrypoint into a snapshot page of its own, built
 on demand outside the wheel, and loads it in a headless Chromium to compare with OCCT's stills.
-cadgen's own snapshots are drawn by OCCT and never load it.
+The engine's own snapshots are drawn by OCCT and never load it.
 
 ### `common/headlessScene.js`
 
@@ -564,7 +564,7 @@ document's), as the xbf renderer hands them to its scene in the viewer. A family
 `{ load(job, { resources }), build(THREE, loaded, job), release(loaded) }`, each a call to
 the module the viewer's renderer calls: `loadRenderGlbDocument` + `createGlbScene`,
 `loadRenderMeshByUrl` + `buildMeshScene`, `loadRobot` + `createRobotScene`. A robot is
-drawn from the payload cadgen resolved for it (`resolved.robot`: the articulation, the
+drawn from the payload the engine resolved for it (`resolved.robot`: the articulation, the
 visuals at their rest placements, each mesh by a URL the snapshot's asset server answers)
 and posed as it is built, at the articulation's opening (every control at rest, then an
 SRDF's `home` group state: where the viewer opens it) with the job's `resolved.controls` on
@@ -588,7 +588,7 @@ joint values; a Quick Edit packet carries the same as `jointValues`.
 
 ## Examples
 
-Docs usage, the hero: one GLB cadgen exported, read and played the way the viewer reads
+Docs usage, the hero: one GLB the engine exported, read and played the way the viewer reads
 and plays a GLB, and drawn by `renderModel` from a model of a root and its bounds:
 
 ```js

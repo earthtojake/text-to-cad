@@ -183,9 +183,9 @@ inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
 CAD view asks of its server, so each host reaches it the same way: the model
 library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
 (`pick`), Reveal (`reveal`), the person's analytics answer and language (`consent`, `language`), the
-update check (`version`) and what the page did for
+update check and press (`version`, `startUpdate`) and what the page did for
 telemetry (`reportActivity`: a touch, a Quick Edit that went, or a crash); every
-change is a POST with the viewer's guard header. A host reports its page's crashes
+change (POST, PUT, PATCH or DELETE) carries the viewer's guard header. A host reports its page's crashes
 with `createCrashReporter(send, { fileOf })`, which makes each with `crashOf` (a
 cancellation, an `AbortError`, is none) -- the
 error's type and its script frames, oldest first, never its message, a value or a
@@ -213,7 +213,7 @@ connection failures.
 Files are named by absolute path, and a document the engine holds by its id alone (a model's)
 by that id. The catalog holds the documents on screen, each row carrying its document's `id`,
 by which rows join: one file however its path is spelled (a symlink, a case variant) is one row.
-`resolveEntry(file)` reads one, asking by `?id=` for an id and by `?file=` for a path (one the
+`resolveEntry(file)` reads one, from `GET /api/v1/documents/<id>` for an id and `GET /api/v1/documents?path=` for a path (one the
 server lacks is an `isMissingFileError`, in the engine's words for an id it does not hold),
 `entryOf(file)` is the row the catalog has, and `createRenderSession({ file })` keeps the displayed
 file's entry current as polling refreshes it. A cancelled or older request

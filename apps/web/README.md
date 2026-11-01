@@ -243,8 +243,8 @@ no filesystem-writing or editing endpoint. The host boundary is
 `vite.config.mjs` names the build, for the version the app menu shows (`__TEXT_TO_CAD_BUILD__`,
 from `@text-to-cad/ui/build-id`): none for the release's own build, whose
 environment names its version in `TEXT_TO_CAD_RELEASE` (the release workflow's bundle
-step), so it shows `v0.8.0`; for any other build, `vite dev` included, the commit of
-this checkout, with `-dirty` when it had uncommitted changes: `v0.8.0-dev.b80844940`.
+step), so it shows `v0.10.0`; for any other build, `vite dev` included, the commit of
+this checkout, with `-dirty` when it had uncommitted changes: `v0.10.0-dev.b80844940`.
 
 ## Testing
 
@@ -435,7 +435,7 @@ builds wrote (`@text-to-cad/core/source-maps`). The wheel
 leaves the maps out and a release uploads them to PostHog, and the page
 carries each chunk's id by file name (`__cadChunkIds`), and a frame names its chunk by it. The page
 also reports the view controls a person used and how long each tool was up (`controls`, names
-from `cad_server.analytics.CONTROLS`, telemetry schema 7). The server holds all of it as counts in memory
+from `cad_server.analytics.CONTROLS`, since telemetry schema 7). The server holds all of it as counts in memory
 -- a file once a day, by its format, never its name -- and sends them every five minutes.
 
 ### File storage and host actions
@@ -475,7 +475,7 @@ GitHub, Discord and, in gray, the version (a link to its release notes) and "Mad
 Projection, Display and Preview are the view's, at the tool strip's end, never the navbar's;
 in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
-`v0.8.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
+`v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
 hourly version check, read from `/api/v1/server` with the server's description as the page

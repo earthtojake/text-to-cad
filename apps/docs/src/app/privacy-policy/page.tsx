@@ -33,7 +33,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Telemetry: usage counts and crash reports, when it is on.</strong> text-to-cad’s
             long-running parts -- the CAD app that shows models in your agent app (the plugin’s{" "}
-            <code>cad</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
+            <code>cad-mcp</code> server) and the CAD viewer in your browser (<code>cad viewer</code>), and
             in earlier releases the build daemon that built models for them -- send to api.texttocad.dev,
             with what <code>cad</code> commands and model scripts counted, at most once every five
             minutes while you use them and once as each stops:
