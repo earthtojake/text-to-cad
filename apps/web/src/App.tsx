@@ -7,6 +7,7 @@ import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
 import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
+import { useUpdateRestart } from './host/useUpdateRestart.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
 import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { english, translator, useLanguage } from '@text-to-cad/ui/i18n';
@@ -143,6 +144,12 @@ export default function App({ client, server, tabStore, notice = null, language:
   const updater = useUpdate({ read: client.version, start: client.startUpdate }, notice, { followed });
   const restarting = updater.phase.phase === 'restarting';
   useEffect(() => { if (restarting) noteFollowedUpdate(); }, [restarting]);
+  // Through the restart the page asks on its own, whatever its other reads met: another start of the
+  // engine (or another release) is reloaded into, and its own engine saying the update failed ends
+  // the restart here.
+  useUpdateRestart(restarting, { instance: server.instance, release: String(server.release || ''),
+    ask: () => client.version(), settle: updater.settle,
+    reload: () => { reloadWhenClean(() => window.location.reload()); } });
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
