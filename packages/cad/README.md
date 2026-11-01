@@ -50,10 +50,12 @@ engineering drawings (`@eng_drawing`).
 Its one required dependency is numpy, the meshes' arrays: what the server imports of it -- the
 document model, the protocol a client speaks, the build's words -- imports no CAD kernel. The
 kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `build123d`
-extra, which the server installs into the environment models run in (the engine's **Running a
-model**). A person who installs the library by hand to run models with their own Python installs
-`cad[build123d]`. The library's layer over that kernel -- the model API and the engine's
-`kernel/` (the memo, element naming, the determinism settings) -- is the build123d integration: a
+extra, which the server installs into the environment its own kernel processes and `cad run`'s models
+run in (the engine's **Running a model**). A person who runs models with a Python of their own gives it
+`cad[build123d]` at the server's release: a script run with that Python is built by a worker of that
+Python, the environment's own packages importable there. The library's layer over that kernel -- the
+model API and the engine's `kernel/` (the memo, element naming, the determinism settings) -- is the
+build123d integration: a
 third-party technology and the application layer over it are an integration, named for the
 technology, and its extra carries the same name.
 
@@ -102,9 +104,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
    restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment models and the engine's kernel
-   processes run in, an installation's base, `cad[build123d]` at its release, made by uv from its
-   cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
+   beside a library or a model; and under `base/` the environment the engine's kernel processes and
+   `cad run`'s models run in, an installation's base, `cad[build123d]` at its release, made by uv from
+   its cache, regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document, and no derived file
@@ -244,9 +246,15 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
     Whether the newer side keeps answering the previous number is decided case by case, by what a
     mismatch would strand and whether the stranded side can say what to do. Where it does not, the
-    side that meets a number it does not speak says so in one line and names which side to update,
-    and to what release, never how to install it: the person or the agent has their own way. The
-    analytics receiver keeps every schema a released client sends. 0.8's door had no number, and 0.10
+    side that meets a number it does not speak says so in one line and names which package to update,
+    and to what release, never how to install it: the person or the agent has their own way -- but
+    for the server, whose one way the line names (`cad update`): installing `cad-server` into a
+    project's environment neither registers nor moves the device's server. The analytics receiver
+    keeps every schema a released client sends. The worker contract (`cad.engine.contract`: the worker
+    protocol's number, the document format, the kernel), by which a script run with a Python of its
+    own and the server meet, is decided so: a contract the server does not speak is refused before any
+    worker starts, in that one line, with no window; one contract of two releases builds, and the
+    script says once which package to update. 0.8's door had no number, and 0.10
     meets 0.8 by stopping it, never by answering it: 0.8's engines keep their own folder, no process
     of 0.10's speaks to one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`.
 
@@ -297,7 +305,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     engine's **Document lifetime**).
 
 20. **One engine serves the device; tabs select documents at `/<uuid>`.** It is the current
-    installation's: every client, whatever its release, attaches to it or starts it, and only an
+    installation's: every client, whatever its release, attaches to it or starts it -- a client with
+    no installation registered starts none: the library never starts a server of its own environment
+    -- and only an
     update a person asks for moves it to another release, on the same port with the same token (the
     engine's **Starting and updating**). A tab names a model's id, or a file's id after a launcher
     registers it; Python scripts are never documents. A page never replaces or re-executes the engine. Its one page and document reads

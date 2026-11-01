@@ -432,15 +432,22 @@ The release the install command runs is text-to-cad's server (`cad-server`): the
 the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
 reaches it. A model runs where the kernel is: in one environment the server makes with uv
 in its cache folder and keeps, the library with its kernel (`cad[build123d]`) on the
-server's Python, 3.14. Every model runs there, and so do the server's own kernel
-processes: exports, snapshots and the meshes the viewer shows. The install command makes
+server's Python, 3.14. `cad run` runs models there, and the server's own kernel processes run
+there too: exports, snapshots and the meshes the viewer shows. The install command makes
 it; otherwise the server makes it as it starts, in the background (with a plugin alone,
-the first start of an app's CAD app), and a first model or view waits for it. A model
+the first start of an app's CAD app), and a first model or view waits for it. A model run so
 imports what that environment holds: the library (`cad`), build123d and what they bring.
 
-To run models with a Python of your own instead, install the library with its kernel
-into it: `pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,
-and `import build123d` fails there). That environment is then the one models run in.
+To run models with a Python of your own instead, with the packages of your project's
+environment, install the library with its kernel into it, at the server's release:
+`pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,
+and `import build123d` fails there). A script run with that Python (`python model.py`,
+`uv run model.py`) is then built by a warm worker running that same Python: the model imports
+your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
+A release whose worker contract the server does not speak is refused in one line that says
+which package to update, and to what release: the cad package in your environment, or
+`cad-server`, by `cad update`. Another release of the same contract builds, and the run says
+once which to update for the other's fixes.
 
 ## Windows 11: Smart App Control
 

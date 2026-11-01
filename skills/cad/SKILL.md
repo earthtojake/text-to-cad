@@ -48,6 +48,12 @@ command again and it waits for that build and replays it (`cad status` shows it)
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background.
 
+`cad run` needs nothing set up: it runs a script in the server's own environment. A Python of the
+project's own (a venv's `python model.py`, `uv run`) whose environment has `cad[build123d]` at the
+server's release runs models too, with its own packages: the server builds the script in a warm
+worker of that same Python. A release the server cannot build with is refused in one line that
+says which package to update; do what it says.
+
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
 them on `__file__` in code that must run from any folder.

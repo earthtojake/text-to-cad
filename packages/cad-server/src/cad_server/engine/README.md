@@ -161,8 +161,9 @@ reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. 
 process imports no kernel: its installation may have none (the wheel's core), and every process
 of the engine's that loads the kernel -- a model's worker, the documents worker, the standby, the
 meshing and reading pools, the render processes -- runs in an environment that has it (**Running a
-model**). If Python cannot start those processes (on Windows, a loader refusing
-`_multiprocessing.pyd`), or the environment they run in cannot be made, the request fails with
+model**): the base, or the Python a script was run with, for that script's worker. If Python cannot
+start those processes (on Windows, a loader refusing `_multiprocessing.pyd`), or the environment they
+run in cannot be made, the request fails with
 `serve.KernelProcessesUnavailable`, which carries the loader's (or the environment's) words. The
 engine has no fallback and remembers nothing, so the next request tries again.
 
@@ -195,8 +196,9 @@ daemon keys by it the worker that built each model document (`builders`, from wh
 asks the server's watched ids; a file the build wrote is no key there) and the live models' book
 (`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
 from).
-The workers alone are keyed otherwise: by the canonical path of the script a worker runs, a
-process's key, not a document's.
+The workers alone are keyed otherwise: by the canonical path of the script a worker runs, and the
+Python a build of it named where that is not the base's (**Running a model**), a process's key, not a
+document's.
 
 The daemon maps each built document to its worker. HTTP watcher accounting has its
 own lock, independent of document reads and the supervisor's leases. A page watches a document (law 19)
@@ -247,9 +249,14 @@ installation's: `<state>/installations/current` names it (`cad_server._internal.
 client that finds no engine running -- an agent app's CAD server, whatever release its plugin pins; a
 skill's `cad` command; `cad run`; a model run directly -- starts that installation's, with its
 Python (`places.engine`, `client._start`); one running is attached to, whatever its release. On a
-device with no current installation, the first client makes its own current, once
-(`installations.bootstrap`). No client starts its own release's engine beside the device's, and none
-stops an engine to start another: an engine runs on until `cad stop`, an update, or its door going.
+device with no current installation, the CAD app's server makes its own installation current, once
+(`installations.bootstrap`), as `cad setup` and `cad doctor` do. A model's own process -- the library,
+which never starts a server of its own environment -- starts none there, but in a base an installation
+made (`places.HOME`, `cad run`'s), whose installation's engine it starts; elsewhere it says, in one
+line, ``cad-server is not installed on this computer: install cad-server and run `cad doctor` once,
+then run this again`` (`client.NOT_INSTALLED`): the remedy the `cad` command's own line gives. No
+client starts its own release's engine beside the device's, and none stops an engine to start
+another: an engine runs on until `cad stop`, an update, or its door going.
 Each installation's bytecode is its own (`places.bytecode_tag`).
 
 An update moves the device to another release in one step, and only when the person asks: the update
@@ -389,12 +396,45 @@ environment. The marker names the installation the base belongs to, which the di
 the engine as `places.HOME`: a process there reaches the device's one engine, and starts the current
 installation's when none runs (`client._start`), so the script, its worker and every other client
 share one engine. The project's own files and `.venv` are not read: the base is what
-the script imports.
+the script imports. `cad run` is the way that needs nothing set up.
 
-Every process of the engine's that loads the kernel runs the base's Python (`places.kernel`, which the
-distribution makes as `places.KERNEL`): a model's worker, the documents worker, the standby, the
-render processes, and the meshing and reading pools, whose spawned processes start on the base's own
-import path, which the marker records (`serve._spawn_in`). The engine starts and serves with no base
+**A Python of the script's own.** A script run by any other Python that has the library -- a venv's
+`python model.py`, `uv run`, a person's own interpreter with `cad[build123d]` -- names that Python in
+each order that starts or reaches its worker (`contract.interpreter`: its executable, its
+environment, the library's release and its worker contract); a process in a base (`places.HOME`)
+names none. The engine builds such a script in a warm worker running that Python
+(`Daemon.caller`, the worker service's `interpreter="lease"`), its import path that environment's own,
+so the script's own packages import in its worker as they do in its run; one whose environment is the
+base itself (an installation that carries the kernel) is built there as any other. The worker is
+keyed by its script and that Python: the same script run from two environments is two workers, and a
+worker started in one Python never serves a build from another. It keeps its memo and the warm edits
+as any worker, and adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); it
+has no standby, so its first build loads the kernel cold. The rest of the engine's kernel processes
+stay in the base: the documents worker, the meshing and reading pools, the render processes and the
+standby.
+
+What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
+and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that
+changes what a worker and the server say to each other), the document format the worker writes
+(`previous.FORMAT`) and the CAD kernel it builds with, OCP's major.minor as the library pins it
+(`KERNEL`). An order whose contract is not the server's is refused before any worker starts, in one
+line naming which package to update and to what release (`contract.refusal`): `cad here is 0.10.0,
+worker contract 1 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks contract 2 (xbf/9, OCP 8.0): update the
+cad package in this environment to 0.10.2` -- the library's side, which names no installer -- or, for a
+library newer than the server, ``...: update cad-server to 0.10.3: run `cad update` `` -- the server's one
+way: installing cad-server into a project's environment neither registers nor moves the device's
+server. One contract of two releases builds, and the build's answer carries the server's release
+(`release`): the script's run then says once, on stderr after its report, which package to update for
+the other's fixes (`contract.notice`, `api.say_notice`): `cad here is 0.10.0; cad-server is 0.10.2:
+update the cad package in this environment to 0.10.2 for its fixes and features`, or ``cad here is
+0.10.3; cad-server is 0.10.2: update cad-server to 0.10.3: run `cad update` ``. A script in the base names
+no Python and hears neither.
+
+Every other process of the engine's that loads the kernel runs the base's Python (`places.kernel`,
+which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
+the documents worker, the standby, the render processes, and the meshing and reading pools, whose
+spawned processes start on the base's own import path, which the marker records (`serve._spawn_in`).
+The engine starts and serves with no base
 made -- pages, the home, documents held in the cache, `status` -- and makes it then, in the background
 (`base.Making`, its lines in the engine's log and its state in `status`): an engine a host's CAD app
 started runs outside any sandbox, where an agent's command may not write the cache folder. The standby
@@ -430,10 +470,11 @@ again.
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
-| `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script, at most one per core alive (`supervisor.py`), connect-or-start, a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
+| `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
 | `frames.py` | the frames every process of the engine's speaks to the daemon, read and written: the library's, the standard library alone (**Services**, the protocol) |
+| `contract.py` | the worker contract the library and the server both state (`CONTRACT`: the worker protocol's number, the document format, OCP's major.minor), the Python an order comes from (`interpreter`), the one line another contract is refused in (`refusal`) and the update notice of another release (`notice`): **Running a model** |
 | `places.py` | where things are, for every process alike, with the standard library alone: the user's state and cache folders, the engine folder and its door, lock and port file (`engine_dir`, `folder_refusal`, `lock`), the installation a process belongs to (`installation`, the base's marker as `HOME`) and the current one a client starts (`current`, `engine`), and how a process of the engine's is started (`windowless`, `detached`, `bytecode`, and the kernel environment, `kernel`, which the server makes as `KERNEL`) |
 | `records.py` | the documents' records read, as a model's run reads them in its own process (`Records`, `current`), their one shape (`parse`), the words said of a record (`home`, `rerun`, `command`) and a model document's cache file's name (`FILE`); the registry (the server's) writes them |
 | `said.py` | the words a build, an export and an inspection are said in: the run line and what is under it (`describe`, `reported`), a file written (`written`, `given`), a size and a measure (`size`, `number`); a model's process says them, and the commands say the same |
@@ -663,8 +704,8 @@ temporary folder cleaned up, or another file put in the door's place -- so that 
 cache); and with the machine. **No timer retires a worker either**: memory alone does. Idle
 documents are saved to the cache, past the memory budget what no page watches leaves memory for it
 (**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
-idle workers go (below). It holds a pool of warm workers, one per model script (and one for the
-documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
+idle workers go (below). It holds a pool of warm workers, one per model script and Python (and one for
+the documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
 the operating system does the rest. (What the daemon itself holds, the documents and their
 tessellations, is under one memory budget: **Document lifetime**.)
 
@@ -684,7 +725,9 @@ tessellations, is under one memory budget: **Document lifetime**.)
   and room for it under the memory cap. A build for a script
   with no live worker takes it when the build's environment shapes the interpreter as the
   standby's does (`places.RESTARTS`), and starts a fresh worker otherwise -- after which the
-  standby, of another interpreter, is replaced by one of the build's. Taken, it is that script's
+  standby, of another interpreter, is replaced by one of the build's. A build in its script's own
+  Python (**Running a model**) never takes it, nor waits for it, nor moves it: the standby is the
+  base's. Taken, it is that script's
   worker (the standby's adoption, `Process.adopt`): its key, the environment it was asked in and the folder a fresh worker
   of it would start in, its run's environment adopted as every run's is (`worker.adopt`). A build
   arriving while the standby starts, of its interpreter, waits for it rather than start another.
@@ -721,8 +764,10 @@ tessellations, is under one memory budget: **Document lifetime**.)
 ([services.py](services.py)), and one supervisor runs them all ([supervisor.py](supervisor.py), whose
 docstring is the mechanism): a model script's worker (the documents worker among them) and a served
 document's render process (whose pictures [renders.py](renders.py) asks for). A declaration says what
-the process runs and in which environment, what one process serves (its key: a script's path, a
-document's id), what binds a process to its caller's interpreter (`places.RESTARTS`), whether it
+the process runs and in which environment, whether a lease may name the Python it runs instead, its
+caller's (`interpreter`: the worker's), what one process serves (its key: a script's path, a
+document's id; with a Python a lease named, that Python too), what binds a process to its caller's
+interpreter (`places.RESTARTS`), whether it
 counts toward the count cap, its rank when memory is shed (the standby 0, a render process 1, a
 worker 2, a watched worker 3), whether the daemon drains it before it stops, whether its retirements
 are listed in `status`, whether it keeps a standby and how long its start may take: a process that
@@ -796,10 +841,10 @@ between requests: an idle worker holds no project folder (on Windows, one a proc
 cannot be renamed or deleted). A meshing or reading pool's processes exit with the process that
 started them, however it ends.
 
-A worker is an interpreter -- the base's Python, the one `cad run` ran the script with
-(**Running a model**) --; a run is the script in its caller's environment. A build goes to its
-script's live worker whatever the caller's environment but for what shapes the interpreter's
-import system (`places.RESTARTS`): `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
+A worker is an interpreter -- the base's Python, the one `cad run` ran the script with, or the Python
+a script was run with directly where that is not the base's (**Running a model**) --; a run is the
+script in its caller's environment. A build goes to its script's live worker of its Python whatever
+the caller's environment but for what shapes the interpreter's import system (`places.RESTARTS`): `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
 `PYTHONNOUSERSITE`, `PYTHONUSERBASE` and `PYTHONPLATLIBDIR`. A relative `PYTHONPATH` entry is the
 caller's, as Python reads it for `python SCRIPT`: made absolute against the caller's working folder
 before the engine is handed it (`client.environment`), since a worker stands in the script's folder.
@@ -834,7 +879,8 @@ documents:
 ```
 
 A worker's memory is as it measured it after its last build; a busy one's build is where its
-last progress frame says (**Progress**); the time is how long it has been busy, or idle. The
+last progress frame says (**Progress**); the time is how long it has been busy, or idle; a worker in
+its script's own Python ends its line with that Python (`--json`: `python`). The
 standby's line has no script: its process, its memory and how long it has stood by (`starting`
 while it loads the kernel); it counts toward the workers' count (`with the standby`) and the RSS
 the header gives against the cap (`--json`: `standby`, `rssMb`, `rssCapMb`). A retirement's reason is

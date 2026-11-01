@@ -124,10 +124,16 @@ that runs the device's current installation (`<state>/installations/current`): t
 (`<state>/releases/<VERSION>`), else the first installation a CAD app server (`cad-mcp`) or
 `cad doctor` registered on the device. Every installation registers itself and writes the
 proxy as its server starts, `cad doctor` runs or `cad setup` sets it up; a checkout's
-editable server registers nothing unless named (`CAD_INSTALLATION_VERSION`). To run your
-working copy, use the checkout's `.venv` (`requirements-dev.txt`), or
-`scripts/install/dev_install.py`, which makes a dev install of it the current installation (see
-[Test In Agent Apps](#test-in-agent-apps)).
+editable server registers nothing unless named (`CAD_INSTALLATION_VERSION`). A model script
+starts no server of its own environment: it reaches the current installation's engine, and on a
+device with none it says ``cad-server is not installed on this computer: install cad-server and run
+`cad doctor` once, then run this again``. To run your working copy, make it the current installation:
+`scripts/install/dev_install.py` makes a dev install of it current (see
+[Test In Agent Apps](#test-in-agent-apps)), as does `CAD_INSTALLATION_VERSION=<VERSION>-dev.0
+./.venv/bin/cad doctor`, run once. With another installation current, the checkout's `.venv` still
+runs models, each built in a worker of the `.venv`'s own Python on the checkout's library, while the
+current installation's engine (its server code, not the checkout's) serves them, and refuses a
+library whose worker contract it does not speak.
 
 `packages/cad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
@@ -149,7 +155,10 @@ engine folder, the current installation's, started by the first command that nee
 whatever release that command is -- and running until `cad stop` or an update (no timer stops
 it). A checkout's `.venv` reaches the device's engine like any client, and starts the current
 installation's when none runs: to run a worktree's own engine, give it its own
-`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation). Its door, a named pipe (on Windows, a port file), and lock live in `cad-engine`
+`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation), and
+register the worktree's `.venv` as that state folder's current installation
+(`CAD_INSTALLATION_VERSION=<VERSION>-dev.0 ./.venv/bin/cad doctor` with those set). Its door, a
+named pipe (on Windows, a port file), and lock live in `cad-engine`
 in `$XDG_RUNTIME_DIR`, else in the per-user temporary folder (on macOS the system's
 `/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cad-<uid>`
 (Windows: the temporary folder); `CAD_ENGINE_DIR` moves them, which gives a
@@ -283,7 +292,10 @@ listed in `tests/python/global/test_no_cad_assets_tracked.py`); do not rely on e
 Repo `tmp/` and system temporary directories are both fine. Give builds an
 engine daemon of their own (`CAD_ENGINE_DIR`) and clean up their processes and
 files. The runner gives every test file its own state, cache and `cad` command
-folders, and fails the run, naming the test, when the run's server writes a
+folders, its state folder registering the file's interpreter as its current installation
+(`tests/python/support/engine_daemon.py`'s `register`, as `isolate` and `watched` do for the folders a
+test makes: a client with no installation starts no engine), and fails the run, naming the test,
+when the run's server writes a
 document, engine or installation record in your own state folder, or your `cad`
 command. The shared
 temporary-directory helper retains the Windows cleanup retries used by the suite.
