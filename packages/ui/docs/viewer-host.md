@@ -30,6 +30,13 @@ of sight), where a CAD renderer draws the model alone — no tools, view actions
 view cube or Quick Edit — and FileViewer draws no navbar. A view shown small in a
 conversation is not compact: it is the whole viewer under its navbar, and its host hands
 its own way to full size as a navbar action (the CAD app's Full size, `CadViewerProps.fullSize`).
+
+`fileActions` is what the host can do with the document on screen, each a capability the file
+menu (the navbar's ⋯) offers only where it is given: `copy-path` and `reveal` act on its file on
+disk (none for a model's document), and `browser` opens the document's page in the person's
+browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
+The ⋯ draws them as Copy path and Open in › Browser and the file manager by its name; a home
+card's ⋯ offers Copy path and Reveal alone.
 CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter serves both apps; the engine owns runtime startup and recovery.
@@ -72,7 +79,7 @@ are for reading and maintaining the contracts.
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
 | `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: one control row of 24px controls — Recent, then at the right the type filter ("All ▾": All, Models, Files, where both are listed), the search, the grid/list switch and, where `pick` is given (a computer with a file chooser), Open — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as tiles (the picture, its kind's glyph, its name and its age with no verb) or as a table's rows (Name, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
-| `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
+| `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
 | `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `TEXT_TO_CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@text-to-cad/ui/build-id` |
 
@@ -102,8 +109,10 @@ Export writes the document as its code built it, so the menu offers formats alon
 selection or a pose, and the formats follow from the file's kind (`export/formats.ts`), so it
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
-before it converts the file to the other mesh kinds. `FileViewer.navbarActions` and `overlay` are named
-composition slots: the first is in the navbar's right group; the second is in the
+before it converts the file to the other mesh kinds. `FileViewer.navbarActions`, `fileMenuItems` and `overlay` are named
+composition slots: the first is in the navbar's right group, after the update (the CAD app's Full
+size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
+after Copy path and Open in (`CadViewer` puts Export's submenu there); the third is in the
 relative viewport below it. The generic FileViewer knows nothing about export jobs.
 
 ## A CAD renderer's controls

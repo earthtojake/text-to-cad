@@ -54,24 +54,32 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   it says what it is. The name
   is that control where it opens the name menu (below), where the view can show another
   document; where it cannot it is plain text. The ⋯
-  is the file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host can do it, and no ⋯ where it can do none. The name has
+  is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), in this order:
+  **Copy path**; **Open in**, a submenu of **Browser** (the document's page in the person's
+  browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
+  and the desktop's file manager by its plain name — **Finder** on macOS, **File Explorer** on
+  Windows, **File manager** on Linux (`reveal`); then the host's own items, the CAD viewer's
+  **Export**, a submenu of the formats the document's kind writes (where the host can download,
+  the web viewer's). Each only where the host can do it: a model's document, which has no file of
+  its own, has no Copy path and no file manager, only Browser and Export where it has them; and
+  no ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
-  and the name 4px in from its edges, so about 7px separate one glyph from the next. Right, only what a host or a file adds: first, the
+  and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
+  kept clean for the update's nudge, only what a host or a file adds: first, the
   update — the blue update button (a download icon and nothing else, no popover), there only while the host's
   install is behind, which updates when pressed. Then, while a person has put an alert card away: the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
-  navbar action. Then the host's own actions: inline, where the host can show the view full size,
-  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button); the web viewer's
-  **Export**; last, **Open in browser** (the CAD app's: an arrow out of a box, a ghost icon button,
-  where a launch carried the web viewer's page of what it shows). A CAD file publishes no
+  navbar action. Then the host's own actions (`actions`): inline, where the host can show the view full size,
+  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button) — today the slot's
+  only control. Export and Open in are the file menu's, never here. A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
   *Design note: the navbar carries nothing the view needs.* What a host or the file adds (the
-  update, an alert's icon, the host's actions) is the navbar's right end. The view's own
+  update, an alert's icon, the host's actions) is the navbar's right end; what can be done with
+  the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name. The view's own
   controls are the strip's, in every host, with or without a navbar: **Projection**, **Display**
   and **Preview** end it; they act on the whole view, whatever tool is in hand, so they are no
   tools, and a new per-file button that is no tool goes with them. In Preview, Preview's own
@@ -128,7 +136,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   A host that shows the view alone (`chrome: "bare"`: the CAD app's file handler, Codex's *Open
   with CAD*, one file whose host's file tree is its navigation) draws no navbar over the file or
   over a page that will not open: no logo or app menu, no Back and Forward, no name or name menu,
-  no ⋯, no Export and no Open in browser. What it still adds is its corner at the viewport's
+  no ⋯ (so no Export and no Open in). What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
   the host can show the view full size, **Full size**; then, while its install is behind, the
   blue update button, the navbar's own: an icon, no text and no popover, which updates when
@@ -1100,7 +1108,7 @@ delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
 strip's buttons (Display and Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the navbar's right-hand controls (the
-update, an alert's icon, the host's actions: the CAD app's Full size and Open in browser among them), Preview's bar (Preview
+update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
 settings, Exit preview) and the
 Animation section's Reset are hinted by name — the strip's hints above their buttons, the
 others' below; there is no hint on the navbar's left (the logo,
@@ -1123,15 +1131,15 @@ job is queued or running and while a dropped connection is asked again (**Prepar
 part.step…**), dismissed the moment the file is handed to the browser's download (whose own
 downloads say the rest), with no success toast of its own; or, where the export fails, its
 error icon with the engine's one-line reason, kept until its dismiss, the one button a toast
-has. No other action earns a toast. Export is an icon button at
-the navbar's right end, named on hover as the view controls are, never in the tool strip.
-It opens a dropdown as the file's ⋯ does, on Display's surface and in its type, as wide as its
-items (shadcn's 8rem least), aligned to the button's end (`export/ExportControls.tsx`): the formats the file's kind writes, plain items, known
+has. No other action earns a toast. Export is the file's ⋯'s last item, a stock shadcn
+submenu (`DropdownMenuSub`), never the navbar's right end and never the tool strip. It opens
+the formats in the menu's own surface and type, as wide as its
+items (shadcn's 8rem least) (`export/ExportControls.tsx`): the formats the file's kind writes, plain items, known
 from the kind and the scene the view already holds, so nothing loads before it shows
 (`export/formats.ts`: a STEP's, an xbf's and a held model's STEP, STL, 3MF, GLB and XBF, and
 DXF where the view draws it flat on z=0, an xbf's XBF its own bytes; a GLB's, an STL's or a
 3MF's the other two mesh kinds), and nothing else: no job list, no rule, no note. A view
-whose file writes nothing has no Export. A format chosen closes the menu and starts its export
+whose file writes nothing has no Export. A format chosen closes the file menu and starts its export
 at once; nothing is asked first, and choosing it again is another export.
 A finished file is a plain browser download, started once by itself; where it lands is
 the browser's setting (its download bubble, or its Save dialog), and the page never says it

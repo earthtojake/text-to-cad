@@ -197,7 +197,7 @@ _APP_TOKEN_META = "dev.texttocad/httpToken"
 _APP_TOKEN_HEADER = "x-cadgen-app"
 _APP_TOKEN_ARGUMENT = "app"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
-# The card's Open in browser: this process opens the web viewer's page of the document the card
+# The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
 _BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
@@ -550,7 +550,7 @@ class Server:
             app("cad_capture_reply", "Answer CAD", "Answer the server's request for a capture.",
                 _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"},
                          _APP_TOKEN_ARGUMENT: _APP_TOKEN_SCHEMA}, ["requestId", _APP_TOKEN_ARGUMENT])),
-            # Its library, settings, Reveal and Open in browser among them, and the person's telemetry answer,
+            # Its library, settings, Reveal and Open in's Browser among them, and the person's telemetry answer,
             # which reaches the receiver off this machine.
             app("cad_http", "CAD HTTP request", "This view's request of one of the CAD viewer's routes; the reply is its "
                 "HTTP status, headers and base64 body.",
@@ -692,7 +692,7 @@ class Server:
         nowhere else): a card whose host carries no ``tools/call`` back (the Claude app's Code tab)
         links the page, and first tries the engine directly with the link's token. A tab's card
         always has its channel, so its launches carry the page alone. The file handler's carry
-        neither: it shows its file alone, with no Open in browser. Nor do launches where this server
+        neither: it shows its file alone, with no Open in > Browser. Nor do launches where this server
         was given no engine (``viewer_url``), or the engine gives no page."""
         if self._viewer_url is None or launch.get("surface") == "file":
             return

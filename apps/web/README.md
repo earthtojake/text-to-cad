@@ -180,9 +180,10 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 
 ## Export and job status
 
-**Export** sits at the top-right of the navbar of a STEP, XBF, held model (a model's document
-the engine holds), GLB, STL or 3MF page: a dropdown of the formats that page's file writes, there at once, as nothing is
-inspected first. For a model it captures the displayed revision and writes the document as its code built it: every
+**Export** is the last item of the file menu (the ⋯ beside the file's name, after Copy path and
+Open in › Finder / File Explorer / File manager) of a STEP, XBF, held model (a model's document
+the engine holds), GLB, STL or 3MF page: a submenu of the formats that page's file writes, there at once, as nothing is
+inspected first. The navbar's right end holds only the update button (and a dismissed alert's icon). For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's
 XBF is its own bytes), and DXF where the view draws it flat on z=0; on a GLB, STL or 3MF page Export converts the file shown, at the
