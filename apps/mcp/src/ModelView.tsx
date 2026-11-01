@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createHttpPromptFiles, type CadClient } from '@text-to-cad/core/client';
+import { createHttpPromptFiles, libraryRow, type CadClient } from '@text-to-cad/core/client';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@text-to-cad/ui/cad-viewer';
 import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@text-to-cad/ui/file-viewer';
@@ -118,13 +118,14 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // Every other view has the home: the models opened before, from every view and the web viewer.
   // What it opens is shown in place.
-  // The home's first list came with its launch: the cards draw at once, and later reads ask.
+  // The home's first list came with its launch, its rows as `GET /api/v1/documents` lists them: the
+  // cards draw at once, each its picture read by its document's id, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
     list: () => {
       const first = seeded.current;
       seeded.current = null;
-      return first ? Promise.resolve(first) : client.recents();
+      return first ? Promise.resolve(first.map(libraryRow)) : client.recents();
     },
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
     thumbnail: model => client.thumbnail(model),

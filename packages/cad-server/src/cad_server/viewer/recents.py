@@ -88,6 +88,25 @@ class Recent:
         """Its last activity, the library's order: the later of when it was opened and updated."""
         return max(self.opened or 0, self.updated or 0)
 
+    def row(self) -> dict[str, Any] | None:
+        """The entry as every list of Recents carries it -- ``GET /api/v1/documents``'s rows and a CAD
+        app home's launch alike: its public row (``public``) with its document's ``id``, ``kind`` and
+        ``api``, its record's own kind as ``record``; None for a file no page reads."""
+        from cad.engine.ids import file_id
+
+        from .kinds import document_api, file_kind
+        from .scanner import VIEWER_EXTENSIONS, extension_of
+
+        if self.kind == "file":
+            kind = file_kind(self.path)
+            if kind is None or extension_of(self.path) not in VIEWER_EXTENSIONS:
+                return None
+            ident = file_id(self.path)
+        else:
+            # A model's document, or a shape a program handed over: either is the engine's, read as a model's.
+            kind, ident = "model", self.path
+        return {**self.public(), "id": ident, "kind": kind, "record": self.kind, "api": document_api(kind, ident)}
+
     def public(self) -> dict[str, Any]:
         """The row a home reads: its times (``opened``, ``updated``, ``created``). Of a model's script only whether
         it is still there is asked (``missing``), never its contents or its times: the engine reads a

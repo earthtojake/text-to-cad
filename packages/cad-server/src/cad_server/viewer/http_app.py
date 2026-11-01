@@ -668,27 +668,13 @@ class CadApp:
         needle = (query.get("q") or "").lower()
         rows = []
         for entry in self.recents.list():
-            row = self._recent_row(entry)
+            row = entry.row()
             if row is None or (kind is not None and row["kind"] != kind):
                 continue
             if needle and needle not in f"{row['name']}\n{row['path']}".lower():
                 continue
             rows.append(row)
         return {"documents": rows[:int(limit)] if limit is not None else rows}
-
-    @staticmethod
-    def _recent_row(entry) -> dict | None:
-        """A Recents entry as ``GET /api/v1/documents`` lists it: None for a file no page reads."""
-        found = entry.public()
-        if entry.kind == "file":
-            kind = file_kind(entry.path)
-            if kind is None or extension_of(entry.path) not in VIEWER_EXTENSIONS:
-                return None
-            ident = file_id(entry.path)
-        else:
-            # A model's document, or a shape a program handed over: either is the engine's, read as a model's.
-            kind, ident = "model", entry.path
-        return {**found, "id": ident, "kind": kind, "record": entry.kind, "api": document_api(kind, ident)}
 
     def envelope(self, ident) -> dict:
         """``GET /api/v1/documents/<id>``: what the document of id ``ident`` is (``_envelope``); 404

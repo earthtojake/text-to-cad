@@ -40,8 +40,11 @@ export interface Launch {
   view?: string;
   order?: { createdAt: number; seq: number };
 }
-/** A model in the library every CAD view shares, as the home lists it. */
-export type Recent = LibraryModel;
+/**
+ * A model in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
+ * `id`, `kind` and `api`, its record's kind as `record` (the home hands it on as the library's, `libraryRow`).
+ */
+export type Recent = Omit<LibraryModel, 'kind'> & { id: string; kind: string; record: LibraryModel['kind']; api?: string };
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture'; requestId: string };

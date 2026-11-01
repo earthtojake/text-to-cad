@@ -115,6 +115,22 @@ it.each(['inline', 'fullscreen'] as const)('an inline host in %s mode keeps the 
   expect(frame.style.getPropertyValue('--cad-viewport-corner-right')).toBe('');
 });
 
+it("the home's first list came with its launch: a file's card reads its picture by its document's id", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  server.answers['/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-000000000001/thumbnail'] = () => new Status(200, null);
+  const row = { id: '6f1c2a4e-1b2c-5d3e-8f4a-000000000001', kind: 'step', record: 'file' as const,
+    api: '/api/v1/documents/step/6f1c2a4e-1b2c-5d3e-8f4a-000000000001', path: '/work/parts/a.step', name: 'a.step',
+    folder: '/work/parts', opened: 1, updated: 1, created: 1, pinned: false, missing: false, thumbnail: 'a.png', pictured: 2 };
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, recents: [row] }} />);
+  // The launch's row, as the library reads one: the record's kind is the library's, the document's beside it.
+  const [seeded] = await viewer.props!.library!.list();
+  expect(seeded).toMatchObject({ id: row.id, kind: 'file', documentKind: 'step', thumbnail: 'a.png' });
+  expect(server.asked('/api/v1/documents')).toEqual([]);  // nothing read: it came with the launch
+  await viewer.props!.library!.thumbnail(seeded);
+  expect(server.asked(`/api/v1/documents/${row.id}/thumbnail`)).toEqual([null]);
+  expect(server.asked('/api/v1/documents/undefined/thumbnail')).toEqual([]);
+});
+
 it('a model opened from the home is shown in place, joins the library with its picture, and leads back home; the host\'s links and file actions go through the host', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={home} />);

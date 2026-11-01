@@ -479,6 +479,13 @@ class TabServerTest(_Session):
         home = self.launch("cad_home")
         self.assertEqual((home["page"], home["model"], home["surface"], [entry["path"] for entry in home["recents"]]),
                          ("home", None, "sidebar", [self.bracket]))
+        # Its rows are Recents' rows as the page reads them anywhere (`GET /api/v1/documents`): a file's
+        # with its document's id, by which its card reads its picture.
+        from cad.engine.ids import file_id
+
+        [seeded] = home["recents"]
+        self.assertEqual((seeded["id"], seeded["kind"], seeded["record"]), (file_id(self.bracket), "stl", "file"))
+        self.assertEqual(home["recents"], self.http("GET", "/api/v1/documents")[1]["documents"])
         fresh = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
         fresh.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX}), None)
         context = RequestContext(1, {"threadId": "t"})

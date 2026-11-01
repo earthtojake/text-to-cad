@@ -69,7 +69,7 @@ const catalogOf = (envelopes) => ({ entries: envelopes.map((envelope) => envelop
  * A Recents row as the library reads it (`CadRecent`): the API names a row's document kind `kind`
  * and its record's (`file`, `model`, `shape`) `record`; the library's `kind` is the record's.
  */
-const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: row.kind });
+export const libraryRow = (row) => ({ ...row, kind: row.record, documentKind: row.kind });
 const libraryRows = (reply) => (Array.isArray(reply?.documents) ? reply.documents.map(libraryRow) : []);
 
 /**

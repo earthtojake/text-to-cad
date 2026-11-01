@@ -661,10 +661,10 @@ class Server:
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
         """The launch that shows the home: the models opened before, which come with it so its cards
-        draw at once, and Open with the desktop's chooser."""
+        draw at once -- each row as ``GET /api/v1/documents`` lists it (``Recent.row``: its document's
+        id, by which its picture is read) -- and Open with the desktop's chooser."""
         try:
-            recents = [entry.public() for entry in self.recents.list()
-                       if entry.kind != "file" or os.path.splitext(entry.path)[1].lower() in VIEWER_EXTENSIONS]
+            recents = [row for row in (entry.row() for entry in self.recents.list()) if row is not None]
         except Exception:  # the home opens whatever the library says
             LOG.exception("could not read recents")
             recents = []
