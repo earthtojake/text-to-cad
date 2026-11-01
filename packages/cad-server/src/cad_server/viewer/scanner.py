@@ -1,7 +1,7 @@
 """The catalog row of one CAD file: what a view needs to render it (``catalog_entry``).
 
 A row is ``{file, kind, url, hash, bytes, ...}``: ``file`` is the file's absolute path with ``/``
-separators, ``url`` is where its bytes are served (``/__cad/asset?file=<abs>&v=<token>``, the token
+separators, ``url`` is where its bytes are served (``/api/v1/local/files?path=<abs>&v=<token>``, the token
 ``base36(size)-base36(mtime_ns)``), ``hash`` is sha256 hex and ``bytes`` the byte size. A view names
 its file, so a row is computed for the file named and nothing walks a folder to find it. Every
 format's row is the file's own: a STEP and an ``.xbf`` are drawn from what the cadgen engine serves

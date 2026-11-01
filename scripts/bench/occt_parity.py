@@ -278,7 +278,8 @@ def _served(doc: Path) -> tuple[str, str]:
     if not answer or "failed" in answer:
         raise RuntimeError(f"the engine would not serve {doc.name}: {(answer or {}).get('failed', 'no daemon')}")
     parsed = urlparse(answer["url"])
-    url = f"{parsed.scheme}://{parsed.netloc}/api/doc/{answer['doc']}"
+    kind = "step" if doc.suffix.lower() in (".step", ".stp") else "xbf"
+    url = f"{parsed.scheme}://{parsed.netloc}/api/v1/documents/{kind}/{answer['doc']}"
     headers = {"Authorization": f"Bearer {answer['token']}", "x-cadgen-viewer": "1"}
     with urlopen(Request(f"{url}/mesh", data=b"", method="POST", headers=headers), timeout=900) as done:  # noqa: S310 - the engine, on loopback
         done.read()

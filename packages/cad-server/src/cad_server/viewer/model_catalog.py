@@ -26,8 +26,11 @@ def entry(value: str) -> dict | None:
     if not is_id(value):
         return None
     model, _why, _state = held(value)
-    if model is None:
-        return None
+    return None if model is None else row(value, model)
+
+
+def row(value: str, model: dict) -> dict:
+    """The catalog row of the model document ``value`` the engine holds as ``model`` (``held``)."""
     built = model.get("version") or model.get("builtAt")
     return {"id": value, "file": value, "name": model["source"]["name"], "sourcePath": None,
             "kind": "xbf", "sourceFormat": "model", "url": "",

@@ -28,7 +28,7 @@ _STATIC_CONTENT_TYPES = {
     ".woff2": "font/woff2",
 }
 
-# CAD assets (/__cad/asset). Unknown -> octet-stream.
+# CAD files by path (/api/v1/local/files) and a document's source. Unknown -> octet-stream.
 #
 # Exactly the extensions that route can emit: the cataloged formats
 # (scanner.SOURCE_EXTENSIONS, scanner.is_served_cad_asset).

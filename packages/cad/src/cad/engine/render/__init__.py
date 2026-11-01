@@ -10,7 +10,7 @@ OCCT's own; a file no document (a mesh file, a robot) from the buffers its reade
 - ``drawing.py``: a DXF drawn as the viewer's DXF pane draws it, in ``look.py``'s 2D look.
 - ``occt.py``: the scene -- the modes, the camera, clip, grid, overlays, Preview -- and the
   prototype's CLI (``python -m cad.engine.render.occt``); ``look.py`` the regular display modes'
-  look, which ``occt.py`` draws by and ``serve.py`` serves to the viewer (``GET /api/look``);
+  look, which ``occt.py`` draws by and ``serve.py`` serves to the viewer (``GET /api/v1/look``);
   ``text.py`` and ``overlay.py`` the annotation's words and Measure's marks, as the page draws them.
 - ``explode.py``: the viewer's Explode, ported (held to the viewer by one golden).
 - ``shapes.py``: a part's buffer as triangulation-only faces and polygon edges, in one kernel read.

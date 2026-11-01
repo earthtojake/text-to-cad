@@ -1328,8 +1328,10 @@ class Daemon:
             else:
                 send(application.launch(request) if op == "viewer" else application.endpoint())
         elif op == "read":
-            # A document's JSON read (``/api/doc/<id>...``), answered in process: ``inspect``'s,
-            # through the door, so it needs no loopback socket of the client's.
+            # A document's JSON read in the engine's own vocabulary (``/api/doc/<id>...``,
+            # ``cad/engine/serve.py``'s, which its HTTP API, ``/api/v1``, answers its pages from),
+            # answered in process: ``inspect``'s, through the door, so it needs no loopback socket of
+            # the client's.
             route = str(request.get("route") or "")
             if not route.startswith("/api/doc/"):
                 send({"failed": f"not a document read: {route!r}"})

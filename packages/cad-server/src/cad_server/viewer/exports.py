@@ -27,6 +27,9 @@ FORMATS = {"step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dx
 from cad_server.jobs import Jobs, JobError as ExportError, STATUS_SECONDS, TERMINAL
 
 ARTIFACT_SECONDS = 600
+# What to do about an export refused with each status.
+_HINTS = {404: "open Export again", 409: "open Export again", 410: "export it again", 413: "send less",
+          429: "download the exports waiting first"}
 MAX_RETAINED_BYTES = 4 * 1024**3
 def specification(payload):
     # The document as its code built it: no part, no pose (the law of options).
@@ -252,38 +255,43 @@ class ExportJobs(Jobs):
                 job["readers"] -= 1
                 self._prune()
 
-    def handle(self, request, response):
+    def answer(self, response, work):
+        """``work(self)``'s ``(status, body)`` sent as JSON; an export's refusal as its status and
+        its sentence, with what to do (``{"error", "hint"}``)."""
         try:
-            tail = request.path.removeprefix("/__cad/exports").strip("/").split("/")
-            if request.method == "POST":
-                if int(request.header("content-length") or 0) > 65536:
-                    raise ExportError("Export request too large.", 413)
-                if tail == [""]:
-                    return response.send_json(202, self.create(json.loads(request.body())))
-            elif request.method == "GET":
-                if tail == [""]:
-                    # The session's epoch, which a new request names (``create``): a request a page
-                    # kept across a reload is refused once this server has gone, never run again.
-                    return response.send_json(200, {"epoch": self.epoch})
-                if len(tail) == 1:
-                    after = request.query.get("after")
-                    return response.send_json(200, self.get(tail[0], int(after) if after is not None else None,
-                                                           float(request.query.get("wait") or 0)))
-                if len(tail) == 2 and tail[1] == "file":
-                    with self.artifact(tail[0]) as path:
-                        from urllib.parse import quote
-                        # A plain browser download: every browser names it, the ASCII form for any
-                        # that ignores RFC 5987 (the page's link names it too, with `download`).
-                        plain = re.sub(r"[^ -~]", "_", path.name).replace('"', "_").replace("\\", "_")
-                        response.stream_file(path, path.stat(), "application/octet-stream", [
-                            ("content-disposition", f'attachment; filename="{plain}"; filename*=UTF-8\'\'{quote(path.name)}'),
-                            ("x-content-type-options", "nosniff")])
-                    # The whole file reached the browser -- no range, and the page did not hang up
-                    # part way -- so it is deleted at once; a broken transfer keeps it for a retry.
-                    whole = not (request.header("range") if hasattr(request, "header") else "")
-                    if whole and getattr(response, "gone", False) is not True and request.method == "GET":
-                        self.fetched(tail[0])
-                    return None
-            raise ExportError("Export route not found.", 404)
+            status, body = work(self)
+            response.send_json(status, body)
         except (ValueError, OSError) as error:
-            response.send_json(getattr(error, "status", 400), {"error": str(error)})
+            status = getattr(error, "status", 400)
+            response.send_json(status, {"error": str(error), "hint": _HINTS.get(status, "open Export again")})
+
+    def handle(self, request, response, tail):
+        """``GET /api/v1/exports[/<job>[/file]]`` (``tail``: what follows ``exports``): the session's
+        epoch, a job's state, a finished job's file. A job is made by its document's route
+        (``POST /api/v1/documents/<id>/exports``: ``create``)."""
+        if not tail:
+            # The session's epoch, which a new request names (``create``): a request a page
+            # kept across a reload is refused once this server has gone, never run again.
+            return self.answer(response, lambda jobs: (200, {"epoch": jobs.epoch}))
+        if len(tail) == 1:
+            after = request.query.get("after")
+            return self.answer(response, lambda jobs: (200, jobs.get(tail[0], int(after) if after is not None else None,
+                                                                     float(request.query.get("wait") or 0))))
+        try:
+            with self.artifact(tail[0]) as path:
+                from urllib.parse import quote
+                # A plain browser download: every browser names it, the ASCII form for any
+                # that ignores RFC 5987 (the page's link names it too, with `download`).
+                plain = re.sub(r"[^ -~]", "_", path.name).replace('"', "_").replace("\\", "_")
+                response.stream_file(path, path.stat(), "application/octet-stream", [
+                    ("content-disposition", f'attachment; filename="{plain}"; filename*=UTF-8\'\'{quote(path.name)}'),
+                    ("x-content-type-options", "nosniff")])
+        except (ValueError, OSError) as error:
+            status = getattr(error, "status", 400)
+            return response.send_json(status, {"error": str(error), "hint": _HINTS.get(status, "open Export again")})
+        # The whole file reached the browser -- no range, and the page did not hang up
+        # part way -- so it is deleted at once; a broken transfer keeps it for a retry.
+        whole = not (request.header("range") if hasattr(request, "header") else "")
+        if whole and getattr(response, "gone", False) is not True and request.method == "GET":
+            self.fetched(tail[0])
+        return None

@@ -677,9 +677,9 @@ class Bench:
             return
         else:
             self.step(model, "serve", wall, load, ok=True)
-            # The page is ``<engine>/<id>?token=...``: the document's routes are under
-            # ``/api/doc/<id>``, and take the page's token as a bearer.
-            api = f"{page.scheme}://{page.netloc}/api/doc/{ident}"
+            # The page is ``<engine>/<id>?token=...``: the model's routes are under
+            # ``/api/v1/documents/model/<id>``, and take the page's token as a bearer.
+            api = f"{page.scheme}://{page.netloc}/api/v1/documents/model/{ident}"
             token = (urllib.parse.parse_qs(page.query).get("token") or [""])[0]
             auth = {"Authorization": f"Bearer {token}"} if token else {}
             for step, query in (("mesh-cold", ""), ("mesh-warm", "?drop=1")):
@@ -703,7 +703,7 @@ class Bench:
                           slowest=(answer.get("per_part") or {}).get("slowest"))
             load, started = loads(), time.perf_counter()
             try:
-                with urllib.request.urlopen(urllib.request.Request(api, headers=auth), timeout=600) as response:  # noqa: S310 - the engine, on loopback
+                with urllib.request.urlopen(urllib.request.Request(f"{api}/structure", headers=auth), timeout=600) as response:  # noqa: S310 - the engine, on loopback
                     data = response.read()
                 structure = json.loads(data)
                 if not isinstance(structure, dict) or not {"prototypes", "instances"} <= structure.keys():

@@ -1,4 +1,4 @@
-"""The HTTP contract: both browser gates, route dispatch, and the SPA.
+"""The HTTP contract: both browser gates, the API's routes (``/api/v1``, ``kinds.py``), and the SPA.
 
 The engine authenticates network requests before this router runs. MCP calls
 reach the same router in process through an authenticated session. Two additional
@@ -8,10 +8,10 @@ browser gates defend against cross-origin requests:
   127.0.0.1/localhost/::1 — the DNS-rebinding case, where an attacker domain
   re-resolves to loopback and the browser treats us as same-origin. Skipped when
   bound non-loopback, matching Jupyter's ``allow_remote_access``.
-* Every POST requires an ``x-cadgen-viewer`` header. A POST changes something (the
-  model library, a person's settings, a prompt's files), and a cross-origin POST
-  whose params ride the query string is otherwise a no-preflight "simple
-  request". A custom header forces a preflight instead.
+* Every request that changes something -- a POST, PUT, PATCH or DELETE (``CHANGING_METHODS``:
+  the model library, a person's settings, a prompt's files) -- requires an ``x-cadgen-viewer``
+  header. A cross-origin POST whose params ride the query string is otherwise a no-preflight
+  "simple request"; a custom header forces a preflight instead.
 
 No ``Access-Control-*`` headers are served here, deliberately: their absence is what
 makes the same-origin policy block cross-origin reads and what makes that
@@ -27,6 +27,7 @@ import hashlib
 import json
 import os
 import re
+import secrets
 import stat
 import sys
 from pathlib import Path
@@ -36,10 +37,12 @@ from cad.engine.ids import canonical, file_id, is_id
 from .backend import absolute_path, asset_path
 from .content_types import content_type_for_path, content_type_for_static_asset, extension_of
 from .encoding import UriError, strict_decode_uri_component
-from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entry, to_posix_path
+from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entry, node_basename, to_posix_path
 from .documents import EngineDocuments
+from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
+    "ApiError",
     "CadApp",
     "POST_GUARD_HEADER",
     "hostname_only",
@@ -154,7 +157,7 @@ def identity_token(dist_dir: str) -> str:
 
 
 def os_user():
-    """This process's OS user, as ``/__cad/server`` names it (``user``): the uid on POSIX, the
+    """This process's OS user, as ``/api/v1/server`` names it (``user``): the uid on POSIX, the
     account name on Windows."""
     if hasattr(os, "getuid"):
         return os.getuid()
@@ -194,20 +197,59 @@ def _working_folder() -> str:
         return os.path.expanduser("~")
 
 
-# Routes one method reaches: the other one answers 405 naming it, never a 404 that reads as no route.
-_GET_ONLY_ROUTES = frozenset({"/__cad/server", "/__cad/catalog", "/__cad/folder", "/__cad/search",
-                              "/__cad/thumbnail", "/__cad/drawing", "/__cad/robot", "/__cad/xbf", "/__cad/asset",
-                              "/__cad/version", "/__cad/mcp-app"})
-_POST_ONLY_ROUTES = frozenset({"/__cad/pick", "/__cad/reveal", "/__cad/clipboard",
-                               "/__cad/analytics/activity", "/__cad/update"})
+# The methods that change something: each must carry the guard header (``POST_GUARD_HEADER``).
+CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
+# What to do, said with an error of each status the routes' funnel answers.
+_ROUTES_HINT = "the engine's routes are under /api/v1; GET /api/v1/server says what this engine reads"
+_FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path or id", 413: "send less",
+                 500: "this is a bug in the CAD server: report it with the error"}
+# A part's elements, as their routes name them and as the engine's reads do.
+_ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
+_ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
+                  "kinematics, POST pose, POST mesh")
+_KIND_ROUTES = {"model": _ENGINE_ROUTES, "xbf": _ENGINE_ROUTES + ", source", "step": _ENGINE_ROUTES + ", source",
+                "dxf": "drawing, source", "urdf": "structure, parts/<digest>, source",
+                "srdf": "structure, parts/<digest>, source", "sdf": "structure, parts/<digest>, source",
+                "stl": "source", "glb": "source", "3mf": "source"}
+# This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
+# served by an engine that restarted since it loaded. One per process, the engine's.
+INSTANCE = secrets.token_hex(8)
+
+
+def send_json(response, status: int, payload, headers=()) -> None:
+    """``payload`` as the JSON answer of ``status``, with ``headers`` beside it."""
+    headers = tuple(headers)
+    if not headers:
+        return response.send_json(status, payload)
+    response.send_bytes(status, json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+                        "application/json; charset=utf-8", headers)
+
+
+class ApiError(Exception):
+    """An API request refused: its status, what is wrong (``error``) and what to do (``hint``), the
+    answer every route gives (``{"error", "hint"}``, and any ``extra`` keys)."""
+
+    def __init__(self, status: int, error: str, hint: str, headers=(), **extra) -> None:
+        super().__init__(error)
+        self.status, self.error, self.hint, self.headers, self.extra = status, error, hint, tuple(headers), extra
+
+    @classmethod
+    def method(cls, method: str, path: str, allowed) -> "ApiError":
+        """The 405 of a route ``method`` does not reach, naming the methods it takes."""
+        allowed = tuple(allowed)
+        named = ", ".join((*allowed, "HEAD") if "GET" in allowed else allowed)
+        return cls(405, f"{method} is not allowed on {path}", f"use {' or '.join(allowed)}", [("allow", named)])
+
+    def send(self, response) -> None:
+        send_json(response, self.status, {"error": self.error, "hint": self.hint, **self.extra}, self.headers)
 
 
 class CadApp:
     """``handle(request, response)`` writes exactly one response.
 
     Unlike the Node app there is no "not mine" return: the Python server always
-    serves the client itself, and the dev proxy forwards only the two API
-    prefixes, so nothing else can be waiting behind this.
+    serves the client itself, and the dev proxy forwards only the API (``/api``)
+    and the CAD app's module (``/app``), so nothing else can be waiting behind this.
 
     One app serves every file on this machine, by absolute path (``backend``). The page names
     each document it shows by id, ``/<id>`` (``cad.engine.ids``): a model's, or a file's once it
@@ -230,7 +272,7 @@ class CadApp:
         self.prompt_files = PromptFiles()
         self._exports = None
         self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
-        # Whether this computer has a file chooser for the home's Open (``POST /__cad/pick``).
+        # Whether this computer has a file chooser for the home's Open (``POST /api/v1/local/pick``).
         self.pick = available()
         self.host = host
         self.port = port
@@ -244,6 +286,8 @@ class CadApp:
         self._picker = None
         # The files this app knows by id (``remember``); the engine's app keeps them in its server.
         self._files: dict[str, str] = {}
+        # Each document's kind, by its id, once known (``kind_of``): an id never changes kind.
+        self._kinds: dict[str, str] = {}
         # The engine shares one recorder across its page and MCP sessions.
         self.analytics = None
         self.consent_by = "viewer"
@@ -321,10 +365,15 @@ class CadApp:
         revision -- a digest of the entries, which a client that only watches for change compares
         instead of reading the catalog again. A file is written whole, by rename, by every writer
         cadgen has, so a read never meets one half written."""
-        from .model_catalog import entry as model_entry, held
+        return self._catalog(file, ident)[0]
+
+    def _catalog(self, file=None, ident=None) -> tuple[dict, dict | None]:
+        """``read_catalog``'s answer, and the model the engine holds where the row is a model's
+        (``model_catalog.held``), else None."""
+        from .model_catalog import held, row
 
         missing = state = ""
-        entry = None
+        entry = model = None
         if ident:
             if not is_id(ident):
                 raise ValueError(f"{ident} is not a document id")
@@ -332,12 +381,13 @@ class CadApp:
             if path is not None:
                 entry = catalog_entry(path)
             else:
-                entry = model_entry(ident)
-                if entry is None:
-                    if self.engine_documents.server is not None:
-                        _model, missing, state = held(ident)
-                    else:
-                        missing = f"no document {ident} is held"
+                model, why, found_state = held(ident)
+                if model is not None:
+                    entry = row(ident, model)
+                elif self.engine_documents.server is not None:
+                    missing, state = why, found_state
+                else:
+                    missing = f"no document {ident} is held"
         elif file:
             path = absolute_path(file)
             entry = catalog_entry(path)
@@ -353,7 +403,7 @@ class CadApp:
             # The engine's state for the model it does not hold (``unsaved``, ``detached``): the
             # page's title for it.
             answer["missingState"] = state
-        return answer
+        return answer, model
 
     # --- gates ------------------------------------------------------------
 
@@ -367,7 +417,8 @@ class CadApp:
                 "error": (
                     f"Host header '{hostname_only(host_header)}' is not a local name; "
                     "refusing (DNS-rebinding defense)"
-                )
+                ),
+                "hint": "open the CAD Viewer at 127.0.0.1 or localhost",
             },
         )
         return True
@@ -378,10 +429,8 @@ class CadApp:
         response.send_json(
             403,
             {
-                "error": (
-                    f"missing {POST_GUARD_HEADER} header (cross-site POST blocked); "
-                    f"send '{POST_GUARD_HEADER}: 1'"
-                )
+                "error": f"missing {POST_GUARD_HEADER} header (cross-site {request.method} blocked)",
+                "hint": f"send '{POST_GUARD_HEADER}: 1'",
             },
         )
         return True
@@ -459,161 +508,510 @@ class CadApp:
     def _dispatch(self, request, response) -> None:
         method = request.method
         pathname = request.path
-        query = request.query
+        if self._rejected_by_host_check(request, response):
+            return
+        # Gated before dispatch, not per route, so a route that changes something added later is
+        # covered by construction.
+        if method in CHANGING_METHODS and self._rejected_as_cross_site_post(request, response):
+            return
+        if pathname == "/api" or pathname.startswith("/api/"):
+            try:
+                self._api(request, response)
+            except ApiError as refusal:
+                refusal.send(response)
+            except Exception as error:  # noqa: BLE001
+                self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
+                status = 400 if isinstance(error, (ValueError, TypeError)) else 404 if isinstance(error, FileNotFoundError) else 500
+                send_json(response, status, {"error": str(error) or type(error).__name__, "hint": _FUNNEL_HINTS[status]})
+            return
+        if pathname == "/app":
+            if method != "GET":
+                return ApiError.method(method, pathname, ("GET",)).send(response)
+            # The CAD app as one module, which a card's shell imports (``cad_server.assets``): the
+            # engine's release, whatever release the host kept the shell of.
+            from cad_server.assets import cad_app_code
 
+            code = cad_app_code()
+            if code is None:
+                send_json(response, 404, {"error": "this install has no CAD app build",
+                                          "hint": "run the install command again: `curl -fsSL https://texttocad.dev/install.sh | sh`"})
+            else:
+                response.send_bytes(200, code, "text/javascript; charset=utf-8")
+            return
         if method == "GET":
-            if self._rejected_by_host_check(request, response):
-                return
-            if not pathname.startswith("/__cad/"):
-                # Note "/__cad" without the trailing slash is NOT an API path
-                # and falls through to the SPA at 200, while "/__cad/" is and
-                # answers 404 JSON. Both are the shipped behaviour.
-                self._serve_dist(request, response)
-                return
-            try:
-                if pathname == "/__cad/exports" or pathname.startswith("/__cad/exports/"):
-                    return self.exports.handle(request, response)
-                if pathname == "/__cad/server":
-                    response.send_json(200, self.server_info())
-                elif pathname == "/__cad/catalog":
-                    response.send_json(200, self.read_catalog(query.get("file"), query.get("id")))
-                elif pathname in ("/__cad/folder", "/__cad/search"):
-                    self._handle_folder(response, pathname, query)
-                elif pathname == "/__cad/recents":
-                    response.send_json(200, self._recents_payload())
-                elif pathname == "/__cad/thumbnail":
-                    self._handle_thumbnail(response, query)
-                elif pathname == "/__cad/drawing":
-                    self._handle_drawing(request, response, query)
-                elif pathname == "/__cad/robot":
-                    self._handle_robot(request, response, query)
-                elif pathname == "/__cad/xbf":
-                    # An engine document (an .xbf, a STEP): where the page reads it, once the
-                    # engine serves it; 202 while the engine reads it (``documents.py``).
-                    if query.get("held") == "1":
-                        response.send_json(200, self.engine_documents.held(query.get("file") or ""))
-                    else:
-                        status, body = self.engine_documents.response(query.get("file") or "")
-                        response.send_json(status, body)
-                elif pathname.startswith("/__cad/prompt-files/"):
-                    self._handle_prompt_files_get(request, response, pathname, query)
-                elif pathname == "/__cad/asset":
-                    self._handle_asset(request, response, query)
-                elif pathname == "/__cad/analytics" and self.analytics is not None:
-                    response.send_json(200, self._consent())
-                elif pathname == "/__cad/language":
-                    from cad_server import language
-
-                    response.send_json(200, language.read())
-                elif pathname == "/__cad/version":
-                    response.send_json(200, self._version())
-                elif pathname == "/__cad/mcp-app":
-                    # The CAD app as one module, which a card's shell imports (``cad_server.assets``): the
-                    # engine's release, whatever release the host kept the shell of.
-                    from cad_server.assets import cad_app_code
-
-                    code = cad_app_code()
-                    if code is None:
-                        response.send_json(404, {"error": "this install has no CAD app build"})
-                    else:
-                        response.send_bytes(200, code, "text/javascript; charset=utf-8")
-                elif pathname in _POST_ONLY_ROUTES:
-                    response.send_bytes(405, b'{"ok":false,"error":"Method not allowed"}',
-                                        "application/json", [("allow", "POST")])
-                else:
-                    # An unrecognised /__cad/* path is a bad API call, not a
-                    # page: a 404 a client doing res.json() can read, never the
-                    # SPA's index.html at 200.
-                    response.send_json(404, {"error": "Not found"})
-            except Exception as error:  # noqa: BLE001
-                self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
-                response.send_json(400 if isinstance(error, (ValueError, TypeError)) else 404 if isinstance(error, FileNotFoundError) else 500,
-                                   {"ok": False, "error": str(error)})
+            self._serve_dist(request, response)
             return
+        # A page answers GET alone: anything else at a page's path is no route, never the SPA.
+        send_json(response, 404, {"error": f"no route {method} {pathname}", "hint": _ROUTES_HINT})
 
-        if method == "POST":
-            # Gated before dispatch, not per route, so a POST route added later
-            # is covered by construction.
-            if self._rejected_by_host_check(request, response):
-                return
-            if self._rejected_as_cross_site_post(request, response):
-                return
+    # --- the API: /api/v1 ---------------------------------------------------
+
+    def _api(self, request, response) -> None:
+        """One request of ``/api/v1`` (``kinds.py``), answered by its family; ``ApiError`` for one no
+        route answers, or one its route refuses."""
+        pathname = request.path
+        if not pathname.startswith(API + "/"):
+            raise ApiError(404, f"no route {pathname}", _ROUTES_HINT)
+        parts = pathname[len(API) + 1:].split("/")
+        head, rest = parts[0], parts[1:]
+        if head == "server" and not rest:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self.api_server())})
+        if head == "settings" and not rest:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self.settings()),
+                                           "PUT": lambda: send_json(response, 200, self._change_settings(request))})
+        if head == "look" and rest in ([], ["environment"]):
+            # The look the regular display modes draw in, and its environment, as the engine serves them.
+            return self._methods(request, {"GET": lambda: self._relay(request, response, "/api/look" + "".join(
+                "/" + part for part in rest))})
+        if head == "documents":
+            return self._documents(request, response, rest)
+        if head == "exports":
+            return self._export_jobs(request, response, rest)
+        if head == "local":
+            return self._local(request, response, rest)
+        raise ApiError(404, f"no route {pathname}", _ROUTES_HINT)
+
+    def _methods(self, request, routes: dict) -> None:
+        """The route's answer to the request's method, or a 405 naming the methods it takes."""
+        answer = routes.get(request.method)
+        if answer is None:
+            raise ApiError.method(request.method, request.path, tuple(routes))
+        return answer()
+
+    def api_server(self) -> dict:
+        """``GET /api/v1/server``: who this engine is (``server_info``), the token of this start of it
+        (``instance``: a page that sees another one reloads), the kinds of documents it reads and
+        what each exports, whether a newer text-to-cad is out (``notice``) and where an update a click
+        started is (``update``)."""
+        return {**self.server_info(), **self._version(),
+                "kinds": {"reads": list(KINDS), "exports": {kind: list(formats) for kind, formats in EXPORTS.items()}}}
+
+    def settings(self, share=None) -> dict:
+        """``GET /api/v1/settings``: the person's settings every CAD view reads -- the language they
+        chose (``cad_server/language.py``) and whether usage stats are shared (``telemetry``: null
+        where this server keeps none)."""
+        from cad_server import language
+
+        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None}
+
+    def _change_settings(self, request) -> dict:
+        """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
+        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are."""
+        from cad_server import language
+
+        self._limit(request, 4096)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or not set(payload) <= {"language", "telemetry"}:
+            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}}")
+        if "language" in payload:
+            language.change(payload["language"])
+        share = None
+        if "telemetry" in payload:
+            telemetry = payload["telemetry"]
+            if type(telemetry) is not dict or not isinstance(telemetry.get("share"), bool):
+                raise ValueError("a telemetry change is {\"share\": true or false}")
+            if self.analytics is None:
+                raise ApiError(409, "this server keeps no usage stats", "change it in the CAD Viewer's app menu")
+            share = telemetry["share"]
+        return self.settings(share)
+
+    @staticmethod
+    def _limit(request, limit: int) -> None:
+        """A body over ``limit`` bytes is refused (413) before it is read."""
+        if int(request.header("content-length") or 0) > limit:
+            raise ApiError(413, f"the request's body is over {limit} bytes", "send less", [("connection", "close")])
+
+    # --- documents ------------------------------------------------------------
+
+    def _documents(self, request, response, rest) -> None:
+        if not rest:
+            return self._methods(request, {
+                "GET": lambda: send_json(response, 200, self.documents(request.query)),
+                "POST": lambda: self._open(request, response),
+                "PATCH": lambda: self._patch_documents(request, response)})
+        first = rest[0]
+        if first in KINDS:
+            if len(rest) == 1:
+                return self._methods(request, {"GET": lambda: send_json(response, 200, self.documents(request.query, first))})
+            return self._kind_route(request, response, first, rest[1], rest[2:])
+        ident = first
+        if len(rest) == 1:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self.envelope(ident)),
+                                           "DELETE": lambda: self._forget(response, ident)})
+        if rest[1:] == ["version"]:
+            # Waited on by a page: answered as soon as the document's version is not ``after``.
+            return self._methods(request, {"GET": lambda: self._relay(request, response, f"/api/doc/{ident}/version",
+                                                                      request.query)})
+        if rest[1:] == ["thumbnail"]:
+            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident)})
+        if rest[1:] == ["exports"]:
+            return self._methods(request, {"POST": lambda: self._export(request, response, ident)})
+        raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
+
+    def documents(self, query, kind=None) -> dict:
+        """``GET /api/v1/documents``: Recents -- the CAD files pages opened and the models the engine
+        built (``recents.py``), each its row with its document's ``id``, ``kind`` and ``api`` (the
+        record's own kind, ``file``, ``model`` or ``shape``, is ``record``) -- of one ``kind``, whose
+        name or path holds ``q``, at most ``limit``. With ``path``, the file at that absolute path
+        alone, as its envelope (``envelope``), known by its id from then on; none for a file no page
+        reads."""
+        kind = kind or query.get("kind") or None
+        if kind is not None and kind not in KINDS:
+            raise ApiError(404, f"no kind {kind}", f"the kinds are {', '.join(KINDS)}")
+        if query.get("path") is not None:
+            catalog, model = self._catalog(query.get("path"), None)
+            found = [self._envelope(catalog, model)] if catalog["entries"] else []
+            return {"documents": [row for row in found if kind is None or row["kind"] == kind]}
+        limit = query.get("limit")
+        if limit is not None and not (limit.isascii() and limit.isdigit() and int(limit) > 0):
+            raise ValueError("limit is a whole number above 0")
+        needle = (query.get("q") or "").lower()
+        rows = []
+        for entry in self.recents.list():
+            row = self._recent_row(entry)
+            if row is None or (kind is not None and row["kind"] != kind):
+                continue
+            if needle and needle not in f"{row['name']}\n{row['path']}".lower():
+                continue
+            rows.append(row)
+        return {"documents": rows[:int(limit)] if limit is not None else rows}
+
+    @staticmethod
+    def _recent_row(entry) -> dict | None:
+        """A Recents entry as ``GET /api/v1/documents`` lists it: None for a file no page reads."""
+        found = entry.public()
+        if entry.kind == "file":
+            kind = file_kind(entry.path)
+            if kind is None or extension_of(entry.path) not in VIEWER_EXTENSIONS:
+                return None
+            ident = file_id(entry.path)
+        else:
+            # A model's document, or a shape a program handed over: either is the engine's, read as a model's.
+            kind, ident = "model", entry.path
+        return {**found, "id": ident, "kind": kind, "record": entry.kind, "api": document_api(kind, ident)}
+
+    def envelope(self, ident) -> dict:
+        """``GET /api/v1/documents/<id>``: what the document of id ``ident`` is (``_envelope``); 404
+        for an id no document has, its reason the engine's -- naming the command that builds it
+        again -- and its ``state`` where the engine names one (``unsaved``, ``detached``)."""
+        if not is_id(ident):
+            raise ApiError(404, f"{ident} is not a document id", "a document's id is the one its page, /<id>, names")
+        catalog, model = self._catalog(None, ident)
+        if not catalog["entries"]:
+            extra = {"state": catalog["missingState"]} if catalog.get("missingState") else {}
+            raise ApiError(404, catalog.get("missing") or f"no document {ident}",
+                           "run the model's script again, or open the file from where it is now", **extra)
+        return self._envelope(catalog, model)
+
+    def _envelope(self, catalog: dict, model: dict | None) -> dict:
+        """A document as every page reads it first: its ``id`` and ``kind``, its ``name``, its
+        ``version``, its ``state`` (a model's, the engine's: ``live`` while a worker holds it,
+        ``held``, ``building``, ``failed``; a file's ``live``: it follows its disk), its ``source``
+        (the script and function that build a model, a file's path), who made it (``producers``),
+        where its kind's reads are (``api``), the formats it exports (``exports``) -- and its catalog
+        row as the page shows it (``entry``) with that row's digest (``revision``, which a page that
+        only watches for change compares). A document the engine serves (a model's, an ``.xbf``'s,
+        a STEP's) says whether the engine holds its read now (``held``), asked without starting one."""
+        from cad_server import __version__
+
+        row = catalog["entries"][0]
+        ident = row["id"]
+        if model is not None:
+            source = model.get("source") or {}
+            state = str(model.get("state") or "held")
+            kind = "model"
+            found = {"name": str(source.get("name") or row.get("name") or ""),
+                     "version": str(model.get("version") if model.get("version") is not None else row.get("hash") or ""),
+                     "state": state,
+                     "source": {"type": "script", "path": source.get("script"), "function": source.get("name")},
+                     "producers": [{"tool": "cad", "release": __version__ if state == "live" else None,
+                                    "at": model.get("builtAt")}]}
+        else:
+            kind = file_kind(row["file"])
+            found = {"name": node_basename(row["file"]), "version": str(row.get("hash") or ""), "state": "live",
+                     "source": {"type": "file", "path": row["file"]}, "producers": []}
+        if kind in ENGINE_KINDS:
+            # Held: read and served now (``serve.Server.listing``), or a live model's, registered; a
+            # file only known by its id is not.
+            server = self.engine_documents.server
+            found["held"] = server is not None and (ident in server.served or ident in server.model_loaders)
+        return {"id": ident, "kind": kind, **found, "api": document_api(kind, ident), "exports": list(EXPORTS[kind]),
+                "schemaVersion": catalog["schemaVersion"], "entry": row, "revision": catalog["revision"]}
+
+    def _open(self, request, response) -> None:
+        """``POST /api/v1/documents``: a file opened as a document -- ``{"path"}``, its absolute path
+        -- or a model the engine holds made served -- ``{"id"}`` -- answered ``201 {"id", "kind",
+        "api"}``. An ``.xbf`` or a STEP is read by the engine first, off the request (``documents.py``):
+        while it reads, ``202`` with the same body, its ``state`` ``reading``, the last frame of its
+        import (``building``) and when to ask again (``retryMs``, and ``Retry-After``)."""
+        self._limit(request, 8192)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or len(payload) != 1 or not set(payload) <= {"path", "id"}:
+            raise ValueError("a document opened is {\"path\": its absolute path} or {\"id\": a model's id}")
+        if "id" in payload:
+            ident = payload["id"]
+            if not isinstance(ident, str) or not is_id(ident):
+                raise ValueError(f"{ident!r} is not a document id")
+            kind = self.kind_of(ident)
+            if kind is None:
+                self.envelope(ident)  # its 404, the engine's reason
+                raise ApiError(404, f"no document {ident}", "run the model's script again")
+            target = ident
+        else:
+            target = absolute_path(payload["path"])
+            kind = file_kind(target)
+            if kind is None or extension_of(target) not in VIEWER_EXTENSIONS:
+                raise ApiError(400, f"CAD opens {_CAD_EXTENSIONS} files; {node_basename(target)} is not one.",
+                               "name a CAD file by its absolute path")
+            if not os.path.isfile(target):
+                raise ApiError(404, f"no CAD file at {target}", "name a file that exists, by its absolute path")
+            ident = self.remember(target)
+        if kind in ENGINE_KINDS:
+            status, body = self.engine_documents.response(target)
+            if status == 202:
+                retry = max(1, -(-int(body.get("retryMs") or 0) // 1000))
+                return send_json(response, 202, {"id": ident, "kind": kind, "api": document_api(kind, ident), **body},
+                                 [("retry-after", retry)])
+            if status != 200:
+                raise ApiError(status, str(body.get("error") or "the engine would not serve it"),
+                               "check that the file is whole, then open it again")
+            ident = body["doc"]
+        send_json(response, 201, {"id": ident, "kind": kind, "api": document_api(kind, ident)})
+
+    def _patch_documents(self, request, response) -> None:
+        """``PATCH /api/v1/documents``: a change to Recents (``_change_recents``), answered with Recents
+        as it now is."""
+        self._limit(request, _LIBRARY_BODY_LIMIT)
+        self._change_recents(json.loads(request.body() or b"{}"))
+        send_json(response, 200, self.documents(request.query))
+
+    def _forget(self, response, ident) -> None:
+        """``DELETE /api/v1/documents/<id>``: a model's document deleted (``delete_document``: its
+        record and its document in the engine's cache), a file's record forgotten, the file untouched."""
+        kind = self.kind_of(ident)
+        if kind is None:
+            self.envelope(ident)  # its 404, the engine's reason
+            raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
+        if kind == "model":
+            self.delete_document(ident)
+        else:
+            self.recents.registry.delete(ident)
+        response.send_empty(204)
+
+    def _export(self, request, response, ident) -> None:
+        """``POST /api/v1/documents/<id>/exports``: an export of that document, its job answered at
+        once (202, ``exports.ExportJobs``), read at ``/api/v1/exports/<job>``. The request names the
+        document as the page shows it (``source``: ``{doc, revision}``, a mesh file's ``doc`` its
+        path), which must be this one."""
+        self._limit(request, 65536)
+        payload = json.loads(request.body() or b"{}")
+        doc = (payload.get("source") or {}).get("doc") if type(payload) is dict else None
+        if not isinstance(doc, str) or not (doc == ident or (not is_id(doc) and self._same_file(doc, ident))):
+            raise ApiError(400, f"the export's source is not document {ident}", "export the document the page shows")
+        self.exports.answer(response, lambda jobs: (202, jobs.create(payload)))
+
+    def _same_file(self, path, ident) -> bool:
+        try:
+            return canonical(absolute_path(path)) == self._file_of(ident)
+        except (OSError, ValueError):
+            return False
+
+    def _export_jobs(self, request, response, rest) -> None:
+        """``/api/v1/exports``: the session's epoch (``GET``), a job's state (``GET <job>``) and its
+        file (``GET <job>/file``, a browser download)."""
+        if len(rest) <= 2 and (len(rest) < 2 or rest[1] == "file") and all(rest):
+            return self._methods(request, {"GET": lambda: self.exports.handle(request, response, rest)})
+        raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
+
+    # --- a kind's documents: /api/v1/documents/<kind>/<id>/... --------------------------
+
+    def kind_of(self, ident) -> str | None:
+        """The kind of the document ``ident`` names (a pose's id, ``<id>~<digest>``, its document's):
+        a file's by its extension, a model's ``model``; None for no document."""
+        base = str(ident or "").split("~", 1)[0]
+        if not is_id(base):
+            return None
+        kind = self._kinds.get(base)
+        if kind is None:
+            path = self._file_of(base)
+            kind = file_kind(path) if path is not None else "model" if self._holds_model(base) else None
+            if kind is not None:
+                self._kinds[base] = kind
+        return kind
+
+    def _holds_model(self, ident) -> bool:
+        """Whether the engine holds a model of id ``ident`` (``model_catalog.held``)."""
+        from .model_catalog import held
+
+        return held(ident)[0] is not None
+
+    def _kind_route(self, request, response, kind, ident, rest) -> None:
+        actual = self.kind_of(ident)
+        if actual is None:
+            self.envelope(ident.split("~", 1)[0])  # its 404, the engine's reason
+            raise ApiError(404, f"no document {ident}", _ROUTES_HINT)
+        if actual != kind:
+            raise ApiError(404, f"{ident} is a {actual}", f"read it at {document_api(actual, ident)}")
+        # A pose's id (``<id>~<digest>``) reads its document's file.
+        path = None if kind == "model" else self._file_of(ident.split("~", 1)[0])
+        if rest == ["source"] and path is not None:
+            return self._methods(request, {"GET": lambda: self._stream(response, path)})
+        if kind in ENGINE_KINDS:
+            return self._engine_route(request, response, kind, ident, rest)
+        if kind == "dxf" and rest == ["drawing"]:
+            return self._methods(request, {"GET": lambda: self._handle_drawing(response, path)})
+        if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
+            mesh = rest[1] if len(rest) == 2 else None
+            return self._methods(request, {"GET": lambda: self._handle_robot(response, path, mesh, document_api(kind, ident))})
+        raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
+
+    def _engine_route(self, request, response, kind, ident, rest) -> None:
+        """A model's, an ``.xbf``'s or a STEP's read, answered by the engine that serves it
+        (``cad/engine/serve.py``'s routes, in process: ``_relay``)."""
+        doc = f"/api/doc/{ident}"
+        query = request.query
+        if rest == ["structure"]:
+            return self._methods(request, {"GET": lambda: self._relay(request, response, doc, query)})
+        if rest == ["kinematics"]:
+            return self._methods(request, {"GET": lambda: self._kinematics(request, response, doc)})
+        if rest == ["measure"]:
+            return self._methods(request, {"GET": lambda: self._relay(request, response, f"{doc}/volumes", query)})
+        if rest == ["pose"]:
+            return self._methods(request, {"POST": lambda: self._pose(request, response, kind, doc)})
+        if rest == ["mesh"]:
+            return self._methods(request, {"POST": lambda: self._relay(request, response, f"{doc}/mesh", query)})
+        if len(rest) >= 2 and rest[0] == "parts" and rest[1]:
+            part = f"{doc}/part/{rest[1]}"
+            if len(rest) == 2:
+                return self._methods(request, {"GET": lambda: self._relay(request, response, part, query)})
+            if len(rest) == 3 and rest[2] in ("groups", "volume"):
+                return self._methods(request, {"GET": lambda: self._relay(request, response, f"{part}/{rest[2]}")})
+            if len(rest) == 4 and rest[2] in _ELEMENTS and rest[3].isascii() and rest[3].isdigit():
+                return self._methods(request, {"GET": lambda: self._relay(
+                    request, response, f"{part}/{_ELEMENTS[rest[2]]}/{rest[3]}")})
+        raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
+
+    def _read(self, request, route: str, query=(), prefetch=True) -> tuple[int, str, dict, bytes]:
+        """The engine's answer to one of its document reads (``route``: ``/api/doc/<id>...``,
+        ``/api/look...``): ``(status, content type, headers, body)``; ``prefetch``: a structure read
+        starts meshing its parts, which a page reads next. Documents are the engine's: an
+        application with none under it serves none."""
+        raise ApiError(404, "documents are served by the installation's engine",
+                       "open the document in the CAD Viewer: `cad viewer <file>`")
+
+    def _relay(self, request, response, route: str, query=()) -> None:
+        """The engine's answer to ``route``, sent on: its error, a JSON object, gains a ``hint``
+        (the command that builds the document again, where the engine names one)."""
+        self._send_read(response, self._read(request, route, query))
+
+    @staticmethod
+    def _send_read(response, answer) -> None:
+        """One of the engine's answers (``_read``) sent on, its error with a ``hint``."""
+        status, content_type, headers, body = answer
+        if status >= 400 and content_type.startswith("application/json"):
             try:
-                if pathname == "/__cad/exports" or pathname.startswith("/__cad/exports/"):
-                    return self.exports.handle(request, response)
-                if pathname in ("/__cad/analytics", "/__cad/analytics/activity") and self.analytics is not None:
-                    # A page's crash report carries its frames (``_report_activity``): room for them, and no more.
-                    if int(request.headers.get("content-length") or 0) > (16384 if pathname.endswith("/activity") else 4096):
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    payload = json.loads(request.body() or b"{}")
-                    if type(payload) is not dict:
-                        raise ValueError("an analytics request is an object")
-                    if pathname == "/__cad/analytics":
-                        response.send_json(200, self._consent(payload.get("share")))
-                    else:
-                        self._report_activity(payload)
-                        response.send_empty(204)
-                elif pathname == "/__cad/language":
-                    # The app menu's Language: the person's choice, one for every CAD view (``cad_server/language.py``).
-                    from cad_server import language
+                found = json.loads(body)
+            except ValueError:
+                found = None
+            if isinstance(found, dict) and "hint" not in found:
+                found["hint"] = found.get("rebuild") or _FUNNEL_HINTS.get(status, _ROUTES_HINT)
+                body = json.dumps(found, separators=(",", ":")).encode("utf-8")
+        response.send_bytes(status, body, content_type, list(headers.items()))
 
-                    if int(request.headers.get("content-length") or 0) > 4096:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    response.send_json(200, language.change(json.loads(request.body() or b"{}")))
-                elif pathname == "/__cad/recents":
-                    if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    response.send_json(200, self._change_recents(json.loads(request.body())))
-                elif pathname == "/__cad/pick":
-                    self._handle_pick(response)
-                elif pathname == "/__cad/update":
-                    status, body = self._update()
-                    response.send_json(status, body)
-                elif pathname == "/__cad/reveal":
-                    from .reveal import reveal_path
-                    if int(request.headers.get("content-length") or 0) > 8192:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    payload = json.loads(request.body())
-                    if type(payload) is not dict or set(payload) != {"path"}:
-                        raise ValueError("Reveal requires a path")
-                    try:
-                        reveal_path(payload["path"])
-                    except FileNotFoundError:
-                        response.send_json(404, {"ok": False, "error": "That file is no longer there."})
-                        return
-                    response.send_empty(204)
-                elif pathname == "/__cad/clipboard":
-                    from .clipboard import MAX_PNG_BYTES, copy_png
-                    if int(request.headers.get("content-length") or 0) > MAX_PNG_BYTES:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    copy_png(request.body())
-                    response.send_empty(204)
-                elif pathname == "/__cad/prompt-files":
-                    from .prompt_files import MAX_BODY_BYTES
-                    if int(request.headers.get("content-length") or 0) > MAX_BODY_BYTES:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    status, body = self.prompt_files.create(request.body())
-                    response.send_json(status, body)
-                elif pathname in _GET_ONLY_ROUTES:
-                    response.send_bytes(405, b'{"ok":false,"error":"Method not allowed"}',
-                                        "application/json", [("allow", "GET, HEAD")])
-                else:
-                    response.send_json(404, {"error": "Not found"})
-            except Exception as error:  # noqa: BLE001
-                self._crashed(error, bugs_only=True)  # a bad request is the caller's; a mistake in our code is a crash
-                response.send_json(400 if isinstance(error, (ValueError, TypeError)) else 404 if isinstance(error, FileNotFoundError) else 500,
-                                   {"ok": False, "error": str(error)})
-            return
+    def _kinematics(self, request, response, doc) -> None:
+        """``GET .../kinematics``: the document's mechanism (``mechanism.block``), which its structure
+        carries; 404 for a document with no joints."""
+        answer = self._read(request, doc, prefetch=False)
+        if answer[0] != 200:
+            return self._send_read(response, answer)
+        block = json.loads(answer[3]).get("kinematics")
+        if block is None:
+            raise ApiError(404, "the document has no joints", "a model's joints are its assembly's mates")
+        send_json(response, 200, block)
 
-        # Unreachable: handler.py answers 405 for every other method before
-        # dispatch ever runs.
-        response.send_empty(405, [("allow", "GET, HEAD, POST")])
+    def _pose(self, request, response, kind, doc) -> None:
+        """``POST .../pose`` with ``{"pose": NAME | {joint: value}}``: the document served at that pose
+        under an id of its own, answered with that id, where it is read (``api``) and the values it
+        stands at."""
+        answer = self._read(request, f"{doc}/pose")
+        if answer[0] != 200:
+            return self._send_read(response, answer)
+        found = json.loads(answer[3])
+        found.pop("url", None)
+        send_json(response, 200, {**found, "api": document_api(kind, found["id"])})
+
+    def _stream(self, response, path) -> None:
+        """A file's bytes, as data (``RAW_FILE_HEADERS``); 404 once it is gone."""
+        try:
+            stat_result = os.stat(path)
+        except (OSError, ValueError):
+            stat_result = None
+        if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
+            raise ApiError(404, f"No file at {path}", "the file was moved or deleted: open it from where it is now")
+        response.stream_file(path, stat_result, content_type_for_path(path), RAW_FILE_HEADERS)
+
+    # --- local: this computer's -------------------------------------------------
+
+    def _local(self, request, response, rest) -> None:
+        """``/api/v1/local``: what a local engine does on this computer -- the update, the explorer,
+        files by path, Quick Edit's files, Reveal, the clipboard, Open's chooser, the page's activity."""
+        route = rest[0] if rest else ""
+        if rest == ["update"]:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self._version()),
+                                           "POST": lambda: send_json(response, *self._update())})
+        if rest == ["folder"]:
+            return self._methods(request, {"GET": lambda: self._handle_folder(response, request.query)})
+        if rest == ["files"]:
+            return self._methods(request, {"GET": lambda: self._handle_file(response, request.query)})
+        if rest == ["prompt-files"]:
+            return self._methods(request, {"POST": lambda: self._create_prompt_files(request, response)})
+        if route == "prompt-files" and len(rest) == 2 and rest[1]:
+            return self._methods(request, {"GET": lambda: self._handle_prompt_files_get(request, response, rest[1])})
+        if rest == ["reveal"]:
+            return self._methods(request, {"POST": lambda: self._reveal(request, response)})
+        if rest == ["clipboard"]:
+            return self._methods(request, {"POST": lambda: self._clipboard(request, response)})
+        if rest == ["pick"]:
+            return self._methods(request, {"POST": lambda: self._handle_pick(response)})
+        if rest == ["activity"] and self.analytics is not None:
+            return self._methods(request, {"POST": lambda: self._activity(request, response)})
+        raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
+
+    def _create_prompt_files(self, request, response) -> None:
+        from .prompt_files import MAX_BODY_BYTES
+
+        self._limit(request, MAX_BODY_BYTES)
+        status, body = self.prompt_files.create(request.body())
+        send_json(response, status, body)
+
+    def _reveal(self, request, response) -> None:
+        from .reveal import reveal_path
+
+        self._limit(request, 8192)
+        payload = json.loads(request.body())
+        if type(payload) is not dict or set(payload) != {"path"}:
+            raise ValueError("Reveal requires a path")
+        try:
+            reveal_path(payload["path"])
+        except FileNotFoundError:
+            raise ApiError(404, "That file is no longer there.", "open it from where it is now") from None
+        response.send_empty(204)
+
+    def _clipboard(self, request, response) -> None:
+        from .clipboard import MAX_PNG_BYTES, copy_png
+
+        self._limit(request, MAX_PNG_BYTES)
+        copy_png(request.body())
+        response.send_empty(204)
+
+    def _activity(self, request, response) -> None:
+        # A page's crash report carries its frames (``_report_activity``): room for them, and no more.
+        self._limit(request, 16384)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict:
+            raise ValueError("an activity report is an object")
+        self._report_activity(payload)
+        response.send_empty(204)
 
     # --- the model library, the explorer and the home's Open -------------
 
@@ -640,14 +1038,9 @@ class CadApp:
             self._picker = FilePicker()
         return self._picker
 
-    def _recents_payload(self) -> dict:
-        # Recents, the registry's view (``recents.py``): the CAD files the viewer opens, and the models.
-        return {"recents": [entry.public() for entry in self.recents.list()
-                            if entry.kind != "file" or extension_of(entry.path) in VIEWER_EXTENSIONS]}
-
-    def _change_recents(self, payload) -> dict:
+    def _change_recents(self, payload) -> None:
         """A change to the library -- ``{action, path, png?}``, a file by its absolute path, a model by
-        its id (its entry's ``path``) -- answered with the library as it now is. A file opened is
+        its id (its entry's ``path``). A file opened is
         also counted for analytics, and so is a model's page, under its own ``model`` kind; a model's entry
         is the engine's, written when it builds, so only when a page opened it (``open``), pinning, its
         picture and its deletion (``delete``: the document, ``delete_document``) change it. A file's
@@ -671,7 +1064,7 @@ class CadApp:
                     self.analytics.opened_document(ident)
             else:
                 raise ValueError(f"unknown recents action {action!r}")
-            return self._recents_payload()
+            return
         path = absolute_path(payload.get("path"))
         # The library keys a model by its canonical path, the engine's (``ids.canonical``): a
         # symlink, its target and a case variant of one file are one entry.
@@ -690,7 +1083,6 @@ class CadApp:
             self.recents.thumbnail(key, thumbnail_png(payload.get("png")))
         else:
             raise ValueError(f"unknown recents action {action!r}")
-        return self._recents_payload()
 
     def delete_document(self, ident):
         """A model's Delete: the one deletion ``cad delete`` is too (``cad_server.engine.models.delete``)
@@ -700,30 +1092,32 @@ class CadApp:
 
         delete(self.recents.registry, ident)
 
-    def _handle_thumbnail(self, response, query):
-        """A library picture, by the content name the library gives it."""
-        name = query.get("name") or ""
+    def _thumbnail(self, response, ident):
+        """``GET /api/v1/documents/<id>/thumbnail``: the picture the library keeps of the document, by
+        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``)."""
+        try:
+            record = self.recents.registry.get(ident) if is_id(ident) else None
+        except OSError:
+            record = None
+        name = str(((record or {}).get("preview") or {}).get("thumbnail") or "")
         png = self.recents.read_thumbnail(name) if _THUMBNAIL_NAME.fullmatch(name) else None
         if png is None:
-            response.send_json(404, {"error": "Not found"})
-            return
+            raise ApiError(404, f"no picture of {ident}", "a document's picture is taken when its page shows it")
         response.send_bytes(200, png, "image/png", RAW_FILE_HEADERS)
 
-    def _handle_folder(self, response, pathname, query):
-        """The explorer's reads (``folders.py``): one folder's entries (``/__cad/folder``), or the
-        CAD files under it whose path holds ``q`` (``/__cad/search``). A path that is not absolute
-        is ``folders``' ValueError: a 400, through the GET funnel."""
+    def _handle_folder(self, response, query):
+        """``GET /api/v1/local/folder``: the explorer's reads (``folders.py``): one folder's entries,
+        or, with ``q``, the CAD files under it whose path holds ``q``. A path that is not absolute
+        is ``folders``' ValueError: a 400, through the funnel."""
         from .folders import list_folder, search_folder
 
         path = query.get("path")
         try:
-            answer = search_folder(path, query.get("q")) if pathname == "/__cad/search" else list_folder(path)
+            answer = search_folder(path, query.get("q")) if query.get("q") is not None else list_folder(path)
         except FileNotFoundError:
-            response.send_json(404, {"error": f"No folder at {path}"})
-            return
+            raise ApiError(404, f"No folder at {path}", "name a folder that exists, by its absolute path") from None
         except PermissionError:
-            response.send_json(403, {"error": f"{path} cannot be read"})
-            return
+            raise ApiError(403, f"{path} cannot be read", "choose a folder this account may read") from None
         response.send_json(200, answer)
 
     def _handle_pick(self, response):
@@ -734,12 +1128,12 @@ class CadApp:
         try:
             chosen = self.picker.choose()
         except PickerFailed as failure:
-            response.send_json(500, {"error": str(failure)})
-            return
+            raise ApiError(500, str(failure), "open the file with `cad viewer <file>` instead") from None
         if chosen is None:
             response.send_json(200, {"cancelled": True})
         elif extension_of(chosen) not in VIEWER_EXTENSIONS:
-            response.send_json(400, {"error": f"CAD opens {_CAD_EXTENSIONS} files; {os.path.basename(chosen)} is not one."})
+            raise ApiError(400, f"CAD opens {_CAD_EXTENSIONS} files; {os.path.basename(chosen)} is not one.",
+                           "choose a CAD file")
         else:
             response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
 
@@ -765,10 +1159,10 @@ class CadApp:
         from cad_server._internal.update import UPDATE
 
         updates.refresh()
-        return {"notice": updates.notice(), "release": __version__, "update": UPDATE.snapshot()}
+        return {"notice": updates.notice(), "release": __version__, "instance": INSTANCE, "update": UPDATE.snapshot()}
 
     def _update(self) -> tuple[int, dict]:
-        """``POST /__cad/update``: the update button's click. The update starts in the background (or the
+        """``POST /api/v1/local/update``: the update button's click. The update starts in the background (or the
         one running is joined) and the request is answered at once with ``_version``'s answer, its state
         ``working``; with no newer release, ``idle``. Only the engine's application updates: one with no
         engine under it (a test's) answers 409."""
@@ -776,7 +1170,8 @@ class CadApp:
 
         server = getattr(self, "server", None)
         if server is None or not callable(getattr(server, "retire", None)):
-            return 409, {"ok": False, "error": "no engine serves this page: nothing to update"}
+            return 409, {"error": "no engine serves this page: nothing to update",
+                         "hint": "update with the install command: `curl -fsSL https://texttocad.dev/install.sh | sh`"}
         UPDATE.start(server)
         return 202, self._version()
 
@@ -802,62 +1197,59 @@ class CadApp:
 
     # --- routes ----------------------------------------------------------
 
-    def _handle_drawing(self, request, response, query):
-        """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns the rules).
+    def _handle_drawing(self, response, path):
+        """``GET /api/v1/documents/dxf/<id>/drawing``: the ``.dxf`` flattened to 2D primitives
+        (``drawings.py`` owns the rules); 202 while it renders.
 
         The payload is already JSON bytes, held in memory by the file's bytes,
         so it goes out through ``send_bytes`` rather than being decoded and
         re-encoded on the way past.
         """
-        status, body = self.drawings.response(query.get("file") or "")
+        status, body = self.drawings.response(path or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
             return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
 
-    def _handle_robot(self, request, response, query):
-        """A robot description resolved for the page, or one of the primitive meshes cadgen made for
-        it (``robots.py`` owns both rules). Real work on a miss -- the validators, the frame graph,
-        meshing a shape -- so it is counted, as the drawing route is."""
+    def _handle_robot(self, response, path, mesh, api):
+        """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
+        for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
+        (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
+        miss -- the validators, the frame graph, meshing a shape -- so it is counted, as the drawing
+        route is."""
         from .robots import robot_response
 
-        status, body, content_type = robot_response(query.get("file") or "", query.get("mesh"))
+        status, body, content_type = robot_response(path or "", mesh, api=api)
         if isinstance(body, bytes):
             response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
             return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
 
-    def _handle_prompt_files_get(self, request, response, pathname, query):
+    def _handle_prompt_files_get(self, request, response, name):
         """Read a prompt JSON file; every request carries the viewer guard."""
         if not request.header(POST_GUARD_HEADER):
-            response.send_json(403, {"ok": False, "error": f"missing {POST_GUARD_HEADER} header; send '{POST_GUARD_HEADER}: 1'"})
-            return
-        found = self.prompt_files.file(pathname[len("/__cad/prompt-files/"):])
+            raise ApiError(403, f"missing {POST_GUARD_HEADER} header", f"send '{POST_GUARD_HEADER}: 1'")
+        found = self.prompt_files.file(name)
         if found is None:
-            response.send_json(404, {"ok": False, "error": "Not found"})
-            return
+            raise ApiError(404, f"no prompt file {name}", "a prompt's files are read by the name its packet gives")
         data, content_type = found
         response.send_bytes(200, data, content_type, RAW_FILE_HEADERS)
 
-    def _handle_asset(self, request, response, query):
-        """A CAD file's bytes, by absolute path. A 404 names the path and why: the page shows the
-        sentence as the reason a model did not load (a robot's missing link mesh among them), and a
-        bare "Not found" left nothing to fix."""
-        ref = query.get("file") or ""
+    def _handle_file(self, response, query):
+        """``GET /api/v1/local/files?path=<abs>``: a CAD file's bytes, by absolute path (a robot's link
+        meshes, a file a model's file names beside it). A 404 names the path and why: the page shows
+        the sentence as the reason a model did not load (a robot's missing link mesh among them),
+        and a bare "Not found" left nothing to fix."""
+        ref = query.get("path") or ""
         candidate = asset_path(ref)
         if not candidate:
-            response.send_json(404, {"error": f"{ref} is not a file the viewer sends: it sends CAD files "
-                                              f"({_CAD_EXTENSIONS}) whose names are not hidden"})
-            return
-        try:
-            stat_result = os.stat(candidate)
-        except (OSError, ValueError):
-            stat_result = None
-        if stat_result is None or not stat.S_ISREG(stat_result.st_mode):
-            response.send_json(404, {"error": f"No file at {candidate}"})
-            return
-        content_type = content_type_for_path(candidate)
-        response.stream_file(candidate, stat_result, content_type, RAW_FILE_HEADERS)
+            raise ApiError(404, f"{ref} is not a file the viewer sends: it sends CAD files "
+                                f"({_CAD_EXTENSIONS}) whose names are not hidden", "name a CAD file by its absolute path")
+        self._stream(response, candidate)
 
 
 def create_cad_app(*, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None) -> CadApp:

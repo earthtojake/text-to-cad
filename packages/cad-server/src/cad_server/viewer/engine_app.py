@@ -92,7 +92,7 @@ TOKEN_NEEDED_PAGE = (
 # Access-Control-Allow-Credentials is ever sent, so a cross-origin read never carries it), not a link
 # in the query, not the user's token (a native client's, which needs no CORS), and never ``/mcp``.
 # The bind stays loopback, and the Host and token gates run first.
-CARD_METHODS = ('GET', 'HEAD', 'POST')
+CARD_METHODS = ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE')
 CARD_HEADERS = ('authorization', 'content-type', 'range', 'if-range', 'x-cadgen-viewer')
 _CARD_EXPOSED = 'content-length, content-range, etag'
 _PREFLIGHT_SECONDS = 600
@@ -108,7 +108,7 @@ def _card_origin(request):
 def _navigation(request):
     """A browser's page load (a document, or HTML asked for) of a page, never a route of the engine."""
     return (request.header('sec-fetch-dest') == 'document' or 'text/html' in request.header('accept')) \
-        and request.method == 'GET' and not request.path.startswith('/__cad/') and request.path != '/mcp'
+        and request.method == 'GET' and not request.path.startswith('/api/') and request.path not in ('/mcp', '/app')
 
 
 def bounce_page(location):
@@ -120,14 +120,19 @@ def bounce_page(location):
 
 
 class DocumentResponse:
-    """Adapt the engine's socket-shaped writer to the application's response, in process. ``page``:
-    the request is the browser page's (the engine's own app), not an MCP view's tunnel."""
-    def __init__(self, request, page=False):
+    """Adapt the engine's socket-shaped writer to the application's response, in process: one of the
+    engine's own document reads (``route``: ``/api/doc/<id>...``, ``/api/look...``, which
+    ``cad/engine/serve.py`` answers), asked for an ``/api/v1`` route. ``page``: the request is the
+    browser page's (the engine's own app), not an MCP view's tunnel; ``prefetch``: a structure read
+    starts meshing the parts a page asks for next."""
+    def __init__(self, request, route, query=(), page=False, prefetch=True):
         self.page = page
+        self.prefetch = prefetch
         self.command = request.method
-        self.path = request.path.removeprefix('/__cad')
-        if request.query:
-            self.path += '?' + urlencode(list(request.query))
+        self.path = route
+        query = list(query)
+        if query:
+            self.path += '?' + urlencode(query)
         self.headers = request.headers
         self.rfile = io.BytesIO(request.body() if request.method == 'POST' else b'')
         self.wfile = io.BytesIO()
@@ -144,19 +149,17 @@ class DocumentResponse:
         pass
 
 
-def document_route(server, request, response, page=False):
-    if request.method == 'POST' and not request.header('x-cadgen-viewer'):
-        response.send_json(403, {'error': 'missing x-cadgen-viewer header'})
-        return
-    handler = DocumentResponse(request, page)
+def document_read(server, request, route, query=(), page=False, prefetch=True):
+    """The engine's answer to its read ``route``: ``(status, content type, headers, body)``. Its own
+    headers go with it but for CORS: application reads are same-origin, authenticated MCP, or a
+    card's link-bearing read, which the engine's gate alone allows (``EngineApp._card``)."""
+    handler = DocumentResponse(request, route, query, page, prefetch)
     server.route(handler, request.method)
-    # No CORS headers of the route's own: application reads are same-origin, authenticated MCP, or a
-    # card's link-bearing read, which the engine's gate alone allows (``EngineApp._card``).
-    response.send_bytes(handler.status, handler.wfile.getvalue(),
-                        handler.response_headers.get('content-type', 'application/octet-stream'),
-                        list({**dict(RAW_FILE_HEADERS), **{key: value for key, value in handler.response_headers.items()
-                              if key not in ('content-type', 'content-length', 'connection', 'cache-control')
-                              and not key.startswith('access-control-')}}.items()))
+    headers = {**dict(RAW_FILE_HEADERS), **{key: value for key, value in handler.response_headers.items()
+               if key not in ('content-type', 'content-length', 'connection', 'cache-control')
+               and not key.startswith('access-control-')}}
+    return (handler.status, handler.response_headers.get('content-type', 'application/octet-stream'), headers,
+            handler.wfile.getvalue())
 
 
 class ViewerApp(CadApp):
@@ -184,12 +187,20 @@ class ViewerApp(CadApp):
             return super().delete_document(ident)
         return self.server.delete(ident)
 
+    def _holds_model(self, ident):
+        # Held by this engine's server, and no file: a model's (or a shape's). Else the engine's
+        # records, which know a model it holds on disk only.
+        if self.server.holds(ident) and not self.server.file_of(ident):
+            return True
+        return super()._holds_model(ident)
+
+    def _read(self, request, route, query=(), prefetch=True):
+        return document_read(self.server, request, route, query, self.page, prefetch)
+
     def handle(self, request, response):
         self.server.touch()
         if not host_is_allowed(request.header('host'), self.host):
-            return response.send_json(403, {'error': 'Host is not a local name'})
-        if request.path.startswith('/__cad/api/') or request.path.startswith('/api/'):
-            return document_route(self.server, request, response, self.page)
+            return response.send_json(403, {'error': 'Host is not a local name', 'hint': 'open the CAD Viewer at 127.0.0.1 or localhost'})
         return super().handle(request, response)
 
 

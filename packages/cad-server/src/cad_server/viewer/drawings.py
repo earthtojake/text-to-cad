@@ -1,4 +1,4 @@
-"""``GET /__cad/drawing``: a ``.dxf`` as a flat 2D render payload.
+"""``GET /api/v1/documents/dxf/<id>/drawing``: a ``.dxf`` as a flat 2D render payload.
 
 This module is the route's decisions — what may be opened, when a drawing is
 rendered, what the HTTP answer is, and which answers it keeps. The payload
@@ -47,14 +47,12 @@ from .scanner import node_basename
 
 __all__ = [
     "DRAWING_HOLD_SECONDS",
-    "DRAWING_ROUTE_PATH",
     "DRAWING_SUFFIX",
     "HELD",
     "DrawingRenders",
     "resolve_drawing_path",
 ]
 
-DRAWING_ROUTE_PATH = "/__cad/drawing"
 DRAWING_SUFFIX = ".dxf"
 # How long a request waits on a render before it answers 202: a small drawing renders inside it
 # and is answered by the first request, and a large one costs one request per hold.
@@ -69,11 +67,11 @@ def resolve_drawing_path(file_ref) -> str | None:
     Raises ``ValueError`` for a ref this route will not take.
     """
     if not file_ref:
-        raise ValueError(f"GET {DRAWING_ROUTE_PATH} needs ?file=<the absolute path of a .dxf>")
+        raise ValueError("a drawing is read from the absolute path of a .dxf")
     candidate = absolute_path(file_ref)
     if not candidate.lower().endswith(DRAWING_SUFFIX):
         raise ValueError(
-            f"{DRAWING_ROUTE_PATH} renders DXF drawings; "
+            "a drawing is a DXF; "
             f"{node_basename(candidate)} is not a {DRAWING_SUFFIX} file"
         )
     return candidate if os.path.isfile(candidate) else None

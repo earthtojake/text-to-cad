@@ -4,7 +4,7 @@ which loads the CAD app the engine serves.
 Every CAD surface loads this same page; what it shows comes from the launch the
 opening tool returns. The resource is the shell (``shell.html``), which greets the
 host, waits for the launch, and imports the app (``app.js``, one module of the whole
-app) from the engine (``GET /__cad/mcp-app``, ``app_code``), through the call the host
+app) from the engine (``GET /app``, ``app_code``), through the call the host
 carries back or from the engine directly: so a page a host keeps -- by its URI, or
 open across an update -- runs the engine's release, and loads the next one in place
 after an update. The URI carries the engine's release and a hash of the page,

@@ -4,8 +4,8 @@ The Node backend routes on ``new URL(req.url, "http://localhost").pathname``,
 which normalises dot segments, converts backslashes to slashes, discards an
 authority and re-percent-encodes part of ASCII. ``urllib.parse.urlsplit`` does
 none of that, so routing on ``urlsplit().path`` would send
-``/__cad/../etc/passwd`` into the ``/__cad/`` API dispatch instead of the SPA,
-and would miss ``/__cad\\asset`` entirely. Every behaviour below is pinned by
+``/api/v1/../etc/passwd`` into the ``/api/`` dispatch instead of the SPA,
+and would miss ``/api\\v1\\server`` entirely. Every behaviour below is pinned by
 ``tests_server/golden/golden.json``.
 
 Byte handling: ``BaseHTTPRequestHandler`` hands us a request line decoded as
@@ -50,8 +50,8 @@ def _strip_fragment_and_query(target: str) -> tuple[str, str]:
 def _strip_authority(path: str) -> str:
     """Drop a scheme and/or authority, leaving the path.
 
-    ``//evil.example/__cad/server`` and ``http://evil.example/__cad/server`` both
-    route as ``/__cad/server``: the Host HEADER is the only host that matters,
+    ``//evil.example/api/v1/server`` and ``http://evil.example/api/v1/server`` both
+    route as ``/api/v1/server``: the Host HEADER is the only host that matters,
     and the host gate is what checks it.
     """
     match = _SCHEME_RE.match(path)

@@ -124,18 +124,18 @@ def form_encode(pairs: Iterable[tuple[str, str]]) -> str:
 
 
 def local_asset_url_for_path(file_path: str, version: str = "") -> str:
-    """``/__cad/asset?file=<abs>[&v=<token>]``.
+    """``/api/v1/local/files?path=<abs>[&v=<token>]``.
 
-    The client rewrites ONLY the ``file`` param (packageAssetUrl.js), so the
+    The client rewrites ONLY the ``path`` param (meshAssetUrl.js), so the
     shape must stay exactly this. ``v`` is omitted when it trims to empty.
     """
     import os
 
-    pairs = [("file", os.path.abspath(str(file_path or "")))]
+    pairs = [("path", os.path.abspath(str(file_path or "")))]
     normalized = str(version or "").strip()
     if normalized:
         pairs.append(("v", normalized))
-    return f"/__cad/asset?{form_encode(pairs)}"
+    return f"/api/v1/local/files?{form_encode(pairs)}"
 
 
 # --- strict decodeURIComponent -------------------------------------------

@@ -1,6 +1,6 @@
 """Quick Edit's JSON handoff files, written synchronously without rendering.
 
-POST /__cad/prompt-files validates a snapshot packet in memory, then returns 200
+POST /api/v1/local/prompt-files validates a snapshot packet in memory, then returns 200
 with compact inline JSON up to 1024 UTF-8 bytes, or writes one .snapshot.json and
 returns its path. Shared input and inline annotation are stored once (Measure's
 measurements are the person's alone: a prompt carries none);
@@ -9,7 +9,7 @@ every one of them; ``cad snapshot`` reads the packet as ``--annotation``, and ``
 authored`` draws a job's view). A packet with
 ink also names the parts hidden and isolated where the ink was last drawn, which
 ``--annotation`` leaves out of its stills. No PNG is produced by this route.
-Guarded GET /__cad/prompt-files/<name> reads only JSON from this process's
+Guarded GET /api/v1/local/prompt-files/<name> reads only JSON from this process's
 scratch directory. Files outlive the viewer until the system clears them.
 """
 
@@ -26,7 +26,7 @@ from cad._internal.atomic_replace import write_bytes_atomic
 
 __all__ = ["PROMPT_FILES_ROUTE", "PromptFiles"]
 
-PROMPT_FILES_ROUTE = "/__cad/prompt-files"
+PROMPT_FILES_ROUTE = "/api/v1/local/prompt-files"
 # How long a request carries: an annotation is points, and a long session of annotating is megabytes.
 MAX_BODY_BYTES = 32 * 1024 * 1024
 MAX_VIEWS = 16

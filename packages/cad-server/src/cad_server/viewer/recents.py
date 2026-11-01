@@ -1,7 +1,7 @@
 """Recents: the engine's registry of documents, as every CAD view's home lists it.
 
 Every CAD view writes here -- the MCP app's views and the CAD Viewer -- and every
-home shows all of it (``GET /__cad/recents``, which the MCP app's views reach
+home shows all of it (``GET /api/v1/documents``, which the MCP app's views reach
 through its tunnel).
 
 Recents is a view of the registry (``cad_server.engine.registry``, ``<state>/documents/<id>/document.json``):

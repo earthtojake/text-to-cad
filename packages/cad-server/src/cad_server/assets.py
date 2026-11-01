@@ -32,7 +32,7 @@ __all__ = [
 ]
 
 # The CAD app's built page (``cad_server.mcp.ui``): the shell a host keeps as its resource, and the app,
-# one module, which the shell loads from the engine (``GET /__cad/mcp-app``).
+# one module, which the shell loads from the engine (``GET /app``).
 CAD_APP_SHELL, CAD_APP_MODULE = "shell.html", "app.js"
 
 # Data-only; deliberately no __init__.py, so this is a path lookup rather than an import.

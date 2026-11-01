@@ -1,5 +1,5 @@
 """The language the CAD views read in: the app menu's Language row, in both CAD apps (the viewer's
-``/__cad/language``, which ``cad-mcp``'s views reach through its tunnel). By default a view infers
+``/api/v1/settings``, which ``cad-mcp``'s views reach through its tunnel). By default a view infers
 it from its context -- the browser's languages, or its host's locale -- and this module keeps only
 the person's override: the ``language`` section of their settings (``cad_server/settings.py``:
 ``settings.json`` in the state directory), so it is one choice for every CAD view -- every tab, both
