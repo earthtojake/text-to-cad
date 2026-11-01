@@ -24,15 +24,14 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.10.0 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
-3. On a computer 0.8 was set up on, moves what 0.10 keeps of 0.8's state folder
-   into its own, once: your telemetry answer and language, the installations'
-   records, the page token, the documents' records and Recents
-   ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md#folders)). Then installs
-   the release in a folder of its own in text-to-cad's state folder
+3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
-   there.
+   there. On a computer 0.8 was set up on, it then moves what 0.10 keeps of 0.8's state
+   folder into its own, once: your telemetry answer and language, the installations'
+   records, the page token, the documents' records and Recents
+   ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md), item 5).
 4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
@@ -40,7 +39,14 @@ checksum. It:
    (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
    own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
-6. Writes the plugin, this release's, into a folder of text-to-cad's state folder
+6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
+   Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
+   starts.
+7. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
+   build123d and what they need, about 220 MB the first time) on the same Python,
+   in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
+   first model builds without a download.
+8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
    one an earlier release installed from GitHub. A copy from a plugin directory
@@ -52,13 +58,6 @@ checksum. It:
    plugin get the skills alone, copied from the folder through the Skills CLI
    ([Other Agents](#other-agents)). Claude Desktop's config gets CAD's server for this
    release, with a `.bak` of the file kept beside it.
-7. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
-   Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
-   starts.
-8. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
-   build123d and what they need, about 220 MB the first time) on the same Python,
-   in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
-   first model builds without a download.
 9. Writes a receipt of everything it changed in text-to-cad's state folder.
 10. Moves your computer's CAD server to this release: a running server finishes
     what it is doing (a build, an export), stops, and this release's takes its place
@@ -349,8 +348,9 @@ The command asks which agents to install for, and where. To skip the questions,
 name the agent and install for your user:
 `npx skills add earthtojake/text-to-cad#latest -g -a <agent> -y`.
 
-Each skill runs text-to-cad's server through uv, pinned to the skill's release, as
-the plugin's server is, so uv must be installed. Without the plugin there is no CAD server, so the
+Each skill runs text-to-cad's server through the `cad` command, pinned to the skill's
+release, which a run of `cad doctor` through uvx registers once (each skill's setup guide
+gives it), so uv must be installed. Without the plugin there is no CAD server, so the
 skills open models in the CAD Viewer in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
