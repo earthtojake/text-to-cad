@@ -869,10 +869,11 @@ A client reaches the daemon on POSIX through named pipes in the engine's folder,
 port's bind), while they let a command make and open files in its temporary folder, where the
 engine's folder is, FIFOs among them. Windows keeps its loopback port and port file, the token
 shown first, in the same hello (`daemon._admitted`, **The door's protocol** below). The engine's
-folder (law 2; `places.default_engine_dir`) is one only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
+folder (law 2; `places.default_engine_dir`) is one only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
 the one the system names, `/var/folders/...`, whatever `$TMPDIR` a sandbox sets, so a sandboxed client
-finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cadgen-<uid>`; on Windows, in the
-temporary folder.
+finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows, in the
+temporary folder. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
+other's door.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
   holds it open for reading, and for writing too, so it never reads as closed. A door nobody reads

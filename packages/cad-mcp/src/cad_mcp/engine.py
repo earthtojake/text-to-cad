@@ -84,16 +84,16 @@ def engine_dir() -> Path:
 
 
 def default_engine_dir() -> str:
-    """The engine folder when ``CAD_ENGINE_DIR`` names none: ``$XDG_RUNTIME_DIR/cadgen-engine``, else
-    ``cadgen-engine`` in the user's own temporary folder (on macOS the one the system names, whatever
-    ``TMPDIR`` a sandbox sets), else ``/tmp/cadgen-<uid>``; on Windows ``cadgen-engine`` in the temporary
-    folder."""
+    """The engine folder when ``CAD_ENGINE_DIR`` names none: ``$XDG_RUNTIME_DIR/cad-engine``, else
+    ``cad-engine`` in the user's own temporary folder (on macOS the one the system names, whatever
+    ``TMPDIR`` a sandbox sets), else ``/tmp/cad-<uid>``; on Windows ``cad-engine`` in the temporary
+    folder. 0.8's engines are in ``cadgen-engine``, which this never reads."""
     if WINDOWS:
-        return os.path.join(tempfile.gettempdir(), "cadgen-engine")
+        return os.path.join(tempfile.gettempdir(), "cad-engine")
     for parent in (os.environ.get("XDG_RUNTIME_DIR"), _darwin_temp() or os.environ.get("TMPDIR")):
         if parent and os.path.isabs(parent) and _users_own(parent):
-            return os.path.join(parent, "cadgen-engine")
-    return f"/tmp/cadgen-{os.getuid()}"
+            return os.path.join(parent, "cad-engine")
+    return f"/tmp/cad-{os.getuid()}"
 
 
 def _darwin_temp() -> str | None:

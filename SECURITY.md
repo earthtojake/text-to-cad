@@ -12,9 +12,9 @@ viewing and exporting. Its clients reach it through its door, a named pipe
 with a pair of pipes per connection, that only you can open (on Windows, a
 loopback port and a token in a file only you can read). The door lives in the
 server's folder (`CAD_ENGINE_DIR`, by default
-`cadgen-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
+`cad-engine` in `$XDG_RUNTIME_DIR`, else in a temporary folder that is yours alone (on macOS
 the system's per-user one, else `$TMPDIR`),
-else `/tmp/cadgen-<uid>`). The client and the daemon refuse a folder that
+else `/tmp/cad-<uid>`). The client and the daemon refuse a folder that
 another user owns or that others can write to. A shell inside an agent's
 sandbox that can open the door builds with the server's own rights, outside
 the sandbox, by design (the door is how a sandboxed agent reaches the

@@ -223,18 +223,19 @@ def engine_dir() -> Path:
 
 def default_engine_dir() -> str:
     """The engine's folder when ``CAD_ENGINE_DIR`` names none, in a place no other user can make
-    it first: ``$XDG_RUNTIME_DIR/cadgen-engine`` (Linux's per-session folder), else
-    ``cadgen-engine`` in the user's temporary folder when it is this user's alone: on macOS the one
+    it first: ``$XDG_RUNTIME_DIR/cad-engine`` (Linux's per-session folder), else
+    ``cad-engine`` in the user's temporary folder when it is this user's alone: on macOS the one
     the system names (``_darwin_temp``, ``/var/folders/...``), which a sandbox that sets its own
     ``TMPDIR`` does not move, so a client in it and the engine outside find one folder; ``TMPDIR``
-    only where the system names none. Else ``/tmp/cadgen-<uid>``, which ``folder_refusal`` still
-    checks. On Windows the temporary folder is the user's own: ``cadgen-engine`` in it."""
+    only where the system names none. Else ``/tmp/cad-<uid>``, which ``folder_refusal`` still
+    checks. On Windows the temporary folder is the user's own: ``cad-engine`` in it. 0.8 kept its
+    engines in ``cadgen-engine``: neither release's clients find the other's door."""
     if WINDOWS:
-        return os.path.join(tempfile.gettempdir(), "cadgen-engine")
+        return os.path.join(tempfile.gettempdir(), "cad-engine")
     for parent in (os.environ.get("XDG_RUNTIME_DIR"), _darwin_temp() or os.environ.get("TMPDIR")):
         if parent and os.path.isabs(parent) and _users_own(parent):
-            return os.path.join(parent, "cadgen-engine")
-    return f"/tmp/cadgen-{os.getuid()}"
+            return os.path.join(parent, "cad-engine")
+    return f"/tmp/cad-{os.getuid()}"
 
 
 def _darwin_temp() -> str | None:

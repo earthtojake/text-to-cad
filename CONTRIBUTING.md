@@ -149,9 +149,9 @@ engine folder, the current installation's, started by the first command that nee
 whatever release that command is -- and running until `cad stop` or an update (no timer stops
 it). A checkout's `.venv` reaches the device's engine like any client, and starts the current
 installation's when none runs: to run a worktree's own engine, give it its own
-`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation). Its door, a named pipe (on Windows, a port file), and lock live in `cadgen-engine`
+`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation). Its door, a named pipe (on Windows, a port file), and lock live in `cad-engine`
 in `$XDG_RUNTIME_DIR`, else in the per-user temporary folder (on macOS the system's
-`/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cadgen-<uid>`
+`/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cad-<uid>`
 (Windows: the temporary folder); `CAD_ENGINE_DIR` moves them, which gives a
 test, a benchmark or an experiment a daemon to itself. `cad status` lists its
 workers, one per model script, each with its memo, and what each is building;

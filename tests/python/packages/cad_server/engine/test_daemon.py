@@ -635,9 +635,9 @@ class DefaultEngineFolderTest(unittest.TestCase):
 
     def test_the_runtime_folder_then_a_private_temporary_folder_then_tmp_by_uid(self) -> None:
         runtime, own = self.private("run"), self.private("T")
-        self.assertEqual(self.folder(XDG_RUNTIME_DIR=str(runtime), TMPDIR=str(own)), runtime / "cadgen-engine")
-        self.assertEqual(self.folder(TMPDIR=f"{own}/"), own / "cadgen-engine")
-        fallback = Path(os.path.realpath(f"/tmp/cadgen-{os.getuid()}"))
+        self.assertEqual(self.folder(XDG_RUNTIME_DIR=str(runtime), TMPDIR=str(own)), runtime / "cad-engine")
+        self.assertEqual(self.folder(TMPDIR=f"{own}/"), own / "cad-engine")
+        fallback = Path(os.path.realpath(f"/tmp/cad-{os.getuid()}"))
         self.assertEqual(self.folder(), fallback)
         shared = self.private("shared", 0o1777)
         self.assertEqual(self.folder(TMPDIR=str(shared), XDG_RUNTIME_DIR=str(self.base / "missing")), fallback)
@@ -650,7 +650,7 @@ class DefaultEngineFolderTest(unittest.TestCase):
         system = places._darwin_temp()
         self.assertTrue(system and system.startswith("/var/folders/"), system)
         self.system = system
-        self.assertEqual(self.folder(), Path(os.path.realpath(os.path.join(system, "cadgen-engine"))))
+        self.assertEqual(self.folder(), Path(os.path.realpath(os.path.join(system, "cad-engine"))))
 
     @unittest.skipUnless(sys.platform == "darwin", "macOS names its per-user temporary folder")
     def test_macos_keeps_the_system_folder_when_a_sandbox_sets_its_own_tmpdir(self) -> None:
@@ -658,7 +658,7 @@ class DefaultEngineFolderTest(unittest.TestCase):
 
         self.system = places._darwin_temp()
         self.assertEqual(self.folder(TMPDIR=str(self.private("sandbox"))),
-                         Path(os.path.realpath(os.path.join(self.system, "cadgen-engine"))))
+                         Path(os.path.realpath(os.path.join(self.system, "cad-engine"))))
 
     def test_a_temporary_folder_another_user_owns_is_passed_over(self) -> None:
         from unittest import mock
@@ -674,7 +674,7 @@ class DefaultEngineFolderTest(unittest.TestCase):
             return found
 
         with mock.patch.object(os, "stat", side_effect=foreign):
-            self.assertEqual(self.folder(TMPDIR=str(own)), Path(os.path.realpath(f"/tmp/cadgen-{os.getuid()}")))
+            self.assertEqual(self.folder(TMPDIR=str(own)), Path(os.path.realpath(f"/tmp/cad-{os.getuid()}")))
 
 class WindowsTokenFirstTest(unittest.TestCase):
     """On Windows the daemon listens on loopback TCP, which any local user can reach: a connection

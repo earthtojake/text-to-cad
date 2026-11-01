@@ -106,7 +106,7 @@ class DefaultEngineGuard(unittest.TestCase):
 
     def run_with(self, answering: list[bool]) -> tuple[int, str, list]:
         stopped: list = []
-        door = "/default/cadgen-engine/0123456789ab.door"
+        door = "/default/cad-engine/engine.door"
         ran = lambda path, top, verbose, env, places: (path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0)  # noqa: E731
         said = io.StringIO()
         with mock.patch.object(runner, "default_engine_door", return_value=door), \
@@ -121,8 +121,8 @@ class DefaultEngineGuard(unittest.TestCase):
     def test_an_engine_a_file_left_in_the_default_folder_is_stopped_and_fails_the_run(self):
         code, said, stopped = self.run_with([False, True])  # none before the run, one after the file
         self.assertEqual(code, 1)
-        self.assertIn("/default/cadgen-engine/0123456789ab.door, after leaves.py", said)
-        self.assertEqual(stopped, [("from cad.engine import api; api.stop()", {"CAD_ENGINE_DIR": "/default/cadgen-engine"})])
+        self.assertIn("/default/cad-engine/engine.door, after leaves.py", said)
+        self.assertEqual(stopped, [("from cad.engine import api; api.stop()", {"CAD_ENGINE_DIR": "/default/cad-engine"})])
 
     def test_the_developer_s_own_engine_running_there_before_the_run_is_left_alone(self):
         code, said, stopped = self.run_with([True])

@@ -20,7 +20,7 @@ def refusal(winerror: int) -> PermissionError:
 
 class ReplaceAtomicTest(unittest.TestCase):
     def setUp(self) -> None:
-        folder = tempfile.TemporaryDirectory(prefix="cadgen-engine-rename-")
+        folder = tempfile.TemporaryDirectory(prefix="cad-engine-rename-")
         self.addCleanup(folder.cleanup)
         self.folder = Path(folder.name)
         self.source = self.folder / ".part.tmp.xbf"
@@ -100,7 +100,7 @@ class StagingTest(unittest.TestCase):
     folder is never written through or moved into place."""
 
     def setUp(self) -> None:
-        folder = tempfile.TemporaryDirectory(prefix="cadgen-engine-staging-")
+        folder = tempfile.TemporaryDirectory(prefix="cad-engine-staging-")
         self.addCleanup(folder.cleanup)
         self.folder = Path(folder.name)
 
