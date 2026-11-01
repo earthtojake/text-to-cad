@@ -982,7 +982,29 @@ class StandbyStartTest(unittest.TestCase):
 
 class DaemonEnvironmentTest(unittest.TestCase):
     """The daemon serves every later client, so the client that starts it does not hand it a
-    per-process telemetry switch: those are the person's saved choice's to decide."""
+    per-process telemetry switch: those are the person's saved choice's to decide. And it is an
+    installation's: a client starts no server of its own environment."""
+
+    def test_with_no_installation_a_client_starts_nothing_and_says_so_in_one_line(self) -> None:
+        from unittest import mock
+
+        from cad.engine import client, places
+
+        state = tempfile.mkdtemp(prefix="no-installation-")
+        self.addCleanup(shutil.rmtree, state, True)
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", None), \
+                mock.patch.object(client.subprocess, "Popen", side_effect=AssertionError("a daemon was started")):
+            with self.assertRaises(ConnectionError) as caught:
+                client._start()
+        self.assertEqual(str(caught.exception),
+                         "cad-server is not installed on this computer: install cad-server and run `cad doctor` once, "
+                         "then run this again")
+        # A base an installation made (``cad run``'s) starts its installation's engine, current or not.
+        base = {"executable": sys.executable, "prefix": sys.prefix, "root": str(Path(state, "server"))}
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", base), \
+                mock.patch.object(client.subprocess, "Popen") as started:
+            client._start()
+        self.assertEqual(started.call_args.args[0][0], sys.executable)
 
     def test_the_started_daemon_does_not_inherit_the_telemetry_switches(self) -> None:
         from unittest import mock
@@ -1087,7 +1109,10 @@ class SweepTest(unittest.TestCase):
         self.assertEqual(done.stderr, f"removed stale engine file {path}\n", "a swept file a line on stderr")
 
     def test_status_starts_no_engine_a_verb_that_starts_one_says_so_and_stop_leaves_none(self) -> None:
-        self.env.update(CAD_STATE_DIR=str(self.state / "state"), CAD_CACHE_DIR=str(self.state / "cache"))
+        own = Path(tempfile.mkdtemp(prefix="own-"))
+        self.addCleanup(shutil.rmtree, own, True)
+        self.env.update(CAD_STATE_DIR=str(own / "state"), CAD_CACHE_DIR=str(own / "cache"))
+        engine_daemon.register(self.env["CAD_STATE_DIR"])  # the installation whose engine a verb starts
         for _ in range(2):
             done = self.cli("status")
             self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "no engine server is running\n", ""))

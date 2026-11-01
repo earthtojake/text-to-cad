@@ -85,6 +85,11 @@ finally:
     print("\\n" + MARK + json.dumps(answer), flush=True)
 """.replace("MARK", repr(MARK))
 PROBE = "import json, sys, cad; print(json.dumps({'cadgen': cad.__file__, 'python': sys.version.split()[0]}))"
+# The bench's interpreter registered as the current installation of a model's private state folder
+# (``Bench.register``), under a version no release takes.
+BENCH_INSTALLATION = "0.0.0+bench"
+REGISTER = ("import sys\nfrom cad_server._internal import installations\n"
+            "installations.register(sys.argv[1])\ninstallations.point(sys.argv[1])")
 
 
 # --- the config ---------------------------------------------------------------------------------
@@ -581,6 +586,14 @@ class Bench:
             done = None
         return done, time.perf_counter() - started
 
+    def register(self, model: Model) -> None:
+        """The interpreter registered as the current installation of the model's private state folder, as
+        an installation registers itself: its daemon is this interpreter's, and a model's run starts none
+        where no installation is registered."""
+        done, _wall = self.run(model, ["-c", REGISTER, BENCH_INSTALLATION], timeout=120)
+        if done is None or done.returncode:
+            raise RuntimeError(f"the interpreter did not register: {done.stderr[-500:] if done else 'no answer'}")
+
     def stop(self, model: Model) -> None:
         done, _wall = self.run(model, ["-m", "cad_server.cli", "stop"], timeout=300)
         if done is None or done.returncode:
@@ -742,6 +755,7 @@ class Bench:
         stopped = False
         try:
             copy_project(ROOT / spec["root"], model.work)
+            self.register(model)
             inside(model.work, model.edit)
             inside(model.work, model.document)
             original = model.edit.read_bytes()

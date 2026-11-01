@@ -17,10 +17,13 @@ asks for a daemon; absence of a daemon is not evidence that the command has hung
 
 from __future__ import annotations
 
+import json
 import locale
 import os
 import shutil
 import subprocess
+import sys
+import sysconfig
 import tempfile
 import threading
 import time
@@ -32,6 +35,40 @@ JOURNAL = "CAD_TEST_JOURNAL"
 HELD_SECONDS = 10.0
 TIMEOUT_SECONDS = 300.0
 STACK_LINES = 30  # a thread's innermost frames: where it waits
+# The version a test's interpreter is registered as (``register``): a name no release takes, which
+# ``cad.engine.places.registered`` passes over, so the engine and its workers go by the release
+# declared beside the code, as they would with no record.
+TEST_INSTALLATION = "0.0.0+test"
+
+
+def register(state: str | os.PathLike, python: str | None = None, prefix: str | None = None) -> bool:
+    """The interpreter ``python`` (this one), of the environment ``prefix`` (this one's), registered as
+    the current installation in the state folder ``state``, as a real installation registers itself
+    (``cad_server._internal.installations``): its record (``installations/<version>.json``: its Python,
+    its ``cad`` console script and its environment) and ``installations/current``. A client of a test
+    then starts the engine of the test's own interpreter, where with no installation registered it
+    starts none (``cad.engine.client._start``). The standard library alone: the runner registers each
+    file's state folder before the file imports anything (``scripts/test/unittest_files.py``). False,
+    and nothing written, for an environment with no ``cad`` console script, which no record can name."""
+    python = python or sys.executable
+    prefix = prefix or sys.prefix
+    windows = os.name == "nt"
+    if prefix == sys.prefix and sys.prefix == sys.base_prefix:
+        scripts = sysconfig.get_path("scripts")  # not a virtual environment: the interpreter's own folder
+    else:
+        scripts = os.path.join(prefix, "Scripts" if windows else "bin")
+    console = os.path.join(scripts, "cad.exe" if windows else "cad")
+    if not (os.path.isfile(python) and os.path.isfile(console)):
+        return False
+    folder = Path(state) / "installations"
+    folder.mkdir(parents=True, exist_ok=True)
+    record = {"version": TEST_INSTALLATION, "python": os.path.abspath(python), "cad": os.path.abspath(console),
+              "prefix": os.path.abspath(prefix), "registered": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    # One key a line, as an installation writes it: the ``cad`` command's sh reads the python's line.
+    (folder / f"{TEST_INSTALLATION}.json").write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
+                                                      encoding="utf-8")
+    (folder / "current").write_text(TEST_INSTALLATION, encoding="utf-8")
+    return True
 
 
 def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
@@ -39,9 +76,10 @@ def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
     ``CAD_STATE_DIR``, ``CAD_CACHE_DIR``) in ``os.environ`` until ``cleanup`` (a module's
     ``unittest.addModuleCleanup``, a test's ``addCleanup``) stops an engine started there, puts the
     environment back and removes them: so an engine a test starts, and every environment built from
-    ``os.environ`` after, runs, records and caches its documents there, never in the developer's.
-    The runner gives each file its own (``scripts/test/unittest_files.py``); this is the same for a
-    file run directly. The variables set."""
+    ``os.environ`` after, runs, records and caches its documents there, never in the developer's. The
+    state folder registers this interpreter as its current installation (``register``), whose engine a
+    client there starts. The runner gives each file its own (``scripts/test/unittest_files.py``); this is
+    the same for a file run directly. The variables set."""
     from unittest import mock
 
     folder = tempfile.mkdtemp(prefix="cadgen-test-")
@@ -49,6 +87,7 @@ def isolate(cleanup: Callable[..., Any]) -> dict[str, str]:
     engine = tempfile.mkdtemp(prefix="eng-", dir="/tmp" if os.name != "nt" else None)
     given = {"CAD_ENGINE_DIR": engine, "CAD_STATE_DIR": os.path.join(folder, "state"),
              "CAD_CACHE_DIR": os.path.join(folder, "cache")}
+    register(given["CAD_STATE_DIR"])
     patch = mock.patch.dict(os.environ, given)
     patch.start()
     cleanup(shutil.rmtree, folder, True)
@@ -83,7 +122,12 @@ def unwritable(folder: Path | str) -> str:
 
 def watched(env: dict[str, str], cleanup: Callable[..., Any]) -> dict[str, str]:
     """``env`` with a journal of its own; ``cleanup`` (a test's ``addCleanup`` or
-    ``addClassCleanup``) removes it."""
+    ``addClassCleanup``) removes it. A state folder ``env`` names (``CAD_STATE_DIR``) with no current
+    installation registers this interpreter as its current one (``register``): the engine its command
+    starts there is this interpreter's, as the runner's and ``isolate``'s are."""
+    state = env.get("CAD_STATE_DIR")
+    if state and not os.path.exists(os.path.join(state, "installations", "current")):
+        register(state)
     folder = tempfile.mkdtemp(prefix="engine-journal-")
     cleanup(shutil.rmtree, folder, True)
     path = os.pathsep.join(item for item in (str(SITE), env.get("PYTHONPATH", "")) if item)

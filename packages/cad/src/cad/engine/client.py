@@ -15,6 +15,7 @@ from typing import Any, Callable
 from cad.engine import places
 from cad.engine.atomic_replace import RETRY_DELAYS_SECONDS
 from cad.engine.door import DOOR_PROTOCOL, GREETING_SECONDS, HELLO_LIMIT, Connection, answering, dial, greeted, hello
+from cad.engine.said import COMMAND, SERVER
 
 __all__ = ["hold", "request", "sweep"]
 
@@ -37,6 +38,12 @@ SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"
 WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
              "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
+# What a client says, starting nothing, where no installation of the server is registered on the device
+# and it runs in no base an installation made (``_start``): the library is plainly here, the script
+# imported it; a registered installation of the server is not. The remedy the ``cad`` command's own line
+# gives: an installation registers itself as ``cad doctor`` runs.
+NOT_INSTALLED = (f"{SERVER} is not installed on this computer: install {SERVER} and run `{COMMAND} doctor` once, "
+                 "then run this again")
 
 
 def _connect(address: Path | None = None) -> Connection | None:
@@ -160,20 +167,25 @@ def _start() -> subprocess.Popen:
     is the one this process started (``_told_started``). It is the current installation's engine
     (``places.engine``, read now), started with that installation's Python whatever release this client
     is -- a client of another release is handed nothing of its own import path --; with none current,
-    the installation's own: this process's, or, in the base the installation made (``places.HOME``),
-    the installation's, the engine's folder first on its ``PYTHONPATH`` only where that Python's
-    environment would not find it -- a source tree --, so no process the daemon starts in the base
-    inherits it."""
-    env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
+    the installation whose base this process runs in (``places.HOME``: ``cad run``'s). Where neither is,
+    nothing starts: the library never starts a server of its own environment, and says so in one line
+    (``NOT_INSTALLED``, a ``ConnectionError``) -- every installation registers itself as it is set up.
+    Started by its own installation (this process's environment, or its base's), the engine's folder is
+    first on its ``PYTHONPATH`` only where that Python's environment would not find it -- a source tree
+    --, so no process the daemon starts in the base inherits it."""
     found = places.engine()
     home = places.HOME
-    if found is not None:
+    if found is None and home is None:
+        raise ConnectionError(NOT_INSTALLED)
+    env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
+    # This process's own installation: the one whose base it runs in, else its own environment.
+    python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
+                            else (sys.executable, places.engine_root(), sys.prefix))
+    if found is not None and not _same(found["prefix"], prefix):
         python = found["python"]
-        if not _same(found["prefix"], home["prefix"] if home else sys.prefix):
-            env.pop("PYTHONPATH", None)  # the current installation's engine imports its own cadgen
+        env.pop("PYTHONPATH", None)  # the current installation's engine imports its own cad
     else:
-        python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home
-                                else (sys.executable, places.engine_root(), sys.prefix))
+        python = found["python"] if found is not None else python
         path = env.get("PYTHONPATH", "")
         inside = os.path.normcase(os.path.realpath(prefix)).rstrip(os.sep) + os.sep
         if not os.path.normcase(os.path.realpath(root)).startswith(inside) and root not in path.split(os.pathsep):

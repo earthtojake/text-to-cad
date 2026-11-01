@@ -21,7 +21,9 @@ Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with 
 directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
 an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
 running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
-``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own that do not exist yet, so
+``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own, the state folder holding nothing but
+this run's interpreter registered as its current installation (``engine_daemon.register``: the
+installation whose engine a client starts, where with none it starts none), so
 nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
 installations or their ``cadgen`` command; a record that this run's cadgen writes in the
 developer's own state folder anyway, or that command written, fails the run, named with the test
@@ -403,17 +405,22 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
             return _run_one_file(path, top, verbose, env, places=places)
         finally:
             running.discard(path)
+    from tests.python.support.engine_daemon import register
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = []
             for index, path in enumerate(files):
                 # A state folder and a command folder of its own too: the engine's registry of
                 # documents (and Recents), the installations and the ``cadgen`` command are the
-                # developer's, never a test's.
+                # developer's, never a test's. Its state folder registers the file's interpreter as its
+                # current installation, as an installation registers itself: a client starts no engine
+                # with none.
                 env = {**os.environ, **shared, "CAD_ENGINE_DIR": os.path.join(engines, f"e{index}"),
                        "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
                        "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
                        "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                register(env["CAD_STATE_DIR"])
                 futures.append(pool.submit(run_one, path, env))
             for future in concurrent.futures.as_completed(futures):
                 path, code, output, seconds = future.result()

@@ -69,9 +69,10 @@ def setUpModule() -> None:
     (root / "src" / "plate.py").write_text(DRAWING_SOURCE, encoding="utf-8")
     PART = str(root / "src" / "part.py")
     DRAWING = str(root / "src" / "plate.py")
-    # The builds below run on an engine daemon of this module's own, never the developer's.
+    # The builds below run on an engine daemon of this module's own, never the developer's: its state
+    # folder registers this interpreter as the installation whose engine the builds start.
     ENGINE = str(root / "engine")
-    WATCHED.update(engine_daemon.watched({}, unittest.addModuleCleanup))
+    WATCHED.update(engine_daemon.watched({"CAD_STATE_DIR": str(root / "state")}, unittest.addModuleCleanup))
 
 
 def tearDownModule() -> None:

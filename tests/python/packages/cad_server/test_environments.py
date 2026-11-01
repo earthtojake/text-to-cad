@@ -5,8 +5,9 @@ script and its worker run there, and so do the engine's documents worker and mes
 engine's daemon runs the core.
 
 uv is reached through a wrapper first on PATH that logs what it is asked. The engine is this file's
-own (the runner's ``CAD_ENGINE_DIR``), started by ``cad run`` with the core's Python and stopped
-by the core's ``cad stop``. The fake-uv contracts (keys, commands, refusals) are test_base.py's.
+own (the runner's ``CAD_ENGINE_DIR``), the core registered as its state folder's current installation,
+started by ``cad run`` with the core's Python and stopped by the core's ``cad stop``. The fake-uv
+contracts (keys, commands, refusals) are test_base.py's.
 """
 
 from __future__ import annotations
@@ -73,6 +74,8 @@ class CoreAndBaseTest(unittest.TestCase):
                        capture_output=True)
         subprocess.run([real, "pip", "install", "--python", str(base.interpreter(cls.core)), "--link-mode",
                         "hardlink", "-e", str(LIBRARY), "-e", str(SERVER)], check=True, capture_output=True)
+        # The device's current installation, as setup registers it: the engine every client starts.
+        assert engine_daemon.register(os.environ["CAD_STATE_DIR"], str(base.interpreter(cls.core)), str(cls.core))
         # A uv first on PATH that writes a line of what it is asked, then runs the real one.
         folder, cls.log = cls.root / "bin", cls.root / "uv.log"
         folder.mkdir()

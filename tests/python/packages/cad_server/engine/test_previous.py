@@ -369,6 +369,9 @@ class PreviousTest(unittest.TestCase):
             self.engine_env = {**os.environ, "CAD_ENGINE_DIR": str(engine), "CAD_STATE_DIR": str(engine / "state"),
                                "CAD_CACHE_DIR": str(engine / "cache"), "CAD_ENGINE_PORT": "0",
                                "CAD_ENGINE_STANDBY": "0"}
+            from tests.python.support.engine_daemon import register
+
+            register(self.engine_env["CAD_STATE_DIR"])  # the installation whose engine the export starts
             self.addCleanup(subprocess.run, [sys.executable, "-m", "cad_server.engine", "stop"], env=self.engine_env,
                             capture_output=True)
         out = self.folder / name

@@ -64,7 +64,7 @@ if ! pick_interpreter; then
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"
-"$PYTHON" - <<'PYTHON'
+"$PYTHON" - "$REPO_ROOT" <<'PYTHON'
 import json, os, subprocess, sys, tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -77,6 +77,11 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
            "CAD_STATE_DIR": str(root / "state"), "CAD_ENGINE_MESH": "inline",
            "CAD_CACHE_DIR": str(root / "no-0.7-store"), "CAD_ENGINE_PORT": "0",
            "CAD_ENGINE_STANDBY": "0"}
+    # The state folder registers this interpreter as its current installation, as an installation
+    # registers itself: the engine the launch starts is this one's (with none, a client starts none).
+    sys.path.append(sys.argv[1])
+    from tests.python.support.engine_daemon import register
+    assert register(env["CAD_STATE_DIR"]), "this interpreter has no cad console script to register"
     def launch(*options):
         result = subprocess.run([sys.executable, "-m", "cad_server.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)
