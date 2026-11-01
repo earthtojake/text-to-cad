@@ -27,6 +27,11 @@ def http_factory(server, host, port):
         UPDATE.recall()
     except Exception:  # noqa: BLE001 - a note for the page, never a reason the engine does not serve
         pass
+    # Open in's apps, looked for in the background as the server starts, with no command
+    # (``cad_server._internal.apps``): a page's first menu reads them, never looks for them.
+    from cad_server._internal.apps import DETECTED
+
+    DETECTED.warm()
     app = EngineApp(server, host, session_factory=Sessions)
     server.clients_active = app.active
     server.clients_working = app.working
