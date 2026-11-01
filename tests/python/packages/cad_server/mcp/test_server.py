@@ -229,19 +229,20 @@ class TabServerTest(_Session):
             return self.call("cad_http", {"method": method, "url": url, "headers": headers or {},
                                          "body": base64.b64encode(json.dumps(body).encode()).decode() if body is not None else ""})
         # Refused before anything routes it, the range cache included.
-        for url in ("/__cad/server", "/__cad/pick", "/__cad/recents", "/__cad/asset?file=x", "/__cad/analytics",
-                    "/__cad/analytics/activity", "/__cad/analytics?share=true"):
+        for url in ("/api/v1/server", "/api/v1/local/pick", "/api/v1/documents", "/api/v1/local/files?path=x", "/api/v1/settings",
+                    "/api/v1/local/activity", "/api/v1/settings?share=true", "/app"):
             with self.subTest(url=url):
                 blocked = request(url, {"x-cadgen-viewer": "1", "range": "bytes=0-20", "if-range": "guessed"})
                 self.assertTrue(blocked["isError"])
                 self.assertNotIn("structuredContent", blocked)
         for bad in ("guessed", other._app_token):
-            self.assertTrue(request("/__cad/analytics", {"x-cadgen-app": bad})["isError"])
-        self.assertEqual(request("/__cad/server", {"X-Cadgen-App": token})["structuredContent"]["status"], 200)
-        # App opt-in still reaches the ordinary route and its cross-site POST guard.
-        self.assertEqual(request("/__cad/analytics", {"x-cadgen-app": token}, {"share": True}, "POST")["structuredContent"]["status"], 403)
+            self.assertTrue(request("/api/v1/settings", {"x-cadgen-app": bad})["isError"])
+        self.assertEqual(request("/api/v1/server", {"X-Cadgen-App": token})["structuredContent"]["status"], 200)
+        # App opt-in still reaches the ordinary route and its cross-site guard.
+        telemetry = {"telemetry": {"share": True}}
+        self.assertEqual(request("/api/v1/settings", {"x-cadgen-app": token}, telemetry, "PUT")["structuredContent"]["status"], 403)
         with mock.patch.object(self.server.analytics, "choose", return_value={"saved": True}) as choose:
-            reply = request("/__cad/analytics", {"x-cadgen-app": token, **GUARDED}, {"share": True}, "POST")
+            reply = request("/api/v1/settings", {"x-cadgen-app": token, **GUARDED}, telemetry, "PUT")
             self.assertEqual(reply["structuredContent"]["status"], 200)
             choose.assert_called_once_with(True, by="app")
         # Removed settings routes have exactly the unknown-route behavior, even with a stale file.
@@ -249,7 +250,7 @@ class TabServerTest(_Session):
         settings.write_text('{"features":{"quickEdit":false}}', encoding="utf-8")
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp)}):
             for method, expected in (("GET", 404), ("POST", 404)):
-                self.assertEqual(request("/__cad/features", {"x-cadgen-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
+                self.assertEqual(request("/api/v1/features", {"x-cadgen-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
 
     def test_the_page_tools_answer_only_the_page_that_holds_the_session_s_capability(self) -> None:
         # The host is asked to keep app-only tools from the model; the server does not rely on it.
@@ -292,7 +293,7 @@ class TabServerTest(_Session):
 
         offer_an_update(self)
         for _ in range(2):  # the update button stays while this install is behind
-            read = self.http("GET", "/__cad/version")[1]
+            read = self.http("GET", "/api/v1/server")[1]
             self.assertEqual((read["notice"], read["release"], read["update"]["state"]),
                              ({"latest": "99.0.0", "version": cad_server.__version__}, cad_server.__version__, "idle"))
         # A launch carries it, as the server last read it, so the button draws with the page.
@@ -406,33 +407,35 @@ class TabServerTest(_Session):
         hidden.mkdir()
         (hidden / "part.stl").write_bytes(STL)
         part = str(hidden / "part.stl")
-        status, catalog = self.http("GET", f"http://cad.invalid/__cad/catalog?file={quote(part, safe='')}")
-        self.assertEqual((status, [entry["file"] for entry in catalog["entries"]]), (200, [part.replace(os.sep, "/")]))
-        self.assertEqual(self.http("GET", f"/__cad/asset?file={quote(part, safe='')}"), (200, STL))
+        status, found = self.http("GET", f"http://cad.invalid/api/v1/documents?path={quote(part, safe='')}")
+        self.assertEqual((status, [row["entry"]["file"] for row in found["documents"]]), (200, [part.replace(os.sep, "/")]))
+        self.assertEqual(self.http("GET", f"/api/v1/local/files?path={quote(part, safe='')}"), (200, STL))
         # The explorer lists a folder; hidden ones stay out of it.
-        status, folder = self.http("GET", f"/__cad/folder?path={quote(str(self.tmp / 'elsewhere'), safe='')}")
+        status, folder = self.http("GET", f"/api/v1/local/folder?path={quote(str(self.tmp / 'elsewhere'), safe='')}")
         self.assertEqual((status, folder["entries"]), (200, [{"name": "loose.stl", "kind": "file"}]))
-        self.assertEqual(self.http("GET", "/__cad/catalog?file=parts%2Fbracket.stl")[0], 400)
-        # A view copies through its host's frame, and no view stops a viewer (this app has no shutdown).
-        self.assertEqual((self.http("POST", "/__cad/clipboard", {})[0], self.http("POST", "/__cad/shutdown", {})[0]), (404, 404))
+        self.assertEqual(self.http("GET", "/api/v1/documents?path=parts%2Fbracket.stl")[0], 400)
+        # A view copies through its host's frame, and no view stops a viewer (this app has no shutdown);
+        # nothing outside the API and the CAD app's module is the tunnel's.
+        self.assertEqual([self.http("POST", path, {})[0] for path in ("/api/v1/local/clipboard", "/api/v1/shutdown", "/index.html")],
+                         [404, 404, 404])
 
     def test_a_view_keeps_the_library_and_the_persons_settings_in_this_servers_own(self) -> None:
         # The model on screen joins the library this server lists on the home (each path in this
         # platform's spelling), and is counted once, here.
         with mock.patch.object(self.server.analytics, "opened") as counted:
-            status, recents = self.http("POST", "/__cad/recents", {"action": "open", "path": self.bracket.replace(os.sep, "/")})
-        self.assertEqual((status, [entry["path"] for entry in recents["recents"]]), (200, [self.bracket]))
+            status, recents = self.http("PATCH", "/api/v1/documents", {"action": "open", "path": self.bracket.replace(os.sep, "/")})
+        self.assertEqual((status, [entry["path"] for entry in recents["documents"]]), (200, [self.bracket]))
         counted.assert_called_once()
         self.assertEqual([entry["path"] for entry in self.launch("cad_home")["recents"]], [self.bracket])
-        # Its picture, kept and read again by name.
+        # Its picture, kept and read again by its document's id.
         png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes(64)).decode("ascii")
-        [entry] = self.http("POST", "/__cad/recents", {"action": "thumbnail", "path": self.bracket, "png": png})[1]["recents"]
-        self.assertEqual(self.http("GET", f"/__cad/thumbnail?name={entry['thumbnail']}"), (200, base64.b64decode(png)))
+        [entry] = self.http("PATCH", "/api/v1/documents", {"action": "thumbnail", "path": self.bracket, "png": png})[1]["documents"]
+        self.assertEqual(self.http("GET", f"/api/v1/documents/{entry['id']}/thumbnail"), (200, base64.b64decode(png)))
         # The home's Open, and the person's answer on the app menu's Share anonymous usage data: the CAD app's own.
         with mock.patch.object(FilePicker, "choose", return_value=self.loose):
-            self.assertEqual(self.http("POST", "/__cad/pick", {}), (200, {"path": self.loose.replace(os.sep, "/")}))
+            self.assertEqual(self.http("POST", "/api/v1/local/pick", {}), (200, {"path": self.loose.replace(os.sep, "/")}))
         with mock.patch.object(self.server.analytics, "choose", return_value={}) as answered:
-            self.assertEqual(self.http("POST", "/__cad/analytics", {"share": False})[0], 200)
+            self.assertEqual(self.http("PUT", "/api/v1/settings", {"telemetry": {"share": False}})[0], 200)
         answered.assert_called_once_with(False, by="app")
 
     def test_a_sync_renews_the_lease_of_the_address_it_names(self) -> None:
@@ -446,7 +449,7 @@ class TabServerTest(_Session):
     def test_a_sync_says_when_the_catalog_moved(self) -> None:
         watch = {"file": self.bracket}
         first = self.call("cad_sync", {"view": "v1", "surface": "tab", "watch": watch})["structuredContent"]
-        catalog = self.http("GET", f"http://cad.invalid/__cad/catalog?file={quote(self.bracket, safe='')}")[1]
+        [catalog] = self.http("GET", f"http://cad.invalid/api/v1/documents?path={quote(self.bracket, safe='')}")[1]["documents"]
         # The revision a view compares is the one its catalog read carries.
         self.assertEqual(first["catalog"]["revision"], catalog["revision"])
         # No build feed rides on it: a document the engine serves tells its view of a new version.
@@ -472,7 +475,7 @@ class TabServerTest(_Session):
         self.assertEqual((documents.hold_seconds, documents.retry_ms), (ENGINE_HOLD_SECONDS, ENGINE_RETRY_MS))
 
     def test_the_sidebar_and_a_tab_with_nothing_to_show_open_the_home(self) -> None:
-        self.http("POST", "/__cad/recents", {"action": "open", "path": self.bracket})
+        self.http("PATCH", "/api/v1/documents", {"action": "open", "path": self.bracket})
         home = self.launch("cad_home")
         self.assertEqual((home["page"], home["model"], home["surface"], [entry["path"] for entry in home["recents"]]),
                          ("home", None, "sidebar", [self.bracket]))
@@ -486,11 +489,11 @@ class TabServerTest(_Session):
         target = Path(self.bracket).resolve()
         # The desktop's file manager is never opened by a test: the call it would make is recorded.
         with mock.patch("cad_server.viewer.reveal.sys.platform", "darwin"), mock.patch("cad_server.viewer.reveal.subprocess.run") as run:
-            self.assertEqual(self.http("POST", "/__cad/reveal", {"path": self.bracket})[0], 204)
+            self.assertEqual(self.http("POST", "/api/v1/local/reveal", {"path": self.bracket})[0], 204)
             run.assert_called_once()
             self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-R", str(target)])
             for path in ("parts/bracket.stl", str(self.workspace / "parts" / "nope.stl")):  # relative; not there
-                self.assertGreaterEqual(self.http("POST", "/__cad/reveal", {"path": path})[0], 400, path)
+                self.assertGreaterEqual(self.http("POST", "/api/v1/local/reveal", {"path": path})[0], 400, path)
             run.assert_called_once()
 
 
@@ -673,7 +676,7 @@ class InlineServerTest(_Session):
 
         self.server._viewer_url = lambda model=None: "http://127.0.0.1:3245/" + ("doc" if model else "") + "?token=t"
         self.server._browser_opener = opener
-        route = "http://cad.invalid/__cad/browser/open"
+        route = "http://cad.invalid/api/v1/local/browser/open"
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(engine)}), \
                 mock.patch.object(browser_open, "display_refusal", return_value=None):
             self.assertEqual(self.http("POST", route, {"model": self.bracket}), (200, {"opened": True}))
@@ -823,25 +826,25 @@ class InlineServerTest(_Session):
         self.assertNotIn(token, json.dumps({k: v for k, v in shown.items() if k != "_meta"}))
         self.assertNotIn(token, json.dumps(self.server.handle("resources/read", {"uri": self.server.page.uri}, None)))
         # Without it, nothing: no route, the telemetry setting included, is routed.
-        for method, url in (("GET", "/__cad/server"), ("GET", "/__cad/recents"), ("GET", "/__cad/analytics"),
-                            ("POST", "/__cad/analytics"), ("POST", "/__cad/analytics/activity"),
-                            ("GET", "/__cad/./analytics/../server"),
-                            ("GET", "http://cad.invalid/__cad/catalog?file=" + quote(self.bracket, safe=""))):
+        for method, url in (("GET", "/api/v1/server"), ("GET", "/api/v1/documents"), ("GET", "/api/v1/settings"),
+                            ("PUT", "/api/v1/settings"), ("POST", "/api/v1/local/activity"),
+                            ("GET", "/api/v1/./settings/../server"), ("GET", "/app"),
+                            ("GET", "http://cad.invalid/api/v1/documents?path=" + quote(self.bracket, safe=""))):
             with self.subTest(method=method, url=url):
-                refused = agent(method, url, b'{"share":false}' if method == "POST" else b"")
+                refused = agent(method, url, b'{"telemetry":{"share":false}}' if method != "GET" else b"")
                 self.assertTrue(refused["isError"])
                 self.assertNotIn("structuredContent", refused)
         # A wrong capability is refused in words; another session's is wrong here.
-        stale = agent("GET", "/__cad/server", headers={"x-cadgen-app": token[:-1] + "x"})
+        stale = agent("GET", "/api/v1/server", headers={"x-cadgen-app": token[:-1] + "x"})
         self.assertTrue(stale["isError"])
         self.assertIn("open CAD again", stale["content"][0]["text"])
         other = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state-other"))
         other.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": self.offered,
                                                      "clientInfo": self.client}), None)
-        self.assertTrue(other.handle("tools/call", {"name": "cad_http", "arguments": {"method": "GET", "url": "/__cad/server",
+        self.assertTrue(other.handle("tools/call", {"name": "cad_http", "arguments": {"method": "GET", "url": "/api/v1/server",
                         "headers": {"x-cadgen-app": token}}}, RequestContext(1, {}))["isError"])
         # With it, the page reaches every viewer route; the header never reaches the route.
-        reply = agent("GET", "/__cad/server", headers={"x-cadgen-app": token})["structuredContent"]
+        reply = agent("GET", "/api/v1/server", headers={"x-cadgen-app": token})["structuredContent"]
         self.assertEqual(reply["status"], 200)
 
 
@@ -856,7 +859,7 @@ class TextServerTest(_Session):
         self.assertNotIn("_meta", self.call("cad_show", {"source": self.bracket}))
         # Nor the page's tools: they are not listed, and a call naming one is refused.
         with self.assertRaises(RpcError):
-            self.call("cad_http", {"method": "GET", "url": "/__cad/server", "headers": {"x-cadgen-app": self.server._app_token}})
+            self.call("cad_http", {"method": "GET", "url": "/api/v1/server", "headers": {"x-cadgen-app": self.server._app_token}})
 
     def test_cad_show_opens_the_model_in_the_browser_and_says_so_with_its_url(self) -> None:
         tools = self.server.handle("tools/list", {}, None)["tools"]
@@ -1035,7 +1038,7 @@ class TextServerTest(_Session):
         # No page answers a card or reaches the viewer's routes here, so neither does the agent.
         for name in ("cad_sync", "cad_open"):
             with self.assertRaises(RpcError, msg=name):
-                self.call(name, {"method": "POST", "url": "/__cad/analytics", "view": "v", "surface": "tab"})
+                self.call(name, {"method": "PUT", "url": "/api/v1/settings", "view": "v", "surface": "tab"})
 
     def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
         offer_an_update(self)
@@ -1471,7 +1474,7 @@ class TunnelBoundTest(_Session):
         model = self.workspace / "parts" / "big.stl"
         body = os.urandom(3 * MAX_REPLY_BYTES + 7)
         model.write_bytes(body)
-        url = f"http://cad.invalid/__cad/asset?file={quote(str(model), safe='')}"
+        url = f"http://cad.invalid/api/v1/local/files?path={quote(str(model), safe='')}"
         whole, sizes, etags = self.read(url)
         self.assertEqual((whole, len(sizes), len(etags)), (body, 4, 1))
         self.assertLessEqual(max(sizes), MESSAGE_BOUND)
@@ -1492,7 +1495,7 @@ class TunnelBoundTest(_Session):
             asked.append(request.path)
             response.send_bytes(200, body, "application/octet-stream")
 
-        url = "http://cad.invalid/__cad/api/doc/abc/part/k1"
+        url = "http://cad.invalid/api/v1/documents/xbf/abc/parts/k1"
         whole, sizes, etag = b"", [], ""
         with mock.patch.object(self.server.tunnel.app, "handle", handle):
             while len(whole) < len(body):
@@ -1503,7 +1506,7 @@ class TunnelBoundTest(_Session):
                 self.assertEqual(reply["headers"]["etag"], etag)
                 whole += base64.b64decode(reply["body"])
                 sizes.append(size)
-        self.assertEqual((whole, asked), (body, ["/__cad/api/doc/abc/part/k1"]))
+        self.assertEqual((whole, asked), (body, ["/api/v1/documents/xbf/abc/parts/k1"]))
         self.assertEqual(len(sizes), 3)
         self.assertLessEqual(max(sizes), MESSAGE_BOUND)
 
@@ -1528,9 +1531,9 @@ class TunnelBodyTest(unittest.TestCase):
 
         class Routes:
             def handle(self, request, response) -> None:
-                if request.path == "/__cad/catalog":
+                if request.path == "/api/v1/documents":
                     response.send_json(200, catalog)
-                elif request.path == "/__cad/api/doc/abc/version":
+                elif request.path == "/api/v1/documents/abc/version":
                     response.send_json(200, {"version": "1-1"})
                 else:
                     response.send_bytes(200, binary, "application/octet-stream")
@@ -1543,13 +1546,13 @@ class TunnelBodyTest(unittest.TestCase):
 
         written = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         self.assertGreater(len(written), GZIP_JSON_MIN_BYTES)
-        reply = call("/__cad/catalog")
+        reply = call("/api/v1/documents")
         self.assertEqual(reply["encoding"], "gzip")
         self.assertEqual(gzip.decompress(base64.b64decode(reply["body"])), written)
         self.assertEqual(int(reply["headers"]["content-length"]), len(written))
         self.assertLess(len(reply["body"]), len(base64.b64encode(written)) // 4)
-        for path, method, body in (("/__cad/api/doc/abc/version", "GET", b'{"version":"1-1"}'),
-                                   ("/__cad/api/doc/abc/part/k1", "GET", binary), ("/__cad/catalog", "HEAD", b"")):
+        for path, method, body in (("/api/v1/documents/abc/version", "GET", b'{"version":"1-1"}'),
+                                   ("/api/v1/documents/xbf/abc/parts/k1", "GET", binary), ("/api/v1/documents", "HEAD", b"")):
             reply = call(path, method)
             self.assertNotIn("encoding", reply)
             self.assertEqual(base64.b64decode(reply["body"]), body)
@@ -1570,7 +1573,7 @@ class TunnelBodyTest(unittest.TestCase):
         def part(first: int, etag: str = "") -> dict:
             headers = {"range": f"bytes={first}-{first + MAX_REPLY_BYTES - 1}", **({"if-range": etag} if etag else {})}
             with mock.patch.object(ViewerTunnel, "app", Routes()):
-                return tunnel.serve(method="GET", url="http://cad.invalid/__cad/drawing?file=/m/a.dxf", headers=headers, body=b"")
+                return tunnel.serve(method="GET", url="http://cad.invalid/api/v1/documents/dxf/abc/drawing", headers=headers, body=b"")
 
         def read() -> bytes:
             first = part(0)

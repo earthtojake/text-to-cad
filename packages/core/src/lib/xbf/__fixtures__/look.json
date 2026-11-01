@@ -13,7 +13,7 @@
     }
   ],
   "environment": {
-    "url": "/api/look/environment",
+    "url": "/api/v1/look/environment",
     "intensity": 0.5
   },
   "colourPower": 2.0,

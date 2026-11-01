@@ -29,12 +29,12 @@ const answer = (body: Uint8Array | Buffer) => ({ ok: true, status: 200, json: as
   arrayBuffer: async () => Uint8Array.from(body).buffer });
 async function bracket() {
   const fetch = async (url: string) => {
-    if (url.endsWith('/api/look')) return answer(read('look.json'));
-    if (url.endsWith('/api/look/environment')) return answer(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith('/api/v1/look')) return answer(read('look.json'));
+    if (url.endsWith('/api/v1/look/environment')) return answer(ENVIRONMENT);
+    const part = /\/parts\/([^/]+)$/.exec(url);
     return answer(part ? read(`bracket/${part[1]}.xbm`) : read('bracket/structure.json'));
   };
-  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/doc/bracket', { fetch: fetch as any }));
+  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/v1/documents/xbf/bracket', { fetch: fetch as any }));
 }
 
 it("Measure's menu chooses what a press takes, as a STEP's: All the vertex, else the edge, else the face; each kind alone", async () => {

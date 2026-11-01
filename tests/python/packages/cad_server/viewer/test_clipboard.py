@@ -27,5 +27,5 @@ class ClipboardTests(unittest.TestCase):
         server = ServerFixture()
         self.addCleanup(server.close)
         with mock.patch('cad_server.viewer.clipboard.copy_png') as copy:
-            self.assertEqual(server.request('POST', '/__cad/clipboard', headers={'x-cadgen-viewer':'1','Content-Type':'image/png'}, body=PNG)[0], 204)
+            self.assertEqual(server.request('POST', '/api/v1/local/clipboard', headers={'x-cadgen-viewer':'1','Content-Type':'image/png'}, body=PNG)[0], 204)
             copy.assert_called_once_with(PNG)

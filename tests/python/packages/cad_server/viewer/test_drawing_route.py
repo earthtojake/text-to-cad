@@ -1,9 +1,10 @@
-"""``GET /__cad/drawing`` against a real launched server, and the answers it holds.
+"""A DXF document's ``drawing`` (``GET /api/v1/documents/dxf/<id>/drawing``) against a real launched
+server, and the answers it holds.
 
 The fixture writes its own drawings with ezdxf into a fresh temporary folder and
 points the store at a temporary directory, which the route never writes: it holds
 its answers in memory, by the bytes it read. Nothing here reads the sample
-corpus. A drawing is named by its absolute path, as every file is; every refusal
+corpus. A drawing is opened by its absolute path, as every file is; every refusal
 asserts both the status and that the secret bytes never appear in the body.
 """
 
@@ -92,10 +93,25 @@ class DrawingRouteFixture:
         finally:
             conn.close()
 
+    def open(self, payload):
+        """``POST /api/v1/documents``: ``(status, headers, body)``."""
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+        try:
+            conn.request("POST", "/api/v1/documents", body=json.dumps(payload).encode(), headers={"x-cadgen-viewer": "1"})
+            response = conn.getresponse()
+            return response.status, dict(response.getheaders()), response.read()
+        finally:
+            conn.close()
+
     def drawing(self, file_param):
-        """The answer, asked again while the drawing renders (202), as the client asks."""
+        """The drawing opened, then its answer, asked again while the drawing renders (202), as the
+        client asks; the open's refusal where it is refused."""
+        status, headers, body = self.open({"path": str(file_param)})
+        if status != 201:
+            return status, headers, body
+        api = json.loads(body)["api"]
         while True:
-            status, headers, body = self.request(f"/__cad/drawing?file={quote(str(file_param), safe='')}")
+            status, headers, body = self.request(f"{api}/drawing")
             if status != 202:
                 return status, headers, body
 
@@ -151,22 +167,29 @@ class ItRefusesWhatItShould(DrawingRouteTestCase):
                 self.assertEqual(status, 400, body[:400])
                 self.assertIn(b"absolute path", body)
 
-    def test_another_extension_is_a_400_that_says_what_the_route_takes(self) -> None:
-        for rel in ("part.step", "passwd"):
-            with self.subTest(rel=rel):
-                status, _, body = self.fixture.drawing(self.fixture.path(rel))
-                self.assertDenied(status, body, {400})
-                self.assertIn(b".dxf", body)
+    def test_another_extension_is_refused_saying_what_it_is(self) -> None:
+        # A file no page reads: the open names the files it opens.
+        status, _, body = self.fixture.drawing(self.fixture.path("passwd"))
+        self.assertDenied(status, body, {400})
+        self.assertIn(b".dxf", body)
+        # A STEP is no drawing: its id under the drawing's kind is a 404 naming its own.
+        from cad.engine.ids import file_id
+
+        step = self.fixture.path("part.step")
+        self.assertEqual(self.fixture.request(f"/api/v1/documents?path={quote(step, safe='')}")[0], 200)
+        status, _, body = self.fixture.request(f"/api/v1/documents/dxf/{file_id(step)}/drawing")
+        self.assertDenied(status, body, {404})
+        self.assertEqual(json.loads(body)["error"], f"{file_id(step)} is a step")
 
     def test_no_file_parameter_says_what_to_send(self) -> None:
-        status, _, body = self.fixture.request("/__cad/drawing")
+        status, _, body = self.fixture.open({})
         self.assertEqual(status, 400, body[:400])
-        self.assertIn(b"?file=", body)
+        self.assertIn(b'\\"path\\"', body)
 
     def test_a_missing_drawing_is_a_404(self) -> None:
         status, _, body = self.fixture.drawing(self.fixture.path("absent.dxf"))
         self.assertEqual(status, 404)
-        self.assertEqual(json.loads(body), {"error": "Not found"})
+        self.assertEqual(json.loads(body)["error"], f"no CAD file at {self.fixture.path('absent.dxf')}")
 
     def test_a_dxf_that_is_not_a_dxf_is_a_400_carrying_the_reason(self) -> None:
         status, _, body = self.fixture.drawing(self.fixture.path("notes.dxf"))
@@ -180,10 +203,10 @@ class ItRefusesWhatItShould(DrawingRouteTestCase):
         self.assertDenied(status, body, {400})
 
     def test_the_route_is_get_only(self) -> None:
+        api = json.loads(self.fixture.open({"path": self.fixture.path("plate.dxf")})[2])["api"]
         conn = http.client.HTTPConnection("127.0.0.1", self.fixture.port, timeout=10)
         try:
-            conn.request("POST", f"/__cad/drawing?file={quote(self.fixture.path('plate.dxf'), safe='')}",
-                         headers={"x-cadgen-viewer": "1"})
+            conn.request("POST", f"{api}/drawing", headers={"x-cadgen-viewer": "1"})
             response = conn.getresponse()
             body = response.read()
         finally:

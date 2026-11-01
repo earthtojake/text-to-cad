@@ -97,9 +97,9 @@ class UrlNormalisation(unittest.TestCase):
                 self.assertEqual(url_norm.request_pathname(target), expected)
 
     def test_dot_segments_leave_the_api_namespace(self) -> None:
-        # Routing on urlsplit().path would send this into the /__cad/ dispatch.
-        self.assertEqual(url_norm.request_pathname("/__cad/../etc/passwd"), "/etc/passwd")
-        self.assertEqual(url_norm.request_pathname("/__cad/%2e%2e/etc"), "/etc")
+        # Routing on urlsplit().path would send this into the /api/ dispatch.
+        self.assertEqual(url_norm.request_pathname("/api/v1/../../etc/passwd"), "/etc/passwd")
+        self.assertEqual(url_norm.request_pathname("/api/%2e%2e/etc"), "/etc")
 
     def test_percent_2f_is_not_a_separator(self) -> None:
         self.assertEqual(

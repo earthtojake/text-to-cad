@@ -2,7 +2,7 @@
 
 Two halves of one product: the engine's DXF export (``cad.engine.export.dxf``)
 writes drawings through build123d's ``ExportDXF``, and ``cad_server.drawing_payload`` is
-what the Viewer's DXF pane gets them back through (`GET /__cad/drawing`). An entity
+what the Viewer's DXF pane gets them back through (`GET /api/v1/documents/dxf/<id>/drawing`). An entity
 the engine emits and the payload does not carry simply vanishes from the picture: a
 hole that is cut but not shown, which is the worst kind of silence in a cut file.
 

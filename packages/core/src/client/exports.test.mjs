@@ -14,13 +14,14 @@ test('export requests stay in the viewer session; the file is a plain session UR
   const request = { requestId: 'stable-request', epoch: 'session-epoch', source: { doc: 'doc', revision: 'rev' }, format: 'step' };
   await service.create(request, abort.signal);
   await service.status('job', 7, abort.signal);
-  assert.equal(service.fileUrl('job/1'), 'https://example.test/s/session/__cad/exports/job%2F1/file');
+  assert.equal(service.fileUrl('job/1'), 'https://example.test/s/session/api/v1/exports/job%2F1/file');
   assert.equal(calls.length, 3, 'naming the file URL fetches nothing');
-  assert.deepEqual([calls[0].url, calls[0].method, calls[0].body, calls[0].signal], ['https://example.test/s/session/__cad/exports', undefined, undefined, abort.signal]);
-  assert.equal(calls[1].url, 'https://example.test/s/session/__cad/exports');
+  assert.deepEqual([calls[0].url, calls[0].method, calls[0].body, calls[0].signal], ['https://example.test/s/session/api/v1/exports', undefined, undefined, abort.signal]);
+  // Made by its document's route; read in the exports' own family.
+  assert.equal(calls[1].url, 'https://example.test/s/session/api/v1/documents/doc/exports');
   assert.equal(calls[1].headers['x-cadgen-viewer'], '1');
   assert.deepEqual(JSON.parse(calls[1].body), request);
-  assert.match(calls[2].url, /\/job\?after=7&wait=25$/);
+  assert.equal(calls[2].url, 'https://example.test/s/session/api/v1/exports/job?after=7&wait=25');
   assert.equal(calls[2].signal, abort.signal);
 });
 

@@ -79,7 +79,7 @@ class LauncherTest(unittest.TestCase):
         self.assertEqual({r['port'] for r in (first, again, latest)}, {first['port']})
         self.assertEqual([urlsplit(r['url']).path for r in (first, latest)], ['/', '/'])
         # One page: the most recent launch's folder, c, replacing b, which its relative files are read from.
-        status, _, data = self.get(first, '/__cad/server')
+        status, _, data = self.get(first, '/api/v1/server')
         self.assertEqual(status, 200)
         self.assertEqual(os.path.realpath(json.loads(data)['start']), os.path.realpath(c))
         self.assertEqual(json.loads(data)['pid'], first['pid'])
@@ -101,22 +101,22 @@ class LauncherTest(unittest.TestCase):
         # A symlink to it is the same document: one id, one catalog row.
         self.assertEqual(urlsplit(self.launch('link.stl')['url']).path, f'/{ident}')
         self.assertEqual(self.get(launched, f'/{ident}')[0], 200)
-        status, _, data = self.get(launched, f'/__cad/catalog?id={ident}')
+        status, _, data = self.get(launched, f'/api/v1/documents/{ident}')
         self.assertEqual(status, 200)
-        self.assertEqual([(row['id'], os.path.realpath(row['file'])) for row in json.loads(data)['entries']],
-                         [(ident, os.path.realpath(part))])
-        status, _, data = self.get(launched, '/__cad/catalog?file=' + str(link))
-        self.assertEqual([row['id'] for row in json.loads(data)['entries']], [ident])
+        envelope = json.loads(data)
+        self.assertEqual((envelope['id'], os.path.realpath(envelope['entry']['file'])), (ident, os.path.realpath(part)))
+        status, _, data = self.get(launched, '/api/v1/documents?path=' + str(link))
+        self.assertEqual([row['id'] for row in json.loads(data)['documents']], [ident])
         # An id nothing holds is missing, and says so; a script is no CAD file to open.
-        status, _, data = self.get(launched, '/__cad/catalog?id=6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab')
-        self.assertEqual((status, json.loads(data)['entries']), (200, []))
-        self.assertIn('is held', json.loads(data)['missing'])
+        status, _, data = self.get(launched, '/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab')
+        self.assertEqual(status, 404)
+        self.assertIn('is held', json.loads(data)['error'])
         (self.root / 'model.py').write_text('print(1)\n', encoding='utf-8')
         self.assertIn('no CAD file', self.launch('model.py', ok=False))
 
     def test_every_route_requires_token_and_keeps_host_and_post_gates(self):
         launch = self.launch()
-        for route in ('/', '/assets/app.js', '/__cad/server', '/api/docs', '/__cad/api/docs', '/mcp'):
+        for route in ('/', '/assets/app.js', '/app', '/api/v1/server', '/api/v1/documents', '/api/docs', '/mcp'):
             self.assertEqual(self.get(launch, route, token=False)[0], 403, route)
             self.assertEqual(self.get(launch, route, headers={'Host': 'evil.example'})[0], 403, route)
         # A page load without a credential is refused with a static page (no script, no asset), never
@@ -170,24 +170,24 @@ class LauncherTest(unittest.TestCase):
         status, headers, _ = self.get(launch, '/', token=False, headers={**cookie, **navigation})
         self.assertEqual(status, 200)
         self.session(headers)
-        self.assertNotIn('set-cookie', self.get(launch, '/__cad/server', token=False, headers=cookie)[1])
+        self.assertNotIn('set-cookie', self.get(launch, '/api/v1/server', token=False, headers=cookie)[1])
         old = {'Cookie': f'{name}={sign(master, "session", 30 * 86400, now=time.time() - 2 * 86400)}'}
-        self.session(self.get(launch, '/__cad/server', token=False, headers=old)[1])
+        self.session(self.get(launch, '/api/v1/server', token=False, headers=old)[1])
         # A sibling cookie that another page on this host set (cookies are host-scoped, not
         # port-scoped), even one a strict parser rejects, must not drop the engine's own cookie.
         for header in (f"x=y z; {cookie['Cookie']}", f"{cookie['Cookie']}; a[b]=1"):
-            status, _, _ = self.get(launch, '/__cad/server', token=False, headers={'Cookie': header})
+            status, _, _ = self.get(launch, '/api/v1/server', token=False, headers={'Cookie': header})
             self.assertEqual(status, 200, header)
-        self.assertEqual(self.get(launch, '/__cad/server?token=%C3%A9', token=False)[0], 403)
+        self.assertEqual(self.get(launch, '/api/v1/server?token=%C3%A9', token=False)[0], 403)
         # The cookie reaches every port of this host, so it admits only what the browser says came
         # from this origin or from the person (or from a client that is not a browser); a token or a
         # link in the header or the URL is admitted from anywhere, and another origin with neither not.
         for site, expected in (('same-origin', 200), ('none', 200), ('same-site', 403), ('cross-site', 403)):
-            status, _, body = self.get(launch, '/__cad/server', token=False,
+            status, _, body = self.get(launch, '/api/v1/server', token=False,
                                        headers={**cookie, 'Sec-Fetch-Site': site})
             self.assertEqual(status, expected, site)
-            self.assertEqual(self.get(launch, '/__cad/server', headers={'Sec-Fetch-Site': site})[0], 200, site)
-            self.assertEqual(self.get(launch, '/__cad/server', token=False, headers={'Sec-Fetch-Site': site})[0], 403)
+            self.assertEqual(self.get(launch, '/api/v1/server', headers={'Sec-Fetch-Site': site})[0], 200, site)
+            self.assertEqual(self.get(launch, '/api/v1/server', token=False, headers={'Sec-Fetch-Site': site})[0], 403)
         self.assertIn(b'cross-origin request refused', self.get(
             launch, '/', token=False, headers={**cookie, 'Sec-Fetch-Site': 'same-site'})[2])
         # Every page may be framed by its own origin alone: the client's, and the link-gone page.
@@ -197,7 +197,7 @@ class LauncherTest(unittest.TestCase):
                       headers={'Sec-Fetch-Dest': 'document'})[1]['content-security-policy'])
         conn = http.client.HTTPConnection('127.0.0.1', launch['port'], timeout=10)
         try:
-            conn.request('POST', '/__cad/recents', body=b'{}', headers={'Authorization': 'Bearer '+launch['token']})
+            conn.request('PATCH', '/api/v1/documents', body=b'{}', headers={'Authorization': 'Bearer '+launch['token']})
             reply = conn.getresponse()
             self.assertEqual(reply.status, 403)
             reply.read()
@@ -209,7 +209,7 @@ class LauncherTest(unittest.TestCase):
                               env=self.env, cwd=self.root, capture_output=True, text=True, timeout=60)
         self.assertEqual(done.returncode, 0, done.stderr)
         launch = json.loads(done.stdout)
-        self.assertEqual(self.get(launch, '/__cad/server')[0], 200)
+        self.assertEqual(self.get(launch, '/api/v1/server')[0], 200)
 
 
 if __name__ == '__main__':

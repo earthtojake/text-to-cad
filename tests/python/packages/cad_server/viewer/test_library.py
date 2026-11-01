@@ -52,23 +52,34 @@ class LibraryTest(unittest.TestCase):
             connection.close()
 
     def change(self, action: str, path: str, **extra) -> tuple[int, dict]:
-        status, body = self.request("POST", "/__cad/recents", {"action": action, "path": path, **extra})
+        status, body = self.request("PATCH", "/api/v1/documents", {"action": action, "path": path, **extra})
         return status, json.loads(body)
 
     def test_the_library_is_read_and_changed_by_absolute_path(self) -> None:
-        self.assertEqual(self.request("GET", "/__cad/recents"), (200, b'{"recents":[]}'))
+        from cad.engine.ids import file_id
+
+        self.assertEqual(self.request("GET", "/api/v1/documents"), (200, b'{"documents":[]}'))
         status, answer = self.change("open", str(self.model))
-        self.assertEqual((status, [entry["path"] for entry in answer["recents"]]), (200, [str(self.model)]))
+        self.assertEqual((status, [entry["path"] for entry in answer["documents"]]), (200, [str(self.model)]))
         status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
-        [entry] = answer["recents"]
-        self.assertEqual(entry, RecentStore().list()[0].public())
-        self.assertEqual(entry["kind"], "file", "a file's row: removed from the list, its file untouched")
-        self.assertTrue(self.change("pin", str(self.model))[1]["recents"][0]["pinned"])
-        self.assertFalse(self.change("unpin", str(self.model))[1]["recents"][0]["pinned"])
-        # The picture, by the content name the library gives it.
-        status, png = self.request("GET", f"/__cad/thumbnail?name={entry['thumbnail']}")
+        [entry] = answer["documents"]
+        # The record's row, its document named: its id, its kind and where its reads are; the record's
+        # own kind is ``record`` -- a file's row: removed from the list, its file untouched.
+        ident = file_id(self.model)
+        self.assertEqual(entry, {**RecentStore().list()[0].public(), "id": ident, "kind": "stl", "record": "file",
+                                 "api": f"/api/v1/documents/stl/{ident}"})
+        self.assertTrue(self.change("pin", str(self.model))[1]["documents"][0]["pinned"])
+        self.assertFalse(self.change("unpin", str(self.model))[1]["documents"][0]["pinned"])
+        # The picture, by its document's id.
+        status, png = self.request("GET", f"/api/v1/documents/{ident}/thumbnail")
         self.assertEqual((status, png), (200, PNG))
-        self.assertEqual(self.change("remove", str(self.model)), (200, {"recents": []}))
+        # Filtered by kind, searched by name or path, at most a number.
+        for query, found in (("?kind=stl", 1), ("?kind=model", 0), ("?q=A.ST", 1), ("?q=nothing", 0), ("?limit=1", 1)):
+            with self.subTest(query=query):
+                self.assertEqual(len(json.loads(self.request("GET", "/api/v1/documents" + query)[1])["documents"]), found)
+        self.assertEqual(json.loads(self.request("GET", "/api/v1/documents/stl")[1])["documents"], [entry])
+        self.assertEqual(self.request("GET", "/api/v1/documents?limit=0")[0], 400)
+        self.assertEqual(self.change("remove", str(self.model)), (200, {"documents": []}))
         self.assertTrue(self.model.is_file(), "removing a file's entry leaves the file")
 
     def test_a_link_its_target_and_a_case_variant_are_one_entry(self) -> None:
@@ -83,8 +94,8 @@ class LibraryTest(unittest.TestCase):
             spellings.append(str(self.model.parent / "A.STL"))
         for spelling in spellings:
             status, answer = self.change("open", spelling)
-        self.assertEqual((status, [entry["path"] for entry in answer["recents"]]), (200, [str(self.model)]))
-        self.assertEqual(self.change("remove", str(link)), (200, {"recents": []}))
+        self.assertEqual((status, [entry["path"] for entry in answer["documents"]]), (200, [str(self.model)]))
+        self.assertEqual(self.change("remove", str(link)), (200, {"documents": []}))
 
     def test_a_change_names_a_cad_file_by_its_absolute_path(self) -> None:
         (self.tmp / "notes.txt").write_text("x", encoding="utf-8")
@@ -104,28 +115,42 @@ class LibraryTest(unittest.TestCase):
         ident = model_id(script, "cube")
         Registry(self.tmp / "state").put({"id": ident, "kind": "model", "root": str(self.tmp),
                                           "home": "parts.py", "entry": "cube", "revision": "r1", "built": 1.0})
-        status, body = self.request("GET", "/__cad/recents")
-        [entry] = json.loads(body)["recents"]
-        self.assertEqual((status, entry["path"], entry["kind"], entry["name"]), (200, ident, "model", "cube"),
-                         "the home opens it by its id: /<id>")
+        status, body = self.request("GET", "/api/v1/documents")
+        [entry] = json.loads(body)["documents"]
+        self.assertEqual((status, entry["path"], entry["id"], entry["kind"], entry["record"], entry["name"]),
+                         (200, ident, ident, "model", "model", "cube"), "the home opens it by its id: /<id>")
         self.assertEqual((entry["updated"], entry["opened"]), (1.0, None), "updated is its run's; no page opened it yet")
-        [entry] = self.change("open", ident)[1]["recents"]
+        [entry] = self.change("open", ident)[1]["documents"]
         self.assertEqual(entry["updated"], 1.0)
         self.assertGreater(entry["opened"], 1.0, "a page's open of its id says when")
-        self.assertTrue(self.change("pin", ident)[1]["recents"][0]["pinned"])
+        self.assertTrue(self.change("pin", ident)[1]["documents"][0]["pinned"])
         cached = self.tmp / "cache" / "documents" / ident / "document.xbf"
         cached.parent.mkdir(parents=True)
         cached.write_bytes(b"its document")
         self.assertEqual(self.change("remove", ident)[0], 400, "a model is deleted, never removed: the word is Delete")
-        self.assertEqual(self.change("delete", ident), (200, {"recents": []}))
+        self.assertEqual(self.change("delete", ident), (200, {"documents": []}))
         self.assertIsNone(Registry(self.tmp / "state").get(ident))
         self.assertFalse(cached.parent.exists(), "its document in the engine's cache goes with its record")
         self.assertTrue(script.is_file(), "its script stays")
 
-    def test_only_a_thumbnail_name_reads_a_thumbnail(self) -> None:
-        for name in ("", "x.png", "../recents.jsonl", "0" * 32 + ".png"):
-            with self.subTest(name=name):
-                self.assertEqual(self.request("GET", f"/__cad/thumbnail?name={name}")[0], 404)
+    def test_a_document_forgotten_by_its_id_leaves_its_file(self) -> None:
+        from cad.engine.ids import file_id
+
+        self.change("open", str(self.model))
+        connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
+        try:
+            connection.request("DELETE", f"/api/v1/documents/{file_id(self.model)}", headers={"x-cadgen-viewer": "1"})
+            response = connection.getresponse()
+            self.assertEqual((response.status, response.read()), (204, b""))
+        finally:
+            connection.close()
+        self.assertEqual(self.request("GET", "/api/v1/documents"), (200, b'{"documents":[]}'))
+        self.assertTrue(self.model.is_file(), "forgetting a file's document leaves the file")
+
+    def test_only_a_documents_own_picture_is_read(self) -> None:
+        for ident in ("x", "..%2Frecents.jsonl", "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"):
+            with self.subTest(ident=ident):
+                self.assertEqual(self.request("GET", f"/api/v1/documents/{ident}/thumbnail")[0], 404)
 
 
 if __name__ == "__main__":

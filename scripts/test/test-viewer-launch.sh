@@ -86,7 +86,7 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
         first = launch()
         again = launch()
         assert first["pid"] == again["pid"] and first["port"] == again["port"]
-        with urlopen(Request(first["apiUrl"]+"/__cad/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
+        with urlopen(Request(first["apiUrl"]+"/api/v1/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
             assert json.load(response)["pid"] == first["pid"]
         # The STEP the page imports: one cylinder, written by build123d's own STEP export, so that no
         # CAD file is committed.
@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
                 page = browser.new_page(viewport={"width": 1000, "height": 720})
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
-                with page.expect_response(lambda response: "/__cad/api/doc/" in response.url and "/part/" in response.url and response.ok, timeout=120000):
+                with page.expect_response(lambda response: "/api/v1/documents/step/" in response.url and "/parts/" in response.url and response.ok, timeout=120000):
                     page.goto(opened["url"])
                 page.locator(".cad-loading-overlay").wait_for(state="hidden", timeout=120000)
                 assert page.locator("canvas").first.is_visible()

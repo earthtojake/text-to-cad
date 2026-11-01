@@ -109,54 +109,58 @@ class ViewerExportHttpTest(unittest.TestCase):
                 with response:
                     return response.status, response.headers, response.read()
 
-            _, _, data = http('/api/doc/' + doc)
+            _, _, data = http('/api/v1/documents/model/' + doc + '/structure')
             structure = json.loads(data)
             source = {'doc': doc, 'revision': structure['version']}
             # Nothing is inspected first: the session's epoch is one read, behind its credential.
-            self.assertEqual(http('/__cad/exports', headers={'Authorization': ''})[0], 403)
-            code, _, data = http('/__cad/exports')
+            self.assertEqual(http('/api/v1/exports', headers={'Authorization': ''})[0], 403)
+            code, _, data = http('/api/v1/exports')
             self.assertEqual(code, 200, data)
             payload = {'requestId': 'http-export-request-0001', 'epoch': json.loads(data)['epoch'],
                        'source': source, 'format': 'stl'}
             # A job is a POST that needs the credential and the viewer's header too.
-            self.assertEqual(http('/__cad/exports', payload, headers={'Authorization': ''})[0], 403)
-            self.assertEqual(http('/__cad/exports', payload, headers={'x-cadgen-viewer': ''})[0], 403)
+            self.assertEqual(http(f'/api/v1/documents/{doc}/exports', payload, headers={'Authorization': ''})[0], 403)
+            self.assertEqual(http(f'/api/v1/documents/{doc}/exports', payload, headers={'x-cadgen-viewer': ''})[0], 403)
+            # A job is its document's: one asked under another document's id is refused, and runs nothing.
+            code, _, data = http('/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/exports', payload)
+            self.assertEqual(code, 400, data)
+            self.assertIn('is not document', json.loads(data)['error'])
             # Long-polling the job waits for observable changes, not a sleep.
-            code, _, data = http('/__cad/exports', payload)
+            code, _, data = http(f'/api/v1/documents/{doc}/exports', payload)
             self.assertEqual(code, 202, data)
             job = json.loads(data)
-            _, _, duplicate = http('/__cad/exports', payload)
+            _, _, duplicate = http(f'/api/v1/documents/{doc}/exports', payload)
             self.assertEqual(json.loads(duplicate)['id'], job['id'])
             while job['state'] in ('queued', 'running'):
-                _, _, data = http(f"/__cad/exports/{job['id']}?after={job['sequence']}&wait=25")
+                _, _, data = http(f"/api/v1/exports/{job['id']}?after={job['sequence']}&wait=25")
                 job = json.loads(data)
             self.assertEqual(job['state'], 'ready', job)
-            code, headers, data = http(f"/__cad/exports/{job['id']}/file")
+            code, headers, data = http(f"/api/v1/exports/{job['id']}/file")
             self.assertEqual(code, 200)
             self.assertEqual(len(data), job['bytes'])
             self.assertGreater(len(data), 84)
             self.assertIn('attachment;', headers['content-disposition'])
             # Reading the final bytes can beat the serving thread's completion cleanup.
             # Await its observable transition before checking that the artifact is gone.
-            code, _, data = http(f"/__cad/exports/{job['id']}?after={job['sequence']}&wait=25")
+            code, _, data = http(f"/api/v1/exports/{job['id']}?after={job['sequence']}&wait=25")
             self.assertEqual(code, 200, data)
             completed = json.loads(data)
             self.assertEqual(completed['state'], 'expired', completed)
             self.assertTrue(completed['fetched'], completed)
-            self.assertEqual(http(f"/__cad/exports/{job['id']}/file")[0], 410)
+            self.assertEqual(http(f"/api/v1/exports/{job['id']}/file")[0], 410)
             def export(request_id):
                 payload['requestId'] = request_id
-                _, _, data = http('/__cad/exports', payload)
+                _, _, data = http(f'/api/v1/documents/{doc}/exports', payload)
                 job = json.loads(data)
                 while job['state'] in ('queued', 'running'):
-                    _, _, data = http(f"/__cad/exports/{job['id']}?after={job['sequence']}&wait=25")
+                    _, _, data = http(f"/api/v1/exports/{job['id']}?after={job['sequence']}&wait=25")
                     job = json.loads(data)
                 return job
 
             # A document is what its last run made: a run of the unchanged script ran nothing, so its
             # generation stands and an export of the displayed revision is still that document.
             api.build_script(script, ['export_http'])
-            self.assertEqual(json.loads(http('/api/doc/' + doc + '/version')[2])['version'], source['revision'])
+            self.assertEqual(json.loads(http('/api/v1/documents/' + doc + '/version')[2])['version'], source['revision'])
             job = export('http-export-request-0002')
             self.assertEqual(job['state'], 'ready', job)
             # An edit is a new generation: the revision the page showed is refused.
@@ -165,7 +169,7 @@ class ViewerExportHttpTest(unittest.TestCase):
             job = export('http-export-request-0003')
             self.assertEqual(job['state'], 'failed', job)
             self.assertIn('source changed', job['error'])
-            _, _, data = http('/api/doc/' + doc + '/version')
+            _, _, data = http('/api/v1/documents/' + doc + '/version')
             self.assertIsNone(json.loads(data)['failed'], 'an export failure is not a model build failure')
             self.assertEqual(list(root.iterdir()), [script], 'no implicit source or intermediate artifact')
 

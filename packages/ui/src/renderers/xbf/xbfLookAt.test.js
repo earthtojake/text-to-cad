@@ -18,12 +18,12 @@ const read = file => fs.readFileSync(path.join(FIXTURES, file));
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), 255, 255, 255, 128]).buffer;
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith('/api/look')) return new Response(read('look.json'));
-    if (url.endsWith('/api/look/environment')) return new Response(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith('/api/v1/look')) return new Response(read('look.json'));
+    if (url.endsWith('/api/v1/look/environment')) return new Response(ENVIRONMENT);
+    const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : read('bracket/structure.json'));
   };
-  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/doc/bracket', { fetch }));
+  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/v1/documents/xbf/bracket', { fetch }));
 }
 const rounded = values => values.map(value => Math.round(value * 1000) / 1000 + 0);
 

@@ -67,7 +67,7 @@ class ListenerBoundsTest(unittest.TestCase):
         for sock in held:
             sock.close()
         self.assertTrue(until(lambda: fixture.server._slots._value == 2), "slots come back as connections end")
-        status, _headers, _body = fixture.request("GET", "/__cad/server", headers={"Host": "localhost"})
+        status, _headers, _body = fixture.request("GET", "/api/v1/server", headers={"Host": "localhost"})
         self.assertEqual(status, 200)
 
 
@@ -85,7 +85,7 @@ class GateOrderTest(unittest.TestCase):
     def request(self, *, host="127.0.0.1:4242", token=""):
         headers = {"host": host, "authorization": f"Bearer {token}" if token else ""}
         return types.SimpleNamespace(header=lambda name, default="": headers.get(name, default), query={},
-                                     path="/__cad/server", method="GET")
+                                     path="/api/v1/server", method="GET")
 
     def test_a_refused_request_neither_touches_the_engine_nor_counts_as_active(self) -> None:
         app, server = self.engine()

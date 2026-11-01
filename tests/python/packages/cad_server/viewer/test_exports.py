@@ -103,9 +103,9 @@ class ExportsTest(unittest.TestCase):
 
     def download(self, ident, *, gone=False, headers=None):
         response = Mock(gone=gone)
-        request = SimpleNamespace(path=f"/__cad/exports/{ident}/file", method="GET", query={},
+        request = SimpleNamespace(path=f"/api/v1/exports/{ident}/file", method="GET", query={},
                                   header=lambda name, default="": (headers or {}).get(name, default))
-        self.jobs.handle(request, response)
+        self.jobs.handle(request, response, [ident, "file"])
         return response
 
     def test_a_file_the_browser_fetched_whole_is_deleted_at_once(self):
@@ -212,7 +212,7 @@ class ExportsTest(unittest.TestCase):
     def test_a_new_request_names_the_epoch_the_exports_route_reads(self):
         # Nothing is inspected before a job: the page reads the session's epoch and submits at once.
         response = Mock()
-        self.jobs.handle(SimpleNamespace(path="/__cad/exports", method="GET", query={}), response)
+        self.jobs.handle(SimpleNamespace(path="/api/v1/exports", method="GET", query={}), response, [])
         response.send_json.assert_called_once_with(200, {"epoch": self.jobs.epoch})
         self.finish.set()
         ident = self.jobs.create({**self.request(), "epoch": response.send_json.call_args.args[1]["epoch"]})["id"]
@@ -235,7 +235,7 @@ class ExportsTest(unittest.TestCase):
         sent = []
         response = Mock(gone=False)
         response.stream_file.side_effect = lambda path, *_rest: sent.append(path.read_bytes())
-        self.jobs.handle(SimpleNamespace(path=f"/__cad/exports/{ident}/file", method="GET", query={}), response)
+        self.jobs.handle(SimpleNamespace(path=f"/api/v1/exports/{ident}/file", method="GET", query={}), response, [ident, "file"])
         self.assertEqual(sent, [b"model"])
         self.assertIn("attachment;", dict(response.stream_file.call_args.args[3])["content-disposition"])
 

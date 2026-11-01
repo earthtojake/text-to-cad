@@ -5,8 +5,8 @@ import { createHttpCadResourceProvider } from "../../client/resources.js";
 import { loadRobotMeshes, robotMeshUrls } from "./loadRobot.js";
 import { resolveCadAssetMeshUrl, resolveLocalAssetFileRef } from "./meshAssetUrl.js";
 
-const SOURCE = "/__cad/asset?file=%2Fw%2Fso101_description%2Furdf%2Fso101.urdf&v=7";
-const fileOf = url => new URL(url, "http://cad.local/").searchParams.get("file");
+const SOURCE = "/api/v1/local/files?path=%2Fw%2Fso101_description%2Furdf%2Fso101.urdf&v=7";
+const fileOf = url => new URL(url, "http://cad.local/").searchParams.get("path");
 
 test("a package:// mesh is the file under the folder named for its package above the description", () => {
   const url = resolveCadAssetMeshUrl("package://so101_description/meshes/base.stl", SOURCE);
@@ -34,14 +34,14 @@ test("a file:// mesh is its absolute path", () => {
 
 test("a link mesh that fails to load names its link, the mesh as written, and the server's reason", async () => {
   // The payload cadgen resolved: a link's facts carry the filename as written, its visual the URL minted for it.
-  const meshUrl = "/__cad/asset?file=%2Fw%2Fso101_description%2Fmeshes%2Fupper_arm.stl&v=7";
+  const meshUrl = "/api/v1/local/files?path=%2Fw%2Fso101_description%2Fmeshes%2Fupper_arm.stl&v=7";
   const robot = {
     links: [
       { name: "base", visuals: [] },
       { name: "upper_arm", visuals: [{ type: "box", filename: "" }, { type: "mesh", filename: "../meshes/upper_arm.stl" }] }
     ],
     visuals: [
-      { id: "upper_arm:v1", link: "upper_arm", label: "box", mesh: { format: "glb", url: "/__cad/object/box" } },
+      { id: "upper_arm:v1", link: "upper_arm", label: "box", mesh: { format: "glb", url: "/api/v1/documents/urdf/r1/parts/box" } },
       { id: "upper_arm:v2", link: "upper_arm", label: "upper_arm.stl", mesh: { format: "stl", url: meshUrl } }
     ]
   };

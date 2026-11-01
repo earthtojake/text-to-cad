@@ -1,9 +1,9 @@
-"""``GET /__cad/robot`` against a real launched server.
+"""A robot document (``/api/v1/documents/<urdf|srdf|sdf>/<id>/...``) against a real launched server.
 
 The fixture writes its own descriptions into a fresh temporary folder; nothing here reads the
-sample corpus. A description is named by its absolute path, as every file is: the route
-answers the payload with every mesh by a URL this server serves, and each primitive's GLB by
-its digest; every refusal asserts the status and the sentence.
+sample corpus. A description is opened by its absolute path, as every file is: its ``structure``
+answers the payload with every mesh by a URL this server serves, and its ``parts/<digest>`` each
+primitive's GLB; every refusal asserts the status and the sentence.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import tempfile
 import threading
 import unittest
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, urlparse
 
 from cad_server.viewer import handler as handler_module
 from cad_server.viewer.http_app import create_cad_app
@@ -69,9 +69,22 @@ class RobotRouteFixture:
         finally:
             conn.close()
 
+    def open(self, file_param):
+        """``POST /api/v1/documents``: ``(status, answer)``."""
+        conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
+        try:
+            conn.request("POST", "/api/v1/documents", body=json.dumps({"path": str(file_param)}).encode(),
+                         headers={"x-cadgen-viewer": "1"})
+            response = conn.getresponse()
+            return response.status, json.loads(response.read())
+        finally:
+            conn.close()
+
     def robot(self, file_param, mesh=None):
-        query = f"/__cad/robot?file={quote(str(file_param), safe='')}"
-        return self.request(query + (f"&mesh={mesh}" if mesh else ""))
+        """The description opened, then its structure, or one primitive's mesh."""
+        status, opened = self.open(file_param)
+        assert status == 201, opened
+        return self.request(f"{opened['api']}/structure" if mesh is None else f"{opened['api']}/parts/{mesh}")
 
 
 class RobotRouteTestCase(unittest.TestCase):
@@ -92,16 +105,18 @@ class ItServesTheRobot(RobotRouteTestCase):
         payload = json.loads(body)
         self.assertEqual([control["id"] for control in payload["articulation"]["controls"]], ["nod"])
         box, head = payload["visuals"]
-        # The primitive: this route, by hash. The file: the asset route, versioned.
+        # The primitive: the document's part, by hash. The file: the files route, versioned.
         self.assertEqual(box["mesh"]["format"], "glb")
+        api = self.fixture.open(self.fixture.path("arm.urdf"))[1]["api"]
+        self.assertTrue(api.startswith("/api/v1/documents/urdf/"), api)
         parsed = urlparse(box["mesh"]["url"])
-        self.assertEqual(parsed.path, "/__cad/robot")
-        self.assertEqual(parse_qs(parsed.query)["file"], [self.fixture.path("arm.urdf")])
-        digest = parse_qs(parsed.query)["mesh"][0]
+        self.assertEqual(parsed.path.rsplit("/", 1)[0], f"{api}/parts")
+        digest = parsed.path.rsplit("/", 1)[1]
+        self.assertRegex(digest, r"^[0-9a-f]{64}$")
         self.assertEqual(head["mesh"]["format"], "stl")
         head_url = urlparse(head["mesh"]["url"])
-        self.assertEqual(head_url.path, "/__cad/asset")
-        self.assertEqual(parse_qs(head_url.query)["file"], [self.fixture.path(os.path.join("meshes", "head.stl"))])
+        self.assertEqual(head_url.path, "/api/v1/local/files")
+        self.assertEqual(parse_qs(head_url.query)["path"], [self.fixture.path(os.path.join("meshes", "head.stl"))])
         self.assertTrue(parse_qs(head_url.query)["v"][0])
         self.assertNotIn("path", head["mesh"], "the page gets URLs, not the host's paths")
 
@@ -109,13 +124,13 @@ class ItServesTheRobot(RobotRouteTestCase):
         self.assertEqual(status, 200)
         self.assertEqual(headers["content-type"], "model/gltf-binary")
         self.assertEqual(mesh[:4], b"glTF")
-        # The asset route serves the link mesh the payload named.
+        # The files route serves the link mesh the payload named.
         status, _headers, stl = self.fixture.request(head["mesh"]["url"])
         self.assertEqual((status, stl), (200, b"solid head\nendsolid head\n"))
 
     def test_a_mesh_the_payload_does_not_name_is_not_served(self) -> None:
         status, _headers, body = self.fixture.robot(self.fixture.path("arm.urdf"), mesh="0" * 64)
-        self.assertEqual((status, json.loads(body)), (404, {"error": "Not found"}))
+        self.assertEqual((status, json.loads(body)["error"]), (404, f"the robot names no mesh {'0' * 64}"))
         status, _headers, body = self.fixture.robot(self.fixture.path("arm.urdf"), mesh="not-a-hash")
         self.assertEqual(status, 400)
         self.assertIn("by its digest", json.loads(body)["error"])
@@ -124,7 +139,7 @@ class ItServesTheRobot(RobotRouteTestCase):
         from cad_server import robot_payload
 
         payload = json.loads(self.fixture.robot(self.fixture.path("arm.urdf"))[2])
-        digest = parse_qs(urlparse(payload["visuals"][0]["mesh"]["url"]).query)["mesh"][0]
+        digest = urlparse(payload["visuals"][0]["mesh"]["url"]).path.rsplit("/", 1)[1]
         with robot_payload._LOCK:
             robot_payload._MESHES.pop(digest)
         status, _headers, mesh = self.fixture.robot(self.fixture.path("arm.urdf"), mesh=digest)
@@ -141,13 +156,19 @@ class ItRefuses(RobotRouteTestCase):
         self.assertIn("could not be parsed as URDF XML", json.loads(body)["error"])
 
     def test_a_ref_this_route_will_not_take(self) -> None:
-        for ref, expected in (("", "needs ?file="), ("arm.urdf", "not an absolute path"), (self.fixture.path("part.step"), "part.step is not a")):
+        for ref, expected in (("", "absolute path"), ("arm.urdf", "not an absolute path")):
             with self.subTest(ref=ref):
-                status, _headers, body = self.fixture.robot(ref)
-                self.assertEqual(status, 400, body[:200])
-                self.assertIn(expected, json.loads(body)["error"])
-        status, _headers, body = self.fixture.robot(self.fixture.path("absent.urdf"))
-        self.assertEqual((status, json.loads(body)), (404, {"error": "Not found"}))
+                status, answer = self.fixture.open(ref)
+                self.assertEqual(status, 400, answer)
+                self.assertIn(expected, answer["error"])
+        # A mesh is no robot: its id under a robot's kind is a 404 naming its own.
+        Path(self.fixture.path("part.stl")).write_bytes(b"solid p\nendsolid p\n")
+        status, mesh = self.fixture.open(self.fixture.path("part.stl"))
+        self.assertEqual(status, 201, mesh)
+        status, _headers, body = self.fixture.request(f"/api/v1/documents/urdf/{mesh['id']}/structure")
+        self.assertEqual((status, json.loads(body)["error"]), (404, f"{mesh['id']} is a stl"))
+        status, answer = self.fixture.open(self.fixture.path("absent.urdf"))
+        self.assertEqual((status, answer["error"]), (404, f"no CAD file at {self.fixture.path('absent.urdf')}"))
 
 
 if __name__ == "__main__":

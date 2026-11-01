@@ -38,11 +38,14 @@ after(() => rm(temporary, { recursive: true, force: true }));
 const IDS = { '/m/one.step': '6f1c2a4e-1b2c-5d3e-8f4a-000000000001', '/m/folder/two.step': '6f1c2a4e-1b2c-5d3e-8f4a-000000000002',
   '/m/picked.step': '6f1c2a4e-1b2c-5d3e-8f4a-000000000003' };
 const ONE = IDS['/m/one.step'], TWO = IDS['/m/folder/two.step'], PICKED = IDS['/m/picked.step'];
-/** The catalog's answer for one document, asked by its path or its id. */
+/** Whether `url` (with its `init`) is the catalog's read of one document: by its path, or its id. */
+const isCatalog = (url, init = {}) => (init.method ?? 'GET') === 'GET' && (url.startsWith('/api/v1/documents?path=') || /^\/api\/v1\/documents\/[0-9a-f-]{36}$/.test(url));
+/** The catalog's answer for one document, asked by its path (envelopes) or its id (its envelope). */
 function catalogOf(url) {
-  const params = new URL(url, 'http://cad.local').searchParams;
-  const file = params.get('file') || Object.keys(IDS).find(path => IDS[path] === params.get('id'));
-  return { entries: file && IDS[file] ? [{ id: IDS[file], file }] : [] };
+  const parsed = new URL(url, 'http://cad.local');
+  const file = parsed.searchParams.get('path') || Object.keys(IDS).find(path => IDS[path] === parsed.pathname.split('/').pop());
+  const envelope = file && IDS[file] ? { id: IDS[file], kind: 'step', entry: { id: IDS[file], file }, revision: '' } : null;
+  return parsed.searchParams.has('path') ? { documents: envelope ? [envelope] : [] } : envelope;
 }
 
 test('the web host keeps the URL, the history, the title and the appearance, and hands the rest to the shared viewer', async () => {
@@ -62,12 +65,13 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (url === '/__cad/analytics' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
-    const reply = url.startsWith('/__cad/catalog') ? catalogOf(url) : url === '/__cad/version' ? { notice }
-      : url === '/__cad/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
-      : url === '/__cad/recents' ? { recents: [] } : url === '/__cad/pick' ? { path: '/m/picked.step' }
-      : url !== '/__cad/analytics' ? { ok: true }
-      : init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
+    if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    const telemetry = init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
+    const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/server' ? { notice }
+      : url === '/api/v1/local/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
+      : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
+      : url !== '/api/v1/settings' ? { ok: true }
+      : { language: { locale: null }, telemetry };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   // The page's own client over this Viewer's routes, its server's description answered here.
@@ -89,7 +93,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-path', 'reveal']);
     assert.equal(viewer().host.fileActions.platform, 'darwin', 'Reveal is labeled for the machine the server runs on');
     await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/reveal'), [['/__cad/reveal', { path: '/m/one.step' }]]);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/reveal'), [['/api/v1/local/reveal', { path: '/m/one.step' }]]);
     assert.equal(viewer().host.links.version, '0.7.4');
     assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
     // An engine of another release answering is an update, which the page reloads into.
@@ -115,21 +119,22 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // Once the catalog has the file, the page is named after it and it joins the library.
     await act(() => viewer().onShown('/m/one.step', ONE));
     assert.equal(window.document.title, 'one.step');
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/recents'), [['/__cad/recents', { action: 'open', path: '/m/one.step' }]]);
-    // CAD's telemetry, as the CAD app's: the consent read once, its answer in the app menu. (The
-    // model shown is counted, by its format and only with consent, as it joins the library.)
-    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')), [['/__cad/analytics', null]]);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/documents'), [['/api/v1/documents', { action: 'open', path: '/m/one.step' }]]);
+    // CAD's telemetry, as the CAD app's: the person's settings read for the consent (and once for the
+    // language), its answer in the app menu. (The model shown is counted, by its format and only with
+    // consent, as it joins the library.)
+    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/api/v1/settings')), [['/api/v1/settings', null], ['/api/v1/settings', null]]);
     // A Quick Edit copied is counted by this Viewer's server, as a touch is: told nothing of the edit.
     viewer().host.usage.used('quickEdit');
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics/activity'), [['/__cad/analytics/activity', { quickEdit: true }]]);
-    libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/__cad/analytics/activity'), 1);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/activity'), [['/api/v1/local/activity', { quickEdit: true }]]);
+    libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/api/v1/local/activity'), 1);
     // So are the controls a person used, as the shared viewer counted them: names and seconds, nothing else.
     viewer().host.usage.controls([{ control: 'display_xray', count: 1, seconds: 0 }]);
     await new Promise(resolve => setImmediate(resolve));
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics/activity'),
-      [['/__cad/analytics/activity', { controls: [{ control: 'display_xray', count: 1, seconds: 0 }] }]]);
-    libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/__cad/analytics/activity'), 1);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/activity'),
+      [['/api/v1/local/activity', { controls: [{ control: 'display_xray', count: 1, seconds: 0 }] }]]);
+    libraryCalls.splice(libraryCalls.findIndex(([url]) => url === '/api/v1/local/activity'), 1);
     // The app menu: Analytics.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
       [['Telemetry', false]]);
@@ -137,15 +142,15 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // is the person's answer.
     assert.equal(viewer().notice, undefined);
     await act(() => viewer().appSettings[0].onCheckedChange(false));
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false }]);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/settings').at(-1), ['/api/v1/settings', { telemetry: { share: false } }]);
     // A newer release is the update button, as in the CAD app: an icon first in the navbar while this
     // install is behind, drawn from the notice the page started with: nothing is read for it.
     assert.equal(viewer().update.props.notice.latest, '0.9.0');
     assert.equal(viewer().update.props.phase.phase, 'idle');
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [], 'nothing read: the page started with the notice');
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/server'), [], 'nothing read: the page started with the notice');
     // A click updates: the engine is asked, and the button follows its update.
     await act(async () => { viewer().update.props.onUpdate(); await new Promise(resolve => setTimeout(resolve, 10)); });
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/update').map(([url]) => url), ['/__cad/update']);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/api/v1/local/update').map(([url]) => url), ['/api/v1/local/update']);
     assert.equal(viewer().update.props.phase.phase, 'working');
     assert.deepEqual(guards, ['1']);
 
@@ -166,13 +171,14 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().onShown(null));
     assert.equal(window.document.title, 'text-to-cad');
     assert.deepEqual(await viewer().library.list(), []);
-    assert.equal(libraryCalls.at(-1)[0], '/__cad/recents');
-    assert.equal(await viewer().library.thumbnail('abc'), '/__cad/thumbnail?name=abc');
+    assert.equal(libraryCalls.at(-1)[0], '/api/v1/documents');
+    // A picture, by its document's id, versioned by its name.
+    assert.equal(await viewer().library.thumbnail({ id: ONE, thumbnail: 'abc.png' }), `/api/v1/documents/${ONE}/thumbnail?v=abc.png`);
     // A model opened from the home, and one picked with Open, are shown here, each a new step.
     await act(() => viewer().library.open({ path: '/m/folder/two.step' }));
     assert.equal(viewer().file, TWO);
     await act(() => viewer().library.pick());
-    assert.ok(libraryCalls.some(([url]) => url === '/__cad/pick'));
+    assert.ok(libraryCalls.some(([url]) => url === '/api/v1/local/pick'));
     assert.equal(viewer().file, PICKED);
     assert.equal(new URL(window.location.href).pathname, `/${PICKED}`);
     // Back to home leads to the bare URL: the home is a step of the browser's history, as a file is,
@@ -201,13 +207,13 @@ test('a page whose engine is gone says so in its language, over the page, until 
   // The catalog's answer: nothing listening (a stopped engine), an engine that does not know this
   // page's token (one started since), or the engine back.
   let catalog = 'back';
-  globalThis.fetch = async (url) => {
-    if (url.startsWith('/__cad/catalog') && catalog === 'stopped') throw new TypeError('Failed to fetch');
-    if (url.startsWith('/__cad/catalog') && catalog === 'restarted') {
+  globalThis.fetch = async (url, init = {}) => {
+    if (isCatalog(url, init) && catalog === 'stopped') throw new TypeError('Failed to fetch');
+    if (isCatalog(url, init) && catalog === 'restarted') {
       return new Response(JSON.stringify({ error: 'engine token required' }), { status: 403, headers: { 'content-type': 'application/json' } });
     }
-    const reply = url.startsWith('/__cad/catalog') ? catalogOf(url) : url === '/__cad/recents' ? { recents: [] }
-      : url === '/__cad/language' ? { locale: 'ja' } : url === '/__cad/analytics' ? { sharing: false, reason: 'untold', policy: 'p' } : { ok: true };
+    const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/documents' ? { documents: [] }
+      : url === '/api/v1/settings' ? { language: { locale: 'ja' }, telemetry: { sharing: false, reason: 'untold', policy: 'p' } } : { ok: true };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };

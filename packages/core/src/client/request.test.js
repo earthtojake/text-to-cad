@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { isEngineGone, isEngineRefused, requestViewerJson } from "./request.js";
 
-const url = "/__cad/artifact?file=part.step";
+const url = "/api/v1/artifact?file=part.step";
 
 test("transport failure retains context and never claims compilation failed", async (t) => {
   t.mock.method(globalThis, "fetch", async () => { throw new TypeError("Failed to fetch"); });
@@ -21,6 +21,8 @@ test("HTTP failures preserve response status and structured server diagnostics",
     assert.equal(error.failure.kind, "http");
     assert.equal(error.failure.status, 503);
     assert.equal(error.failure.detail, "Worker unavailable");
+    // The answer rides along: the API's `hint`, a missing document's `state`.
+    assert.deepEqual(error.failure.payload, { error: { message: "Worker unavailable" } });
     return true;
   });
 });

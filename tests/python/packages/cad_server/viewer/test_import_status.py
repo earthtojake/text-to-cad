@@ -68,7 +68,7 @@ class ImportStatusTest(unittest.TestCase):
         self.engine.say(None)
         self.engine.release.set()
         for documents in (quick, patient):
-            self.assertEqual(documents.response(str(self.step)), (200, {"doc": "doc-1", "url": "/__cad/api/doc/doc-1"}))
+            self.assertEqual(documents.response(str(self.step)), (200, {"doc": "doc-1"}))
 
     def test_without_an_engine_the_202_says_no_frame(self) -> None:
         documents = EngineDocuments(hold_seconds=0.0, retry_ms=0, server=None)
