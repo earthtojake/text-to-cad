@@ -237,7 +237,7 @@ tools, annotate, select and quick edit; every renderer serves that review.
 
 A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
 reads what the engine serves of it through the viewer (`client.engineDocument`,
-`/__cad/xbf`) — its structure and one buffer per part — and reads no source or sidecar. A
+`/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.
 The Model tree shares the explorer's row and filter primitives. Its rows are the

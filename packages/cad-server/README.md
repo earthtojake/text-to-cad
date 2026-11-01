@@ -22,8 +22,8 @@ src/cad_server/
   cli/                   # the `cad` command: a module per command, each a shell over
                          #   the function or parser that does the work
   viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
-                         #   (http_app), files by absolute path (backend), a file's catalog row
-                         #   (scanner), the explorer's reads (folders), the model library
+                         #   (http_app: /api/v1, its document kinds in kinds), files by
+                         #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
                          #   payload (drawings), a robot's (robots), Quick Edit's packets
@@ -119,7 +119,11 @@ their size and when they were last written, and `cad doctor --prune` removes the
 written them for seven days -- a 0.7 in use writes its store at every build -- or at once with
 `--all-versions`, once no 0.7 is left in any agent app.
 
-The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
-uses the same host and custom-header POST gates as other mutation routes, limits
+The engine's HTTP API is `/api/v1` (`viewer/http_app.py`, its document kinds `viewer/kinds.py`; the
+routes are listed in the engine README's **Wire format**): the pages are at the root, and every
+route they call is under it.
+
+The viewer exposes `POST /api/v1/local/clipboard` for explicit viewport PNG copies. It
+uses the same host and custom-header gates as other mutation routes, limits
 images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
 reads the clipboard. Unsupported desktop clipboard environments return an error.

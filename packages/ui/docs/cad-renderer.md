@@ -300,8 +300,8 @@ it, the file sidebar, Quick Edit at the top-right.
   --camera authored` the view the ink was last drawn in. Quick Edit puts no measurement in its
   packet: they are the person's.
 
-- **The picture comes from the BACKEND.** `client.drawing(file)` is
-  `GET /__cad/drawing` (`apps/web/docs/backend.md`), asked again while the server
+- **The picture comes from the BACKEND.** `client.drawing(file)` is the DXF document's
+  `drawing` (`GET /api/v1/documents/dxf/<id>/drawing`, `apps/web/docs/backend.md`), asked again while the server
   renders a drawing it has not drawn before: ezdxf flattens the modelspace on the
   server — text placed, dimensions exploded, hatches filled, blocks placed — and the
   client receives five primitive shapes and `text` in DXF coordinates, y up. **This
@@ -483,7 +483,7 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
 
 `createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
 `.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, one payload: cadgen
-resolves the description (`GET /__cad/robot`, `cad_server.robot_payload`) into the
+resolves the description (its document's `structure`, `cad_server.robot_payload`) into the
 articulation the page plays, played by core's `common/articulation.js`, the visuals it
 draws (each mesh at its rest placement: a link's mesh file, or a box, cylinder, sphere or
 capsule cadgen meshed, held by its digest) and the facts a person reads back. An SRDF is its paired URDF with the SRDF's
@@ -518,7 +518,7 @@ the loader asks which format it was.
 - **Loading** (`robot/useRobotDocument.js`, over core's `lib/urdf/loadRobot.js`):
   `loadRenderRobot` (the payload, cached by the description's
   revision), then every distinct mesh URL it names (`loadRenderMeshByUrl`, at most six
-  at a time; a primitive is served by cadgen by its digest, `/__cad/robot?file=&mesh=<hash>`).
+  at a time; a primitive is served by cadgen by its digest, its document's `parts/<hash>`).
   Progress reads "Loading URDF", "Loading meshes 3/13",
   "Building robot". The robot is published once, whole. A mesh that cannot be fetched
   fails the load. A warm file is on screen on the first render; a new revision loads

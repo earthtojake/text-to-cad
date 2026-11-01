@@ -2,7 +2,7 @@
 // Bake the shared reflection environment: the CAD Viewer's neutral studio (core's
 // `createStudioEnvironmentScene` at its defaults, the one an authored finish reflected) as a
 // Radiance HDR equirectangular image, which the engine ships (`cad/engine/render/studio.hdr`,
-// served at `GET /api/look/environment`) and both renderers light an engine document's regular
+// served at `GET /api/v1/look/environment`) and both renderers light an engine document's regular
 // modes with: the viewer through PMREM, the OCCT prototype through its cube map.
 //
 //   node scripts/look/bake-environment.mjs [OUT.hdr]

@@ -74,6 +74,12 @@ nowhere.
 **6. Updates are by hand**: the update button in the CAD Viewer and the CAD app, `cad
 update`, or the install command again. Nothing updates on its own.
 
+**7. The engine's HTTP API is `/api/v1`**: a script that read the engine's port by hand reads
+`GET /api/v1/server` for 0.8's `/__cad/server` and `/__cad/version`, a document by its id at
+`/api/v1/documents/<id>` (its envelope, whose `api` names its kind's reads) for `/__cad/catalog`
+and `/__cad/api/doc/<id>`, and the rest as the engine's README lists it (**Wire format**). A 0.8
+page still open when the engine moves to 0.9 is reloaded by hand.
+
 Installing the library into a Python of your own instead of the install command: it is
 `cad` on PyPI now (`pip install 'cad[build123d]==0.10.0'`; pin it, the release you run), beside the
 server, `cad-server`, and the CAD app's, `cad-mcp`; `cadgen` and `text-to-cad` install `cad` at the

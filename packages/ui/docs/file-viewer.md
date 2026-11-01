@@ -141,7 +141,7 @@ in through `source.search`: the client waits 150 ms after the last keystroke and
 aborts the search before it, and each match shows its path below the folder, the
 subfolders muted before the name. An answer that is `truncated` adds "Stopped early.
 Keep typing to narrow the search." The viewer server bounds both reads
-(`GET /__cad/folder`, `/__cad/search`): hidden and build folders are left out of each,
+(`GET /api/v1/local/folder`, with `q` a search): hidden and build folders are left out of each,
 and a search stops at 200 results, about 1.5 s or depth 24, walking a folder it reaches
 twice once. A pick opens the file through `navigation.openFile` and closes the popover.
 Up and Down move between the filter and the rows; Escape closes it like any popover.
