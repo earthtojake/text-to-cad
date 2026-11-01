@@ -103,8 +103,8 @@ with the same options.
 
 The install command gives every app the same plugin, from one folder on your computer
 that the release writes: `plugin` in text-to-cad's state folder
-(`~/Library/Application Support/texttocad/plugin` on macOS,
-`~/.local/state/texttocad/plugin` on Linux, `%LOCALAPPDATA%\texttocad-state\plugin` on
+(`~/Library/Application Support/cad/plugin` on macOS,
+`~/.local/state/cad/plugin` on Linux, `%LOCALAPPDATA%\cad-state\plugin` on
 Windows); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
 -- each app's manifest, its config for CAD's server, and the skills -- at the release
 your computer runs, and is written again in place when an update moves your computer to

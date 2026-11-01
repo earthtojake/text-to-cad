@@ -53,14 +53,14 @@ uvx --no-config --managed-python --python 3.14 --from cad-mcp==0.10.0 cad-mcp
 The server's key stays `cad`. The installer rewrites the Claude Desktop entry it wrote
 ([the whole entry](../install.md#claude-desktop-chat-tab)).
 
-**5. The state and cache folders moved**, to names for text-to-cad:
+**5. The state and cache folders moved**, named `cad` now:
 
 | | 0.8 | 0.10 |
 |---|---|---|
-| State, macOS | `~/Library/Application Support/cadgen` | `~/Library/Application Support/texttocad` |
-| State, Linux | `~/.local/state/cadgen` (`$XDG_STATE_HOME`) | `~/.local/state/texttocad` |
-| State, Windows | `%LOCALAPPDATA%\cadgen-state` | `%LOCALAPPDATA%\texttocad-state` |
-| Cache | `~/.cache/cadgen` (`$XDG_CACHE_HOME`; Windows `%LOCALAPPDATA%\cadgen`) | `~/.cache/texttocad` (Windows `%LOCALAPPDATA%\texttocad`) |
+| State, macOS | `~/Library/Application Support/cadgen` | `~/Library/Application Support/cad` |
+| State, Linux | `~/.local/state/cadgen` (`$XDG_STATE_HOME`) | `~/.local/state/cad` |
+| State, Windows | `%LOCALAPPDATA%\cadgen-state` | `%LOCALAPPDATA%\cad-state` |
+| Cache | `~/.cache/cadgen` (`$XDG_CACHE_HOME`; Windows `%LOCALAPPDATA%\cadgen`) | `~/.cache/cad` (Windows `%LOCALAPPDATA%\cad`) |
 
 The installer moves into the new state folder, once, what 0.10 keeps: your settings (the
 telemetry answer, so a no stays a no -- the old folder keeps a no too, for 0.8 while it

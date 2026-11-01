@@ -87,7 +87,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
    `$TMPDIR`), else `/tmp/cadgen-<uid>` (the names releases before 0.10 used too, so each finds the
    other's door) -- and the server's own
-   state in the user's state folder (`texttocad`): settings, Recents' small previews, and the registry of the
+   state in the user's state folder (`cad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
    program's; both this user's alone), each registered installation's record
@@ -96,7 +96,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    releases an update installed (`releases/<version>`: each one's environment, made by uv from its
    cache; the one before the current kept as the way back);
    never geometry and never source. In the
-   platform's cache folder (`~/.cache/texttocad`; on Windows `%LOCALAPPDATA%\texttocad`) it keeps, under `documents/` and
+   platform's cache folder (`~/.cache/cad`; on Windows `%LOCALAPPDATA%\cad`) it keeps, under `documents/` and
    nowhere else there, each model document's bytes as it last built them: its own file, never a
    declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
    -- and made again by a run of its script (a shape's by the program that handed it over), so a

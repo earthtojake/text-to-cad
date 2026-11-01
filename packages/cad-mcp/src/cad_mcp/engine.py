@@ -71,10 +71,10 @@ def state_dir() -> Path:
     if override:
         return Path(override)
     if sys.platform == "darwin":
-        return Path.home() / "Library" / "Application Support" / "texttocad"
+        return Path.home() / "Library" / "Application Support" / "cad"
     if sys.platform == "win32":
-        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "texttocad-state"
-    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "texttocad"
+        return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / "cad-state"
+    return Path(os.environ.get("XDG_STATE_HOME") or Path.home() / ".local" / "state") / "cad"
 
 
 def engine_dir() -> Path:

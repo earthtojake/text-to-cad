@@ -54,7 +54,7 @@ WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy.
 MARK = "cad proxy: "
-REVISION = 5
+REVISION = 6
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -384,8 +384,8 @@ _SH = """#!/bin/sh
 # else the one registered last. Every release writes this same file (cad setup, cad doctor, the
 # CAD app's server).
 if [ -n "$CAD_STATE_DIR" ]; then state=$CAD_STATE_DIR
-elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/texttocad"
-else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/texttocad"
+elif [ "$(uname -s)" = Darwin ]; then state="$HOME/Library/Application Support/cad"
+else state="${{XDG_STATE_HOME:-$HOME/.local/state}}/cad"
 fi
 current=$(sed -n '1p' "$state/installations/current" 2>/dev/null)
 case $current in ''|*[!0-9A-Za-z.+_-]*) current= ;; esac
@@ -413,7 +413,7 @@ rem {mark}{revision}\r
 rem The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),\r
 rem else the one registered last.\r
 setlocal EnableDelayedExpansion\r
-if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\texttocad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\texttocad-state")\r
+if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cad-state")\r
 set "current="\r
 if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
 if defined current if exist "!state!\\installations\\!current!.json" (\r

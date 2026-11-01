@@ -318,7 +318,7 @@ it again.
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.
 - **A restart reopens what was built.** The server keeps each model document's bytes in
-  the platform's cache folder (`~/.cache/texttocad/documents/`), once it is idle, so after a
+  the platform's cache folder (`~/.cache/cad/documents/`), once it is idle, so after a
   restart its id answers every verb as last built (`cad status`: `held`, on `disk`).
   A document is what its last run made: the server never checks the code on disk against
   it, no surface says the script changed, and nothing reruns. After an edit, run the script

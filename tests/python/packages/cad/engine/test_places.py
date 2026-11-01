@@ -1,6 +1,6 @@
 """The state folder an earlier release kept, adopted (``cad.engine.places.adopt``, ``adopt_earlier``).
 
-0.9 names its state folder ``texttocad`` where 0.8's was ``cadgen``: what this release keeps of the earlier
+0.9 names its state folder ``cad`` where 0.8's was ``cadgen``: what this release keeps of the earlier
 one -- the person's settings, the installations' records less ``current``, the engines' records with the page
 token, the documents' records and Recents, setup's receipt and the install channels -- moves into its own,
 each once, and the rest stays, with the person's telemetry no for the earlier release still installed. Every folder here is a temporary one: the platform's places are stood in
@@ -35,7 +35,7 @@ class Folders(unittest.TestCase):
         scratch = tempfile.TemporaryDirectory(prefix="places-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
-        self.earlier, self.folder = self.root / "cadgen", self.root / "texttocad"
+        self.earlier, self.folder = self.root / "cadgen", self.root / "cad"
         write(self.earlier / "settings.json", '{"telemetry": {"choice": "off"}}')
         write(self.earlier / "installations" / "0.8.4.json", '{"version": "0.8.4"}')
         write(self.earlier / "installations" / "current", "0.8.4")
@@ -118,7 +118,7 @@ class AdoptEarlierTest(Folders):
                                              "LOCALAPPDATA": str(self.root)}):
             self.assertEqual(places.earlier_state_dir(), self.earlier)
             self.assertEqual(places.earlier_cache_dir(), self.root / "cadgen")
-            self.assertEqual(places.cache_dir(), self.root / "texttocad")
+            self.assertEqual(places.cache_dir(), self.root / "cad")
         named = {"CAD_STATE_DIR": str(self.root / "s"), "CAD_CACHE_DIR": str(self.root / "c")}
         with mock.patch.dict(os.environ, named):
             self.assertEqual((places.earlier_state_dir(), places.earlier_cache_dir()), (self.root / "s", self.root / "c"))

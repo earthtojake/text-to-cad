@@ -175,7 +175,7 @@ engine builds is written beside a project only as the files models declare or a 
 exports. Beside the person's settings, in the state folder, it keeps one record per model or
 opened file (`documents/<uuid>/document.json`: the script and function that build it, or
 the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
-`~/.cache/texttocad`) it keeps each model document's bytes as last built,
+`~/.cache/cad`) it keeps each model document's bytes as last built,
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
 every document without a build, and under `pycache/` the bytecode the daemon and its
 workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`); it touches nothing else in

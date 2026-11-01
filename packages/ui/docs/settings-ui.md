@@ -183,7 +183,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   own, starts it where the explorer was last in this tab (the tab's `explorer.folder`, kept as
   it moves), else in the person's home folder (the server's `home`), never in the folder of the
   script that built it. It lists one folder at a time — its subfolders, then its CAD files,
-  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/texttocad` and the
+  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/cad` and the
   folders on the way to it), which holds each model's `documents/<id>/document.xbf` — in compact rows: one 24px
   line of 12px text each, its kind a small light glyph in one column 5px in from the row's
   left end and 4px before the name (a folder its disclosure chevron, with no folder icon; a

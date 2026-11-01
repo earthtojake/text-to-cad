@@ -832,7 +832,7 @@ engine server 98307, up 2h10m · workers 3/10 with the standby · held by 1 app 
   waiting  2 builds, first come first served
 retired: finger_01.py (LRU) 3m ago · qdd_actuator.py (pressure) 41m ago · tom.py (RSS) 2h ago
 serving http://127.0.0.1:52811: 3 documents · 2.1 GB of 16.0 GB held
-cache /Users/me/.cache/texttocad: 14 documents · 212.4 MB, kept until deleted
+cache /Users/me/.cache/cad: 14 documents · 212.4 MB, kept until deleted
 documents:
   live      tom      8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12
   held      bracket  3e9b7c21-55aa-5f0e-8d11-6c2a9b4e7d30  memory and disk
@@ -1083,7 +1083,7 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 **The cache.** For every model and shape document -- never a file's, which is its own
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
 ([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
-`$XDG_CACHE_HOME/texttocad` or `%LOCALAPPDATA%\texttocad`, else `~/.cache/texttocad`; releases before
+`$XDG_CACHE_HOME/cad` or `%LOCALAPPDATA%\cad`, else `~/.cache/cad`; releases before
 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the

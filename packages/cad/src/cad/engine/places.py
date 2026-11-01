@@ -78,12 +78,12 @@ MARKER_SCHEMA = "cadgen env/2"
 # what the homes show of them (Recents), and setup's receipt and the install channels. Not the locks,
 # nor the telemetry an earlier release noted and did not send. The person's telemetry no stays in the
 # earlier folder too, for the earlier release still installed (``adopt``).
-STATE = ("texttocad", "texttocad-state")
+STATE = ("cad", "cad-state")
 EARLIER_STATE = ("cadgen", "cadgen-state")
 SETTINGS = "settings.json"
 ADOPTED = (SETTINGS, INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
            "install-channels.json")
-CACHE, EARLIER_CACHE = "texttocad", "cadgen"
+CACHE, EARLIER_CACHE = "cad", "cadgen"
 
 
 def _platform_state(names: tuple[str, str]) -> Path:
@@ -96,8 +96,8 @@ def _platform_state(names: tuple[str, str]) -> Path:
 
 
 def state_dir() -> Path:
-    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``texttocad`` in the platform's
-    place for state (on Windows ``texttocad-state`` in the local application data)."""
+    """Where this user's CAD state lives (``CAD_STATE_DIR`` overrides it): ``cad`` in the platform's
+    place for state (on Windows ``cad-state`` in the local application data)."""
     override = os.environ.get("CAD_STATE_DIR")
     if override:
         return Path(override)
@@ -180,8 +180,8 @@ def cache_dir() -> Path:
     cache location, which the system and the person treat as disposable -- wiping it loses no
     state, the records stay in ``state_dir``. ``CAD_CACHE_DIR`` when set (a relative one made
     absolute once, and written back, so a worker after a ``chdir`` names the same folder), else
-    ``$XDG_CACHE_HOME/texttocad`` on POSIX or ``%LOCALAPPDATA%\\texttocad`` on Windows when set, else
-    ``~/.cache/texttocad``. An earlier release's cache (named for cadgen) is not read: it is a cache."""
+    ``$XDG_CACHE_HOME/cad`` on POSIX or ``%LOCALAPPDATA%\\cad`` on Windows when set, else
+    ``~/.cache/cad``. An earlier release's cache (named for cadgen) is not read: it is a cache."""
     return _cache_dir(CACHE)
 
 

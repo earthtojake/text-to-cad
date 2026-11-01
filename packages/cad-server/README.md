@@ -99,8 +99,8 @@ new release and brings the copies along; nothing updates by itself. A model buil
 the one registered last (`_internal/proxy.py`; a `+<version>` is taken off). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
-The state folder is `texttocad` in the platform's place for state (`texttocad-state` on Windows),
-the cache folder `texttocad` in its place for caches. On a computer an earlier release (0.8, named
+The state folder is `cad` in the platform's place for state (`cad-state` on Windows),
+the cache folder `cad` in its place for caches. On a computer an earlier release (0.8, named
 cadgen) set up, `cad setup`, `cad doctor` and a registration move what this release keeps of the
 earlier state folder into this one, each thing once and only where this one has none of it: the
 settings, the installations' records, the engines' records with the page token, the documents'

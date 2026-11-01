@@ -161,7 +161,7 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
   a hidden folder opens like any other. The explorer reads one folder at a
   time, and its search skips hidden folders and `__cadgen__`, `__pycache__`,
   `build`, `coverage`, `dist`, `node_modules` and `viewer` (exact case) — except the folders
-  on the way to the engine's cache (`~/.cache/texttocad`, each model's
+  on the way to the engine's cache (`~/.cache/cad`, each model's
   `documents/<id>/document.xbf`), which it lists.
   [docs/backend.md](docs/backend.md) has the rules.
 - **Verify a link by loading the page**, never by curling `/api/v1/local/files` —
