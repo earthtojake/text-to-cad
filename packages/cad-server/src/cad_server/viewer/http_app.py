@@ -201,6 +201,11 @@ def _working_folder() -> str:
 CHANGING_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 # What to do, said with an error of each status the routes' funnel answers.
 _ROUTES_HINT = "the engine's routes are under /api/v1; GET /api/v1/server says what this engine reads"
+# 0.8's reload probe: a CAD Viewer tab of 0.8 left open across the upgrade asks these (its reconnect
+# compares `pid`, its server info `identityToken`; one that started an update asks `version`), so each
+# answers as `GET /api/v1/server` does and the tab reloads itself into this release. Answered through
+# 0.10, gone in 0.11; nothing else under `/__cad/` is a route.
+_PROBES_0_8 = ("/__cad/server", "/__cad/version")
 _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path or id", 413: "send less",
                  500: "this is a bug in the CAD server: report it with the error"}
 # A part's elements, as their routes name them and as the engine's reads do.
@@ -513,6 +518,12 @@ class CadApp:
         # Gated before dispatch, not per route, so a route that changes something added later is
         # covered by construction.
         if method in CHANGING_METHODS and self._rejected_as_cross_site_post(request, response):
+            return
+        if pathname in _PROBES_0_8:
+            try:
+                self._methods(request, {"GET": lambda: send_json(response, 200, self.api_server())})
+            except ApiError as refusal:
+                refusal.send(response)
             return
         if pathname == "/api" or pathname.startswith("/api/"):
             try:

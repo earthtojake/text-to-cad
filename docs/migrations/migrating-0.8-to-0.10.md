@@ -77,8 +77,10 @@ update`, or the install command again. Nothing updates on its own.
 **7. The engine's HTTP API is `/api/v1`**: a script that read the engine's port by hand reads
 `GET /api/v1/server` for 0.8's `/__cad/server` and `/__cad/version`, a document by its id at
 `/api/v1/documents/<id>` (its envelope, whose `api` names its kind's reads) for `/__cad/catalog`
-and `/__cad/api/doc/<id>`, and the rest as the engine's README lists it (**Wire format**). Reload
-any CAD Viewer tab left open from 0.8: it says its engine is gone until you reload it.
+and `/__cad/api/doc/<id>`, and the rest as the engine's README lists it (**Wire format**). A CAD
+Viewer tab left open from 0.8 reloads itself into 0.10 once its engine answers. The CAD tab in Codex
+or the card in Claude Desktop is 0.8's own app, which the restart the install command asks for
+replaces.
 
 Installing the library into a Python of your own instead of the install command: it is
 `cad` on PyPI now (`pip install 'cad[build123d]==0.10.0'`; pin it, the release you run), beside the
