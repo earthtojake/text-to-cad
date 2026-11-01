@@ -30,9 +30,10 @@ terminal UI show none and are served as text clients.
   mounts a viewer card in the chat, and the host keeps the old cards. A card is
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
-  the file menu: Copy path, then Open in › Browser and Finder (File Explorer, File manager) — no
-  Export, as this host has no downloads; then, at the right, only the update button and Full size
-  where the host can show a view full size), the tool strip ending
+  the file menu: Copy path, then Open in › Browser and Finder (File Explorer, File manager), a
+  model's Copy path and Finder acting on its script — no Export, as this host has no downloads;
+  then, at the right, only Full size where the host can show a view full size and, last, the update
+  button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the file sidebar, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The Claude app's Code tab draws the card too, but carries none of its calls
@@ -104,7 +105,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   before, in any view or the web viewer). Back to home, first in the menu the navbar's logo
   opens, goes to it. The sidebar (`cad_home`) and a tab with nothing to show open on it; a
   model opened from it is shown in place. The home has the same navbar (the logo's menu, Back
-  and Forward, the update button and Full size; no file, so no ⋯); it starts with its control
+  and Forward, Full size and the update button; no file, so no ⋯); it starts with its control
   row, its links the app menu's.
 - **A view browses from its file's folder.** The file name in the navbar opens the name menu:
   Models, and Files, the explorer, starting at the file's folder. A pick shows the file in
@@ -388,7 +389,7 @@ presentation but the file handler's (`chrome: "bare"`, above). Inline, where the
 `fullscreen` among its display modes, the card's **Full size** (lucide `Maximize2`, a small ghost
 icon button) asks it for `ui/request-display-mode` fullscreen; it is the first of the host's
 actions at the navbar's right, over a file and on the home (the corner's first in the file
-handler); with the update button, it is all the navbar's right end holds. The file menu's
+handler); with the update button after it, outermost, it is all the navbar's right end holds. The file menu's
 **Open in › Browser** (the host's `fileActions.perform.browser`, `ModelView.tsx`, which `App.tsx`'s
 `openBrowserPage` implements) opens the web viewer's page of the document on screen: the page each launch carries (`browser`: the document's, `/<id>`
 with the day link, or the home's), and for a file the person opened that no launch named, the

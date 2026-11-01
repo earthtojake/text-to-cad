@@ -47,33 +47,38 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   host keeps the view's own history (`history`: the CAD app's views, which no browser holds),
   **Back** and **Forward**, two arrows walking it as a browser's do, from file to file and to
   and from the home (a step like a file), each there always and disabled where it has
-  nowhere to go; then the open file's name, alone (no glyph: the name and, where it opens the
+  nowhere to go — on a desktop's row alone: a phone's (`useViewerMobile`, a view under 600px)
+  has no room for them and draws neither, the history kept; then the open file's name, alone (no glyph: the name and, where it opens the
   name menu, its chevron), and its ⋯. Each of these that
   is a control (`NAV_ITEM_CLASS`) is transparent at rest, takes the same accent background
   while the pointer is on it and while its menu is open, has a pointer cursor and no tooltip:
   it says what it is. The name
   is that control where it opens the name menu (below), where the view can show another
   document; where it cannot it is plain text. The ⋯
-  is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), in this order:
+  is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), the menu and each
+  submenu shadcn's own width (`min-w-[8rem]`, sized to its items: no width of their own), in this order:
   **Copy path**; **Open in**, a submenu of **Browser** (the document's page in the person's
   browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
   and the desktop's file manager by its plain name — **Finder** on macOS, **File Explorer** on
   Windows, **File manager** on Linux (`reveal`); then the host's own items, the CAD viewer's
   **Export**, a submenu of the formats the document's kind writes (where the host can download,
-  the web viewer's). Each only where the host can do it: a model's document, which has no file of
-  its own, has no Copy path and no file manager, only Browser and Export where it has them; and
-  no ⋯ where there is nothing. The home has no file and no ⋯. The name has
+  the web viewer's). Each only where the host can do it. A model's document, which has no file of
+  its own, has the same menu on the script that builds it (its envelope's `source.path`,
+  `FileMetadata.sourceFile`): Copy path copies the script's path and the file manager reveals it,
+  while Browser opens the model's own page; where the engine names no script, only Browser and
+  Export. There is no Copy link: a page's link carries its credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
-  kept clean for the update's nudge, only what a host or a file adds: first, the
-  update — the blue update button (a download icon and nothing else, no popover), there only while the host's
-  install is behind, which updates when pressed. Then, while a person has put an alert card away: the card's own icon (a circle
+  kept clean for the update's nudge, only what a host or a file adds, in this order: first, while
+  a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
   navbar action. Then the host's own actions (`actions`): inline, where the host can show the view full size,
   **Full size** (the CAD app's: two diagonal arrows, a ghost icon button) — today the slot's
-  only control. Export and Open in are the file menu's, never here. A CAD file publishes no
+  only control. Last, outermost, the update — the blue update button (a download icon and
+  nothing else, no popover), there only while the host's install is behind, which updates when
+  pressed. Export and Open in are the file menu's, never here. A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
@@ -88,7 +93,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
   A host's home has the same navbar, with only the logo and its app menu (without Back to
   files) and, where the host keeps the view's history, **Back** and **Forward** at the left
-  and, at the right end, the host's update, when there is one, and its actions — the same
+  (a desktop's alone) and, at the right end, the host's actions and, last, its update, when there is one — the same
   buttons, sizes and places as over a file. Under it,
   the page, after Figma's Recents, with no hero (no wordmark, tagline or links: GitHub and
   Discord are the app menu's, X its footer's "Made by"; no light/dark button: Theme is the
@@ -1153,7 +1158,7 @@ moment, or, where the clipboard refuses, a line under the box saying so. Errors 
 the host's `onError` are the host's to show. A card the
 model survives (a failed update, a warning beside the model) has an X, **Dismiss**: it puts
 the card away for as long as that alert stands, and its icon, first of the navbar's
-right-hand controls after the update button, brings it back. The dismissal goes once the alert changes or clears, or
+right-hand controls (before the host's actions and the update button), brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
 

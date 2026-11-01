@@ -1611,7 +1611,7 @@ one the model survives (`blocking: false`, the previous version still on screen)
 has a Dismiss button, and stays dismissed until the alert changes, or clears and is
 raised again, or another file opens. The dismissal is the frame's (`useAlertDismissal`), so a
 trip to Preview keeps it, and while it stands the card's own icon, in its colour and named
-after the alert, is the first of the navbar's right-hand controls after the update button
+after the alert, is the first of the navbar's right-hand controls, before the host's actions and the update button
 (the renderer's navigation action): pressing it brings the card back, and the icon goes. A warning is a card
 too, dismissible while the model is on screen:
 there is no other place a problem is listed. Full diagnostics stay expandable under

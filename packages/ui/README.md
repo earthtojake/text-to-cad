@@ -299,13 +299,13 @@ opens the app's menu: Back to home where the host
 has a home, the person's settings (Language, Telemetry, Theme), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
-app's views), Back and Forward follow, disabled where they have nowhere to go. It names the
+app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
 file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Open in,
 a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
-Export, a submenu of the formats). They share one look: transparent until the
+Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
-or a file adds, kept for the update's nudge: the host's update button, a dismissed alert's icon
-and, last, the host's actions (the CAD app's Full size); the view's own controls (a 3D view's Projection, Display and
+or a file adds, kept for the update's nudge: a dismissed alert's icon, the host's actions (the
+CAD app's Full size) and, last, outermost, the host's update button; the view's own controls (a 3D view's Projection, Display and
 Preview) end its tool strip, never the navbar. A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,
@@ -319,7 +319,7 @@ does not exist shows "File does not exist" and its path, and any other failure t
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own
-icon, the first of the navbar's right-hand controls after the update button while it is put
+icon, the first of the navbar's right-hand controls (the update button last) while it is put
 away, brings it back.
 Retry reloads only the selected renderer; Report Issue, where the host has a tracker, opens a
 new issue titled "Issue: ", labelled `bug`, filled in from the card, with the file's name and

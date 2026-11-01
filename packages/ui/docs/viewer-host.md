@@ -9,7 +9,9 @@ shared. Missing optional methods mean an operation is unsupported.
 A view shows a file by its absolute path, or a document the engine holds by its id alone (a
 model's: a lower-case UUID, `cad.engine.ids`). A file's metadata may carry `navigationPath`,
 the on-disk file to browse from and act on; null says the document has no file of its own (a
-model's): its view has no file menu, its navbar and Preview's bar name it by its `name`, with no glyph, and
+model's), and then `sourceFile`, where given, is the file it is built from (a model's script, its
+envelope's `source.path`): its file menu's Copy path and file manager act on that, its Files never
+start there; with neither, its file menu has only what needs no file (Browser, Export). A model's navbar and Preview's bar name it by its `name`, with no glyph, and
 its Files starts where the explorer was last in this tab, else the person's home folder, never
 the folder of the script that built it. A file's Files (the explorer its name menu holds) is rooted at that file's folder. Python scripts are never documents: no view opens one,
 and no folder lists one.
@@ -33,7 +35,7 @@ its own way to full size as a navbar action (the CAD app's Full size, `CadViewer
 
 `fileActions` is what the host can do with the document on screen, each a capability the file
 menu (the navbar's ⋯) offers only where it is given: `copy-path` and `reveal` act on its file on
-disk (none for a model's document), and `browser` opens the document's page in the person's
+disk (a model's: its script, `sourceFile`), and `browser` opens the document's page in the person's
 browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
 The ⋯ draws them as Copy path and Open in › Browser and the file manager by its name; a home
 card's ⋯ offers Copy path and Reveal alone.
@@ -110,8 +112,8 @@ selection or a pose, and the formats follow from the file's kind (`export/format
 has nothing to load; it says too whether its scene lies flat on z=0 (`planar`), which adds DXF. The GLB and mesh renderers publish the file shown: its path as the
 document and the catalog hash of the bytes on screen as the revision, which the server checks
 before it converts the file to the other mesh kinds. `FileViewer.navbarActions`, `fileMenuItems` and `overlay` are named
-composition slots: the first is in the navbar's right group, after the update (the CAD app's Full
-size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
+composition slots: the first is in the navbar's right group, before the update, which is
+outermost (the CAD app's Full size, its one control now; kept as the host's slot); the second is the end of the file's ⋯ menu,
 after Copy path and Open in (`CadViewer` puts Export's submenu there); the third is in the
 relative viewport below it. The generic FileViewer knows nothing about export jobs.
 
