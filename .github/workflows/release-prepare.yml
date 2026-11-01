@@ -8,7 +8,7 @@ name: Prepare Release
 #   gh workflow run release-prepare.yml --ref main -f bump=patch
 #
 # runs scripts/release/bump-version.sh on a fresh `release/X.Y.Z` branch from the target -- the
-# bump, the derived metadata and every cadgen pin -- and opens that pull request with
+# bump, the derived metadata and every pin of the release's own -- and opens that pull request with
 # PREPARE_RELEASE_TOKEN: a pull request the workflow's own token opens starts no workflows, so
 # no check would ever run on it. It never merges anything: a person merges the pull request
 # once its checks pass, and that merge releases it.
@@ -105,7 +105,7 @@ jobs:
           git checkout -B "$branch"
           git commit -qam "Release $VERSION"
           git push --force-with-lease origin "$branch"
-          body="Releases $VERSION: VERSION, the derived metadata and every cadgen pin. Opened by Prepare Release. Merging it releases it: Publish Release uploads the wheel to PyPI, then moves the latest branch."
+          body="Releases $VERSION: VERSION, the derived metadata and every pin. Opened by Prepare Release. Merging it releases it: Publish Release uploads the wheel to PyPI, then moves the latest branch."
           # Only an OPEN pull request from this branch is ours to update: a closed or merged one
           # with the same head name (a previous attempt) cannot be reopened onto a new commit.
           number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$TARGET" --state open --json number --jq '.[0].number // empty')"

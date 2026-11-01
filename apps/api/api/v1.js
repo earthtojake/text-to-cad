@@ -1,4 +1,4 @@
-// api.texttocad.dev/v1/*: cadgen's version feed and its telemetry, forwarded to PostHog (src/). vercel.json
+// api.texttocad.dev/v1/*: text-to-cad's version feed and its telemetry, forwarded to PostHog (src/). vercel.json
 // rewrites every /v1 path to this one function, which keeps the path it was asked for, and the handler
 // routes it.
 import { handle } from '../src/handler.mjs';

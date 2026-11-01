@@ -1,11 +1,11 @@
 /**
- * Crash reports that are never cadgen's bug, dropped before they reach PostHog (README.md, "Never cadgen's
+ * Crash reports that are never text-to-cad's bug, dropped before they reach PostHog (README.md, "Never text-to-cad's
  * bug"). Released clients keep sending what a later one learned to leave out, and every one of these would be
  * an issue to triage that has no fix in cadgen: the other end of a connection leaving, a model's own mistake
  * that an older cadgen let Python word, a worker someone stopped.
  *
  * The rule: a signature goes on `NEVER_OURS` only when it can never be a mistake in cadgen's code -- never
- * because it is frequent -- and in the same change the client stops sending it (`cadgen/analytics.py`:
+ * because it is frequent -- and in the same change the client stops sending it (`cad_server/analytics.py`:
  * `stdout_closed`, `signature`). Each entry matches on a row's `where`, `type`, `status` and frames alone. Dropping
  * a row is not a refusal: the batch is still taken, and its other rows stored.
  */

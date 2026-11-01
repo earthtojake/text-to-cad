@@ -1,6 +1,6 @@
 /**
- * api.texttocad.dev: what cadgen talks to -- the version feed its hourly check reads, and the receiver
- * cadgen's telemetry is sent to -- served by this project's one function (`api/v1.js`, which vercel.json
+ * api.texttocad.dev: what text-to-cad talks to -- the version feed its hourly check reads, and the receiver
+ * text-to-cad's telemetry is sent to -- served by this project's one function (`api/v1.js`, which vercel.json
  * sends every /v1 path to). A plain fetch handler over a `store` (PostHog's, posthog.mjs), so the host it runs on and
  * the service behind it can change without a release of anything that calls it (README.md).
  *
@@ -100,7 +100,7 @@ export async function handle(request, store, { missing = [], country, versions, 
       }
       return reply(200, { ok: true });
     }
-    // No browser posts here. cadgen posts from Python's urllib, which sends no Origin header, while a
+    // No browser posts here. text-to-cad posts from Python's urllib, which sends no Origin header, while a
     // browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included. And only
     // JSON is read, which a page can post to another site only after a CORS preflight nothing here approves.
     if (request.method === 'POST') {
@@ -109,7 +109,7 @@ export async function handle(request, store, { missing = [], country, versions, 
     }
     if (path === '/v1/events' && request.method === 'POST') {
       batch = await json(request);
-      // Crashes that are never cadgen's bug go no further (noise.mjs), counted in one line by name.
+      // Crashes that are never text-to-cad's bug go no further (noise.mjs), counted in one line by name.
       const { rows, dropped } = withoutNoise(rowsOf(batch));
       if (dropped.size) console.info(`telemetry dropped ${[...dropped].map(([name, n]) => `${name} ${n}`).join(', ')}${senderOf(batch)}`);
       if (rows.length) await store.insert(rows, { country: COUNTRY.test(country ?? '') ? country : null });

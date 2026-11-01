@@ -1,5 +1,5 @@
 /**
- * What cadgen sends (`cadgen/analytics.py`), checked field by field and turned into rows. Every schema a
+ * What text-to-cad sends (`cad_server/analytics.py`), checked field by field and turned into rows. Every schema a
  * released cadgen sends is read, for as long as that release can still be running (README.md): a copy
  * nobody updates keeps counting. Anything outside the contract is refused, not stored: an unknown field, a
  * name outside its vocabulary, a count that is not one, a string longer than a version or a client name
@@ -61,7 +61,7 @@ const MAX_EVENTS_7 = 256; // schema 7's: a window's controls, one event each, be
 const MAX_COUNT = 1_000_000;
 const MAX_SECONDS = 10_000_000; // a window's builds, added up across every worker: far past any there are
 const MAX_FRAMES = 30;
-// A crash's frame, as cadgen names one (`cadgen/analytics.py`: `signature`; a page's: core's `crashOf`).
+// A crash's frame, as the server names one (`cad_server/analytics.py`: `signature`; a page's: core's `crashOf`).
 // A path inside a place: segments of letters, digits and `_.+-`, none of them `.` or `..`.
 const FRAME_FILE = /^(?:<user>|<\?>|<frozen>|(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}){0,8})$/;
 const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
@@ -69,7 +69,7 @@ const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;
 
 const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
-// Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
+// Where the install came from, as its plugin's startup command named it (`cad_server/_internal/channel.py`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
   'claude-directory', 'openai-directory', 'cursor-marketplace', 'agent-plugins', 'dev', 'unknown']);
 const SOURCES = new Set(['store', 'manual']);
@@ -84,7 +84,7 @@ const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
-// What a person used in a CAD view (`cadgen/analytics.py`: `CONTROLS`, the page's own in `@text-to-cad/ui`'s
+// What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@text-to-cad/ui`'s
 // `usage/controls.js`): a closed list of names the page chose, never a value typed or a file's.
 export const CONTROLS = new Set([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode
@@ -137,11 +137,11 @@ export const CONTROLS = new Set([
   'home_open', 'home_pick', 'home_copy_path', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
 ]);
 const WHERE = new Set(['tool', 'route', 'request', 'build', 'command', 'page']);
-// Why a CAD tool's call failed (`cadgen/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
+// Why a CAD tool's call failed (`cad_server/analytics.py`: `FAILURES`): the caller's, the view's, the machine's or
 // cadgen's own, as cadgen named it where the call failed.
 const FAILURES = new Set(['no_path', 'relative_path', 'no_file', 'not_cad', 'no_view', 'wrong_view', 'bad_request',
   'timeout', 'view_error', 'too_large', 'no_viewer', 'bug', 'other']);
-// Why a build failed (`cadgen/analytics.py`: `BUILD_FAILURES`), from what the error was and whose code raised it:
+// Why a build failed (`cad_server/analytics.py`: `BUILD_FAILURES`), from what the error was and whose code raised it:
 // the model's, the CAD kernel's under it, cadgen's refusal or its mistake, the machine's.
 const BUILD_FAILURES = new Set(['model_error', 'kernel_error', 'refused', 'script_error', 'arguments', 'child_failed',
   'missing_module', 'missing_file', 'io_error', 'timeout', 'memory', 'export_error', 'bug', 'other']);
