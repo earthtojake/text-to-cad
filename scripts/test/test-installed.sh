@@ -258,14 +258,11 @@ if os.path.realpath(record["prefix"]) != os.path.realpath(sys.argv[2]):
 PY
 [ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
-same "$("$PROXY" "+$VERSION_INSTALLED" run -c 'import sys; print(sys.prefix)')" "$VENV" \
-  || fail "$COMMAND +$VERSION_INSTALLED run does not run the installation's python"
-# The first installation on this machine is its current one, and the command runs it whatever release a
-# skill names: nothing on the machine compares versions.
+same "$("$PROXY" run -c 'import sys; print(sys.prefix)')" "$VENV" \
+  || fail "$COMMAND run does not run the installation's python"
+# The first installation on this machine is its current one, the one the command runs.
 [ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
   || fail "$VERSION_INSTALLED is not the current installation"
-same "$("$PROXY" +0.0.1 run -c 'import sys; print(sys.prefix)')" "$VENV" \
-  || fail "$COMMAND +0.0.1 run does not run the current installation"
 echo "   $(basename "$RECORD"), current, and $PROXY"
 
 step "Build a real model with no repo in sight"
@@ -287,9 +284,9 @@ def probe():
 if __name__ == "__main__":
     probe()
 PY
-# Running the script IS the build: no CLI verb takes its place. Run as a skill runs it: $COMMAND +V run.
-"$PROXY" "+$VERSION_INSTALLED" run models/probe.py >"$WORK/build.log" 2>&1 \
-  || { cat "$WORK/build.log" >&2; fail "$COMMAND +$VERSION_INSTALLED run <model>.py"; }
+# Running the script IS the build: no CLI verb takes its place. Run as a skill runs it: $COMMAND run.
+"$PROXY" run models/probe.py >"$WORK/build.log" 2>&1 \
+  || { cat "$WORK/build.log" >&2; fail "$COMMAND run <model>.py"; }
 for written in XBF/probe.xbf probe.step probe.stl; do
   [ -s "$EMPTY/models/$written" ] \
     || { cat "$WORK/build.log" >&2; fail "the model script did not write models/$written"; }
@@ -299,8 +296,8 @@ echo "   built an xbf and the STEP and STL it declares"
 # The script above wrote the files the model DECLARES. This is the other half: an export of
 # the document to a destination the command names.
 step "Export the document"
-"$PROXY" "+$VERSION_INSTALLED" export models/XBF/probe.xbf models/exported.step models/exported.stl \
-  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND +$VERSION_INSTALLED export"; }
+"$PROXY" export models/XBF/probe.xbf models/exported.step models/exported.stl \
+  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND export"; }
 for written in exported.step exported.stl; do
   [ -s "$EMPTY/models/$written" ] || { cat "$WORK/export.log" >&2; fail "export wrote no models/$written"; }
 done
