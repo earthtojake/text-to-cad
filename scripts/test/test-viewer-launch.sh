@@ -111,7 +111,8 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
                 page.locator(".cad-loading-overlay").wait_for(state="hidden", timeout=120000)
                 assert page.locator("canvas").first.is_visible()
                 assert not errors, errors
-                assert "token=" not in page.url
+                # The address keeps a working link, so the same page opens in another browser on this machine.
+                assert "token=" in page.url, page.url
                 assert urlsplit(page.url).path == page_path, page.url
                 print("Bundled viewer rendered a STEP on the engine at /<id>; launch reuse and authentication passed.")
             finally:
