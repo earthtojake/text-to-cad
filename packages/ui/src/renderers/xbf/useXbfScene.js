@@ -46,7 +46,7 @@ const pause = (ms, signal) => new Promise((resolve, reject) => {
  * @param {{ client: { engineDocument?: Function }, file: string }} options
  * @returns {{ scene: object | null, document: object | null, revision: string, busy: boolean, progress: object | null,
  *   error: unknown, empty: boolean, update: { version: string, fetched: number, kept: number, ms: number } | null,
- *   building: object | null, failed: { model?: string, error?: string, progress?: object | null } | null }}
+ *   building: object | null, failed: { model?: string, error?: string, owner?: string, progress?: object | null } | null }}
  *   `update`: the last version that arrived after the first, how many parts it fetched and kept, and the
  *   milliseconds from the engine's answer to its scene. `building`: the progress frame of the build
  *   writing the document now; `failed`: the last build of it that failed.

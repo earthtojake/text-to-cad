@@ -507,6 +507,7 @@ export default {
   "alert.build.title": "モデルをビルドできませんでした",
   "alert.build.message": "「{file}」をビルドできませんでした。",
   "alert.build.recovery": "モデルのソースのエラーを修正してください。ビルドが成功すると表示が更新されます。",
+  "alert.build.recoveryInternal": "このエラーはモデルのコードではなく、CAD 自体で発生しました。下の詳細を添えて報告してください。",
   "alert.empty.summary": "メッシュを利用できません",
   "alert.empty.title": "表示するジオメトリがありません",
   "alert.empty.message": "「{file}」はファイルブラウザーにありますが、読み込んでも表示できるジオメトリがありませんでした。",

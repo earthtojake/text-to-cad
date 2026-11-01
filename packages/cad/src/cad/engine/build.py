@@ -400,6 +400,82 @@ def _refused(error: BaseException) -> dict[str, str]:
     return {"failedAt": found} if found else {}
 
 
+# The library's own folder, and its two files that wrap build123d's calls (the memo's and the
+# history's): a frame there passes a model's call on to build123d, and is no code of the library's
+# own when the error comes from the call (``_owner``).
+_LIBRARY = Path(__file__).resolve().parents[1]
+_WRAPPERS = frozenset({_LIBRARY / "engine" / "kernel" / "memo.py", _LIBRARY / "engine" / "kernel" / "history.py"})
+
+
+def _frame_owner(filename: str) -> str:
+    """Whose code a traceback frame runs: the model's (a first-party file), the library's, one of
+    its wrappers of build123d's calls (``_WRAPPERS``), or another library's (build123d, OCP, numpy,
+    the standard library, and an import's ``<frozen ...>`` frames)."""
+    from cad.engine.kernel.trace import first_party_file
+
+    if first_party_file(filename):
+        return "model"
+    try:
+        path = Path(filename).resolve()
+    except (OSError, RuntimeError, ValueError):
+        return "other"
+    if path in _WRAPPERS:
+        return "wrapper"
+    return "library" if path.is_relative_to(_LIBRARY) else "other"
+
+
+def _owner(error: BaseException) -> str:
+    """Whose a build's error is to fix, from where it was raised (``owner`` of a failed report):
+
+    - ``kernel``: OCCT refused a call (``memo.refused_call``), almost always the model's geometry;
+    - ``model``: raised by the model's own code, or by another library the model called (build123d,
+      numpy, ...) -- a library's error is its caller's, and the memo's wrappers pass a model's call
+      on, so they are no caller;
+    - ``refused``: the library said no to what it was given, as it says no -- a ``ValueError`` or
+      ``TypeError`` raised in its own code (``ExportRefused``, ``SnapshotRefused``, ...);
+    - ``internal``: any other error raised in the library's code, or by another library the library
+      called: a defect of ours.
+
+    The page offers to report ``internal`` alone. A ``ValueError`` Python raises for a defect in
+    the library's code (an unpacking) reads as ``refused``: the error still shows whole."""
+    from cad.engine.kernel.memo import refused_call
+    from cad.engine.kernel.trace import first_party_file
+
+    if refused_call(error):
+        return "kernel"
+    if isinstance(error, SyntaxError) and first_party_file(error.filename or ""):
+        return "model"
+    frames = traceback.extract_tb(error.__traceback__)
+    if not frames:
+        return "internal"
+    raised = _frame_owner(frames[-1].filename)
+    if raised == "model":
+        return "model"
+    if raised in ("library", "wrapper"):
+        return "refused" if isinstance(error, (ValueError, TypeError)) else "internal"
+    for frame in reversed(frames[:-1]):  # another library raised: its caller's
+        caller = _frame_owner(frame.filename)
+        if caller == "model":
+            return "model"
+        if caller == "library":
+            return "internal"
+    return "internal"
+
+
+def _failed(error: BaseException) -> dict[str, str]:
+    """A failed report's error: the model's frames (``_model_traceback``), whose it is to fix
+    (``_owner``) and the kernel call it was refused at (``_refused``)."""
+    return {"error": _model_traceback(error), "owner": _owner(error), **_refused(error)}
+
+
+def _output_failed(report: dict[str, Any], error: BaseException) -> None:
+    """A file that cannot be written: the report's error, whose it is (``_owner``) and its trace."""
+    report["ok"] = False
+    report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
+    report["owner"] = _owner(error)
+    report["trace"] = traceback.format_exc()
+
+
 def build(script: Path, functions: list[str] | None = None, *, log: Callable[[str], None] = lambda _line: None,
           cwd: Path | None = None, verify: bool = False, profile: bool = False,
           run: str | None = None, cache: str | None = None) -> list[dict[str, Any]]:
@@ -495,7 +571,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             except BuildError:
                 raise
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                return [{"ok": False, "model": f"{shown}", "error": _model_traceback(error), **_refused(error)}]
+                return [{"ok": False, "model": f"{shown}", **_failed(error)}]
             finally:
                 _HEARD[0] = None
             context.loaded = set(_first_party_modules())
@@ -573,8 +649,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 result = context.root(model)
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id,
-                                "error": _model_traceback(error), **_refused(error)})
+                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id, **_failed(error)})
                 # A child that ran before the error writes its files all the same.
                 results.append((model, None, 0.0, ran(model, before)))
                 continue
@@ -633,9 +708,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 _taken_outputs(model, report, log)
             except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-                report["ok"] = False
-                report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-                report["trace"] = traceback.format_exc()
+                _output_failed(report, error)
         if model in own:
             report["source"]["declares"] = declared
         # Each child that ran writes the files it declares, from its own document, after its
@@ -647,6 +720,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             if not row["ok"]:
                 report["ok"] = False
                 report.setdefault("error", f"{identity}: {row['error']}")
+                report.setdefault("owner", row.get("owner", "internal"))
     _keep_load(kept or fresh, reports, context)
     return reports
 
@@ -668,9 +742,7 @@ def _written(model: Any, result: Any, run: Any, report: dict[str, Any], log: Cal
     try:
         _finish(model, result, run, report, log, plan, context)
     except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-        report["ok"] = False
-        report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-        report["trace"] = traceback.format_exc()
+        _output_failed(report, error)
 
 
 def _shown(script: Path, cwd: Path | None) -> str:

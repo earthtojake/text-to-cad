@@ -508,6 +508,7 @@ export default {
   "alert.build.title": "無法建置模型",
   "alert.build.message": "無法建置「{file}」。",
   "alert.build.recovery": "請修正模型原始檔中的錯誤：建置成功後檢視會自動更新。",
+  "alert.build.recoveryInternal": "此錯誤來自 CAD 本身，而非模型程式碼。請附上下方的詳細資訊回報此問題。",
   "alert.empty.summary": "網格無法使用",
   "alert.empty.title": "沒有可顯示的幾何",
   "alert.empty.message": "「{file}」列在檔案瀏覽器中，但載入後沒有產生可見的幾何。",

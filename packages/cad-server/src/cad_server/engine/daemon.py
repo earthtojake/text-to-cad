@@ -819,8 +819,9 @@ class Daemon:
         reports = done.get("reports") if isinstance(done, dict) else done
         for report in reports if isinstance(reports, list) else []:
             frame = report.get("progress") or {}
+            # ``owner``: whose the error is to fix (``build._owner``); a report without one is the engine's.
             failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
-                                                    "progress": frame}
+                                                    "owner": report.get("owner") or "internal", "progress": frame}
             for ident in self.models.paths(worker, report.get("model")):
                 outcomes[ident] = failed
             # Each child model the run built is a document of its own, built as its own row says: its
@@ -828,10 +829,13 @@ class Daemon:
             for identity, child in (report.get("child_models") or {}).items():
                 if child.get("id"):
                     outcomes[child["id"]] = None if child.get("ok") else {
-                        "model": identity, "error": child.get("error"), "progress": frame}
+                        "model": identity, "error": child.get("error"),
+                        "owner": child.get("owner") or "internal", "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "progress": frame}
+            # The worker itself failed (it died, or its answer was no report): the engine's error.
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "owner": "internal",
+                               "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
             server.built(outcomes)
