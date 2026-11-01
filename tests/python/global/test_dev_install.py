@@ -46,34 +46,26 @@ class DevPluginTests(unittest.TestCase):
                         if icon:
                             self.assertTrue((plugin / icon).is_file(), icon)
 
-    def test_the_skills_run_the_version_the_server_registers(self) -> None:
-        # The dev server runs the checkout's .venv, registered as this install's own version; the
-        # copied skills must run that version, or the agent's scripts would run the release's
-        # installation and a daemon of their own.
-        released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+    def test_the_skills_never_send_the_agent_to_the_release_s_installer(self) -> None:
+        # The dev server runs the checkout's .venv, made the current installation, which the `cad` command
+        # the skills run runs; the release's installer would put the published release over it.
         with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CAD_LAUNCHER_DIR": ""}):
-            rewrites = dev_install.skill_rewrites(released, "1.2.3-dev.1", python="/w/.venv/bin/python")
-            # Every rewrite matches text in the documents it rewrites: one that matches nothing is dead.
-            documents = "".join(path.read_text(encoding="utf-8") for skill in (REPO_ROOT / "skills").glob("*/SKILL.md")
-                                for path in (skill, skill.parent / "references" / "setup.md") if path.is_file())
+            rewrites = dev_install.skill_rewrites()
+            # Every rewrite matches text in the skills: one that matches nothing is dead.
+            documents = "".join(skill.read_text(encoding="utf-8") for skill in (REPO_ROOT / "skills").glob("*/SKILL.md"))
             for released_text in rewrites:
                 self.assertIn(released_text, documents, "a rewrite that matches nothing in the skills")
             plugin = Path(scratch) / "claude"
             dev_install.assemble("claude", plugin, "1.2.3-dev.1", {"command": "x"}, rewrites=rewrites)
+            note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
             for skill in plugin.glob("skills/*/SKILL.md"):
-                setup = skill.parent / "references" / "setup.md"
-                text = skill.read_text(encoding="utf-8") + (setup.read_text(encoding="utf-8") if setup.is_file() else "")
+                text = skill.read_text(encoding="utf-8")
                 with self.subTest(skill=skill.parent.name):
-                    self.assertNotIn("--from cad-server==", text)
-                    self.assertNotIn(f"+{released}`", text)
-                    # Never the release's installer over this checkout's engine.
                     for command in dev_install.INSTALL_COMMANDS:
                         self.assertNotIn(command, text)
-                    if "below means" in text:
-                        self.assertIn("`cad` below means `cad +1.2.3-dev.1`", text)
-                        self.assertIn("`python` below means `cad +1.2.3-dev.1 run`", text)
-                        self.assertIn("it says 1.2.3-dev.1 is not installed", text)
-                        self.assertIn("/w/.venv/bin/python -m cad_server.cli doctor`", text)
+                    if "## Setup" in text:
+                        self.assertIn(f"```bash\n# {note}\n```\n", text)
+                        self.assertIn(f"On Windows, in PowerShell: `{note}`.", text)
 
     def test_wheel_mode_registers_one_wheel_for_the_server_and_the_skills(self) -> None:
         import argparse
@@ -93,48 +85,15 @@ class DevPluginTests(unittest.TestCase):
                 # Its record is kept, for --uninstall to take out.
                 self.assertEqual(json.loads((Path(scratch) / "installations.json").read_text(encoding="utf-8")),
                                  {"v": "/state/installations/v.json"})
-        # The app starts the shim's wheel; the skills run the server's, with the library's beside it.
+        # The app starts the shim's wheel; the server's, with the library's beside it, is registered.
         self.assertEqual((server["args"], server["env"]),
                          ([*dev_install.LAUNCHER[1:], str(shim), "cad-mcp"],
                           {"CAD_INSTALL_CHANNEL": "dev", "CAD_INSTALLATION_VERSION": "v"}))
         uvx = [*dev_install.LAUNCHER[:-1], "--with", str(library), dev_install.LAUNCHER[-1], str(wheel)]
         # The server's installation registers as this install's version, by its own python.
         run.assert_called_once_with(*uvx, "python", "-c", dev_install.REGISTER, "v", capture=True)
-        released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
-        self.assertTrue(rewrites[dev_install.launch("cad", released)].endswith(f"--from {wheel} cad"))
-        self.assertEqual(rewrites[f"cad +{released}"], "cad +v")
+        self.assertEqual(rewrites, dev_install.skill_rewrites())
         self.assertIsNone(page, "a wheel serves the page it was built with")
-
-    def test_the_install_command_becomes_a_note_in_the_setup_guide_and_history_is_left(self) -> None:
-        released, named = "1.2.3", "1.2.3-dev.1"
-        with tempfile.TemporaryDirectory() as scratch, mock.patch.dict("os.environ", {"CAD_LAUNCHER_DIR": ""}):
-            root = Path(scratch) / "source"
-            skill = root / "skills/fixture"
-            (skill / "references").mkdir(parents=True)
-            (root / ".claude-plugin").mkdir()
-            (root / ".claude-plugin/plugin.json").write_text(json.dumps({"name": "text-to-cad", "version": released}),
-                                                            encoding="utf-8")
-            main = ("---\nname: fixture\ndescription: fixture\n---\n"
-                    f"`cad` below means `cad +{released}`. [Setup](references/setup.md)\n")
-            guide = ("```bash\n" + dev_install.INSTALL_COMMANDS[0] + "\n```\n"
-                     + f"On Windows, in PowerShell: `{dev_install.INSTALL_COMMANDS[1]}`. Restart the\n"
-                     + dev_install.launch("cad", released) + " doctor\n"
-                     + rf"%USERPROFILE%\.local\bin\cad.cmd +{released}" + "\n")
-            (skill / "SKILL.md").write_text(main, encoding="utf-8")
-            (skill / "references/setup.md").write_text(guide, encoding="utf-8")
-            (skill / "references/migrations.md").write_text(guide, encoding="utf-8")
-            rewrites = dev_install.skill_rewrites(released, named, python="/w/python")
-            plugin = Path(scratch) / "plugin"
-            dev_install.assemble("claude", plugin, named, {"command": "x"}, root=root, rewrites=rewrites)
-            copied = (plugin / "skills/fixture/references/setup.md").read_text(encoding="utf-8")
-            note = f"This is a development install of {dev_install.REPO_ROOT}; do not run the install command here"
-            self.assertIn(f"```bash\n# {note}\n```\n", copied)
-            self.assertIn(f"On Windows, in PowerShell: `{note}`. Restart the\n", copied)
-            self.assertIn("/w/python -m cad_server.cli doctor", copied)
-            self.assertIn(f"cad.cmd +{named}", copied)
-            self.assertIn(f"`cad +{named}`", (plugin / "skills/fixture/SKILL.md").read_text(encoding="utf-8"))
-            # A migration reference may name an old release on purpose: copied as it is.
-            self.assertEqual((plugin / "skills/fixture/references/migrations.md").read_text(encoding="utf-8"), guide)
 
     def test_this_scripts_launcher_and_install_command_are_the_servers(self) -> None:
         import sys
@@ -163,9 +122,10 @@ class DevPluginTests(unittest.TestCase):
                 (folder / name).mkdir(parents=True)
                 (folder / name / "SKILL.md").write_text(body, encoding="utf-8")
             self.assertEqual(dev_install.loose_skills([folder, Path(scratch) / "absent"]), [folder / "cad"])
-        # The check reads each skill's provenance line, so every skill must keep one.
+        # The check reads the repository each skill's front matter names, so every skill must name it.
         for skill in (REPO_ROOT / "skills").glob("*/SKILL.md"):
-            self.assertIn(dev_install.PROVENANCE, skill.read_text(encoding="utf-8"), skill)
+            front_matter = skill.read_text(encoding="utf-8").split("\n---\n", 1)[0]
+            self.assertIn(f"\nmetadata:\n  repository: {dev_install.PROVENANCE}\n", front_matter + "\n", skill)
 
 
 if __name__ == "__main__":

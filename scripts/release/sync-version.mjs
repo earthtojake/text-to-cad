@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -33,28 +33,11 @@ export const tomlTargets = [
 // alone: `cad` at the end of another name (`my-cad==`) pins no distribution of the release.
 export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
-// Every skill that runs the server names the version its installation registers as
-// (`cad +<version>`, run by the `cad` command it writes, and "it says <version> is not
-// installed") and the command that installs it (`uvx ... --from cad-server==<version> cad doctor`),
-// in its SKILL.md and in its setup guide (references/setup.md). Its other references are history, and
-// keep the releases they name.
-function skillLaunchTargets() {
-  const skills = path.join(repoRoot, "skills");
-  if (!existsSync(skills)) {
-    return [];
-  }
-  return readdirSync(skills, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .flatMap((entry) => ["SKILL.md", "references/setup.md"].map((file) => `skills/${entry.name}/${file}`))
-    .filter((relative) => existsSync(path.join(repoRoot, relative)))
-    .filter((relative) => /(?<![\w.-])cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==|\bcad(?:\.cmd)? \+\d/.test(readFileSync(path.join(repoRoot, relative), "utf8")))
-    .sort();
-}
-
 // Files that pin a release by a requirement string rather than a version field: the commands the
 // agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
-// config and the command it says the installer runs, every skill's install command and `cad +<version>`,
-// and the distributions that pin the library at their own release (the server, the alias). A file may
+// config and the command it says the installer runs, and the distributions that pin the library at
+// their own release (the server, the alias). The skills name no release: they run the `cad` command,
+// whatever installation is current. A file may
 // also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
 // change, not over it.
 export const pinTargets = [
@@ -69,7 +52,6 @@ export const pinTargets = [
   // The turn-off command the privacy policy prints, the plugin's own launch line. The README and
   // the docs site's homepage pin nothing: a target without a pin is refused.
   "apps/docs/src/app/privacy-policy/page.tsx",
-  ...skillLaunchTargets(),
 ];
 
 // The one-line installer's scripts carry the release they were published with, which each installs
@@ -228,33 +210,19 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
-// A skill runs its version by the `cad` command (`cad +0.8.0`), and says it in the
-// command's refusal ("it says 0.8.0 is not installed").
-export const skillVersionPattern = /(\bcad(?:\.cmd)? \+|it says )(\d[^\s`"'\\)]*)/g;
-
 function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
   const pin = new RegExp(pinPattern.source, "g");
   const matches = [...text.matchAll(pin)];
-  const named = [...text.matchAll(skillVersionPattern)];
-  if (matches.length === 0 && named.length === 0) {
-    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version> or run cad +<version>`);
+  if (matches.length === 0) {
+    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version>`);
   }
-  const labels = [];
-  if (!matches.every((match) => match[2] === version)) {
-    labels.push("release pin");
-  }
-  if (!named.every((match) => match[2] === version)) {
-    labels.push("cad +<version>");
-  }
-  if (labels.length === 0) {
+  if (matches.every((match) => match[2] === version)) {
     return null;
   }
   return {
     path: relativePath,
-    labels,
-    text: text
-      .replace(pin, (_, prefix) => `${prefix}${version}`)
-      .replace(skillVersionPattern, (_, prefix) => `${prefix}${version}`),
+    labels: ["release pin"],
+    text: text.replace(pin, (_, prefix) => `${prefix}${version}`),
   };
 }
 

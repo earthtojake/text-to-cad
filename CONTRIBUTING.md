@@ -119,9 +119,8 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Skills run the server as `cad +<VERSION>` through `~/.local/bin/cad`, the proxy
-that runs the device's current installation (`<state>/installations/current`; the `+<VERSION>`
-is taken off): the release `cad setup` or an update made current, from its folder
+Skills run the server as `cad` through `~/.local/bin/cad`, the proxy
+that runs the device's current installation (`<state>/installations/current`): the release `cad setup` or an update made current, from its folder
 (`<state>/releases/<VERSION>`), else the first installation a CAD app server (`cad-mcp`) or
 `cad doctor` registered on the device. Every installation registers itself and writes the
 proxy as its server starts, `cad doctor` runs or `cad setup` sets it up; a checkout's
@@ -230,8 +229,8 @@ npx skills add . -g -a <agent>
 A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
 `cad-mcp` run by this checkout's `.venv` (`CAD_PYTHON` overrides it), serving
 a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
-build). That `.venv` is registered as that install's version (`<VERSION>-dev.<time>`),
-the copied skills run `cad +<VERSION>-dev.<time>` and the proxy is written (the server
+build). That `.venv` is registered as that install's version (`<VERSION>-dev.<time>`)
+and the proxy the copied skills run is written (the server
 registers it again at each start, told the version by `CAD_INSTALLATION_VERSION`;
 `--uninstall` takes the record out). The install is made the device's current installation, so the
 engine every app and the agent's scripts reach is this checkout's, started afresh by the next client
@@ -794,11 +793,10 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 past `main`'s and stamps the derived metadata and every pin of the release's own
 (`sync-version.mjs`: package, plugin and lockfile versions, the four
 `pyproject.toml`s and their `cad==` pins, the plugin server configs'
-`cad-mcp==`, each skill's launch command and `cad +<version>`, the installers'
-`cad-server==` fallback). It works from `main`'s version, not the
-branch's, so running it twice changes nothing and running it again after `main`
-moves moves the bump with it; it refuses a branch that does not contain `main`
-yet, whose stamps would conflict.
+`cad-mcp==`, the installers' `cad-server==` fallback); the skills name no
+release. It works from `main`'s version, not the branch's, so running it twice
+changes nothing and running it again after `main` moves moves the bump with it;
+it refuses a branch that does not contain `main` yet, whose stamps would conflict.
 
 The pull request's Version Check says what merging it releases, and refuses:
 

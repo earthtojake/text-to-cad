@@ -130,15 +130,13 @@ where those files ship, so these scripts are what produces them.
   index until it lists the version (ten minutes at most). Called by
   `release-publish.yml`'s `pypi` job, project by project.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, the four
-  `pyproject.toml`s are `VERSION` and pin the library at it, every skill's main file and setup
-  guide pin `cad-server==VERSION` or run `cad +VERSION`, the one-line installer falls back
+  `pyproject.toml`s are `VERSION` and pin the library at it, the one-line installer falls back
   to `VERSION`, and (with the flag)
   `VERSION` is greater than the one at `REF`. Called by `test.yml` (Version Check), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
   lockfile and `pyproject.toml` metadata, the `cad`, `cad-server` and `cad-mcp`
-  pins, the skills' `cad +VERSION` in each
-  skill's main file and `references/setup.md`, and the one-line installer's fallback release) from
+  pins, and the one-line installer's fallback release) from
   `VERSION`. Called by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
 - `check-wheel-contents.sh` — builds the four wheels and asserts each carries its own
   top-level packages alone (the alias none, and only the library at the release as
@@ -227,9 +225,9 @@ where those files ship, so these scripts are what produces them.
   checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
   for `claude` (which Cursor and Grok Build load too), `codex`, `cursor`, `grok`
   and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
-  taken at install, assembled under `tmp/<host>-dev`), with the skills' launch
-  command and setup guide rewritten to that same runtime (the install command a note that it is a
-  development install); `--wheel` builds the checkout's wheel and
+  taken at install, assembled under `tmp/<host>-dev`), made the current installation the
+  skills' `cad` command runs, with the install command in their setup a note that it is a
+  development install; `--wheel` builds the checkout's wheel and
   runs both through `uvx --from <wheel>`; the server alone for `claude-desktop`. Refuses a host where another copy of the plugin, or this
   repository's skills installed loose, would load. Developer step in
   `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are

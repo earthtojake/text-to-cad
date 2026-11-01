@@ -118,17 +118,10 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if repo_path(relative).is_file():
                     (root / relative).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(repo_path(relative), root / relative)
-            # A skill's setup guide is stamped with its main file; its other references are history.
-            fixture = root / "skills/fixture"
-            (fixture / "references").mkdir(parents=True)
-            (fixture / "SKILL.md").write_text("`cad` below means `cad +1.2.3`\n"
-                                               "[Setup](references/setup.md) [Migration](references/migrations.md)\n",
-                                               encoding="utf-8")
-            (fixture / "references/setup.md").write_text("uvx --from cad-server==1.2.3 cad doctor\n"
-                                                          r"%USERPROFILE%\.local\bin\cad.cmd +1.2.3" + "\n",
-                                                          encoding="utf-8")
-            historical = "An older release used cadgen==0.1.0 and cad +0.1.0.\n"
-            (fixture / "references/migrations.md").write_text(historical, encoding="utf-8")
+            # A skill names no release: it runs the `cad` command, and the release stamps nothing in it.
+            skill = root / "skills/fixture/SKILL.md"
+            skill.parent.mkdir(parents=True)
+            skill.write_text("Run `cad run model.py`. An older release used cadgen==0.1.0.\n", encoding="utf-8")
             (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
             result = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
                                     capture_output=True, text=True, timeout=120)
@@ -150,21 +143,7 @@ class VersionSyncMirrorTests(unittest.TestCase):
             self.assertIn('--from "$requirement" cad "$verb"', installer)
             self.assertIn('requirement="cad-server==$version"', installer)
             self.assertIn('\n    $CadVersion = "9.9.9"\n', (root / "scripts/install/install.ps1").read_text(encoding="utf-8"))
-            self.assertIn("`cad +9.9.9`", (fixture / "SKILL.md").read_text(encoding="utf-8"))
-            guide = (fixture / "references/setup.md").read_text(encoding="utf-8")
-            self.assertIn("--from cad-server==9.9.9 cad doctor", guide)
-            self.assertIn("cad.cmd +9.9.9", guide)
-            self.assertEqual((fixture / "references/migrations.md").read_text(encoding="utf-8"), historical)
-            # Every skill's launch command moves with the server's, so they stay one installation:
-            # the version it runs by the `cad` command in its main file, and in its setup guide the
-            # command that installs it and the refusal it names.
-            skill = (root / "skills/cad/SKILL.md").read_text(encoding="utf-8")
-            self.assertIn("`cad +9.9.9`", skill)
-            self.assertIn("`python` below means `cad +9.9.9 run`", skill)
-            guide = (root / "skills/cad/references/setup.md").read_text(encoding="utf-8")
-            self.assertIn("--from cad-server==9.9.9 cad doctor`", guide)
-            self.assertIn("it says 9.9.9 is not installed", guide)
-            self.assertIn("`cad.cmd +9.9.9`", guide)
+            self.assertEqual(skill.read_text(encoding="utf-8"), "Run `cad run model.py`. An older release used cadgen==0.1.0.\n")
             # So does the turn-off command the privacy policy prints.
             self.assertIn("--from cad-server==9.9.9 cad telemetry off",
                           (root / "apps/docs/src/app/privacy-policy/page.tsx").read_text(encoding="utf-8"))
@@ -189,7 +168,6 @@ class VersionSyncMirrorTests(unittest.TestCase):
                              *projects):
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(repo_path(relative), root / relative)
-            (root / "skills").mkdir()
             shutil.copy2(repo_path("VERSION"), root / "VERSION")
             check = [str(root / "scripts/release/check-version.sh")]
             passed = subprocess.run(check, capture_output=True, text=True, timeout=60)

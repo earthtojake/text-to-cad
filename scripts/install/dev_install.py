@@ -3,10 +3,10 @@
 
 Each host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills, and
 CAD's server run by this checkout's .venv (`cad-mcp`), serving a copy of this checkout's
-apps/mcp build. That .venv is registered as this install's version (<version>-dev.<time>), the
-skills run `cad +<version>-dev.<time>` and the `cad` command is written (~/.local/bin/cad), so
-the server and the agent's scripts share this checkout's installation and warm daemon -- and every
-worktree has its own. With --wheel, the checkout's wheels are built as the release builds them, the
+apps/mcp build. That .venv is registered as this install's version (<version>-dev.<time>) and
+made the current installation, and the `cad` command is written (~/.local/bin/cad), which the
+skills run, so the server and the agent's scripts share this checkout's installation and warm
+daemon -- and every worktree has its own. With --wheel, the checkout's wheels are built as the release builds them, the
 server runs them through uvx and that installation is the one registered: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
 gets that server alone. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
 install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
@@ -82,7 +82,7 @@ DESKTOP_SERVER = "cad-dev"
 CURSOR_PLUGINS = providers.cursor_plugins()
 # Written into the Cursor plugin folder, so --uninstall and a reinstall only ever touch our own.
 OWNER_MARK = providers.DEV_MARK
-# Every SKILL.md of this repository's says where it is maintained; a loose skill saying so is ours.
+# Every SKILL.md of this repository's names it; a loose skill naming it is ours.
 PROVENANCE = providers.PROVENANCE
 IGNORED = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 # A Codex thread waits this long for the server's first start, which may build the page's data.
@@ -122,11 +122,6 @@ def server_entry(host: str, python: str, page_dir: Path, version: str | None = N
 # The variable that names the version a development install registers as (cadgen's
 # _internal/installations.py NAME_ENV).
 VERSION_ENV = "CAD_INSTALLATION_VERSION"
-
-
-def launch(tool: str, version: str) -> str:
-    """The uvx command for ``tool`` (``cad`` or ``python``), as the release stamps it in the skills."""
-    return " ".join((*LAUNCHER, f"cad-server=={version}", tool))
 
 
 def launcher_dir() -> str:
@@ -180,21 +175,14 @@ def unregister(host: str) -> None:
         Path(path).unlink(missing_ok=True)
 
 
-def skill_rewrites(released: str, version: str, python: str | None = None, wheel: Path | None = None) -> dict:
+def skill_rewrites() -> dict:
     """What a development install changes in its skills' text, ``{release's: this install's}``: the
-    version they run (``cad +<version>``, ``cad.cmd +<version>``) is this install's, the `cad`
-    command's folder is CAD_LAUNCHER_DIR's, the install command becomes the checkout's interpreter
-    (the .venv shape) or the wheel through uvx (--wheel), told that version so its `cad doctor`
-    registers it (Windows shells take no such prefix), and the one-line installer
-    (``INSTALL_COMMANDS``) becomes a note that this is a development install."""
-    named = "" if os.name == "nt" else f"{VERSION_ENV}={version} "
-    command = " ".join((*uvx_from(wheel), "cad")) if wheel is not None else f"{python} -m cad_server.cli"
-    rewrites = {launch("cad", released): f"{named}{command}", f"cad +{released}": f"cad +{version}",
-                f"cad.cmd +{released}": f"cad.cmd +{version}",
-                f"it says {released} is not installed": f"it says {version} is not installed"}
+    `cad` command's folder is CAD_LAUNCHER_DIR's, and the one-line installer (``INSTALL_COMMANDS``)
+    becomes a note that this is a development install. The skills name no version: the `cad` command
+    runs the current installation, which this install is made."""
     note = f"This is a development install of {REPO_ROOT}; do not run the install command here"
     # The macOS and Linux command stands alone in a shell block: there the note is a comment.
-    rewrites.update({INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note})
+    rewrites = {INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note}
     if launcher_dir() != "~/.local/bin":
         rewrites["~/.local/bin"] = launcher_dir()
     return rewrites
@@ -204,24 +192,19 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
              rewrites: dict | None = None) -> dict:
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
-    The skills are copied with ``rewrites`` applied (:func:`skill_rewrites`: the runtime the server
-    uses), the host's manifest takes `version` (each install its own, so a host that caches by
+    The skills are copied with ``rewrites`` applied to each SKILL.md (:func:`skill_rewrites`), the
+    host's manifest takes `version` (each install its own, so a host that caches by
     version takes this build) and names `server` alone: in a server config beside it, or, for
     Gemini, which keeps servers in the manifest itself, inline.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
-    # A skill's main file and its setup guide carry the runtime; a migration reference may name an
-    # old release on purpose, and is copied as it is.
     for skill in plugin_dir.glob("skills/*/SKILL.md"):
-        for document in (skill, skill.parent / "references" / "setup.md"):
-            if not document.is_file():
-                continue
-            text = document.read_text(encoding="utf-8")
-            for released, ours in (rewrites or {}).items():
-                text = text.replace(released, ours)
-            document.write_text(text, encoding="utf-8")
+        text = skill.read_text(encoding="utf-8")
+        for released, ours in (rewrites or {}).items():
+            text = text.replace(released, ours)
+        skill.write_text(text, encoding="utf-8")
     if host == "gemini":
         manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
         manifest["version"] = version
@@ -357,7 +340,6 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
     the app restarts, by that installation's own interpreter; its server registers it again at each
     start.
     """
-    released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if args.wheel:
         wheel = build_wheel(host, args.build)
         shim = sorted(wheel.parent.glob("cad_mcp-*.whl"))
@@ -370,14 +352,14 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
             return server, {}, None
         server["env"][VERSION_ENV] = version
         register(host, [*uvx_from(wheel), "python"], version)
-        return server, skill_rewrites(released, version, wheel=wheel), None
+        return server, skill_rewrites(), None
     python = interpreter()
     # Codex keeps an earlier install's server running until it restarts, so its page stays too.
     page_dir = copy_page(host, args.build, version, prune=host != "codex")
     if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
         return server_entry(host, python, page_dir), {}, page_dir
     register(host, [python], version)
-    return server_entry(host, python, page_dir, version), skill_rewrites(released, version, python=python), page_dir
+    return server_entry(host, python, page_dir, version), skill_rewrites(), page_dir
 
 
 def dev_version() -> str:
