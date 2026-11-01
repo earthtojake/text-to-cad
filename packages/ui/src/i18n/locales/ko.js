@@ -121,6 +121,7 @@ export default {
   "update.label": "업데이트",
   "update.toAria": "{version}(으)로 업데이트",
   "update.updating": "{version}(으)로 업데이트하는 중",
+  "update.progress": "업데이트 중, {percent}%",
   "update.restarting": "{version}(으)로 다시 시작하는 중",
   "update.failed": "업데이트하지 못했습니다: {error}",
   "update.updated": "{version}(으)로 업데이트했습니다.",

@@ -121,6 +121,7 @@ export default {
   "update.label": "アップデート",
   "update.toAria": "{version} にアップデート",
   "update.updating": "{version} にアップデートしています",
+  "update.progress": "アップデート中、{percent}%",
   "update.restarting": "{version} で再起動しています",
   "update.failed": "アップデートできませんでした: {error}",
   "update.updated": "{version} にアップデートしました。",

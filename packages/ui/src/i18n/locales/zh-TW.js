@@ -122,6 +122,7 @@ export default {
   "update.label": "更新",
   "update.toAria": "更新至 {version}",
   "update.updating": "正在更新到 {version}",
+  "update.progress": "正在更新，{percent}%",
   "update.restarting": "正在以 {version} 重新啟動",
   "update.failed": "更新失敗：{error}",
   "update.updated": "已更新至 {version}。",

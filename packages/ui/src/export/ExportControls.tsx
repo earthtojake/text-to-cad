@@ -78,11 +78,13 @@ const GUTTER = 16;
  * A toast as small as a menu item: one line of the menu's text (`text-tiny`, regular weight), its
  * padding, a 14px icon, and as wide as its text above Sonner's narrow-screen layout (a window up to
  * 600px, where Sonner spans its toasts across the screen). Sonner's own stylesheet is unlayered, so
- * each of these is `!important` to win over it; `primitives/sonner.jsx` stays shadcn's.
+ * each of these is `!important` to win over it; `primitives/sonner.jsx` stays shadcn's. A toast is at most
+ * 30rem wide and its text wraps past that (a failure's line can be long); `richColors` tints an error,
+ * a warning and a success in their colours, so a failed update reads as one.
  */
 const TOAST_CLASSES = {
-  toast: 'gap-1.5! px-2.5! py-1.5! text-tiny! min-[601px]:w-max! min-[601px]:max-w-[calc(100vw-2rem)]!',
-  title: 'font-normal! leading-4!',
+  toast: 'gap-1.5! px-2.5! py-1.5! text-tiny! min-[601px]:w-max! min-[601px]:max-w-[min(30rem,calc(100vw-2rem))]!',
+  title: 'font-normal! leading-4! whitespace-normal! break-words!',
   icon: 'size-3.5! [&_svg]:size-3.5!',
 };
 
@@ -113,7 +115,7 @@ function ExportToaster() {
   const { t } = useI18n();
   const top = useBelowNavbar(useViewerMobile());
   const offset = { top, right: GUTTER, left: GUTTER };
-  return <Toaster position="top-right" offset={offset} mobileOffset={offset}
+  return <Toaster position="top-right" offset={offset} mobileOffset={offset} richColors
     toastOptions={{ closeButtonAriaLabel: t('export.dismiss'), classNames: TOAST_CLASSES }} />;
 }
 

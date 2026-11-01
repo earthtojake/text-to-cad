@@ -135,6 +135,7 @@ export default {
   "update.label": "Update",
   "update.toAria": "Update to {version}",
   "update.updating": "Updating to {version}",
+  "update.progress": "Updating, {percent}%",
   "update.restarting": "Restarting with {version}",
   "update.failed": "The update failed: {error}",
   "update.updated": "Updated to {version}.",
