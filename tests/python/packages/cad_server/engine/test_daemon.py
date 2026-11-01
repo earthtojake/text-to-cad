@@ -1699,11 +1699,11 @@ if __name__ == '__main__':
         stat = (self.folder / "XBF/pair.xbf").stat()
         self.assertEqual(answer["version"], f"{stat.st_mtime_ns}-{stat.st_size}", "the file's own version")
         self.assertNotIn("patch", answer, "nothing of the run reached the page")
-        after = get_json(api, token)
+        after = get_json(f"{api}/structure", token)
         keys = lambda s: {p["name"]: p["key"] for p in s["prototypes"]}  # noqa: E731
         self.assertNotEqual(keys(after)["block"], keys(before)["block"])
         self.assertEqual(keys(after)["peg"], keys(before)["peg"])
-        self.assertEqual(get(f"{api}/part/{keys(after)['block']}", token)[:4], b"XBM2")
+        self.assertEqual(get(f"{api}/parts/{keys(after)['block']}", token)[:4], b"XBM2")
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
         found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "inspect", doc, ref], cwd=self.folder,
