@@ -209,7 +209,7 @@ class EngineApp:
         self.server, self.host = server, host
         # The installation's page token, the same at every start (``daemon.bind``), else one of its own.
         self.token = getattr(server, 'token', None) or secrets.token_urlsafe(32)
-        self.cookie = 'cadgen-' + _mac(self.token, 'cookie')[:12]
+        self.cookie = 'cad-' + _mac(self.token, 'cookie')[:12]
         self.lock = threading.RLock()
         self.active_requests = 0
         self._default = None

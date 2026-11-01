@@ -80,7 +80,7 @@ class LauncherTest(unittest.TestCase):
 
     def session(self, headers):
         """The ``Cookie`` header that sends back the session a response set."""
-        self.assertRegex(headers['set-cookie'], r'^cadgen-[\w-]{12}=\d+\.[\w-]{43}; Path=/; Max-Age=2592000; '
+        self.assertRegex(headers['set-cookie'], r'^cad-[\w-]{12}=\d+\.[\w-]{43}; Path=/; Max-Age=2592000; '
                                                 r'HttpOnly; SameSite=Strict$')
         return {'Cookie': headers['set-cookie'].split(';')[0]}
 

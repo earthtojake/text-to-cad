@@ -2369,10 +2369,7 @@ the server's state refuses a change: a telemetry answer to a server that keeps n
 (`settings`), an update with no engine under the page (`local/update`), an export of a session
 that restarted or of a source that changed since the page showed it, and 410 for an export's file
 already fetched or past its window. Every request that changes something (POST, PUT, PATCH, DELETE)
-carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it). `GET
-/__cad/server` and `GET /__cad/version` answer as `GET /api/v1/server` does, so a CAD Viewer tab of
-0.8 left open across the upgrade reloads itself: 0.8's probe, answered through 0.10 and gone in 0.11.
-The families:
+carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it). The families:
 
 | Route | What it answers |
 | --- | --- |
