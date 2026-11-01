@@ -1,10 +1,10 @@
 """The state folder an earlier release kept, adopted (``cad.engine.places.adopt``, ``adopt_earlier``).
 
-0.9 names its state folder ``cad`` where 0.8's was ``cadgen``: what this release keeps of the earlier
-one -- the person's settings, the installations' records less ``current``, the engines' records with the page
-token, the documents' records and Recents, setup's receipt and the install channels -- moves into its own,
-each once, and the rest stays, with the person's telemetry no for the earlier release still installed. Every folder here is a temporary one: the platform's places are stood in
-for, never read.
+0.10 names its state folder ``cad`` where 0.8's was ``cadgen``: what this release keeps of the earlier one
+-- the person's settings, the documents' records and Recents, and setup's receipt -- moves into its own, each
+once, and the rest stays -- 0.8's installations' records, its engines' records and page token, its install
+channels --, with the person's telemetry no for the earlier release still installed. Every folder here is a
+temporary one: the platform's places are stood in for, never read.
 """
 
 from __future__ import annotations
@@ -18,8 +18,7 @@ from unittest import mock
 
 from cad.engine import places
 
-EVERYTHING = ["settings.json", "installations", "engines", "documents", "recents", "install-receipt.json",
-              "install-channels.json"]
+EVERYTHING = ["settings.json", "documents", "recents", "install-receipt.json"]
 
 
 def write(path: Path, text: str = "") -> Path:
@@ -52,17 +51,21 @@ class Folders(unittest.TestCase):
 class AdoptTest(Folders):
     def test_what_this_release_keeps_moves_and_the_rest_stays(self) -> None:
         self.assertEqual(places.adopt(self.earlier, self.folder), EVERYTHING)
-        self.assertEqual(sorted(path.name for path in (self.folder / "installations").iterdir()), ["0.8.4.json"],
-                         "an earlier release's current is not this one's to keep")
         self.assertEqual((self.folder / "settings.json").read_text(encoding="utf-8"), '{"telemetry": {"choice": "off"}}',
                          "a no stays a no")
-        self.assertEqual((self.folder / "engines" / "token").read_text(encoding="utf-8"), "t" * 43)
         self.assertTrue((self.folder / "documents" / "a" / "document.json").is_file())
         self.assertTrue((self.folder / "recents" / "thumbnails" / "a.png").is_file())
-        # Moved, never copied: the locks and what was noted and not sent stay behind, and the person's no, for
-        # the earlier release still installed, which would take settings it found missing for never told.
+        self.assertEqual((self.folder / "install-receipt.json").read_text(encoding="utf-8"), "{}")
+        # Moved, never copied: what only 0.8 runs by -- its installations' records, its engines' with the page
+        # token, its install channels --, the locks and what was noted and not sent stay behind, and the
+        # person's no, for the earlier release still installed, which would take settings it found missing for
+        # never told.
         self.assertEqual(sorted(path.name for path in self.earlier.iterdir()),
-                         ["install.lock", "settings.json", "settings.lock", "telemetry-spool.jsonl"])
+                         ["engines", "install-channels.json", "install.lock", "installations", "settings.json",
+                          "settings.lock", "telemetry-spool.jsonl"])
+        self.assertEqual((self.earlier / "engines" / "token").read_text(encoding="utf-8"), "t" * 43)
+        self.assertEqual((self.earlier / "installations" / "current").read_text(encoding="utf-8"), "0.8.4")
+        self.assertFalse((self.folder / "engines").exists() or (self.folder / "installations").exists())
         self.assertEqual(json.loads((self.earlier / "settings.json").read_text(encoding="utf-8")),
                          {"telemetry": {"choice": "off"}})
         self.assertEqual(places.adopt(self.earlier, self.folder), [], "once")
@@ -83,12 +86,12 @@ class AdoptTest(Folders):
 
     def test_what_this_release_already_keeps_is_never_replaced(self) -> None:
         write(self.folder / "settings.json", '{"telemetry": {"notifiedAt": 1}}')
-        write(self.folder / "engines" / "token", "n" * 43)
+        write(self.folder / "recents" / "thumbnails" / "b.png", "mine")
         self.assertEqual(places.adopt(self.earlier, self.folder),
-                         [name for name in EVERYTHING if name not in ("settings.json", "engines")])
-        self.assertEqual((self.folder / "engines" / "token").read_text(encoding="utf-8"), "n" * 43)
+                         [name for name in EVERYTHING if name not in ("settings.json", "recents")])
+        self.assertEqual(sorted(path.name for path in (self.folder / "recents" / "thumbnails").iterdir()), ["b.png"])
         self.assertEqual((self.folder / "settings.json").read_text(encoding="utf-8"), '{"telemetry": {"notifiedAt": 1}}')
-        self.assertTrue((self.earlier / "engines" / "token").is_file(), "left where it was")
+        self.assertTrue((self.earlier / "recents" / "thumbnails" / "a.png").is_file(), "left where it was")
 
     def test_no_earlier_folder_moves_nothing_and_makes_nothing(self) -> None:
         self.assertEqual(places.adopt(self.root / "absent", self.folder), [])
@@ -108,9 +111,9 @@ class AdoptEarlierTest(Folders):
                 mock.patch.dict(os.environ, {"CAD_STATE_DIR": ""}):
             self.assertEqual(places.adopt_earlier(), EVERYTHING)
             self.assertEqual(places.state_dir(), self.folder)
-            write(self.earlier / "installations" / "0.8.5.json", "{}")  # written by 0.8 after the move
+            write(self.earlier / "documents" / "b" / "document.json", "{}")  # written by 0.8 after the move
             self.assertEqual(places.adopt_earlier(), [], "this release's folder has it: never again")
-        self.assertFalse((self.folder / "installations" / "0.8.5.json").exists())
+        self.assertFalse((self.folder / "documents" / "b").exists())
 
     def test_what_earlier_releases_left_is_looked_for_in_their_own_folders_or_the_ones_named(self) -> None:
         with mock.patch.object(places, "_platform_state", side_effect=self.platform), \

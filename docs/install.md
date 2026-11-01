@@ -29,8 +29,8 @@ checksum. It:
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
    there. On a computer 0.8 was set up on, it then moves what 0.10 keeps of 0.8's state
-   folder into its own, once: your telemetry answer and language, the installations'
-   records, the page token, the documents' records and Recents
+   folder into its own, once: your telemetry answer and language, the documents' records
+   and Recents, and 0.8's setup receipt
    ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md), item 5).
 4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints

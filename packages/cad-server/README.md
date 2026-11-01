@@ -103,9 +103,10 @@ The state folder is `cad` in the platform's place for state (`cad-state` on Wind
 the cache folder `cad` in its place for caches. On a computer an earlier release (0.8, named
 cadgen) set up, `cad setup`, `cad doctor` and a registration move what this release keeps of the
 earlier state folder into this one, each thing once and only where this one has none of it: the
-settings, the installations' records, the engines' records with the page token, the documents'
-records, Recents, the setup receipt and the install channels (`cad.engine.places.adopt`); the person's
-telemetry no stays in the earlier folder too, for the earlier release while it is installed.
+settings, the documents' records, Recents and the setup receipt (`cad.engine.places.adopt`); the
+person's telemetry no stays in the earlier folder too, for the earlier release while it is installed.
+0.8's installations' records, engine records and page token stay where 0.8 keeps them: no 0.10 engine
+serves a link 0.8 printed.
 
 Coming from 0.7: cadgen 0.7.x kept a cache store, which can hold gigabytes, in its cache folder,
 `~/.cache/cadgen` (macOS and Linux; `$XDG_CACHE_HOME/cadgen` when that is set),

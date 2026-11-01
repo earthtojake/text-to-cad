@@ -42,10 +42,7 @@ credentials, all made from one token:
   one), so the address copied into another browser on this machine opens the
   same page. A link works only from this machine: the server listens on
   loopback (unless you bind another `--host`, below) and refuses any other Host. It never leaves in a Referer
-  (every page is sent `Referrer-Policy: no-referrer`). A link an earlier
-  release printed was good for a day: past it, it opens the viewer only in a
-  browser that holds a session; anywhere else its page says it has expired and
-  to ask your agent to open the model again. A page's
+  (every page is sent `Referrer-Policy: no-referrer`). A page's
   and a CAD app card's **Copy link** copy a fresh one; the card asks for it
   through its tunnel, with a capability that already reaches everything a link
   does, so this widens nothing.

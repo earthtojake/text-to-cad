@@ -36,8 +36,7 @@ installer runs.
 `~/.local/bin/cad` (on Windows `cad.cmd`), and a skill's
 `uvx ... --from cadgen==0.8.4 cadgen doctor` is
 `uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad doctor`.
-0.8's `cadgen` command finds nothing once its records have moved; `cad doctor --prune`
-removes it.
+0.8's `cadgen` command still runs 0.8, beside 0.10, until `cad doctor --prune` removes it.
 
 **3. `CADGEN_*` is `CAD_*` in environments**, the rest of each name the same:
 `CADGEN_TELEMETRY=0` is `CAD_TELEMETRY=0`, `CADGEN_ENGINE_PORT` is `CAD_ENGINE_PORT`,
@@ -64,11 +63,11 @@ The server's key stays `cad`. The installer rewrites the Claude Desktop entry it
 
 The installer moves into the new state folder, once, what 0.10 keeps: your settings (the
 telemetry answer, so a no stays a no -- the old folder keeps a no too, for 0.8 while it
-is still installed -- and the language), the installations' records, the
-page token (your links keep working), the documents' records and Recents, and setup's
-receipt. Recents is as it was. The cache does not move: a model in Recents opens again once
-its script runs (`cad run model.py`), and the old cache folder can be deleted, as can the old
-state folder once nothing of 0.8 runs. A `CAD_STATE_DIR` you set names a folder that moves
+is still installed -- and the language), the documents' records and Recents, and setup's
+receipt. Recents is as it was. 0.8's page token stays behind, so a link 0.8 printed opens
+nothing in 0.10: ask your agent for a new one. The cache does not move: a model in Recents
+opens again once its script runs (`cad run model.py`), and the old cache folder can be
+deleted, as can the old state folder once nothing of 0.8 runs. A `CAD_STATE_DIR` you set names a folder that moves
 nowhere.
 
 **6. Updates are by hand**: the update button in the CAD Viewer and the CAD app, `cad

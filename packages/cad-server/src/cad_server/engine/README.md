@@ -211,8 +211,7 @@ holds them under one memory budget that never evicts a watched one (**Document l
 
 The installation's door (**The door**) supplies its HTTP token, which programmatic clients send as a
 Bearer header; no URL carries it. A page URL the engine prints or opens carries a link instead, good
-until the token is rotated (`LINK_SECONDS`, its expiry a century out; one an earlier release printed
-still expires after its day), for which a browser is given a SameSite=Strict session cookie (the link
+until the token is rotated (`LINK_SECONDS`, its expiry a century out), for which a browser is given a SameSite=Strict session cookie (the link
 stays in the page's address, which the page gives one where it has none: `GET /api/v1/local/link`), one name on every port of
 the host, that lasts 30 days from its last use (a page load renews it, as any request does once it
 is a day old): both are the token's signatures of an expiry, checked by signing again, so no engine

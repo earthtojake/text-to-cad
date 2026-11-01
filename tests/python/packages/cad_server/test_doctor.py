@@ -189,9 +189,19 @@ class DoctorTests(unittest.TestCase):
         (theirs / "cadgen").write_text("", encoding="utf-8")
         own = folder / "cadgen-0.7"
         own.symlink_to(theirs / "cadgen")
+        registered = self.state / "env-0.8.3" / "bin"  # an environment 0.8 registered, in its own record
+        registered.mkdir(parents=True)
+        for name in ("cadgen", "python"):
+            (registered / name).write_text("", encoding="utf-8")
+        (self.state / "installations").mkdir(exist_ok=True)
+        (self.state / "installations" / "0.8.3.json").write_text(json.dumps(
+            {"version": "0.8.3", "python": str(registered / "python"), "cadgen": str(registered / "cadgen"),
+             "prefix": str(registered.parent)}), encoding="utf-8")
+        into = folder / "cadgen-0.8.3"
+        into.symlink_to(registered / "cadgen")
         code, out, _ = _run(["--prune"])
         self.assertEqual(code, 0)
-        for path in (console, python, gone, earlier):
+        for path in (console, python, gone, earlier, into):
             self.assertIn(f"removed {path}, a launcher the cad command replaces\n", out)
             self.assertFalse(os.path.lexists(path), path)
         for path, text in kept.items():

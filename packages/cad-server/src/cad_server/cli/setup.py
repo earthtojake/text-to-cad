@@ -793,9 +793,8 @@ class Installer:
         from cad.engine.places import adopt_earlier
         from cad_server._internal.file_lock import exclusive
 
-        # What this release keeps of an earlier release's state folder, moved into its own first: the
-        # person's settings, the installations' records (an earlier engine on the port is stopped by its
-        # own, found by its record), the engines' with the page token, the documents' and the receipt.
+        # What this release keeps of 0.8's state folder, moved into its own first: the person's settings,
+        # the documents' records and Recents, and the receipt.
         adopt_earlier()
         state = self._state()
         state.mkdir(parents=True, exist_ok=True)

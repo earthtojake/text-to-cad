@@ -30,8 +30,7 @@ from .http_app import CadApp, RAW_FILE_HEADERS, host_is_allowed
 # ``cad_server.engine.daemon.bind``), which only the user's own clients present, as a Bearer header: the
 # door hands it to them. Every URL a launch prints or opens carries a link instead,
 # ``?token=<expires>.<mac>``, good until the token is rotated (``LINK_SECONDS``: its expiry a century
-# out, as a Jupyter server's URL token lasts until it is revoked; one an earlier release printed, good
-# for a day, still reads and still expires), and a browser that opens one is given
+# out, as a Jupyter server's URL token lasts until it is revoked), and a browser that opens one is given
 # the session cookie, ``<expires>.<mac>`` too, good for 30 days from its last use, which renews it
 # (``SESSION_SECONDS``, ``EngineApp._admitted``). The link stays in the page's address, which the page
 # gives one where it has none (``GET /api/v1/local/link``), so the address copied into another browser on this machine

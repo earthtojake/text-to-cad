@@ -72,17 +72,17 @@ MARKER_SCHEMA = "cad env/2"
 
 # The state folder's name in the platform's place for it (on Windows, beside the cache folder, its own
 # suffix), and the earlier releases' (named for cadgen, the library's earlier name). What this release
-# keeps of an earlier state folder (``ADOPTED``) it moves into its own (``adopt``): the person's settings
-# (the telemetry answer, so a no stays a no, and the language), the installations' records, the engines'
-# records with the page token (the page links a person keeps still open), the documents' records and
-# what the homes show of them (Recents), and setup's receipt and the install channels. Not the locks,
-# nor the telemetry an earlier release noted and did not send. The person's telemetry no stays in the
-# earlier folder too, for the earlier release still installed (``adopt``).
+# keeps of an earlier state folder (``ADOPTED``) it moves into its own (``adopt``): what the person owns
+# -- their settings (the telemetry answer, so a no stays a no, and the language), the documents' records
+# and what the homes show of them (Recents) -- and setup's receipt, which ``cad setup`` reads for the
+# skills and the configs 0.8's setup touched, and ``cad uninstall`` for what it did. Not 0.8's
+# installations' records, its engines' records or its page token, which only 0.8 runs by, nor its
+# install channels, the locks, or the telemetry it noted and did not send. The person's telemetry no
+# stays in the earlier folder too, for the earlier release still installed (``adopt``).
 STATE = ("cad", "cad-state")
 EARLIER_STATE = ("cadgen", "cadgen-state")
 SETTINGS = "settings.json"
-ADOPTED = (SETTINGS, INSTALLATIONS, "engines", "documents", "recents", "install-receipt.json",
-           "install-channels.json")
+ADOPTED = (SETTINGS, "documents", "recents", "install-receipt.json")
 CACHE, EARLIER_CACHE = "cad", "cadgen"
 
 
@@ -123,8 +123,7 @@ def adopt_earlier() -> list[str]:
 
 def adopt(earlier: Path, folder: Path) -> list[str]:
     """What this release keeps of the state folder ``earlier`` moved into ``folder`` (``ADOPTED``), each
-    only where ``folder`` has none -- the installations' records less ``current``, an earlier release's
-    choice that is not this one's to keep. The rest stays where it was. Moved, never copied -- a record
+    only where ``folder`` has none. The rest stays where it was. Moved, never copied -- a record
     names one place --, but for the person's telemetry no: an earlier release still installed (an app's
     session, its own stop command) reads settings it finds missing as never told and tells its notice
     again, which it then takes for a yes, so its folder keeps the no (``_said_no``). Quiet: a move that
@@ -143,11 +142,6 @@ def adopt(earlier: Path, folder: Path) -> list[str]:
         if no is not None:
             _leave(source, {"telemetry": no})
         moved.append(name)
-    if INSTALLATIONS in moved:
-        try:
-            (folder / CURRENT).unlink()
-        except OSError:
-            pass
     return moved
 
 

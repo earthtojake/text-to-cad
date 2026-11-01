@@ -44,6 +44,7 @@ import os
 import re
 import sys
 import time
+from pathlib import Path
 
 from cad.engine.places import VERSION, alive, installation_record
 
@@ -233,9 +234,38 @@ def prune(folder=None) -> list[str]:
 # (a symlink to an environment's console script; on Windows a copy, ``.exe``) and
 # ``cadgen-python-<version>`` (a script whose first lines carry ``LEGACY_MARK``).
 LEGACY_MARK = "cadgen launcher: "
-# 0.8's proxy, ``cadgen`` (``cadgen.cmd``), which the ``cad`` command replaces: the installations it
-# read moved to this release's state folder (``cad.engine.places.adopt_earlier``).
+# 0.8's proxy, ``cadgen`` (``cadgen.cmd``), which the ``cad`` command replaces.
 EARLIER_PROXY, EARLIER_MARK = "cadgen", "cadgen proxy: "
+# The key 0.8's installation records name their console script by (this release's say ``cad``).
+EARLIER_CONSOLE = "cadgen"
+
+
+def earlier(folder: Path | None = None) -> list[dict]:
+    """0.8's installations, each by its record where 0.8 left it: ``installations/<version>.json`` in 0.8's
+    state folder (``folder``; by default where what 0.8 left is looked for,
+    ``cad.engine.places.earlier_state_dir``), its ``version``, ``python``, console script
+    (``EARLIER_CONSOLE``) and environment (``prefix``), with its file (``path``). No record of this
+    release's is one. Read only to clean 0.8 up: ``cad setup`` stops 0.8's server by 0.8's own stop, and
+    ``cad doctor --prune`` takes out the launchers 0.8 published (``prune_legacy``)."""
+    from cad.engine.places import earlier_state_dir
+
+    where = Path(folder or earlier_state_dir()) / FOLDER
+    try:
+        names = sorted(os.listdir(where))
+    except OSError:
+        return []
+    found = []
+    for name in names:
+        if not (name.endswith(".json") and VERSION.fullmatch(name[:-5])):
+            continue
+        try:
+            record = json.loads((where / name).read_bytes())
+        except (OSError, ValueError):
+            continue
+        if isinstance(record, dict) and record.get("version") == name[:-5] and all(
+                isinstance(record.get(key), str) for key in ("python", EARLIER_CONSOLE, "prefix")):
+            found.append({**record, "path": str(where / name)})
+    return found
 
 
 def _marked(path: str, mark: str) -> bool:
@@ -267,12 +297,9 @@ def _legacy_console(path: str) -> bool:
 
 
 def _registered_environment(path: str) -> bool:
-    """Whether the symlink ``path`` leads into the environment of a registered installation."""
+    """Whether the symlink ``path`` leads into the environment of an installation 0.8 registered (``earlier``)."""
     place = os.path.dirname(os.path.dirname(os.path.realpath(path)))
-    try:
-        return any(_same_place(record["prefix"], place) for record in records())
-    except OSError:
-        return False
+    return any(_same_place(record["prefix"], place) for record in earlier())
 
 
 def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]:
@@ -303,7 +330,7 @@ def prune_legacy(where: str | None = None, windows: bool = WINDOWS) -> list[str]
         elif stem.startswith("cadgen-") and VERSION.fullmatch(stem[len("cadgen-"):]):
             version = stem[len("cadgen-"):]
             # A symlink into a cadgen environment is an earlier build's only beside its marked python,
-            # or pointing nowhere now, or into an environment registered here: a person's own
+            # or pointing nowhere now, or into an environment 0.8 registered: a person's own
             # ``cadgen-0.7`` into a venv of theirs is theirs.
             legacy = (_legacy_console(path) and (version in marked or not os.path.exists(path)
                                                  or _registered_environment(path))) \
@@ -518,8 +545,9 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
 def setup(version: str, *, make_current: bool = False) -> tuple[tuple[str, str, str | None], tuple[str, str, str | None]]:
     """Register this installation as ``version`` and write the proxy: each ``(path, status, error)``.
     With ``make_current`` (a development install), it is pointed at as ``current``; else only when no
-    live installation is (``bootstrap``). On a device an earlier release set up, what this release keeps
-    of its state folder is moved into this one's first (``cad.engine.places.adopt_earlier``)."""
+    live installation is (``bootstrap``). On a device 0.8 set up, what this release keeps of its state
+    folder -- the person's settings, documents and Recents, and setup's receipt -- is moved into this
+    one's first (``cad.engine.places.adopt_earlier``)."""
     from cad.engine.places import adopt_earlier
 
     adopt_earlier()
