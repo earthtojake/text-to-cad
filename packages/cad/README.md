@@ -204,15 +204,47 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     *Pressure-test*: every sentence in a distribution's markdown must be true and actionable for
     someone who only ran `pip install cad==<release>` (or `cad-server`, or `cad-mcp`). Naming a bundled thing ("the JavaScript runtime
     bundled at build time") passes; a repository path to its source, a repository script, or a
-    repository workflow does not.
-15. **No backwards compatibility for authoring and runtime APIs.** Hard cutovers only.
-    A retired surface does not exist: no
-    alias, no shim, and no error that recognizes its old spelling to explain what replaced it. A
-    removed command, flag, argument, key, module or name gets what the current contract's
-    ordinary validation says -- an unknown command, an unrecognized argument, an unknown key, an
-    `ImportError`, an `AttributeError`.
-    *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name
-    that never existed.
+    repository workflow does not. This README also holds the laws of all three distributions, so a
+    law may name another distribution's file, said as that distribution's ("the server's
+    `updates.py`").
+15. **Compatibility, by who pays for a break.** A change is judged by who absorbs it and whether
+    they can. Four tiers:
+
+    **Tier 1: what an agent reads each session** -- the skills, the `cad` command's verbs and flags,
+    the CAD tools' arguments, the wording of docs. Hard cutovers only, release over release. A retired
+    surface does not exist: no alias, no shim, and no error that recognizes its old spelling to
+    explain what replaced it. A removed command, flag, argument, key, module or name gets what the
+    current contract's ordinary validation says -- an unknown command, an unrecognized argument, an
+    unknown key, an `ImportError`, an `AttributeError`.
+    *Pressure-test*: use a removed spelling; the error must read exactly as it would for a name that
+    never existed.
+
+    **Tier 2: the library's public imports** -- `from cad import model` and the rest of what a model
+    script imports: the decorators, the exports, the helpers, the model contract. These are changed
+    only when a release must: a change breaks scripts a person already has, which an agent then has
+    to find out about and rewrite. When one is unavoidable it is still a hard cutover (no shim, no
+    teaching error), named in the migration reference, and an agent migrates a project on first touch.
+
+    **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings,
+    receipts, the plugin folder. A release reads what the previous shipped release wrote, writes the
+    current form, and migrates on first touch, once: never the old form written, never a downgrade.
+    Opening, viewing, importing and exporting a saved document never requires its source or a rebuild
+    because text-to-cad was upgraded: the engine reads `xbf/8` and `xbf/9` and converts `xbf/8` in
+    memory, without executing model code or changing source or cache bytes, under a migration record
+    that leaves the original build closure and toolchain provenance unchanged; an explicit export to
+    another XBF path saves the upgraded document atomically, and opening one does not rewrite it;
+    an unsupported format or a failed conversion keeps the original bytes and record and says why.
+    Build-cache reuse is separate: running a model compares the current key and may rebuild. This tier
+    retains no retired authoring API. The engine's README's **Build closure** describes the conversion.
+
+    **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
+    its page, the update handshake, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
+    the installation and release records, the analytics schemas, and the PyPI names old pins resolve
+    through. Each is numbered or frozen in a golden; a change within a number is additive, and unknown
+    keys and ops are ignored; a breaking change bumps the number, and the newer side answers the
+    previous number for one release -- the window in which the previous release's plugins, pages,
+    shims and updaters are still running on a device -- then drops it. The analytics receiver keeps
+    every schema a released client sends.
 
     **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
     the `cadgen` import is the library itself, every name and every module of it `cad`'s own
@@ -220,17 +252,6 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     install the library at their own release. Nothing else of 0.8's names is kept: the `cadgen`
     command, the `CADGEN_*` variables and `cadgen mcp` are gone, as this law says.
 
-    **Persisted-document exception.** Saved documents have a separate compatibility contract:
-    opening, viewing, importing and exporting supported formats must not require their source or
-    a rebuild just because text-to-cad was upgraded. The engine reads `xbf/8` and `xbf/9`; it converts
-    `xbf/8` material metadata in memory, without executing model code or changing source or cache
-    bytes. A separate migration record identifies the conversion while the original build closure
-    and toolchain provenance remain unchanged. Explicit export to a different XBF path can save
-    the upgraded document atomically; opening it does not rewrite it. Unsupported formats and
-    failed conversions preserve the original bytes and cache record and give a clear error.
-    Build-cache reuse is separate: explicitly running a model compares the current key and may
-    rebuild it. This exception retains no retired authoring APIs or classes. The engine's
-    README's **Build closure** describes the supported conversion and export behavior.
 
 16. **Closed vocabularies.** Every declaration surface has a closed key/kind set. An unknown key
     is an error naming the supported set, never silently ignored.
@@ -238,9 +259,9 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     output at exit 0. No silent fallbacks, no globs, no guessing; a failed write or render leaves
     no file this run wrote; an earlier file stays byte for byte.
 18. **Nothing waits on the network.** Once installed, text-to-cad works offline: every command,
-    build, snapshot, server and page. Its own requests are two: telemetry (`analytics.py`, usage
+    build, snapshot, server and page. Its own requests are two: telemetry (the server's `analytics.py`, usage
     counts under a random id, sent by default once a `cad` command has said so, and never
-    after the person's no) and the hourly version check (`updates.py`). Both run in the
+    after the person's no) and the hourly version check (the server's `updates.py`). Both run in the
     background and fail silently: no start, command, build, request or tool call waits on them.
     An update waits on the network because a person asked for it -- the update button, `cad
     update`, the install command run again --: it reads the feed then, and uv installs the release
@@ -252,7 +273,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     in a small file beside the settings (`analytics.spool`), which the CAD app's
     and the viewer's background sends take, and a command that finds it has waited more than a
     window, with no other process sending, starts a sender detached that sends it and exits
-    (`_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
+    (the server's `_internal/telemetry_send.py`). A process that exits sends nothing either: its last batch is
     kept beside the settings, and the next process that sends sends it, in the background. One
     wait remains, bounded: `cad telemetry off`, which waits for the deletion it asks for.
     The pages load nothing from the internet: everything they show ships in the wheel.
@@ -360,7 +381,7 @@ Status is in session memory for up to 24 hours: the 64 most recent finished oper
 (32 MiB of reports at most) and the 2048 most recent request identities, the oldest
 dropped rather than new work refused; a restart loses it. A remembered identity whose
 operation was dropped answers 410 and never replays writes.
-`jobs.py` owns admission, progress, waiting and cancellation for both agent
+The server's `jobs.py` owns admission, progress, waiting and cancellation for both agent
 operations and viewer exports. Viewer exports additionally own temporary artifact
 expiry, revision checks and download delivery; running cancellation discards that
 temporary artifact. Browser downloads choose the viewer user's local destination
