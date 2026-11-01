@@ -898,13 +898,11 @@ other's door.
   reader of that number skips; a removal or a rename takes a new number. Each side reads the other's
   number first: the daemon greets with the number the connection speaks, the lower of its own and
   the hello's, and the client speaks that one or hangs up (`door.greeted`; `cad-mcp` keeps a copy,
-  as it imports nothing of the library's). The bare forms, `<id>\n` and `ok\n`, are protocol 0,
-  0.8's: the daemon answers a bare hello with a bare greeting, and a client says the bare hello at an
-  earlier release's door, which it asks to stop before it takes the port (**Starting and updating**;
-  `client._protocol`, by the door's name). On Windows the hello goes first on the loopback
-  connection, the port file's token where a pair's id goes, and the greeting comes back on it; a
-  request line that starts with its token instead is an earlier release's client's, protocol 0,
-  ungreeted, and a client says no hello at an earlier release's port.
+  as it imports nothing of the library's). Numbers start at 1: 0.8's door had none (a bare `<id>\n`
+  and `ok\n`), which neither side reads, and 0.8's engines keep their own folder. On Windows the hello
+  goes first on the loopback connection, the port file's token where a pair's id goes, and the
+  greeting comes back on it; a connection that says no such hello is refused before its request is
+  read.
 - **Leftovers.** A client killed before its greeting leaves its pair: the daemon sweeps pairs no
   connection of its own holds once they are two minutes old, looking at their names and ages
   alone, never opening one, so a sweep never waits. A stopping daemon takes its door away first:

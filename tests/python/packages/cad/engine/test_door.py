@@ -32,7 +32,7 @@ class DoorTest(unittest.TestCase):
         self.addCleanup(opened.close)
         return path
 
-    def test_a_hello_is_one_short_line_naming_an_id_and_its_protocol_and_a_bare_id_is_protocol_0(self) -> None:
+    def test_a_hello_is_one_short_line_naming_an_id_and_its_protocol_and_0_8_s_bare_id_is_none(self) -> None:
         from cad.engine import door
 
         ident = "0123456789abcdef" * 2
@@ -40,32 +40,32 @@ class DoorTest(unittest.TestCase):
         self.assertEqual(line, ident.encode() + b" 1\n")
         self.assertEqual(door.DOOR_PROTOCOL, 1)
         self.assertLess(len(line), 512, "below PIPE_BUF: hellos written at once never interleave")
-        self.assertEqual(door.hello(ident, 0), ident.encode() + b"\n", "protocol 0: the bare id, 0.8's hello")
-        for said, protocol in ((line, 1), (door.hello(ident, 0), 0), (ident.encode() + b" 7 later fields\n", 7)):
+        for said, protocol in ((line, 1), (ident.encode() + b" 7 later fields\n", 7)):
             self.assertEqual(door.hello_id(said.rstrip(b"\n")), ident)
             self.assertEqual(door.hello_protocol(said.rstrip(b"\n")), protocol)
-        for other in (b"", ident[:-1].encode(), ident.upper().encode(), ident.encode() + b"0",
-                      b"../" + ident[3:].encode(), ident.encode()[:-1] + b"\x00", ident.encode() + b" ",
-                      ident.encode() + b" one", ident.encode() + b" -1", ident.encode() + b"  1"):
+        for other in (b"", ident.encode(), ident.encode() + b" 0", ident[:-1].encode(), ident.upper().encode(),
+                      ident.encode() + b"0", b"../" + ident[3:].encode(), ident.encode()[:-1] + b"\x00",
+                      ident.encode() + b" ", ident.encode() + b" one", ident.encode() + b" -1",
+                      ident.encode() + b"  1"):
             self.assertIsNone(door.hello_id(other), other)
             self.assertIsNone(door.hello_protocol(other), other)
 
-    def test_a_greeting_names_the_protocol_the_connection_speaks_and_a_bare_ok_is_protocol_0(self) -> None:
+    def test_a_greeting_names_the_protocol_the_connection_speaks_and_0_8_s_bare_ok_is_none(self) -> None:
         from cad.engine import door
 
         self.assertEqual(door.greeting(1), b"ok 1\n")
         self.assertEqual(door.greeting(), b"ok 1\n")
-        self.assertEqual(door.greeting(0), b"ok\n", "protocol 0: the bare greeting, 0.8's")
-        for line, protocol in ((b"ok 1\n", 1), (b"ok 1", 1), (b"ok\n", 0), (b"ok", 0), (b"ok 2 later fields\n", 2)):
+        for line, protocol in ((b"ok 1\n", 1), (b"ok 1", 1), (b"ok 2 later fields\n", 2)):
             self.assertEqual(door.greeted(line), protocol, line)
-        for other in (b"", b"\n", b"ok \n", b"ok one\n", b"no 1\n", b"okay\n", b"ok\n\n"):
+        for other in (b"", b"\n", b"ok\n", b"ok", b"ok 0\n", b"ok \n", b"ok one\n", b"no 1\n", b"okay\n",
+                      b"ok\n\n"):
             self.assertIsNone(door.greeted(other), other)
 
     def test_the_daemon_greets_each_hello_in_the_protocol_it_spoke(self) -> None:
         from cad.engine import door
 
         path = self.open_door(lambda reader, writer: reader.readline())
-        for protocol, greeting in ((1, b"ok 1\n"), (0, b"ok\n"), (9, b"ok 1\n")):
+        for protocol, greeting in ((1, b"ok 1\n"), (9, b"ok 1\n")):
             ident = secrets.token_hex(16)
             up, down = door.pair(self.clients, ident)
             os.mkfifo(up, 0o600)
@@ -81,10 +81,10 @@ class DoorTest(unittest.TestCase):
                 self.assertTrue(selector.select(10), "the pair was greeted")
                 self.assertEqual(os.read(hold, 64), greeting, f"a protocol {protocol} hello")
 
-    def test_a_client_takes_a_bare_greeting_as_protocol_0_and_refuses_one_it_does_not_speak(self) -> None:
+    def test_a_client_refuses_a_greeting_it_does_not_speak_0_8_s_bare_ok_among_them(self) -> None:
         from cad.engine import door
 
-        for greeting, protocol in ((b"ok\n", 0), (b"ok 1\n", 1), (b"ok 2\n", None), (b"no\n", None)):
+        for greeting, protocol in ((b"ok 1\n", 1), (b"ok\n", None), (b"ok 2\n", None), (b"no\n", None)):
             def answer(ident: str, _protocol: int, greeting: bytes = greeting) -> None:
                 up, down = door.pair(self.clients, ident)
                 writer = os.open(down, os.O_WRONLY | os.O_NONBLOCK)
@@ -174,7 +174,7 @@ class DoorTest(unittest.TestCase):
         dying.join(5)
         self.assertEqual(list(self.clients.iterdir()), [])
 
-    def test_a_client_says_the_bare_hello_at_an_earlier_release_s_door_and_its_own_at_the_engine_s(self) -> None:
+    def test_a_client_says_its_own_hello_at_any_door_never_0_8_s_bare_one(self) -> None:
         from cad.engine import client, door, places
 
         heard: list[int] = []
@@ -183,15 +183,15 @@ class DoorTest(unittest.TestCase):
             heard.append(protocol)
             door.answer(self.clients, ident, lambda reader, writer: reader.readline(), protocol)
 
-        for name, protocol in (("0123456789ab", 0), (places.NAME, door.DOOR_PROTOCOL)):  # 0.8's door: a tag
+        for name in ("0123456789ab", places.NAME):  # 0.8's doors were named for their installation
             opened = door.Door(self.folder / f"{name}.door", engine)
             self.addCleanup(opened.close)
             connection = client._connect(opened.path)
             self.assertIsNotNone(connection, name)
-            self.assertEqual(connection.protocol, protocol, name)
+            self.assertEqual(connection.protocol, door.DOOR_PROTOCOL, name)
             connection.close()
             opened.close()
-        self.assertEqual(heard, [0, door.DOOR_PROTOCOL])
+        self.assertEqual(heard, [door.DOOR_PROTOCOL] * 2)
 
     def test_a_clients_folder_opened_to_others_is_closed_again_and_connects(self) -> None:
         from cad.engine import door

@@ -39,33 +39,21 @@ SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start
              "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
 
 
-def _protocol(address: Path | None) -> int:
-    """The door protocol a client says hello in at ``address``: this one's at the engine's door or
-    port file (``places.NAME``); at an earlier release's (named for its installation), whose engine
-    a later one asks to stop before it takes its port, 0: the bare hello, and on Windows none, which
-    is all that engine reads."""
-    return DOOR_PROTOCOL if address is None or address.stem == places.NAME else 0
-
-
 def _connect(address: Path | None = None) -> Connection | None:
     """A connection to the daemon at ``address`` (its door, on Windows its port file; by default
     the engine's), or None when none answers there or it greets in a protocol this side does not
     speak. ``ConnectionError`` when the system refuses this process the engine's folder (a sandbox
     that forbids writing there)."""
-    protocol = _protocol(address)
     try:
         if places.WINDOWS:
             port, token = _port_text(address or places.port_path()).split()
             connection = socket.create_connection(("127.0.0.1", int(port)), timeout=5)
             stream = connection.makefile("rwb")
-            spoken: int | None = 0
-            try:
-                if protocol:
-                    # The door's hello and greeting on the port: the token where a pair's id goes.
-                    connection.settimeout(GREETING_SECONDS)
-                    stream.write(hello(token, protocol))
-                    stream.flush()
-                    spoken = greeted(stream.readline(HELLO_LIMIT))
+            try:  # the door's hello and greeting on the port: the token where a pair's id goes
+                connection.settimeout(GREETING_SECONDS)
+                stream.write(hello(token))
+                stream.flush()
+                spoken = greeted(stream.readline(HELLO_LIMIT))
                 connection.settimeout(None)
             except OSError:
                 spoken = None
@@ -77,7 +65,7 @@ def _connect(address: Path | None = None) -> Connection | None:
         door = address or places.door_path()
         if places.folder_refusal(door.parent) is not None or not door.exists():
             return None
-        return dial(door, protocol=protocol)
+        return dial(door)
     except PermissionError as error:
         raise _denied(f"opening a pipe in the engine's folder {places.engine_dir()}: {error.strerror or error}") from None
     except (OSError, ValueError):
@@ -325,9 +313,7 @@ def request(message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = 
 
 def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[[dict[str, Any]], None] = lambda _m: None,
               on_progress: Callable[[dict[str, Any]], None] | None = None, address: Path | None = None) -> dict[str, Any]:
-    if places.WINDOWS:
-        # The token first, so the daemon checks it in the line's first bytes, before it reads the rest:
-        # an earlier release's engine, which takes no hello, by those bytes alone.
+    if places.WINDOWS:  # the token in the request too, which the daemon checks as it did the hello's
         message = {"token": (address or places.port_path()).read_text(encoding="utf-8").split()[1], **message}
     with connection:
         connection.writer.write((json.dumps(message) + "\n").encode())

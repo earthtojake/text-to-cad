@@ -83,6 +83,7 @@ from typing import Any, Callable
 from cad.engine.atomic_replace import replace_atomic
 from cad.engine.client import WORKER_STDERR
 from cad.engine import places as _places
+from cad.engine.door import DOOR_PROTOCOL
 from cad.engine.ids import canonical, file_id, is_id
 from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, folder_refusal, installation, lock, lock_path, names, port_path, pycache)
 from cad_server.engine.services import SERVICES
@@ -1534,18 +1535,14 @@ def _no_kernel(error: BaseException) -> bool:
 # How long a connection to the Windows loopback port has to show its token: anyone on the machine can
 # connect there, so nothing more is read, or waited for, until it has.
 AUTH_SECONDS = 10.0
-# How a request line from a client before the door protocol starts on Windows: its token first.
-_TOKEN_FIRST = b'{"token": "'
 
 
-def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> tuple[bytes, int] | None:
+def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> int | None:
     """On Windows, a connection's token shown, and the door protocol it speaks: the door's hello with
     the token where a pair's id goes (``<token> <protocol>``, ``door.hello``), greeted on the
-    connection as the door greets (``door.greeting``); or, from a client of an earlier release, which
-    says no hello, the request line's first bytes, the token first (``{"token": "<token>", ...``,
-    ``client._exchange``): protocol 0, ungreeted. A peer without the token is refused after a line of
-    ``door.HELLO_LIMIT`` bytes and ``AUTH_SECONDS`` at most, before a request is read or parsed. What
-    was read of the request line, and the protocol; None: refused."""
+    connection as the door greets (``door.greeting``). A peer without it -- a line that is no such
+    hello, 0.8's client's request among them -- is refused after a line of ``door.HELLO_LIMIT`` bytes
+    and ``AUTH_SECONDS`` at most, before a request is read or parsed. The protocol; None: refused."""
     import hmac
 
     from cad.engine import door
@@ -1554,31 +1551,22 @@ def _admitted(daemon: Daemon, connection: socket.socket, stream: Any) -> tuple[b
         return None
     token = daemon.token.encode("ascii")
     connection.settimeout(AUTH_SECONDS)
-    head = stream.read(len(_TOKEN_FIRST))
-    if head == _TOKEN_FIRST:
-        expected = _TOKEN_FIRST + token + b'"'
-        prefix = head + stream.read(len(expected) - len(head))
-        if not hmac.compare_digest(prefix, expected):
-            return None
-        connection.settimeout(None)
-        return prefix, 0
-    line = head + stream.readline(door.HELLO_LIMIT - len(head))
-    ident = door.hello_id(line.removesuffix(b"\n")) if line.endswith(b"\n") else None
-    if ident is None or not hmac.compare_digest(ident.encode("ascii"), token):
+    line = stream.readline(door.HELLO_LIMIT)
+    said = line.removesuffix(b"\n") if line.endswith(b"\n") else b""
+    ident, protocol = door.hello_id(said), door.hello_protocol(said)
+    if ident is None or protocol is None or not hmac.compare_digest(ident.encode("ascii"), token):
         return None
-    protocol = door.hello_protocol(line.removesuffix(b"\n")) or 0
     stream.write(door.greeting(min(protocol, door.DOOR_PROTOCOL)))
     stream.flush()
     connection.settimeout(None)
-    return b"", protocol
+    return protocol
 
 
-def _serve(daemon: Daemon, reader: Any, writer: Any, prefix: bytes = b"", protocol: int = 0) -> None:
-    """One connection: its request line (after ``prefix``, what the Windows check read of it), and
-    every answer line the request sends. A hold keeps the connection until its client goes.
-    ``protocol``: the door protocol the client's hello spoke (0 for the bare form), carried for the
-    request's handling once a later protocol number changes what it may say."""
-    line = prefix + reader.readline()
+def _serve(daemon: Daemon, reader: Any, writer: Any, protocol: int = DOOR_PROTOCOL) -> None:
+    """One connection: its request line, and every answer line the request sends. A hold keeps the
+    connection until its client goes. ``protocol``: the door protocol the client's hello spoke,
+    carried for the request's handling once a later protocol number changes what it may say."""
+    line = reader.readline()
     if not line:
         return
     request = json.loads(line)
@@ -1624,16 +1612,15 @@ def _serve_door(daemon: Daemon, ident: str, protocol: int) -> None:
 
 
 def _serve_connection(daemon: Daemon, connection: socket.socket) -> None:
-    """A connection to the Windows loopback port: its token shown first (``_admitted``: in its hello, or
-    an earlier release's client's request line), then served."""
+    """A connection to the Windows loopback port: its token shown first, in its hello (``_admitted``),
+    then served."""
     with connection:
         stream = connection.makefile("rwb")
         try:
-            admitted = _admitted(daemon, connection, stream)
-            if admitted is None:
+            protocol = _admitted(daemon, connection, stream)
+            if protocol is None:
                 return
-            prefix, protocol = admitted
-            _serve(daemon, stream, stream, prefix, protocol)
+            _serve(daemon, stream, stream, protocol)
         except (OSError, ValueError):
             pass
         finally:

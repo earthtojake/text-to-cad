@@ -244,7 +244,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     keys and ops are ignored; a breaking change bumps the number, and the newer side answers the
     previous number for one release -- the window in which the previous release's plugins, pages,
     shims and updaters are still running on a device -- then drops it. The analytics receiver keeps
-    every schema a released client sends.
+    every schema a released client sends. 0.8's door had no number, and nothing of 0.10's speaks it:
+    the window runs from 0.10 on.
 
     **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
     the `cadgen` import is the library itself, every name and every module of it `cad`'s own

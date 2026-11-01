@@ -35,9 +35,8 @@ greeting and to the operations a connection carries, each new field at the end o
 reader of that number skips. A removal or a rename takes a new number. Each side reads the other's
 number first: the daemon greets with the number the connection speaks, the lower of its own and the
 hello's (one it no longer serves: no greeting, the connection closed), and the client speaks that one
-or hangs up. The bare forms, ``<id>\n`` and ``ok\n``, are protocol 0: what engines and clients
-before the number spoke (0.8's), which both sides still read, and which the daemon answers a bare
-hello with.
+or hangs up. Numbers start at 1: 0.8's door had none (a bare ``<id>\n`` and ``ok\n``), which neither
+side reads, and 0.8's engines keep a folder of their own (``places.default_engine_dir``).
 """
 
 from __future__ import annotations
@@ -71,58 +70,53 @@ _CLOEXEC = getattr(os, "O_CLOEXEC", 0)
 
 def hello(ident: str, protocol: int = DOOR_PROTOCOL) -> bytes:
     """A client's hello: its pair's id, a space and the door protocol it speaks, and a newline, one
-    atomic write into the door. Protocol 0 is the bare form, the id alone, which engines before the
-    number read."""
-    line = (f"{ident} {protocol}\n" if protocol else f"{ident}\n").encode("ascii")
+    atomic write into the door."""
+    line = f"{ident} {protocol}\n".encode("ascii")
     assert len(line) < HELLO_LIMIT
     return line
 
 
 def _number(field: bytes) -> int | None:
-    """A protocol number: ASCII digits, a few of them."""
-    return int(field) if 0 < len(field) <= 6 and field.isdigit() else None
+    """A protocol number: ASCII digits, a few of them, 1 or more."""
+    number = int(field) if 0 < len(field) <= 6 and field.isdigit() else 0
+    return number or None
 
 
 def _hello(line: bytes) -> tuple[str, int] | None:
-    """A hello's id and protocol (0 for the bare id), or None for a line that is no hello. Fields
-    after the protocol are a later release's additions, skipped."""
+    """A hello's id and protocol, or None for a line that is no hello (0.8's, the bare id, among them).
+    Fields after the protocol are a later release's additions, skipped."""
     ident, spaced, rest = line.partition(b" ")
-    if len(ident) != ID_CHARACTERS or ident.strip(b"0123456789abcdef"):
+    if not spaced or len(ident) != ID_CHARACTERS or ident.strip(b"0123456789abcdef"):
         return None
-    if not spaced:
-        return ident.decode("ascii"), 0
     protocol = _number(rest.split(b" ", 1)[0])
     return None if protocol is None else (ident.decode("ascii"), protocol)
 
 
 def hello_id(line: bytes) -> str | None:
-    """The pair id a hello names (the line without its newline), or None for a line that is no hello:
-    ``<id>`` (protocol 0) or ``<id> <protocol>``."""
+    """The pair id a hello names (the line without its newline), ``<id> <protocol>``, or None for a
+    line that is no hello."""
     found = _hello(line)
     return None if found is None else found[0]
 
 
 def hello_protocol(line: bytes) -> int | None:
-    """The door protocol a hello speaks (the line without its newline): 0 for the bare id, None for a
-    line that is no hello."""
+    """The door protocol a hello speaks (the line without its newline), or None for a line that is no
+    hello."""
     found = _hello(line)
     return None if found is None else found[1]
 
 
 def greeting(protocol: int = DOOR_PROTOCOL) -> bytes:
     """The daemon's greeting for a connection that speaks ``protocol``: ``ok <protocol>`` and a
-    newline; protocol 0's is the bare ``ok``, the greeting a bare hello's client reads."""
-    return f"ok {protocol}\n".encode("ascii") if protocol else b"ok\n"
+    newline."""
+    return f"ok {protocol}\n".encode("ascii")
 
 
 def greeted(line: bytes) -> int | None:
-    """The door protocol a greeting says the connection speaks (with or without its newline): 0 for
-    the bare ``ok``, None for a line that is no greeting. Fields after the protocol are a later
-    release's additions, skipped."""
-    line = line.removesuffix(b"\n")
-    if line == b"ok":
-        return 0
-    word, spaced, rest = line.partition(b" ")
+    """The door protocol a greeting says the connection speaks (with or without its newline), or None
+    for a line that is no greeting (0.8's bare ``ok`` among them). Fields after the protocol are a
+    later release's additions, skipped."""
+    word, spaced, rest = line.removesuffix(b"\n").partition(b" ")
     return _number(rest.split(b" ", 1)[0]) if word == b"ok" and spaced else None
 
 
@@ -193,9 +187,9 @@ class Connection:
 
 def dial(door: Path, timeout: float = GREETING_SECONDS, protocol: int = DOOR_PROTOCOL) -> Connection | None:
     """A connection to the daemon reading ``door``, or None when none reads it, it never greets, or
-    it greets in a protocol this side does not speak. ``protocol``: the hello's, 0 for the bare form
-    an earlier release's engine reads. ``PermissionError`` when this process may not make its pair in
-    the engine's folder (a sandbox that forbids writing there)."""
+    it greets in a protocol this side does not speak. ``protocol``: the one the hello says.
+    ``PermissionError`` when this process may not make its pair in the engine's folder (a sandbox
+    that forbids writing there)."""
     folder = door.parent / CLIENTS
     ident = secrets.token_hex(ID_CHARACTERS // 2)
     up, down = pair(folder, ident)

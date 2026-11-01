@@ -129,18 +129,18 @@ class StartTest(unittest.TestCase):
 class DoorTest(unittest.TestCase):
     """The transport's own copy of the door's client half (it does not import the library) says the
     library's hello and reads its greeting: in protocol 1 through the door's pipes and on Windows' port,
-    a bare ``ok`` as protocol 0, and a protocol it does not speak refused."""
+    and a greeting it does not speak -- 0.8's bare ``ok`` among them -- refused."""
 
     def test_its_hello_and_greeting_are_the_library_s(self) -> None:
         from cad.engine import door
 
         ident = "0123456789abcdef" * 2
         self.assertEqual((engine.DOOR_PROTOCOL, engine.hello(ident)), (door.DOOR_PROTOCOL, door.hello(ident)))
-        for line in (b"ok\n", b"ok 1\n", b"ok 1", b"ok 2 later\n", b"ok \n", b"ok one\n", b"no\n", b""):
+        for line in (b"ok\n", b"ok 0\n", b"ok 1\n", b"ok 1", b"ok 2 later\n", b"ok \n", b"ok one\n", b"no\n", b""):
             self.assertEqual(engine.greeted(line), door.greeted(line), line)
 
     @unittest.skipIf(os.name == "nt", "the door's pipes are POSIX's")
-    def test_it_dials_the_door_in_its_protocol_and_takes_a_bare_greeting_as_protocol_0(self) -> None:
+    def test_it_dials_the_door_in_its_protocol_and_refuses_0_8_s_bare_greeting(self) -> None:
         from cad.engine import door
 
         folder = Path(tempfile.mkdtemp(prefix="shim-door-"))
@@ -160,7 +160,7 @@ class DoorTest(unittest.TestCase):
                 os.close(writer)
             return answer
 
-        for on_hello, protocol in ((library, 1), (greets(b"ok\n"), 0), (greets(b"ok 2\n"), None)):
+        for on_hello, protocol in ((library, 1), (greets(b"ok\n"), None), (greets(b"ok 2\n"), None)):
             opened = door.Door(folder / "engine.door", on_hello)
             self.addCleanup(opened.close)
             connection = engine.dial(opened.path, timeout=5)

@@ -206,9 +206,9 @@ def register() -> None:
 CLIENTS = "clients"
 # The door protocol this transport speaks (the library's ``cad.engine.door``, which it does not import):
 # its hello is ``<id> <protocol>`` and a newline, and the server's greeting ``ok <protocol>`` and a newline,
-# the protocol the connection speaks; the bare ``ok`` is protocol 0. Within a number only additions, each
-# a field at the end of its line, which a reader of that number skips; a removal or a rename takes a new
-# number.
+# the protocol the connection speaks, from 1 (0.8's bare ``ok`` is no greeting). Within a number only
+# additions, each a field at the end of its line, which a reader of that number skips; a removal or a
+# rename takes a new number.
 DOOR_PROTOCOL = 1
 ID_CHARACTERS = 32
 HELLO_LIMIT = 512
@@ -279,14 +279,12 @@ def hello(ident: str) -> bytes:
 
 def greeted(line: bytes) -> int | None:
     """The door protocol the server's greeting says the connection speaks (with or without its
-    newline): 0 for the bare ``ok``, None for a line that is no greeting; fields after the number,
-    a later release's additions, skipped."""
-    line = line.removesuffix(b"\n")
-    if line == b"ok":
-        return 0
-    word, spaced, rest = line.partition(b" ")
+    newline), 1 or more, or None for a line that is no greeting; fields after the number, a later
+    release's additions, skipped."""
+    word, spaced, rest = line.removesuffix(b"\n").partition(b" ")
     field = rest.split(b" ", 1)[0]
-    return int(field) if word == b"ok" and spaced and 0 < len(field) <= 6 and field.isdigit() else None
+    number = int(field) if word == b"ok" and spaced and 0 < len(field) <= 6 and field.isdigit() else 0
+    return number or None
 
 
 def _knock(door: Path, ident: str, timeout: float) -> bool:
