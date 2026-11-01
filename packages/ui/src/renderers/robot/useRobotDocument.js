@@ -56,7 +56,7 @@ function peekRobot(entry, resources) {
 }
 
 /**
- * A robot as cadgen resolved it (`GET /__cad/robot`: the articulation to play, the visuals
+ * A robot as cadgen resolved it (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`: the articulation to play, the visuals
  * to draw and the facts a person reads back) and every mesh its visuals name, as the
  * once-built part list a scene is made from. URDF, SRDF (its paired URDF, with the SRDF's
  * semantics on it) and SDF are one payload: nothing here asks which it was. The robot is

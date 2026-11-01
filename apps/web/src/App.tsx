@@ -4,7 +4,7 @@ import { createCadFileActions } from '@text-to-cad/ui/catalog';
 import type { ModelLibrarySource } from '@text-to-cad/ui/library';
 import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
 import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
-import { cadApiUrl, createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
+import { createHttpPromptFiles, isEngineRefused, type CadClient, type CadServerInfo } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { useEngineReconnect } from './host/useEngineReconnect.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
@@ -113,7 +113,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: name => Promise.resolve(cadApiUrl('/__cad/thumbnail', { origin: client.origin, params: { name } })),
+    thumbnail: model => Promise.resolve(client.thumbnailUrl(model)),
     open: async entry => { await show(entry.path); },
     ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
   }), [client, server.pick, show]);
@@ -169,7 +169,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   const readRefused = useSyncExternalStore(client.subscribe, () => client.getSnapshot().engineRefused, () => false);
   // Asked again, at the same address with the same token, until an engine answers: a new one reloads the page.
   // An engine that refuses the token runs: the page's link was replaced, which the last ask says once it has asked.
-  const askedRefused = useEngineReconnect(engineGone, { pid: server.pid, release: String(server.release || ''), fast: restarting,
+  const askedRefused = useEngineReconnect(engineGone, { instance: server.instance, release: String(server.release || ''), fast: restarting,
     reload: () => { reloadWhenClean(() => window.location.reload()); },
     ask: () => client.serverInfo({ fresh: true }).then(info => info, error => (isEngineRefused(error) ? { refused: true } : null)) });
   const refused = askedRefused ?? readRefused;

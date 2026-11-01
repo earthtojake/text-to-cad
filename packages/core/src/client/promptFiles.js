@@ -17,7 +17,7 @@ export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalTh
   };
   return {
     async create(request) {
-      const body = await answer(await fetchImpl(cadApiUrl('/__cad/prompt-files', { origin }), {
+      const body = await answer(await fetchImpl(cadApiUrl('/api/v1/local/prompt-files', { origin }), {
         method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify({ ...request, acceptInline: true }),
       }));
       if (typeof body.inline === "string") return { inline: body.inline };
@@ -26,7 +26,7 @@ export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalTh
     },
     async read(path) {
       const name = String(path).split(/[\\/]/).pop();
-      const response = await fetchImpl(cadApiUrl(`/__cad/prompt-files/${encodeURIComponent(name)}`, { origin }), { headers });
+      const response = await fetchImpl(cadApiUrl(`/api/v1/local/prompt-files/${encodeURIComponent(name)}`, { origin }), { headers });
       if (!response.ok) throw new Error(`The prompt file ${name} could not be read (${response.status}).`);
       return response.blob();
     },

@@ -1,7 +1,7 @@
 import { SURFACE_BRDFS } from "../viewer/surfaceBrdf.js";
 
-// The engine's look of the regular display modes (`GET /api/look` and its environment image,
-// `GET /api/look/environment`: `cad/engine/render/look.py`), and what an engine document's scene
+// The engine's look of the regular display modes (`GET /api/v1/look` and its environment image,
+// `GET /api/v1/look/environment`: `cad/engine/render/look.py`), and what an engine document's scene
 // draws by it in those modes: the rig a stage lights it with in place of the theme's
 // (`../viewer/sceneContract.js`'s `rig`, put up by `../viewer/sceneRig.js`) and what its surfaces
 // wear (`xbfLookSurface`). Preview's photographic look is not this: there the scene is drawn as
@@ -169,12 +169,12 @@ export function parseXbfLook(json) {
 }
 
 /**
- * The look of the engine read under `base` (its origin, or the viewer's relay of it:
- * `xbfDocument.js`'s `xbfDocumentSource`): `GET <base>/api/look`, parsed, and its environment image
+ * The look of the engine read under `base` (its origin, or the page's:
+ * `xbfDocument.js`'s `xbfDocumentSource`): `GET <base>/api/v1/look`, parsed, and its environment image
  * read and decoded (`environment.image`).
  */
 export async function fetchXbfLook(base, { fetch: fetchImpl = globalThis.fetch, signal } = {}) {
-  const response = await fetchImpl(`${base}/api/look`, { signal, cache: "no-store" });
+  const response = await fetchImpl(`${base}/api/v1/look`, { signal, cache: "no-store" });
   if (!response.ok) throw new Error(`the engine's look: the engine answered ${response.status}`);
   const look = parseXbfLook(await response.json());
   const image = await fetchImpl(`${base}${look.environment.url}`, { signal });

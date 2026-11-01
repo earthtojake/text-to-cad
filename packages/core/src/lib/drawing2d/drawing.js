@@ -1,5 +1,5 @@
 /**
- * A `GET /__cad/drawing` payload, batched once and then drawn many times.
+ * A `GET /api/v1/documents/dxf/<id>/drawing` payload, batched once and then drawn many times.
  *
  * The backend flattens a `.dxf` into five primitive shapes (`point`, `lines`,
  * `path`, `filled-paths`, `filled-polygon`) and its text (`text`) in DXF

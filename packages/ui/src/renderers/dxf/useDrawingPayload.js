@@ -1,5 +1,5 @@
 /**
- * The drawing on screen: `GET /__cad/drawing` for the file (asked again while
+ * The drawing on screen: `GET /api/v1/documents/dxf/<id>/drawing` for the file (asked again while
  * the server renders it: `client.drawing`), batched into paths once.
  *
  * The client never parses DXF. ezdxf does the reading on the server — text

@@ -54,7 +54,7 @@ export function createDirectFetch(reach: Pick<EngineReach, 'origin' | 'link'>, f
 export const PROBE_MS = 5_000;
 
 /**
- * Whether this page can reach the engine directly: one cheap authenticated read (`/__cad/server`,
+ * Whether this page can reach the engine directly: one cheap authenticated read (`/api/v1/server`,
  * what the engine is), answered by the CAD Viewer itself. A sandbox's CSP, a host's network rules,
  * an engine gone or a link refused all come out as false.
  */
@@ -63,7 +63,7 @@ export async function probeEngine(reach: Pick<EngineReach, 'origin' | 'link'>, f
   const timer = new AbortController();
   const stop = setTimeout(() => timer.abort(), timeoutMs);
   try {
-    const response = await createDirectFetch(reach, fetchImpl)(`${TUNNEL_ORIGIN}/__cad/server`, { signal: timer.signal });
+    const response = await createDirectFetch(reach, fetchImpl)(`${TUNNEL_ORIGIN}/api/v1/server`, { signal: timer.signal });
     if (!response.ok) return false;
     const answer = await response.json() as { app?: unknown };
     return answer?.app === 'cad-viewer';

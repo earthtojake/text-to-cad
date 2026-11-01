@@ -65,7 +65,7 @@ export default function Connection({ bridge, server, channel, launch, presentati
     let active = true;
     // What the engine is: the cheapest of its reads. Any answer, even a refusal of the engine's, is
     // a channel; a timeout is too (the view's own sync then says the plugin stopped).
-    void server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/__cad/server`, headers: {}, body: '' })
+    void server.http({ method: 'GET', url: `${TUNNEL_ORIGIN}/api/v1/server`, headers: {}, body: '' })
       .catch(() => null)
       .then(() => { if (active && channel.state !== 'none') setRoute({ kind: 'tunnel' }); });
     return () => { active = false; };

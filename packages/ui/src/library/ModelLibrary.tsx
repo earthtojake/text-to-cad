@@ -18,6 +18,8 @@ import { activityLabel, ageLabel } from "../lib/age.js";
 export interface LibraryModel {
   /** The model's identity in the host's library; the absolute path where there is one. */
   path: string;
+  /** Its document's id, where the host names one: its picture is read by it. */
+  id?: string;
   name: string;
   /** Where it is, as the person reads it. */
   folder: string;
@@ -30,7 +32,7 @@ export interface LibraryModel {
   pinned: boolean;
   /** Gone from where it was: listed, but not openable. */
   missing: boolean;
-  /** A picture's name, for `thumbnail()`. */
+  /** A picture's name (its content's): `thumbnail()` reads the picture of the row that names it. */
   thumbnail: string | null;
   /** When the picture was taken, in seconds; null without one. A document updated since has an old one. */
   pictured: number | null;
@@ -51,8 +53,8 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   list(): Promise<readonly Model[]>;
   /** `delete` for a model's row (`deletes`), `remove` for a file's. */
   change(action: "pin" | "unpin" | "remove" | "delete", model: Model): Promise<readonly Model[]>;
-  /** An image URL for a model's thumbnail, or null. */
-  thumbnail(name: string): Promise<string | null>;
+  /** An image URL for a model's thumbnail (the one its `thumbnail` names), or null. */
+  thumbnail(model: Model): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
    * Open: choose a file with the desktop's own file chooser, and show it. A host on a computer with
@@ -93,7 +95,7 @@ const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
-function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
+function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(item: Model): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
   const { t } = useI18n();
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
@@ -106,7 +108,7 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     if (item.missing || !element.current) return;
     const name = item.thumbnail;
     const show = () => {
-      if (name) void load(name).then(value => { if (active) setImage(value); }).catch(() => {});
+      if (name) void load(latest.current.item).then(value => { if (active) setImage(value); }).catch(() => {});
       latest.current.seen(latest.current.item);
     };
     if (typeof IntersectionObserver === "undefined") { show(); return () => { active = false; }; }
@@ -230,10 +232,12 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     };
     draw.current(next).then(done, () => done(false));
   }, [queue, refresh]);
-  const load = useCallback((name: string) => {
+  const load = useCallback((item: Model) => {
+    // A picture is kept by its name, its content's: a new picture of the row is another name.
+    const name = String(item.thumbnail);
     let image = images.current.get(name);
     if (!image) {
-      image = current.current.thumbnail(name);
+      image = current.current.thumbnail(item);
       images.current.set(name, image);
     }
     return image;

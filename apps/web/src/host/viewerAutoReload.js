@@ -1,11 +1,11 @@
 /**
  * The browser half of "the server is no longer the one this page loaded from".
  *
- * An update is followed: the engine that answers with another release (`/__cad/server`'s `release`)
+ * An update is followed: the engine that answers with another release (`/api/v1/server`'s `release`)
  * and admits this page's credential is the device's engine of the next release, and the page reloads
  * into it (`reload`, deferred while the page has something unsaved: `@text-to-cad/ui/update`).
  *
- * Every viewer server says who it is: `/__cad/server`'s `identityToken`, its
+ * Every viewer server says who it is: `/api/v1/server`'s `identityToken`, its
  * cadgen version and a digest of the page it serves. Once that answer is not the
  * one the page loaded against, the page reloads, which picks up the client that
  * server serves -- and with it whatever its store speaks (a mesh format, a

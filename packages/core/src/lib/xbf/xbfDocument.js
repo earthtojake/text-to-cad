@@ -1,45 +1,51 @@
 // A cadgen engine document -- an `.xbf`, or a STEP the engine read -- as a page reads it from the
-// engine that serves it (`cad serve`, `cad/engine/serve.py`): its structure as JSON
+// engine that serves it (`cad/engine/serve.py`, through the engine's API, `/api/v1`): its structure as JSON
 // (prototypes with their names, geometry keys, colours and element names by ordinal; instances
 // with world matrices; the tree; the version) and one XBM2 buffer per prototype, read as views
 // over the fetched bytes (`xbm.js`). The viewer's xbf renderer and the parity page's headless stage
-// both load through here, so they draw the same bytes. The viewer's page reads the engine through
-// its own server (`/__cad/api/...`, `cad_server/viewer/documents.py`), with the fetch its client
-// sends every request with (the CAD app's goes over its tunnel); the snapshot's stage reads the
-// engine's own port. Either is a document URL here, and every read is made beside it.
+// both load through here, so they draw the same bytes. The viewer's page reads the engine's API on
+// its own origin (`/api/v1/documents/<kind>/<id>`), with the fetch its client sends every request
+// with (the CAD app's goes over its tunnel); the snapshot's stage reads the engine's own port. Either
+// is a document URL here, and every read is made beside it.
 //
 // A part is fetched once per geometry key: a new version of the document fetches the parts
 // whose keys it has not held (an edit changes the keys of the parts it touched, and only those)
 // and keeps the rest, buffers and the geometry built over them, as FreeCAD recomputes only the
 // objects an edit touched. What the kernel measures of an element is asked of the engine when a
 // person asks (`fetchXbfElementFacts`), never extracted ahead. Beside the document, the engine's
-// look of the regular display modes (`GET /api/look`, `xbfLook.js`), read once per engine.
+// look of the regular display modes (`GET /api/v1/look`, `xbfLook.js`), read once per engine.
 
 import { fetchXbfLook } from "./xbfLook.js";
 import { readXbmPart, xbmUnmeshedFaces } from "./xbm.js";
 
-const DOC_PATH = /^(.*\/api\/doc\/[^/?#]+)\/?$/;
+// `<base>/api/v1/documents/<kind>/<id>`: a document of one of the engine's kinds (`model`, `xbf`, `step`).
+const DOC_PATH = /^((.*)\/api\/v1\/documents\/([a-z0-9]+)\/([^/?#]+))\/?$/;
+// A part's elements, as the API's routes name them.
+const ELEMENTS = Object.freeze({ face: "faces", edge: "edges", vertex: "vertices" });
 // How many part requests are in flight at once: a browser holds about six connections per host.
 const PART_CONCURRENCY = 6;
 // How long a version request waits on the engine for a new version, in seconds (the engine caps it at 60).
 export const XBF_VERSION_WAIT_SECONDS = 25;
 
 /**
- * Where a served document is read: its API URL -- the engine's own,
- * `http://127.0.0.1:<port>/api/doc/<id>`, or the viewer's relay of it, `/__cad/api/doc/<id>`
- * (resolved against the page) -- and the base every other read of that engine is made under
- * (`base`: the URL before `/api/doc/<id>`, its look at `<base>/api/look`).
+ * Where a served document is read: its kind's API URL -- on the engine's own port,
+ * `http://127.0.0.1:<port>/api/v1/documents/<kind>/<id>`, or the page's origin,
+ * `/api/v1/documents/<kind>/<id>` (resolved against the page) -- and the base every other read of
+ * that engine is made under (`base`: the URL before `/api/v1`, its look at `<base>/api/v1/look`, the
+ * document's version at `<base>/api/v1/documents/<id>/version`).
  * @param {string | { url: string }} value
- * @returns {{ url: string, origin: string, base: string, doc: string }}
+ * @returns {{ url: string, origin: string, base: string, doc: string, kind: string }}
  */
 export function xbfDocumentSource(value) {
   const text = String(typeof value === "string" ? value : value?.url || "").trim();
   const match = DOC_PATH.exec(text.split(/[?#]/)[0]);
   let parsed = null;
   try { parsed = match ? new URL(match[1], globalThis.location?.href) : null; } catch { /* not a URL here */ }
-  if (!parsed) throw new Error(`an engine document is read from its API URL (…/api/doc/<id>), not ${JSON.stringify(text)}`);
+  if (!parsed) throw new Error(`an engine document is read from its API URL (…/api/v1/documents/<kind>/<id>), not ${JSON.stringify(text)}`);
   const url = parsed.href.replace(/\/$/, "");
-  return { url, origin: parsed.origin, base: url.slice(0, url.lastIndexOf("/api/doc/")), doc: decodeURIComponent(url.split("/").pop()) };
+  const at = url.lastIndexOf("/api/v1/documents/");
+  const [kind, doc] = url.slice(at + "/api/v1/documents/".length).split("/");
+  return { url, origin: parsed.origin, base: url.slice(0, at), doc: decodeURIComponent(doc), kind };
 }
 
 async function failure(response, what) {
@@ -128,7 +134,7 @@ export async function loadXbfDocument(source, { previous = null, fetch: fetchImp
     : fetchXbfLook(where.base, { fetch: fetchImpl, signal });
   // Read beside the structure; a failure of it is reported once the structure is in.
   looked.catch(() => {});
-  const structure = await getJson(fetchImpl, where.url, "the document's structure", signal);
+  const structure = await getJson(fetchImpl, `${where.url}/structure`, "the document's structure", signal);
   if (!Array.isArray(structure?.prototypes) || !Array.isArray(structure?.instances)) {
     throw new Error("the engine's structure has no prototypes and instances");
   }
@@ -153,7 +159,7 @@ export async function loadXbfDocument(source, { previous = null, fetch: fetchImp
   const partsStarted = performance.now();
   try {
     await inBatches(missing, PART_CONCURRENCY, async (key) => {
-      const response = await fetchImpl(`${where.url}/part/${encodeURIComponent(key)}${query}`, { signal });
+      const response = await fetchImpl(`${where.url}/parts/${encodeURIComponent(key)}${query}`, { signal });
       if (!response.ok) throw await failure(response, `part ${key}`);
       const buffer = await response.arrayBuffer();
       parts.set(key, createPart(key, buffer).retain());
@@ -206,7 +212,8 @@ export async function waitForXbfVersion(source, after, { wait = XBF_VERSION_WAIT
   const where = xbfDocumentSource(source);
   const counted = Number.isInteger(progress) && progress >= 0 ? `&progress=${progress}` : "";
   const query = `after=${encodeURIComponent(after || "")}&wait=${encodeURIComponent(wait)}${counted}`;
-  const answer = await getJson(fetchImpl, `${where.url}/version?${query}`, "the document's version", signal);
+  const answer = await getJson(fetchImpl, `${where.base}/api/v1/documents/${encodeURIComponent(where.doc)}/version?${query}`,
+    "the document's version", signal);
   const record = value => (value && typeof value === "object" && !Array.isArray(value) ? value : null);
   return { version: String(answer?.version || ""), building: record(answer?.building),
     failed: record(answer?.failed), progress: Number.isInteger(answer?.progress) ? answer.progress : null };
@@ -247,7 +254,7 @@ export function placeXbfFacts(facts, matrix) {
 export function fetchXbfElementFacts(source, key, kind, ordinal, { fetch: fetchImpl = globalThis.fetch, signal } = {}) {
   if (!["face", "edge", "vertex"].includes(kind)) return Promise.reject(new Error(`no ${kind} facts: an element is a face, an edge or a vertex`));
   const where = xbfDocumentSource(source);
-  return getJson(fetchImpl, `${where.url}/part/${encodeURIComponent(key)}/${kind}/${Number(ordinal)}`, `${kind} ${ordinal}`, signal);
+  return getJson(fetchImpl, `${where.url}/parts/${encodeURIComponent(key)}/${ELEMENTS[kind]}/${Number(ordinal)}`, `${kind} ${ordinal}`, signal);
 }
 
 /**
@@ -258,5 +265,5 @@ export function fetchXbfElementFacts(source, key, kind, ordinal, { fetch: fetchI
  */
 export function fetchXbfPartGroups(source, key, { fetch: fetchImpl = globalThis.fetch, signal } = {}) {
   const where = xbfDocumentSource(source);
-  return getJson(fetchImpl, `${where.url}/part/${encodeURIComponent(key)}/groups`, `part ${key}'s groups`, signal);
+  return getJson(fetchImpl, `${where.url}/parts/${encodeURIComponent(key)}/groups`, `part ${key}'s groups`, signal);
 }
