@@ -2361,20 +2361,22 @@ kinds `viewer/kinds.py`); the pages are at the root -- `/` the home, `/<id>` a d
 or a key is only ever added, and a removal or a rename is a v2. Every answer is JSON but a file's
 bytes; every refusal is `{"error", "hint"}` -- what is wrong and what to do -- with its status: 404
 for an unknown route, kind or id (a document's names its `state` where the engine says one), 405
-naming the methods the route takes (`Allow`), 413 for a body over its route's limit, 409 for what
-the document's state refuses. Every request that changes something (POST, PUT, PATCH, DELETE)
+naming the methods the route takes (`Allow`), 413 for a body over its route's limit, and 409 where
+the server's state refuses a change: a telemetry answer to a server that keeps no usage stats
+(`settings`), an update with no engine under the page (`local/update`), an export of a session
+that restarted or of a source that changed since the page showed it. Every request that changes something (POST, PUT, PATCH, DELETE)
 carries `x-cadgen-viewer`, the gate a cross-site form cannot pass. The families:
 
 | Route | What it answers |
 | --- | --- |
-| `GET /api/v1/server` | who this engine is (release, `identityToken`, platform, home, start, pick, port, pid), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
+| `GET /api/v1/server` | who this engine is (`app`, `release`, `identityToken`, `platform`, `user`, `home`, `start`, `pick`, `port`, `pid`), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
 | `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}`, the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents` | Recents: `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |
 | `PATCH /api/v1/documents` | a change to Recents (`{"action", "path", "png"?}`), answered with Recents |
 | `GET\|DELETE /api/v1/documents/<id>` | the envelope -- `id`, `kind`, `name`, `version`, `state`, `source`, `producers`, `api`, `exports`, the row (`entry`) and its digest (`revision`), `held` for a document the engine serves -- or the document forgotten (204) |
-| `GET /api/v1/documents/<id>/version`, `.../thumbnail` | its version, waited on (**Progress**); its picture |
+| `GET /api/v1/documents/<id>/version`, `.../thumbnail` | its version, waited on (**Progress**); its picture, the PNG the page kept, as it kept it (a `?v=` the page adds is ignored: it keeps an older picture out of a cache) |
 | `POST /api/v1/documents/<id>/exports` | an export of it, its job (202); `GET /api/v1/exports[/<job>[/file]]` the session's epoch, a job, its file |
 | `/api/v1/documents/<kind>/<id>/...` | a kind's reads (below); the id under another kind is a 404 naming its own |
 | `/api/v1/local/...` | a local engine's: `update` (GET, POST: the button), `folder?path=&q=`, `files?path=` (a CAD file's bytes), `prompt-files[/<name>]`, `reveal`, `clipboard`, `pick`, `activity` |
