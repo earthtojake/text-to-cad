@@ -383,6 +383,10 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     startUpdate() {
       return request(`${API}/local/update`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, operation: 'update' });
     },
+    // A fresh link for the page's own address (`GET /api/v1/local/link`): `{ link, expires }`.
+    link() {
+      return request(`${API}/local/link`, { operation: 'link' });
+    },
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl(`${API}/local/activity`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },

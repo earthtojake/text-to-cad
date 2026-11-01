@@ -363,6 +363,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path.endsWith('/thumbnail')) return new Response(path.includes('/d1/') ? thumbnail : null, { status: path.includes('/d1/') ? 200 : 404 });
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
+    if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
     if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
     return Response.json({ path });
@@ -389,6 +390,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   await client.language(null);
   await client.version();
   await client.startUpdate();
+  assert.deepEqual(await client.link(), { link: '1700000000.mac', expires: 1700000000 }, 'a fresh link for the address');
   client.reportActivity({ touched: true });
   await new Promise((resolve) => setImmediate(resolve));
   // Every change carries the header no page from another site can send; a read sends none.
@@ -405,6 +407,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/settings', 'PUT', '1', { language: { locale: 'zh-CN' } }], ['/api/v1/settings', 'PUT', '1', { language: { locale: null } }],
     ['/api/v1/server', 'GET', null, null],
     ['/api/v1/local/update', 'POST', '1', null],
+    ['/api/v1/local/link', 'GET', null, null],
     ['/api/v1/local/activity', 'POST', '1', { touched: true }],
   ]);
 });

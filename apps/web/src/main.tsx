@@ -7,6 +7,7 @@ import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
 import { I18nProvider, resolveLocale, translateIn } from '@text-to-cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
+import { keepAddressLink } from './host/addressLink.js';
 import App from './App';
 import { EngineStopped } from './EngineStopped';
 import { sessionTabRecord } from './persistence/tabRecord';
@@ -32,6 +33,8 @@ if (!element) throw new Error('Missing #root mount point.');
 // The catalog is read every two seconds while the tab is seen: a hidden tab asks nothing and is read
 // again the moment it is shown (`host/cadClient.js`).
 const client = createWebCadClient();
+// The address keeps a working link, so it opens this page in another browser on this machine too.
+const stopAddressLink = keepAddressLink({ fetchLink: () => client.link() });
 // The page's crashes -- an error nothing caught, or one a view's boundary caught -- told to this
 // Viewer's server for its telemetry (`cad_server/analytics.py`), each once a page and never its message.
 const reportCrash = createCrashReporter(crash => client.reportActivity({ crash }));
@@ -49,7 +52,7 @@ icon.type = 'image/png'; icon.href = faviconUrl;
 document.title = 'text-to-cad';
 const controller = new AbortController();
 function dispose() {
-  controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide);
+  controller.abort(); stopAddressLink(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide);
   window.removeEventListener('error', onError); window.removeEventListener('unhandledrejection', onRejection);
 }
 function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }

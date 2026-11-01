@@ -248,6 +248,8 @@ export interface CadWorkspaceService {
   version(): Promise<CadVersion>;
   /** The update button's click: the engine updates in the background, and answers as `version` does. */
   startUpdate(): Promise<CadVersion>;
+  /** A fresh link (`<expires>.<mac>`) for the page's own address, and when it expires (Unix seconds). */
+  link(): Promise<{ link: string; expires: number }>;
   /**
    * What the page did -- a person touched it, sent a Quick Edit, used its controls, or the page crashed (`crashOf`) --
    * noted by the server and sent only with consent. Never fails.

@@ -128,17 +128,20 @@ The JSON record includes `url`, `apiUrl`, `token`, `port`, `pid`, `start` (the f
 shows), `documents` (`{id, file, url}` for each FILE) and `action` (`started` or `reused`,
 referring to the page). Each URL, and `token`, carries a fresh link, good for a day
 (`--api-only`'s `token` is the user's token itself, for the dev proxy). The URL is usable
-as soon as it is printed. Its link is exchanged for an HttpOnly, SameSite=Strict session cookie,
-one for every port of the host, that lasts 30 days from its last use, and is removed from the
-address bar. Programmatic clients send the link or the token as a Bearer header. Every route,
+as soon as it is printed. Opening it gives the browser an HttpOnly, SameSite=Strict session
+cookie, one for every port of the host, that lasts 30 days from its last use, and the page is
+served with its link left in the address bar (no redirect; `Referrer-Policy: no-referrer`). The
+page keeps that link fresh (`src/host/addressLink.js`, `GET /api/v1/local/link`: on load, and when
+shown or focused, whenever the address has none or one within 12 hours of its expiry), so the
+address copied into another browser on this machine opens the same page. Programmatic clients send the link or the token as a Bearer header. Every route,
 including documents, requires one. The loopback Host check,
 cross-site POST guard and raw-file response headers remain. Binding `--host`
 off loopback exposes these same authenticated routes; anyone with a link or the cookie has
 local-file access. Keep the URL private. Vite remains on its own strict port, 5173.
 A refused page load is answered 403 with a static page of a few lines, no script and no asset: a
 link past its day says it has expired, any other (no link, a session 30 days unused, or a link or
-cookie from before `cad server --rotate-token`) that the page needs its link, and both say to
-run `cad viewer` and open the link it prints. A
+cookie from before `cad server --rotate-token`) that this browser can't open CAD yet, and both
+say to ask your agent to open the model again and use the new link. A
 loaded page whose engine stops under it says the engine is not running, in the person's
 language, over the page until a read answers again. One whose engine runs and refuses its token
 (after `cad server --rotate-token`) says instead that its link was replaced, and to run `cad

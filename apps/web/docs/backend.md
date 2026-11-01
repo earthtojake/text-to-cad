@@ -45,7 +45,8 @@ file it registers by the id of its canonical path, or a document id the engine h
 home, `/`. `--json` prints the launch record without opening a browser. An explicit host or port
 must match a running engine. There is one page per engine and no page session: each launch's
 folder becomes the folder the home shows, replacing the last. Always use the printed URL,
-including its token query; the browser exchanges the token for a same-site HTTP-only cookie.
+including its token query; the browser is given a same-site HTTP-only cookie for it, and the link
+stays in the address, which the page keeps fresh (`GET /api/v1/local/link`).
 
 `cad stop` stops the installation's whole engine, including its workers and
 MCP sessions. Closing a page, a Vite process or a host's stdio shim does not stop it.
@@ -204,6 +205,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |
 | `POST /api/v1/local/pick` | Open the machine's own file chooser (`cad_server._internal.picker`) and answer the file picked; the home offers it where the server's `pick` says there is one. |
 | `POST /api/v1/local/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
+| `GET /api/v1/local/link` | `{link, expires}`: a fresh link the page writes into its own address (`token=`), so the address copied into another browser on this machine opens the same page (`src/host/addressLink.js`). The page's alone: a CAD card's tunnel never reaches it. |
 | `POST /api/v1/local/activity` | What the page did, for telemetry: `{touched: true}`, a person touched it; `{quickEdit: true}`, a Quick Edit went; `{controls: [{control, count, seconds}]}`, the view controls used (names from `cad_server.analytics.CONTROLS`); `{crash}`, the page crashed (core's `crashOf`: its type and frames, checked again by the server, never a message). Its body may run to 16 KiB. |
 | `GET /api/v1/local/update` | `{notice, release, instance, update}`: whether a newer text-to-cad is out (the update button's `notice`, `{latest, version}`, or null), the release the engine runs, and the update a press started (`state`: `idle`, `working`, `restarting` or `failed`; its `target`, its last `progress` frame, its `error`): on the engine a failed switch started again, `failed` with that switch's error, for minutes (`Update.recall`). `GET /api/v1/server` says the same. |
 | `POST /api/v1/local/update` | The update button's press (`cad_server._internal.update`): the newest release installed, set up and switched to; answers `202` with what `GET /api/v1/local/update` says, at once. Not on an engine that cannot hand itself over (409). |
