@@ -66,7 +66,7 @@ export interface CadRecent {
   script?: string;
 }
 /** Whether the person's usage stats are sent (`/api/v1/settings`' `telemetry`; nothing asks): `reason` says who decided. */
-export interface CadConsent { sharing: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
+export interface CadConsent { share: boolean; reason: 'default' | 'untold' | 'choice' | 'environment' | 'unavailable'; policy: string; saved?: boolean }
 /** A newer text-to-cad, as cadgen's version check says it (`/api/v1/server`'s `notice`): the release offered, and this install's. */
 export interface CadUpdateNotice { latest: string; version: string }
 /** Where an update the update button started is (`cad_server/_internal/update.py`). */

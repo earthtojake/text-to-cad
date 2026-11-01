@@ -321,7 +321,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
-    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { sharing: true } });
+    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
     return Response.json({ path });
   } });
   t.after(() => client.dispose());
@@ -337,7 +337,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.equal(await client.pick(), '/models/picked.step');
   await client.reveal('/models/a.step');
   await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
-  assert.deepEqual(await client.consent(), { sharing: true }, 'the settings\' telemetry');
+  assert.deepEqual(await client.consent(), { share: true }, 'the settings\' telemetry');
   await client.consent(true);
   await client.consent(false);
   assert.equal(client.features, undefined);

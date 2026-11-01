@@ -75,7 +75,7 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the day li
     const path = new URL(url).pathname;
     if (path === '/api/v1/server') return json({ app: 'cad-viewer', notice: null });
     if (path === '/api/v1/documents') return json({ documents: [] });
-    if (path === '/api/v1/settings') return json({ language: { locale: null }, telemetry: { sharing: false, policy: 'https://www.texttocad.dev/privacy-policy' } });
+    if (path === '/api/v1/settings') return json({ language: { locale: null }, telemetry: { share: false, policy: 'https://www.texttocad.dev/privacy-policy' } });
     return json({ notice: null });
   });
   render(<Connection bridge={bridge as any} server={server} channel={channel} launch={launch} presentation="inline" fetchImpl={fetchImpl as any} />);

@@ -4,7 +4,8 @@ import { translator } from "../i18n/core.js";
 
 /** What a CAD app's server says about the usage stats cadgen sends (its telemetry). */
 export interface AnalyticsConsent {
-  sharing: boolean;
+  /** Whether usage stats are shared: the settings' `telemetry.share`, the key a change names too. */
+  share: boolean;
   /** Why: `environment` (DO_NOT_TRACK or CAD_TELEMETRY decided, and no click changes it), `choice`,
    * `default` (on by default: the person was told), `untold` (nothing sent yet), `unavailable`. */
   reason?: "environment" | "choice" | "default" | "untold" | "unavailable";
@@ -38,11 +39,11 @@ export function useAnalyticsConsent(consent: (share?: boolean) => Promise<Analyt
     return () => window.removeEventListener("focus", recheck);
   }, [read]);
   const answer = useCallback((share: boolean) => {
-    setState(previous => previous && { ...previous, sharing: share });
+    setState(previous => previous && { ...previous, share });
     read(share);
   }, [read]);
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
-    id: "analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked), info: t("consent.telemetryInfo"),
+    id: "analytics", checked: state.share, onCheckedChange: (checked: boolean) => answer(checked), info: t("consent.telemetryInfo"),
     ...(state.reason === "environment"
       ? { label: t("consent.shareUsageEnvironment"), disabled: true }
       : { label: t("consent.shareUsage") }),

@@ -596,7 +596,10 @@ class CadApp:
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
-        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are."""
+        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are. It takes
+        what ``GET`` answers: the telemetry's read-only ``reason``, ``policy`` and ``saved`` ride along
+        and are ignored, and a null telemetry (a server that keeps none) changes nothing, so a page
+        that puts back what it read, one value changed, changes that value."""
         from cad_server import language
 
         self._limit(request, 4096)
@@ -606,9 +609,10 @@ class CadApp:
         if "language" in payload:
             language.change(payload["language"])
         share = None
-        if "telemetry" in payload:
+        if payload.get("telemetry") is not None:
             telemetry = payload["telemetry"]
-            if type(telemetry) is not dict or not isinstance(telemetry.get("share"), bool):
+            if type(telemetry) is not dict or not isinstance(telemetry.get("share"), bool) \
+                    or not set(telemetry) <= {"share", "reason", "policy", "saved"}:
                 raise ValueError("a telemetry change is {\"share\": true or false}")
             if self.analytics is None:
                 raise ApiError(409, "this server keeps no usage stats", "change it in the CAD Viewer's app menu")
@@ -1126,14 +1130,14 @@ class CadApp:
     # --- usage stats (telemetry) --------------------------------------------
 
     def _consent(self, share=None) -> dict:
-        """The app menu's Share anonymous usage data toggle: whether sharing is on and why, and, from the person's
-        click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
+        """The app menu's Share anonymous usage data toggle: whether usage stats are shared (``share``,
+        the key a change names too) and why, and, from the person's click, their answer, which changes it whenever. Nothing asks: telemetry is on by default once a
         ``cadgen`` command has said so (``cad_server/analytics.py``)."""
         from cad_server.analytics import PRIVACY_URL
 
         changed = self.analytics.choose(share, by=self.consent_by) if isinstance(share, bool) else None
         found = self.analytics.status()
-        return {"sharing": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL,
+        return {"share": found["sharing"], "reason": found["reason"], "policy": PRIVACY_URL,
                 **({"saved": bool(changed.get("saved"))} if changed is not None else {})}
 
     def _version(self) -> dict:

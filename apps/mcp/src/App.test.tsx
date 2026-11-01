@@ -48,7 +48,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   const answers: Record<string, Answer> = {
     // The person's settings: read (no body), or changed (`{telemetry}`, `{language}`).
     '/api/v1/settings': body => ({ language: { locale: body?.language?.locale ?? null },
-      telemetry: { sharing: Boolean(body?.telemetry?.share), policy: POLICY } }),
+      telemetry: { share: Boolean(body?.telemetry?.share), policy: POLICY } }),
     '/api/v1/server': () => ({ notice: null }),
     '/api/v1/documents': () => ({ documents: [] }),
     '/api/v1/local/reveal': () => null,
@@ -437,12 +437,12 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   releaseStaleRead = value => { server.answers['/api/v1/settings'] = answer; for (const resolve of stale) resolve(value); };
   act(() => { window.dispatchEvent(new Event('focus')); });
   await act(async () => viewer.props!.appSettings![0].onCheckedChange(true));
-  await act(async () => releaseStaleRead({ language: { locale: null }, telemetry: { sharing: false, policy: POLICY } }));
+  await act(async () => releaseStaleRead({ language: { locale: null }, telemetry: { share: false, policy: POLICY } }));
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   cleanup();
   // DO_NOT_TRACK: the setting says so, and cannot be changed here.
   const fixed = host({ displayMode: 'fullscreen' });
-  fixed.server.answers['/api/v1/settings'] = () => ({ language: { locale: null }, telemetry: { sharing: false, reason: 'environment', policy: POLICY } });
+  fixed.server.answers['/api/v1/settings'] = () => ({ language: { locale: null }, telemetry: { share: false, reason: 'environment', policy: POLICY } });
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Telemetry (set by your environment)' }));

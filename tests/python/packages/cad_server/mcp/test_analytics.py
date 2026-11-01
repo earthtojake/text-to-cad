@@ -592,12 +592,12 @@ class ServerCountsTest(_Tmp):
     def test_counts_go_from_the_notice_on_without_a_restart(self) -> None:
         server, sent = self.serve("claude-github")
         self.call(server, "cad_show", {"source": "a.step"})
-        self.assertEqual(self.consent(server), {"sharing": False, "reason": "untold", "policy": PRIVACY_URL})
+        self.assertEqual(self.consent(server), {"share": False, "reason": "untold", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.call(server, "cad_view")  # noted before anyone was told
         self.assertTrue(notify(io.StringIO(), path=self.path))  # a skill's first `cad` command
         # The running CAD app sends from the notice on, with no restart -- and never what it noted before.
-        self.assertEqual(self.consent(server), {"sharing": True, "reason": "default", "policy": PRIVACY_URL})
+        self.assertEqual(self.consent(server), {"share": True, "reason": "default", "policy": PRIVACY_URL})
         self.assertFalse(server.analytics.flush())
         self.assertEqual(sent, [])
         model = self.tmp / "bracket.step"
@@ -632,7 +632,7 @@ class ServerCountsTest(_Tmp):
             off = off["telemetry"]
             choose.assert_called_once_with(False, by="app")
         self.assertEqual(code, 200)
-        self.assertEqual((off["sharing"], off["saved"]), (False, True))
+        self.assertEqual((off["share"], off["saved"]), (False, True))
         self.assertFalse(status(path=self.path)["sharing"])
         self.assertNotIn("id", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
         # Wait for the actual deletion worker, not a clock interval.
@@ -649,7 +649,7 @@ class ServerCountsTest(_Tmp):
         server.analytics.choose(True, by="app")
         with mock.patch("cad_server.settings.write_bytes_atomic", side_effect=OSError("read only")):
             code, answer = self.http(server, "PUT", "/api/v1/settings", {"telemetry": {"share": False}})
-        self.assertEqual((code, answer["telemetry"]["sharing"], answer["telemetry"]["saved"]), (200, False, False))
+        self.assertEqual((code, answer["telemetry"]["share"], answer["telemetry"]["saved"]), (200, False, False))
 
 class SenderTest(_Tmp):
     """Every batch says who sent it (``PROCESSES``), whichever process holds the recorder: the engine
@@ -1052,8 +1052,8 @@ class NeverInTheWayTest(_Tmp):
                 mock.patch("cad_server.analytics.choose", side_effect=RuntimeError("broken")), \
                 self.assertNoLogs("cad_server.analytics", level="INFO"):
             # The tools answer as if nothing were wrong: off.
-            self.assertEqual(self.consent(server)["sharing"], False)
-            self.assertEqual(self.consent(server, True)["sharing"], False)
+            self.assertEqual(self.consent(server)["share"], False)
+            self.assertEqual(self.consent(server, True)["share"], False)
             # CAD's own tools are untouched, and the recorder's own methods return quietly.
             self.assertIn("isError", self.call(server, "cad_show", {"source": "missing.step"}))
             server.analytics.called("cad_show", True)

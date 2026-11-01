@@ -2368,7 +2368,7 @@ carries `x-cadgen-viewer`, the gate a cross-site form cannot pass. The families:
 | Route | What it answers |
 | --- | --- |
 | `GET /api/v1/server` | who this engine is (release, `identityToken`, platform, home, start, pick, port, pid), `instance` (a random token of this start of it: a page that sees another reloads), `kinds` (`reads`, and each kind's `exports`), `notice` and `update` |
-| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"sharing", "reason", "policy"}}`, the person's, one for every view; PUT a part of it |
+| `GET\|PUT /api/v1/settings` | `{"language": {"locale"}, "telemetry": {"share", "reason", "policy"}}`, the person's, one for every view; PUT takes the same shape, or a part of it (the read-only `reason` and `policy` ignored), and answers the whole |
 | `GET /api/v1/look`, `/api/v1/look/environment` | the regular modes' look, and its Radiance image |
 | `GET /api/v1/documents` | Recents: `{"documents": [row]}`, each row its document's `id`, `kind`, `api` and its record's kind (`record`); `?kind=`, `?q=`, `?limit=`; `?path=` one file's envelope, known by its id from then on |
 | `POST /api/v1/documents` | a file opened (`{"path"}`) or a held model served (`{"id"}`): `201 {"id", "kind", "api"}`, or `202` (and `Retry-After`) while the engine reads it |

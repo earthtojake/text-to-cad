@@ -66,7 +66,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
     if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
-    const telemetry = init.body ? { sharing: false, reason: 'choice', policy: 'p' } : { sharing: false, reason: 'untold', policy: 'p' };
+    const telemetry = init.body ? { share: false, reason: 'choice', policy: 'p' } : { share: false, reason: 'untold', policy: 'p' };
     const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/server' ? { notice }
       : url === '/api/v1/local/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }
       : url === '/api/v1/documents' ? { documents: [] } : url === '/api/v1/local/pick' ? { path: '/m/picked.step' }
@@ -213,7 +213,7 @@ test('a page whose engine is gone says so in its language, over the page, until 
       return new Response(JSON.stringify({ error: 'engine token required' }), { status: 403, headers: { 'content-type': 'application/json' } });
     }
     const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/documents' ? { documents: [] }
-      : url === '/api/v1/settings' ? { language: { locale: 'ja' }, telemetry: { sharing: false, reason: 'untold', policy: 'p' } } : { ok: true };
+      : url === '/api/v1/settings' ? { language: { locale: 'ja' }, telemetry: { share: false, reason: 'untold', policy: 'p' } } : { ok: true };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   const client = { ...createWebCadClient({ document: window.document }), serverInfo: async () => ({ start: '/m' }) };

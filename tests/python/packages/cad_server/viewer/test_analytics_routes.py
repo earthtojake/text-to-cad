@@ -96,19 +96,26 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_the_viewer_never_asks_and_a_no_is_kept_for_every_cad_app(self) -> None:
         status, settings = self.request("GET", "/api/v1/settings")
-        self.assertEqual((status, settings["telemetry"]), (200, {"sharing": False, "reason": "untold", "policy": PRIVACY_URL}))
+        self.assertEqual((status, settings["telemetry"]), (200, {"share": False, "reason": "untold", "policy": PRIVACY_URL}))
         status, answered = self.request("PUT", "/api/v1/settings", {"telemetry": {"share": False}})
         answered = answered["telemetry"]
-        self.assertEqual((status, answered["sharing"], answered["reason"], answered["saved"]), (200, False, "choice", True))
+        self.assertEqual((status, answered["share"], answered["reason"], answered["saved"]), (200, False, "choice", True))
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no. The app menu's toggle changes it whenever.
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["telemetry"]["choice"], "off")
-        self.assertEqual(self.request("PUT", "/api/v1/settings", {"telemetry": {"share": True}})[1]["telemetry"]["sharing"], True)
+        self.assertEqual(self.request("PUT", "/api/v1/settings", {"telemetry": {"share": True}})[1]["telemetry"]["share"], True)
         # A change that is not one is refused, and changes nothing.
         for change in ({"telemetry": {"share": "yes"}}, {"telemetry": True}, {"colour": "red"}):
             with self.subTest(change=change):
                 self.assertEqual(self.request("PUT", "/api/v1/settings", change)[0], 400)
-        self.assertEqual(self.request("GET", "/api/v1/settings")[1]["telemetry"]["sharing"], True)
+        self.assertEqual(self.request("GET", "/api/v1/settings")[1]["telemetry"]["share"], True)
+        # What a read answers, put back with one value changed, changes that value: the telemetry's
+        # read-only reason and policy ride along.
+        read = self.request("GET", "/api/v1/settings")[1]
+        read["telemetry"]["share"] = False
+        status, written = self.request("PUT", "/api/v1/settings", read)
+        self.assertEqual((status, written["telemetry"]["share"], written["telemetry"]["reason"]), (200, False, "choice"))
+        self.assertEqual(self.request("PUT", "/api/v1/settings", {"telemetry": {"share": True, "colour": 1}})[0], 400)
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_a_count(self) -> None:
         # A touch is reported; a model the page shows is counted as it joins the library.
