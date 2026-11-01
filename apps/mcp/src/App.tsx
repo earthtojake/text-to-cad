@@ -16,7 +16,7 @@ import { captureSettled, fitCapture } from './host/capture';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import { loadNextRelease, useNextRelease } from './host/release';
+import { followedUpdate, forgetFollowedUpdate, loadNextRelease, useNextRelease } from './host/release';
 import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import { createTunnelClient, createTunnelFetch, TUNNEL_ORIGIN } from './host/tunnel';
@@ -297,7 +297,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // under this card, another view's click -- the card asks for its release, and loads the engine's app
   // of the new one in place of its own (the shell a host keeps: `host/shell.ts`); should the switch fail
   // and go back, the engine of its own release says so, and the button says it once and is offered again.
-  const updater = useUpdate({ read: client.version, start: client.startUpdate }, initial.notice ?? null);
+  // The card loaded in place of one that followed an update to this release says so, once, and suggests
+  // restarting the host app: the card and the engine run the new release already, but the app reads its
+  // skills only as a session starts.
+  const [followed] = useState(followedUpdate);
+  useEffect(() => { forgetFollowedUpdate(); }, []);
+  const updater = useUpdate({ read: client.version, start: client.startUpdate }, initial.notice ?? null,
+    { followed, restartForSkills: true });
   useNextRelease({ read: client.version, release: initial.version, watching: updater.phase.phase === 'restarting' || Boolean(lost),
     onNewRelease: loadNextRelease, onSameRelease: updater.settle });
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the

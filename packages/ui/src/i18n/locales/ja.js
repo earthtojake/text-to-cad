@@ -123,6 +123,8 @@ export default {
   "update.updating": "{version} にアップデートしています",
   "update.restarting": "{version} で再起動しています",
   "update.failed": "アップデートできませんでした: {error}",
+  "update.updated": "{version} にアップデートしました。",
+  "update.updatedRestart": "{version} にアップデートしました。新しいスキルを読み込むには、アプリを再起動してください。",
 
   "alert.undisplayable": "モデルを表示できませんでした",
   "alert.dismiss": "閉じる",

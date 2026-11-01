@@ -123,6 +123,8 @@ export default {
   "update.updating": "{version}(으)로 업데이트하는 중",
   "update.restarting": "{version}(으)로 다시 시작하는 중",
   "update.failed": "업데이트하지 못했습니다: {error}",
+  "update.updated": "{version}(으)로 업데이트했습니다.",
+  "update.updatedRestart": "{version}(으)로 업데이트했습니다. 새 스킬을 불러오려면 앱을 다시 시작하세요.",
 
   "alert.undisplayable": "모델을 표시할 수 없습니다",
   "alert.dismiss": "닫기",

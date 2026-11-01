@@ -137,6 +137,8 @@ export default {
   "update.updating": "Updating to {version}",
   "update.restarting": "Restarting with {version}",
   "update.failed": "The update failed: {error}",
+  "update.updated": "Updated to {version}.",
+  "update.updatedRestart": "Updated to {version}. Restart the app to load its new skills.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",

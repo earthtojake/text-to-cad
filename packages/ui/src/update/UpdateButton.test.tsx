@@ -1,6 +1,7 @@
 import { StrictMode } from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { toast } from 'sonner';
 import { UPDATE_POLL_MS, UpdateButton, pageHasUnsaved, reloadWhenClean, useUpdate, type UpdateCall, type UpdateReply } from './index.js';
 
 const NOTICE = { latest: '0.9.1', version: '0.9.0' };
@@ -14,7 +15,9 @@ function Host({ read, start, initial = NOTICE, onFailed, followed }: {
   return notice || phase.phase !== 'idle' ? <UpdateButton notice={notice} phase={phase} onUpdate={update} /> : <p>No notice</p>;
 }
 
-beforeEach(() => { vi.useFakeTimers(); });
+vi.mock('sonner', async original => ({ ...await original<object>(), toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
+
+beforeEach(() => { vi.useFakeTimers(); vi.mocked(toast.success).mockClear(); });
 afterEach(() => { cleanup(); vi.useRealTimers(); });
 
 it('is an icon, and nothing else: no popover, no words beside it', () => {
@@ -69,6 +72,27 @@ it('a page reloaded into the engine its update restarted says the switch failed,
   expect(screen.getByRole('button', { name: 'Update to 0.9.1' })).toBeTruthy();
   await act(async () => { fireEvent.focus(window); });
   expect(onFailed).toHaveBeenCalledOnce();
+});
+
+it('a page reloaded into the engine its update moved to says it is updated, once, as a toast', async () => {
+  // The web page that followed the update loads anew into the new release's engine, whose update is idle.
+  const onFailed = vi.fn();
+  const read = vi.fn<UpdateCall>(async () => ({ notice: null, release: '0.9.1', update: { state: 'idle' } }));
+  render(<StrictMode><Host read={read} start={read} onFailed={onFailed} followed /></StrictMode>);
+  await act(async () => {});
+  expect(read).toHaveBeenCalledOnce();
+  expect(toast.success).toHaveBeenCalledWith('Updated to 0.9.1.');
+  expect(screen.getByText('No notice')).toBeTruthy();  // the install is current
+  await act(async () => { fireEvent.focus(window); });
+  expect(toast.success).toHaveBeenCalledOnce();
+  expect(onFailed).not.toHaveBeenCalled();
+});
+
+it('a page loaded with nothing followed says nothing of the release it runs', async () => {
+  const read = vi.fn<UpdateCall>(async () => ({ notice: null, release: '0.9.1', update: { state: 'idle' } }));
+  render(<Host read={read} start={read} />);
+  await act(async () => { fireEvent.focus(window); });
+  expect(toast.success).not.toHaveBeenCalled();
 });
 
 it('a host that keeps its page through the restart ends it on a switch that failed: said once, offered again', async () => {

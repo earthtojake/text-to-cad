@@ -124,6 +124,8 @@ export default {
   "update.updating": "正在更新到 {version}",
   "update.restarting": "正在以 {version} 重新启动",
   "update.failed": "更新失败：{error}",
+  "update.updated": "已更新到 {version}。",
+  "update.updatedRestart": "已更新到 {version}。重新启动应用以加载新技能。",
 
   "alert.undisplayable": "无法显示该模型",
   "alert.dismiss": "关闭",

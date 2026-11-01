@@ -53,14 +53,18 @@ const STAGES = 4;
  * export's: `sonner`), or to `onFailed` -- and the button is offered again; the engine keeps saying it
  * failed until the next click, and a page that comes back to it later says nothing. A page reloaded into
  * the engine its update restarted (`followed`: the host keeps that across the reload) follows it still:
- * it reads where the update ended once, and says a switch that failed and went back. A host that keeps
+ * it reads where the update ended once, and says a switch that failed and went back -- or, the engine
+ * running the release it moved to, that it is updated, once, as the same toast (or to `onUpdated`);
+ * `restartForSkills`, said by a host app that reads a release's skills only in a new session of its own,
+ * suggests restarting it. A host that keeps
  * its page through the restart (a CAD card) reads the engine itself meanwhile and hands each answer of
  * its own release to `settle`: one that says the switch failed and went back ends the restart the same
  * way. A read that fails changes nothing; one while the engine restarts is the restart.
  */
 export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall },
   initial: UpdateNotice | null,
-  { onFailed, followed = false }: { onFailed?: (error: string) => void; followed?: boolean } = {}) {
+  { onFailed, onUpdated, followed = false, restartForSkills = false }: { onFailed?: (error: string) => void;
+    onUpdated?: (version: string) => void; followed?: boolean; restartForSkills?: boolean } = {}) {
   const [notice, setNotice] = useState<UpdateNotice | null>(initial);
   const [phase, setPhase] = useState<UpdatePhase>({ phase: "idle" });
   const polling = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -70,6 +74,10 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
   const { t } = useI18n();
   const failed = useRef(onFailed);
   failed.current = onFailed ?? (error => { toast.error(t("update.failed", { error })); });
+  const updated = useRef(onUpdated);
+  updated.current = onUpdated ?? (restartForSkills
+    ? (version => { toast.success(t("update.updatedRestart", { version })); })
+    : (version => { toast.success(t("update.updated", { version })); }));
 
   const stopPolling = () => {
     if (polling.current !== null) clearTimeout(polling.current);
@@ -113,14 +121,19 @@ export function useUpdate({ read, start }: { read: UpdateCall; start: UpdateCall
       if (apply(reply) === "working" && polling.current === null) follow();
     }, () => {});
   }, [read, apply, follow]);
-  // Where the update this page followed before its reload ended: read once, as the page loads.
+  // Where the update this page followed before its reload ended: read once, as the page loads. An engine
+  // whose update neither runs nor failed runs the release the update moved to: said once.
   const resumed = useRef(followed);
   useEffect(() => {
     if (!resumed.current) return;
     resumed.current = false;
     following.current = true;
-    refresh();
-  }, [refresh]);
+    void read().then(reply => {
+      const phase = apply(reply);
+      if (phase === "working" && polling.current === null) follow();
+      else if (phase === "idle" && reply.update?.state !== "failed" && reply.release && alive.current) updated.current?.(reply.release);
+    }, () => {});
+  }, [read, apply, follow]);
   // An answer the host read itself while the engine restarted: a switch that failed and went back ends the
   // restart (said once, the button offered again); any other is the restart still going.
   const settle = useCallback((reply: UpdateReply) => {

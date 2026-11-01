@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
+import { toast } from 'sonner';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
 import { version } from '../package.json';
@@ -20,6 +21,9 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
     CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.openInBrowser ?? null}{props.notice ?? null}</>; },
   };
 });
+
+// The toasts a view says (the real viewer's Toaster draws them): what this page asks it to say.
+vi.mock('sonner', async original => ({ ...await original<object>(), toast: Object.assign(vi.fn(), { success: vi.fn(), error: vi.fn() }) }));
 
 beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
@@ -471,6 +475,20 @@ it('a newer release is the update button, an icon: a click updates through the e
   release = '0.9.0';  // the engine came back with the new release: the card loads its app in place
   await waitFor(() => expect(reload).toHaveBeenCalledOnce(), { timeout: 3000 });
   expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
+});
+
+it('the card loaded in place of one that followed an update says so once, and suggests restarting the app for its skills', async () => {
+  vi.mocked(toast.success).mockClear();
+  vi.mocked(toast.error).mockClear();
+  vi.stubGlobal('__cadFollowedUpdate', true);  // the card before it, the engine back with the new release (`loadNextRelease`)
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} });
+  server.answers['/api/v1/server'] = () => ({ notice: null, release: '0.9.0', update: { state: 'idle', target: null } });
+  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, version: '0.8.1' }} />);
+  await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Updated to 0.9.0. Restart the app to load its new skills.'));
+  expect(globalThis.__cadFollowedUpdate).toBeUndefined();  // taken: a card loaded later says nothing
+  await act(async () => { window.dispatchEvent(new Event('focus')); });
+  expect(toast.success).toHaveBeenCalledOnce();
+  expect(toast.error).not.toHaveBeenCalled();
 });
 
 it('a switch that fails and goes back ends the card\'s restart: the update offered again, no other app loaded', async () => {
