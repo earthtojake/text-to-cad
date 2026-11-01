@@ -112,7 +112,8 @@ class OpenInRoutesTest(unittest.TestCase):
         for payload, expected in (({"id": MODEL, "target": "export:step", "app": "freecad"}, (str(self.step), FOUND["freecad"])),
                                   ({"id": MODEL, "target": "source", "app": "cursor"}, (str(self.script), FOUND["cursor"])),
                                   ({"id": MODEL, "target": "source", "app": "default"}, (str(self.script), None)),
-                                  ({"id": step, "target": "source", "app": "bambu"}, (self.fixture.app.file_of(step), FOUND["bambu"]))):
+                                  ({"id": step, "target": "source", "app": "bambu"},
+                                   (os.path.normpath(self.fixture.app.file_of(step)), FOUND["bambu"]))):
             with self.subTest(payload=payload):
                 self.opener.reset_mock()
                 self.assertEqual(self.post(payload), (204, None))

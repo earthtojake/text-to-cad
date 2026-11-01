@@ -1079,10 +1079,13 @@ class CadApp:
                 raise ApiError(400, f"{payload['app']!r} is not an app found here for {chosen['kind']} files",
                                f"name one of {', '.join([*offered, 'default'])}")
             app = found[payload["app"]]
-        if not _is_file(chosen["path"]):
+        # The catalog keeps a file's path `/`-separated; an app is handed this system's own spelling
+        # (backslashes on Windows, where some apps refuse the other).
+        path = os.path.normpath(chosen["path"]) if chosen["path"] else chosen["path"]
+        if not _is_file(path):
             raise ApiError(404, "That file is no longer there.", "build the model again, or open the file from where it is now")
         try:
-            apps.open_file(chosen["path"], app)
+            apps.open_file(path, app)
         except OSError as error:
             raise ApiError(500, f"the app could not be started: {error}", "open the file from the file manager instead") from None
         response.send_empty(204)
