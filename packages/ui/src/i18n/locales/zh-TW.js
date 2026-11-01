@@ -40,6 +40,7 @@ export default {
   "file.browser": "瀏覽器",
   "file.fileExplorer": "檔案總管",
   "file.fileManager": "檔案管理員",
+  "file.sourceMissing": "來源檔案已被移動或刪除。",
 
   "menu.backToHome": "回到首頁",
   "menu.theme": "主題",

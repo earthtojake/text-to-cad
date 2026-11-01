@@ -52,13 +52,14 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
       signal.throwIfAborted();
       // A document known by its id alone (a model's) keeps its id for a path, is named by its
       // function, and has no file to browse from (`navigationPath: null`); its file menu acts on
-      // the script that builds it (`sourceFile`), which the client's row carries only while that file
-      // is there (`script`, from the envelope's `source.present`): a script gone is no item at all.
+      // the script that builds it (`sourceFile`). A source the envelope says is gone (a model's script
+      // moved or deleted, a file gone) is `sourceMissing`: its menu draws what acts on it disabled.
       const byId = entry.sourcePath === null;
       const file = byId ? entry.file : normalizePath(entry.file);
       const name = entry.name || baseName(file);
       const script = byId && typeof entry.script === 'string' && entry.script ? normalizePath(entry.script) : null;
-      return { path: file, name, ...(byId ? { navigationPath: null } : {}), ...(script ? { sourceFile: script } : {}), kind: 'file', size: Number(entry.bytes || 0),
+      return { path: file, name, ...(byId ? { navigationPath: null } : {}), ...(script ? { sourceFile: script } : {}),
+        ...(entry.sourcePresent === false ? { sourceMissing: true } : {}), kind: 'file', size: Number(entry.bytes || 0),
         extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
         revision: contentRevision(entry) };
     },

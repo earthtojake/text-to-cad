@@ -31,7 +31,8 @@ terminal UI show none and are served as text clients.
   the whole viewer at card size, as a tab is: its navbar (`chrome: "page"`: the logo, which
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, then Open in › Browser and Finder (File Explorer, File manager), a
-  model's Copy path and Finder acting on its script — no Export, as this host has no downloads;
+  model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
+  script was moved or deleted; Browser needs none) — no Export, as this host has no downloads;
   then, at the right, only Full size where the host can show a view full size and, last, the update
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the file sidebar, the view cube, and Quick Edit. In

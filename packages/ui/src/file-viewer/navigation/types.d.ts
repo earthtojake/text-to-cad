@@ -9,14 +9,19 @@ import type { FileSource } from "../types.js";
 /** What a host can do with a document: its path copied, its file shown in the file manager, its page opened in the browser. */
 export type EntryAction = "copy-path" | "reveal" | "browser";
 export type Platform = "darwin" | "win32" | "linux";
-export type EntryMenuItem = { action: EntryAction; label: string };
+/** One item; Open in's say whether they can open now (`enabled`) and why not (`reason`, their hint). */
+export type EntryMenuItem = { action: EntryAction; label: string; enabled?: boolean; reason?: string };
 
 export const ENTRY_ACTIONS: readonly EntryAction[];
 /** A home card's file actions: Copy path, then Reveal in the file manager, each where the host can do it. */
 export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string): EntryMenuItem[];
 export function revealLabel(platform: Platform, t?: (key: string) => string): string;
-/** The navbar's Open in: Browser, then the file manager by its name (Finder, File Explorer, File manager), each where the host can do it. */
-export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string): EntryMenuItem[];
+/**
+ * The navbar's Open in: Browser, then the file manager by its name (Finder, File Explorer, File manager), each where the
+ * host can do it; the file manager disabled, with its reason, while the source was moved or deleted (`sourceMissing`).
+ */
+export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string,
+  state?: { sourceMissing?: boolean }): (EntryMenuItem & { enabled: boolean })[];
 export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
 
 /* -------------------------------------------------------------------- */
@@ -89,7 +94,7 @@ export const ViewerNavbar: ComponentType<{
    * where `capabilities` has it, then `items` (the host's own: the CAD viewer's Export submenu). None
    * where it would be empty.
    */
-  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction) => void; items?: ReactNode } | null;
+  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean; onAction: (action: EntryAction) => void; items?: ReactNode } | null;
   trailing?: ReactNode;
   /** The host's update button, last among the controls (outermost), while its install is behind. */
   update?: ReactNode;

@@ -62,12 +62,19 @@ export const API = '/api/v1';
 /**
  * Documents' envelopes (`GET /api/v1/documents/<id>`, `?path=`) as the catalog the client keeps: their
  * rows and, for the one asked for, its row's digest. A model's row carries the script that builds it
- * (the envelope's `source.path`) as `script` only while that file is there (`source.present`): its
- * file menu acts on it, and a script gone or never kept is no item at all, never an error.
+ * (the envelope's `source.path`) as `script`, and every row whether its source is on disk now
+ * (`source.present`) as `sourcePresent`: a menu offers what acts on the source, disabled while it is gone.
  */
-const scriptOf = (envelope) => (envelope?.source?.type === 'script' && envelope.source.present === true
-  && typeof envelope.source.path === 'string' && envelope.source.path ? envelope.source.path : null);
-const rowOfEnvelope = (envelope) => (envelope?.entry && scriptOf(envelope) ? { ...envelope.entry, script: scriptOf(envelope) } : envelope?.entry);
+const scriptOf = (envelope) => (envelope?.source?.type === 'script' && typeof envelope.source.path === 'string' && envelope.source.path
+  ? envelope.source.path : null);
+const rowOfEnvelope = (envelope) => {
+  if (!envelope?.entry) return envelope?.entry;
+  const script = scriptOf(envelope);
+  const present = envelope.source?.present;
+  return script || typeof present === 'boolean'
+    ? { ...envelope.entry, ...(script ? { script } : {}), ...(typeof present === 'boolean' ? { sourcePresent: present } : {}) }
+    : envelope.entry;
+};
 const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter(Boolean),
   revision: envelopes.length === 1 ? envelopes[0]?.revision ?? '' : '' });
 /**

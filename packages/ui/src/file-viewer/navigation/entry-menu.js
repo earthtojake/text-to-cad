@@ -21,7 +21,8 @@ export const ENTRY_ACTIONS = Object.freeze(["copy-path", "reveal", "browser"]);
 /**
  * @typedef {"copy-path"|"reveal"|"browser"} EntryAction
  * @typedef {"darwin"|"win32"|"linux"} Platform
- * @typedef {{ action: EntryAction, label: string }} EntryMenuItem
+ * @typedef {{ action: EntryAction, label: string, enabled?: boolean, reason?: string }} EntryMenuItem
+ *   `enabled` false: drawn disabled, `reason` its hint (Open in's entries; a home card's are always enabled).
  */
 
 /** A home card's item that shows the file in the OS's file browser. */
@@ -64,15 +65,21 @@ export function entryMenu(platform, capabilities, t = english) {
 }
 
 /**
- * The navbar's Open in: the document's page in the person's browser, where the host has one, then
- * the desktop's file manager, by its name — each where the host can do it, in a fixed order.
+ * The navbar's Open in: one entry per place the document opens in, each where the host can do it, in
+ * a fixed order -- its page in the person's browser, then the desktop's file manager, by its name.
+ * Each says whether it can open now: an entry that opens the source (the file manager) is disabled,
+ * with the reason, while the source was moved or deleted (`sourceMissing`); the browser needs none.
  *
  * @param {Platform} platform
  * @param {ReadonlySet<EntryAction>} capabilities What this host can perform on the document on screen.
  * @param {(key: string) => string} [t] The view's translator; English by default.
- * @returns {EntryMenuItem[]}
+ * @param {{ sourceMissing?: boolean }} [state] The document's source: whether it is gone.
+ * @returns {Required<Pick<EntryMenuItem, "action" | "label" | "enabled">>[] & EntryMenuItem[]}
  */
-export function openInMenu(platform, capabilities, t = english) {
-  return [{ action: "browser", label: t("file.browser") }, { action: "reveal", label: fileManagerName(platform, t) }]
-    .filter((item) => capabilities.has(item.action));
+export function openInMenu(platform, capabilities, t = english, { sourceMissing = false } = {}) {
+  const missing = sourceMissing ? { enabled: false, reason: t("file.sourceMissing") } : { enabled: true };
+  return [
+    { action: "browser", label: t("file.browser"), enabled: true },
+    { action: "reveal", label: fileManagerName(platform, t), ...missing },
+  ].filter((item) => capabilities.has(item.action));
 }

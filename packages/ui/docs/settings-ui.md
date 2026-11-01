@@ -66,7 +66,14 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   its own, has the same menu on the script that builds it (its envelope's `source.path`,
   `FileMetadata.sourceFile`): Copy path copies the script's path and the file manager reveals it,
   while Browser opens the model's own page; where the engine names no script, only Browser and
-  Export. There is no Copy link: a page's link carries its credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
+  Export. A document whose source was moved or deleted (a model's script gone or never on disk, a
+  file gone: the envelope's `source.present` false, `FileMetadata.sourceMissing`) keeps Copy path
+  (where it was) and draws what opens the source disabled, with one hint, **The source was moved
+  or deleted.** (`file.sourceMissing`, on a wrapper, as shadcn hints a disabled control): Open in
+  itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
+  needs no source and stays enabled, its Finder disabled. Open in's entries are one list, each with
+  whether it opens now and why not (`openInMenu`). There is no Copy link: a page's link carries its
+  credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,

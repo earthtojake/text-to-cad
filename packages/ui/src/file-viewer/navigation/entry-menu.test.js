@@ -13,9 +13,13 @@ test("a home card's file menu offers what the host can do, copy before reveal, n
 
 test("the navbar's Open in is the browser, then the file manager by its plain name, each where the host can do it", () => {
   assert.deepEqual(openInMenu("darwin", new Set(["copy-path", "reveal", "browser"])),
-    [{ action: "browser", label: "Browser" }, { action: "reveal", label: "Finder" }]);
-  assert.deepEqual(openInMenu("win32", new Set(["reveal"])), [{ action: "reveal", label: "File Explorer" }]);
-  assert.deepEqual(openInMenu("linux", new Set(["browser"])), [{ action: "browser", label: "Browser" }]);
+    [{ action: "browser", label: "Browser", enabled: true }, { action: "reveal", label: "Finder", enabled: true }]);
+  assert.deepEqual(openInMenu("win32", new Set(["reveal"])), [{ action: "reveal", label: "File Explorer", enabled: true }]);
+  assert.deepEqual(openInMenu("linux", new Set(["browser"])), [{ action: "browser", label: "Browser", enabled: true }]);
+  // A source moved or deleted: what opens it is disabled, saying why; the browser needs none.
+  assert.deepEqual(openInMenu("darwin", new Set(["reveal", "browser"]), undefined, { sourceMissing: true }), [
+    { action: "browser", label: "Browser", enabled: true },
+    { action: "reveal", label: "Finder", enabled: false, reason: "The source was moved or deleted." }]);
   assert.deepEqual(openInMenu("linux", new Set(["copy-path"])), []);
   assert.equal(fileManagerName("linux"), "File manager");
   // Finder is a product's name, the same in every language; the others are said in the view's.

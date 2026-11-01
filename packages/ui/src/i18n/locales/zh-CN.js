@@ -40,6 +40,7 @@ export default {
   "file.browser": "浏览器",
   "file.fileExplorer": "文件资源管理器",
   "file.fileManager": "文件管理器",
+  "file.sourceMissing": "源文件已被移动或删除。",
 
   "menu.backToHome": "返回主页",
   "menu.theme": "主题",

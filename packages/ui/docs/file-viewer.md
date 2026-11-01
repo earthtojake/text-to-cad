@@ -102,7 +102,8 @@ bar in its place and gives it back as it closes. Over a file, left to right:
   and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
   host's own items (`fileMenuItems`: the CAD viewer's Export submenu). Each only where the
   host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
-  model's act on its script, `sourceFile`, and it has neither where none is named), and no ⋯
+  model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
+  or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯
   where there is nothing. The menu and its submenus are shadcn's own width.
 
 The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ are one kind of control: transparent

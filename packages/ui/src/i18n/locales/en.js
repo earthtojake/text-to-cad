@@ -47,6 +47,7 @@ export default {
   "file.browser": "Browser",
   "file.fileExplorer": "File Explorer",
   "file.fileManager": "File manager",
+  "file.sourceMissing": "The source was moved or deleted.",
 
   // The app's menu, from the navbar's logo.
   "menu.backToHome": "Back to home",

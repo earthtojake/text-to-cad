@@ -184,7 +184,8 @@ restarting an engine you own, then rerunning the launcher. Vite handles client H
 Open in › Finder / File Explorer / File manager) of a STEP, XBF, held model (a model's document
 the engine holds), GLB, STL or 3MF page: a submenu of the formats that page's file writes, there at once, as nothing is
 inspected first. A held model's menu also has Copy path and Open in › Finder (File Explorer,
-File manager) on the script that builds it. The navbar's right end holds only the update button
+File manager) on the script that builds it; where that script was moved or deleted, Open in is
+disabled, its hint "The source was moved or deleted." The navbar's right end holds only the update button
 (and a dismissed alert's icon). For a model it captures the displayed revision and writes the document as its code built it: every
 part, as authored. The menu chooses a format alone; a posed or partial file is a function
 in the model's code. A STEP, XBF or held model offers STEP, STL, 3MF, GLB and XBF (an XBF's

@@ -113,15 +113,17 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
   const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
+  // A source moved or deleted keeps Copy path (where it was) and draws what opens it disabled.
+  const sourceMissing = Boolean(shown?.file.sourceMissing);
   const fileMenu = useMemo(() => {
     const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
       .filter(action => action === "browser" ? Boolean(path) : Boolean(onDisk)));
     const target = (action: EntryAction) => action === "browser" ? path : onDisk;
     return path && (capabilities.size || fileMenuItems) ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities, items: fileMenuItems,
+      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems,
       onAction: (action: EntryAction) => { void Promise.resolve(perform?.[action]?.({ path: target(action) ?? "", kind: "file" })).catch(error => onError?.(error)); },
     } : null;
-  }, [path, onDisk, perform, host.fileActions?.platform, fileMenuItems, onError]);
+  }, [path, onDisk, sourceMissing, perform, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

@@ -297,7 +297,7 @@ it('has no file menu on a document with no file of its own, which its name names
   expect(labels()).not.toContain('File actions');
 });
 
-it('puts Open in › Browser and the host\'s own items (Export) in the file menu; a model\'s Copy path and file manager act on its script', async () => {
+it('puts Open in › Browser and the host\'s own items (Export) in the file menu; a model\'s Copy path and file manager act on its script, disabled with the reason where it is gone', async () => {
   // No hover: jsdom lays nothing out, so a pointer leaving a submenu's trigger for its items closes it.
   const user = userEvent.setup({ skipHover: true });
   const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
@@ -307,8 +307,9 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   const exportMenu = <DropdownMenuSub><DropdownMenuSubTrigger>Export</DropdownMenuSubTrigger><DropdownMenuSubContent aria-label="Export">
     <DropdownMenuItem data-export-format="step" onSelect={() => exported('step')}>STEP</DropdownMenuItem>
   </DropdownMenuSubContent></DropdownMenuSub>;
-  const modelHost = (script?: string) => ({ ...host, fileActions: { platform: 'darwin', perform }, files: { id: 'one',
-    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, ...(script ? { sourceFile: script } : {}), kind: 'file' as const, extension: 'xbf', size: 0 }) } });
+  const modelHost = (script?: string, { missing = false, actions = perform as Record<string, unknown> } = {}) => ({ ...host, fileActions: { platform: 'darwin', perform: actions }, files: { id: 'one',
+    stat: async (path: string) => ({ path, name: 'bracket', navigationPath: null, ...(script ? { sourceFile: script } : {}),
+      ...(missing ? { sourceMissing: true } : {}), kind: 'file' as const, extension: 'xbf', size: 0 }) } });
   const top = () => screen.getAllByRole('menuitem').map(item => item.textContent);
   const openIn = () => within(screen.getByRole('menu', { name: 'Open in' })).getAllByRole('menuitem').map(item => item.textContent);
   // A model whose script the engine names: the same menu a file has, on its script.
@@ -336,6 +337,39 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   await user.click(screen.getByRole('button', { name: 'File actions' }));
   await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
   for (const menu of screen.getAllByRole('menu')) expect(menu.className.split(/\s+/).filter(name => /^w-/.test(name))).toEqual([]);
+  cleanup();
+  // A model whose script was moved or deleted, where nothing in Open in can open (the web viewer's: no
+  // Browser): Copy path stays (where it was), and Open in is drawn disabled, its hint saying why.
+  const web = { 'copy-path': perform['copy-path'], reveal: perform.reveal };
+  render(<FileViewer file={id} host={modelHost('/m/parts.py', { missing: true, actions: web }) as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(top()).toEqual(['Copy path', 'Open in', 'Export']);
+  const openInRow = screen.getByRole('menuitem', { name: 'Open in' });
+  expect([openInRow.getAttribute('aria-disabled'), openInRow.closest('[data-disabled-reason]')]).toEqual(['true', expect.anything()]);
+  await user.hover(openInRow.closest('[data-disabled-reason]')!);
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  expect(screen.queryByRole('menu', { name: 'Open in' })).toBeNull();
+  await user.click(screen.getByRole('menuitem', { name: 'Copy path' }));
+  expect(perform['copy-path']).toHaveBeenLastCalledWith({ path: '/m/parts.py', kind: 'file' });
+  cleanup();
+  // The card's: Browser needs no source, so Open in and Browser stay enabled and Finder is disabled, saying why.
+  render(<FileViewer file={id} host={modelHost('/m/parts.py', { missing: true }) as any} renderers={[renderer]} state={{}} onStateChange={() => {}} />);
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getByRole('menuitem', { name: 'Open in' }).getAttribute('aria-disabled')).toBeNull();
+  await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  expect(openIn()).toEqual(['Browser', 'Finder']);
+  const finder = screen.getByRole('menuitem', { name: 'Finder' });
+  expect([screen.getByRole('menuitem', { name: 'Browser' }).getAttribute('aria-disabled'), finder.getAttribute('aria-disabled')]).toEqual([null, 'true']);
+  // The pointer straight onto its row's wrapper: jsdom lays nothing out, so a pointer crossing from
+  // Open in to its submenu would close it (a browser's pointer grace keeps it open).
+  fireEvent.pointerMove(finder.closest('[data-disabled-reason]')!, { pointerType: 'mouse' });
+  expect((await screen.findByRole('tooltip')).textContent).toBe('The source was moved or deleted.');
+  const reveals = perform.reveal.mock.calls.length;
+  await user.click(screen.getByRole('menuitem', { name: 'Browser' }));
+  expect(perform.browser).toHaveBeenLastCalledWith({ path: id, kind: 'file' });
+  expect(perform.reveal).toHaveBeenCalledTimes(reveals);
   cleanup();
   // A model whose script is not named: Open in › Browser and Export alone.
   render(<FileViewer file={id} host={modelHost() as any} renderers={[renderer]} state={{}} onStateChange={() => {}} fileMenuItems={exportMenu} />);

@@ -15,10 +15,14 @@ export interface FileMetadata extends FileEntry {
   navigationPath?: string | null;
   /**
    * For a document with no file of its own (`navigationPath: null`), the file it is built from (a
-   * model's script), only while that file is there: what its file menu's Copy path and file manager
-   * act on. Its Files never start there.
+   * model's script): what its file menu's Copy path and file manager act on. Its Files never start there.
    */
   sourceFile?: string;
+  /**
+   * The document's source (its file, a model's script) was moved or deleted: the file menu keeps
+   * Copy path (where it was) and draws what opens the source disabled, saying why.
+   */
+  sourceMissing?: boolean;
   size: number;
   extension: string;
   mime?: string;

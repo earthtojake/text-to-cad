@@ -39,6 +39,7 @@ export default {
   "file.browser": "브라우저",
   "file.fileExplorer": "파일 탐색기",
   "file.fileManager": "파일 관리자",
+  "file.sourceMissing": "소스가 이동되었거나 삭제되었습니다.",
 
   "menu.backToHome": "홈으로",
   "menu.theme": "테마",

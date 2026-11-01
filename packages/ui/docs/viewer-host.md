@@ -10,9 +10,10 @@ A view shows a file by its absolute path, or a document the engine holds by its 
 model's: a lower-case UUID, `cad.engine.ids`). A file's metadata may carry `navigationPath`,
 the on-disk file to browse from and act on; null says the document has no file of its own (a
 model's), and then `sourceFile`, where given, is the file it is built from (a model's script, its
-envelope's `source.path`, given only while the envelope says that file is `present`: a script gone or
-never kept is no item, never an error): its file menu's Copy path and file manager act on that, its Files never
-start there; with neither, its file menu has only what needs no file (Browser, Export). A model's navbar and Preview's bar name it by its `name`, with no glyph, and
+envelope's `source.path`): its file menu's Copy path and file manager act on that, its Files never
+start there; with neither, its file menu has only what needs no file (Browser, Export). `sourceMissing`
+says the source was moved or deleted (the envelope's `source.present` false): the menu keeps Copy path
+and draws what opens the source disabled with its reason, never an error. A model's navbar and Preview's bar name it by its `name`, with no glyph, and
 its Files starts where the explorer was last in this tab, else the person's home folder, never
 the folder of the script that built it. A file's Files (the explorer its name menu holds) is rooted at that file's folder. Python scripts are never documents: no view opens one,
 and no folder lists one.

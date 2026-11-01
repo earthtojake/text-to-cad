@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useI18n } from "@text-to-cad/ui/i18n";
 import { cn } from "@text-to-cad/ui/utils";
 
@@ -89,19 +90,37 @@ function HistoryButtons({ viewHistory }) {
   </span>;
 }
 
+// A disabled menu row, as shadcn's disabled item is: dimmed and deaf to the pointer (stock
+// `DropdownMenuSubTrigger` has no disabled style of its own).
+const DISABLED_ROW_CLASS = "data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+
 /**
- * The ⋯ after the file's name: what can be done with the document. Copy path; Open in, a submenu of
- * the document's page in the browser (the CAD app's) and the desktop's file manager, by its name
- * (Finder, File Explorer, File manager); then the host's own items (`items`: the CAD viewer's
- * Export submenu). Each only where the host can do it, and no ⋯ where it can do none.
+ * A disabled row with its reason as a hint. A disabled Radix item takes no pointer, so the hint is
+ * on a wrapper that does, as shadcn hints a disabled button.
  */
-function FileMenu({ platform, capabilities, onAction, items: hostItems = null }) {
+function WhyDisabled({ reason, children }) {
+  return <TooltipHint content={reason} side="right"><span className="block" data-disabled-reason="">{children}</span></TooltipHint>;
+}
+
+/**
+ * The ⋯ after the file's name: what can be done with the document. Copy path (where its source is,
+ * or was); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
+ * browser, the CAD app's, and the desktop's file manager by its name -- Finder, File Explorer, File
+ * manager); then the host's own items (`items`: the CAD viewer's Export submenu). Each only where
+ * the host can do it, and no ⋯ where it can do none. While the source was moved or deleted
+ * (`sourceMissing`), what opens it is drawn disabled with the reason: Open in itself where nothing
+ * in it can open, else each such entry.
+ */
+function FileMenu({ platform, capabilities, sourceMissing = false, onAction, items: hostItems = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const copy = capabilities.has("copy-path");
-  const openIn = openInMenu(platform, capabilities, t);
+  const openIn = openInMenu(platform, capabilities, t, { sourceMissing });
   if (!copy && !openIn.length && !hostItems) return null;
   const perform = action => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action); };
+  const openable = openIn.some(item => item.enabled);
+  const label = t("file.openIn");
+  const trigger = <DropdownMenuSubTrigger data-open-in-menu="" disabled={!openable} className={DISABLED_ROW_CLASS}>{label}</DropdownMenuSubTrigger>;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
       className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
@@ -110,9 +129,12 @@ function FileMenu({ platform, capabilities, onAction, items: hostItems = null })
     <DropdownMenuContent align="start" sideOffset={6}>
       {copy ? <DropdownMenuItem onSelect={() => perform("copy-path")}>{t("file.copyPath")}</DropdownMenuItem> : null}
       {openIn.length ? <DropdownMenuSub>
-        <DropdownMenuSubTrigger data-open-in-menu="">{t("file.openIn")}</DropdownMenuSubTrigger>
-        <DropdownMenuSubContent aria-label={t("file.openIn")}>
-          {openIn.map(item => <DropdownMenuItem key={item.action} data-open-in={item.action} onSelect={() => perform(item.action)}>{item.label}</DropdownMenuItem>)}
+        {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
+        <DropdownMenuSubContent aria-label={label}>
+          {openIn.map(item => {
+            const row = <DropdownMenuItem key={item.action} data-open-in={item.action} disabled={!item.enabled} onSelect={() => perform(item.action)}>{item.label}</DropdownMenuItem>;
+            return item.enabled ? row : <WhyDisabled key={item.action} reason={item.reason}>{row}</WhyDisabled>;
+          })}
         </DropdownMenuSubContent>
       </DropdownMenuSub> : null}
       {hostItems}
@@ -207,7 +229,7 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   Where the host's files can be browsed: the name menu's Files, from `folder` where given.
  * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]
  *   The host's library: the name menu's Models, its models alone.
- * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
+ * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>, sourceMissing?: boolean,
  *   onAction(action: import("./entry-menu.js").EntryAction): void, items?: import("react").ReactNode } | null} [props.fileMenu]
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.

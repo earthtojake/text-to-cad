@@ -39,6 +39,7 @@ export default {
   "file.browser": "ブラウザ",
   "file.fileExplorer": "エクスプローラー",
   "file.fileManager": "ファイルマネージャー",
+  "file.sourceMissing": "ソースは移動または削除されました。",
 
   "menu.backToHome": "ホームへ戻る",
   "menu.theme": "テーマ",
