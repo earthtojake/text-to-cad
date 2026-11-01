@@ -403,7 +403,7 @@ CONTROLS = frozenset({
     "look_at", "isolate", "view_cube", "view_cube_drag", "fit",
     "quick_edit_copy", "quick_edit_queue", "quick_edit_send",
     "navbar_back", "navbar_forward", "models", "models_open", "models_filter", "explorer", "explorer_filter",
-    "file_copy_path", "file_reveal", "home",
+    "file_copy_path", "file_reveal", "file_open_app", "home",
     "theme_system", "theme_light", "theme_dark", "language", "feedback",
     "export_step", "export_stl", "export_threemf", "export_glb", "export_dxf", "export_xbf", "export_original",
     "home_search", "home_filter_all", "home_filter_models", "home_filter_files", "home_layout_grid", "home_layout_list",
