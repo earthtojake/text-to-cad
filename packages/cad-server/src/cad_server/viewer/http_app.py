@@ -704,6 +704,10 @@ class CadApp:
         """``GET /api/v1/documents/<id>``: what the document of id ``ident`` is (``_envelope``); 404
         for an id no document has, its reason the engine's -- naming the command that builds it
         again -- and its ``state`` where the engine names one (``unsaved``, ``detached``)."""
+        return self._envelope(*self._known(ident))
+
+    def _known(self, ident) -> tuple[dict, dict | None]:
+        """``_catalog`` of the document of id ``ident``; 404 for an id no document has (``envelope``)."""
         if not is_id(ident):
             raise ApiError(404, f"{ident} is not a document id", "a document's id is the one its page, /<id>, names")
         catalog, model = self._catalog(None, ident)
@@ -711,7 +715,7 @@ class CadApp:
             extra = {"state": catalog["missingState"]} if catalog.get("missingState") else {}
             raise ApiError(404, catalog.get("missing") or f"no document {ident}",
                            "run the model's script again, or open the file from where it is now", **extra)
-        return self._envelope(catalog, model)
+        return catalog, model
 
     def _envelope(self, catalog: dict, model: dict | None) -> dict:
         """A document as every page reads it first: its ``id`` and ``kind``, its ``name``, its
@@ -966,8 +970,8 @@ class CadApp:
 
     def _local(self, request, response, rest) -> None:
         """``/api/v1/local``: what a local engine does on this computer -- the update, the explorer,
-        files by path, Quick Edit's files, Reveal, the clipboard, Open's chooser, the page's fresh link, the
-        page's activity."""
+        files by path, Quick Edit's files, Reveal, Open in, the clipboard, Open's chooser, the page's fresh link,
+        the page's activity."""
         route = rest[0] if rest else ""
         if rest == ["update"]:
             return self._methods(request, {"GET": lambda: send_json(response, 200, self._version()),
@@ -982,6 +986,10 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._handle_prompt_files_get(request, response, rest[1])})
         if rest == ["reveal"]:
             return self._methods(request, {"POST": lambda: self._reveal(request, response)})
+        if rest == ["open-in"]:
+            return self._methods(request, {"GET": lambda: send_json(response, 200, self.open_in(request.query.get("id")))})
+        if rest == ["open"]:
+            return self._methods(request, {"POST": lambda: self._open_with(request, response)})
         if rest == ["clipboard"]:
             return self._methods(request, {"POST": lambda: self._clipboard(request, response)})
         if rest == ["pick"]:
@@ -1010,6 +1018,73 @@ class CadApp:
             reveal_path(payload["path"])
         except FileNotFoundError:
             raise ApiError(404, "That file is no longer there.", "open it from where it is now") from None
+        response.send_empty(204)
+
+    # Open in: a document's files, each in an app this computer has (``cad_server._internal.apps``).
+
+    def _open_targets(self, ident) -> list[dict]:
+        """The files of document ``ident`` Open in offers, each ``{target, kind, path}``: its ``source``
+        -- a model's script (kind ``script``), a file's own path -- then, for a model, one
+        ``export:<kind>`` for each kind of file its last build wrote, as the engine holds the build
+        (``model_info``'s ``files``: none for a model taken up from the cache, which no build wrote
+        yet). The paths are the server's own: a request only ever names one of these. 404 for an
+        id no document has."""
+        catalog, model = self._known(ident)
+        envelope = self._envelope(catalog, model)
+        path = envelope["source"].get("path")
+        targets = [{"target": "source", "kind": "script" if model is not None else envelope["kind"],
+                    "path": path if isinstance(path, str) and path else None}]
+        for written in (model or {}).get("files") or ():
+            kind = file_kind(written)
+            if kind is not None and all(target["kind"] != kind for target in targets[1:]):
+                targets.append({"target": f"export:{kind}", "kind": kind, "path": str(written)})
+        return targets
+
+    def open_in(self, ident) -> dict:
+        """``GET /api/v1/local/open-in?id=<id>``: the document's files (``_open_targets``), each with
+        its ``name``, whether it is there now (``present``) and the apps this computer has that take
+        its kind (``apps``, as last found: never looked for on a request), and the desktop's file
+        manager (``fileManager``)."""
+        from cad_server._internal.apps import DETECTED, apps_for, file_manager
+
+        found = DETECTED.found()
+        return {"targets": [{"target": target["target"], "kind": target["kind"],
+                             "name": node_basename(target["path"]) if target["path"] else "",
+                             "present": _is_file(target["path"]), "apps": apps_for(target["kind"], found)}
+                            for target in self._open_targets(ident)],
+                "fileManager": file_manager()}
+
+    def _open_with(self, request, response) -> None:
+        """``POST /api/v1/local/open`` with ``{"id", "target", "app"}``: one of the document's files
+        (``_open_targets``) in an app found for its kind, or the operating system's own handler
+        (``"default"``), started detached (``apps.open_file``). 404 for a document or a file not there,
+        400 for a target the document does not have or an app not found for that file."""
+        from cad_server._internal import apps
+
+        self._limit(request, 8192)
+        payload = json.loads(request.body() or b"{}")
+        if type(payload) is not dict or set(payload) != {"id", "target", "app"} \
+                or not all(isinstance(value, str) for value in payload.values()):
+            raise ValueError('Open takes {"id", "target", "app"}: a document, one of its targets and an app')
+        targets = {target["target"]: target for target in self._open_targets(payload["id"])}
+        chosen = targets.get(payload["target"])
+        if chosen is None:
+            raise ApiError(400, f"the document has no target {payload['target']!r}",
+                           f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
+        app = None
+        if payload["app"] != "default":
+            found = apps.DETECTED.found()
+            if payload["app"] not in apps.KINDS.get(chosen["kind"], ()) or payload["app"] not in found:
+                offered = [entry["id"] for entry in apps.apps_for(chosen["kind"], found)]
+                raise ApiError(400, f"{payload['app']!r} is not an app found here for {chosen['kind']} files",
+                               f"name one of {', '.join([*offered, 'default'])}")
+            app = found[payload["app"]]
+        if not _is_file(chosen["path"]):
+            raise ApiError(404, "That file is no longer there.", "build the model again, or open the file from where it is now")
+        try:
+            apps.open_file(chosen["path"], app)
+        except OSError as error:
+            raise ApiError(500, f"the app could not be started: {error}", "open the file from the file manager instead") from None
         response.send_empty(204)
 
     def _clipboard(self, request, response) -> None:

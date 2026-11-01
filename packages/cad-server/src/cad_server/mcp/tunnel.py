@@ -4,7 +4,7 @@ A view sends exactly the requests the web client sends (``/api/v1/*``) as tool
 calls; this module hands each one to the viewer's own router -- one :class:`~cad_server.viewer.http_app.CadApp`, made on the first
 request, for every view of this server -- and returns the status, headers and
 body bytes. There is one backend, not two: the router, its checks and its limits
-are the ones the web app uses, the model library, the home's Open, Reveal, the
+are the ones the web app uses, the model library, the home's Open, Reveal, Open in, the
 person's analytics answer and language, and the update check included. The app
 keeps the server's own library and analytics, so a model a view opens is
 counted once, by this process.
