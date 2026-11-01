@@ -42,7 +42,7 @@ says what to do, and `cad doctor` explains the installation.
 
 One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
-and the documents it holds; `cad stop` stops it, and any older one left running.
+and the documents it holds; `cad stop` stops it.
 A build cut off by the shell's time limit keeps running in the server; run the same
 command again and it waits for that build and replays it (`cad status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the

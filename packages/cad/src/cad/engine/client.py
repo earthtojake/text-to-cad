@@ -328,8 +328,8 @@ def _exchange(connection: Connection, message: dict[str, Any], on_log: Callable[
                     on_progress(answer["progress"])
                 continue
             notice = answer.pop("notice", None)
-            # The request that bound the engine's port, when that start retired an older engine or
-            # moved the port (``daemon.bind``): a line each.
+            # The request that bound the engine's port, when that start moved the port
+            # (``daemon.bind``): a line each.
             for said in (notice or "").splitlines():
                 print(f"cad: {said}", file=sys.stderr)
             return answer
@@ -355,7 +355,7 @@ def sweep(*, stop: bool) -> dict[str, list[str]]:
             if not wait_gone(endpoint=endpoint):
                 raise ConnectionError(f"the engine server at {endpoint.address} did not exit")
             found["stopped"].append(str(endpoint.address))
-            _remove_dead(endpoint)  # what an engine from before engines removed their own files left: its stop's
+            _remove_dead(endpoint)  # what it left, should it have died before removing its files
             continue
         found["removed"] += _remove_dead(endpoint)
     return found

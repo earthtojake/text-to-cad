@@ -1,9 +1,10 @@
 """The device's page links outlive its engine: one HTTP port (``--port``, else ``CAD_ENGINE_PORT``,
 else 3245 or the port it rolled to when 3245 was another's, remembered) and the user's one page token,
 the same at every start until ``cad server --rotate-token``. A named port another process holds
-is refused by name; another engine on it (an earlier cadgen's, its door another name) that nothing
-uses is asked to stop, and one in use is rolled from. One engine a device: a client of another
-release attaches to the engine running, and starts the current installation's, never its own."""
+is refused by name, and the device's port is rolled from it: another engine on it -- of another
+engine folder, as 0.8's server is to 0.10 -- is asked nothing, as any program is. One engine a
+device: a client of another release attaches to the engine running, and starts the current
+installation's, never its own."""
 
 from __future__ import annotations
 
@@ -23,8 +24,6 @@ from tests.python.support import engine_daemon
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
-# An earlier cadgen's engine's name in the engine folder (``EnginePortTest.earlier``).
-EARLIER = "0123456789ab"
 
 
 def free_port() -> int:
@@ -90,18 +89,8 @@ class EnginePortTest(unittest.TestCase):
                                           "CAD_STATE_DIR": str(self.root / "state"),
                                           "CAD_CACHE_DIR": str(self.root / "cache")},
                                          self.addCleanup)
+        self.addCleanup(self.answering)
         self.addCleanup(self.stop)
-        self.addCleanup(self.stop_every)
-
-    def stop_every(self) -> None:
-        """Every engine in the test's engine folder asked to stop, whatever version it runs as (each
-        its own door, ``daemon._tag``), and awaited gone."""
-        from cad_server.engine import daemon
-
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
-            for door in (self.root / "engine").glob("*.port" if os.name == "nt" else "*.door"):
-                daemon._ask(door, {"op": "stop"})
-        self.answering()
 
     def cli(self, *args: str, python: str = sys.executable, **extra: str) -> subprocess.CompletedProcess:
         return engine_daemon.run([python, "-m", "cad_server.engine", *args], env={**self.env, **extra})
@@ -138,45 +127,22 @@ class EnginePortTest(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
             return places.address()
 
-    def earlier(self, port: int) -> tuple[Path, dict]:
-        """An earlier cadgen's engine in the test's engine folder -- its door another name, a tag of 12
-        hex digits as 0.8's engines named theirs --, serving on ``port``: its door and its status,
-        stopped at the end."""
-        from cad.engine import client
-        from cad_server.engine import daemon
-
-        code = (f"import sys; from cad.engine import places; from cad_server.engine import daemon; "
-                f"places.NAME = daemon.NAME = {EARLIER!r}; "
-                "sys.exit(daemon.main())")
-        process = subprocess.Popen([sys.executable, "-c", code], env=self.env, stdin=subprocess.DEVNULL,
-                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        self.addCleanup(engine_daemon.reap, process)
-        door = self.root / "engine" / f"{EARLIER}.{'port' if os.name == 'nt' else 'door'}"
-        deadline = time.monotonic() + 60
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
-            while (connection := client._connect(door)) is None:
-                self.assertIsNone(process.poll(), "the earlier engine exited before its door answered")
-                self.assertLess(time.monotonic(), deadline, "the earlier engine's door answered")
-                time.sleep(0.05)
-            served = client._exchange(connection, {"op": "http", "port": port}, address=door)
-            self.assertEqual(served.get("url"), f"http://127.0.0.1:{port}", served)
-            self.addCleanup(lambda: daemon._ask(door, {"op": "stop"}))
-            return door, daemon._ask(door, {"op": "status"}) or {}
-
-    def server(self, *args: str) -> None:
-        """``cad server ARGS`` in the background, once its door answers."""
+    def server(self, *args: str, **extra: str) -> subprocess.Popen:
+        """``cad server ARGS`` in the background, once its door answers; ``extra``: its environment."""
         from cad.engine import client, places
 
-        process = subprocess.Popen([sys.executable, "-m", "cad_server.engine", "server", *args], env=self.env,
+        env = {**self.env, **extra}
+        process = subprocess.Popen([sys.executable, "-m", "cad_server.engine", "server", *args], env=env,
                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         self.addCleanup(engine_daemon.reap, process)
-        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": self.env["CAD_ENGINE_DIR"]}):
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": env["CAD_ENGINE_DIR"]}):
             deadline = time.monotonic() + 60
             while (found := client._connect(places.address())) is None:
                 self.assertIsNone(process.poll(), "the server exited before its door answered")
                 self.assertLess(time.monotonic(), deadline, "the server's door answered")
                 time.sleep(0.05)
             found.close()
+        return process
 
     def record(self) -> dict:
         """This installation's engine record, or ``{}`` with none."""
@@ -207,19 +173,6 @@ class EnginePortTest(unittest.TestCase):
             return answer.status, dict(answer.getheaders()), answer.read()
         finally:
             connection.close()
-
-    def held(self, door: Path) -> None:
-        """An app server's hold on the engine at ``door``, as ``client.hold`` asks one, kept to the end."""
-        from cad.engine import client
-
-        held = client._connect(door)
-        self.addCleanup(held.close)
-        message = {"op": "hold", "host": "codex"}
-        if os.name == "nt":
-            message = {"token": door.read_text(encoding="utf-8").split()[1], **message}
-        held.writer.write((json.dumps(message) + "\n").encode())
-        held.writer.flush()
-        self.assertEqual(json.loads(held.reader.readline()), {"ok": True})
 
     def bound(self, default: int, **extra: str) -> tuple[Listener, dict]:
         """``daemon.bind`` in this process, nothing named, its default ``default``: its listener
@@ -365,37 +318,25 @@ class EnginePortTest(unittest.TestCase):
         token.chmod(0o600)
         self.assertEqual(self.token(), "t" * 43, "never replaced: the links made with it still work")
 
-    def test_an_unused_earlier_engine_on_the_port_is_asked_to_stop_and_its_port_taken(self) -> None:
-        port = free_port()
-        door, theirs = self.earlier(port)
-        ours = self.launch(CAD_ENGINE_PORT=str(port))
-        self.assertEqual(ours["port"], port)
-        self.assertNotEqual(ours["pid"], theirs["pid"])
-        # One token for every engine: a link outlives an update.
-        self.assertEqual(ours["token"], self.token())
-        self.answering(self.ours())
-
-    def test_an_earlier_engine_in_use_is_refused_when_named_and_else_rolled_from(self) -> None:
-        from cad.engine import previous
-
-        port = free_port()
-        door, theirs = self.earlier(port)
-        self.held(door)  # an app server's hold on it, as ``client.hold`` asks one
-        done = self.started(CAD_ENGINE_PORT=str(port))
-        self.assertEqual(done.returncode, 1, done.stdout)
-        self.assertEqual(done.stderr.strip().splitlines()[-1],
-                         f"CAD Viewer: port {port} is held by text-to-cad {previous.version()}'s engine "
-                         f"(pid {theirs['pid']}), still in use by 1 app server: quit that app or run `cad stop` "
-                         "with that version")
-        self.answering(door)
-        server, where = self.bound(port)  # its port the default: rolled from, never asked to stop
-        self.assertGreater(server.port, port)
-        self.assertEqual(where["notice"], f"{port} is held by text-to-cad {previous.version()}'s engine (pid "
-                                          f"{theirs['pid']}); the engine serves on {server.port} and keeps it")
-        # It serves with the token it started with: a new one is refused while it runs.
-        refused = self.cli("server", "--rotate-token")
-        self.assertEqual(refused.returncode, 1)
-        self.assertIn("another engine server is running", refused.stderr)
+    def test_another_engine_on_the_default_port_is_asked_nothing_and_rolled_from(self) -> None:
+        """An engine of another engine folder on the device's port -- as 0.8's server is to 0.10's -- is
+        rolled from as any program is, said as a text-to-cad's, never asked to stop: it runs on."""
+        default = free_port()
+        other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state"),
+                 "CAD_ENGINE_STANDBY": "0"}
+        theirs = self.server("--port", str(default), **other)
+        self.addCleanup(lambda: self.cli("stop", **other))
+        done = self.started(CAD_ENGINE_DEFAULT_PORT=str(default))
+        self.assertEqual(done.returncode, 0, done.stderr)
+        port = json.loads(done.stdout)["port"]
+        self.assertTrue(default < port <= default + 64, port)
+        (said,) = [line for line in done.stderr.splitlines() if line.startswith(f"cad: {default} is held by ")]
+        self.assertTrue(said.endswith(f"; the engine serves on {port} and keeps it"), said)
+        if os.name != "nt":  # the system names the holder by its command line
+            self.assertIn("another text-to-cad (", said)
+            self.assertIn(f"pid {theirs.pid})", said)
+        self.assertIsNone(theirs.poll(), "never asked to stop: it runs on")
+        self.assertTrue(listening(default))
 
     def test_a_client_of_another_release_attaches_and_starts_the_current_installation_s_engine(self) -> None:
         """One engine a device: a client of another installation (an app's newer plugin) attaches to the

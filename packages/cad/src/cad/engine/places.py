@@ -326,7 +326,7 @@ def endpoints() -> list[Endpoint]:
 def lock(path: Path | None = None) -> Any:
     """The daemon's lock (or the one at ``path``), held for its life; None when
     another daemon holds it. A lock file is removed by whoever holds it (``daemon.let_go``,
-    ``daemon.sweep_dead``), so a lock taken on a file whose name has gone, or names another file now,
+    ``client.sweep``), so a lock taken on a file whose name has gone, or names another file now,
     is no lock: it is let go and the file the name names now is taken instead (``names``)."""
     engine_dir().mkdir(parents=True, exist_ok=True, mode=0o700)
     refusal = folder_refusal(engine_dir())

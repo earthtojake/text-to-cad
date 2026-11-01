@@ -58,8 +58,9 @@ the memory cap.
 Its only files are the operating system's coordination, in its own folder, ``state_dir``: a lock,
 and on POSIX its door, a named pipe (``door_path``), and the pipes of the connections being opened
 (``door``: no socket, so a sandbox that refuses sockets still reaches it); on Windows a localhost
-TCP port and a token, in a port file there. It removes them as it stops (``let_go``), and a daemon
-starting removes those of every engine that died without (``sweep_dead``). Requests are one JSON object per line on a connection; answers
+TCP port and a token, in a port file there. It removes them as it stops (``let_go``); those of one
+killed are the next one's, which takes its lock and makes its door anew, and ``cad status`` and ``cad
+stop`` remove them (``client.sweep``). Requests are one JSON object per line on a connection; answers
 are JSON lines, the last of which carries ``done``, ``failed`` or ``ok``. Before it, a build
 sends its caller its ``{"log"}`` lines and its ``{"progress"}`` frames as its worker sends them
 (``progress.py``); the daemon keeps each busy worker's last frame for ``status``, and wakes the
@@ -85,11 +86,11 @@ from cad.engine.client import WORKER_STDERR
 from cad.engine import places as _places
 from cad.engine.door import DOOR_PROTOCOL
 from cad.engine.ids import canonical, file_id, is_id
-from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, folder_refusal, installation, lock, lock_path, names, port_path, pycache)
+from cad.engine.places import (NAME, WINDOWS, bytecode, door_path, engine_dir, engine_root, failure_path, installation, lock, lock_path, names, port_path, pycache)
 from cad_server.engine.services import SERVICES
 from cad_server.engine.supervisor import Gone, Process, Supervisor
 
-__all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "sweep_dead", "worker_cap"]
+__all__ = ["DEFAULT_PORT", "PortHeld", "let_go", "main", "port_holder", "worker_cap"]
 
 
 def _application(server: Any, host: str, port: int) -> Any:
@@ -140,10 +141,6 @@ DEFAULT_PORT = 3245
 DEFAULT_PORT_ENV = "CAD_ENGINE_DEFAULT_PORT"
 # How many ports past a held default (or remembered) one the engine tries before any free one.
 PORTS_TRIED = 64
-# How long the engine waits for another engine on its port that it asked to stop to let the port go.
-RETIRE_SECONDS = 10.0
-# How long the engine waits for another engine to answer what it is using.
-ASK_SECONDS = 5.0
 # How long a build's worker is free, with no request waiting for it, before the documents the build
 # made that an inspection has measured are read and measured again for the inspection after it
 # (``serve.Server.measure_later``): a program calling its models one after another sends its next
@@ -284,28 +281,16 @@ class PortHeld(ValueError):
         self.who = who
 
 
-def _uses(status: dict[str, Any]) -> list[str] | None:
-    """What uses another engine, by its ``status``, in words: its holds (an agent host's app server),
-    the pages that watch its documents, its requests; None when its ``status`` does not say (one this
-    cadgen cannot ask)."""
-    if not {"watched", "active", "busy"} <= status.keys():
-        return None
-    holders, pages = status.get("holders") or 0, status["watched"]
-    return [f"{count} {noun}{'' if count == 1 else 's'}"
-            for count, noun in ((holders, "app server"), (pages, "open page"),
-                                (status["busy"] + bool(status["active"]), "request")) if count]
-
-
 def bind(host: str, asked: int | None, listen: Callable[[int, str], Any]) -> tuple[Any, dict[str, Any]]:
     """The engine's HTTP server, listening, and where its port came from. ``listen(port, token)``
     makes it. A port named -- ``asked`` (``--port``, or the switch's: the port the engine before it
     served), else ``CAD_ENGINE_PORT`` -- is taken or refused by name (``PortHeld``). Else the
     device's port: 3245 (``DEFAULT_PORT``) when it is free, else the port it remembers, else the one it
-    rolls to (``_installation_port``). Either way an engine of another engine folder or of an earlier
-    cadgen on it that nothing uses is asked to stop and its port taken (``_listen``); one in use is
-    rolled from. The page token is the user's (``registry.TOKEN``), one for every engine, made by the
-    first to start (``_new_token``); one there that cannot be read is refused by name, and nothing is
-    served.
+    rolls to (``_installation_port``). Another process on it -- another engine, 0.8's among them,
+    whatever it is -- is asked nothing: a port named is refused, naming it, and the device's port is
+    rolled from (``_listen``). The page token is the user's (``registry.TOKEN``), one for every engine,
+    made by the first to start (``_new_token``); one there that cannot be read is refused by name, and
+    nothing is served.
 
     ``where``: ``source`` (``--port``, ``CAD_ENGINE_PORT``, ``default`` or ``rolled``), for a
     rolled port ``because`` (who holds 3245), and ``notice``, the line this start says once: a move of
@@ -356,8 +341,8 @@ def _installation_port(host: str, remembered: int | None, token: str,
                        listen: Callable[[int, str], Any]) -> tuple[Any, dict[str, Any]]:
     """The server on the device's own port, and where it came from (``bind``): 3245 when it is free (a
     remembered other port forgotten: the one time a link changes), else the remembered port, else --
-    that one held by anything but another engine nothing uses -- the next free port, ``PORTS_TRIED``
-    above it and then any (``_roll``), remembered from then on."""
+    that one held too -- the next free port, ``PORTS_TRIED`` above it and then any (``_roll``),
+    remembered from then on."""
     default = default_port()
     first = remembered or default
     if first != default:
@@ -402,76 +387,31 @@ def _roll(host: str, held: int, token: str, listen: Callable[[int, str], Any]) -
 
 
 def _listen(host: str, port: int, source: str, token: str, listen: Callable[[int, str], Any]) -> Any:
-    """``listen(port, token)``, or ``PortHeld`` when another process holds ``port``. Another engine
-    that nothing uses is asked to stop first (``_holder``), and its port waited for, ``RETIRE_SECONDS``
-    at most; any other holder is refused at once."""
+    """``listen(port, token)``, or ``PortHeld`` naming the process that holds ``port`` (``_holder``): no
+    other process is asked anything, another engine -- 0.8's among them -- no more than any program."""
     import errno
 
-    deadline = None
-    retired = ""
-    while True:
-        try:
-            if port and _answers(host, port):  # a listener on every interface lets a loopback bind through
-                raise OSError(errno.EADDRINUSE, os.strerror(errno.EADDRINUSE))
-            return listen(port, token)
-        except OSError as error:
-            if not port or not _held(error):
-                raise ValueError(f"cannot listen on {host}:{port}: {error.strerror or error}") from None
-        if deadline is None:
-            retired = _holder(port, source)  # refuses (``PortHeld``) unless it asked an unused engine to stop
-            deadline = time.monotonic() + RETIRE_SECONDS
-        elif time.monotonic() > deadline:
-            raise PortHeld(f"port {port} is held by {retired}, which was asked to stop and still holds it after "
-                           f"{RETIRE_SECONDS:.0f} s: run `cad stop` with that version", retired) from None
-        time.sleep(0.1)
+    try:
+        if port and _answers(host, port):  # a listener on every interface lets a loopback bind through
+            raise OSError(errno.EADDRINUSE, os.strerror(errno.EADDRINUSE))
+        return listen(port, token)
+    except OSError as error:
+        if not port or not _held(error):
+            raise ValueError(f"cannot listen on {host}:{port}: {error.strerror or error}") from None
+    raise _holder(port, source)
 
 
-def _holder(port: int, source: str) -> str:
-    """Who holds ``port``, when it is another engine in this engine folder (an earlier cadgen's, whose
-    door has another name) that nothing uses: asked to stop (its ``stop``), and named. Else
-    ``PortHeld``, naming the holder: that engine and what uses it, one this cadgen cannot ask, or the
-    process the system names (``port_holder``). ``source``: where the port came from (``bind``), which
-    says how to name another."""
+def _holder(port: int, source: str) -> PortHeld:
+    """``port`` refused, naming who holds it as the system names it (``_who``) and what to do about it.
+    ``source``: where the port came from (``bind``), which says how to name another."""
     other = "pass another --port" if source == "--port" else "start the server with another CAD_ENGINE_PORT"
-    remedy = f"stop it, or {other}"
-    found = _engine_serving(port)
-    if found is not None:
-        address, status = found
-        who = _engine_name(status)
-        uses = _uses(status)
-        if uses is None:
-            raise PortHeld(f"port {port} is held by {who}, which this server cannot ask whether it is in use: "
-                           f"run `cad stop` with that version, or {other}", who)
-        if uses:
-            then = "quit that app" if (status.get("holders") or 0) else "close that page" if status["watched"] \
-                else "let it finish"
-            raise PortHeld(f"port {port} is held by {who}, still in use by {' and '.join(uses)}: {then} "
-                           "or run `cad stop` with that version", who)
-        if _ask(address, {"op": "stop"}) is None:
-            raise PortHeld(f"port {port} is held by {who}, which did not answer when asked to stop: "
-                           "run `cad stop` with that version", who)
-        return who
-    pid, name, command = port_holder(port)
-    if pid is None:
-        raise PortHeld(f"port {port} is held by another process: {remedy}", "another process")
-    if _CADGEN.search(command or ""):
-        who = f"another text-to-cad ({name}, pid {pid})"
-        raise PortHeld(f"port {port} is held by {who}, which this one cannot ask to stop: {remedy}", who)
-    who = f"{name or 'a process'} (pid {pid})"
-    raise PortHeld(f"port {port} is held by {who}: {remedy}", who)
-
-
-def _engine_name(status: dict[str, Any]) -> str:
-    """Another engine, by its ``status``: the version its installation runs as and its pid."""
-    version = status.get("installation") or status.get("version")
-    return (f"text-to-cad {version}'s engine" if version else "another release's engine") + f" (pid {status.get('pid')})"
+    who = _who(port)
+    return PortHeld(f"port {port} is held by {who}: stop it, or {other}", who)
 
 
 def _who(port: int) -> str:
-    """Who holds ``port``, in words, as ``_holder`` names it: never refused, never asked to stop."""
-    found = _engine_serving(port)
-    if found is not None:
-        return _engine_name(found[1])
+    """Who holds ``port``, in words, as the system names it (``port_holder``): another text-to-cad by its
+    command line (``_CADGEN``), else its name and pid, else another process."""
     pid, name, command = port_holder(port)
     if pid is None:
         return "another process"
@@ -482,46 +422,6 @@ def _who(port: int) -> str:
 # or ``-m cadgen.…``, or the command's -- ``cad``, an earlier release's ``cadgen`` -- ``viewer``, ``server`` or
 # ``mcp``.
 _CADGEN = re.compile(r"(-m\s+(cad_server|cadgen)(\.\w+)*|[/\\](cad|cadgen)(\.exe)?\s+(viewer|server|mcp))(\s|$)")
-
-
-def _engine_serving(port: int) -> tuple[Path, dict[str, Any]] | None:
-    """The door (on Windows, the port file) of another engine in this engine folder -- an earlier
-    cadgen's, whose door has another name -- whose HTTP server is on ``port``, and its ``status``; None
-    when no engine there answers so."""
-    ours = {NAME}
-    try:
-        doors = sorted(engine_dir().glob("*.port" if WINDOWS else "*.door"))
-    except OSError:
-        return None
-    for address in doors:
-        if address.stem in ours:
-            continue
-        status = _ask(address, {"op": "status"})
-        serving = (status or {}).get("serving")
-        if isinstance(serving, dict) and serving.get("port") == port:
-            return address, status
-    return None
-
-
-def _ask(address: Path, message: dict[str, Any]) -> dict[str, Any] | None:
-    """``message`` asked of the engine at ``address``: its answer, or None when none answers there
-    within ``ASK_SECONDS`` (a wedged engine never wedges this one)."""
-    from cad.engine import client
-
-    answers: list[dict[str, Any]] = []
-
-    def ask() -> None:
-        try:
-            connection = client._connect(address)
-            if connection is not None:
-                answers.append(client._exchange(connection, message, address=address))
-        except (OSError, ValueError):
-            pass
-
-    asking = threading.Thread(target=ask, daemon=True)
-    asking.start()
-    asking.join(ASK_SECONDS)
-    return answers[0] if answers and answers[0].get("ok") else None
 
 
 def port_holder(port: int) -> tuple[int | None, str | None, str | None]:
@@ -618,19 +518,6 @@ def rotate_token() -> str | None:
     return token
 
 
-def others_running() -> list[Path]:
-    """The doors (on Windows, port files) of the other engines that answer in this engine folder (an
-    earlier cadgen's): each serves with the token it read at its start."""
-    from cad.engine import client
-
-    ours = {NAME}
-    try:
-        doors = sorted(engine_dir().glob("*.port" if WINDOWS else "*.door"))
-    except OSError:
-        return []
-    return [door for door in doors if door.stem not in ours and client._answering(door)]
-
-
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
         self.port = port  # ``cad server --port``: the HTTP port this engine must take, or None
@@ -666,7 +553,7 @@ class Daemon:
         self.busy_lock = threading.Lock()
         self.stopping = threading.Event()
         # The connections that hold the engine (``hold``: an agent host's MCP server, while the host
-        # runs): while one is open, no other engine asks it to stop for its port (``bind``).
+        # runs), which ``status`` counts.
         self.holders = 0
         # Draining for an update (``drain``): it stops once nothing is in flight.
         self.draining = False
@@ -754,10 +641,9 @@ class Daemon:
 
     def hold(self, reader: Any, send: Callable[[dict[str, Any]], None], host: Any = None, holder: Any = None) -> None:
         """A hold on the engine (``{"op": "hold", "host": ..., "holder": ...}``): answered, then kept until
-        its client goes (its end of file). While any is kept, another engine that wants the port never
-        asks this one to stop: it rolls past it, or refuses a port it was named (``bind``).
+        its client goes (its end of file), and counted in ``status`` (``holders``).
         ``host``, the agent host the holder serves (its MCP server says it), is counted in ``status``
-        (``hosts``): the ``cadgen`` command in that host's shell runs this installation. ``holder``, the
+        (``hosts``): the ``cad`` command in that host's shell runs this installation. ``holder``, the
         name an MCP server holds with and opens its sessions under: once its client is gone -- a
         server that exits, or one killed before it could say goodbye -- those sessions end
         (``serve.Server.on_hold_end``)."""
@@ -1091,8 +977,7 @@ class Daemon:
     def handle(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """One request, answered through ``send``. One that serves -- binding the HTTP server, a
         launch, a page's read -- counts in ``status``'s ``busy`` until it is answered, as builds and
-        draws do: a drain for an update waits for it (``drain``), and another engine starting meanwhile
-        never asks this one to stop under it (``_holder`` reads ``busy`` through ``_uses``)."""
+        draws do: a drain for an update waits for it (``drain``)."""
         if request.get("op") not in SERVING:
             return self._handle(request, send)
         with self.busy_lock:
@@ -1421,9 +1306,8 @@ class Daemon:
         standby = ({"pid": spare.pid, "rssMb": None if spare.rss is None else round(spare.rss),
                     "seconds": round(time.time() - spare.started, 1)} if spare is not None
                    else {"pid": None, "rssMb": None, "seconds": None, "starting": True} if readying else None)
-        # What uses it, which `cad status` says (and a later cadgen's engine asks an earlier one's before
-        # it takes its port, ``bind``): its holds, the documents pages watch, its builds and draws, and HTTP
-        # work underway.
+        # What uses it, which `cad status` says: its holds, the documents pages watch, its builds and draws,
+        # and HTTP work underway.
         return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
                 "up": round(time.time() - self.born, 1),
                 "workers": workers, "standby": standby, "cap": supervisor.cap, "waiting": supervisor.waiting("worker"),
@@ -1677,106 +1561,6 @@ def _drop_lock(held: Any, path: Path) -> None:
             pass  # another opened it meanwhile: its file now
 
 
-# A file of one engine in the engine folder: its name (``NAME``; an earlier cadgen's, a tag of 12 hex
-# digits, and an early engine's socket under a longer one) and what it is -- its lock, its door, its port
-# file (Windows' address, or an early engine's), its failure note, a port file being written, an early
-# engine's socket.
-_ENGINE_FILE = re.compile(r"(?P<tag>engine|[0-9a-f]{12}|[0-9a-f]{16})\.(?P<kind>lock|door|port|failed|tmp|sock)")
-# How long a dead engine's failure note (and a port file it was writing) stays: the client that
-# started it reads the note as the engine exits (``client._not_started``).
-NOTE_KEPT_SECONDS = 120.0
-
-
-def sweep_dead(folder: Path | None = None, now: float | None = None) -> list[str]:
-    """The files in the engine folder of every engine that is dead, removed, as a daemon starts: an
-    engine killed, or one before engines removed their own files (``let_go``). An engine is dead
-    when its lock is free (taken here while its files go, so none starts between) and nothing
-    answers at its door, port file or socket; without a lock file, when nothing answers there. A
-    live engine's files are never touched, nor this daemon's, nor a failure note or a port file
-    being written younger than ``NOTE_KEPT_SECONDS``. Its folder's other files (``clients/``, a
-    browser's redirect page) are not an engine's. The paths removed."""
-    folder = folder or engine_dir()
-    now = time.time() if now is None else now
-    if folder_refusal(folder) is not None:
-        return []  # a folder another can change: nothing in it is this user's daemon's to remove
-    engines: dict[str, dict[str, Path]] = {}
-    try:
-        entries = list(os.scandir(folder))
-    except OSError:
-        return []
-    for entry in entries:
-        found = _ENGINE_FILE.fullmatch(entry.name)
-        if found is not None:
-            engines.setdefault(found["tag"], {})[found["kind"]] = Path(entry.path)
-    removed: list[str] = []
-    for tag, files in sorted(engines.items()):
-        if tag == NAME:
-            continue  # this daemon's: it holds the lock
-        held = None
-        if "lock" in files:
-            try:
-                held = lock(files["lock"])
-            except OSError:
-                continue
-            if held is None:
-                continue  # its engine holds it: starting, running or stopping
-        try:
-            if _live(files):
-                continue
-            for kind, path in sorted(files.items()):
-                if kind == "lock" or (kind in ("failed", "tmp") and _younger(path, now)):
-                    continue
-                try:
-                    path.unlink()
-                    removed.append(str(path))
-                except OSError:
-                    pass
-        finally:
-            if held is not None:
-                there = files["lock"].exists()
-                _drop_lock(held, files["lock"])
-                if there and not files["lock"].exists():
-                    removed.append(str(files["lock"]))
-    return removed
-
-
-def _live(files: dict[str, Path]) -> bool:
-    """Whether an engine answers at any of ``files``: its door takes a writer, its port a
-    connection (Windows), its socket a connection (an early engine's)."""
-    from cad.engine import client
-
-    if "door" in files and not WINDOWS and client._answering(files["door"]):
-        return True
-    if "port" in files and WINDOWS and client._answering(files["port"]):
-        return True
-    if "sock" in files and not WINDOWS:
-        return any(_listened(files["sock"]) for _ in range(2))  # refused twice: a full backlog refuses too
-    return False
-
-
-def _listened(path: Path) -> bool:
-    """Whether a connection to the socket at ``path`` is not refused (an early engine's)."""
-    probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    probe.settimeout(0.5)
-    try:
-        probe.connect(str(path))
-    except (ConnectionRefusedError, FileNotFoundError):
-        time.sleep(0.1)
-        return False  # nobody listens: a dead engine's
-    except OSError:
-        return True  # refused by the system, or too long a name: not this sweep's to judge
-    finally:
-        probe.close()
-    return True
-
-
-def _younger(path: Path, now: float) -> bool:
-    try:
-        return now - os.lstat(path).st_mtime < NOTE_KEPT_SECONDS
-    except OSError:
-        return False
-
-
 def _identity(path: Path) -> tuple[int, int] | None:
     """The file at ``path`` (not a link it names): its device and inode, or None when there is none."""
     try:
@@ -1820,12 +1604,6 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             return 1 if port is not None else 0
         return 0  # another daemon is up
     if rotate:
-        others = others_running()
-        if others:
-            print("cad: another engine server is running, serving with the token: stop it "
-                  f"first ({', '.join(str(door) for door in others)}), then cad server --rotate-token", file=sys.stderr)
-            let_go(held)
-            return 1
         try:
             if rotate_token() is None:
                 raise OSError("no state folder")
@@ -1844,8 +1622,6 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
         _note_failure("the engine server cannot listen on a local port", error)
         let_go(held, failed=True)
         return 1
-    # The files of engines that died without removing theirs, swept while this one starts.
-    threading.Thread(target=sweep_dead, daemon=True).start()
     daemon = Daemon(port=port)
 
     # And the records from before namespace/name identity brought to it, once (``identity.migrate``:

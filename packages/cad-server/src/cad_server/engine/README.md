@@ -239,8 +239,8 @@ that is free is used, and one held is rolled from the same way. When 3245 is fre
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
 system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netstat` on Windows), or
-`another process` where it does not say; another release this one cannot reach is `another
-text-to-cad (<name>, pid N)`.
+`another process` where it does not say, and a server of text-to-cad's, by its command line (another
+engine folder's, 0.8's), `another text-to-cad (<name>, pid N)`.
 
 **Starting and updating.** The device runs one release's engine at a time, the current
 installation's: `<state>/installations/current` names it (`cad_server._internal.installations`). Every
@@ -279,10 +279,9 @@ switch that went back puts the release before's plugin back, the apps' copies wi
 did, and how long no engine served (`gapMs`), is `update.json` in the state folder, and the helper's
 lines `update.log`.
 
-An earlier release's engine (0.8's, its door named for its installation) on the port that nothing uses
--- no hold, no page watching a document, no build, draw or HTTP request underway -- is asked to stop
-as the engine binds, and its port taken once it has gone (`daemon.RETIRE_SECONDS` at most); one still
-in use is named and refused (below).
+An engine asks no other process anything, another engine no more than any program: 0.8's server on
+the port is rolled from as above, or refused where the port is named, as below, and `cad setup` stops
+it with 0.8's own `cadgen stop`.
 
 A named port another process holds is refused in one line naming the holder (`daemon.PortHeld`).
 `cad server` binds at its start, so the command fails at once with that line on stderr and exits
@@ -290,14 +289,9 @@ A named port another process holds is refused in one line naming the holder (`da
 request names (`cad viewer --port`) refuses that request alone, with the line: the engine runs
 on, unbound, for its other clients' builds and the next request that serves. Its own port held
 (`CAD_ENGINE_PORT` in the environment it started in) fails that request with the line, and the
-engine, which can never serve, leaves its note (`places.failure_path`) and exits 1:
-
-- another program: `port 3245 is held by <name> (pid N): stop it, or start the server with another
-  CAD_ENGINE_PORT` (`…or pass another --port` for a port `--port` named);
-- an earlier release's engine in use: `port 3245 is held by text-to-cad <version>'s engine (pid N), still
-  in use by 1 app server: quit that app or run `cad stop` with that version` (or `N open pages`,
-  `N requests`); an engine whose `status` does not say what uses it cannot be asked, and is refused by
-  name the same way.
+engine, which can never serve, leaves its note (`places.failure_path`) and exits 1: `port 3245 is
+held by <name> (pid N): stop it, or start the server with another CAD_ENGINE_PORT` (`…or pass another
+--port` for a port `--port` named).
 
 The token is made at the first engine's start and every start serves with it: the engine's record,
 `engines/engine.json` in the state folder, keeps the port it rolled to (`registry.Registry.engine`,
@@ -909,9 +903,8 @@ other's door.
   workers have stopped it removes the rest of its files -- its port file, its failure note (but a
   failure's, which its client reads) and last its lock, removed while still held (`daemon.let_go`)
   -- whether it stopped on `stop`, a terminate, a retirement or its door gone. An engine killed
-  leaves its files; a daemon starting removes every dead engine's (`daemon.sweep_dead`): its lock
-  free, taken while they go, and nothing answering at its door, port file or an early engine's
-  socket, never a live engine's, and a failure note only once it is two minutes old. A lock is
+  leaves its files: the next to start takes its lock and makes its door anew, and `cad status` and
+  `cad stop` remove them, its lock free and nothing answering at its door (`client.sweep`). A lock is
   taken on the file its name names (`places.lock`), so a lock file removed under a daemon starting
   is never two daemons' lock.
 - **Reads.** What a client used to ask of the loopback port, `inspect`'s document reads, goes
