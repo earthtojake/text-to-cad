@@ -82,6 +82,8 @@ class CardCorsTest(unittest.TestCase):
             with self.subTest(preflight=name):
                 status, answer = self.ask("OPTIONS", "/api/v1/server", headers)
                 self.assertEqual((status, self.cors(answer)), (405, {}))
+                # The methods the engine serves, as every other 405 of it names them.
+                self.assertEqual(answer["allow"], "GET, HEAD, POST, PUT, PATCH, DELETE")
         status, answer = self.ask("OPTIONS", "/mcp", {"Origin": CARD, "Access-Control-Request-Method": "POST",
                                                       "Access-Control-Request-Headers": "authorization, content-type"})
         self.assertEqual((status, self.cors(answer)), (405, {}))

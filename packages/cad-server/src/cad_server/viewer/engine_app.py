@@ -401,7 +401,7 @@ class EngineApp:
         if not (host_is_allowed(request.header('host'), self.host) and origin
                 and request.header('access-control-request-method').upper() in CARD_METHODS
                 and 'authorization' in asked and asked <= set(CARD_HEADERS)):
-            return response.send_empty(405, [('allow', 'GET, HEAD, POST')])
+            return response.send_empty(405, [('allow', ', '.join(CARD_METHODS))])  # every method served
         headers = [('access-control-allow-origin', origin), ('vary', 'Origin'),
                    ('access-control-allow-methods', ', '.join(CARD_METHODS)),
                    ('access-control-allow-headers', ', '.join(CARD_HEADERS)),

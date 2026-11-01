@@ -248,8 +248,8 @@ class CadApp:
     """``handle(request, response)`` writes exactly one response.
 
     Unlike the Node app there is no "not mine" return: the Python server always
-    serves the client itself, and the dev proxy forwards only the API (``/api``)
-    and the CAD app's module (``/app``), so nothing else can be waiting behind this.
+    serves the client itself, and the dev proxy forwards only the API (``/api``), so
+    nothing else can be waiting behind this.
 
     One app serves every file on this machine, by absolute path (``backend``). The page names
     each document it shows by id, ``/<id>`` (``cad.engine.ids``): a model's, or a file's once it
