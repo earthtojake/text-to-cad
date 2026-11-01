@@ -890,11 +890,14 @@ class InstallChannelTest(_Tmp):
                                         "clientInfo": {"name": "claude-code", "version": "2.1.0"}})
         server.handle("initialize", params, None)
         deadline = time.monotonic() + 30
-        while not self.record.exists():  # written in the background as the session opens
-            self.assertLess(time.monotonic(), deadline, "the channel was written down")
-            time.sleep(0.01)
-        self.assertEqual(json.loads(self.record.read_text(encoding="utf-8")),
-                         {install_channel.installation(): "claude-github"})
+        while True:  # written in the background as the session opens, atomically: read once it is readable
+            try:
+                written = json.loads(self.record.read_text(encoding="utf-8"))
+                break
+            except (OSError, ValueError):  # not there yet, or Windows refusing a file mid-replace
+                self.assertLess(time.monotonic(), deadline, "the channel was written down")
+                time.sleep(0.01)
+        self.assertEqual(written, {install_channel.installation(): "claude-github"})
 
 
 class BeforeTelemetryTest(_Tmp):
