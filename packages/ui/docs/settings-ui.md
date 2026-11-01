@@ -60,7 +60,15 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   **Copy path**; **Open in**, a submenu of **Browser** (the document's page in the person's
   browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
   and the desktop's file manager by its plain name — **Finder** on macOS, **File Explorer** on
-  Windows, **File manager** on Linux (`reveal`); then the host's own items, the CAD viewer's
+  Windows, **File manager** on Linux (`reveal`); then, where the host has this computer's apps
+  (`fileActions.apps`), in groups parted by separators: the apps that take the source (a model's
+  script: Visual Studio Code, Cursor …; a file's: FreeCAD, Bambu Studio …, by their product names,
+  untranslated as Finder is); each file the model's last build wrote that is on disk, its apps as
+  **App (file name)** (FreeCAD (bracket.step)); and **Default app**, the OS's own handler for the
+  source. A group with no item is left out with its separator, and an export whose file is gone is
+  left out. The apps are asked for as the menu opens, never before: what needs no answer is there
+  at once, the apps join it when it comes, and a failed or slow answer leaves the menu as without
+  them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the CAD viewer's
   **Export**, a submenu of the formats the document's kind writes (where the host can download,
   the web viewer's). Each only where the host can do it. A model's document, which has no file of
   its own, has the same menu on the script that builds it (its envelope's `source.path`,
@@ -71,7 +79,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   (where it was) and draws what opens the source disabled, with one hint, **The source was moved
   or deleted.** (`file.sourceMissing`, on a wrapper, as shadcn hints a disabled control): Open in
   itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
-  needs no source and stays enabled, its Finder disabled. Open in's entries are one list, each with
+  needs no source and stays enabled, its Finder disabled. The source's apps and Default app are
+  disabled the same way; an export on disk still opens. Open in's entries are one list, each with
   whether it opens now and why not (`openInMenu`). There is no Copy link: a page's link carries its
   credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced

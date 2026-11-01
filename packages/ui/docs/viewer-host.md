@@ -40,7 +40,14 @@ menu (the navbar's ⋯) offers only where it is given: `copy-path` and `reveal` 
 disk (a model's: its script, `sourceFile`), and `browser` opens the document's page in the person's
 browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
 The ⋯ draws them as Copy path and Open in › Browser and the file manager by its name; a home
-card's ⋯ offers Copy path and Reveal alone.
+card's ⋯ offers Copy path and Reveal alone. A host that can open the document's files in this
+computer's apps adds `apps(entry, { signal })` — the files (`source`, a model's `export:<format>`s),
+whether each is on disk and the apps that take it (`OpenInFiles`, `GET /api/v1/local/open-in`'s
+answer; asked as the menu opens, null or a failure and the menu is as without) — and
+`openApp(entry, target, app)`, which opens one in an app or in `"default"`, the OS's own: both or
+neither, the entry named as the document is (its path, a model's id). `createCadFileActions({ openIn: client })`
+makes both from a CAD client (`openInApps`, `openIn`, a file's id from `entryOf`); the web viewer
+hands its client, the CAD app its tunnel's. A host with neither shows Open in without apps.
 CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter serves both apps; the engine owns runtime startup and recovery.

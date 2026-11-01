@@ -32,7 +32,9 @@ terminal UI show none and are served as text clients.
   opens the app menu, first; Back and Forward; the file name that opens the name menu; the ⋯,
   the file menu: Copy path, then Open in › Browser and Finder (File Explorer, File manager), a
   model's Copy path and Finder acting on its script (Finder disabled, with its reason, where the
-  script was moved or deleted; Browser needs none) — no Export, as this host has no downloads;
+  script was moved or deleted; Browser needs none), then the apps the server finds on this computer
+  for the document's files, through the tunnel as Reveal goes (the source's, each export's as "App
+  (file name)", then Default app) — no Export, as this host has no downloads;
   then, at the right, only Full size where the host can show a view full size and, last, the update
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
   in Projection, Display and Preview, the file sidebar, the view cube, and Quick Edit. In
