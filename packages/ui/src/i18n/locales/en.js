@@ -534,6 +534,7 @@ export default {
   "alert.build.title": "Couldn’t build the model",
   "alert.build.message": "“{file}” could not be built.",
   "alert.build.recovery": "Correct the error in the model’s source: the view updates when a build succeeds.",
+  "alert.build.recoveryInternal": "This error comes from CAD itself, not from the model’s code. Please report it with the details below.",
   "alert.empty.summary": "Mesh unavailable",
   "alert.empty.title": "No geometry to display",
   "alert.empty.message": "“{file}” is listed in the file browser, but loading it produced no visible geometry.",

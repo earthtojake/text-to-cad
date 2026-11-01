@@ -87,14 +87,23 @@ export function failureAlert(fileRef, error, failure, compile = false, t = engli
   };
 }
 
+// The owners of a build's error (`build._owner`) that are the model's to correct, not CAD's.
+const MODEL_OWNERS = new Set(["model", "refused", "kernel"]);
+
 /**
  * The file's last build failed (`failed`: the engine's record of it -- the model, its error and the
  * stage it reached, its last progress event): over a model on screen, the last version that built,
  * the card is no block and can be put away; the error is said, and held whole in the details (the
  * stage in English, as the details are). The view updates by itself when a build succeeds, so there
  * is nothing to retry here.
+ *
+ * The engine says whose the error is to fix (`owner`, the engine's `build._owner`): the model's own
+ * code (`model`), a refusal of what the model gave (`refused`), or the CAD kernel's refusal of an
+ * operation (`kernel`) is the model's to correct, and is no issue of the project's to report
+ * (`reportable: false`); `internal` is a fault in CAD itself, to report. A record without an owner
+ * (an engine before it) is reportable, as every failure was.
  * @param {string} fileRef
- * @param {{ model?: string, error?: string, progress?: { kind?: string, stage?: string, detail?: string } | null }} failed
+ * @param {{ model?: string, error?: string, owner?: string, progress?: { kind?: string, stage?: string, detail?: string } | null }} failed
  * @param {boolean} hasModel  A version of the file is on screen.
  * @param {(key: string, params?: Record<string, unknown>) => string} [t]
  */
@@ -106,12 +115,14 @@ export function buildFailedAlert(fileRef, failed, hasModel, t = english) {
     "Operation: building the model", error].filter(Boolean).join("\n");
   // What was raised, the traceback's last line; the traceback itself is in the details.
   const raised = error.split("\n").map(line => line.trim()).filter(Boolean).at(-1);
+  const models = MODEL_OWNERS.has(failed?.owner);
   return {
     severity: "error", kind: "build", details, reason: raised,
     summary: t(hasModel ? "alert.update.summary" : "alert.build.summary"),
     title: t(hasModel ? "alert.update.title" : "alert.build.title"),
     message: hasModel ? t("alert.update.message") : t("alert.build.message", { file: fileRef }),
-    recovery: t("alert.build.recovery"),
+    recovery: t(failed?.owner === "internal" ? "alert.build.recoveryInternal" : "alert.build.recovery"),
+    ...(models ? { reportable: false } : {}),
     ...(hasModel ? { blocking: false } : {})
   };
 }

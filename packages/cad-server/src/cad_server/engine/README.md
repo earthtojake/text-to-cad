@@ -583,7 +583,13 @@ Nor does the day: the creation date the BinXCAF driver writes in the file's
 header is always `01/01/2000` (`document.WRITTEN_DATE`, put over the driver's in
 place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
-previous files stay: the program's own call prints those frames once on stderr, then `failed
+previous files stay. The report also says whose the error is to fix (`owner`, `build._owner`),
+from the line that raised it: `model` (the model's own code, or a library it called -- build123d,
+numpy -- the memo's wrappers being no caller), `kernel` (OCCT refused a call: `failedAt`), `refused`
+(the library said no to what it was given: a `ValueError` or `TypeError` raised in its own code,
+`ExportRefused` and its kind) or `internal` (any other error raised in the library's code, or a
+worker that failed without a report: a defect of ours). The page's record of the failed build
+carries it, and the card offers Report Issue for `internal` alone. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
 it, and left uncaught it ends the program with status 1 without its traceback again
 (`model._told`). A call the engine never served -- none runs and this shell's sandbox cannot

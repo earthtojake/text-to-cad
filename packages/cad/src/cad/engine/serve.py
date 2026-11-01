@@ -1581,7 +1581,8 @@ class Server:
 
     def built(self, outcomes: dict[str, dict[str, Any] | None]) -> None:
         """Builds that answered: per model document they built (its id), None when its model built,
-        else what failed (``{"model", "error", "progress"}``). Those served are built
+        else what failed (``{"model", "error", "owner", "progress"}``; ``owner``: whose the error is to
+        fix, ``build._owner``). Those served are built
         no longer; their pages are woken."""
         hit = False
         with self.load_lock:

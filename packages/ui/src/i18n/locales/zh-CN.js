@@ -508,6 +508,7 @@ export default {
   "alert.build.title": "无法构建模型",
   "alert.build.message": "无法构建“{file}”。",
   "alert.build.recovery": "请修正模型源文件中的错误：构建成功后视图会自动更新。",
+  "alert.build.recoveryInternal": "此错误来自 CAD 本身，而不是模型代码。请附上下方的详细信息报告此问题。",
   "alert.empty.summary": "网格不可用",
   "alert.empty.title": "没有可显示的几何体",
   "alert.empty.message": "“{file}”列在文件浏览器中，但加载后没有产生可见的几何体。",

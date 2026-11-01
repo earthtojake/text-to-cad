@@ -202,7 +202,7 @@ export async function loadXbfDocument(source, { previous = null, fetch: fetchImp
  * after `wait` seconds with the same version. Given `progress` (the count of the document's build last heard), it answers too
  * when that count moves: a build writing the document reports its stage, or fails.
  * @returns {Promise<{ version: string, building: object | null,
- *   failed: { model?: string, error?: string, progress?: object | null } | null, progress: number | null }>}
+ *   failed: { model?: string, error?: string, owner?: string, progress?: object | null } | null, progress: number | null }>}
  *   `building`: the last progress frame of the build of a model's document now (`progress.py`'s;
  *   a file's is always null: a file names no model);
  *   `failed`: the last build of it that failed, until one succeeds or another begins; `progress`:

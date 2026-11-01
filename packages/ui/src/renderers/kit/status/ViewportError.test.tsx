@@ -69,6 +69,13 @@ it('offers Retry, and beside it, where the host has a tracker, Report Issue: a n
   expect(body).toContain('- File: gear.step\n- CAD: 0.7.5\n- Platform: linux');
   expect(body).toContain('```\nFile: gear.step\n```');
   expect(body).not.toContain('/Users/ada');
+  cleanup();
+  // An error that is the model's to correct is no issue of the project's: no Report Issue, Retry stays.
+  render(<ViewerHostContext.Provider value={testHost({ links: viewerLinks({ version: '0.7.5' }) }) as any}>
+    <ViewerAlertCard alert={{ ...alert, reportable: false }} hasContent={false} onReload={onReload} file="/Users/ada/parts/gear.step" />
+  </ViewerHostContext.Provider>);
+  expect(screen.queryByRole('link', { name: 'Report Issue' })).toBeNull();
+  expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
 });
 
 it('copies the whole of Details, however far they scroll, from the icon in their corner, through the host\'s clipboard', async () => {

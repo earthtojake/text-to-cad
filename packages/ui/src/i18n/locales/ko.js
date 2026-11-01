@@ -507,6 +507,7 @@ export default {
   "alert.build.title": "모델을 빌드할 수 없습니다",
   "alert.build.message": "“{file}”을(를) 빌드할 수 없습니다.",
   "alert.build.recovery": "모델 소스의 오류를 수정하세요. 빌드가 성공하면 화면이 업데이트됩니다.",
+  "alert.build.recoveryInternal": "이 오류는 모델 코드가 아니라 CAD 자체에서 발생했습니다. 아래 세부 정보와 함께 신고해 주세요.",
   "alert.empty.summary": "메시를 사용할 수 없음",
   "alert.empty.title": "표시할 지오메트리가 없습니다",
   "alert.empty.message": "“{file}”은(는) 파일 브라우저에 있지만 로드해도 보이는 지오메트리가 없습니다.",
