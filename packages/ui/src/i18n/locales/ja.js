@@ -9,10 +9,11 @@ export default {
   "export.failed": "エクスポートに失敗しました",
 
   "app.start.notAnswering": "CAD ビューアーが応答しません",
-  "app.engine.notRunning": "エンジンが動いていません。戻るとページは自動で再接続します。",
-  "app.engine.startIt": "cad run <script>.py か cad viewer を実行して起動してください。",
-  "app.engine.linkReplaced": "このページのリンクは置き換えられました。新しいリンクを開くとページは自動で再接続します。",
-  "app.engine.openNewLink": "cad viewer を実行し、表示されたリンクを開いてください。",
+  "app.engine.notRunning": "CAD が動いていません。",
+  "app.engine.startIt": "次にエージェントが CAD を使うか、CAD アプリを開くと再び起動します。このページは自動的に再接続します。",
+  "app.engine.linkReplaced": "このリンクは使えなくなりました。",
+  "app.engine.openNewLink": "エージェントにもう一度モデルを開いてもらい、新しいリンクを使ってください。",
+  "app.engine.reload": "再読み込み",
 
   "file.opening": "開いています…",
   "file.missing": "ファイルが存在しません",

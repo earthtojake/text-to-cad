@@ -10,10 +10,11 @@ export default {
   "export.failed": "导出失败",
 
   "app.start.notAnswering": "CAD 查看器没有响应",
-  "app.engine.notRunning": "引擎没有运行；它恢复后页面会重新连接。",
-  "app.engine.startIt": "运行 cad run <script>.py 或 cad viewer 来启动它。",
-  "app.engine.linkReplaced": "此页面的链接已被替换；打开新链接后页面会重新连接。",
-  "app.engine.openNewLink": "运行 cad viewer 并打开它打印出的链接。",
+  "app.engine.notRunning": "CAD 未在运行。",
+  "app.engine.startIt": "当你的智能体下次使用 CAD 或你打开 CAD 应用时，它会重新启动；此页面会自动重新连接。",
+  "app.engine.linkReplaced": "此链接已失效。",
+  "app.engine.openNewLink": "让你的智能体再次打开该模型，然后使用新链接。",
+  "app.engine.reload": "重新加载",
 
   "file.opening": "正在打开…",
   "file.missing": "文件不存在",

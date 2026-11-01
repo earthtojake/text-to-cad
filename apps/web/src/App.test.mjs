@@ -225,8 +225,8 @@ test('a page whose engine is gone says so in its language, over the page, until 
     assert.equal(alert() === null, true, 'nothing is said while the engine answers');
     catalog = 'stopped';
     await act(() => client.refresh({ file: ONE }).catch(() => {}));
-    assert.match(alert()?.textContent ?? '', /エンジンが動いていません。戻るとページは自動で再接続します。/);
-    assert.match(alert()?.textContent ?? '', /cad run <script>\.py か cad viewer を実行して起動してください。/);
+    assert.match(alert()?.textContent ?? '', /CAD が動いていません。/);
+    assert.match(alert()?.textContent ?? '', /次にエージェントが CAD を使うか、CAD アプリを開くと再び起動します。/);
     // The one notice: the page under it, a view's own card among it, is out of reach and unheard.
     assert.equal(window.document.querySelectorAll('[role="alert"]').length, 1);
     const under = alert()?.nextElementSibling;
@@ -236,8 +236,8 @@ test('a page whose engine is gone says so in its language, over the page, until 
     catalog = 'restarted';
     await act(() => client.refresh({ file: ONE }).catch(() => {}));
     // An engine that refuses the token runs: the page's link was replaced (`cad server --rotate-token`).
-    assert.match(alert()?.textContent ?? '', /このページのリンクは置き換えられました。/);
-    assert.match(alert()?.textContent ?? '', /cad viewer を実行し、表示されたリンクを開いてください。/);
+    assert.match(alert()?.textContent ?? '', /このリンクは使えなくなりました。/);
+    assert.match(alert()?.textContent ?? '', /エージェントにもう一度モデルを開いてもらい、新しいリンクを使ってください。/);
     assert.doesNotMatch(alert()?.textContent ?? '', /engine token required|エンジンが動いていません/);
     catalog = 'back';
     await act(() => client.refresh({ file: ONE }));
@@ -258,10 +258,10 @@ test('the notice says the page reconnects, and how to start the engine', async (
   try {
     await act(() => root.render(createElement(EngineStopped, { locale: 'en' })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
-      'The engine is not running; the page reconnects when it is back.Run cad run <script>.py or cad viewer to start it.');
+      'CAD is not running.It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.Reload');
     await act(() => root.render(createElement(EngineStopped, { locale: 'en', refused: true })));
     assert.equal(dom.window.document.querySelector('[role="alert"]')?.textContent,
-      "This page's link was replaced; the page reconnects once its new link is opened.Run cad viewer and open the link it prints.");
+      "This link no longer works.Ask your agent to open the model again and use the new link.");
   } finally {
     await act(() => root.unmount());
     dom.window.close();

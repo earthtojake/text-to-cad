@@ -13,10 +13,11 @@ export default {
 
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "The CAD Viewer is not answering",
-  "app.engine.notRunning": "The engine is not running; the page reconnects when it is back.",
-  "app.engine.startIt": "Run cad run <script>.py or cad viewer to start it.",
-  "app.engine.linkReplaced": "This page's link was replaced; the page reconnects once its new link is opened.",
-  "app.engine.openNewLink": "Run cad viewer and open the link it prints.",
+  "app.engine.notRunning": "CAD is not running.",
+  "app.engine.startIt": "It starts again when your agent next uses CAD or you open the CAD app; this page reconnects on its own.",
+  "app.engine.linkReplaced": "This link no longer works.",
+  "app.engine.openNewLink": "Ask your agent to open the model again and use the new link.",
+  "app.engine.reload": "Reload",
 
   // The file view: opening, and the states where it stops.
   "file.opening": "Opening…",
