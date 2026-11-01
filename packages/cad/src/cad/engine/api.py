@@ -180,7 +180,7 @@ class Document:
         part's shape bytes, as an ``export.Source`` of this process. Nothing is built."""
         from cad.engine.export import Source
 
-        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd)})
+        answer = _ask({"op": "result", "id": self.id, "cwd": str(self.cwd), **_interpreter()})
         payload = base64.b64decode(answer.get("payload") or "")
         done = answer["done"]
         shapes, at = {}, 0
@@ -271,7 +271,7 @@ def hand_over(shape: Any, name: Any, *, animations: Any = None, frame: Any = Non
     ident = derived_id(scope, name)
     data = _handed_bytes(shape, name, animations)
     answer = _ask({"op": "shape", "id": ident, "name": name, "scope": scope, "program": _program(),
-                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii")})
+                   "cwd": os.getcwd(), "xbf": base64.b64encode(data).decode("ascii"), **_interpreter()})
     report = {"ok": True, "model": name, "id": ident, "url": (answer.get("done") or {}).get("url"),
               "source": {"script": scope, "name": name}, "kind": "shape", "bytes": len(data)}
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
@@ -325,6 +325,43 @@ def _failed(answer: dict[str, Any]) -> Exception:
             setattr(error, key, answer[key])
     error._engine_refusal = True  # type: ignore[attr-defined]  # the worker's, not this process's (``_error``)
     return error
+
+
+def _interpreter() -> dict[str, Any]:
+    """What an order that starts or reaches a script's worker says of the Python it comes from
+    (``contract.interpreter``: its executable, environment, release and worker contract), which the
+    server checks against its own contract and builds the script in; nothing from a base the server made
+    (``cad run``'s), whose scripts it builds in its own environment."""
+    from cad.engine.contract import interpreter
+
+    named = interpreter()
+    return {"interpreter": named} if named is not None else {}
+
+
+# The update notice a run of a script says once (``contract.notice``), as the build that heard the
+# server's release left it, and whether it was said: per process, so a forked child is a run of its own.
+_NOTICE: dict[str, Any] = {"pid": None, "line": None, "said": False}
+
+
+def _heard_release(server: Any) -> None:
+    """The server's release, as a build of this run's in its caller's own Python heard it: kept as the
+    line its run says once (``say_notice``) when it is another release than this library, under one
+    contract (the build ran)."""
+    from cad.engine.contract import notice
+
+    if _NOTICE["pid"] != os.getpid():
+        _NOTICE.update(pid=os.getpid(), line=None, said=False)
+    if _NOTICE["line"] is None and not _NOTICE["said"]:
+        _NOTICE["line"] = notice(server)
+
+
+def say_notice() -> None:
+    """The update notice this run heard (``_heard_release``), on stderr, once a run: after the report of
+    the model call that heard it, never in its way."""
+    if _NOTICE["pid"] != os.getpid() or not _NOTICE["line"] or _NOTICE["said"]:
+        return
+    _NOTICE["said"] = True
+    print(_NOTICE["line"], file=sys.stderr, flush=True)
 
 
 def _program() -> str | None:
@@ -392,8 +429,11 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 streamed = streamed or (log is not None and message.get("stream") == "model")
                 shown(message["log"] if message.get("stream") == "model" else f"  {message['log']}")
 
+            # The Python this script runs in, which the server builds it in (``contract.interpreter``).
+            named = _interpreter()
             order = {"op": "build", "script": str(script), "functions": functions,
-                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program()}
+                     "cwd": str(cwd), "verify": verify, "profile": profile, "run": _run(), "program": _program(),
+                     **named}
             try:
                 answer = _ask(order, relay, frames)
             except EngineError as error:
@@ -404,6 +444,8 @@ def _built(script: Path, functions: list[str] | None, *, verify: bool = False, p
                 # A dead worker's stderr tail is what this log just showed: said once.
                 raise EngineError(str(error).partition(WORKER_STDERR)[0]) from None
             reports, fresh = answer["done"], answer.get("worker", {}).get("fresh")
+            if named:
+                _heard_release(answer.get("release"))
     finally:
         if bar is not None:
             bar.close()

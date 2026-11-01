@@ -14,7 +14,12 @@ import os
 import sys
 from typing import Any
 
-__all__ = ["describe", "files", "given", "log", "number", "reported", "shown", "size", "weighed", "written"]
+__all__ = ["COMMAND", "SERVER", "describe", "files", "given", "log", "number", "reported", "shown", "size", "weighed",
+           "written"]
+
+# The server's distribution and its command, as every line of the library names them: one place to
+# rename either (the server names them in its own, ``cad_server._internal.launch``).
+SERVER, COMMAND = "cad-server", "cad"
 
 
 def log(text: str) -> None:

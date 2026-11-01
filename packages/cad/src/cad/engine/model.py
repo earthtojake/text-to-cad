@@ -255,6 +255,8 @@ class Model:
             _CONTEXT.program = previous
         if program:
             reported(built.models, built.wall, built.fresh, False)
+        # Once a run, after its report: the server is another release than this library, under one contract.
+        api.say_notice()
         if not built.ok:
             error = api.EngineError(next(row.get("error", "model failed") for row in built.models if not row.get("ok")))
             if program:
