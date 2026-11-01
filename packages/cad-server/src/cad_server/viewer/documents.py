@@ -110,7 +110,7 @@ class EngineDocuments:
             if serve is not None:
                 return serve
             serve = self._serves[ident] = _Serve()
-        threading.Thread(target=self._run, args=(serve, path), name="cadgen-engine-serve", daemon=True).start()
+        threading.Thread(target=self._run, args=(serve, path), name="cad-engine-serve", daemon=True).start()
         return serve
 
     def _run(self, serve: _Serve, path: str) -> None:

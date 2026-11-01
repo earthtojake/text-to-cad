@@ -97,7 +97,7 @@ class DrawingRouteFixture:
         """``POST /api/v1/documents``: ``(status, headers, body)``."""
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         try:
-            conn.request("POST", "/api/v1/documents", body=json.dumps(payload).encode(), headers={"x-cadgen-viewer": "1"})
+            conn.request("POST", "/api/v1/documents", body=json.dumps(payload).encode(), headers={"x-cad-viewer": "1"})
             response = conn.getresponse()
             return response.status, dict(response.getheaders()), response.read()
         finally:
@@ -206,7 +206,7 @@ class ItRefusesWhatItShould(DrawingRouteTestCase):
         api = json.loads(self.fixture.open({"path": self.fixture.path("plate.dxf")})[2])["api"]
         conn = http.client.HTTPConnection("127.0.0.1", self.fixture.port, timeout=10)
         try:
-            conn.request("POST", f"{api}/drawing", headers={"x-cadgen-viewer": "1"})
+            conn.request("POST", f"{api}/drawing", headers={"x-cad-viewer": "1"})
             response = conn.getresponse()
             body = response.read()
         finally:

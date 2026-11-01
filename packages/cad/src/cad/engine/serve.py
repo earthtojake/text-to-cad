@@ -572,7 +572,7 @@ def exit_with_parent() -> None:
         parent.join()
         os._exit(0)
 
-    threading.Thread(target=watch, name="cadgen-parent-watch", daemon=True).start()
+    threading.Thread(target=watch, name="cad-parent-watch", daemon=True).start()
 
 
 def _ready() -> bool:
@@ -658,7 +658,7 @@ class Mesher:
                 return job.future
             self._queued[priority].append(job)
             if self._dispatcher is None:
-                self._dispatcher = threading.Thread(target=self._dispatch, name="cadgen-pool-dispatch", daemon=True)
+                self._dispatcher = threading.Thread(target=self._dispatch, name="cad-pool-dispatch", daemon=True)
                 self._dispatcher.start()
             self._wake.notify_all()
         return job.future
@@ -1075,7 +1075,7 @@ class Server:
             self.thread = threading.Thread(target=self.http.serve_forever, daemon=True)
             self.thread.start()
         if self.budget is not None:
-            threading.Thread(target=self._pressured, name="cadgen-memory-pressure", daemon=True).start()
+            threading.Thread(target=self._pressured, name="cad-memory-pressure", daemon=True).start()
 
     def _pressured(self) -> None:
         """The pressure poller: each ``PRESSURE_PERIOD`` (or when woken), the system's signal; under
@@ -1842,7 +1842,7 @@ class Server:
                 with self.load_lock:
                     self.measuring.difference_update(known)
 
-        thread = threading.Thread(target=measure, name="cadgen-measure-later", daemon=True)
+        thread = threading.Thread(target=measure, name="cad-measure-later", daemon=True)
         thread.start()
         return thread
 

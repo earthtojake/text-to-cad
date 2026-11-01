@@ -65,7 +65,7 @@ class Jobs:
                "state": "queued", "stage": "Waiting for worker", "sequence": 0,
                "createdAt": self.clock(), "finishedAt": 0, "cancel": False, **fields}
         self.jobs[ident], self.requests[request_id] = job, ident
-        threading.Thread(target=self._execute, args=(job,), daemon=True, name="cadgen-operation").start()
+        threading.Thread(target=self._execute, args=(job,), daemon=True, name="cad-operation").start()
         return self.public(job)
 
     def _change(self, job, **fields):

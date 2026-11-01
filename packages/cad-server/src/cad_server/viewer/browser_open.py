@@ -53,7 +53,7 @@ def _remove_later(path: Path) -> None:
         except OSError:
             pass
 
-    threading.Thread(target=remove, name='cadgen-browser-open', daemon=True).start()
+    threading.Thread(target=remove, name='cad-browser-open', daemon=True).start()
 
 
 def display_refusal(environ=None) -> str | None:

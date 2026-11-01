@@ -113,7 +113,7 @@ try:
     def ask(path, body=None):
         connection = http.client.HTTPConnection('127.0.0.1', server.port, timeout=90)
         connection.request('POST' if body is not None else 'GET', path, body=body,
-                           headers={'Authorization': 'Bearer '+token, 'x-cadgen-viewer': '1'})
+                           headers={'Authorization': 'Bearer '+token, 'x-cad-viewer': '1'})
         response = connection.getresponse()
         data = response.read()
         connection.close()
@@ -168,7 +168,7 @@ finally:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=300)
         try:
             connection.request("POST", target, body=json.dumps(payload).encode(),
-                               headers={"Authorization": "Bearer " + self.token, "x-cadgen-viewer": "1"})
+                               headers={"Authorization": "Bearer " + self.token, "x-cad-viewer": "1"})
             response = connection.getresponse()
             return response.status, json.loads(response.read())
         finally:
@@ -293,7 +293,7 @@ finally:
             body = '' if payload is None else base64.b64encode(json.dumps(payload).encode()).decode()
             reply = proxy.handle('tools/call', {'name': 'cad_http', 'arguments':
                          {'method': method, 'url': f'http://cad.invalid{url}', 'body': body,
-                          'headers': {'x-cadgen-app': token, 'x-cadgen-viewer': '1'}}}, context)['structuredContent']
+                          'headers': {'x-cad-app': token, 'x-cad-viewer': '1'}}}, context)['structuredContent']
             body = base64.b64decode(reply.get("body") or "")
             return reply["status"], gzip.decompress(body) if reply.get("encoding") == "gzip" else body
 

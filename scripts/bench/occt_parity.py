@@ -280,7 +280,7 @@ def _served(doc: Path) -> tuple[str, str]:
     parsed = urlparse(answer["url"])
     kind = "step" if doc.suffix.lower() in (".step", ".stp") else "xbf"
     url = f"{parsed.scheme}://{parsed.netloc}/api/v1/documents/{kind}/{answer['doc']}"
-    headers = {"Authorization": f"Bearer {answer['token']}", "x-cadgen-viewer": "1"}
+    headers = {"Authorization": f"Bearer {answer['token']}", "x-cad-viewer": "1"}
     with urlopen(Request(f"{url}/mesh", data=b"", method="POST", headers=headers), timeout=900) as done:  # noqa: S310 - the engine, on loopback
         done.read()
     return url, answer["token"]

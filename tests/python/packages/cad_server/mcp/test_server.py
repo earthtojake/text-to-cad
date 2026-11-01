@@ -44,7 +44,7 @@ STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nver
 # 10 MiB the MCP TypeScript SDK's stdio reader stops at.
 MESSAGE_BOUND = MAX_REPLY_BYTES * 4 // 3 + 4096
 # What the page's client sends with every POST: the viewer refuses one without its header.
-GUARDED = {"x-cadgen-viewer": "1", "content-type": "application/json"}
+GUARDED = {"x-cad-viewer": "1", "content-type": "application/json"}
 
 
 def as_codex_spells_it(path: str) -> str:
@@ -139,7 +139,7 @@ class _Session(unittest.TestCase):
         dict body is a JSON POST, with the header the page's client sends."""
         if isinstance(body, dict):
             body, headers = json.dumps(body).encode("utf-8"), {**GUARDED, **(headers or {})}
-        reply = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cadgen-app": self.server._app_token, **(headers or {})},
+        reply = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cad-app": self.server._app_token, **(headers or {})},
                                        "body": base64.b64encode(body).decode("ascii")})["structuredContent"]
         data = base64.b64decode(reply.get("body") or "")
         return reply["status"], json.loads(data) if reply["headers"].get("content-type", "").startswith("application/json") else data
@@ -232,17 +232,17 @@ class TabServerTest(_Session):
         for url in ("/api/v1/server", "/api/v1/local/pick", "/api/v1/documents", "/api/v1/local/files?path=x", "/api/v1/settings",
                     "/api/v1/local/activity", "/api/v1/settings?share=true", "/app"):
             with self.subTest(url=url):
-                blocked = request(url, {"x-cadgen-viewer": "1", "range": "bytes=0-20", "if-range": "guessed"})
+                blocked = request(url, {"x-cad-viewer": "1", "range": "bytes=0-20", "if-range": "guessed"})
                 self.assertTrue(blocked["isError"])
                 self.assertNotIn("structuredContent", blocked)
         for bad in ("guessed", other._app_token):
-            self.assertTrue(request("/api/v1/settings", {"x-cadgen-app": bad})["isError"])
-        self.assertEqual(request("/api/v1/server", {"X-Cadgen-App": token})["structuredContent"]["status"], 200)
+            self.assertTrue(request("/api/v1/settings", {"x-cad-app": bad})["isError"])
+        self.assertEqual(request("/api/v1/server", {"X-Cad-App": token})["structuredContent"]["status"], 200)
         # App opt-in still reaches the ordinary route and its cross-site guard.
         telemetry = {"telemetry": {"share": True}}
-        self.assertEqual(request("/api/v1/settings", {"x-cadgen-app": token}, telemetry, "PUT")["structuredContent"]["status"], 403)
+        self.assertEqual(request("/api/v1/settings", {"x-cad-app": token}, telemetry, "PUT")["structuredContent"]["status"], 403)
         with mock.patch.object(self.server.analytics, "choose", return_value={"saved": True}) as choose:
-            reply = request("/api/v1/settings", {"x-cadgen-app": token, **GUARDED}, telemetry, "PUT")
+            reply = request("/api/v1/settings", {"x-cad-app": token, **GUARDED}, telemetry, "PUT")
             self.assertEqual(reply["structuredContent"]["status"], 200)
             choose.assert_called_once_with(True, by="app")
         # Removed settings routes have exactly the unknown-route behavior, even with a stale file.
@@ -250,7 +250,7 @@ class TabServerTest(_Session):
         settings.write_text('{"features":{"quickEdit":false}}', encoding="utf-8")
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": str(self.tmp)}):
             for method, expected in (("GET", 404), ("POST", 404)):
-                self.assertEqual(request("/api/v1/features", {"x-cadgen-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
+                self.assertEqual(request("/api/v1/features", {"x-cad-app": token, **GUARDED}, method=method)["structuredContent"]["status"], expected)
 
     def test_the_page_tools_answer_only_the_page_that_holds_the_session_s_capability(self) -> None:
         # The host is asked to keep app-only tools from the model; the server does not rely on it.
@@ -847,16 +847,16 @@ class InlineServerTest(_Session):
                 self.assertTrue(refused["isError"])
                 self.assertNotIn("structuredContent", refused)
         # A wrong capability is refused in words; another session's is wrong here.
-        stale = agent("GET", "/api/v1/server", headers={"x-cadgen-app": token[:-1] + "x"})
+        stale = agent("GET", "/api/v1/server", headers={"x-cad-app": token[:-1] + "x"})
         self.assertTrue(stale["isError"])
         self.assertIn("open CAD again", stale["content"][0]["text"])
         other = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state-other"))
         other.handle("initialize", initialize_params({"protocolVersion": "2025-06-18", "capabilities": self.offered,
                                                      "clientInfo": self.client}), None)
         self.assertTrue(other.handle("tools/call", {"name": "cad_http", "arguments": {"method": "GET", "url": "/api/v1/server",
-                        "headers": {"x-cadgen-app": token}}}, RequestContext(1, {}))["isError"])
+                        "headers": {"x-cad-app": token}}}, RequestContext(1, {}))["isError"])
         # With it, the page reaches every viewer route; the header never reaches the route.
-        reply = agent("GET", "/api/v1/server", headers={"x-cadgen-app": token})["structuredContent"]
+        reply = agent("GET", "/api/v1/server", headers={"x-cad-app": token})["structuredContent"]
         self.assertEqual(reply["status"], 200)
 
 
@@ -871,7 +871,7 @@ class TextServerTest(_Session):
         self.assertNotIn("_meta", self.call("cad_show", {"source": self.bracket}))
         # Nor the page's tools: they are not listed, and a call naming one is refused.
         with self.assertRaises(RpcError):
-            self.call("cad_http", {"method": "GET", "url": "/api/v1/server", "headers": {"x-cadgen-app": self.server._app_token}})
+            self.call("cad_http", {"method": "GET", "url": "/api/v1/server", "headers": {"x-cad-app": self.server._app_token}})
 
     def test_cad_show_opens_the_model_in_the_browser_and_says_so_with_its_url(self) -> None:
         tools = self.server.handle("tools/list", {}, None)["tools"]
@@ -1461,7 +1461,7 @@ class TunnelBoundTest(_Session):
 
     def sized(self, method: str, url: str, headers: dict | None = None, body: bytes = b"") -> tuple[dict, int]:
         """The reply, and the length of the message that carried it."""
-        result = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cadgen-app": self.server._app_token, **(headers or {})},
+        result = self.call("cad_http", {"method": method, "url": url, "headers": {"x-cad-app": self.server._app_token, **(headers or {})},
                                         "body": base64.b64encode(body).decode("ascii")})
         return result["structuredContent"], len(json.dumps({"jsonrpc": "2.0", "id": 1, "result": result}, separators=(",", ":")))
 

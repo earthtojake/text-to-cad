@@ -99,7 +99,7 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string,
       call('cad_capture_reply', { requestId, ...reply, app: appToken }),
     /** One request to the viewer's routes (`host/tunnel.ts`): everything else the page asks of the server. */
     http: (args: { method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
-      call<HttpReply>('cad_http', { ...args, headers: { ...args.headers, 'x-cadgen-app': appToken } }, options),
+      call<HttpReply>('cad_http', { ...args, headers: { ...args.headers, 'x-cad-app': appToken } }, options),
   };
 }
 export type Server = ReturnType<typeof createServer>;

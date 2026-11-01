@@ -74,7 +74,7 @@ class RobotRouteFixture:
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         try:
             conn.request("POST", "/api/v1/documents", body=json.dumps({"path": str(file_param)}).encode(),
-                         headers={"x-cadgen-viewer": "1"})
+                         headers={"x-cad-viewer": "1"})
             response = conn.getresponse()
             return response.status, json.loads(response.read())
         finally:

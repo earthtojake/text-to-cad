@@ -84,7 +84,7 @@ class Update:
                 self.state = {"state": "idle", "target": None, "progress": None, "error": None}
                 return dict(self.state)
             self.state = {**self.state, "target": target}
-            self.thread = threading.Thread(target=self._run, args=(target, server), name="cadgen-update", daemon=True)
+            self.thread = threading.Thread(target=self._run, args=(target, server), name="cad-update", daemon=True)
             self.thread.start()
             return dict(self.state)
 

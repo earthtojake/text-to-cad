@@ -60,7 +60,7 @@ async function bodyOf(reply: Reply): Promise<Uint8Array<ArrayBuffer>> {
 /** The CAD app's code through the call the host carries to CAD's server: its first part, then the rest a range at a time. */
 export async function viaTunnel(bridge: Pick<CadShell['bridge'], 'callTool'>, token: string): Promise<string> {
   const ask = async (range: string, etag?: string): Promise<Reply> => {
-    const headers: Record<string, string> = { 'x-cadgen-app': token, range, ...(etag ? { 'if-range': etag } : {}) };
+    const headers: Record<string, string> = { 'x-cad-app': token, range, ...(etag ? { 'if-range': etag } : {}) };
     const result = await bridge.callTool('cad_http', { method: 'GET', url: `${TUNNEL_ORIGIN}${APP_ROUTE}`, headers, body: '' },
       { timeoutMs: 120_000 });
     if (result.isError) throw new Error(toolText(result, 'CAD could not load its app.'));

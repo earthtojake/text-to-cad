@@ -194,7 +194,7 @@ _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": F
 # page's tools refuses a call without it: a host is asked to keep app-only tools from the model, and the
 # server does not rely on it. ``cad_http`` takes it as a header, the others as an argument.
 _APP_TOKEN_META = "dev.texttocad/httpToken"
-_APP_TOKEN_HEADER = "x-cadgen-app"
+_APP_TOKEN_HEADER = "x-cad-app"
 _APP_TOKEN_ARGUMENT = "app"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Browser (its file menu's Open in): this process opens the web viewer's page of the document the card
@@ -433,7 +433,7 @@ class Server:
             # processes that no plugin told (``cad_server._internal.channel.remember``), in the background.
             from cad_server._internal.channel import remember
 
-            threading.Thread(target=remember, args=(transport["channel"],), name="cadgen-channel", daemon=True).start()
+            threading.Thread(target=remember, args=(transport["channel"],), name="cad-channel", daemon=True).start()
         self._peer_browser = transport.get("browser") if isinstance(transport.get("browser"), dict) else None
         self._declared = why.startswith("declared")
         self.tabs, self.text = presentation == "tabs", presentation == "text"

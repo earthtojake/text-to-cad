@@ -17,7 +17,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   installed from (its channel, ``cad_server/_internal/channel.py``: a plugin directory, the Cursor
   Marketplace, GitHub, a development install, or ``unknown``), the operating system and processor,
   and from the apps the agent app's name and version and how that app shows CAD (tabs, inline or
-  text) -- or, from the browser viewer, ``cadgen-viewer`` and ``browser``; a ``cli`` batch names no app;
+  text) -- or, from the browser viewer, ``cad-viewer`` and ``browser``; a ``cli`` batch names no app;
 - ``tool`` (the CAD app): how many times each CAD tool was called, and how many of those failed -- a call
   naming no tool of cadgen's counted as ``cad_unknown``'s (``UNKNOWN_TOOL``), never by the name it sent;
 - ``tool_failure`` (the CAD app): how many of a tool's calls failed for each reason (``FAILURES``): one
@@ -51,7 +51,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   an axis) or anything of the file's;
 - ``exception``: a crash in cadgen's own code (``signature``), and how many times it happened that
   window -- where (``WHERE``), the error's type, whether the process went on, and its innermost frames
-  in code that may be named: each a file inside cadgen, the standard library or one of cadgen's
+  in code that may be named: each a file inside our packages (``cad/<path>``, ``cad_server/<path>``), the standard library or one of our
   dependencies (a page's: its script asset), a function and a line, the person's own code a bare
   ``<user>``; a build worker that died, its exit status. Never the error's message. Each process
   reports its own (``report``, ``collect_crashes``); a command's and a worker's are kept with its counts,
@@ -465,7 +465,14 @@ _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 # there, it can never be a mistake in cadgen's code -- never because it is frequent -- and in the same change the
 # receiver drops it from the releases already out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing
 # anything at once.
-_THEIR_CYCLE = frozenset({"cadgen/engine/model.py"})
+_THEIR_CYCLE = frozenset({"cad/engine/model.py"})
+# The packages whose code is ours, each frame of theirs named by the package: ``cad/<path>``, ``cad_server/<path>``.
+OUR_PACKAGES = ("cad", "cad_server")
+
+
+def _is_ours(file: str) -> bool:
+    """Whether a frame's file, as a crash names it, is in our own code."""
+    return file.split("/", 1)[0] in OUR_PACKAGES
 
 
 def _installation_gone(error: BaseException) -> bool:
@@ -831,7 +838,7 @@ def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POS
 
         data = json.dumps(payload, separators=(",", ":")).encode("utf-8") if payload is not None else None
         request = urllib.request.Request(url, data=data, method=method,
-                                         headers={"Content-Type": "application/json", "User-Agent": "cadgen"})
+                                         headers={"Content-Type": "application/json", "User-Agent": "cad"})
         try:
             with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - http(s) only (`endpoint`)
                 return "ok" if 200 <= response.status < 300 else "failed"
@@ -875,7 +882,7 @@ def _distribution(name: str) -> str:
 
 @functools.cache
 def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
-    """Where code a crash may name lives, the longest first: cadgen's own package, the folders installed
+    """Where code a crash may name lives, the longest first: our own packages, the folders installed
     packages live in, and the standard library's; and the import names of cadgen's dependencies, all the
     way down -- the only installed packages named, so a package of the person's own is never."""
     import site
@@ -885,8 +892,8 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
     import cad
     import cad_server
 
-    # The library's and the server's own code, named alike as every release has named it: ``cadgen/<path>``.
-    places = [(os.path.realpath(os.path.dirname(package.__file__)), "cadgen") for package in (cad_server, cad)]
+    # The library's and the server's own code, each named by its package (``OUR_PACKAGES``).
+    places = [(os.path.realpath(os.path.dirname(package.__file__)), package.__name__) for package in (cad_server, cad)]
     paths = sysconfig.get_paths()
     sites = [*site.getsitepackages(), paths["purelib"], paths["platlib"],
              *(entry for entry in sys.path if entry.endswith(("site-packages", "dist-packages")))]
@@ -913,7 +920,7 @@ def _places() -> tuple[tuple[tuple[str, str], ...], frozenset[str]]:
 
 
 def _located(path: str) -> tuple[str, str] | None:
-    """Where a frame's file lives -- ``cadgen``, ``site`` (one of cadgen's dependencies) or ``stdlib`` -- and
+    """Where a frame's file lives -- ``ours``, ``site`` (one of our dependencies) or ``stdlib`` -- and
     its path inside that, as a crash names it; or ``None``, for the person's own code, or anything else."""
     if path.startswith("<frozen "):
         return "stdlib", "<frozen>"
@@ -923,8 +930,8 @@ def _located(path: str) -> tuple[str, str] | None:
         if not resolved.startswith(root + os.sep):
             continue
         inside = resolved[len(root) + 1:].replace(os.sep, "/")
-        if kind == "cadgen":
-            inside = f"cadgen/{inside}"
+        if kind in OUR_PACKAGES:
+            inside, kind = f"{kind}/{inside}", "ours"
         elif kind == "site" and inside.split("/", 1)[0].split(".", 1)[0] not in ours:
             return None
         elif kind == "stdlib" and ("site-packages/" in inside or "dist-packages/" in inside):
@@ -934,8 +941,8 @@ def _located(path: str) -> tuple[str, str] | None:
 
 
 def _file_of(path: str) -> str | None:
-    """A frame's file as a crash names it: its path inside cadgen, the standard library or one of
-    cadgen's dependencies -- or ``None``, for the person's own code, or anything else."""
+    """A frame's file as a crash names it: its path inside our packages, the standard library or one of
+    our dependencies -- or ``None``, for the person's own code, or anything else."""
     found = _located(path)
     return found[1] if found else None
 
@@ -991,7 +998,7 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
     decisive = None
     for filename, function, line in raw:
         file = _file_of(filename)
-        if file is None or file.startswith("cadgen/"):
+        if file is None or _is_ours(file):
             decisive = (file, filename, line)
         if file is None:
             if not frames or frames[-1]["file"] != USER:
@@ -1004,7 +1011,7 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
 def _their_cycle(frames: list[dict[str, Any]]) -> bool:
     """A recursion that is the person's: through no cadgen code but the wrapper that calls their model."""
     return any(frame["file"] == USER for frame in frames) and \
-        all(frame["file"] in _THEIR_CYCLE for frame in frames if frame["file"].startswith("cadgen/"))
+        all(frame["file"] in _THEIR_CYCLE for frame in frames if _is_ours(frame["file"]))
 
 
 def _mistake(error: BaseException, filename: str, line: int) -> bool:
@@ -1112,20 +1119,20 @@ def _named(error: BaseException, vocabulary: frozenset[str]) -> str | None:
 
 
 def _whose(error: BaseException) -> tuple[str | None, tuple[str, str, int] | None]:
-    """Whose code ``error`` came from: where its innermost frame lives (``cadgen``, ``site``, ``stdlib``, or
+    """Whose code ``error`` came from: where its innermost frame lives (``ours``, ``site``, ``stdlib``, or
     ``user``: the person's), and its innermost frame of cadgen's or the person's -- whose, its file, its line."""
     innermost, decisive = None, None
     for frame, line in traceback.walk_tb(error.__traceback__):
         found = _located(frame.f_code.co_filename)
         innermost = found[0] if found else "user"
-        if innermost in ("cadgen", "user"):
+        if innermost in ("ours", "user"):
             decisive = (innermost, frame.f_code.co_filename, int(line or 0))
     return innermost, decisive
 
 
 def _bug(error: BaseException, decisive: tuple[str, str, int] | None) -> bool:
     """A mistake in cadgen's own code: what ``signature(bugs_only=True)`` reports as a crash."""
-    return decisive is not None and decisive[0] == "cadgen" and _mistake(error, decisive[1], decisive[2])
+    return decisive is not None and decisive[0] == "ours" and _mistake(error, decisive[1], decisive[2])
 
 
 def build_failure(error: BaseException) -> str:
@@ -1516,7 +1523,7 @@ class Recorder:
     @_guarded(lambda: None)
     def started(self, *, client: dict[str, Any], presentation: str) -> None:
         """Whose use this process's batches count: the agent app a session's initialize names, and how it shows CAD
-        (``cad_server.mcp.server``), or the browser viewer's page as the client ``cadgen-viewer`` in a ``browser``
+        (``cad_server.mcp.server``), or the browser viewer's page as the client ``cad-viewer`` in a ``browser``
         (``cad_server.viewer.engine_app``)."""
         name, version = client.get("name"), client.get("version")
         with self._lock:
@@ -1820,7 +1827,7 @@ class Recorder:
             while not stop.wait(self._interval):
                 self.flush()
 
-        threading.Thread(target=loop, name="cadgen-telemetry", daemon=True).start()
+        threading.Thread(target=loop, name="cad-telemetry", daemon=True).start()
 
     @_guarded(lambda: None)
     def close(self) -> None:
@@ -1853,6 +1860,6 @@ class Recorder:
             except Exception:  # noqa: BLE001 - a thread's traceback would land in the host's logs
                 LOG.debug("telemetry background work failed", exc_info=True)
 
-        thread = threading.Thread(target=run, name="cadgen-telemetry-once", daemon=True)
+        thread = threading.Thread(target=run, name="cad-telemetry-once", daemon=True)
         thread.start()
         return thread

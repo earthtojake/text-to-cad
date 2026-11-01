@@ -95,7 +95,7 @@ def put(target: Path | str, write: Callable[[Path], None], *, compare: bool = Tr
         stage = None
     try:
         with contextlib.ExitStack() as aside:
-            folder = stage or Path(aside.enter_context(tempfile.TemporaryDirectory(prefix="cadgen-")))
+            folder = stage or Path(aside.enter_context(tempfile.TemporaryDirectory(prefix="cad-")))
             temporary = folder / name
             write(temporary)
             size = temporary.stat().st_size

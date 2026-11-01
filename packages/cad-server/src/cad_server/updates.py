@@ -244,7 +244,7 @@ def refresh() -> threading.Thread | None:
     try:
         if not (checking() and _due(_load(_cache()), "checked", time.time())):
             return None
-        thread = threading.Thread(target=_quietly, name="cadgen-update-check", daemon=True)
+        thread = threading.Thread(target=_quietly, name="cad-update-check", daemon=True)
         thread.start()
         return thread
     except Exception:  # noqa: BLE001 - a check that cannot start is tried at the next one

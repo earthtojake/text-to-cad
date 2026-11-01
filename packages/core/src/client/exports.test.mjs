@@ -19,7 +19,7 @@ test('export requests stay in the viewer session; the file is a plain session UR
   assert.deepEqual([calls[0].url, calls[0].method, calls[0].body, calls[0].signal], ['https://example.test/s/session/api/v1/exports', undefined, undefined, abort.signal]);
   // Made by its document's route; read in the exports' own family.
   assert.equal(calls[1].url, 'https://example.test/s/session/api/v1/documents/doc/exports');
-  assert.equal(calls[1].headers['x-cadgen-viewer'], '1');
+  assert.equal(calls[1].headers['x-cad-viewer'], '1');
   assert.deepEqual(JSON.parse(calls[1].body), request);
   assert.equal(calls[2].url, 'https://example.test/s/session/api/v1/exports/job?after=7&wait=25');
   assert.equal(calls[2].signal, abort.signal);

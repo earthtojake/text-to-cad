@@ -47,7 +47,7 @@ class CardCorsTest(unittest.TestCase):
         self.assertEqual(status, 204)
         self.assertEqual(self.cors(headers), {
             "access-control-allow-origin": CARD, "access-control-allow-methods": "GET, HEAD, POST, PUT, PATCH, DELETE",
-            "access-control-allow-headers": "authorization, content-type, range, if-range, x-cadgen-viewer",
+            "access-control-allow-headers": "authorization, content-type, range, if-range, x-cad-viewer",
             "access-control-max-age": "600", "access-control-allow-private-network": "true"})
         self.assertEqual(headers["vary"], "Origin")
         # A change's preflight -- a POST, a PUT, a PATCH, a DELETE -- with the guard header and a JSON body's type.
@@ -56,7 +56,7 @@ class CardCorsTest(unittest.TestCase):
             with self.subTest(method=method):
                 status, _ = self.ask("OPTIONS", path, {
                     "Origin": CARD, "Access-Control-Request-Method": method,
-                    "Access-Control-Request-Headers": "authorization,content-type,x-cadgen-viewer"})
+                    "Access-Control-Request-Headers": "authorization,content-type,x-cad-viewer"})
                 self.assertEqual(status, 204)
         for origin in (CARD, "null"):  # an opaque sandbox's origin is "null", echoed as such
             with self.subTest(origin=origin):

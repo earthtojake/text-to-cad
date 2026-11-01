@@ -11,7 +11,7 @@ from cad_server.viewer.response import Request
 
 
 def request(path, method='GET', query=()):
-    return Request(raw_method=method, path=path, query=list(query), headers={'x-cadgen-viewer': '1'}, read_body=lambda: b'')
+    return Request(raw_method=method, path=path, query=list(query), headers={'x-cad-viewer': '1'}, read_body=lambda: b'')
 
 
 class DocumentDispatchTest(unittest.TestCase):

@@ -55,7 +55,7 @@ def _stem(name: str) -> str:
 
 
 def _directory() -> Path:
-    return Path(tempfile.mkdtemp(prefix="cadgen-prompt-files-"))
+    return Path(tempfile.mkdtemp(prefix="cad-prompt-files-"))
 
 
 class PromptFiles:

@@ -20,7 +20,7 @@ from urllib.request import Request, urlopen
 
 
 def _get(url: str, token: str, method: str = "GET") -> bytes:
-    headers = {"Authorization": f"Bearer {token}", **({"x-cadgen-viewer": "1"} if method == "POST" else {})}
+    headers = {"Authorization": f"Bearer {token}", **({"x-cad-viewer": "1"} if method == "POST" else {})}
     request = Request(url, data=b"" if method == "POST" else None, method=method, headers=headers)
     with urlopen(request, timeout=900) as answer:  # noqa: S310 - loopback engine
         return answer.read()

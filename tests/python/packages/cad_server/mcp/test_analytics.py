@@ -85,9 +85,9 @@ class _Tmp(unittest.TestCase):
 
     def agent(self, server: Server, method: str, url: str, body: dict | None = None, *, app: str | None = None) -> dict:
         """The same request with no capability, as an agent would send it: the tool's result."""
-        headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if body is not None else {}
+        headers = {"x-cad-viewer": "1", "content-type": "application/json"} if body is not None else {}
         if app is not None:
-            headers["x-cadgen-app"] = app
+            headers["x-cad-app"] = app
         return self.call(server, "cad_http", {"method": method, "url": url, "headers": headers,
                                               "body": base64.b64encode(json.dumps(body).encode() if body is not None else b"").decode("ascii")})
 
@@ -694,7 +694,7 @@ class SenderTest(_Tmp):
         # the viewer's use from the apps' by client. The CAD app's names the agent app a session's initialize does
         # (``Server``), none before.
         self.assertEqual((viewer["client"], viewer["presentation"]),
-                         ({"name": "cadgen-viewer", "version": __version__}, "browser"))
+                         ({"name": "cad-viewer", "version": __version__}, "browser"))
         self.assertEqual([key for key in ("client", "presentation") if key in app], [])
 
     def test_a_batch_names_the_version_its_installation_runs_as(self) -> None:
@@ -737,7 +737,7 @@ class SenderTest(_Tmp):
         self.assertEqual(commands["install"], own["install"])
         self.assertNotEqual(commands["batch"], own["batch"])
         self.assertNotEqual(commands["session"], own["session"])
-        # The viewer's recorder likewise: the spool's batch is `cli`, its own the browser page's (`cadgen-viewer`).
+        # The viewer's recorder likewise: the spool's batch is `cli`, its own the browser page's (`cad-viewer`).
         viewer.viewed()
         self.assertTrue(spool({"features": ["drawing"]}, path=self.path))
         self.assertTrue(viewer.flush())
@@ -745,7 +745,7 @@ class SenderTest(_Tmp):
         self.assertEqual((commands["process"], commands.get("client"), commands["events"]),
                          ("cli", None, [{"name": "feature", "feature": "drawing", "count": 1}]))
         self.assertEqual((own["process"], own["client"]["name"], own["presentation"], own["events"]),
-                         ("viewer", "cadgen-viewer", "browser", [{"name": "view", "calls": 1}]))
+                         ("viewer", "cad-viewer", "browser", [{"name": "view", "calls": 1}]))
         # With nothing spooled, an app's flush sends its own batch alone; with nothing of its own, the spool's alone.
         app.viewed()
         self.assertTrue(app.flush())

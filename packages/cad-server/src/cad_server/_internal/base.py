@@ -334,7 +334,7 @@ class Making:
             if installation.kernel or complete(where(installation)) is not None:
                 return False
             self.state, self.lines, self.error, self.since = "making", [], None, time.time()
-        threading.Thread(target=self._make, name="cadgen-base", daemon=True).start()
+        threading.Thread(target=self._make, name="cad-base", daemon=True).start()
         return True
 
     def _said(self, line: str) -> None:

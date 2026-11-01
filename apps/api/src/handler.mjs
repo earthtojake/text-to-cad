@@ -51,7 +51,7 @@ const RELEASE = /^\d{1,3}\.\d{1,3}\.\d{1,3}$/;
 const senderOf = batch => {
   const parts = [];
   if (Number.isInteger(batch?.schema) && batch.schema >= 0 && batch.schema < 100) parts.push(`schema ${batch.schema}`);
-  if (typeof batch?.version === 'string' && RELEASE.test(batch.version)) parts.push(`cadgen ${batch.version}`);
+  if (typeof batch?.version === 'string' && RELEASE.test(batch.version)) parts.push(`release ${batch.version}`);
   return parts.length ? ` (${parts.join(', ')})` : '';
 };
 // Which endpoint, by a name of ours: a path is the caller's to choose.

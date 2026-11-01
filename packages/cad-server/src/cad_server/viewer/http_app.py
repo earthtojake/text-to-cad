@@ -9,7 +9,7 @@ browser gates defend against cross-origin requests:
   re-resolves to loopback and the browser treats us as same-origin. Skipped when
   bound non-loopback, matching Jupyter's ``allow_remote_access``.
 * Every request that changes something -- a POST, PUT, PATCH or DELETE (``CHANGING_METHODS``:
-  the model library, a person's settings, a prompt's files) -- requires an ``x-cadgen-viewer``
+  the model library, a person's settings, a prompt's files) -- requires an ``x-cad-viewer``
   header. A cross-origin POST whose params ride the query string is otherwise a no-preflight
   "simple request"; a custom header forces a preflight instead.
 
@@ -57,7 +57,7 @@ import threading
 
 _EXPORTS_LOCK = threading.Lock()
 
-POST_GUARD_HEADER = "x-cadgen-viewer"
+POST_GUARD_HEADER = "x-cad-viewer"
 # A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
 _LIBRARY_BODY_LIMIT = 768 * 1024
 # A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.

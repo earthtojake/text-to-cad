@@ -65,7 +65,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    if (url === '/api/v1/settings' && init.body) guards.push(init.headers?.['x-cad-viewer']);
     const telemetry = init.body ? { share: false, reason: 'choice', policy: 'p' } : { share: false, reason: 'untold', policy: 'p' };
     const reply = isCatalog(url, init) ? catalogOf(url) : url === '/api/v1/server' ? { notice }
       : url === '/api/v1/local/update' ? { notice, release: '0.8.1', update: { state: 'working', target: '0.9.0', progress: { stage: 'install', done: 0, total: 4 } } }

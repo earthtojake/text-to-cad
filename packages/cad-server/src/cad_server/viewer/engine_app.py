@@ -93,7 +93,7 @@ TOKEN_NEEDED_PAGE = (_PAGE_HEAD + "<h1>This browser can't open CAD yet.</h1>" + 
 # in the query, not the user's token (a native client's, which needs no CORS), and never ``/mcp``.
 # The bind stays loopback, and the Host and token gates run first.
 CARD_METHODS = ('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE')
-CARD_HEADERS = ('authorization', 'content-type', 'range', 'if-range', 'x-cadgen-viewer')
+CARD_HEADERS = ('authorization', 'content-type', 'range', 'if-range', 'x-cad-viewer')
 _CARD_EXPOSED = 'content-length, content-range, etag'
 _PREFLIGHT_SECONDS = 600
 
@@ -223,7 +223,7 @@ class EngineApp:
         # itself, of this version, shown in a browser -- the page's usage, told from the apps' by client.
         self.analytics = Recorder(process="app")
         self.viewer_analytics = Recorder(process="viewer")
-        self.viewer_analytics.started(client={"name": "cadgen-viewer", "version": __version__}, presentation="browser")
+        self.viewer_analytics.started(client={"name": "cad-viewer", "version": __version__}, presentation="browser")
         self.analytics.start()
         self.viewer_analytics.start()
 

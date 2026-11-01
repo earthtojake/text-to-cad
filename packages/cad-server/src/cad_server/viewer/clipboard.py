@@ -16,7 +16,7 @@ def copy_png(data: bytes) -> None:
         raise ValueError("Expected a PNG image of at most 20 MiB")
     if sys.platform == "darwin":
         # Only the generated temporary path is passed as data, never script text.
-        with tempfile.TemporaryDirectory(prefix="cadgen-clipboard-") as directory:
+        with tempfile.TemporaryDirectory(prefix="cad-clipboard-") as directory:
             image = Path(directory) / "snapshot.png"
             image.write_bytes(data)
             subprocess.run(["/usr/bin/osascript", "-e", 'on run argv\nset the clipboard to (read POSIX file (item 1 of argv) as «class PNGf»)\nend run', str(image)], check=True, capture_output=True, timeout=10)

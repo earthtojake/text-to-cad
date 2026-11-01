@@ -44,7 +44,7 @@ class LibraryTest(unittest.TestCase):
     def request(self, method: str, path: str, body: dict | None = None) -> tuple[int, bytes]:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         try:
-            headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if body is not None else {}
+            headers = {"x-cad-viewer": "1", "content-type": "application/json"} if body is not None else {}
             connection.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
             response = connection.getresponse()
             return response.status, response.read()
@@ -139,7 +139,7 @@ class LibraryTest(unittest.TestCase):
         self.change("open", str(self.model))
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
         try:
-            connection.request("DELETE", f"/api/v1/documents/{file_id(self.model)}", headers={"x-cadgen-viewer": "1"})
+            connection.request("DELETE", f"/api/v1/documents/{file_id(self.model)}", headers={"x-cad-viewer": "1"})
             response = connection.getresponse()
             self.assertEqual((response.status, response.read()), (204, b""))
         finally:

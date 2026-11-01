@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { rowsOf, uuidV5 } from './events.mjs';
-import { EVENTS, missingSettings, posthogStore, READY_TTL_MS, SETTINGS, settingsOf } from './posthog.mjs';
+import { EVENTS, exceptionOf, missingSettings, posthogStore, READY_TTL_MS, SETTINGS, settingsOf } from './posthog.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -262,4 +262,13 @@ test('the host names its settings, and health names any missing or not what Post
   assert.deepEqual(settingsOf(env), { region: 'us', projectKey: 'phc_project', personalKey: 'phx_personal', projectId: '42' });
   assert.deepEqual(missingSettings({}), SETTINGS);
   assert.deepEqual(missingSettings({ ...env, POSTHOG_REGION: 'asia', POSTHOG_PROJECT_ID: 'my-project' }), ['POSTHOG_REGION', 'POSTHOG_PROJECT_ID']);
+});
+
+test("0.10's frames are ours by package, and 0.8's by the one package it was", () => {
+  const row = { where: 'tool', type: 'KeyError', handled: true, frames: [
+    { file: 'cad/engine/model.py', function: 'model', line: 1 }, { file: 'cad_server/mcp/server.py', function: 'Server._call', line: 2 },
+    { file: 'cadgen/mcp/server.py', function: 'Server._call', line: 3 }, { file: 'cadquery/occ_impl/shapes.py', function: 'f', line: 4 },
+    { file: 'build123d/topology.py', function: 'g', line: 5 }, { file: '<user>', function: '<user>', line: 0 }] };
+  const [{ stacktrace }] = exceptionOf(row);
+  assert.deepEqual(stacktrace.frames.map(frame => frame.in_app), [true, true, true, false, false, false]);
 });

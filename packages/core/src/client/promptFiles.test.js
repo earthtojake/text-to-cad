@@ -17,7 +17,7 @@ test("a prompt saves JSON in one request without polling; a JSON file is read by
     'POST http://cad.invalid/api/v1/local/prompt-files',
   ]);
   assert.deepEqual(JSON.parse(calls[0].body), { ...request, acceptInline: true });
-  assert.ok(calls.every(call => call.headers['x-cadgen-viewer'] === '1'));
+  assert.ok(calls.every(call => call.headers['x-cad-viewer'] === '1'));
   const json = await files.read('/tmp/p/a-1.snapshot.json');
   assert.equal(json.type, 'application/json');
   assert.equal(calls.at(-1).url, 'http://cad.invalid/api/v1/local/prompt-files/a-1.snapshot.json');

@@ -87,7 +87,7 @@ it('an engine the probe reaches runs the whole card over direct HTTP: the link a
   expect(asked.map(request => new URL(request.url).pathname)).toEqual(expect.arrayContaining(['/api/v1/server', '/api/v1/documents']));
   for (const request of asked) {
     expect(request.headers.get('authorization')).toBe('Bearer 1893456000.mac');
-    expect(request.headers.has('x-cadgen-app')).toBe(false);
+    expect(request.headers.has('x-cad-app')).toBe(false);
     expect(request.credentials).toBe('omit');
   }
   // The host was asked once, the check that found it refuses; never again, and no view sync.

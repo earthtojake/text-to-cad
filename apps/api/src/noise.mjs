@@ -10,14 +10,17 @@
  * a row is not a refusal: the batch is still taken, and its other rows stored.
  */
 
+import { OUR_FRAMES } from './events.mjs';
+
 const USER = '<user>';
 // Python's names for a connection the other end closed or refused: `ConnectionError` and its subclasses.
 const CONNECTION_ERRORS = new Set(['ConnectionError', 'BrokenPipeError', 'ConnectionAbortedError',
   'ConnectionResetError', 'ConnectionRefusedError']);
 // What a person's interrupt or logout stops a build worker with: SIGTERM, SIGINT, SIGHUP, as a negative exit status.
 const STOPPED = new Set([-15, -2, -1]);
-// The only cadgen code a person's own recursion runs through: the decorator wrapper that calls their model.
-const THEIR_CYCLE = new Set(['cadgen/authoring.py']);
+// The only code of ours a person's own recursion runs through: the decorator wrapper that calls their model
+// (0.7's `authoring.py`, then `engine/model.py`: `cadgen/` before 0.10, `cad/` from it).
+const THEIR_CYCLE = new Set(['cadgen/authoring.py', 'cadgen/engine/model.py', 'cad/engine/model.py']);
 
 // The innermost frame is cadgen's `file` at `fn`, and the person's code called its way there: cadgen only
 // passed on what the model asked of it.
@@ -46,7 +49,7 @@ export const NEVER_OURS = [
   // that calls itself never ends). cadgen's own recursion fills those frames with cadgen's.
   // Of cadgen's code, only the decorator wrapper that calls the model may be in it: anything else may be cadgen's cycle.
   { name: 'their_recursion', test: row => row.type === 'RecursionError' && row.frames.some(frame => frame.file === USER)
-    && row.frames.every(frame => !frame.file.startsWith('cadgen/') || THEIR_CYCLE.has(frame.file)) },
+    && row.frames.every(frame => !OUR_FRAMES.test(frame.file) || THEIR_CYCLE.has(frame.file)) },
   // A page's cancellation: an AbortError is what the page's own `abort()`, or the browser leaving the page, makes
   // -- a view's feed aborting its request as the view unmounts. Asked for, never a crash: cadgen 0.7.20 and earlier.
   { name: 'page_cancelled', test: row => row.where === 'page' && row.type === 'AbortError' },

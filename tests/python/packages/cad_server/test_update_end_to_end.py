@@ -327,7 +327,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         clicked = time.monotonic()
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         connection.request("POST", "/api/v1/local/update", body=b"{}", headers={
-            "Authorization": f"Bearer {token}", "x-cadgen-viewer": "1", "Content-Type": "application/json"})
+            "Authorization": f"Bearer {token}", "x-cad-viewer": "1", "Content-Type": "application/json"})
         response = connection.getresponse()
         answer = json.loads(response.read())
         connection.close()

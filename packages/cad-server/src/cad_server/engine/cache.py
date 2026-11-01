@@ -254,7 +254,7 @@ class Cache:
     def _start(self) -> None:
         """The cache's thread, started once (call with the lock held)."""
         if self.thread is None:
-            self.thread = threading.Thread(target=self.run, name="cadgen-engine-cache", daemon=True)
+            self.thread = threading.Thread(target=self.run, name="cad-engine-cache", daemon=True)
             self.thread.start()
 
     def run(self) -> None:

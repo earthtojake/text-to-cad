@@ -687,7 +687,7 @@ class Bench:
                 try:
                     # A POST carries the viewer's guard header, as the page's do.
                     with urllib.request.urlopen(urllib.request.Request(f"{api}/mesh{query}", data=b"", method="POST",
-                                                                       headers={**auth, "x-cadgen-viewer": "1"}),
+                                                                       headers={**auth, "x-cad-viewer": "1"}),
                                                 timeout=self.timeout) as response:  # noqa: S310 - the engine, on loopback
                         answer = json.loads(response.read())
                         required = {"seconds", "parts", "meshed", "triangles", "bytes", "unmeshed", "mode", "workers", "per_part"}

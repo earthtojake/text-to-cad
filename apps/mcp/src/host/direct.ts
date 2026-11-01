@@ -28,7 +28,7 @@ export function engineReach(launch: Pick<Launch, 'browser' | 'engine'>): EngineR
 /**
  * A `fetch` with the tunnel's shape: the CAD client still builds its URLs on `TUNNEL_ORIGIN`, and
  * each is sent to the engine's origin instead, path and query unchanged (as the tunnel's server reads
- * only those), so a change of transport changes no caller. The tunnel's own header (`x-cadgen-app`, a session's capability) stays home.
+ * only those), so a change of transport changes no caller. The tunnel's own header (`x-cad-app`, a session's capability) stays home.
  */
 export function createDirectFetch(reach: Pick<EngineReach, 'origin' | 'link'>, fetchImpl: typeof fetch = globalThis.fetch): typeof fetch {
   return async (input, init) => {
@@ -36,7 +36,7 @@ export function createDirectFetch(reach: Pick<EngineReach, 'origin' | 'link'>, f
     const target = new URL(request.url);
     const method = request.method.toUpperCase();
     const headers = new Headers(request.headers);
-    headers.delete('x-cadgen-app');
+    headers.delete('x-cad-app');
     headers.set('authorization', `Bearer ${reach.link}`);
     const body = method === 'GET' || method === 'HEAD' ? undefined : await request.arrayBuffer();
     try {

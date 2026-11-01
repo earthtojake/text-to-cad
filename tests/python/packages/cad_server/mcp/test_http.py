@@ -207,7 +207,7 @@ class HttpSessionsTest(unittest.TestCase):
         # Each host connection has its own capability: another's view reaches nothing here.
         self.assertNotEqual(self.tool(second, 'cad_tab')['_meta']['dev.texttocad/httpToken'], token)
         self.assertTrue(self.tool(second, 'cad_sync', {'view': 'one', 'surface': 'agent', 'app': token})['isError'])
-        reply = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/api/v1/server', 'headers': {'x-cadgen-app': token}})['structuredContent']
+        reply = self.tool(first, 'cad_http', {'method': 'GET', 'url': '/api/v1/server', 'headers': {'x-cad-app': token}})['structuredContent']
         self.assertEqual(reply['status'], 200)
         self.assertEqual(json.loads(base64.b64decode(reply['body']))['pid'], info['pid'])
         first.close()
@@ -221,7 +221,7 @@ class HttpSessionsTest(unittest.TestCase):
 
         proxy = self.proxy()
         token = self.tool(proxy, 'cad_tab')['_meta']['dev.texttocad/httpToken']
-        reply = self.tool(proxy, 'cad_http', {'method': 'GET', 'url': '/api/v1/local/link', 'headers': {'x-cadgen-app': token}})['structuredContent']
+        reply = self.tool(proxy, 'cad_http', {'method': 'GET', 'url': '/api/v1/local/link', 'headers': {'x-cad-app': token}})['structuredContent']
         self.assertEqual(reply['status'], 200)
         fresh = json.loads(base64.b64decode(reply['body']))
         self.assertEqual((set(fresh), int(fresh['link'].split('.')[0])), ({'link', 'expires'}, fresh['expires']))

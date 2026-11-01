@@ -244,7 +244,7 @@ class CacheTest(unittest.TestCase):
         request = urllib.request.Request(f"{serving['url']}/api/v1/documents", method="PATCH",
                                          data=json.dumps({"action": action, "path": path}).encode(),
                                          headers={"Authorization": "Bearer " + self.ask({"op": "http"})["token"],
-                                                  "x-cadgen-viewer": "1", "content-type": "application/json"})
+                                                  "x-cad-viewer": "1", "content-type": "application/json"})
         try:
             with urllib.request.urlopen(request, timeout=60) as response:  # noqa: S310
                 return response.status, json.loads(response.read())

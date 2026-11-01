@@ -47,7 +47,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def call(self, method: str, path: str, body=None, *, guard: bool = True) -> tuple[int, bytes, str]:
         connection = http.client.HTTPConnection("127.0.0.1", self.port, timeout=10)
-        headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if guard else {}
+        headers = {"x-cad-viewer": "1", "content-type": "application/json"} if guard else {}
         try:
             connection.request(method, path, body=None if body is None else json.dumps(body), headers=headers)
             response = connection.getresponse()

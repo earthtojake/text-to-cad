@@ -87,7 +87,7 @@ class EngineTelemetryTest(unittest.TestCase):
         self.assertEqual(reason(bug), "bug")
         crash = {"where": "build", "type": "KeyError", "handled": True,
                  "frames": [{"file": "<user>", "function": "<user>", "line": 0},
-                            {"file": "cadgen/engine/api.py", "function": "_heard", "line": line}]}
+                            {"file": "cad/engine/api.py", "function": "_heard", "line": line}]}
         self.assertEqual(engine_telemetry.counts(facts(ok=False, error=bug), "script")["crashes"], [crash])
         # Raised here, it is the command's to report (``cad_server.cli``): only a script's process reports it itself.
         with mock.patch.object(engine_telemetry, "command", "xbf"):

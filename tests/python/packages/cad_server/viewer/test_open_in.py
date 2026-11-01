@@ -21,7 +21,7 @@ MODEL = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 UNKNOWN = "0f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
 FOUND = {"vscode": "/A/Visual Studio Code.app", "cursor": "/A/Cursor.app", "freecad": "/A/FreeCAD.app",
          "bambu": "/A/BambuStudio.app", "blender": "/A/Blender.app"}
-WRITE = {"x-cadgen-viewer": "1", "Content-Type": "application/json"}
+WRITE = {"x-cad-viewer": "1", "Content-Type": "application/json"}
 
 
 def entry(app: str) -> dict:

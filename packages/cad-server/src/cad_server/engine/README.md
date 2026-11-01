@@ -326,7 +326,7 @@ the page's requests of the viewer's routes, dispatches into the same application
 process. It is app-only, as `cad_sync` and `cad_capture_reply` are, and absent where
 no page is drawn: no agent reaches a viewer route. Launch results carry the app
 capability (the stdio peer's, one for its host, which every session it opens is given) in UI-only `_meta["dev.texttocad/httpToken"]`, never content, structured
-content or the resource. The page sends it in `x-cadgen-app`; the server checks it
+content or the resource. The page sends it in `x-cad-app`; the server checks it
 before dispatch and strips it, and refuses a call without it. Authorization precedes
 the range cache. This is an MCP host/model boundary, not a sandbox against the
 local authenticated host, which already has the installation's file authority.
@@ -2370,7 +2370,7 @@ the server's state refuses a change: a telemetry answer to a server that keeps n
 (`settings`), an update with no engine under the page (`local/update`), an export of a session
 that restarted or of a source that changed since the page showed it, and 410 for an export's file
 already fetched or past its window. Every request that changes something (POST, PUT, PATCH, DELETE)
-carries `x-cadgen-viewer`, the gate a cross-site form cannot pass (403 without it). `GET
+carries `x-cad-viewer`, the gate a cross-site form cannot pass (403 without it). `GET
 /__cad/server` and `GET /__cad/version` answer as `GET /api/v1/server` does, so a CAD Viewer tab of
 0.8 left open across the upgrade reloads itself: 0.8's probe, answered through 0.10 and gone in 0.11.
 The families:

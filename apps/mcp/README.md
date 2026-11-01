@@ -234,7 +234,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   app-only and absent in text-only hosts. Every
   page launch includes the host connection's capability in result `_meta["dev.texttocad/httpToken"]`,
   which [MCP Apps hosts deliver to the UI](https://github.com/modelcontextprotocol/ext-apps/blob/main/specification/2026-01-26/apps.mdx#2-tool-results), outside model context; content and structured content never
-  carry it. The page sends `x-cadgen-app` with HTTP calls, and the same capability
+  carry it. The page sends `x-cad-app` with HTTP calls, and the same capability
   as the `app` argument of `cad_sync` and `cad_capture_reply`; all three refuse a call
   without it: a host is asked to keep app-only tools from the model, and the server
   does not rely on it. The server validates

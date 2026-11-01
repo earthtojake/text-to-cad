@@ -64,6 +64,9 @@ const MAX_FRAMES = 30;
 // A crash's frame, as the server names one (`cad_server/analytics.py`: `signature`; a page's: core's `crashOf`).
 // A path inside a place: segments of letters, digits and `_.+-`, none of them `.` or `..`.
 const FRAME_FILE = /^(?:<user>|<\?>|<frozen>|(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}(?:\/(?!\.\.?(?:\/|$))[A-Za-z0-9_.+-]{1,64}){0,8})$/;
+// A frame in our own code: the library's (`cad/`) and the server's (`cad_server/`), and, from releases before
+// 0.10, the one package they were (`cadgen/`).
+export const OUR_FRAMES = /^(?:cad|cad_server|cadgen)\//;
 const FUNCTION = /^(?:<user>|<\?>|[A-Za-z_$<][A-Za-z0-9_$.<>]{0,79})$/;
 const TYPE = /^(?:<user>|<\?>|[A-Za-z_][A-Za-z0-9_.]{0,127})$/;
 export const MAX_BYTES = 64 * 1024;

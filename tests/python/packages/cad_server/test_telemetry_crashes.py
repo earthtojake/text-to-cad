@@ -51,7 +51,7 @@ class SignatureTest(unittest.TestCase):
         self.assertEqual((found["where"], found["type"], found["handled"]), ("build", "KeyError", True))
         files = [frame["file"] for frame in found["frames"]]
         self.assertIn("<user>", files)
-        self.assertEqual(files[-1], "cadgen/analytics.py", "the innermost frame is where it failed")
+        self.assertEqual(files[-1], "cad_server/analytics.py", "the innermost frame is where it failed")
         self.assertEqual(found["frames"][-1]["function"], "_Tally.note")
         self.assertTrue(analytics.valid_signature(found))
         said = json.dumps(found)
@@ -91,12 +91,12 @@ class SignatureTest(unittest.TestCase):
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), namespace)  # noqa: S102
         file_of = analytics._file_of
         ours = os.path.realpath(source)
-        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/_internal/generation.py"
+        with mock.patch.object(analytics, "_file_of", lambda path: "cad/_internal/generation.py"
                                if os.path.realpath(path) == ours else file_of(path)):
             self.assertIsNone(analytics.signature(_caught(namespace["told"]), "build", bugs_only=True))
             self.assertIsNone(analytics.signature(_caught(lambda: namespace["told_too"](0)), "build", bugs_only=True))
             found = analytics.signature(_caught(_user_calls(namespace["broke"])), "build", bugs_only=True)
-        self.assertEqual(found["frames"][-1], {"file": "cadgen/_internal/generation.py", "function": "broke", "line": 9})
+        self.assertEqual(found["frames"][-1], {"file": "cad/_internal/generation.py", "function": "broke", "line": 9})
 
     def test_what_a_model_asks_wrongly_of_cadgens_helpers_is_its_own_mistake(self) -> None:
         # A name build123d does not have, asked of the module cadgen's finder bound lazily (still with Python's
@@ -145,7 +145,7 @@ class SignatureTest(unittest.TestCase):
         file_of, here = analytics._file_of, os.path.realpath(__file__)
         self.addCleanup(sys.setrecursionlimit, sys.getrecursionlimit())
         sys.setrecursionlimit(200)  # a short stack: each frame's file is looked up on disk
-        with mock.patch.object(analytics, "_file_of", lambda path: "cadgen/engine/model.py"
+        with mock.patch.object(analytics, "_file_of", lambda path: "cad/engine/model.py"
                                if os.path.realpath(path) == here else file_of(path)):
             theirs, mine = _caught(model), _caught(_user_calls(ours, "/work/model.py"))
             sys.setrecursionlimit(1000)
@@ -154,7 +154,7 @@ class SignatureTest(unittest.TestCase):
                     self.assertIsNone(analytics.signature(theirs, where, bugs_only=bugs_only), "theirs is in the cycle")
                     found = analytics.signature(mine, where, bugs_only=bugs_only)
                     self.assertEqual((found["type"], {frame["file"] for frame in found["frames"]}),
-                                     ("RecursionError", {"cadgen/engine/model.py"}), "the person's call is far outside it")
+                                     ("RecursionError", {"cad/engine/model.py"}), "the person's call is far outside it")
 
     def test_cadgens_own_module_gone_is_its_installation_removed_and_never_a_crash(self) -> None:
         import importlib
@@ -246,7 +246,7 @@ class FailureReasonTest(unittest.TestCase):
         self.cadgen: dict = {}
         exec(compile(source.read_text(encoding="utf-8"), str(source), "exec"), self.cadgen)  # noqa: S102
         located, ours = analytics._located, os.path.realpath(source)
-        placed = mock.patch.object(analytics, "_located", lambda path: ("cadgen", "cadgen/_internal/export.py")
+        placed = mock.patch.object(analytics, "_located", lambda path: ("ours", "cad/_internal/export.py")
                                    if os.path.realpath(path) == ours else located(path))
         placed.start()
         self.addCleanup(placed.stop)
@@ -444,7 +444,7 @@ class CommandCrashTest(unittest.TestCase):
         for invoke in (told, _cadgen_bug):
             emit(invoke, prog="cad urdf validate", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
-        self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cadgen/analytics.py"))
+        self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cad_server/analytics.py"))
 
 
 if __name__ == "__main__":

@@ -130,7 +130,7 @@ class DrawingRenders:
             render = self._renders.get(key)
             if render is None:
                 render = self._renders[key] = _Render()
-                threading.Thread(target=self._render, args=(render, key, candidate, data), name="cadgen-drawing",
+                threading.Thread(target=self._render, args=(render, key, candidate, data), name="cad-drawing",
                                  daemon=True).start()
         if render.done.wait(self.hold_seconds):
             return render.status, render.body

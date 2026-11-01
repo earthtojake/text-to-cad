@@ -354,7 +354,7 @@ def _tga(image: Any) -> bytes:
     stream = io.BytesIO()
     if image.Save(stream, TCollection_AsciiString("tga")):
         return stream.getvalue()
-    handle, path = tempfile.mkstemp(prefix="cadgen-picture-", suffix=".tga")
+    handle, path = tempfile.mkstemp(prefix="cad-picture-", suffix=".tga")
     os.close(handle)
     try:
         if not image.Save(TCollection_AsciiString(path)):

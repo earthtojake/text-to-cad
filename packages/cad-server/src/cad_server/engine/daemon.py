@@ -1512,7 +1512,7 @@ class Daemon:
                           file=sys.stderr, flush=True)
             self.stopping.set()
 
-        threading.Thread(target=wait, name="cadgen-drain", daemon=True).start()
+        threading.Thread(target=wait, name="cad-drain", daemon=True).start()
 
     def shutdown(self) -> None:
         # The documents built or read in the last idle window, saved first, best effort (``cache``).

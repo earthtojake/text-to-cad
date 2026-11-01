@@ -9,7 +9,7 @@ import { cadApiUrl } from './client.js';
  * @returns {{ create(request: PromptFilesRequest): Promise<PromptFiles>, read(path: string): Promise<Blob> }}
  */
 export function createHttpPromptFiles({ origin = '', fetch: fetchImpl = globalThis.fetch } = {}) {
-  const headers = { 'x-cadgen-viewer': '1' };
+  const headers = { 'x-cad-viewer': '1' };
   const answer = async response => {
     const body = await response.json().catch(() => null);
     if (!body?.ok) throw new Error(body?.error || `The prompt's files could not be made (${response.status}).`);

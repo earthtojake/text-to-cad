@@ -38,7 +38,7 @@ class ViewerLanguageTest(unittest.TestCase):
         try:
             headers = {"content-type": "application/json"} if body is not None else {}
             if body is not None and guard:
-                headers["x-cadgen-viewer"] = "1"
+                headers["x-cad-viewer"] = "1"
             payload = None if body is None else {"language": body}
             connection.request(method, "/api/v1/settings", body=json.dumps(payload) if payload is not None else None, headers=headers)
             response = connection.getresponse()

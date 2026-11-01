@@ -98,7 +98,7 @@ class ViewerExportHttpTest(unittest.TestCase):
             self.assertTrue(session.get('ok'), session)
 
             def http(path, body=None, *, headers=None):
-                supplied = {'Authorization': 'Bearer ' + session['token'], 'x-cadgen-viewer': '1',
+                supplied = {'Authorization': 'Bearer ' + session['token'], 'x-cad-viewer': '1',
                             'content-type': 'application/json', **(headers or {})}
                 query = urllib.request.Request(session['apiUrl'] + path,
                     data=json.dumps(body).encode() if body is not None else None, headers=supplied)
@@ -120,7 +120,7 @@ class ViewerExportHttpTest(unittest.TestCase):
                        'source': source, 'format': 'stl'}
             # A job is a POST that needs the credential and the viewer's header too.
             self.assertEqual(http(f'/api/v1/documents/{doc}/exports', payload, headers={'Authorization': ''})[0], 403)
-            self.assertEqual(http(f'/api/v1/documents/{doc}/exports', payload, headers={'x-cadgen-viewer': ''})[0], 403)
+            self.assertEqual(http(f'/api/v1/documents/{doc}/exports', payload, headers={'x-cad-viewer': ''})[0], 403)
             # A job is its document's: one asked under another document's id is refused, and runs nothing.
             code, _, data = http('/api/v1/documents/6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab/exports', payload)
             self.assertEqual(code, 400, data)

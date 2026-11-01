@@ -177,8 +177,8 @@ class PostGuard(HttpLayerTestCase):
         self.assertEqual(status, 403)
         self.assertEqual(
             body.decode("utf-8"),
-            '{"error":"missing x-cadgen-viewer header (cross-site POST blocked)",'
-            '"hint":"send \'x-cadgen-viewer: 1\'"}',
+            '{"error":"missing x-cad-viewer header (cross-site POST blocked)",'
+            '"hint":"send \'x-cad-viewer: 1\'"}',
         )
 
     def test_every_method_that_changes_something_is_guarded(self):
@@ -190,7 +190,7 @@ class PostGuard(HttpLayerTestCase):
                 self.assertIn(f"cross-site {method} blocked", json.loads(body)["error"])
 
     def test_an_empty_value_is_falsy_and_refused(self):
-        status, _, _ = self.fixture.request("POST", "/api/v1/documents", headers={"x-cadgen-viewer": ""})
+        status, _, _ = self.fixture.request("POST", "/api/v1/documents", headers={"x-cad-viewer": ""})
         self.assertEqual(status, 403)
 
     def test_the_gate_runs_before_dispatch_so_unknown_routes_are_covered(self):
@@ -199,7 +199,7 @@ class PostGuard(HttpLayerTestCase):
 
     def test_host_gate_wins_over_the_header_gate(self):
         status, _, body = self.fixture.request(
-            "POST", "/api/v1/documents", headers={"Host": "attacker.example", "x-cadgen-viewer": "1"}
+            "POST", "/api/v1/documents", headers={"Host": "attacker.example", "x-cad-viewer": "1"}
         )
         self.assertEqual(status, 403)
         self.assertIn(b"DNS-rebinding", body)
@@ -379,7 +379,7 @@ class Documents(HttpLayerTestCase):
 
         def open_(payload):
             status, headers, body = self.fixture.request("POST", "/api/v1/documents", body=json.dumps(payload).encode(),
-                                                         headers={"x-cadgen-viewer": "1", "content-type": "application/json"})
+                                                         headers={"x-cad-viewer": "1", "content-type": "application/json"})
             return status, json.loads(body)
 
         ident = file_id(part)
@@ -407,7 +407,7 @@ class Documents(HttpLayerTestCase):
         reading = (202, {"state": "reading", "retryMs": 1500, "building": frame})
         with mock.patch.object(self.fixture.app.engine_documents, "response", return_value=reading):
             status, headers, body = self.fixture.request("POST", "/api/v1/documents", body=json.dumps({"path": str(step)}).encode(),
-                                                         headers={"x-cadgen-viewer": "1"})
+                                                         headers={"x-cad-viewer": "1"})
         from cad.engine.ids import file_id
 
         self.assertEqual(status, 202)
@@ -447,7 +447,7 @@ class Pick(HttpLayerTestCase):
 
     def pick(self, **behaviour):
         with mock.patch.object(FilePicker, "choose", **behaviour):
-            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cadgen-viewer": "1"})
+            status, _, body = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"})
         return status, json.loads(body)
 
     def test_a_cad_file_is_its_path_and_anything_else_says_why(self):
@@ -472,10 +472,10 @@ class Pick(HttpLayerTestCase):
         with mock.patch("cad_server._internal.picker._command", return_value=(["chooser"], {}, False)), \
                 mock.patch("cad_server._internal.picker.subprocess.run", side_effect=run):
             first = threading.Thread(target=lambda: answers.append(
-                self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cadgen-viewer": "1"})[0]))
+                self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"})[0]))
             first.start()
             self.assertTrue(opened.wait(10))
-            second = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cadgen-viewer": "1"})
+            second = self.fixture.request("POST", "/api/v1/local/pick", headers={"x-cad-viewer": "1"})
             release.set()
             first.join(10)
         self.assertEqual((second[0], json.loads(second[2])["error"]), (500, "A file chooser is already open."))
@@ -692,7 +692,7 @@ class MethodHandling(HttpLayerTestCase):
                                       ("PUT", "/api/v1/documents", "GET, POST, PATCH, HEAD"),
                                       ("POST", "/app", "GET, HEAD")):
             with self.subTest(method=method, path=path):
-                status, headers, body = self.fixture.request(method, path, headers={"x-cadgen-viewer": "1"})
+                status, headers, body = self.fixture.request(method, path, headers={"x-cad-viewer": "1"})
                 self.assertEqual(status, 405)
                 self.assertEqual(headers["allow"], allowed)
                 self.assertEqual(json.loads(body), {"error": f"{method} is not allowed on {path}",
@@ -701,7 +701,7 @@ class MethodHandling(HttpLayerTestCase):
     def test_unknown_post_route_is_json_404(self):
         for path in ("/api/v1/export", "/nope"):
             with self.subTest(path=path):
-                status, headers, body = self.fixture.request("POST", path, headers={"x-cadgen-viewer": "1"})
+                status, headers, body = self.fixture.request("POST", path, headers={"x-cad-viewer": "1"})
                 self.assertEqual(status, 404)
                 self.assertEqual(json.loads(body)["error"], f"no route {path}" if path == "/api/v1/export" else "no route POST /nope")
                 self.assertNotIn("allow", headers)
@@ -785,7 +785,7 @@ class KeepAlive(HttpLayerTestCase):
     def test_an_undrained_post_body_does_not_desync_the_next_request(self):
         raw = self.fixture.raw(
             b"POST /api/v1/nope?file=/x.step HTTP/1.1\r\n"
-            b"Host: 127.0.0.1\r\nx-cadgen-viewer: 1\r\nContent-Length: 5\r\n\r\nHELLO"
+            b"Host: 127.0.0.1\r\nx-cad-viewer: 1\r\nContent-Length: 5\r\n\r\nHELLO"
             b"GET /api/v1/server HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n",
             reads=2,
         )
@@ -823,7 +823,7 @@ class RequestBodies(HttpLayerTestCase):
             with self.subTest(path=path):
                 raw = self.fixture.raw(
                     f"{method} {path} HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-                    f"x-cadgen-viewer: 1\r\nContent-Length: {limit + 1}\r\n\r\n".encode()
+                    f"x-cad-viewer: 1\r\nContent-Length: {limit + 1}\r\n\r\n".encode()
                 )
                 self.assertIn(b"413", raw.split(b"\r\n")[0])
                 self.assertIn(b"connection: close", raw.lower())
@@ -835,7 +835,7 @@ class RequestBodies(HttpLayerTestCase):
         sock = socket.create_connection(("127.0.0.1", self.fixture.port), timeout=10)
         received = b""
         try:
-            sock.sendall(b"POST /api/v1/local/reveal HTTP/1.1\r\nHost: 127.0.0.1\r\nx-cadgen-viewer: 1\r\n"
+            sock.sendall(b"POST /api/v1/local/reveal HTTP/1.1\r\nHost: 127.0.0.1\r\nx-cad-viewer: 1\r\n"
                          + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
             while chunk := sock.recv(65536):
                 received += chunk
@@ -848,7 +848,7 @@ class RequestBodies(HttpLayerTestCase):
         # refused before any route reads a mangled one.
         raw = self.fixture.raw(
             b"POST /api/v1/documents HTTP/1.1\r\n"
-            b"Host: 127.0.0.1\r\nx-cadgen-viewer: 1\r\nTransfer-Encoding: chunked\r\n\r\n"
+            b"Host: 127.0.0.1\r\nx-cad-viewer: 1\r\nTransfer-Encoding: chunked\r\n\r\n"
             b"5\r\nHELLO\r\n0\r\n\r\n"
         )
         self.assertIn(b"400", raw.split(b"\r\n")[0])
@@ -860,7 +860,7 @@ class RequestBodies(HttpLayerTestCase):
         oversize = handler_module.MAX_REQUEST_BODY_BYTES + 1
         raw = self.fixture.raw(
             b"POST /api/v1/documents HTTP/1.1\r\nHost: 127.0.0.1\r\n"
-            b"x-cadgen-viewer: 1\r\nContent-Length: " + str(oversize).encode() + b"\r\n\r\n"
+            b"x-cad-viewer: 1\r\nContent-Length: " + str(oversize).encode() + b"\r\n\r\n"
         )
         self.assertIn(b"400", raw.split(b"\r\n")[0])
         self.assertIn(b"request body too large", raw)

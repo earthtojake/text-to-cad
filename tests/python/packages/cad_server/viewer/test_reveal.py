@@ -61,7 +61,7 @@ class RevealTests(unittest.TestCase):
             run.assert_not_called()
 
     def test_route_takes_a_valid_payload(self):  # the header gate is test_http_layer.PostGuard's
-        headers = {'x-cadgen-viewer': '1', 'Content-Type': 'application/json'}
+        headers = {'x-cad-viewer': '1', 'Content-Type': 'application/json'}
         body = json.dumps({'path': str(self.target)}).encode()
         with mock.patch('cad_server.viewer.reveal.reveal_path') as reveal:
             self.assertEqual(self.server.request('POST', '/api/v1/local/reveal', headers=headers, body=body)[0], 204)

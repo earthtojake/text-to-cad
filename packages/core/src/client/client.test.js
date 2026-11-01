@@ -234,12 +234,12 @@ test('a drawing is its document opened once, then one plain GET of its drawing',
   const payload = await client.drawing('/drawings/plate.dxf');
   assert.equal(payload.schemaVersion, 1);
   assert.equal(new URL(calls[0].url).pathname, '/api/v1/documents');
-  assert.deepEqual([calls[0].options.method, calls[0].options.headers['x-cadgen-viewer'], JSON.parse(calls[0].options.body)],
+  assert.deepEqual([calls[0].options.method, calls[0].options.headers['x-cad-viewer'], JSON.parse(calls[0].options.body)],
     ['POST', '1', { path: '/drawings/plate.dxf' }], 'the file opened by its path, a guarded change');
   assert.equal(new URL(calls[1].url).pathname, '/api/v1/documents/dxf/d1/drawing');
   assert.equal(calls[1].options.method, 'GET');
   // A GET carries no cross-site guard: this route reads and nothing else.
-  assert.equal(calls[1].options.headers['x-cadgen-viewer'], undefined);
+  assert.equal(calls[1].options.headers['x-cad-viewer'], undefined);
   // Opened once: the next read of it reads its drawing alone.
   await client.drawing('/drawings/plate.dxf');
   assert.deepEqual(calls.slice(2).map(({ url }) => new URL(url).pathname), ['/api/v1/documents/dxf/d1/drawing']);
@@ -337,7 +337,7 @@ test('Open in reads a document\'s files and their apps by its id, and opens one 
   const answer = { targets: [{ target: 'source', kind: 'script', name: 'bracket.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }] }], fileManager: 'finder' };
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
     const parsed = new URL(url);
-    calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cadgen-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (parsed.pathname === '/api/v1/local/open-in') return Response.json(answer);
     return options.body?.includes('gone') ? Response.json({ error: 'That file is not there.' }, { status: 404 }) : new Response(null, { status: 204 });
   } });
@@ -359,7 +359,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
     const path = new URL(url).pathname;
-    calls.push([path, options.method || 'GET', options.headers?.['x-cadgen-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    calls.push([path, options.method || 'GET', options.headers?.['x-cad-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
     if (path.endsWith('/thumbnail')) return new Response(path.includes('/d1/') ? thumbnail : null, { status: path.includes('/d1/') ? 200 : 404 });
     if (path === '/api/v1/local/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });

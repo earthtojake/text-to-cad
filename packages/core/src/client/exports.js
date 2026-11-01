@@ -24,7 +24,7 @@ export function createExportService({ origin = '', fetch: fetchImpl = globalThis
   const url = (path) => viewerOriginUrl(origin, '/api/v1/exports' + path);
   async function response(target, body, signal) {
     const answer = await fetchImpl(target, { signal, cache: 'no-store', ...(body === undefined ? {} : {
-      method: 'POST', headers: { 'content-type': 'application/json', 'x-cadgen-viewer': '1' }, body: JSON.stringify(body),
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-cad-viewer': '1' }, body: JSON.stringify(body),
     }) });
     if (!answer.ok) {
       let message = `Export request failed (${answer.status}).`;

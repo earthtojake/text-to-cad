@@ -55,7 +55,7 @@ export function isMissingFileError(error) {
 
 // A guarded JSON change: the viewer refuses a POST, PUT, PATCH or DELETE without its header (no
 // cross-site form can send one).
-const JSON_POST = Object.freeze({ 'content-type': 'application/json', 'x-cadgen-viewer': '1' });
+const JSON_POST = Object.freeze({ 'content-type': 'application/json', 'x-cad-viewer': '1' });
 // The engine's API (`cad_server/viewer/kinds.py`): every route the page calls is under it.
 export const API = '/api/v1';
 
@@ -340,7 +340,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
     },
     pick() {
-      return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
+      return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
     },
     async reveal(path) {
       const response = await fetchImpl(cadApiUrl(`${API}/local/reveal`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ path }) });
@@ -381,7 +381,7 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return request(`${API}/server`, { operation: 'version' });
     },
     startUpdate() {
-      return request(`${API}/local/update`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, operation: 'update' });
+      return request(`${API}/local/update`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'update' });
     },
     // A fresh link for the page's own address (`GET /api/v1/local/link`): `{ link, expires }`.
     link() {

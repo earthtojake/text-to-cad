@@ -264,10 +264,10 @@ describe('the fetch tunnel', () => {
       },
     }, 'app-capability');
     const tunnel = createTunnelFetch(server);
-    const posted = await tunnel(`${TUNNEL_ORIGIN}/api/v1/parts?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
+    const posted = await tunnel(`${TUNNEL_ORIGIN}/api/v1/parts?x=1`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, body: '{"a":1}' });
     expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/api/v1/parts?x=1` } });
-    expect(calls[0].args.headers['x-cadgen-viewer']).toBe('1');
-    expect(calls[0].args.headers['x-cadgen-app']).toBe('app-capability');
+    expect(calls[0].args.headers['x-cad-viewer']).toBe('1');
+    expect(calls[0].args.headers['x-cad-app']).toBe('app-capability');
     expect(new TextDecoder().decode(decodeBase64(calls[0].args.body))).toBe('{"a":1}');
     expect(posted.status).toBe(201);
     expect(await posted.json()).toEqual({ ok: true });

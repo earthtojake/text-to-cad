@@ -20,7 +20,7 @@ it('the shell reads the engine\'s app through the call the host carries, a part 
   expect(text).toBe(code);
   expect(callTool.mock.calls[0][0]).toBe('cad_http');
   expect(callTool.mock.calls[0][1]).toMatchObject({ method: 'GET', url: `http://cad.invalid${APP_ROUTE}`,
-    headers: { 'x-cadgen-app': 'capability' } });
+    headers: { 'x-cad-app': 'capability' } });
   expect(callTool.mock.calls.slice(1).every(([, args]) => args.headers['if-range'] === '"e1"')).toBe(true);
   expect(ranges[0]).toBe(`bytes=0-${4 * 1024 * 1024 - 1}`);
 });

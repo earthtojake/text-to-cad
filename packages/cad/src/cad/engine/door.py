@@ -376,7 +376,7 @@ class Door:
         self.identity = os.fstat(self.read_fd).st_ino
         _private(self.clients)
         self.sweep()
-        self.thread = threading.Thread(target=self._read, name="cadgen-door", daemon=True)
+        self.thread = threading.Thread(target=self._read, name="cad-door", daemon=True)
         self.thread.start()
 
     def _read(self) -> None:

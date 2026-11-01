@@ -51,7 +51,7 @@ class ExportJobs(Jobs):
     def _maintenance(self):
         # Crash recovery has no persistent job registry. Reap only this service's private
         # directories after a full day; living owners refresh their directory timestamp.
-        for directory in (self.root or Path(tempfile.gettempdir())).glob("cadgen-download-*"):
+        for directory in (self.root or Path(tempfile.gettempdir())).glob("cad-download-*"):
             try:
                 if directory.is_dir() and not directory.is_symlink() and time.time() - directory.stat().st_mtime > STATUS_SECONDS:
                     shutil.rmtree(directory)
@@ -85,7 +85,7 @@ class ExportJobs(Jobs):
     def _start(self):
         if not self.started:
             self.started = True
-            threading.Thread(target=self._maintenance, daemon=True, name="cadgen-export-cleanup").start()
+            threading.Thread(target=self._maintenance, daemon=True, name="cad-export-cleanup").start()
 
     def _prune(self):
         now = self.clock()
@@ -173,7 +173,7 @@ class ExportJobs(Jobs):
         _source, _expected, name = self._source(job["spec"])
         stem = (re.sub(r"[^\w .-]", "_", name)[:100].strip(" .") or "export")
         filename = stem + FORMATS[job["spec"]["format"]]
-        directory = Path(tempfile.mkdtemp(prefix="cadgen-download-", dir=self.root))
+        directory = Path(tempfile.mkdtemp(prefix="cad-download-", dir=self.root))
         with self.changed:
             job["directory"] = directory
             self._change(job, filename=filename, stage="Preparing export")

@@ -68,7 +68,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.sent: list[dict] = []
         self.app = create_cad_app(host="127.0.0.1", port=0, start=str(self.root))
         self.app.analytics = Recorder(process="viewer", path=self.state, send=lambda payload: self.sent.append(payload) or True)
-        self.app.analytics.started(client={"name": "cadgen-viewer", "version": "0"}, presentation="browser")
+        self.app.analytics.started(client={"name": "cad-viewer", "version": "0"}, presentation="browser")
         self.port = self.serve(self.app)
 
     def serve(self, app) -> int:
@@ -86,7 +86,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         try:
             headers = {"content-type": "application/json"} if body is not None else {}
             if body is not None and guard:
-                headers["x-cadgen-viewer"] = "1"
+                headers["x-cad-viewer"] = "1"
             connection.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
             response = connection.getresponse()
             data = response.read()
@@ -129,7 +129,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(self.request("PATCH", "/api/v1/documents", {"action": "open", "path": "parts/a.stl"})[0], 400)
         self.assertTrue(self.app.analytics.flush())
         [payload] = self.sent
-        self.assertEqual((payload["process"], payload["presentation"], payload["client"]["name"]), ("viewer", "browser", "cadgen-viewer"))
+        self.assertEqual((payload["process"], payload["presentation"], payload["client"]["name"]), ("viewer", "browser", "cad-viewer"))
         # The file was shown before the yes too: counted once that day, and that count was never sent.
         self.assertEqual(payload["events"], [{"name": "view", "calls": 1}])
         (self.root / "b.stl").write_bytes(STL)
