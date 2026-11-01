@@ -742,6 +742,17 @@ Where the built things live instead:
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
 
+### Versions a release cannot take
+
+The PyPI project `cad` (the library's distribution) was transferred to this project on
+2026-10-31, and its previous owner published these versions before the transfer: `0.8.0`, `0.8.1`, `0.8.2`, `0.8.3`, `0.8.4`, `0.8.5`, `0.9.0`, `0.9.1`, `0.9.5`, `0.9.6`, `0.9.7`, `0.9.8`, `0.9.9.1`, `0.9.9.3`, `1.0`, `1.0.1`, `1.0.2`, `1.0.3`, `1.0.4`, `1.1.1`, `1.1.2`.
+PyPI never accepts a filename again, yanked or deleted or not, so no release of text-to-cad can
+carry any of them (`VERSION` is one number for all five distributions, which is why the release that
+was to be 0.9.0 is 0.10.0). `scripts/release/unavailable-versions.txt` is the
+machine-checked source: `check-version.sh` and `bump-version.sh` (which `Prepare Release` runs) refuse a
+`VERSION` on it (1.0.0 too, since a trailing `.0` is insignificant to PyPI), and a test keeps
+this list identical to the file.
+
 ### Shipping a release
 
 Merging a pull request that changes `VERSION` releases it: `Publish Release`
@@ -794,7 +805,8 @@ The pull request's Version Check says what merging it releases, and refuses:
 
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
-- a version that is not past the target branch's and the latest release tag's;
+- a version that is not past the target branch's and the latest release tag's, or that is on
+  the list of [versions a release cannot take](#versions-a-release-cannot-take);
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never
   start. Release such a change after it merges, from its own pull request;

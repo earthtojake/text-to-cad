@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+# shellcheck source=release-tags.sh
+source "$SCRIPT_DIR/release-tags.sh"
 
 usage() {
   cat <<'EOF'
@@ -11,7 +13,8 @@ Usage:
 
 Checks that VERSION contains a valid canonical release version, that the five
 distributions (the library, the server, the shim and the two aliases) are that
-version and pin each other at it (`cad==<version>`), that every skill's
+version and pin each other at it (`cad==<version>`), that it is not one PyPI will never take
+(scripts/release/unavailable-versions.txt), that every skill's
 SKILL.md and setup guide (references/setup.md) name exactly that version: its
 install command (`uvx ... --from cad-server==<version> cad doctor`) and the
 version it runs (`cad +<version>`, "it says <version> is not installed"), and
@@ -63,6 +66,7 @@ if [[ ! "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; th
   echo "VERSION must be a plain semver version like 1.2.3, got '$version'" >&2
   exit 1
 fi
+refuse_unavailable_version "$version" || exit 1
 echo "Canonical release version is valid: $version"
 if [ -n "$BASE_REF" ]; then
   "$SCRIPT_DIR/bump-version.sh" --check-incremented-from "$BASE_REF"

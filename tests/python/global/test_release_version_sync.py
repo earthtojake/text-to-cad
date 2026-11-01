@@ -184,7 +184,8 @@ class VersionSyncMirrorTests(unittest.TestCase):
                                     % json.dumps(SYNC_SCRIPT.as_uri())))
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch).resolve()
-            for relative in ("scripts/release/check-version.sh", "scripts/install/install.sh", "scripts/install/install.ps1",
+            for relative in ("scripts/release/check-version.sh", "scripts/release/release-tags.sh",
+                             "scripts/release/unavailable-versions.txt", "scripts/install/install.sh", "scripts/install/install.ps1",
                              *projects):
                 (root / relative).parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(repo_path(relative), root / relative)

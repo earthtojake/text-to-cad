@@ -157,11 +157,14 @@ case "$TARGET" in
   major|minor|patch) next_version="$(bump_version "$base_version" "$TARGET")" ;;
   *)
     validate_semver "$TARGET"
+    refuse_unavailable_version "$TARGET" || exit 1
     version_greater "$TARGET" "$base_version" ||
       die "$TARGET is not greater than $base_version, the version on $BASE"
     next_version="$TARGET"
     ;;
 esac
+
+refuse_unavailable_version "$next_version" || exit 1
 
 echo "Release: $base_version ($BASE) -> $next_version"
 if [ "$DRY_RUN" -eq 1 ]; then
