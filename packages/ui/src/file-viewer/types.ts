@@ -13,6 +13,11 @@ export interface FileMetadata extends FileEntry {
    * `path`. Null for a document with no file of its own (a model's, by its id): no file menu.
    */
   navigationPath?: string | null;
+  /**
+   * For a document with no file of its own (`navigationPath: null`), the file it is built from (a
+   * model's script): what its file menu's Copy path and file manager act on. Its Files never start there.
+   */
+  sourceFile?: string;
   size: number;
   extension: string;
   mime?: string;

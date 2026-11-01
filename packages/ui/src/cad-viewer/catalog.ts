@@ -51,11 +51,13 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
       const entry = await client.resolveEntry(path, { signal });
       signal.throwIfAborted();
       // A document known by its id alone (a model's) keeps its id for a path, is named by its
-      // function, and has no file to browse from or act on (`navigationPath: null`).
+      // function, and has no file to browse from (`navigationPath: null`); its file menu acts on
+      // the script that builds it, where the engine names one (`sourceFile`).
       const byId = entry.sourcePath === null;
       const file = byId ? entry.file : normalizePath(entry.file);
       const name = entry.name || baseName(file);
-      return { path: file, name, ...(byId ? { navigationPath: null } : {}), kind: 'file', size: Number(entry.bytes || 0),
+      const script = byId && typeof entry.script === 'string' && entry.script ? normalizePath(entry.script) : null;
+      return { path: file, name, ...(byId ? { navigationPath: null } : {}), ...(script ? { sourceFile: script } : {}), kind: 'file', size: Number(entry.bytes || 0),
         extension: byId ? 'xbf' : name.split('.').pop()?.toLowerCase() || '', mediaType: byId ? 'cad-document' : 'cad',
         revision: contentRevision(entry) };
     },

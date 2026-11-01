@@ -62,11 +62,11 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   /** This app's on/off settings, in the app menu: analytics. */
   appSettings?: readonly AppSetting[];
   /**
-   * While this install is behind: the navbar's update button, first among its controls, over a file
+   * While this install is behind: the navbar's update button, last among its controls (after Full size), over a file
    * and on the home; in the file handler, the corner's notice under Full size.
    */
   update?: ReactNode;
-  /** Inline, the card's way to full size, where the host can show it so: in the navbar before the host's other actions; the corner's first in the file handler. */
+  /** Inline, the card's way to full size, where the host can show it so: in the navbar just before the update button; the corner's first in the file handler. */
   fullSize?: ReactNode;
   /**
    * Open a document's page (a file's path, a model's id) in the person's browser, where a launch carried

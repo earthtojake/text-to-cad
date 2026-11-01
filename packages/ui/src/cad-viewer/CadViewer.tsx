@@ -73,7 +73,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   notice?: ReactNode;
   /**
    * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:
-   * first among the navbar's controls, over every file and on the home.
+   * last among the navbar's controls (outermost, after Full size), over every file and on the home.
    */
   update?: ReactNode;
   /**
@@ -83,7 +83,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   history?: ViewerHistory;
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
-   * show it full size: the navbar's host action, at its right end after the update, over every file
+   * show it full size: the navbar's host action, at its right end just before the update, over every file
    * and on the home. Nothing where there is no navbar (`chrome: "bare"`). (A host's way to open what
    * is shown in a page of its own, the CAD app's browser page, is a file action, `fileActions.perform.browser`:
    * the file menu's Open in › Browser.)

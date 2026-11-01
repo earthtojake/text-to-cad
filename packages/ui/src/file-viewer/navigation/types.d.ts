@@ -64,7 +64,8 @@ export function fuzzyMatch(
  * The one navbar, over a file and over a host's home (with no file, history or Back to home). Left: the logo, which opens the app's menu
  * (`AppMenu`), Back and Forward where the host keeps the view's history (`history`), the open file's
  * name, with no glyph (the door to the name menu: Models and Files, where the host has them) and its ⋯ (Copy path, Open in, then
- * the host's own items: the CAD viewer's Export). Right: `update`, `trailing` (the file's actions), then `actions`.
+ * the host's own items: the CAD viewer's Export). Right: `trailing` (the file's actions), `actions`, then `update`, outermost.
+ * Back and Forward are a desktop row's alone: a phone's has no room for them.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to home. */
@@ -90,7 +91,7 @@ export const ViewerNavbar: ComponentType<{
    */
   fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; onAction: (action: EntryAction) => void; items?: ReactNode } | null;
   trailing?: ReactNode;
-  /** The host's update button, first among the controls, while its install is behind. */
+  /** The host's update button, last among the controls (outermost), while its install is behind. */
   update?: ReactNode;
   /** The host's own actions (the CAD app's Full size, inline), last in the row. */
   actions?: ReactNode;

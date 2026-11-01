@@ -61,9 +61,13 @@ export const API = '/api/v1';
 
 /**
  * Documents' envelopes (`GET /api/v1/documents/<id>`, `?path=`) as the catalog the client keeps: their
- * rows and, for the one asked for, its row's digest.
+ * rows and, for the one asked for, its row's digest. A model's row carries the script that builds it
+ * (the envelope's `source.path`) as `script`, where the envelope names one: its file menu acts on it.
  */
-const catalogOf = (envelopes) => ({ entries: envelopes.map((envelope) => envelope?.entry).filter(Boolean),
+const scriptOf = (envelope) => (envelope?.source?.type === 'script' && typeof envelope.source.path === 'string' && envelope.source.path
+  ? envelope.source.path : null);
+const rowOfEnvelope = (envelope) => (envelope?.entry && scriptOf(envelope) ? { ...envelope.entry, script: scriptOf(envelope) } : envelope?.entry);
+const catalogOf = (envelopes) => ({ entries: envelopes.map(rowOfEnvelope).filter(Boolean),
   revision: envelopes.length === 1 ? envelopes[0]?.revision ?? '' : '' });
 /**
  * A Recents row as the library reads it (`CadRecent`): the API names a row's document kind `kind`

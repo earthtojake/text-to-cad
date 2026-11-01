@@ -33,15 +33,17 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document
  * alike), which opens the app's menu (`AppMenu`: Back to home
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
- * where the host keeps the view's own history (`history`); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
+ * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
+ * no room for them); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
  * where the view can show another; and the ⋯ menu of what can be done with the document: Copy path,
- * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export).
+ * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export) — a model's
+ * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
  *
- * Right, only what a host or a file adds, kept for the update's nudge: the host's update button
- * while its install is behind (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the
- * file's own actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back);
- * last, the host's own actions (`actions`: the CAD app's Full size, inline). The colour scheme is the
- * app menu's. A view's own controls are never here: Display and Preview end its tool strip.
+ * Right, only what a host or a file adds, kept for the update's nudge, in this order: the file's own
+ * actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's own
+ * actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
+ * while its install is behind (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`).
+ * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -105,7 +107,7 @@ function FileMenu({ platform, capabilities, onAction, items: hostItems = null })
       className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
     </button></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="w-56" sideOffset={6}>
+    <DropdownMenuContent align="start" sideOffset={6}>
       {copy ? <DropdownMenuItem onSelect={() => perform("copy-path")}>{t("file.copyPath")}</DropdownMenuItem> : null}
       {openIn.length ? <DropdownMenuSub>
         <DropdownMenuSubTrigger data-open-in-menu="">{t("file.openIn")}</DropdownMenuSubTrigger>
@@ -210,29 +212,31 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
- * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
+ * @param {import("react").ReactNode} [props.update] The host's update button, last among the controls (outermost).
  * @param {string} [props.className]
  */
 export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, update = null, actions = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
+  const mobile = useViewerMobile();
   return (
     // `pl-3`: the logo's mark (its button's 4px in) stands on the page's 16px gutter, the Home's
     // grid's left edge (`.cad-library-content`), over the home and over a page alike.
     <header className={cn(NAVBAR_ROW_CLASS, "pl-3 border-border bg-background text-foreground", className)} data-viewer-navbar="">
       <nav aria-label={t("navbar.viewer")} className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
         {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
-        {history ? <HistoryButtons viewHistory={history} /> : null}
+        {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
+        {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
         {file ? <span className="flex min-w-0 items-center">
           <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
           {fileMenu ? <FileMenu {...fileMenu} /> : null}
         </span> : null}
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>
-        {update}
         {trailing}
         {actions}
+        {update}
       </div>
     </header>
   );

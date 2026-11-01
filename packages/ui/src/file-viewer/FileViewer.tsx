@@ -109,18 +109,19 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
   const folder = navigationPath ? null : explorerFolder;
   // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
-  // disk (none for a document with no file of its own, a model's), its page in the browser whatever
-  // it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
+  // disk (a model's: the script that builds it, where its metadata names one), its page in the
+  // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
+  const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
   const fileMenu = useMemo(() => {
     const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
-      .filter(action => action === "browser" ? Boolean(path) : Boolean(navigationPath)));
-    const target = (action: EntryAction) => action === "browser" ? path : navigationPath;
+      .filter(action => action === "browser" ? Boolean(path) : Boolean(onDisk)));
+    const target = (action: EntryAction) => action === "browser" ? path : onDisk;
     return path && (capabilities.size || fileMenuItems) ? {
       platform: host.fileActions?.platform ?? "linux", capabilities, items: fileMenuItems,
       onAction: (action: EntryAction) => { void Promise.resolve(perform?.[action]?.({ path: target(action) ?? "", kind: "file" })).catch(error => onError?.(error)); },
     } : null;
-  }, [path, navigationPath, perform, host.fileActions?.platform, fileMenuItems, onError]);
+  }, [path, onDisk, perform, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

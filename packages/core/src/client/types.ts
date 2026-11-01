@@ -8,6 +8,8 @@ export interface CadEntry {
   name?: string;
   /** The file to browse from; null for a document with no file of its own (a model's). */
   sourcePath?: string | null;
+  /** A model's script, the file that builds it (its envelope's `source.path`), where the engine names one. */
+  script?: string;
   kind?: string;
   format?: string;
   sourceFormat?: string;

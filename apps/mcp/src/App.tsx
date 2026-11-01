@@ -278,7 +278,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
   const { appSettings } = useAnalyticsConsent(client.consent, locale);
   // A newer text-to-cad (`cad_server/updates.py`), from the launch's notice at once, while this install is
-  // behind: the update button, an icon first among the navbar's controls (in the file handler, which
+  // behind: the update button, an icon last among the navbar's controls (in the file handler, which
   // has no navbar, in its corner). A click updates; once the engine restarts for it -- or goes from
   // under this card, another view's click -- the card asks for its release, and loads the engine's app
   // of the new one in place of its own (the shell a host keeps: `host/shell.ts`); should the switch fail
