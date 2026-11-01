@@ -1,4 +1,4 @@
-"""What cadgen leaves behind that no cadgen running now needs, which ``cad doctor`` reports and
+"""What text-to-cad leaves behind that no release running now needs, which ``cad doctor`` reports and
 ``cad doctor --prune`` removes. Nothing here removes anything by itself.
 
 Five classes, each found by what it is, never by a guess:
@@ -23,7 +23,7 @@ Five classes, each found by what it is, never by a guess:
   (``cad doctor --prune --all-versions``).
 
 Nothing written in the last ``QUIET_DAYS`` days is removed, of any class (but 0.7's with
-``--all-versions``): a write that recent may be a cadgen at work.
+``--all-versions``): a write that recent may be a release at work.
 """
 
 from __future__ import annotations

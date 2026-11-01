@@ -1,24 +1,24 @@
-"""The installations of cadgen this user has, the one of them that is ``current``, and the one
-``cadgen`` command that runs it.
+"""The installations of text-to-cad this user has, the one of them that is ``current``, and the one
+``cad`` command that runs it.
 
-A skill runs cadgen in the agent's shell, and that shell is often a sandbox that lets a command
+A skill runs the ``cad`` command in the agent's shell, and that shell is often a sandbox that lets a command
 read and execute anything but write only to its working folder and the temporary folder. ``uvx``
 cannot start in one: uv writes its cache before it does anything else. The environment uv built
 starts fine there. So an installation registers itself, and one command runs the current one:
 
 - ``<state>/installations/<version>.json``, the installation's record: ``version``, the absolute
-  paths of its ``python`` and its ``cadgen`` console script, its environment (``prefix``) and when
+  paths of its ``python`` and its ``cad`` console script, its environment (``prefix``) and when
   it registered (``registered``). The state folder's ``Folder`` (``cad_server.engine.registry``) writes
   it, as it writes everything there.
 - ``<state>/installations/current``, the version of the installation that is the device's: its
   engine is the one every client starts or attaches to (``cad.engine.client``), whatever its own
-  release, and the ``cadgen`` command runs it. ``cad setup`` (and so ``cad update`` and the
+  release, and the ``cad`` command runs it. ``cad setup`` (and so ``cad update`` and the
   install command run again) points it at the release it sets up, through the switch
   (``cad_server._internal.switch``); a client that finds none -- no installation before it -- points it
   at itself once (``bootstrap``).
 - ``~/.local/bin/cad`` (``CAD_LAUNCHER_DIR`` moves the folder), the proxy: a short ``sh``
   script that runs the current installation's interpreter with ``-m cad_server._internal.proxy`` (with
-  no current one, the one registered last), which runs that installation's ``cadgen``. Every version
+  no current one, the one registered last), which runs that installation's ``cad``. Every version
   writes the same file (``REVISION``), so the proxy is no installation's. On Windows it is
   ``cad.cmd``, the same logic.
 
@@ -33,7 +33,7 @@ interpreter is gone.
 
 An editable install (a checkout's environment) registers nothing by itself: it reports the release's
 version, and its record would take a user's place. A development install names its own
-(``CAD_INSTALLATION_VERSION``), which the ``cadgen`` command sets for it as it runs it
+(``CAD_INSTALLATION_VERSION``), which the ``cad`` command sets for it as it runs it
 (``named``, ``cad_server._internal.proxy``).
 """
 
@@ -59,7 +59,7 @@ REVISION = 5
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
 # record names -- a development install's ``<version>-dev.<time>``, a source tree's -- is a name the
-# installation cannot know by itself: the ``cadgen`` command gives it (``named``).
+# installation cannot know by itself: the ``cad`` command gives it (``named``).
 RELEASE = re.compile(r"[0-9]+(\.[0-9]+)*((a|b|rc)[0-9]+)?(\.post[0-9]+)?")
 
 OK = "ok"
@@ -108,7 +108,7 @@ def targets() -> tuple[str, str, str] | None:
 
 
 def editable() -> bool:
-    """Whether this cadgen is imported from outside its environment: a checkout's source tree
+    """Whether this text-to-cad is imported from outside its environment: a checkout's source tree
     (an editable install, or a path on ``PYTHONPATH``). A string compare, no metadata read."""
     import cad_server
 
@@ -196,14 +196,14 @@ def records(folder=None) -> list[dict]:
 
 
 def named(record: dict) -> str | None:
-    """The version the ``cadgen`` command tells the installation of ``record`` it runs as
+    """The version the ``cad`` command tells the installation of ``record`` it runs as
     (``NAME_ENV``): a development or source registration's, which it cannot know by itself (it
     reports its release's); None for a release, which knows."""
     return None if RELEASE.fullmatch(record["version"]) else record["version"]
 
 
 def here(folder=None) -> dict | None:
-    """The record the ``cadgen`` command runs this installation by: one naming this environment
+    """The record the ``cad`` command runs this installation by: one naming this environment
     (``sys.prefix``) whose interpreter and console script are there (``alive``) -- the version it runs as
     (``cad.engine.places.installation``) where that one is, else the one registered last. ``None`` for an
     installation no record names."""

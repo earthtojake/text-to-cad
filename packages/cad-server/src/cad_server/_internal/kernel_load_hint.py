@@ -1,6 +1,6 @@
 """Name the blocker when Windows refuses to load the CAD kernel.
 
-The kernel cadgen and build123d run on is ``OCP``, a single native extension
+The kernel the library and build123d run on is ``OCP``, a single native extension
 module (``OCP.cp3xx-win_amd64.pyd``, ~90 MB) that the cadquery-ocp wheels ship
 WITHOUT an Authenticode signature. Windows 11's Smart App Control blocks
 unsigned native code, so on a machine where it is on -- which is the default

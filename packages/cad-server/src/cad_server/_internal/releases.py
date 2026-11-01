@@ -1,6 +1,6 @@
-"""The releases of cadgen this device keeps, each the folder an update installs it in.
+"""The releases of text-to-cad this device keeps, each the folder an update installs it in.
 
-``<state>/releases/<version>`` is a release's core -- the ``cadgen`` command, the engine, the CAD
+``<state>/releases/<version>`` is a release's core -- the ``cad`` command, the engine, the CAD
 Viewer's server, the MCP shim, without the kernel (its ``build123d`` extra goes in the base,
 ``cad_server._internal.base``) -- in a virtual environment of the engine's own interpreter, made by uv
 as the base is (``base.make``): its files hard links into uv's cache, asked of the cache first
@@ -60,7 +60,7 @@ def where(version: str) -> Path:
 
 
 def console(env: Path) -> Path:
-    """The ``cadgen`` command of the environment at ``env``."""
+    """The ``cad`` command of the environment at ``env``."""
     return env / ("Scripts/cad.exe" if os.name == "nt" else "bin/cad")
 
 

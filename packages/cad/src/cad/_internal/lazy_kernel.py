@@ -18,8 +18,8 @@ import that finds it in ``sys.modules`` (to wait on one still initializing), and
 library's lazy module loads on any attribute, so the module is a ``KernelModule``, which answers
 ``__spec__`` as it stands and hands every other first read to the standard library's load.
 
-Installed twice, harmlessly (``install`` is idempotent): by ``cadgen-lazy-kernel.pth`` in the
-site-packages of an environment cadgen is installed into, before any import, and by cadgen's
+Installed twice, harmlessly (``install`` is idempotent): by ``cad-lazy-kernel.pth`` in the
+site-packages of an environment the library is installed into, before any import, and by the library's
 package ``__init__`` for an editable install, where a wheel's ``.pth`` is not placed. Importing
 this module imports no kernel.
 """

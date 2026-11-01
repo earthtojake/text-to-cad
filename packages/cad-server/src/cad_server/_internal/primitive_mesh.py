@@ -1,6 +1,6 @@
 """The meshes of a robot description's primitive shapes: box, cylinder, sphere, capsule.
 
-A URDF or SDF visual may be a shape rather than a mesh file. cadgen meshes it for the CAD
+A URDF or SDF visual may be a shape rather than a mesh file. The server meshes it for the CAD
 Viewer's robot view at one tolerance (``CHORD``, ``ANGLE``): a round shape takes as many
 segments as the chord criterion (relative to the shape's bounding diagonal) and the angle
 criterion between them allow. A box is twelve triangles whatever the tolerance.

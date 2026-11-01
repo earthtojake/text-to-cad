@@ -1,4 +1,4 @@
-"""api.texttocad.dev: the one service cadgen talks to.
+"""api.texttocad.dev: the one service text-to-cad talks to.
 
 Two things use it: telemetry (``cad_server/analytics.py``: ``/events`` and ``/forget``) and the hourly
 version check (``cad_server/updates.py``: ``/versions``). It is ours,

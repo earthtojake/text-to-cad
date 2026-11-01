@@ -1,4 +1,4 @@
-"""Whether this cadgen is an editable install of a source tree, and of which one.
+"""Whether this text-to-cad is an editable install of a source tree, and of which one.
 
 ``pip install -e <dir>`` (and ``uv pip install -e``) records the source directory beside the
 distribution's metadata (``direct_url.json``, PEP 610), and the import path then points at that
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 
 def editable_source() -> str | None:
-    """The directory this cadgen was EDITABLE-installed from, or ``None``.
+    """The directory this text-to-cad was EDITABLE-installed from, or ``None``.
 
     Anything unreadable, unparseable or non-editable answers ``None``: a caller that cannot tell
     does the ordinary thing rather than guessing.

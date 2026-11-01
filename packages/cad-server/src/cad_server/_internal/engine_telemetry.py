@@ -3,7 +3,7 @@
 The engine counts nothing and imports nothing of cadgen (its law 3). After each build, export and
 snapshot it calls the functions in ``cad.engine.api.observers`` with a plain dict of what the verb
 did (``api._facts``). ``observe`` is the server's: appended by the server's commands (``install``: the
-``cadgen`` command, the engine's own) the moment the engine's verbs are imported, never sooner, so a
+``cad`` command, the engine's own) the moment the engine's verbs are imported, never sooner, so a
 process that does not use the engine imports none of it; with it, what the library counts itself (a
 drawing, ``cad._internal.counts``) is told to the server's telemetry. A process no command of the
 server's runs -- a model's own, in the CAD kernel environment, where only the library is -- counts
@@ -40,7 +40,7 @@ from __future__ import annotations
 import sys
 from typing import Any
 
-# The ``cadgen`` command this process runs (``cad_server.cli``, as it starts one); None for a model script or a
+# The ``cad`` command this process runs (``cad_server.cli``, as it starts one); None for a model script or a
 # Python caller.
 command: str | None = None
 # Commands that serve others and count their own work: a verb one asks for is a view's, not a build.
@@ -147,7 +147,7 @@ def observe(facts: dict[str, Any]) -> None:
 
 
 def _via(facts: dict[str, Any]) -> str | None:
-    """Who asked: a model script (``python model.py``, a Python caller), a ``cadgen`` command, or -- ``None`` --
+    """Who asked: a model script (``python model.py``, a Python caller), a ``cad`` command, or -- ``None`` --
     a server, whose own work this is not."""
     if facts.get("program"):
         return "script"
