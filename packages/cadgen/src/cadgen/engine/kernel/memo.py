@@ -183,6 +183,7 @@ from typing import Any, Callable, Iterator
 from OCP.BRep import BRep_TEdge, BRep_TFace, BRep_TVertex
 from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_EDGE, TopAbs_FACE, TopAbs_VERTEX
 from OCP.TopExp import TopExp
+from OCP.TopoDS import TopoDS_Compound
 from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher
 
 from cadgen.engine.kernel.bounds import box_limits
@@ -392,6 +393,9 @@ def install() -> bool:
             _patch(getattr(topology, cls_name), attr, label, "instance")
         for cls_name, attr, label in _CLASSMETHOD_TARGETS:
             _patch(getattr(topology, cls_name), attr, label, "classmethod")
+        placed = inspect.getattr_static(topology.Shape, "_placed", None)
+        if inspect.isfunction(placed) and not getattr(placed, "__kernel_memo__", False):
+            topology.Shape._placed = _noting_placement(placed)
         for cls_name, _slot in _CONSTRUCTOR_TARGETS:
             _patch(getattr(topology, cls_name), "__init__", cls_name, "constructor")
         for module_name, attr, slot in _HELPER_TARGETS:
@@ -1537,6 +1541,28 @@ def _sharing(function: Any) -> Any:
 
     __deepcopy__.__kernel_original__ = function
     return __deepcopy__
+
+
+def _noting_placement(function: Any) -> Any:
+    """build123d's ``Shape._placed`` (0.14), behind ``moved``, ``located`` and ``copy.copy``
+    in place of a deep copy: a new object on the SAME TShape, as ``_sharing`` makes one, so
+    the TShape is noted as placed (``_note_placed``) the same way. An assembly's children are
+    copied without passing through ``_placed``, and each compound of the copy is a new TShape
+    holding the shared ones, so every node of the source and of the copy is noted here."""
+    @functools.wraps(function)
+    def _placed(self: Any, wrapped: Any) -> Any:
+        result = function(self, wrapped)
+        pending = [self, result]
+        while pending:
+            node = pending.pop()
+            own = _wrapped(node)
+            if own is not None:
+                _note_placed(own.TShape())
+            pending.extend(node.children)
+        return result
+
+    _placed.__kernel_memo__ = True
+    return _placed
 
 
 def _note_placed(tshape: Any) -> None:
@@ -3521,7 +3547,10 @@ def _key_args(label: str, kind: str, args: tuple) -> tuple:
 def _wrapped(shape: Any) -> Any:
     """The shape's ``TopoDS_Shape`` from its own state, or None for an empty shape."""
     state = getattr(shape, "__dict__", None)
-    return None if state is None else state.get("_wrapped")
+    wrapped = None if state is None else state.get("_wrapped")
+    if isinstance(wrapped, TopoDS_Compound) and wrapped.NbChildren() == 0 and getattr(shape, "is_empty", False):
+        return None  # build123d 0.14: the zero of a shape class holds an empty compound
+    return wrapped
 
 
 # --- keys -----------------------------------------------------------------------------------
@@ -4165,6 +4194,7 @@ def _register(result: Any, key: tuple[int, int] | None, feature: int | None, sta
             continue
         origin = copied.get(position, _NO_COPY) if copied else _NO_COPY
         made = _Made(tshape, key=key, entry=entry, position=position, origin=origin)
+        made.placed = tshape in state.placed  # noted before the operation returned; a hit reads it here
         with _LOCK:
             if key is None:
                 state.transient[tshape] = made
