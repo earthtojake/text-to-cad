@@ -4,7 +4,7 @@
  *
  * Hosts may keep a UI resource by its URI (OpenAI's guidance makes the URI the cache key; Claude
  * Desktop keeps a thread's page until it restarts), so the resource is this shell, and the app is
- * the engine's (`GET /__cad/mcp-app`: the app's code as one module, `cad_server/mcp/ui.py`). The shell
+ * the engine's (`GET /app`: the app's code as one module, `cad_server/mcp/ui.py`). The shell
  * greets the host and waits for the launch, as the app did (`host/bridge.ts`), then reads the app
  * through the call the host carries back to CAD's server (`cad_http`, in parts as the tunnel sends
  * long bodies), or, where the host carries no call, from the engine directly with the launch's link
@@ -18,7 +18,7 @@ import { readPresentation, type Presentation } from './presentation';
 import { readLaunch, toolText, type Launch } from './server';
 
 /** The engine's route that serves the CAD app's code (`cad_server/viewer/http_app.py`). */
-export const APP_ROUTE = '/__cad/mcp-app';
+export const APP_ROUTE = '/app';
 /** The origin a `cad_http` request is spelled on (`host/tunnel.ts`'s `TUNNEL_ORIGIN`): the server reads its path alone. */
 const TUNNEL_ORIGIN = 'http://cad.invalid';
 /** The most body one `cad_http` reply carries (`host/tunnel.ts`'s `TUNNEL_REPLY_MAX_BYTES`). */

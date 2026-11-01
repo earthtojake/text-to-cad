@@ -118,9 +118,11 @@ export async function requestViewerJson(url, options, operation, { timeoutMs = 0
     parentSignal?.removeEventListener?.("abort", abortFromParent);
   }
   if (!response.ok) {
+    // The answer itself rides along (`payload`: the API's `{error, hint}` and whatever else it said,
+    // a missing document's `state` among them).
     throw new ViewerRequestError({
       ...context, kind: payload?.state === "failed" ? "compile" : "http", status: response.status,
-      detail: serverErrorMessage(payload) || `HTTP ${response.status} ${response.statusText}`.trim()
+      detail: serverErrorMessage(payload) || `HTTP ${response.status} ${response.statusText}`.trim(), payload
     });
   }
   return payload;

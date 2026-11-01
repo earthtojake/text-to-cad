@@ -1,7 +1,7 @@
 // THE origin of the CAD Viewer backend this surface talks to.
 //
 // The standalone app is served BY that backend, so every call it makes is a
-// root-relative `/__cad/...` URL and the origin is the
+// root-relative `/api/v1/...` URL and the origin is the
 // empty string — same origin, exactly what shipped before this module existed.
 // A host that embeds the viewer (one that spawns `cad viewer --api-only`
 // per project root, say) is served from somewhere else

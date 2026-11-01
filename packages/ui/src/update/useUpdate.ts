@@ -20,14 +20,16 @@ export interface UpdateState {
   error?: string | null;
 }
 
-/** `GET /__cad/version` (and `POST /__cad/update`, which answers the same): the notice, the engine's release, the update's state. */
+/** `GET /api/v1/server` (and `POST /api/v1/local/update`, which answers the same of it): the notice, the engine's release and this start of it, the update's state. */
 export interface UpdateReply {
   notice: UpdateNotice | null;
   release?: string;
+  /** This start of the engine: another one is an engine that restarted. */
+  instance?: string;
   update?: UpdateState | null;
 }
 
-/** The host's call to its server: what `GET /__cad/version` answers. */
+/** The host's call to its server: what `GET /api/v1/server` answers. */
 export type UpdateCall = () => Promise<UpdateReply>;
 
 /** Where the update button is: offered (`idle`), installing (`working`, its share done), or restarting the engine. */
@@ -44,7 +46,7 @@ const STAGES = 4;
  * The update button's state, from the host's server: the notice the host already knew as the page
  * started (`initial`: a CAD app's launch carries it, the web page reads it with its server's
  * description), so the button draws with the page, and read again whenever the person comes back to
- * the page. `update()` is the click: the server updates (`start`, `POST /__cad/update`), and the page
+ * the page. `update()` is the click: the server updates (`start`, `POST /api/v1/local/update`), and the page
  * asks where it is (`read`) until the engine restarts -- `working`, then `restarting`, which is the
  * host's to follow: the engine goes and comes back with the new release, and the page reloads into
  * it. A failed update the page followed is said once -- its one line, as the viewer's toast (an

@@ -135,7 +135,7 @@ export function pageOf(pages: Pages, model: string | null): string | null {
 
 /**
  * Open the web viewer's page of `model` (the home's with none) in the person's browser. The server
- * opens it itself, from this computer (`POST /__cad/browser/open`, the app's alone, naming the
+ * opens it itself, from this computer (`POST /api/v1/local/browser/open`, the app's alone, naming the
  * document and never a URL), as a host may not follow a link to a loopback page (Codex does not);
  * where it cannot (no display, a remote shell) or is not reached that way (`direct`), the launch's
  * page goes through the host's open-link request where it offers one, else as a plain link.
@@ -144,7 +144,7 @@ async function openBrowserPage({ tunnel, direct, bridge, model, page }: {
   tunnel: typeof fetch; direct: boolean; bridge: Bridge; model: string | null; page: string;
 }) {
   if (!direct) {
-    const response = await tunnel(`${TUNNEL_ORIGIN}/__cad/browser/open`, {
+    const response = await tunnel(`${TUNNEL_ORIGIN}/api/v1/local/browser/open`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model }),
     }).catch(() => null);
     if (response?.ok) return;

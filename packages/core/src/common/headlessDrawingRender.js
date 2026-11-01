@@ -1,5 +1,5 @@
 /**
- * A drawing job on the parity page: a `GET /__cad/drawing` payload, on a 2D
+ * A drawing job on the parity page: a `GET /api/v1/documents/dxf/<id>/drawing` payload, on a 2D
  * canvas, as a PNG (`cad snapshot` draws by OCCT in the engine).
  *
  * This is the headless page's half of the viewer's DXF pane, and deliberately shares its

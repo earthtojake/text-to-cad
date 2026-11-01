@@ -5,7 +5,7 @@ export const RELEASE_POLL_MS = 500;
 
 /**
  * A card's update: while `watching` (its own click restarts the engine, or its engine went from under
- * it), the card asks the engine its release (`read`, `GET /__cad/version` through the host), and once
+ * it), the card asks the engine who it is (`read`, `GET /api/v1/server` through the host), and once
  * one answers with another release than the card's own (`release`), the card loads the engine's app
  * in place of its own (`onNewRelease`: the shell's `reload`, `host/shell.ts`). An answer of the card's
  * own release goes to `onSameRelease`: a switch that failed and went back says so there (the update's

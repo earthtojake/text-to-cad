@@ -10,8 +10,9 @@ export const RECONNECT_UPDATE_MS = 250;
  * A page whose engine is gone (`gone`) asks the same address again -- with its token, the cookie its
  * link left -- after a second, backing off to every five, until an engine answers it. The
  * installation's engine comes back on the same port with the same token (`cad_server/engine/daemon.py`,
- * `bind`), so a restart, a stop or a reboot costs an open tab nothing: once another engine
- * than the one the page loaded from (`pid`) answers, the page reloads itself into the same document
+ * `bind`), so a restart, a stop or a reboot costs an open tab nothing: once another start of the
+ * engine than the one the page loaded from (`instance`, `/api/v1/server`'s token of each start)
+ * answers, the page reloads itself into the same document
  * (its URL, `/<id>`), whatever the page's reads said meanwhile -- and so does one of another release
  * (`release`: an update), once the page has nothing unsaved (`reload`). The same engine answering was a
  * blip: nothing is reloaded. While the engine restarts for an update this page started (`fast`), it
@@ -24,15 +25,15 @@ export const RECONNECT_UPDATE_MS = 250;
  * the page's token, `false` when nothing answered, `null` before the first ask.
  *
  * @param {boolean} gone
- * @param {{ pid: unknown, release?: string, fast?: boolean,
- *   ask: () => Promise<{ pid?: unknown, release?: string } | { refused: true } | null>, reload?: () => void,
+ * @param {{ instance: unknown, release?: string, fast?: boolean,
+ *   ask: () => Promise<{ instance?: unknown, release?: string } | { refused: true } | null>, reload?: () => void,
  *   schedule?: (run: () => void, delayMs: number) => unknown, cancel?: (handle: unknown) => void }} options
- *   `ask` answers the engine's description (`/__cad/server`) when one answered this page, `{ refused:
+ *   `ask` answers the engine's description (`/api/v1/server`) when one answered this page, `{ refused:
  *   true }` when one answered and refused its token, else null.
  * @returns {boolean | null}
  */
 export function useEngineReconnect(gone, {
-  pid,
+  instance,
   release = "",
   fast = false,
   ask,
@@ -41,7 +42,7 @@ export function useEngineReconnect(gone, {
   cancel = (handle) => clearTimeout(handle)
 }) {
   const optionsRef = useRef(null);
-  optionsRef.current = { pid, release, fast, ask, reload, schedule, cancel };
+  optionsRef.current = { instance, release, fast, ask, reload, schedule, cancel };
   const asking = useRef(null);
   const [refused, setRefused] = useState(null);
 
@@ -71,7 +72,7 @@ export function useEngineReconnect(gone, {
       asking.current = null;
       setRefused(null);
       const released = optionsRef.current.release && answer.release && answer.release !== optionsRef.current.release;
-      if (answer.pid !== optionsRef.current.pid || released) {
+      if (answer.instance !== optionsRef.current.instance || released) {
         optionsRef.current.reload();
       }
     };

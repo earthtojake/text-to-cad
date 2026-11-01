@@ -290,7 +290,7 @@ export function peekRender3Mf(url, { resources } = {}) {
 }
 
 /**
- * A robot as cadgen resolved it (`cad_server.robot_payload`, `GET /__cad/robot`): the articulation
+ * A robot as cadgen resolved it (`cad_server.robot_payload`, `GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`): the articulation
  * to play and the visuals to draw. Cached for the page by file and revision, as a description
  * once was, so a warm reopen is whole on the first render; the page validates nothing of it but
  * the schema it reads.

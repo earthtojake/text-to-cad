@@ -52,7 +52,7 @@ function resolveDirectoryRoot() {
 }
 
 // Vite obtains the API endpoint of this installation's engine (its one page's), then
-// proxies /__cad with its token. Closing Vite leaves the engine and its other clients alive.
+// proxies the engine's API, /api, with its token. Closing Vite leaves the engine and its other clients alive.
 // VIEWER_PYTHON names the editable installation's interpreter. An explicit
 // VIEWER_BACKEND_URL (the launcher's apiUrl) also needs CAD_ENGINE_TOKEN: the token is
 // named outside the client's envPrefix (VIEWER_), which Vite hands to the page.
@@ -230,13 +230,13 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
     // reuses or replaces; dev stays out of that.)
     strictPort: true,
     allowedHosts: viewerAllowedHosts,
-    // No CORS: the client is this origin's own, and the /__cad proxy below adds the engine's
+    // No CORS: the client is this origin's own, and the /api proxy below adds the engine's
     // token to what it forwards, so no other origin (another localhost port among them) may
     // read what it answers. Vite's default lets every localhost origin.
     cors: false,
-    // The two API prefixes go to the Python backend; everything else is the
-    // client, served by Vite with HMR. Neither prefix collides with Vite's own
-    // reserved /@vite/, /@fs/ or /@id/.
+    // The API (/api: every route the page calls, /api/v1/...) goes to the Python backend;
+    // everything else is the client, served by Vite with HMR. The prefix collides with none
+    // of Vite's own reserved /@vite/, /@fs/ or /@id/.
     //
     // changeOrigin: false is MANDATORY. The backend keeps its DNS-rebinding
     // Host check, which is active whenever the bound host is loopback. With
@@ -250,7 +250,7 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
         ? await (async () => {
             const { target, token } = await startDevBackend();
             return {
-              "/__cad": { target, changeOrigin: false, headers: token ? { Authorization: `Bearer ${token}` } : {} },
+              "/api": { target, changeOrigin: false, headers: token ? { Authorization: `Bearer ${token}` } : {} },
             };
           })()
         : undefined,

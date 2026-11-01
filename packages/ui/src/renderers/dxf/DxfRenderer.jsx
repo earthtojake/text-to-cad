@@ -64,7 +64,7 @@ import { useI18n } from "@text-to-cad/ui/i18n";
  * chrome is every view's — the strip at the top centre, the tool's row under it, the sidebar at the
  * top-left, Quick Edit at the top-right — drawn from the kit's parts around the 2D canvas.
  *
- * The picture comes from the BACKEND (`GET /__cad/drawing`), which runs ezdxf over the file and
+ * The picture comes from the BACKEND (`GET /api/v1/documents/dxf/<id>/drawing`), which runs ezdxf over the file and
  * returns flat primitives, each naming its entity. This renderer never parses DXF.
  */
 
