@@ -18,7 +18,7 @@ processes (the standby, the documents worker, the meshing and reading pools, the
 - **The key** digests the installation (its environment, the version it runs as, its release and
   where its cadgen installs from), its Python and the architecture: an upgrade makes a base of its
   own, from uv's cache, and nothing is made twice.
-- **The marker**, ``cadgen-env.json``, written last, makes it complete: a later use reads the marker
+- **The marker**, ``cad-env.json``, written last, makes it complete: a later use reads the marker
   and resolves nothing. It names the installation the base belongs to (``home``), so a process
   running there reaches that installation's engine and starts it with that installation's Python, and
   it records the base's own import path, which the engine's spawned kernel processes start with.

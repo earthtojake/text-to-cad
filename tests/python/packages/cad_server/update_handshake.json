@@ -22,8 +22,8 @@
    "nt": "Scripts/cad.exe",
    "posix": "bin/cad"
   },
-  "release_marker": "cadgen-release.json",
-  "release_schema": "cadgen release/1",
+  "release_marker": "cad-release.json",
+  "release_schema": "cad release/1",
   "releases": "releases",
   "switch_log": "update.log",
   "switch_record": "update.json",

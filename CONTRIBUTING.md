@@ -836,7 +836,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    does the same for both copies of the plugin the install branches get. Then
    `bundle.sh --clean` — which is where the server's whole runtime comes into
    existence, Viewer client and CAD app alike, because the release
-   commit carries none of it; its `TEXT_TO_CAD_RELEASE` names the version, so
+   commit carries none of it; its `CAD_RELEASE` names the version, so
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
    `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's four projects on
@@ -944,7 +944,7 @@ What each store and installer reads:
 | Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
-| The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`texttocad`) |
+| The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`text-to-cad`) |
 | claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |

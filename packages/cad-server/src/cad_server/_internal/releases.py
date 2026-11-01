@@ -5,7 +5,7 @@ Viewer's server, the MCP shim, without the kernel (its ``build123d`` extra goes 
 ``cad_server._internal.base``) -- in a virtual environment of the engine's own interpreter, made by uv
 as the base is (``base.make``): its files hard links into uv's cache, asked of the cache first
 (``--offline``) and of the network only for what it does not hold, its marker
-(``cadgen-release.json``) written last, a lock beside it. An update makes the folder of the release
+(``cad-release.json``) written last, a lock beside it. An update makes the folder of the release
 it moves to (``make``), that release then sets itself up from there (``cad setup``, which
 registers it, ``cad_server._internal.installations``), and the switch points ``current`` at it
 (``cad_server._internal.switch``).
@@ -39,8 +39,8 @@ __all__ = ["FOLDER", "MARKER", "SCHEMA", "collect", "complete", "console", "list
            "where"]
 
 FOLDER = "releases"
-MARKER = "cadgen-release.json"
-SCHEMA = "cadgen release/1"
+MARKER = "cad-release.json"
+SCHEMA = "cad release/1"
 
 
 def root() -> Path:

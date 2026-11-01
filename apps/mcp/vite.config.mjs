@@ -186,7 +186,7 @@ const { version } = JSON.parse(fs.readFileSync(new URL('package.json', import.me
 const licenses = thirdPartyLicenses();
 
 export default defineConfig({
-  define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version, cwd: appRoot })) },
+  define: { __CAD_BUILD__: JSON.stringify(buildId({ version, cwd: appRoot })) },
   plugins: [packageSourceMaps(['@text-to-cad/core', '@text-to-cad/ui']), inlineWorkers(), react(), inlineDocument(), licenses.plugin()],
   resolve: { dedupe: ['react', 'react-dom', 'three', 'lucide-react'] },
   build: {

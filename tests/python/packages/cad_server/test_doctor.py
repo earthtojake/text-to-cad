@@ -372,9 +372,9 @@ class DoctorTests(unittest.TestCase):
             lines = self.apps()
         self.assertEqual(detect.call_args.kwargs["folder"], plugin.folder())
         self.assertEqual(lines, [
-            f"app      Claude Code: text-to-cad@texttocad 1.1.0, reads {folder} in place",
+            f"app      Claude Code: text-to-cad@text-to-cad 1.1.0, reads {folder} in place",
             "app      Claude Desktop: text-to-cad 1.1.0",
-            f"app      Codex: text-to-cad@texttocad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
+            f"app      Codex: text-to-cad@text-to-cad 1.2.0, a copy of {folder}, made 2026-10-31 02:41",
             "app      Cursor: /c/text-to-cad (the Cursor Marketplace's), which its store updates",
             f"app      Gemini CLI: text-to-cad 1.1.0, linked to {folder}",
             "app      Codex: text-to-cad@openai-curated (its app directory's): the directory's copy, replaced by cad setup "

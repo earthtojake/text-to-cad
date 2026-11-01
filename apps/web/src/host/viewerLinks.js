@@ -17,7 +17,7 @@ import viewerPackage from "../../package.json";
 
 // Which build this is, where it is not the release's own: vite.config.mjs names it
 // (`@text-to-cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
-const BUILD = typeof __TEXT_TO_CAD_BUILD__ === "string" ? __TEXT_TO_CAD_BUILD__ : "";
+const BUILD = typeof __CAD_BUILD__ === "string" ? __CAD_BUILD__ : "";
 
 /** This Viewer's `ViewerHost.links`: the version it runs, X, its build's GitHub (and new issues there) and Discord. */
 export function useViewerLinks() {

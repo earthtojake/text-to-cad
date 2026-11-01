@@ -5,10 +5,10 @@ about it, and a checkout's development installer loads this same file by its pat
 find every app, every copy of the plugin and every app's own commands the same way. Every app with a
 plugin gets it from the plugin folder the server writes, ``<state>/plugin``
 (``cad_server._internal.plugin``: the repository root's plugin layout, its catalog a local one,
-``texttocad``), each the way that app keeps a local plugin. Six apps:
+``text-to-cad``), each the way that app keeps a local plugin. Six apps:
 
 - **Claude Code**: the folder added as a local-directory marketplace and its plugin installed,
-  ``text-to-cad@texttocad``, through ``claude plugin``. Its sessions read the folder in place, so a
+  ``text-to-cad@text-to-cad``, through ``claude plugin``. Its sessions read the folder in place, so a
   folder written again is what the next session reads, with no command; its cached copy, which
   ``claude plugin list`` reports and Cursor and Grok Build may read, is brought along by ``claude
   plugin update``. Cursor and Grok Build load the plugins Claude Code installed as well as their own
@@ -95,7 +95,7 @@ REPOSITORY_URL = f"https://github.com/{REPOSITORY}"
 BRANCH = "latest"
 # The plugin folder's catalog, as Claude Code and Codex name it, and the plugin's id in it
 # (``cad_server._internal.plugin.MARKETPLACE``: a test holds the two equal).
-MARKETPLACE = "texttocad"
+MARKETPLACE = "text-to-cad"
 PLUGIN_ID = f"{PLUGIN}@{MARKETPLACE}"
 # The repository's catalog on GitHub, which an earlier release's installer added: a copy from it is a
 # second copy now.
@@ -453,7 +453,7 @@ def find_cli(name: str, machine: Optional[Machine] = None) -> Optional[str]:
 # prune) removes; a release folder of text-to-cad's has its marker at its root, and an update removes the ones
 # it no longer needs (``cad_server._internal.releases``).
 _UV_ARCHIVE = re.compile(r"archive-v\d+")
-RELEASE_MARKER = "cadgen-release.json"
+RELEASE_MARKER = "cad-release.json"
 
 
 def _within(path: str, folder: str) -> bool:

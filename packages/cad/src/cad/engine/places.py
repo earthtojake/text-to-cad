@@ -64,8 +64,8 @@ CURRENT = f"{INSTALLATIONS}/current"
 VERSION = re.compile(r"[0-9][0-9A-Za-z.+_-]*")
 # The marker the server writes last in the environment it makes for the kernel (the base), naming the
 # installation it belongs to (``home``), and the marker's schema.
-MARKER = "cadgen-env.json"
-MARKER_SCHEMA = "cadgen env/2"
+MARKER = "cad-env.json"
+MARKER_SCHEMA = "cad env/2"
 
 
 # --- the user's folders ----------------------------------------------------------------------------

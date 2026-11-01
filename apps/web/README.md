@@ -251,9 +251,9 @@ no filesystem-writing or editing endpoint. The host boundary is
 [the shared host contract](../../packages/ui/docs/viewer-host.md); browser persistence is
 [docs/storage.md](docs/storage.md). CAD control guidance lives with the UI package.
 
-`vite.config.mjs` names the build, for the version the app menu shows (`__TEXT_TO_CAD_BUILD__`,
+`vite.config.mjs` names the build, for the version the app menu shows (`__CAD_BUILD__`,
 from `@text-to-cad/ui/build-id`): none for the release's own build, whose
-environment names its version in `TEXT_TO_CAD_RELEASE` (the release workflow's bundle
+environment names its version in `CAD_RELEASE` (the release workflow's bundle
 step), so it shows `v0.10.0`; for any other build, `vite dev` included, the commit of
 this checkout, with `-dirty` when it had uncommitted changes: `v0.10.0-dev.b80844940`.
 

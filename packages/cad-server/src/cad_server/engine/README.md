@@ -385,7 +385,7 @@ folder, its files hard links into uv's cache; uv is asked `--offline` first and 
 only for what its cache lacks, saying so first. One per installation, keyed by it (its environment,
 the version it runs as, its release and source), its Python and the architecture, so an update
 makes a base of its own -- before it switches (**Starting and updating**), so the first build after
-it waits on nothing. Its marker, `cadgen-env.json`, written last, makes it complete, so a later
+it waits on nothing. Its marker, `cad-env.json`, written last, makes it complete, so a later
 use reads the marker and resolves nothing; a lock beside it makes one process make it while another
 waits. An installation whose own environment carries the kernel (installed with the extra, `pip
 install 'cad[build123d]==<release>'`) is its own base, and none is made.

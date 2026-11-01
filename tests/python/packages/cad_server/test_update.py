@@ -138,7 +138,7 @@ class SwitchTest(Fixture):
         for version in ("1.1.0", "1.2.0"):
             self.release(version)
         installations.point("1.1.0")
-        ran = subprocess.CompletedProcess([], 0, "", "Codex: update text-to-cad@texttocad\n")
+        ran = subprocess.CompletedProcess([], 0, "", "Codex: update text-to-cad@text-to-cad\n")
         for held, current in ((True, "1.2.0"), (False, "1.1.0")):
             with self.subTest(held=held), \
                     mock.patch.object(switch, "switch", side_effect=lambda *a, **k: (installations.point(current),
@@ -147,7 +147,7 @@ class SwitchTest(Fixture):
                     mock.patch.object(sys, "stderr", io.StringIO()) as log, \
                     mock.patch.dict(os.environ, {"PYTHONPATH": "/checkout/src"}):
                 self.assertEqual(switch.helper("1.2.0", port=4567, previous="1.1.0"), 0 if held else 1)
-            self.assertIn("cad update: Codex: update text-to-cad@texttocad", log.getvalue(), "its lines go to the log")
+            self.assertIn("cad update: Codex: update text-to-cad@text-to-cad", log.getvalue(), "its lines go to the log")
             (call,) = run.call_args_list
             self.assertEqual(call.args[0], [installations.current()["cadgen"], "plugin", "--refresh"])
             self.assertNotIn("PYTHONPATH", call.kwargs["env"], "the release runs its own code")

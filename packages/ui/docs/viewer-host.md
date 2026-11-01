@@ -97,7 +97,7 @@ are for reading and maintaining the contracts.
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
-| `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `TEXT_TO_CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@text-to-cad/ui/build-id` |
+| `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@text-to-cad/ui/build-id` |
 
 Start with the actual compositions: [web App](../../../apps/web/src/App.tsx) and the
 MCP app's [ModelView](../../../apps/mcp/src/ModelView.tsx), both one `CadViewer`.

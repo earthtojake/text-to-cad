@@ -365,7 +365,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         self.assertEqual(stages, sorted(stages, key=order.index))
         self.assertEqual((self.work / "state" / "installations" / "current").read_text(encoding="utf-8"), B)
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
-            self.assertTrue((self.release(version) / "cadgen-release.json").is_file(), version)
+            self.assertTrue((self.release(version) / "cad-release.json").is_file(), version)
         self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
         proxy = self.work / "bin" / ("cad.cmd" if WINDOWS else "cad")  # the cad command runs current
         self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")

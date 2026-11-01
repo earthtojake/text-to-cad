@@ -42,7 +42,7 @@ NAME = "text-to-cad"
 FOLDER = "plugin"
 # The catalog the folder is, as Claude Code and Codex name it: a local one of its own, apart from the
 # repository's catalog on GitHub (``earthtojake``) and a checkout's development install's.
-MARKETPLACE = "texttocad"
+MARKETPLACE = "text-to-cad"
 PLUGIN_ID = f"{NAME}@{MARKETPLACE}"
 SKILLS = "skills"
 CATALOG = ".claude-plugin/marketplace.json"

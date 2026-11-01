@@ -266,13 +266,13 @@ class TheCommand(Fixture):
         self.assertIn(["Claude Code", "remove duplicate", "text-to-cad@earthtojake-dev 0.0.1-dev.1 (a development install)"],
                       rows)
         folder = providers.shown(plugin.folder(), self.machine)
-        self.assertIn(["Claude Code", "install", f"text-to-cad@texttocad, which reads {folder} in place"], rows)
+        self.assertIn(["Claude Code", "install", f"text-to-cad@text-to-cad, which reads {folder} in place"], rows)
         where = providers.shown(self.desktop, self.machine)
         self.assertIn(["Claude Desktop", "install", f"mcpServers.cad in {where}: text-to-cad {RELEASE}"], rows)
         self.assertIn(["Cursor", "leave", "served by the Claude Code plugin"], rows)
         self.assertIn(["plugin folder", "write", f"{folder}: text-to-cad {RELEASE}, which the apps read"], rows)
         self.assertIn(["engine", "leave", f"port {PORT}: no engine running; the first CAD view or build starts one"], rows)
-        self.assertIn("$ claude plugin install text-to-cad@texttocad", out)
+        self.assertIn("$ claude plugin install text-to-cad@text-to-cad", out)
         self.assertIn("not found here: Codex, Grok Build, Gemini CLI", out)
         self.assertEqual(lines[-1], "Dry run: nothing was changed.")
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -515,7 +515,7 @@ class InstallUpdateAndUninstall(Fixture):
                          (self.plugin_source / "skills" / "cad" / "SKILL.md").read_bytes())
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertIn(["claude", "plugin", "marketplace", "add", str(folder)], calls)
-        self.assertIn(["claude", "plugin", "install", "text-to-cad@texttocad"], calls)
+        self.assertIn(["claude", "plugin", "install", "text-to-cad@text-to-cad"], calls)
         # Run again: the folder already this release's, nothing written.
         before = (folder / plugin.MANIFEST).stat().st_mtime_ns
         self.assertEqual(self.run_setup("--only", "claude")[0], 0)
@@ -532,7 +532,7 @@ class InstallUpdateAndUninstall(Fixture):
             code, out, _err = self.run_setup()
         self.assertEqual(code, 1, out)
         self.assertIn("could not be written: no plugin in this installation", out)
-        self.assertIn("Claude Code: install text-to-cad@texttocad", out)
+        self.assertIn("Claude Code: install text-to-cad@text-to-cad", out)
         self.assertIn("not done, with no plugin folder", out)
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
         self.assertFalse([call for call in calls if call[1:3] == ["plugin", "marketplace"] and call[3] == "add"])
@@ -650,14 +650,14 @@ class ThePluginCommand(Fixture):
         folder = plugin.folder()
         command(self.bin, "codex", "print('codex-cli 0.153.4') if args == ['--version'] else None\n")
         codex = self.home / ".codex"
-        (codex / "plugins" / "cache" / "texttocad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
-        (codex / "config.toml").write_text(f'[marketplaces.texttocad]\nsource_type = "local"\nsource = {json.dumps(str(folder))}\n'
-                                           '[plugins."text-to-cad@texttocad"]\nenabled = true\n', encoding="utf-8")
+        (codex / "plugins" / "cache" / "text-to-cad" / "text-to-cad" / "0.0.1").mkdir(parents=True)
+        (codex / "config.toml").write_text(f'[marketplaces.text-to-cad]\nsource_type = "local"\nsource = {json.dumps(str(folder))}\n'
+                                           '[plugins."text-to-cad@text-to-cad"]\nenabled = true\n', encoding="utf-8")
         code, out, err = self._run(plugin_cli.main, ("--refresh",))
         self.assertEqual(code, 0, err)
-        self.assertIn("Codex: update text-to-cad@texttocad 0.0.1 -> " + RELEASE, err)
+        self.assertIn("Codex: update text-to-cad@text-to-cad 0.0.1 -> " + RELEASE, err)
         calls = [json.loads(line) for line in (self.bin / "calls.jsonl").read_text(encoding="utf-8").splitlines()]
-        self.assertIn(["codex", "plugin", "add", "text-to-cad@texttocad"], calls)
+        self.assertIn(["codex", "plugin", "add", "text-to-cad@text-to-cad"], calls)
         self.assertEqual([action["app"] for action in self.receipt()["actions"]], ["codex"])
         count = len(calls)
         code, out, err = self._run(plugin_cli.main, ("--refresh", "--json"))

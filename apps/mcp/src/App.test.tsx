@@ -9,7 +9,7 @@ import type { HostContext } from './host/bridge';
 import type { Launch } from './host/server';
 
 // The page as a checkout builds it: its Vite config names the build (vite.config.mjs, build.test.ts).
-vi.hoisted(() => { Object.assign(globalThis, { __TEXT_TO_CAD_BUILD__: 'b80844940' }); });
+vi.hoisted(() => { Object.assign(globalThis, { __CAD_BUILD__: 'b80844940' }); });
 
 // The shared CAD viewer, reduced to what this page hands it: what it draws for each prompt
 // destination and each page is its own suite's (packages/ui); what this page hands it is this one's.

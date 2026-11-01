@@ -198,7 +198,7 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
   envPrefix: ENV_PREFIX,
   // Which build this is, for the version the app menu shows (src/host/viewerLinks.js): none for
   // the release's own, this checkout's commit for any other (@text-to-cad/ui/build-id).
-  define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
+  define: { __CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
   plugins: [
     react(),
     serverLifetimePlugin(),
