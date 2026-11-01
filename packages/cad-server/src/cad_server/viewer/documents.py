@@ -23,7 +23,7 @@ def engine_document_path(file_ref):
     """The engine document a request names: a document's id as it is, or an on-disk ``.xbf`` or
     STEP's absolute path. A script is no document."""
     if not file_ref:
-        raise ValueError("GET /__cad/xbf needs ?file=<a document id, or an absolute document path>")
+        raise ValueError("a document is opened by a document id, or an absolute document path")
     if is_id(file_ref):
         return file_ref
     path = absolute_path(file_ref)
@@ -68,7 +68,7 @@ class EngineDocuments:
     # --- the serve -------------------------------------------------------------------------
 
     def response(self, file_ref) -> tuple[int, dict]:
-        """``(status, body)``: ``{"doc", "url"}`` at 200; 202 while the engine reads the file,
+        """``(status, body)``: ``{"doc"}`` at 200; 202 while the engine reads the file,
         ``{"state": "reading", "retryMs", "building"}``, ``building`` the last frame of the file's
         import where the engine has one (``serve.Server.importing``: a STEP's reader parsing it, then
         collecting its parts, counted), else null; or the engine's refusal at 400. A request is held
@@ -95,12 +95,6 @@ class EngineDocuments:
     def _building(self, ident: str) -> dict | None:
         """The last frame of the document's import, or None."""
         return self.server.build_of(ident)["building"] if self.server is not None else None
-
-    def held(self, file_ref) -> dict:
-        """``{"held": bool}``: whether the engine serves the document now (its daemon lists it),
-        asked without starting the daemon or a read."""
-        ident = document_id(engine_document_path(file_ref))
-        return {"held": self.server is not None and self.server.holds(ident)}
 
     def _joined(self, ident: str) -> _Serve | None:
         now = self._clock()
@@ -146,4 +140,4 @@ class EngineDocuments:
             ident = answer["doc"]
         else:
             ident = self.server.add(Path(path))
-        return {"doc": ident, "url": f"/__cad/api/doc/{ident}"}
+        return {"doc": ident}

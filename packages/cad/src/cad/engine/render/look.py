@@ -1,8 +1,8 @@
 """The regular display modes' look: one frozen record that both renderers draw by.
 
 ``occt.py`` draws it on OCCT's PBR raster (``finish.py``; X-ray on its Phong program), the engine
-serves it as JSON (``GET /api/look``, its environment at ``GET /api/look/environment``:
-``serve.py``), and the CAD Viewer draws an engine document's regular modes by it through three's
+serves it as JSON (``GET /api/v1/look``, its environment at ``GET /api/v1/look/environment``:
+``serve.py``'s ``/api/look``, which the engine's API answers), and the CAD Viewer draws an engine document's regular modes by it through three's
 physical materials (core's ``lib/xbf/xbfLook.js``). Preview's photographic look is not here.
 
 **The light.** One key, a directional light at ``intensity`` (radiance: a white surface facing it
@@ -179,7 +179,7 @@ class Look:
 
     @property
     def environment_path(self) -> Path:
-        """The environment's image, which ``GET /api/look/environment`` serves."""
+        """The environment's image, which ``GET /api/v1/look/environment`` serves."""
         return Path(__file__).resolve().parent / self.environment.file
 
     def edge(self, line: str) -> str:
@@ -189,13 +189,13 @@ class Look:
         return next(mode for mode in self.modes if mode.name == name)
 
     def json(self) -> dict[str, Any]:
-        """The record as ``GET /api/look`` serves it (camelCase, as the structure is); the
-        environment's image is ``GET /api/look/environment``."""
+        """The record as ``GET /api/v1/look`` serves it (camelCase, as the structure is); the
+        environment's image is ``GET /api/v1/look/environment``."""
         return {
             "version": self.version, "backdrop": self.backdrop,
             "lights": [{"name": light.name, "direction": list(light.direction), "intensity": light.intensity}
                        for light in self.lights],
-            "environment": {"url": "/api/look/environment", "intensity": self.environment.intensity},
+            "environment": {"url": "/api/v1/look/environment", "intensity": self.environment.intensity},
             "colourPower": self.colour_power,
             "plain": {"metallic": self.plain.metallic, "roughness": self.plain.roughness, "ior": self.plain.ior},
             "brdf": self.brdf, "tone": self.tone, "exposure": self.exposure, "fill": self.fill,

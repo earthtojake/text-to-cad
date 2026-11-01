@@ -199,7 +199,7 @@ _APP_TOKEN_ARGUMENT = "app"
 _APP_TOKEN_SCHEMA = {"type": "string", "description": "The view's capability, from its launch's metadata."}
 # The card's Open in browser: this process opens the web viewer's page of the document the card
 # shows (``_open_in_browser``), a route of the app's alone -- an agent's request never reaches it.
-_BROWSER_OPEN_ROUTE = "/__cad/browser/open"
+_BROWSER_OPEN_ROUTE = "/api/v1/local/browser/open"
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
@@ -884,7 +884,7 @@ class Server:
         return (self._viewer_url or viewer_url)(model)
 
     def _open_in_browser(self, method: str, body: bytes) -> dict[str, Any]:
-        """``POST /__cad/browser/open`` with ``{"model": <path or id> | null}``, the card's Open in
+        """``POST /api/v1/local/browser/open`` with ``{"model": <path or id> | null}``, the card's Open in
         browser: this process opens the web viewer's page of that document (the home's with none) in
         the person's browser, through an owner-only redirect file so the page's token is on no
         command line (``browser_open``) -- a host may not follow a link to a loopback page, and Codex

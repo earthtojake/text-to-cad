@@ -1,6 +1,6 @@
 """The CAD Viewer's HTTP routes, served in-process for a view with no network.
 
-A view sends exactly the requests the web client sends (``/__cad/*``) as tool
+A view sends exactly the requests the web client sends (``/api/v1/*``) as tool
 calls; this module hands each one to the viewer's own router -- one :class:`~cad_server.viewer.http_app.CadApp`, made on the first
 request, for every view of this server -- and returns the status, headers and
 body bytes. There is one backend, not two: the router, its checks and its limits
@@ -57,11 +57,13 @@ from cad_server.viewer import url_norm
 from cad_server.viewer.response import Request, Response
 
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
-_ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST"})
-_API_PREFIXES = ("/__cad/",)
+_ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"})
+_API_PREFIXES = ("/api/v1/",)
+# Beside the API, the CAD app's module (``GET /app``), which a card's shell loads through its host.
+_APP_ROUTE = "/app"
 # The one route whose effect belongs to the host: a view copies through its host's frame, never
-# through the server's clipboard. (No app here has a shutdown: it refuses `/__cad/shutdown` itself.)
-_HOST_EFFECT_ROUTES = frozenset({"/__cad/clipboard"})
+# through the server's clipboard.
+_HOST_EFFECT_ROUTES = frozenset({"/api/v1/local/clipboard"})
 # How long one catalog read answers every view of a file that asks for its revision: views sync
 # each second, and N of them on one file then cost one read, not N.
 CATALOG_REVISION_SECONDS = 0.75
@@ -157,7 +159,8 @@ class ViewerTunnel:
     # What a view watches, answered on its sync (``cad_sync``) rather than as requests of its own.
 
     def catalog_revision(self, file: str) -> str:
-        """A digest of the catalog the view reads (``/__cad/catalog?file=``): it moves whenever
+        """A digest of the catalog the view reads (its document's envelope, ``GET /api/v1/documents``'s
+        ``path=`` or ``/api/v1/documents/<id>``: its ``revision``): it moves whenever
         anything the view would see in it does, and the view reads the catalog again only then."""
         now = self._clock()
         with self._lock:
@@ -177,8 +180,8 @@ class ViewerTunnel:
         method = method.upper()
         path = url_norm.request_pathname(url)
         if method not in _ALLOWED_METHODS:
-            return _result(405, {"allow": "GET, HEAD, POST", "content-length": "0"}, b"")
-        if not path.startswith(_API_PREFIXES) or path in _HOST_EFFECT_ROUTES:
+            return _result(405, {"allow": ", ".join(sorted(_ALLOWED_METHODS)), "content-length": "0"}, b"")
+        if not (path.startswith(_API_PREFIXES) or path == _APP_ROUTE) or path in _HOST_EFFECT_ROUTES:
             return _result(404, {"content-type": "text/plain; charset=utf-8"}, b"Not found")
         if len(body) > MAX_REQUEST_BODY_BYTES:
             return _result(400, {"content-type": "application/json; charset=utf-8"}, b'{"ok":false,"error":"request body too large"}')

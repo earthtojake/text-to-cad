@@ -1,7 +1,7 @@
-"""The update the engine runs when a person clicks its update button (``POST /__cad/update``).
+"""The update the engine runs when a person clicks its update button (``POST /api/v1/local/update``).
 
 One at a time, in the engine's own process, in the background: the request that asked for it is
-answered at once, and the page or card that asked reads where it is (``GET /__cad/version``'s
+answered at once, and the page or card that asked reads where it is (``GET /api/v1/server``'s
 ``update``) until the engine goes and comes back with the new release. Nothing here starts on its
 own: no fetch and no switch without that click, ``cad update`` or the install command.
 

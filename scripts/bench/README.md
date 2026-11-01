@@ -61,7 +61,7 @@ The batch never stops another batch's engine or clears its cache. Steps are:
 - `export`: explicitly export the selected document id to `xbf`, recording bytes and
   translation time separately from build walls;
 - `serve`, `mesh-cold`, `mesh-warm`, `structure`: serve that model id, mesh every part
-  (`POST /api/doc/<id>/mesh`), mesh again after dropping those meshes on the now-warm
+  (`POST /api/v1/documents/model/<id>/mesh`), mesh again after dropping those meshes on the now-warm
   pool, then read the page's structure. No file is substituted for the model document;
 - `snapshot-first`, `snapshot`: draw that document id twice with `cad snapshot --json`.
 

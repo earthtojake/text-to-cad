@@ -1,7 +1,8 @@
 """Where the prototype's meshes come from: the engine's, never OCCT's.
 
 - ``from_daemon``: the daemon serves the document and meshes every part in its warm pool
-  (``POST /api/doc/<id>/mesh``), then hands each part's XBM buffer (``GET .../part/<key>``) --
+  (``POST /api/v1/documents/<kind>/<id>/mesh``), then hands each part's XBM buffer
+  (``GET .../parts/<key>``) --
   the bytes the viewer draws. Each request carries the user's token, as the engine's own
   clients send it (``Authorization: Bearer``), and the POST the page's guard header.
 - ``save``/``load``: those buffers kept in a folder, a cold run's pre-built cache (prototype
@@ -30,9 +31,9 @@ def _fetch(url: str, token: str) -> tuple[dict[str, Any], dict[str, bytes], dict
     started = time.perf_counter()
     meshed = json.loads(_get(f"{url}/mesh", token, "POST"))
     timings["mesh"] = time.perf_counter() - started
-    structure = json.loads(_get(url, token))
+    structure = json.loads(_get(f"{url}/structure", token))
     started = time.perf_counter()
-    buffers = {p["key"]: _get(f"{url}/part/{p['key']}", token) for p in structure["prototypes"]}
+    buffers = {p["key"]: _get(f"{url}/parts/{p['key']}", token) for p in structure["prototypes"]}
     timings["fetch"] = time.perf_counter() - started
     timings["pool_seconds"] = meshed.get("seconds", 0.0)
     return structure, buffers, timings
@@ -46,7 +47,9 @@ def from_daemon(path: Path) -> tuple[dict[str, Any], dict[str, bytes], dict[str,
     if not answer or "failed" in answer:
         raise RuntimeError(f"the engine would not serve {path}: {(answer or {}).get('failed', 'no daemon')}")
     parsed = urlparse(answer["url"])
-    return _fetch(f"{parsed.scheme}://{parsed.netloc}/api/doc/{answer['doc']}", answer["token"])
+    # The engine's API names a document under its kind: a STEP's ``step``, an ``.xbf``'s ``xbf``.
+    kind = {".stp": "step", ".step": "step"}.get(Path(path).suffix.lower(), "xbf")
+    return _fetch(f"{parsed.scheme}://{parsed.netloc}/api/v1/documents/{kind}/{answer['doc']}", answer["token"])
 
 
 def save(folder: Path, buffers: dict[str, bytes]) -> None:

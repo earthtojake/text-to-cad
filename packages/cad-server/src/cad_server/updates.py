@@ -24,7 +24,7 @@ development install: the store moved the plugin, and the device's engine is stil
 update a person asks for reads the feed whatever the copy (``checking(asked=True)``).
 
 The notice is ``{latest, version}``: the CAD Viewer's and the CAD app's update button, an icon and
-nothing else, while this install is behind; a click updates (``POST /__cad/update``). A text-only app
+nothing else, while this install is behind; a click updates (``POST /api/v1/local/update``). A text-only app
 gets one line (``line``) with its first ``cad_show`` result: the release, and the install command
 (``INSTALL``, ``INSTALL_WINDOWS``; ``command`` picks this computer's), which updates text-to-cad in
 every agent app on the computer (``cad setup``). A skill's ``cadgen`` command says nothing.

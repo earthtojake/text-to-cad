@@ -32,7 +32,8 @@ __all__ = ["CadHTTPServer", "make_handler_class", "MAX_REQUEST_BODY_BYTES"]
 # refused before it is read.
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 
-_ALLOWED_METHODS = ("GET", "HEAD", "POST")
+# The methods a route may take (``http_app``): the API's PUT, PATCH and DELETE among them.
+_ALLOWED_METHODS = ("GET", "HEAD", "POST", "PUT", "PATCH", "DELETE")
 
 # How long a closing connection waits for each piece of a body its route never read (`_linger`).
 LINGER_SECONDS = 1.0
@@ -219,7 +220,7 @@ def make_handler_class(app):
 
             NOT ``self.path``: ``parse_request`` collapses a leading ``//`` to
             ``/`` (a 3.11 open-redirect fix for SimpleHTTPRequestHandler), which
-            turns ``//evil.example/__cad/server`` into a path segment instead of
+            turns ``//evil.example/api/v1/server`` into a path segment instead of
             an authority Node would discard. Routing on it would answer the SPA
             where Node answers the API.
             """
@@ -294,6 +295,12 @@ def make_handler_class(app):
         def do_DELETE(self):
             self._dispatch()
 
+        def do_PUT(self):  # noqa: N802
+            self._dispatch()
+
+        def do_PATCH(self):  # noqa: N802
+            self._dispatch()
+
         def do_POST(self):  # noqa: N802
             self._dispatch()
 
@@ -301,7 +308,7 @@ def make_handler_class(app):
             self._dispatch()
 
         def handle_one_request(self):
-            # Everything other than GET/HEAD/POST answers 405 instead of
+            # Every method a route never takes answers 405 instead of
             # hanging. The Node server dropped handle()'s false return on the
             # floor, so OPTIONS/PUT/DELETE/PATCH stalled until Node's 300s
             # requestTimeout — unpinned, unused by any client, and a trivial
@@ -323,14 +330,14 @@ def make_handler_class(app):
                 # OPTIONS reaches an app that answers preflights (``EngineApp.preflight``: a CAD
                 # card's link-bearing request, and nothing else); every other app 405s it as before.
                 preflight = self.command == "OPTIONS" and getattr(app, "preflight", None) is not None
-                if self.command not in _ALLOWED_METHODS and not preflight and not (self.command == "DELETE" and self.path == "/mcp"):
+                if self.command not in _ALLOWED_METHODS and not preflight:
                     if "chunked" in (self.headers.get("transfer-encoding") or "").lower():
                         # Nothing here can frame a chunked body, so the only
                         # safe answer is to stop reusing the connection.
                         self.close_connection = True
                     else:
                         self._drain_body()
-                    Response(self).send_empty(405, [("allow", "GET, HEAD, POST")])
+                    Response(self).send_empty(405, [("allow", ", ".join(_ALLOWED_METHODS))])
                     self.wfile.flush()
                     return
                 method = getattr(self, f"do_{self.command}", None)
