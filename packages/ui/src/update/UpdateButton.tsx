@@ -13,7 +13,7 @@ const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
  * A newer text-to-cad, as the update button: an icon and nothing else, which a host hands the viewer
  * (`update`) to draw first among the navbar's controls, over every file and over the home (and, where
  * the host shows the view alone, in its corner), while this install is behind (`cad_server/updates.py`).
- * A click updates (`useUpdate`): the icon becomes a ring that fills as the release installs, then a
+ * A click updates (`useUpdate`): the icon becomes a ring that fills a stage at a time as the release installs (each step eased), then a
  * spinner while the engine restarts, and the page reloads itself into the new release (the host's to
  * do). Nothing else is shown; a failed update says its one line (the host's toast) and offers itself again.
  */
@@ -38,7 +38,8 @@ export function UpdateButton({ notice, phase, onUpdate }: {
       <svg viewBox="0 0 16 16" className="size-4 -rotate-90" aria-hidden="true">
         <circle cx="8" cy="8" r={RADIUS} fill="none" stroke="currentColor" strokeOpacity={0.25} strokeWidth={2} />
         <circle cx="8" cy="8" r={RADIUS} fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE} strokeDashoffset={CIRCUMFERENCE * (1 - share)} />
+          strokeDasharray={CIRCUMFERENCE} strokeDashoffset={CIRCUMFERENCE * (1 - share)}
+          style={{ transition: "stroke-dashoffset 600ms ease-out" }} />
       </svg>
     </span>;
   }
