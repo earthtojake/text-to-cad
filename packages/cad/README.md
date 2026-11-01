@@ -240,14 +240,15 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
     **Tier 4: protocols where two releases meet while both run** -- the door, the CAD app's server and
     its page, the update handshake, the HTTP API (`/api/v1`), a page's reload probe, the version feed,
     the installation and release records, the analytics schemas, and the PyPI names old pins resolve
-    through. Each is numbered or frozen in a golden; a change within a number is additive, and unknown
-    keys and ops are ignored; a breaking change bumps the number, and the newer side answers the
-    previous number for one release -- the window in which the previous release's plugins, pages,
-    shims and updaters are still running on a device -- then drops it. The analytics receiver keeps
-    every schema a released client sends. 0.8's door had no number, and 0.10 meets 0.8 by stopping
-    it, never by answering it: 0.8's engines keep their own folder, no process of 0.10's speaks to
-    one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`. The window runs
-    from 0.10 on.
+    through. Each is numbered or frozen in a golden, so a break is never silent: a change within a
+    number is additive, and unknown keys and ops are ignored; a breaking change bumps the number.
+    Whether the newer side keeps answering the previous number is decided case by case, by what a
+    mismatch would strand and whether the stranded side can say what to do. Where it does not, the
+    side that meets a number it does not speak says so in one line and names which side to update,
+    and to what release, never how to install it: the person or the agent has their own way. The
+    analytics receiver keeps every schema a released client sends. 0.8's door had no number, and 0.10
+    meets 0.8 by stopping it, never by answering it: 0.8's engines keep their own folder, no process
+    of 0.10's speaks to one of 0.8's, and `cad setup` stops 0.8's server with 0.8's own `cadgen stop`.
 
     **The earlier name.** `cadgen` is the library under its earlier name, not a retired surface:
     the `cadgen` import is the library itself, every name and every module of it `cad`'s own
