@@ -180,7 +180,7 @@ the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
 every document without a build, and under `pycache/` the bytecode the daemon and its
 workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`); it touches nothing else in
-that folder. Releases before 0.9 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
+that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`

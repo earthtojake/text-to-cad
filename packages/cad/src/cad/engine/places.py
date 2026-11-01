@@ -105,7 +105,7 @@ def state_dir() -> Path:
 
 
 def earlier_state_dir() -> Path:
-    """Where the releases before 0.9 kept their state (``EARLIER_STATE``), or the folder ``CAD_STATE_DIR`` names:
+    """Where the releases before 0.10 kept their state (``EARLIER_STATE``), or the folder ``CAD_STATE_DIR`` names:
     where what they left behind is looked for (``cad doctor``)."""
     override = os.environ.get("CAD_STATE_DIR")
     return Path(override) if override else _platform_state(EARLIER_STATE)
@@ -186,7 +186,7 @@ def cache_dir() -> Path:
 
 
 def earlier_cache_dir() -> Path:
-    """Where the releases before 0.9 kept their cache (``EARLIER_CACHE``, by ``cache_dir``'s rule), or the folder
+    """Where the releases before 0.10 kept their cache (``EARLIER_CACHE``, by ``cache_dir``'s rule), or the folder
     ``CAD_CACHE_DIR`` names: where what they left behind is looked for (``cad doctor``)."""
     return _cache_dir(EARLIER_CACHE)
 

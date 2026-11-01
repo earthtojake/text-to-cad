@@ -1081,7 +1081,7 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
 ([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
 `$XDG_CACHE_HOME/texttocad` or `%LOCALAPPDATA%\texttocad`, else `~/.cache/texttocad`; releases before
-0.9 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
+0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's

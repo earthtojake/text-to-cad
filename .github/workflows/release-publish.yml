@@ -306,7 +306,7 @@ jobs:
 
       # The wheels about to ship, the library's, the server's and the shim's, installed together
       # into a fresh venv with no repo on the path: the front door, the viewer verb, the shim's command
-      # and the doctor all answer (0.9's doctor takes no skill folder). test-installed.sh then drives the same wheels through a
+      # and the doctor all answer (0.10's doctor takes no skill folder). test-installed.sh then drives the same wheels through a
       # real build.
       - name: Install the built wheels and exercise them
         run: |

@@ -19,8 +19,8 @@ SRDF correctness is a **planning semantics** problem. The common failure is not 
 Run the server through the `cad` command its installation writes, so this skill's commands
 share one installation, and its server, with the CAD app's:
 
-- `cad` below means `cad +0.9.0` (`~/.local/bin/cad +0.9.0` where `~/.local/bin` is not on your PATH)
-- `python` below means `cad +0.9.0 run`
+- `cad` below means `cad +0.10.0` (`~/.local/bin/cad +0.10.0` where `~/.local/bin` is not on your PATH)
+- `python` below means `cad +0.10.0 run`
 
 For first-time setup or an update, a missing `cad` command, a release it says is not
 installed, a server that is not running, or an installation or kernel load error, read

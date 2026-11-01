@@ -16,7 +16,7 @@ export default function PrivacyPolicyPage() {
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
           text-to-cad: the text-to-cad plugin and its skills, the text-to-cad software they run (the packages{" "}
           <code>cad</code>, <code>cad-server</code> and <code>cad-mcp</code>, named cadgen
-          before 0.9), the
+          before 0.10), the
           step.parts part library they search, and this website, texttocad.dev. text-to-cad runs on
           your computer. Your prompts, models, drawings and files stay there, and we do not collect
           them.
@@ -100,7 +100,7 @@ export default function PrivacyPolicyPage() {
             that sends; when nothing has sent it for five minutes, the next <code>cad</code> command
             starts a short-lived sender in the background, which sends it and exits. Like any
             request over the internet, each one also reaches our host with your IP address, the time
-            and a user agent (just “cadgen”, the software’s name before 0.9); see section 4 for what happens to them.
+            and a user agent (just “cadgen”, the software’s name before 0.10); see section 4 for what happens to them.
             Section 5 says when telemetry is on and how to turn it off.
           </li>
           <li>
@@ -222,17 +222,17 @@ export default function PrivacyPolicyPage() {
             telemetry off deletes those files too.
           </li>
           <li>
-            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry off</code>, use{" "}
+            To turn telemetry off, run <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad telemetry off</code>, use{" "}
             <strong>Telemetry</strong> in the menu of the CAD app or the CAD viewer (the logo
             at the top left, over any open model), or ask your agent to turn off CAD telemetry.
             Turning it off deletes the install ID on your computer and asks our server to delete
             everything stored under it. Turning it on again starts a new install ID, so nothing links
-            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry on</code> turns it on, and{" "}
-            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad telemetry status</code> shows the setting and your install ID.
+            the two. <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad telemetry on</code> turns it on, and{" "}
+            <code>uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad telemetry status</code> shows the setting and your install ID.
           </li>
           <li>
             Setting <code>DO_NOT_TRACK=1</code> or <code>CAD_TELEMETRY=0</code> (<code>CADGEN_TELEMETRY=0</code>{" "}
-            before 0.9) where text-to-cad runs (your agent app’s environment, or the shell that runs a{" "}
+            before 0.10) where text-to-cad runs (your agent app’s environment, or the shell that runs a{" "}
             <code>cad</code> command or a model script) turns telemetry off for that process and the builds it
             asks for, whatever your setting says; <code>CAD_TELEMETRY=1</code> turns it on for that process the
             same way.
@@ -240,7 +240,7 @@ export default function PrivacyPolicyPage() {
             own, a viewer started in the background and the short-lived sender, go by your setting.
           </li>
           <li>
-            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.9) where text-to-cad
+            Setting <code>CAD_UPDATE_CHECK=0</code> (<code>CADGEN_UPDATE_CHECK=0</code> before 0.10) where text-to-cad
             runs turns the hourly version check
             off; CAD then never says when there is an update.
           </li>

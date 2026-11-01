@@ -358,7 +358,7 @@ def _cache() -> str:
 
 def _leftovers():
     """What earlier releases left behind that none running now needs (``cad_server._internal.leftovers``):
-    the state and cache folders, and each class found in them. What 0.8 and 0.7 kept outside what 0.9
+    the state and cache folders, and each class found in them. What 0.8 and 0.7 kept outside what 0.10
     moved into its own state folder (``cad.engine.places.adopt``) is in theirs, named for cadgen
     (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` name them)."""

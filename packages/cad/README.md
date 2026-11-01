@@ -85,7 +85,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
    a folder only the user can make: `cadgen-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
-   `$TMPDIR`), else `/tmp/cadgen-<uid>` (the names releases before 0.9 used too, so each finds the
+   `$TMPDIR`), else `/tmp/cadgen-<uid>` (the names releases before 0.10 used too, so each finds the
    other's door) -- and the server's own
    state in the user's state folder (`texttocad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or

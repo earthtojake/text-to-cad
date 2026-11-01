@@ -24,19 +24,19 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --from cad-server==0.9.0 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
-3. On a computer 0.8 was set up on, moves what 0.9 keeps of 0.8's state folder
+3. On a computer 0.8 was set up on, moves what 0.10 keeps of 0.8's state folder
    into its own, once: your telemetry answer and language, the installations'
    records, the page token, the documents' records and Recents
-   ([Migrating from 0.8](migrations/migrating-0.8-to-0.9.md#folders)). Then installs
+   ([Migrating from 0.8](migrations/migrating-0.8-to-0.10.md#folders)). Then installs
    the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
    there.
 4. Finds your agent apps (Claude Code, Claude Desktop's Chat tab, Codex, Cursor,
    Grok Build and Gemini) and the copies of text-to-cad already in them, and prints
    its plan for each: add, update, remove a duplicate, or leave as it is.
-5. Stops the server of a release from before 0.9 (0.8's cadgen) on CAD's port
+5. Stops the server of a release from before 0.10 (0.8's cadgen) on CAD's port
    (3245, or `CAD_ENGINE_PORT`) when nothing is using it, through that installation's
    own `cadgen stop`. One still in use (an app session open on it, a page watching it, a
    build) is left running, and the plan says how to stop it.
@@ -201,7 +201,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.9.0", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.10.0", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -411,8 +411,8 @@ never in CI and never for a copy that something else updates.
 release says so too, with no request at all. A click on the button reads the feed
 again, for the newest release.
 
-Updating from 0.8: [Migrating from 0.8 to 0.9](migrations/migrating-0.8-to-0.9.md) says
-what 0.9 renames (the `cad` command, `CAD_*`, the folders, the packages) and what the
+Updating from 0.8: [Migrating from 0.8 to 0.10](migrations/migrating-0.8-to-0.10.md) says
+what 0.10 renames (the `cad` command, `CAD_*`, the folders, the packages) and what the
 install command moves for you.
 
 Updating from 0.8.0 or 0.8.1, whose engine runs until it is stopped:
@@ -437,7 +437,7 @@ the first start of an app's CAD app), and a first model or view waits for it. A 
 imports what that environment holds: the library (`cad`), build123d and what they bring.
 
 To run models with a Python of your own instead, install the library with its kernel
-into it: `pip install 'cad[build123d]==0.9.0'` (`pip install cad==0.9.0` is the library alone,
+into it: `pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,
 and `import build123d` fails there). That environment is then the one models run in.
 
 ## Windows 11: Smart App Control

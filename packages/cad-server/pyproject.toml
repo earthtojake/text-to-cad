@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad-server"
-version = "0.9.0"
+version = "0.10.0"
 description = "The CAD server for text-to-cad: the device's daemon that builds, keeps and serves CAD documents, the CAD Viewer, the CAD app's MCP endpoint, and the command that runs and installs them."
 readme = "README.md"
 license = "MIT"
@@ -26,7 +26,7 @@ classifiers = [
 dependencies = [
   # The library at this very release, without its kernel: the document model, the protocol, the
   # words the verbs say. Exact: one release of the two is one product.
-  "cad==0.9.0",
+  "cad==0.10.0",
   # The server makes the environment its workers run in, and each release's an update installs, with
   # uv: a dependency, so it is always there (its wheel carries the binary, `uv.find_uv_bin`), on a
   # machine with no uv on PATH too.

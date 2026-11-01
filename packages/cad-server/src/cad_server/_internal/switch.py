@@ -267,7 +267,7 @@ def follow(told: Callable[[str], None] | None = None) -> bool:
     installation's own ``cad plugin --refresh`` writes it again -- nothing changes when that release's
     setup already did -- and, should that change it (a switch that went back), brings the copies apps
     keep of it to it. Run once no lock of the installer's is held. Whether it ran and succeeded; a
-    release before 0.9 has no such command, and its plugin no folder."""
+    release before 0.10 has no such command, and its plugin no folder."""
     from cad_server._internal import installations
 
     told = _said(told)

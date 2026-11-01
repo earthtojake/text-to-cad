@@ -9,9 +9,9 @@ migration is the guide, followed top to bottom:
 
 ## A 0.8 project
 
-A project written for 0.8 runs on 0.9 as it is; 0.9 renames what is around it
-([Migrating from 0.8 to 0.9](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.8-to-0.9.md),
-in a checkout `docs/migrations/migrating-0.8-to-0.9.md`):
+A project written for 0.8 runs on 0.10 as it is; 0.10 renames what is around it
+([Migrating from 0.8 to 0.10](https://github.com/earthtojake/text-to-cad/blob/main/docs/migrations/migrating-0.8-to-0.10.md),
+in a checkout `docs/migrations/migrating-0.8-to-0.10.md`):
 
 - `from cadgen import ...` is the library under its earlier name and keeps working; its
   name is `cad` (`from cad import model`), which new code uses.
