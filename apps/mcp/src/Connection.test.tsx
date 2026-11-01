@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
+import type { CadViewerProps } from '@cad/ui/cad-viewer';
 import Connection from './Connection';
 import { HostError } from './host/bridge';
 import { createChannel, declaresServerTools } from './host/channel';
@@ -8,7 +8,7 @@ import { createServer, type Launch } from './host/server';
 
 // The shared CAD viewer, reduced to whether this page mounted it, and with what client.
 const viewer = vi.hoisted(() => ({ props: null as CadViewerProps | null }));
-vi.mock('@text-to-cad/ui/cad-viewer', async original => ({
+vi.mock('@cad/ui/cad-viewer', async original => ({
   ...await original<object>(),
   CadViewer: (props: CadViewerProps) => { viewer.props = props; return null; },
 }));

@@ -56,7 +56,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
   ``<user>``; a build worker that died, its exit status. Never the error's message. Each process
   reports its own (``report``, ``collect_crashes``); a command's and a worker's are kept with its counts,
   and a page's go to the server that served it -- never one in none of the page's scripts, which a script
-  the browser runs in the page threw (an extension's: ``crashOf`` in @text-to-cad/core).
+  the browser runs in the page threw (an extension's: ``crashOf`` in @cad/core).
 
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
@@ -367,7 +367,7 @@ SNAPSHOT_FAILURES = frozenset({"bad_request", "no_file", "input_error", "browser
 # exports (``@stl``, ``@glb``, ``@threemf``), a snapshot (or an engine export) that posed joints or played an
 # animation, an engineering drawing (``@eng_drawing``), and a CAD view's Quick Edit sending its prompt.
 FEATURES = frozenset({"assembly", "declared_mesh", "kinematics", "animation", "drawing", "quick_edit"})
-# What a person used in a CAD view, as its page names it (``@text-to-cad/ui``'s ``usage/controls.js``; the
+# What a person used in a CAD view, as its page names it (``@cad/ui``'s ``usage/controls.js``; the
 # receiver's ``CONTROLS``): the strip's tools and Preview, each a mode that stays on (Explode and Clip, popovers
 # from their tiles, a use each time one opens), their modes and settings,
 # Display's and Preview's settings, the routines and Position, the sidebar's sections and trees, a part's menu,

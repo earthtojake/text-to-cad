@@ -150,7 +150,7 @@ are answered for the origin that sent them, with no credentials
 ## Engine documents: a STEP and an `.xbf`
 
 A STEP (`.step`, `.stp`) and an `.xbf` open in the engine document renderer
-(`@text-to-cad/ui`'s `renderers/xbf`), drawn from what the engine serves
+(`@cad/ui`'s `renderers/xbf`), drawn from what the engine serves
 of them (`cad_server.viewer.documents`). `POST /api/v1/documents` with `{"path": <abs>}` (or
 `{"id"}`) acquires the file, or the document of that id as the engine holds it (never built), in
 the already-running engine and answers `201 {id, kind, api}`, where `api` is
@@ -172,7 +172,7 @@ router handles reads tunneled through `cad_http`, in process. Document buffers
 and routes retain the raw-file response headers and engine authentication.
 The wire format is the engine README's **Wire format** section.
 
-The browser host constructs a `CadClient` from `@text-to-cad/core/client` and
+The browser host constructs a `CadClient` from `@cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's
 two-second poll and stop when its last subscriber leaves. The client's
 `engineDocument(file)` answers the document's API URL on the client's origin and the

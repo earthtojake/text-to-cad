@@ -1,5 +1,5 @@
-import { createCadClient, encodeBase64 } from '@text-to-cad/core/client';
-import type { CadClientOptions } from '@text-to-cad/core/client';
+import { createCadClient, encodeBase64 } from '@cad/core/client';
+import type { CadClientOptions } from '@cad/core/client';
 import { HostError } from './bridge';
 import { isHostRefusal } from './channel';
 import { ServerError, type HttpReply, type Server } from './server';

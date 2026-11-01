@@ -1,6 +1,6 @@
 import { Progress as ProgressPrimitive } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 /**
  * shadcn/ui Progress, smui-styled.

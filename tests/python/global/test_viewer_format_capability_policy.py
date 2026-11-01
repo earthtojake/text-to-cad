@@ -75,7 +75,7 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             MAX_RENDER_FORMAT_CHECKS,
             "viewer client gained RENDER_FORMAT identity checks "
             f"({total} > {MAX_RENDER_FORMAT_CHECKS}). Gate on a capability from "
-            "@text-to-cad/core/lib/renderCapabilities instead of on the format's identity. "
+            "@cad/core/lib/renderCapabilities instead of on the format's identity. "
             f"Heaviest files: {worst}",
         )
 

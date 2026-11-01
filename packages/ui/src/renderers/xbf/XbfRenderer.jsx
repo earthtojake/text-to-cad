@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
-import { sceneFramingBounds } from "@text-to-cad/core/lib/viewer/sceneContract.js";
-import { boundsInUnits } from "@text-to-cad/core/lib/viewer/sceneUnits.js";
-import { fetchXbfPartGroups } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
+import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
+import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
+import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import { readFileView } from "../kit/shell/fileView.js";
@@ -42,7 +42,7 @@ import { readXbfView, xbfViewSignatures, xbfViewSlices } from "./xbfViewSlices.j
 import { goneFromEngine, useXbfScene } from "./useXbfScene.js";
 import { useXbfMotion } from "./useXbfMotion.js";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // A part menu's item as telemetry names it (`usage/controls.js`), by the action it runs.
 const MENU_CONTROLS = Object.freeze({

@@ -1,6 +1,6 @@
-import { TEXT_TO_CAD_LINKS, releaseNotesUrl } from "@text-to-cad/ui/links";
+import { TEXT_TO_CAD_LINKS, releaseNotesUrl } from "@cad/ui/links";
 
-// The links every app's navbar draws, by default (`@text-to-cad/ui/links`); this build may point
+// The links every app's navbar draws, by default (`@cad/ui/links`); this build may point
 // GitHub and Discord elsewhere (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`).
 export const DEFAULT_VIEWER_GITHUB_URL = TEXT_TO_CAD_LINKS.github;
 export const DEFAULT_VIEWER_DISCORD_URL = TEXT_TO_CAD_LINKS.discord;

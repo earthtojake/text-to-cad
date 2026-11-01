@@ -122,9 +122,9 @@ which points both at the checkout.
   `packages/cad-mcp` ([README](packages/cad-mcp/README.md)) is the shim, and
   `packages/aliases/` the `cadgen` alias. Skills consume the server as an
   installed distribution.
-  `packages/core` ([README](packages/core/README.md)) is `@text-to-cad/core`, shared
+  `packages/core` ([README](packages/core/README.md)) is `@cad/core`, shared
   CAD/runtime/client code without React; `packages/ui` ([README](packages/ui/README.md))
-  is `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
+  is `@cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `apps/docs/` ([README](apps/docs/README.md)): documentation site.
 - `apps/api/` ([README](apps/api/README.md)): `api.texttocad.dev`, its own Vercel project:
   the version feed (read from PyPI) and the CAD app's consented analytics.

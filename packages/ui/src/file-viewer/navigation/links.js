@@ -1,11 +1,11 @@
 /**
  * What the app menu links to, in every app: the running version (its release notes), the
- * source, the community and a new issue. `@text-to-cad/ui/links` — pure, with no imports, so a
+ * source, the community and a new issue. `@cad/ui/links` — pure, with no imports, so a
  * host's own build configuration and its unit tests read the same defaults the navbar draws. A
- * newer release is not a link: cadgen says so, with the update button (`@text-to-cad/ui/update`).
+ * newer release is not a link: cadgen says so, with the update button (`@cad/ui/update`).
  *
  * A host supplies the version it runs, and the id of its build where that is not the release's
- * own (`@text-to-cad/ui/build-id`), and hands `viewerLinks(...)` to its `ViewerHost.links`. It
+ * own (`@cad/ui/build-id`), and hands `viewerLinks(...)` to its `ViewerHost.links`. It
  * may point the links elsewhere (the web reads its build's environment), and say how a link is
  * followed (`open`, for a page in a frame that cannot open one itself). Nothing here fetches or
  * navigates.
@@ -92,7 +92,7 @@ function cut(text, length) {
 
 /**
  * The navbar's links for a host running `version`: the defaults, with whatever the host changes.
- * A custom build of it (`build`, the id its Vite config names: `@text-to-cad/ui/build-id`) runs
+ * A custom build of it (`build`, the id its Vite config names: `@cad/ui/build-id`) runs
  * `0.7.15-dev.<build>`, which the app menu shows and a new issue names; its release notes are still
  * those of the release it was built on.
  *

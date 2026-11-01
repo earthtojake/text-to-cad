@@ -1392,7 +1392,7 @@ baked as a 512 x 256 Radiance image beside the record (`render/studio.hdr`); no 
 shadow, exposure or tone curve: the sum is clamped and sRGB-encoded. Every surface answers that
 light as OCCT's PBR program does (the record's `brdf`, `occt`): single scattering, Schlick-GGX
 geometry, OCCT's split-sum table, the roughness as given, no anisotropy, which the viewer draws in
-place of three's own physical model (the bundled `@text-to-cad/core`'s `lib/viewer/surfaceBrdf.js`),
+place of three's own physical model (the bundled `@cad/core`'s `lib/viewer/surfaceBrdf.js`),
 its environment prefiltered as OCCT bakes it (`lib/viewer/ggxEnvironment.js`: each roughness the
 image convolved with that roughness's GGX lobe, the diffuse light OCCT's nine spherical harmonics
 of the irradiance). A part without a material,
@@ -1408,7 +1408,7 @@ Edges are unlit in their class's ink, 1 px; X-ray's faces are lit at 0.22 opacit
 are the backdrop's colour. The engine serves the record as `GET /api/v1/look` and its image as
 `GET /api/v1/look/environment`; the page reads both once per engine, beside the document, and the
 document's scene brings them as its own lighting and surface rule (the bundled
-`@text-to-cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
+`@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
 up in place of the theme's. Preview is drawn as any file's is.
 
 `cad snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
@@ -2464,7 +2464,7 @@ starts from, the n-th element of its kind a feature made, and a step per feature
 made it out of another (`f:plate.body.3;M:plate.relief`: face 3 of the box, modified
 by the relief cut). A long derivation folds to its last feature and a digest
 (`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out. Every name is a
-reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@text-to-cad/core` runtime, mirrored as
+reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
 `refs.py`'s `ELEMENT_NAME`, which the naming in `kernel/trace.py` reads and which loads no kernel): a feature name has at most one dot, every segment
 is an identifier, and an atom ends in a number or a digest. A name holds no line or file (law 9): a line is
 what the worker serves, now.

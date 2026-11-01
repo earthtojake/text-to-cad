@@ -1,5 +1,5 @@
-import { edgeGeometryFromSegments } from "@text-to-cad/core/lib/viewer/measurement.js";
-import { xbfSegments } from "@text-to-cad/core/lib/xbf/xbfEntities.js";
+import { edgeGeometryFromSegments } from "@cad/core/lib/viewer/measurement.js";
+import { xbfSegments } from "@cad/core/lib/xbf/xbfEntities.js";
 import { planeOfPoints } from "../kit/camera/lookAt.js";
 
 // A face or edge of an engine document as a look-at subject (`kit/camera/lookAt.js`): what a

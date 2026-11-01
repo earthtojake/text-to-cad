@@ -6,8 +6,8 @@ import { cleanup, render } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import * as THREE from 'three';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { loadXbfDocument } from '@text-to-cad/core/lib/xbf/xbfDocument.js';
-import { createXbfScene } from '@text-to-cad/core/lib/xbf/xbfScene.js';
+import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
+import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';
 import MeasureFilterMenu, { MEASURE_MODES } from '../../../dist/renderers/kit/tools/measure/MeasureFilterMenu.js';
 import { MEASURE_FILTER_DEFAULT } from '../../../dist/renderers/kit/tools/measure/measureFilter.js';
 import { pickModeOf } from '../../../dist/renderers/kit/tools/select/selectFilter.js';
@@ -22,7 +22,7 @@ Object.assign(globalThis, { React });
 beforeEach(() => { vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const read = (file: string) => fs.readFileSync(path.join(FIXTURES, file));
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), 255, 255, 255, 128]);
 const answer = (body: Uint8Array | Buffer) => ({ ok: true, status: 200, json: async () => JSON.parse(Buffer.from(body).toString('utf8')),

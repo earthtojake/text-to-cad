@@ -1,4 +1,4 @@
-import type { PromptContextPort } from '@text-to-cad/core/prompt';
+import type { PromptContextPort } from '@cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 import type { ControlCount } from '../usage/controls.js';
 
@@ -16,7 +16,7 @@ export interface ClipboardPort {
 /**
  * A Quick Edit's .snapshot.json, made at Copy/Queue/Send: shared input, inline annotation
  * and measurements, with one job per drawn view (`cad snapshot --annotation PACKET --camera authored` draws each).
- * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@text-to-cad/core/client`) is the
+ * `create` returns compact inline JSON up to 1024 UTF-8 bytes, otherwise writes it and answers its path; `read` fetches it. `createHttpPromptFiles` (`@cad/core/client`) is the
  * viewer server's.
  */
 export interface PromptFiles {
@@ -30,7 +30,7 @@ export interface PromptFiles {
 /**
  * What the app menu links to — the running version (its release notes), the source and the
  * community — and how a link is followed. Build it with
- * `viewerLinks` (`@text-to-cad/ui/links`), which fills in the defaults.
+ * `viewerLinks` (`@cad/ui/links`), which fills in the defaults.
  */
 export interface ViewerLinks {
   /**
@@ -57,7 +57,7 @@ export interface ViewerLinks {
   open?(url: string): Promise<void>;
 }
 /** One export the page started and has not yet handed to the browser: its request and the name it downloads as. */
-export interface ExportRecord { request: import('@text-to-cad/core/client').ExportRequest; filename: string }
+export interface ExportRecord { request: import('@cad/core/client').ExportRequest; filename: string }
 /** The browser's own downloads. No picker, handle or server path crosses this port. */
 export interface DownloadPort {
   /** Hands the browser a same-origin file URL to download as `filename`; where it goes is the browser's setting. */
@@ -101,7 +101,7 @@ export interface ViewerHost {
    * is a view drawn with no chrome (the library's picture of a model, drawn out of sight): a
    * renderer draws the model alone — not its tools, its view's controls, its cube or its Quick
    * Edit — and the view has no navbar. `locale` is the language the view reads in, as the host
-   * resolved it (`@text-to-cad/ui/i18n`'s `useLanguage`: the person's choice, else what the context
+   * resolved it (`@cad/ui/i18n`'s `useLanguage`: the person's choice, else what the context
    * infers); one it does not speak, or none, reads English.
    */
   environment: { colorScheme: 'light' | 'dark'; locale?: string; platform?: string; reducedMotion?: boolean; compact?: boolean };

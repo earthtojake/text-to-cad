@@ -1,12 +1,12 @@
 import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
 import { Fragment, useEffect, useRef, useState } from "react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@cad/ui/primitives/tabs";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 
 import logo from "../../assets/logo-c.svg";
 import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js";
@@ -44,7 +44,7 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Right, only what a host or a file adds, kept for the update's nudge, in this order: the file's own
  * actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's own
  * actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
- * while its install is behind (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`).
+ * while its install is behind (`update`, the blue `UpdateButton` from `@cad/ui/update`).
  * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.

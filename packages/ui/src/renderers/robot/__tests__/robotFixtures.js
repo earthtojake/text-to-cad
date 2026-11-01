@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildRobotParts } from "@text-to-cad/core/lib/urdf/robotParts.js";
+import { buildRobotParts } from "@cad/core/lib/urdf/robotParts.js";
 
 // Under vitest's jsdom environment a module's URL is served over http from the package root
 // (or under `/@fs/` by its absolute path); under node it is a file URL.

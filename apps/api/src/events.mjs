@@ -84,7 +84,7 @@ const KINDS_6 = new Set([...KINDS, 'xbf']);
 const KINDS_8 = new Set([...KINDS_6, 'model']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
-// What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@text-to-cad/ui`'s
+// What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
 // `usage/controls.js`): a closed list of names the page chose, never a value typed or a file's.
 export const CONTROLS = new Set([
   // The tools on the strip, each one a mode that stays on (its seconds counted), and Preview; Explode

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { translator } from '@text-to-cad/ui/i18n';
+import { translator } from '@cad/ui/i18n';
 import { hostDisplayName } from './hostName';
 
 describe('the host\'s display name', () => {

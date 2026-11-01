@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
-import { ExportRequestError, exportPause, type ExportJob, type ExportRequest, type ExportService } from '@text-to-cad/core/client';
+import { ExportRequestError, exportPause, type ExportJob, type ExportRequest, type ExportService } from '@cad/core/client';
 import type { DownloadPort, ExportRecord } from '../host/types.js';
 import { ViewerElementContext } from '../host/context.js';
 import { DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from '../primitives/dropdown-menu.jsx';

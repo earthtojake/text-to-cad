@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import * as THREE from "three";
-import { createSceneClip } from "@text-to-cad/core/lib/viewer/sceneClip.js";
+import { createSceneClip } from "@cad/core/lib/viewer/sceneClip.js";
 
 /**
  * Clip and Explode on a scene the viewport holds, as the view says them (`displaySettings`'s

@@ -13,7 +13,7 @@ import { PNG } from 'pngjs';
 // Fixtures, served from memory: cadgen's exports of two boxes with authored colours (core's
 // `lib/render/fixtures`), static and with the clip that slides one of them from its rest pose,
 // and bytes that are not a GLB at all.
-const CORE_FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/render/glbMeshData.js')), 'fixtures');
+const CORE_FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/render/glbMeshData.js')), 'fixtures');
 const FILES = {
   'static.glb': readFileSync(join(CORE_FIXTURES, 'pair.glb')),
   'animated.glb': readFileSync(join(CORE_FIXTURES, 'pair.slide.glb')),

@@ -1,28 +1,28 @@
 import { createViewportBuffer } from "./viewportBuffer.js";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { isEditableTarget, prefersCoarsePointer } from "./dom.js";
 import {
   isWebGlContextCreationError,
   isSoftwareWebGlRenderer,
   runtimeErrorMessage
-} from "@text-to-cad/core/lib/viewer/webglSupport.js";
+} from "@cad/core/lib/viewer/webglSupport.js";
 import {
   createCadWebGlRenderer
-} from "@text-to-cad/core/common/webglRenderer.js";
-import { fitCameraDepthToBounds } from "@text-to-cad/core/common/renderOptions.js";
+} from "@cad/core/common/webglRenderer.js";
+import { fitCameraDepthToBounds } from "@cad/core/common/renderOptions.js";
 import { CAMERA_TOUCH, touchCamera } from "../camera/cameraTouch.js";
 import { keepOrthographicEyeOutside } from "../camera/orthographicEye.js";
 import {
   screenSpaceLineDeviceResolution
-} from "@text-to-cad/core/common/renderEdges.js";
-import { renderWithSceneRig } from "@text-to-cad/core/lib/viewer/sceneRig.js";
+} from "@cad/core/common/renderEdges.js";
+import { renderWithSceneRig } from "@cad/core/lib/viewer/sceneRig.js";
 import {
   resolveInteractionPixelRatioCap
-} from "@text-to-cad/core/lib/viewer/renderQuality.js";
+} from "@cad/core/lib/viewer/renderQuality.js";
 import { updateOrbitControls } from "../camera/orbitControls.js";
 import { guardedOrbitControls } from "../camera/orbitControlsPointers.js";
-import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@text-to-cad/core/lib/viewer/perfMarks.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@cad/core/lib/viewer/perfMarks.js";
 import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepthPolicy.js";
 import { createZoomPivotReanchor } from "../camera/zoomPivotReanchor.js";
 import { createFramePresentation } from "./framePresentation.js";

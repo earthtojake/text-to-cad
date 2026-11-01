@@ -30,7 +30,7 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of the host's library, as the name menu's Recent lists it (`@text-to-cad/ui/library`'s rows). */
+/** A document of the host's library, as the name menu's Recent lists it (`@cad/ui/library`'s rows). */
 export interface RecentDocument {
   /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
   path: string;
@@ -83,7 +83,7 @@ export interface FileSource {
 export interface FileViewerState {
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
-   * holds (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
+   * holds (`@cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
    */
   renderers?: Record<string, JsonValue>;
 }
@@ -214,7 +214,7 @@ export interface FileViewerProps {
    */
   appSettings?: readonly AppSetting[];
   /**
-   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), first among the navbar's
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), first among the navbar's
    * controls, while the host's install is behind; nothing otherwise.
    */
   update?: ReactNode;

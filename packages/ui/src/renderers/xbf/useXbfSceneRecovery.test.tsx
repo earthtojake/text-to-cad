@@ -1,14 +1,14 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { loadXbfDocument } from '@text-to-cad/core/lib/xbf/xbfDocument.js';
+import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
 import { useXbfScene } from './useXbfScene.js';
 
 // Keep geometry out of this connection test. Version polling still uses the real
 // waitForXbfVersion -> getJson -> fetch path whose rejection the hook must own.
-vi.mock('@text-to-cad/core/lib/xbf/xbfDocument.js', async importOriginal => ({
+vi.mock('@cad/core/lib/xbf/xbfDocument.js', async importOriginal => ({
   ...await importOriginal(), loadXbfDocument: vi.fn(),
 }));
-vi.mock('@text-to-cad/core/lib/xbf/xbfScene.js', () => ({
+vi.mock('@cad/core/lib/xbf/xbfScene.js', () => ({
   createXbfScene: () => ({ dispose: vi.fn() }),
 }));
 

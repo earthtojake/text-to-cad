@@ -1,5 +1,5 @@
 /**
- * `@text-to-cad/ui/navigation` — the chrome AROUND a file surface, shared by every
+ * `@cad/ui/navigation` — the chrome AROUND a file surface, shared by every
  * app that draws one.
  *
  * A renderer draws one file's contents; this is everything else a person sees:

@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { toast } from 'sonner';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
+import type { CadViewerProps } from '@cad/ui/cad-viewer';
 import { version } from '../package.json';
 import App from './App';
 import { frameClipboard } from './host/clipboard';
@@ -14,7 +14,7 @@ vi.hoisted(() => { Object.assign(globalThis, { __CAD_BUILD__: 'b80844940' }); })
 // The shared CAD viewer, reduced to what this page hands it: what it draws for each prompt
 // destination and each page is its own suite's (packages/ui); what this page hands it is this one's.
 const viewer = vi.hoisted(() => ({ props: null as CadViewerProps | null, mounts: 0 }));
-vi.mock('@text-to-cad/ui/cad-viewer', async original => {
+vi.mock('@cad/ui/cad-viewer', async original => {
   const { useEffect } = await import('react');
   return {
     ...await original<object>(),

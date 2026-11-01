@@ -10,7 +10,7 @@ lines, arcs, bulges, a block, a solid and a hatch.
 
 `formats_golden/kinematics.json` is the viewer's own forward kinematics on `KINEMATICS`: each
 link's world transform (row-major, metres) at three poses, made by origin/main's
-`@text-to-cad/core` `lib/urdf/parseUrdf.js` and `kinematics.js` (with jsdom's DOMParser) when the
+`@cad/core` `lib/urdf/parseUrdf.js` and `kinematics.js` (with jsdom's DOMParser) when the
 port was written; the port must agree to 1e-9.
 
 The pictures (`formats_golden/*.png`, 320x240, macOS) match as `test_render.py`'s do: at most 1.5%

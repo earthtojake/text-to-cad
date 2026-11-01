@@ -5,21 +5,21 @@
  * A mark drawn over a drawing lies on the sheet: its screen points become drawing coordinates
  * (x, y, 0) under the view as it stood, on no part, so it pans and zooms with the drawing and the
  * annotation file a prompt carries is in the drawing's own coordinates — what `cad snapshot`
- * draws it over (`@text-to-cad/core/lib/drawing2d/marks.js`). A stroke keeps its width in screen
+ * draws it over (`@cad/core/lib/drawing2d/marks.js`). A stroke keeps its width in screen
  * pixels, as over a model; a text mark's corners are on the sheet, so its words zoom with it.
  *
  * Importing this module has no environmental effects.
  */
-import { annotationDocument } from "@text-to-cad/core/common/annotation.js";
-import { annotationMarkOnScreen } from "@text-to-cad/core/lib/drawing2d/marks.js";
-import { screenToModel } from "@text-to-cad/core/lib/drawing2d/index.js";
+import { annotationDocument } from "@cad/core/common/annotation.js";
+import { annotationMarkOnScreen } from "@cad/core/lib/drawing2d/marks.js";
+import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import { markPoints } from "../../annotation/geometry.js";
 
 /**
  * A screen mark (`annotation/geometry.js`) as the session keeps it on a drawing: its points on the
  * sheet under `transform`.
  * @param {object} mark
- * @param {import("@text-to-cad/core/lib/drawing2d/transform.js").DrawingTransform} transform
+ * @param {import("@cad/core/lib/drawing2d/transform.js").DrawingTransform} transform
  */
 export function placeOnSheet(mark, transform) {
   const screen = markPoints(mark);

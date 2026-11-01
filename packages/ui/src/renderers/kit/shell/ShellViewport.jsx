@@ -1,21 +1,21 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@text-to-cad/core/common/inspectEnvironment.js";
-import { resolveCadGridSettings } from "@text-to-cad/core/common/cadInk.js";
-import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@text-to-cad/core/common/sceneSettings.js";
-import { applySceneRig, sceneRigFor } from "@text-to-cad/core/lib/viewer/sceneRig.js";
+import { createInspectEnvironmentResource, INSPECT_ENVIRONMENT_ID } from "@cad/core/common/inspectEnvironment.js";
+import { resolveCadGridSettings } from "@cad/core/common/cadInk.js";
+import { resolveSceneSurfaceLook, scenePhotographicLighting } from "@cad/core/common/sceneSettings.js";
+import { applySceneRig, sceneRigFor } from "@cad/core/lib/viewer/sceneRig.js";
 import {
   CAMERA_PROJECTION, normalizeCameraProjection, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot
-} from "@text-to-cad/core/lib/perspective.js";
-import { mergeBoundsList } from "@text-to-cad/core/lib/viewer/autoZoom.js";
-import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ, sceneRadiusForBounds } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
-import { defaultSceneGridRadius, getSceneScaleSettings, normalizeSceneScaleMode, VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
-import { buildCompositeScreenshotBlob, resolveElementBackgroundColor } from "@text-to-cad/core/lib/viewer/screenshotCapture.js";
+} from "@cad/core/lib/perspective.js";
+import { mergeBoundsList } from "@cad/core/lib/viewer/autoZoom.js";
+import { applyRuntimeModelBounds, resolveRuntimeModelFloorZ, sceneRadiusForBounds } from "@cad/core/lib/viewer/modelRuntime.js";
+import { defaultSceneGridRadius, getSceneScaleSettings, normalizeSceneScaleMode, VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
+import { buildCompositeScreenshotBlob, resolveElementBackgroundColor } from "@cad/core/lib/viewer/screenshotCapture.js";
 import {
   applySceneBackground, BASE_VIEWER_THEME, disposeTexture, getViewerThemeValue, updateSpotLightTarget
-} from "@text-to-cad/core/lib/viewer/stageTheme.js";
-import { buildRuntimeInitializationAlert } from "@text-to-cad/core/lib/viewer/webglSupport.js";
-import { THEME_FLOOR_MODES } from "@text-to-cad/core/lib/themeSettings.js";
+} from "@cad/core/lib/viewer/stageTheme.js";
+import { buildRuntimeInitializationAlert } from "@cad/core/lib/viewer/webglSupport.js";
+import { THEME_FLOOR_MODES } from "@cad/core/lib/themeSettings.js";
 import ViewPlaneControl from "../camera/ViewPlaneControl.js";
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiveDistanceScale } from "../camera/cameraLens.js";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
@@ -59,7 +59,7 @@ import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";

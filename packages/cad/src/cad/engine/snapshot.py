@@ -88,7 +88,7 @@ CAMERA_KEYS = frozenset({"preset", "name", "position", "target", "up", "directio
 AUTHORED = "authored"
 # The Quick Edit packets an annotation file is looked for beside (``cad_server.viewer`` writes them).
 PACKETS = "*.snapshot.json"
-# The viewer's annotation file (``@text-to-cad/core`` ``common/annotation.js``) and Measure's marks.
+# The viewer's annotation file (``@cad/core`` ``common/annotation.js``) and Measure's marks.
 ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 MARK_KINDS = ("stroke", "area", "text")
 MARK_MAX = 8192  # a still's annotation holds at most this many marks

@@ -1,6 +1,6 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createHttpCadResourceProvider } from '@text-to-cad/core/client';
+import { createHttpCadResourceProvider } from '@cad/core/client';
 import { useRobotDocument } from '../../../dist/renderers/robot/useRobotDocument.js';
 import { fixtureGlb as glb, fixturePayload, fixtureRefusal } from './__tests__/robotFixtures.js';
 

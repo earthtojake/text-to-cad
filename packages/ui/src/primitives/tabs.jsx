@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Tabs as TabsPrimitive } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 // shadcn's Tabs as shipped, on the viewer's type scale (`text-xs`): a muted list of equal
 // triggers, the active one raised on the background.

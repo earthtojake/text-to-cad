@@ -54,7 +54,7 @@ _NUMBER = re.compile(r"\.([1-9][0-9]*)")
 
 
 # An element name, as the naming spells it (``kernel/trace.py``) and the viewer's ref grammar admits it
-# (``cadRefs`` in the bundled ``@text-to-cad/core`` runtime: ``ELEMENT_NAME_SOURCE``): a kind, then an
+# (``cadRefs`` in the bundled ``@cad/core`` runtime: ``ELEMENT_NAME_SOURCE``): a kind, then an
 # atom and its steps. Kept here, beside the grammar that reads it and with no kernel: parsing a ref
 # loads none.
 _NAME_SEGMENT = r"[A-Za-z_][A-Za-z0-9_]*"

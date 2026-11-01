@@ -246,7 +246,7 @@ jobs:
       # gitignored, so the release commit carries none of them. Nothing
       # here writes to git -- the wheel is the release asset. CAD_RELEASE names the
       # version this build releases, so the Viewer and the CAD app it bundles show it as it is;
-      # any other build shows where it came from (`-dev.<commit>`, @text-to-cad/ui/build-id).
+      # any other build shows where it came from (`-dev.<commit>`, @cad/ui/build-id).
       - name: Bundle production outputs
         env:
           CAD_RELEASE: ${{ needs.gate.outputs.version }}

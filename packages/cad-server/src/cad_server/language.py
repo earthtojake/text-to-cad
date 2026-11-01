@@ -18,7 +18,7 @@ from cad_server.settings import read_section, update_section
 LOG = logging.getLogger("cad_server.language")
 
 SECTION = "language"  # this module's part of the settings file
-# Every locale the views speak, as their dictionaries name them (`@text-to-cad/ui/i18n`).
+# Every locale the views speak, as their dictionaries name them (`@cad/ui/i18n`).
 LOCALES: tuple[str, ...] = ("en", "zh-CN", "zh-TW", "ja", "ko")
 
 

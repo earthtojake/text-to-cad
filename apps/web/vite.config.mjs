@@ -4,10 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { buildId } from "@text-to-cad/ui/build-id";
-import { stampDebugId } from "@text-to-cad/core/chunk-ids";
-import { packageSourceMaps } from "@text-to-cad/core/source-maps";
-import { thirdPartyLicenses } from "@text-to-cad/core/third-party-licenses";
+import { buildId } from "@cad/ui/build-id";
+import { stampDebugId } from "@cad/core/chunk-ids";
+import { packageSourceMaps } from "@cad/core/source-maps";
+import { thirdPartyLicenses } from "@cad/core/third-party-licenses";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
@@ -156,11 +156,11 @@ function serverLifetimePlugin() {
 }
 
 // Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
-// report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
+// report names the chunk each of its frames ran in by it (@cad/core's crash reporter), and
 // the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
 // show the source -- the shared packages' own source, whose maps the build chains
-// (@text-to-cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
-// map decide (@text-to-cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
+// (@cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
+// map decide (@cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
 // in dist, which the wheel leaves out (scripts/bundle).
 function chunkIdsPlugin() {
   return {
@@ -189,7 +189,7 @@ function chunkIdsPlugin() {
 }
 
 // The third-party notice beside index.html, of every package the client and its workers inline:
-// it ships with the client (@text-to-cad/core/third-party-licenses).
+// it ships with the client (@cad/core/third-party-licenses).
 const licenses = thirdPartyLicenses();
 
 export default defineConfig(async ({ command }) => (refuseClientTokens(), {
@@ -197,12 +197,12 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
   base: "./",
   envPrefix: ENV_PREFIX,
   // Which build this is, for the version the app menu shows (src/host/viewerLinks.js): none for
-  // the release's own, this checkout's commit for any other (@text-to-cad/ui/build-id).
+  // the release's own, this checkout's commit for any other (@cad/ui/build-id).
   define: { __CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
   plugins: [
     react(),
     serverLifetimePlugin(),
-    packageSourceMaps(["@text-to-cad/core", "@text-to-cad/ui"]),
+    packageSourceMaps(["@cad/core", "@cad/ui"]),
     chunkIdsPlugin(),
     licenses.plugin(),
   ],
@@ -255,7 +255,7 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
           })()
         : undefined,
     fs: {
-      // @text-to-cad/core lives outside the app root, so it must be allowed explicitly;
+      // @cad/core lives outside the app root, so it must be allowed explicitly;
       // real paths too, in case a checkout reaches it through a link. See
       // scripts/serverFsAllow.mjs.
       allow: resolveServerFsAllow([repoRoot], {

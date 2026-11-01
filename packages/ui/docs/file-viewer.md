@@ -1,12 +1,12 @@
 # FileViewer
 
-`@text-to-cad/ui/file-viewer` exports the complete file view: one file by its
+`@cad/ui/file-viewer` exports the complete file view: one file by its
 absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu its name opens
 (Models and Files), renderer loading, and the loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
-separate `@text-to-cad/ui/renderers/*` entry points and their own
+separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@text-to-cad/ui/cad-viewer`), which is this component with the five
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the five
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx
@@ -27,7 +27,7 @@ path is absolute and `/`-separated (`/a/b.step`, `C:/a/b.step`); containment and
 authorization remain in the host service. The host controls navigation
 (`navigation.openFile(path)` where the view can show another file, and `home()` where it
 has a home; a view that shows one file alone has neither, and no name menu) and keeps
-`FileViewerState` in its tab store (`@text-to-cad/ui/tab-store`; `useTabViewerState`
+`FileViewerState` in its tab store (`@cad/ui/tab-store`; `useTabViewerState`
 derives it): `renderers`, under encoded `[file path, renderer ID]` keys, each the
 file's view.
 

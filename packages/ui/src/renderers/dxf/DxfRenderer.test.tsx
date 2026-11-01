@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { createCadClient } from '@text-to-cad/core/client';
+import { createCadClient } from '@cad/core/client';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createDxfRenderer } from '../../../dist/renderers/dxf/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
@@ -20,7 +20,7 @@ const FILE = '/models/sample.dxf';
 // Every transform the drawing is painted at, and the layers it was painted without: the picture
 // itself is not jsdom's to draw.
 const painted = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number; hidden?: string[] }>);
-vi.mock('@text-to-cad/core/lib/drawing2d/index.js', async (importOriginal) => {
+vi.mock('@cad/core/lib/drawing2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, drawDrawing: (_ctx: unknown, _drawing: unknown, { transform, hiddenLayers }: { transform: any, hiddenLayers?: Set<string> }) => {
     painted.push({ ...transform, hidden: [...(hiddenLayers || [])] });

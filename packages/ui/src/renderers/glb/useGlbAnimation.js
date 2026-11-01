@@ -2,8 +2,8 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import * as THREE from "three";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@text-to-cad/core/common/animationClock.js";
-import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
+} from "@cad/core/common/animationClock.js";
+import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@cad/core/lib/render/glbAnimationRuntime.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 

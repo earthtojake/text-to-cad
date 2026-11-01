@@ -14,7 +14,7 @@ export function isViewerServiceFailure(failure, detail) {
   return ["service", "worker", "daemon", "broker", "status", "timeout"].includes(kind) || /\b(?:artifact|model) (?:worker|broker)\b|\bworker unavailable\b|\bservice unavailable\b|artifact request failed|lost its protocol|no cold retry|no unaccounted retry/i.test(detail);
 }
 
-// The client names each request's operation by a token (`@text-to-cad/core/client`'s `request`):
+// The client names each request's operation by a token (`@cad/core/client`'s `request`):
 // a sentence says it in words, the details keep the token. A token this kit has no words for (a
 // family's own read) is the file being loaded; an operation already in words is said as it is,
 // the kit's own two by their keys.

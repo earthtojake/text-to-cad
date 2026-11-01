@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { encodeBase64 } from '@text-to-cad/core/client';
-import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
+import { encodeBase64 } from '@cad/core/client';
+import { createPromptContext, referencePart } from '@cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';

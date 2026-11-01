@@ -1,5 +1,5 @@
-import { spellEngineRefs } from "@text-to-cad/core/lib/cadRefs.js";
-import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { spellEngineRefs } from "@cad/core/lib/cadRefs.js";
+import { xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 
 // An engine document's tree as a STEP's model tree presented an assembly: its
 // assemblies over their children and each placed part a leaf, its faces and edges never rows

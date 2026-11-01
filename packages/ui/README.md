@@ -1,11 +1,11 @@
-# @text-to-cad/ui
+# @cad/ui
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
-`CadViewer` (`@text-to-cad/ui/cad-viewer`) is the CAD viewer every app shows:
+`CadViewer` (`@cad/ui/cad-viewer`) is the CAD viewer every app shows:
 FileViewer over a CAD client, with the five CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
@@ -17,7 +17,7 @@ remain its own.
 
 ## Ownership and dependencies
 
-UI may import `@text-to-cad/core` and browser-safe React dependencies. It must not
+UI may import `@cad/core` and browser-safe React dependencies. It must not
 import an application, Node services, desktop IPC schemas, app stores,
 or `window.textToCad`. Hosts inject file access, capabilities, navigation,
 persistence, appearance and CAD services. Importing a package starts no polling,
@@ -119,14 +119,14 @@ the host's source lists. A host that opens arbitrary files registers a
 fallback renderer (`fallback: true`) for the types nothing else matches.
 
 ```tsx
-import { FileViewer } from '@text-to-cad/ui/file-viewer';
-import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
-import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
-import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
-import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
-import { createXbfRenderer } from '@text-to-cad/ui/renderers/xbf';
-import '@text-to-cad/ui/tokens.css';
-import '@text-to-cad/ui/styles.css';
+import { FileViewer } from '@cad/ui/file-viewer';
+import { createDxfRenderer } from '@cad/ui/renderers/dxf';
+import { createGlbRenderer } from '@cad/ui/renderers/glb';
+import { createMeshRenderer } from '@cad/ui/renderers/mesh';
+import { createRobotRenderer } from '@cad/ui/renderers/robot';
+import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import '@cad/ui/tokens.css';
+import '@cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
@@ -151,7 +151,7 @@ the file on screen (absolute; `''` is the home) and how to show another (`onShow
 its library.
 
 ```tsx
-import { CadViewer, createCadFileSource } from '@text-to-cad/ui/cad-viewer';
+import { CadViewer, createCadFileSource } from '@cad/ui/cad-viewer';
 
 const host = { files: createCadFileSource(client), clipboard, promptContext, environment };
 <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file}
@@ -190,7 +190,7 @@ render-session disposal releases shared worker leases. One viewer cannot replace
 another viewer's cache provider or camera state.
 
 The host owns where state lives; the package owns what it is. Everything the
-viewer keeps is one tab record (`@text-to-cad/ui/tab-store`: the tab's settings and
+viewer keeps is one tab record (`@cad/ui/tab-store`: the tab's settings and
 the view of the file on screen — its camera, Display settings, Preview's Render settings,
 its playback settings and the renderer's own slices), thrown out with the tab and kept across a reload. Leaving a file, for
 another or for the home, drops its view (`CadViewer`), and an update of it keeps what
@@ -208,8 +208,8 @@ From the repository root:
 npm ci
 npx --no-install playwright install chromium
 npm run build:packages
-npm run typecheck --workspace @text-to-cad/ui
-npm test --workspace @text-to-cad/ui
+npm run typecheck --workspace @cad/ui
+npm test --workspace @cad/ui
 npm run check:boundaries
 ```
 

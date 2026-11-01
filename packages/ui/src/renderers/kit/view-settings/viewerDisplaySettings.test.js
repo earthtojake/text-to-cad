@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
+import { resolveViewSettings } from '@cad/core/common/viewSettings.js';
 import { DISPLAY_MODE_OPTIONS } from './DisplayModeOptions.js';
 import {
   cameraForViewSettings, mergePreviewSettings, mergeViewerDisplaySettings, previewDisplaySettings,

@@ -301,7 +301,7 @@ export interface CadPageCrash {
 export interface CadActivity {
   touched?: boolean;
   quickEdit?: boolean;
-  /** The view's controls a person used since the last report (`@text-to-cad/ui`'s `usage/controls.js`). */
+  /** The view's controls a person used since the last report (`@cad/ui`'s `usage/controls.js`). */
   controls?: { control: string; count: number; seconds: number }[];
   crash?: CadPageCrash;
 }

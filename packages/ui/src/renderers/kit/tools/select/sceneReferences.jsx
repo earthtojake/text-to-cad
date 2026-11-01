@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
+import { formatPromptReference } from "@cad/core/prompt";
 import { InfoRow, MonoValue } from "../../inspector/referenceRows.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const EMPTY = Object.freeze([]);
 
@@ -21,7 +21,7 @@ function ScenePartCard({ facts }) {
  *
  * @param {{ scene: { describePart?: (id: string) => ({ name: string, facts: { label: string, value: string }[] } | null) } | null,
  *   selection: ReturnType<typeof import("./useSceneSelection.js").useSceneSelection>,
- *   resource: import("@text-to-cad/core/prompt").ResourceRef | null }} options
+ *   resource: import("@cad/core/prompt").ResourceRef | null }} options
  */
 export function useSceneReferences({ scene, selection, resource }) {
   const { selected, select, hover } = selection;

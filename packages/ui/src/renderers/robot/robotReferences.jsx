@@ -1,6 +1,6 @@
 import { useMemo } from "react";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
-import { isLabelSelector } from "@text-to-cad/core/lib/cadRefs.js";
+import { formatPromptReference } from "@cad/core/prompt";
+import { isLabelSelector } from "@cad/core/lib/cadRefs.js";
 import RobotComponentDetails, { RobotLinkDetails } from "./LinkDetails.jsx";
 import { buildRobotTree, robotLinkFacts, robotLinkNodeId } from "./robotTree.js";
 
@@ -19,7 +19,7 @@ const EMPTY = Object.freeze([]);
  * its name as its ID.
  *
  * @param {{ robot: object | null, components?: object[], selection: ReturnType<typeof import("./useLinkSelection.js").useLinkSelection>,
- *   resource: import("@text-to-cad/core/prompt").ResourceRef | null, onOpenFile?: ((path: string) => void) | null,
+ *   resource: import("@cad/core/prompt").ResourceRef | null, onOpenFile?: ((path: string) => void) | null,
  *   meshPath?: ((filename: string) => string) | null, groupNamesByLink?: Map<string, string[]> | null }} options
  */
 export function useRobotReferences({ robot, components = EMPTY, selection, resource, onOpenFile = null, meshPath = null, groupNamesByLink = null }) {

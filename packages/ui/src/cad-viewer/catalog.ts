@@ -1,10 +1,10 @@
-import type { CadEntry, CadWorkspaceService } from '@text-to-cad/core/client';
-import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
+import type { CadEntry, CadWorkspaceService } from '@cad/core/client';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
 /**
- * `@text-to-cad/ui/catalog`: CAD files as the viewer reads them, by absolute path, and documents the
+ * `@cad/ui/catalog`: CAD files as the viewer reads them, by absolute path, and documents the
  * engine holds by their id alone (a model's), which have no file to browse. Pure — no React
  * and no transport — so a host's adapters and their unit tests import it alone.
  *

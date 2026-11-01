@@ -1,4 +1,4 @@
-"""A DXF drawn by OCCT as the viewer's DXF pane draws it (``@text-to-cad/core`` ``lib/drawing2d``):
+"""A DXF drawn by OCCT as the viewer's DXF pane draws it (``@cad/core`` ``lib/drawing2d``):
 the whole drawing from above, fitted to the picture with the pane's margin, or the window a plan
 view names (a Quick Edit view's camera: ``plan_view``), its lines one pixel wide in their pens, its
 fills flat in theirs, its words in their pens, set in the platform's UI face at their cap height and
@@ -291,7 +291,7 @@ def _laid(frame: np.ndarray, left: int, top: int, cover: np.ndarray, rgb: np.nda
 
 def paint_ink(frame: np.ndarray, marks: list[dict[str, Any]], place: Any, line_scale: float) -> None:
     """An annotation's ink over a drawing (sRGB bytes, rows top first, in place), as the viewer's
-    drawing pane paints it (``@text-to-cad/core`` ``lib/drawing2d/marks.js``): each mark on the sheet,
+    drawing pane paints it (``@cad/core`` ``lib/drawing2d/marks.js``): each mark on the sheet,
     its points in drawing coordinates placed through the view (``place``: drawing to pixels), in its
     colour at its opacity. A stroke is round-capped and -joined, ``width`` pixels times ``line_scale``
     wide (the picture as heavy as the viewer was against its height; a segment of a stroke with

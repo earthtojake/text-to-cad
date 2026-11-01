@@ -1,12 +1,12 @@
 # Docs site
 
-The documentation website (Next.js) — texttocad.dev. A @text-to-cad/core CLIENT: the
+The documentation website (Next.js) — texttocad.dev. A @cad/core CLIENT: the
 hero and example scenes render real CAD models in the browser through the
 same shared runtime the viewer uses.
 
 **PURPOSE** — the public documentation and marketing site.
 
-**MAY DEPEND ON** — compiled `@text-to-cad/core` exports and this app's own
+**MAY DEPEND ON** — compiled `@cad/core` exports and this app's own
 npm dependencies. Never another app or the running CAD server.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
@@ -30,7 +30,7 @@ local development.
 
 ```bash
 npm ci --workspace packages/core --workspace apps/docs
-npm run build --workspace @text-to-cad/core
+npm run build --workspace @cad/core
 npm --prefix apps/docs run check    # the CI gate: lint + typecheck + build
 ```
 

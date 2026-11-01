@@ -48,7 +48,7 @@ const round = value => String(Math.round(Number(value) * 1e4) / 1e4);
 /**
  * An entity, as Quick Edit's chip says it: its name, and what the drawing says of it — its handle
  * and DXF type, its layer, the block an INSERT places, a circle's or arc's centre and radius.
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
  */
 export function describeEntity(entity, unit = "", t = english) {
   const units = unit ? ` ${unit}` : "";
@@ -70,7 +70,7 @@ export function describeEntity(entity, unit = "", t = english) {
  * `useSceneReferences`): its entities by reference id, each described, and its highlight, which
  * `onHighlight` paints.
  *
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
  * @param {{ onHighlight(ink: { hovered: string[], selected: string[] }): void, unit?: string }} options
  *   `onHighlight` is given handles; `t` says the entities in the view's language.
  */
@@ -120,7 +120,7 @@ export const LAYERS_SECTION_MIN_LAYERS = 4;
  * (`LAYERS_SECTION_MIN_LAYERS` or more drawn on), or block references, whose contents a layer
  * nests. A flat pattern of two or three layers (CUT, BEND) and no blocks has none: its section
  * would be a few rows saying what the drawing already shows.
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing | null} drawing
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing | null} drawing
  */
 export function layersSectionShown(drawing) {
   if (!drawing) return false;
@@ -133,7 +133,7 @@ export function layersSectionShown(drawing) {
  * The Layers section's rows: each layer drawn on, in the drawing's order, with its colour, the
  * number of entities drawn on it, and the block references placed on it (each a row of its own,
  * its block's name).
- * @param {import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
+ * @param {import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing} drawing
  * @returns {{ name: string, color: string | null, entities: number, inserts: { handle: string, block: string }[] }[]}
  */
 export function layerRows(drawing) {

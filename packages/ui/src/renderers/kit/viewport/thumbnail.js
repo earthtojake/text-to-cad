@@ -1,8 +1,8 @@
-import { fitCameraDepthToBounds } from "@text-to-cad/core/common/renderOptions.js";
-import { mergeBoundsList } from "@text-to-cad/core/lib/viewer/autoZoom.js";
-import { renderWithSceneRig } from "@text-to-cad/core/lib/viewer/sceneRig.js";
-import { getSceneScaleSettings } from "@text-to-cad/core/lib/viewer/sceneScale.js";
-import { canvasToBlob } from "@text-to-cad/core/lib/viewer/screenshotCapture.js";
+import { fitCameraDepthToBounds } from "@cad/core/common/renderOptions.js";
+import { mergeBoundsList } from "@cad/core/lib/viewer/autoZoom.js";
+import { renderWithSceneRig } from "@cad/core/lib/viewer/sceneRig.js";
+import { getSceneScaleSettings } from "@cad/core/lib/viewer/sceneScale.js";
+import { canvasToBlob } from "@cad/core/lib/viewer/screenshotCapture.js";
 import { interactiveCameraFrameForBounds } from "../camera/viewportCameraFit.js";
 import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from "../camera/viewportCameraKit.js";
 import { viewerDepthSettings } from "./renderDepthPolicy.js";

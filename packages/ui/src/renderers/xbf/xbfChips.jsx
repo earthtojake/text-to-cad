@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchXbfElementFacts } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
+import { fetchXbfElementFacts } from "@cad/core/lib/xbf/xbfDocument.js";
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
+import { formatPromptReference } from "@cad/core/prompt";
 import { InfoRow, MonoValue, formatNumber } from "../kit/inspector/referenceRows.jsx";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // What is selected in an engine document, as Quick Edit's chips -- as the STEP renderer's were:
 // a part or subassembly a chip of its own, its card its part count (a

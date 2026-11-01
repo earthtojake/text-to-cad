@@ -4,7 +4,7 @@
 // loop the routine plays with, while unset the routine's own authored values. Orbit on or off is not
 // here: Preview opens still every time.
 // Importing this module has no environmental effects.
-import { clampAnimationSpeed } from "@text-to-cad/core/common/animationClock.js";
+import { clampAnimationSpeed } from "@cad/core/common/animationClock.js";
 
 export const MAX_ORBIT_SPEED = 5;
 export const DEFAULT_PLAYBACK = Object.freeze({ orbitSpeed: 1, autoplay: false });

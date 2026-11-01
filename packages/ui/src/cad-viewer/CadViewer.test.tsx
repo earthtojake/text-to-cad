@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
+import { unavailablePromptContext } from '@cad/core/prompt';
 import type { FileViewerProps } from '../file-viewer/types.js';
 // The built package: its renderers' modules are JSX in `.js`, which only the build compiles.
 import { CadViewer, createCadFileSource } from '../../dist/cad-viewer/index.js';

@@ -1,6 +1,6 @@
 """The controls a CAD view counts are one vocabulary in three languages.
 
-The page names what a person used (`@text-to-cad/ui`'s `usage/controls.js`), cadgen notes only names it
+The page names what a person used (`@cad/ui`'s `usage/controls.js`), cadgen notes only names it
 knows (`cad_server/analytics.py`: `CONTROLS`), and the receiver refuses any other (`apps/api/src/events.mjs`:
 `CONTROLS`). A name one of them lacks is a count lost without a word: the page's never noted, or a whole
 batch refused. Read as text, so this needs nothing installed.

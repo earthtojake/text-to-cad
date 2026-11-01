@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
 import { FileWarning } from 'lucide-react';
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
+import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
@@ -17,7 +17,7 @@ import type { LibraryLayout } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
 import { normalizePath } from './catalog.js';
-import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
 
@@ -72,7 +72,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   /**
-   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind:
    * last among the navbar's controls (outermost, after Full size), over every file and on the home.
    */
   update?: ReactNode;

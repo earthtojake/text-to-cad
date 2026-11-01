@@ -1,12 +1,12 @@
 import { useMemo } from "react";
 import { Trash2 } from "lucide-react";
-import { measureLabelText, measureSeriesColor } from "@text-to-cad/core/lib/viewer/measureDimension.js";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { measureLabelText, measureSeriesColor } from "@cad/core/lib/viewer/measureDimension.js";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import ReferenceChips from "../quick-edit/ReferenceChips.jsx";
 import SubToolbar, { SubToolbarSeparator } from "../SubToolbar.jsx";
 import MeasurementCard from "./MeasurementCard.jsx";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * Measure's results as chips, Quick Edit's own (`ReferenceChips.jsx`), in any view: each its

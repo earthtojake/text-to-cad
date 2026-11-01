@@ -357,7 +357,7 @@ it('peeking on a phone, its row is the note\'s field and a plain icon button per
 
 
 it.each(['Copy Prompt', 'Queue', 'Send'])('%s includes a small snapshot as JSON with no file read', async action => {
-  const { resolvePromptMessage } = await import('@text-to-cad/core/prompt');
+  const { resolvePromptMessage } = await import('@cad/core/prompt');
   let message = '';
   const take = async (context: any) => { message = await resolvePromptMessage(context); return { status: 'added' as const, partIds: [] }; };
   const host = testHost({ clipboard: { writeText: async text => { message = await text; }, readText: async () => '', writeImage: async () => {} },

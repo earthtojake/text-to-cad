@@ -1,11 +1,11 @@
 import { FileWarning } from 'lucide-react';
-import { EmptyState } from '@text-to-cad/ui/navigation';
+import { EmptyState } from '@cad/ui/navigation';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createCrashReporter, isEngineGone, isEngineRefused } from '@text-to-cad/core/client';
-import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
-import { createTabStore } from '@text-to-cad/ui/tab-store';
-import { I18nProvider, resolveLocale, translateIn } from '@text-to-cad/ui/i18n';
+import { createCrashReporter, isEngineGone, isEngineRefused } from '@cad/core/client';
+import { ViewerLoadingOverlay } from '@cad/ui/file-viewer/presentation';
+import { createTabStore } from '@cad/ui/tab-store';
+import { I18nProvider, resolveLocale, translateIn } from '@cad/ui/i18n';
 import { createWebCadClient } from './host/cadClient.js';
 import { keepAddressLink } from './host/addressLink.js';
 import App from './App';

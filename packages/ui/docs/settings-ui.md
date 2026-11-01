@@ -26,7 +26,7 @@ inspects a format's parts, joints or topology. No pick or tool opens or closes t
 
 | The host (web, the CAD app) supplies | The shared UI decides |
 | --- | --- |
-| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
+| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@cad/ui/tab-store`, `kit/shell/fileView.js`) |
 | `chrome` (the navbar, `"page"`, or the view alone, `"bare"`), `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings), `colorScheme` (the person's theme and how it changes) | The navbar's order and look, over a file and over the home, the app menu (one menu in the viewer and on the home) and what a new issue says |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `promptFiles` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
@@ -453,7 +453,7 @@ a curve and the area the engine's facts of it, shown once they are in). With one
 only that kind is taken: an edge's end is still its vertex under Vertices, and anywhere else a
 press takes nothing. Shift held, a press takes the point on the model as it is.
 
-The reading follows from the pair (`@text-to-cad/core/lib/viewer/measureEntities.js`), not from
+The reading follows from the pair (`@cad/core/lib/viewer/measureEntities.js`), not from
 where on each the pointer happened to be:
 
 - two vertices: the distance, with ΔX ΔY ΔZ;
@@ -677,7 +677,7 @@ Display is a choice of mode and the Grid switch, and nothing else: a mode has no
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
 the model's CAD edges, the default), **Shaded** (no edges), **Parts** (Solid with each part
 its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the view's
-injected capabilities (`viewFeaturesForKind`, `@text-to-cad/core/common/viewSettings.js`; the
+injected capabilities (`viewFeaturesForKind`, `@cad/core/common/viewSettings.js`; the
 rows and icons `DisplayModeOptions.js`): a STEP assembly
 offers all six, a STEP part file all but Parts, and a file without CAD edges (STL, 3MF, GLB,
 a robot) Solid, with Parts when it has several parts, objects or links. **Grid** draws the
@@ -755,7 +755,7 @@ what the host supplies, the person's settings in the order Language, Telemetry, 
   mainland China and Singapore read 简体中文, Traditional script or Taiwan, Hong Kong and Macau
   繁體中文, any Japanese 日本語, any Korean 한국어, anything else English. A language chosen
   overrides the inference until Automatic clears it. The host resolves the language and hands
-  it down as `environment.locale` (`@text-to-cad/ui/i18n`'s `useLanguage`); the shared UI holds
+  it down as `environment.locale` (`@cad/ui/i18n`'s `useLanguage`); the shared UI holds
   no locale of its own.
 - The host's own on/off settings (`appSettings`), a checkbox item each, in the order they
   come, checked at the right; a press turns one without closing the menu. An info icon after
@@ -783,7 +783,7 @@ view's or a tab's: the host keeps it where every view of theirs reads it (both a
 settings, `settings.json` in text-to-cad's state directory), and a view reads it again whenever
 the person comes back to the page.
 
-Every string of the chrome reads through `@text-to-cad/ui/i18n` (`useI18n().t`), English
+Every string of the chrome reads through `@cad/ui/i18n` (`useI18n().t`), English
 first: `en.js` holds every key, each other locale the same keys (a parity test), and a key a
 locale misses reads English. No view spells a word itself: `scripts/test/check-ui-strings.mjs`
 refuses English in JSX text, the attributes a person reads and a table's labels across

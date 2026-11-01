@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useSyncExternalStore } from "react";
-import { ToolbarTooltipScope } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { ToolbarTooltipScope } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
 import { SIDEBAR_SLIDE_CLASS } from "./FileSidebar.jsx";
 

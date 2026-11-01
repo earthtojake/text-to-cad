@@ -36,7 +36,7 @@ Push the branch to `origin` and open the pull request against
 
 Choose the setup for the environment where the tools and tests will run. Every
 environment needs Python 3.14 or newer, the packages' floor. Install Node.js 22 for the
-packaged runtime, Viewer, `@text-to-cad/core`, or documentation site; Python-only work
+packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
 ### Linux, macOS, and WSL
@@ -354,7 +354,7 @@ diff content: a comment in a module selects what the module's code would.
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
 | cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
-| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@text-to-cad/core`'s units, the dependency and kit-boundary checks |
+| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
 | skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`), dfm and dfam-check (their skills) |
@@ -517,14 +517,14 @@ Canonical source directories are:
 Three source trees ship whole and must each work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
 `tests/python/global/test_package_boundaries.py`: `packages/cad`,
-`packages/cad-server` (with @text-to-cad/core and the viewer client bundled in at build
+`packages/cad-server` (with @cad/core and the viewer client bundled in at build
 time) and `packages/cad-mcp` each build into a PyPI wheel whose README is its long
 description. Markdown under it must be true and
-actionable with this repo gone: name the bundled thing ("the @text-to-cad/core runtime
+actionable with this repo gone: name the bundled thing ("the @cad/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
 relative to the package itself. Repo-development guidance belongs here, not in
 the package. `apps/web` is a client package with a boundary of its own
-(`apps/web/scripts/selfContained.test.mjs`): it imports @text-to-cad/core and @text-to-cad/ui by their public exports; relative
+(`apps/web/scripts/selfContained.test.mjs`): it imports @cad/core and @cad/ui by their public exports; relative
 imports remain inside its directory.
 
 ## Working On The Packages In This Repo
@@ -544,7 +544,7 @@ imports remain inside its directory.
 
 The npm apps are `docs`, `web` and `mcp` (`apps/api` is a Vercel project of its own, with no
 dependencies). Framework-independent CAD code lives
-in `@text-to-cad/core`; `@text-to-cad/ui` owns the complete FileViewer and injectable
+in `@cad/core`; `@cad/ui` owns the complete FileViewer and injectable
 renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,
 including aliases, re-exports and dynamic imports.
@@ -559,13 +559,13 @@ Install from the repository root, selecting only the workflow being exercised:
 
 ```bash
 # Python engine/runtime or shared core work:
-npm ci --workspace @text-to-cad/core
-npm run build --workspace @text-to-cad/core
+npm ci --workspace @cad/core
+npm run build --workspace @cad/core
 # Viewer and shared UI work:
-npm ci --workspace @text-to-cad/core --workspace @text-to-cad/ui --workspace @text-to-cad/web
+npm ci --workspace @cad/core --workspace @cad/ui --workspace @cad/web
 npm run build:packages
 # Docs work:
-npm ci --workspace @text-to-cad/core --workspace cad-skills-docs
+npm ci --workspace @cad/core --workspace cad-skills-docs
 npm run build:docs
 ```
 
@@ -838,7 +838,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    existence, Viewer client and CAD app alike, because the release
    commit carries none of it; its `CAD_RELEASE` names the version, so
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
-   `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
+   `v<VERSION>-dev.<commit>` (`@cad/ui/build-id`) — `check-builds.sh`,
    the wheel-contents check, `python -m build` of the release's four projects on
    PyPI into one folder (the library `cad`, the server `cad-server`, the
    shim `cad-mcp`, and the alias `cadgen`, a wheel and an
@@ -857,7 +857,7 @@ green: that is the release. `Publish Release`, on the merge commit:
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
    (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
    id, which the chunk's text and its map decide together
-   (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
+   (`@cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
    uploads it once. Then the `pypi` job uploads the four projects, one at a time:

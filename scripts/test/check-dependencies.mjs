@@ -6,7 +6,7 @@ import { isBuiltin } from 'node:module';
 import ts from 'typescript';
 
 export function checkDependencies(repo) {
-const packages = new Map(['core', 'ui'].map(name => [`@text-to-cad/${name}`, path.join(repo, 'packages', name)]));
+const packages = new Map(['core', 'ui'].map(name => [`@cad/${name}`, path.join(repo, 'packages', name)]));
 const extensions = ['', '.ts', '.tsx', '.js', '.jsx', '.mjs', '.d.ts', '/index.ts', '/index.tsx', '/index.js'];
 function existing(file) {
   const base = file.replace(/\.(?:js|jsx)$/, '');
@@ -89,7 +89,7 @@ for (const file of files) {
   if (from === 'packages/ui') for (const effect of hostEffects(code, file)) errors.push(`${path.relative(repo, file)} uses ${effect}; inject a host service`);
   for (const item of imports) {
     if (isBuiltin(item.name)) nodeModules.add(file);
-    if (from === 'packages/ui' && item.name === '@text-to-cad/core/client' && !item.typesOnly) {
+    if (from === 'packages/ui' && item.name === '@cad/core/client' && !item.typesOnly) {
       const ast = ts.createSourceFile(file, code, ts.ScriptTarget.Latest, true);
       for (const node of ast.statements) if (ts.isImportDeclaration(node) && node.moduleSpecifier.text === item.name) {
         const bindings = node.importClause?.namedBindings;
@@ -102,9 +102,9 @@ for (const file of files) {
     if (/^(cadgen-js|cad-viewer(?:\/|$)|cadgen-react)/.test(item.name)) errors.push(`${label}: retired package`);
     if (from.startsWith('apps/') && to?.startsWith('apps/') && from !== to) errors.push(`${label}: app-to-app dependency`);
     if (from.startsWith('packages/') && to?.startsWith('apps/')) errors.push(`${label}: package depends on app source`);
-    if (from === 'packages/core' && (/^(react(?:-dom)?(?:\/|$)|electron(?:\/|$)|next(?:\/|$)|@text-to-cad\/ui(?:\/|$))/.test(item.name) || to === 'packages/ui')) errors.push(`${label}: core depends on UI/platform framework`);
+    if (from === 'packages/core' && (/^(react(?:-dom)?(?:\/|$)|electron(?:\/|$)|next(?:\/|$)|@cad\/ui(?:\/|$))/.test(item.name) || to === 'packages/ui')) errors.push(`${label}: core depends on UI/platform framework`);
     if (from === 'packages/ui' && (isBuiltin(item.name) || /^(electron(?:\/|$)|@\/)/.test(item.name))) errors.push(`${label}: UI depends on a host or Node module`);
-    if (item.name.startsWith('@text-to-cad/') && !resolved && !item.name.endsWith('.css')) errors.push(`${label}: missing package export/source`);
+    if (item.name.startsWith('@cad/') && !resolved && !item.name.endsWith('.css')) errors.push(`${label}: missing package export/source`);
     if (item.name.startsWith('.') && !resolved && !/\.(css|svg|png|webp|ico|glb|wasm|json)$/.test(item.name.split('?')[0])) errors.push(`${label}: unresolved relative module`);
     if (resolved && !item.typesOnly) edges.set(file, [...(edges.get(file) || []), resolved]);
   }

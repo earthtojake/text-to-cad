@@ -1,8 +1,8 @@
-import { createPromptDeliveryLedger, resolvePromptMessage, validatePromptContext } from '@text-to-cad/core/prompt';
-import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@text-to-cad/core/prompt';
+import { createPromptDeliveryLedger, resolvePromptMessage, validatePromptContext } from '@cad/core/prompt';
+import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@cad/core/prompt';
 import { HostError, type Bridge } from './bridge';
 import type { Presentation } from './presentation';
-import { english } from '@text-to-cad/ui/i18n';
+import { english } from '@cad/ui/i18n';
 
 const MAX_ITEMS = 24;
 const METHOD_NOT_FOUND = -32601;

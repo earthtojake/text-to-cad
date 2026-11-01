@@ -1,6 +1,6 @@
 # CAD app (MCP Apps)
 
-The page an agent host renders for CAD: the same `@text-to-cad/ui` FileViewer and
+The page an agent host renders for CAD: the same `@cad/ui` FileViewer and
 renderers `apps/web` composes, behind a different host — an MCP Apps bridge
 instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
 `cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
@@ -89,7 +89,7 @@ total, elapsedMs}`, the latest it said (an export's `read` and `write`, a snapsh
 and `write`, an inspection's `measure`, counted where the stage has units) -- and the stage's words
 as `stage`; a status asked with `afterSequence` wakes with each event, as it wakes with the result.
 The same event is what a view's status line says of a build behind the model it shows
-(`@text-to-cad/ui`'s `kit/status`, in the view's language), so a card and an agent read one shape. No tool builds source
+(`@cad/ui`'s `kit/status`, in the view's language), so a card and an agent read one shape. No tool builds source
 text: to build a shape, wrap the shape in a decorated function and run its script.
 Inspection never builds. The web viewer's Export is a browser download; this page has no Export, having no HTTP origin to download from.
 
@@ -149,7 +149,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   a source tree). A server of a newer release than the engine's -- an app whose plugin
   moved ahead -- says a release is out too, with no request (`updates.see`). While this
   install is behind, the navbar shows the shared blue `UpdateButton`
-  (`@text-to-cad/ui/update`), an icon and nothing else, first among its controls, over a
+  (`@cad/ui/update`), an icon and nothing else, first among its controls, over a
   file and over the home; the file handler, which has no navbar, shows it in its corner,
   under Full size. A launch carries the notice the server last read, so the button draws
   with the page; the page reads it again (`/api/v1/server`) when the person comes back to
@@ -180,10 +180,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   made blob URLs of, and by each chunk's debug id), as their type and frames, never a message.
   The build keeps a source map of each chunk as the page runs it (`dist/sourcemaps`, which a
   release uploads to PostHog), leading into the shared packages' own source, whose modules
-  load with their maps (`@text-to-cad/core/source-maps`): every edit the build makes to a
+  load with their maps (`@cad/core/source-maps`): every edit the build makes to a
   module or a chunk is folded into rolldown's map, each import's placeholder is as wide as the
   blob URL that replaces it, and the chunk's debug
-  id is the one its edited text and map decide (`@text-to-cad/core/chunk-ids`), never the
+  id is the one its edited text and map decide (`@cad/core/chunk-ids`), never the
   id of the unedited chunk the CAD Viewer may ship. It is on by default once
   a `cad` command has said so, once, and nothing asks. The app menu's **Telemetry**
   switch (`appSettings`, through `/api/v1/settings`' `telemetry`) changes the answer, one answer for
@@ -372,13 +372,13 @@ values have no reader and cannot hide it. Settings files need no conversion.
 | `capture.ts` | a capture once the view shows the model asked about, loaded and drawn (`captureSettled`, within `CAPTURE_SETTLE_MS`), and the PNG shrunk to fit one reply (`fitCapture`) |
 | `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` naming the snapshot path, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
-| `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
+| `live.ts`, `sync.ts` | the mounted view's live controller (`@cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`) and the catalog's revision |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 | `shell.ts` | the shell a host keeps (`src/shell.ts` starts it): the engine's app read through `cad_http` (`APP_ROUTE`, `/app`), a long one a part at a time, else from the engine with the launch's link, and imported; what it hands the app (`__cadShell`: the bridge, the presentation, the launch, the opening result, and `reload`) |
 | `release.ts` | the card through an update: the engine asked every half second while it restarts, and the engine's app loaded in the card's own place once it answers with another release (`useNextRelease`, `loadNextRelease`) |
 | `clipboard.ts` | the frame's clipboard, every copy's: the asynchronous clipboard where the host grants it (the resource asks for `clipboardWrite`), else the page's own copy command, still inside the press, for text |
 
-`ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,
+`ModelView.tsx` is the page: the shared `CadViewer` (`@cad/ui/cad-viewer`,
 the one the web Viewer shows) showing the launch's model, with this host's ports — its
 tunnel (which also carries a Quick Edit's views and annotation to the server, which makes their files: `promptFiles`), the
 explorer's folders and search over it (`createCadFileSource`), its chat, its file menu
@@ -445,7 +445,7 @@ scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the type check, the tests,
 then the build. A build names itself in the app menu (`vite.config.mjs`, through
-`@text-to-cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
+`@cad/ui/build-id`): the release's own build shows `v<VERSION>`, any other
 `v<VERSION>-dev.<commit>`, the commit of the checkout it was built from. Every host
 `dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent Apps"). A checkout's `cad-mcp` serves `apps/mcp/dist` when it exists
 (`CAD_MCP_APP_DIR` overrides it); a wheel serves `cad_server/_runtime/mcp`,

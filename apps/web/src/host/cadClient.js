@@ -1,4 +1,4 @@
-import { createCadClient } from "@text-to-cad/core/client";
+import { createCadClient } from "@cad/core/client";
 
 /**
  * The web viewer's connection to the server it was loaded from. Its catalog is read every two

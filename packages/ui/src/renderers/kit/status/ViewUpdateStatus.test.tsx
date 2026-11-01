@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ViewerMobileContext } from '../../../file-viewer/responsive.js';
-import { I18nProvider } from '@text-to-cad/ui/i18n';
+import { I18nProvider } from '@cad/ui/i18n';
 import { loadingProgress } from './loadingState.js';
 import { MODEL_UPDATE_STATUS, modelUpdateStatus, ViewUpdateStatus } from './ViewUpdateStatus.jsx';
 Object.assign(globalThis, { React });

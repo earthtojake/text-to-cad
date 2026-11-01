@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { PaintBucket, Trash2 } from "lucide-react";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { ANNOTATION_STROKE_WIDTHS, AnnotationStylePickers, annotationColors } from "../../../../annotation/toolbar.jsx";
 import { fillMarkAt, interiorPoint, strokeSettingOf } from "../../../../annotation/geometry.js";
 import { annotationsOnScreen, annotationWorldPoints, projectAnnotations } from "./annotation3d.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // How far the bar keeps from the ink it is about, and from the viewport's edges, in px.
 const GAP = 10;

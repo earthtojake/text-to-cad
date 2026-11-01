@@ -1,7 +1,7 @@
 import { PlugZap } from 'lucide-react';
-import { EmptyState } from '@text-to-cad/ui/navigation';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { translateIn } from '@text-to-cad/ui/i18n';
+import { EmptyState } from '@cad/ui/navigation';
+import { Button } from '@cad/ui/primitives/button';
+import { translateIn } from '@cad/ui/i18n';
 
 /**
  * What the page says when the engine that served it is gone (`isEngineGone`): CAD is not running

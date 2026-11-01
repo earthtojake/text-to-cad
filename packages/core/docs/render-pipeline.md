@@ -1,6 +1,6 @@
 # Render Pipeline
 
-`@text-to-cad/core` exposes a staged render for the viewer, the docs hero and the OCCT parity
+`@cad/core` exposes a staged render for the viewer, the docs hero and the OCCT parity
 bench's headless page: a family's scene builder makes the scene, `renderModel` draws it on a
 canvas, and `captureModel` (the parity page's) returns its pictures.
 
@@ -439,7 +439,7 @@ geometry whose key the new version still holds, and builds only the parts the ed
 Use this module for interactive browser canvases, including the docs hero.
 
 ```js
-import { renderModel } from "@text-to-cad/core/common/renderModel.js";
+import { renderModel } from "@cad/core/common/renderModel.js";
 ```
 
 `renderModel(THREE, model, options)` returns an interactive viewport API:
@@ -496,7 +496,7 @@ import {
   renderJobContext,
   renderModel,
   captureModel
-} from "@text-to-cad/core/common/renderMeshScene.js";
+} from "@cad/core/common/renderMeshScene.js";
 ```
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
@@ -548,7 +548,7 @@ that rest box.
   in its scene graph's order (a robot's scene attaches a link's meshes before the joints it
   carries, so its rows run down the tree from the root).
 
-It does not write files: its caller does. Consumers use compiled `@text-to-cad/core`
+It does not write files: its caller does. Consumers use compiled `@cad/core`
 exports; the OCCT parity bench bundles this entrypoint into a snapshot page of its own, built
 on demand outside the wheel, and loads it in a headless Chromium to compare with OCCT's stills.
 The engine's own snapshots are drawn by OCCT and never load it.
@@ -593,9 +593,9 @@ and plays a GLB, and drawn by `renderModel` from a model of a root and its bound
 
 ```js
 import * as THREE from "three";
-import { buildGlbDocumentFromBuffer } from "@text-to-cad/core/lib/render/glbMeshData.js";
-import { createGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
-import { renderModel } from "@text-to-cad/core/common/renderModel.js";
+import { buildGlbDocumentFromBuffer } from "@cad/core/lib/render/glbMeshData.js";
+import { createGlbAnimationRuntime, setGlbAnimationTime } from "@cad/core/lib/render/glbAnimationRuntime.js";
+import { renderModel } from "@cad/core/common/renderModel.js";
 
 const glb = await buildGlbDocumentFromBuffer(await (await fetch("/hero/planetary.glb")).arrayBuffer(), {});
 const placed = new THREE.Group();                 // the file in CAD space: millimetres, Z up

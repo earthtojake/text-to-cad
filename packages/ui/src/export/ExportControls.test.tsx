@@ -3,7 +3,7 @@ import { cleanup, render, screen, waitFor, within, act } from '@testing-library/
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { toast } from 'sonner';
-import { ExportRequestError, exportPause } from '@text-to-cad/core/client';
+import { ExportRequestError, exportPause } from '@cad/core/client';
 import { ExportControls } from '../../dist/export/ExportControls.js';
 import { useExportView } from '../../dist/export/context.js';
 import { I18nProvider } from '../../dist/i18n/index.js';
@@ -12,8 +12,8 @@ import { ViewerElementContext, ViewerHostContext } from '../../dist/host/context
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../../dist/primitives/dropdown-menu.js';
 
 // A retry's pause is the test's to end: a dropped connection is asked again when it says so.
-vi.mock('@text-to-cad/core/client', async original => ({
-  ...await original<typeof import('@text-to-cad/core/client')>(),
+vi.mock('@cad/core/client', async original => ({
+  ...await original<typeof import('@cad/core/client')>(),
   exportPause: vi.fn(),
 }));
 

@@ -1,5 +1,5 @@
 {
-  "name": "@text-to-cad/web",
+  "name": "@cad/web",
   "private": true,
   "type": "module",
   "version": "0.10.0",
@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@text-to-cad/core": "*",
+    "@cad/core": "*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.61.0",
@@ -20,7 +20,7 @@
     "react-dom": "19.3.1",
     "tailwind-merge": "^3.7.0",
     "three": "0.186.1",
-    "@text-to-cad/ui": "*"
+    "@cad/ui": "*"
   },
   "devDependencies": {
     "@babel/parser": "^8.0.8",

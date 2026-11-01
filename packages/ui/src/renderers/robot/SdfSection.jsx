@@ -1,5 +1,5 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { useI18n } from "@cad/ui/i18n";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
 

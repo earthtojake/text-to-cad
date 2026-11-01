@@ -1,5 +1,5 @@
 import { getStrokePoints } from "perfect-freehand";
-import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from "@text-to-cad/core/lib/annotation/fillRegion.js";
+import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from "@cad/core/lib/annotation/fillRegion.js";
 
 // Ink on the screen: what each Annotate tool puts down, as marks in CSS pixels from the viewport's
 // top-left — a stroke (a polyline of a width), an area (a filled polygon:

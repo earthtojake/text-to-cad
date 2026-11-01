@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
-import { useAnalyticsConsent } from '@text-to-cad/ui/consent';
-import { translator, useI18n, useLanguage } from '@text-to-cad/ui/i18n';
-import { UpdateButton, useUpdate } from '@text-to-cad/ui/update';
-import { viewerLinks } from '@text-to-cad/ui/links';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { TooltipHint } from '@text-to-cad/ui/primitives/tooltip';
-import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
-import { normalizePath } from '@text-to-cad/ui/cad-viewer';
+import { useAnalyticsConsent } from '@cad/ui/consent';
+import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
+import { UpdateButton, useUpdate } from '@cad/ui/update';
+import { viewerLinks } from '@cad/ui/links';
+import { Button } from '@cad/ui/primitives/button';
+import { TooltipHint } from '@cad/ui/primitives/tooltip';
+import { createTabStore, memoryTabRecord } from '@cad/ui/tab-store';
+import { normalizePath } from '@cad/ui/cad-viewer';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
 import { declaresOpenLinks } from './host/channel';
@@ -27,7 +27,7 @@ interface Showing { launch: Launch; sequence: number }
 
 declare const __CAD_BUILD__: string | undefined;
 // Which build this page is, where it is not the release's own: vite.config.mjs names it
-// (`@text-to-cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
+// (`@cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
 const BUILD = typeof __CAD_BUILD__ === 'string' ? __CAD_BUILD__ : '';
 
 // The host's sandbox need not be a secure context, where randomUUID is missing.

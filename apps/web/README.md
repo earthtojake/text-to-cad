@@ -8,14 +8,14 @@ model's id, or a file's id once a launcher (or the page itself) registers it, de
 the file's canonical path. `/` is the home: the library alone, the documents opened or built
 before. Python scripts are never documents. There is no hosted deployment.
 
-This app is the browser host of `@text-to-cad/ui/file-viewer`, not the owner of
+This app is the browser host of `@cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
 **Owns:** URL selection (`/<id>`: `src/client/workbench/fileParam.js`), browser history, document title/appearance, browser
 persistence, the file menu's reveal route, and the app menu's links (the update notice is
 the server's, read from `/api/v1/server`).
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
-`CadViewer` (`@text-to-cad/ui/cad-viewer`), which registers one renderer per file
+`CadViewer` (`@cad/ui/cad-viewer`), which registers one renderer per file
 family and draws the navbar and the explorer. The catalog exposes CAD
 artifacts only. Explicit exports write only the requested download to temporary server storage.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
@@ -25,7 +25,7 @@ owns expansion-based picking and isolation.
 Web uses the same tree and file-row primitives as the CAD app; its HTTP adapter
 does not decide which model nodes are expanded or selectable.
 
-**May depend on:** compiled `@text-to-cad/ui` and `@text-to-cad/core` exports and app
+**May depend on:** compiled `@cad/ui` and `@cad/core` exports and app
 libraries. Never another application's source. Shared packages never import
 this app. The Python wheel consumes only the production build.
 
@@ -227,21 +227,21 @@ There is no durable job registry; a server restart ends these jobs.
 Reload picks up the exports still under way from this tab's session storage and reconnects
 with the same request IDs; an export leaves it once its file is handed to the browser or it
 fails. Each request names the session's epoch, read as its export starts, so a server
-restarted since refuses it rather than running it again, and its toast says so. Client transport is `@text-to-cad/core/client`'s `ExportService`, shared UI is
+restarted since refuses it rather than running it again, and its toast says so. Client transport is `@cad/core/client`'s `ExportService`, shared UI is
 `packages/ui/src/export`, and `src/host/downloads.ts` owns the browser effect.
 
 ## Shared interface
 
-This app exports no components. Other hosts use `@text-to-cad/ui/file-viewer` with
+This app exports no components. Other hosts use `@cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
-`@text-to-cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@text-to-cad/ui/renderers/dxf`, for `.glb`
-`@text-to-cad/ui/renderers/glb`, for `.stl` and `.3mf` `@text-to-cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@text-to-cad/ui/renderers/robot` (`CadViewer` registers all
+`@cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@cad/ui/renderers/dxf`, for `.glb`
+`@cad/ui/renderers/glb`, for `.stl` and `.3mf` `@cad/ui/renderers/mesh`, and
+for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot` (`CadViewer` registers all
 five with the same client and preferences, as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package: the root workspace builds UI's ESM, declarations, CSS and worker assets before building
 the app, with no source alias or JSX loader. Web supplies its file source (`createCadFileSource`
-from `@text-to-cad/ui/catalog`, over its CAD client), URL navigation (`onShow`, the `/<id>` path
+from `@cad/ui/catalog`, over its CAD client), URL navigation (`onShow`, the `/<id>` path
 and history), browser persistence, the document title and appearance, the viewer's links
 (`ViewerHost.links`: its version, its build's GitHub and Discord, `src/host/viewerLinks.js`) and
 the tab's colour scheme (`colorScheme`); the navbar, the explorer, the tool strip, the file
@@ -252,7 +252,7 @@ no filesystem-writing or editing endpoint. The host boundary is
 [docs/storage.md](docs/storage.md). CAD control guidance lives with the UI package.
 
 `vite.config.mjs` names the build, for the version the app menu shows (`__CAD_BUILD__`,
-from `@text-to-cad/ui/build-id`): none for the release's own build, whose
+from `@cad/ui/build-id`): none for the release's own build, whose
 environment names its version in `CAD_RELEASE` (the release workflow's bundle
 step), so it shows `v0.10.0`; for any other build, `vite dev` included, the commit of
 this checkout, with `-dirty` when it had uncommitted changes: `v0.10.0-dev.b80844940`.
@@ -281,7 +281,7 @@ processes on exit.
 
 ### Branded loading indicator
 
-`@text-to-cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
+`@cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
 the CAD renderer, so a host can show loading feedback without eagerly importing the
 CAD surface. `size` controls its pixel dimensions (default 96), `className` its
 placement, and `active={false}` uses the still pose. The host owns status text.
@@ -334,7 +334,7 @@ has moved it, and fits it again to a changed model while they have not
 
 Authored material information lives in the selection's reference details; editing
 it requires changing the source model or annotations. The viewer has no Materials
-or Theme editor. These controls live in `@text-to-cad/ui`; see the UI package's
+or Theme editor. These controls live in `@cad/ui`; see the UI package's
 Render and loading playbooks.
 
 A STEP or an `.xbf` loads its structure, then its parts, each at the mesh the engine
@@ -379,7 +379,7 @@ No snapshot is written while drawing or typing, and no image is rendered.
 
 ### The home
 
-The bare URL is the home: the library every CAD view shares (`@text-to-cad/ui/library`),
+The bare URL is the home: the library every CAD view shares (`@cad/ui/library`),
 and nothing else, laid out after Figma's Recents in a centred column (1128px at most, on 24px
 gutters, 44px under the navbar). It starts with one control row of 24px
 controls: "Recent" at the left, a 17px heading on the row's line, and at the right the type filter, a dropdown
@@ -440,9 +440,9 @@ file shown is counted as it joins the library (`PATCH /api/v1/documents`). A Qui
 through the host's `usage`, and the page's own crashes -- an error nothing caught, or one a view's
 boundary caught (`main.tsx`) -- are reported as core's `crashOf` makes them: the error's type and its
 script frames, never its message, each once a page. The build gives every chunk a hidden source map and
-a debug id its text and that map decide (`vite.config.mjs`, `@text-to-cad/core/chunk-ids`). A map leads
+a debug id its text and that map decide (`vite.config.mjs`, `@cad/core/chunk-ids`). A map leads
 into the shared packages' own source, not their compiled `dist`: their modules load with the maps their
-builds wrote (`@text-to-cad/core/source-maps`). The wheel
+builds wrote (`@cad/core/source-maps`). The wheel
 leaves the maps out and a release uploads them to PostHog, and the page
 carries each chunk's id by file name (`__cadChunkIds`), and a frame names its chunk by it. The page
 also reports the view controls a person used and how long each tool was up (`controls`, names
@@ -451,7 +451,7 @@ from `cad_server.analytics.CONTROLS`, since telemetry schema 7). The server hold
 
 ### File storage and host actions
 
-The web `FileSource` is `createCadFileSource` from `@text-to-cad/ui/catalog` over
+The web `FileSource` is `createCadFileSource` from `@cad/ui/catalog` over
 the CAD client, the one the CAD app uses: a file's catalog row, one folder's entries
 (`GET /api/v1/local/folder`) and the CAD files under a folder (the same, with `q`), with no
 writes or native filesystem mutations. Catalog content/revision changes are
@@ -468,7 +468,7 @@ renderer's selection action, rather than the file menu.
 
 The host body uses the shared `text-ui` token (13px at the normal root scale).
 Menus, tabs and tree rows follow the same default from
-[`@text-to-cad/ui`](../../packages/ui/README.md); settings sheets preserve their
+[`@cad/ui`](../../packages/ui/README.md); settings sheets preserve their
 compact 11px labels and values. The shared renderer owns reference
 layout, projected-bounds camera fitting and labeled orientation axes, so the CAD app
 and the web stay consistent without host-specific copies of those controls.

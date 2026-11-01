@@ -3,7 +3,7 @@
  *
  * An update is followed: the engine that answers with another release (`/api/v1/server`'s `release`)
  * and admits this page's credential is the device's engine of the next release, and the page reloads
- * into it (`reload`, deferred while the page has something unsaved: `@text-to-cad/ui/update`).
+ * into it (`reload`, deferred while the page has something unsaved: `@cad/ui/update`).
  *
  * Every viewer server says who it is: `/api/v1/server`'s `identityToken`, its
  * cadgen version and a digest of the page it serves. Once that answer is not the

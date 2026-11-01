@@ -1,4 +1,4 @@
-import { compileWithSceneRig } from "@text-to-cad/core/lib/viewer/sceneRig.js";
+import { compileWithSceneRig } from "@cad/core/lib/viewer/sceneRig.js";
 
 // Keeps the last framebuffer visible while the existing scene is reconciled.
 // Compilation uses Three's public async API; no renderer/context replacement. It compiles the

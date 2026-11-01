@@ -1,5 +1,5 @@
-import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
-import type { ExportFormat } from '@text-to-cad/core/client';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
+import type { ExportFormat } from '@cad/core/client';
 import type { ExportView } from './context.js';
 
 /**

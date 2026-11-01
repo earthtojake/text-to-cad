@@ -1,6 +1,6 @@
 """A robot description -- a URDF, an SDF, or an SRDF with the URDF it plans for -- as the stills
 hold it: every link visual's mesh a part, placed where its link stands at the pose asked, by
-forward kinematics ported from the viewer's (``@text-to-cad/core`` ``lib/urdf/kinematics.js``
+forward kinematics ported from the viewer's (``@cad/core`` ``lib/urdf/kinematics.js``
 and ``fourBarCoupling.js``) and held to a golden its own code made.
 
 **Reading** (the standard library's XML): a URDF's links and their visuals (origin, ``<mesh

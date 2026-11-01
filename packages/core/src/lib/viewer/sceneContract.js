@@ -1,5 +1,5 @@
 // The contract a family's scene exposes to whatever shows it: the viewer's viewport
-// (`@text-to-cad/ui` renderers/kit) and the parity page's headless stage
+// (`@cad/ui` renderers/kit) and the parity page's headless stage
 // (`common/headlessScene.js`). It is deliberately tiny, so neither reaches into a
 // scene: the host adopts `object3D`, frames `restBounds` (else `bounds`), hands over
 // the surface look it resolved, lights it with its own `rig` where it brings one, and the

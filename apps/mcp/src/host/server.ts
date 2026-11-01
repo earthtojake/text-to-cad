@@ -1,5 +1,5 @@
-import type { LibraryModel } from '@text-to-cad/ui/library';
-import type { UpdateNotice } from '@text-to-cad/ui/update';
+import type { LibraryModel } from '@cad/ui/library';
+import type { UpdateNotice } from '@cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 

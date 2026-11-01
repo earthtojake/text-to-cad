@@ -29,7 +29,7 @@ import {
   screenToModel,
   zoomLimits,
   zoomTransform
-} from "@text-to-cad/core/lib/drawing2d/index.js";
+} from "@cad/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
 import { capturePointer, releasePointer } from "../../lib/pointerCapture.js";
 import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js";

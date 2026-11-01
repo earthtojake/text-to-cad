@@ -4,8 +4,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import * as THREE from 'three';
-import { loadXbfDocument } from '@text-to-cad/core/lib/xbf/xbfDocument.js';
-import { createXbfScene } from '@text-to-cad/core/lib/xbf/xbfScene.js';
+import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
+import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';
 
 import { lookAtFor } from '../kit/camera/lookAt.js';
 import { xbfLookSubject } from './xbfLookAt.js';
@@ -13,7 +13,7 @@ import { xbfLookSubject } from './xbfLookAt.js';
 /** An engine document's face or edge as what a double-click looks at: its kind from its surface or polyline, where it stands. */
 
 // Core's bracket: a 40 x 20 x 4 plate on z = -2..2 with a Ø8 hole at the origin, two Ø6 pegs at x = ±12.
-const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const read = file => fs.readFileSync(path.join(FIXTURES, file));
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), 255, 255, 255, 128]).buffer;
 async function bracket() {

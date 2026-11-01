@@ -1,10 +1,10 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
-import { entityAt, drawEntityHighlights, snapAt } from "@text-to-cad/core/lib/drawing2d/entities.js";
-import { drawAnnotationMarks } from "@text-to-cad/core/lib/drawing2d/marks.js";
-import { planCamera, planProjection } from "@text-to-cad/core/lib/drawing2d/planView.js";
-import { screenToModel } from "@text-to-cad/core/lib/drawing2d/index.js";
+import { cn } from "@cad/ui/utils";
+import { entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
+import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
+import { planCamera, planProjection } from "@cad/core/lib/drawing2d/planView.js";
+import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { hasOpenPopup } from "../../lib/popups.js";
@@ -46,7 +46,7 @@ import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAn
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
 import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS, pressToolKey } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * A `.dxf` is drawn as a drawing: on a canvas, head on, in the pens it declares. No 3D, no fold

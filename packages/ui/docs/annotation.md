@@ -54,7 +54,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
     `perfect-freehand`.
   - Rectangles get rounded corners.
   - A fill finds the area inside a shape with
-    `@text-to-cad/core/lib/annotation/fillRegion.js`.
+    `@cad/core/lib/annotation/fillRegion.js`.
 - `renderers/kit/tools/annotate/AnnotationOverlay.jsx` — the surface over the viewport
   while Pencil or Shapes is up. It turns every gesture into marks, previews a mark on its
   own canvas as it is made, and puts it into the model when the gesture ends.
@@ -127,7 +127,7 @@ were drawn from every angle, lying on the surface they were drawn on. The engine
     renderer names under it (`ref`, a prompt reference, from the shell's
     `inkTouches`), each with its part; without it, the parts.
   - The projected ink is plain data (`AnnotationItem`): an annotation mark
-    (`@text-to-cad/core/common/annotation.js`), kept across scene rebuilds.
+    (`@cad/core/common/annotation.js`), kept across scene rebuilds.
     `mountAnnotations` draws it in a viewer runtime and `update` draws only the
     marks a change adds; the objects are core's, the ones a snapshot draws an
     annotation with. The preview

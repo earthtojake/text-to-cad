@@ -1,7 +1,7 @@
-import { createScreenSpaceLineStrip } from "@text-to-cad/core/common/renderEdges.js";
+import { createScreenSpaceLineStrip } from "@cad/core/common/renderEdges.js";
 import {
   ANNOTATION_RENDER_ORDER, annotationDocument, annotationMarkObject, annotationObjectShown as shown, clipAnnotationObject, disposeAnnotationObject
-} from "@text-to-cad/core/common/annotation.js";
+} from "@cad/core/common/annotation.js";
 import { markPoints } from "../../../../annotation/geometry.js";
 import { requestSceneFrame } from "../../viewport/sceneFrames.js";
 
@@ -17,9 +17,9 @@ import { requestSceneFrame } from "../../viewport/sceneFrames.js";
 // (`AnnotationItem`), kept across scene rebuilds; `mountAnnotations` draws it in a viewer runtime.
 
 /**
- * A mark as Annotate keeps it: an annotation mark (`@text-to-cad/core/common/annotation.js`, the shape a prompt's
+ * A mark as Annotate keeps it: an annotation mark (`@cad/core/common/annotation.js`, the shape a prompt's
  * annotation file and a snapshot job read), its points a Float32Array.
- * @typedef {import("@text-to-cad/core/common/annotation.js").AnnotationMark & { points: Float32Array }} AnnotationItem
+ * @typedef {import("@cad/core/common/annotation.js").AnnotationMark & { points: Float32Array }} AnnotationItem
  * @typedef {{ point: import("three").Vector3, normal: import("three").Vector3 }} Level  A mark's level: a plane
  *   through `point` with unit `normal`, in model coordinates.
  */
@@ -548,7 +548,7 @@ function touchesOf(points, touchesAt, partAt) {
 }
 
 /**
- * The annotation as an annotation file says it (`@text-to-cad/core/common/annotation.js`).
+ * The annotation as an annotation file says it (`@cad/core/common/annotation.js`).
  * @param {readonly AnnotationItem[]} items
  * @param {string} [units]
  */

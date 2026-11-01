@@ -7,7 +7,7 @@
 # Nothing cadgen ships loads it -- cadgen's snapshots are drawn by OCCT, and the wheel does
 # not carry this page. Its one reader is the OCCT parity bench (scripts/bench/occt_parity.py),
 # which runs this before it drives the page in a headless Chromium to compare OCCT's stills
-# with the viewer's: it is built from the same @text-to-cad/core entrypoint the CAD Viewer
+# with the viewer's: it is built from the same @cad/core entrypoint the CAD Viewer
 # uses, so its picture is the viewport's.
 #
 # The esbuild toolchain and the pinned three/meshoptimizer are npm-installed once into
@@ -135,7 +135,7 @@ build_snapshot_runtime() {
   rm -rf "$target_dir"
   mkdir -p "$target_dir"
   write_snapshot_render_html "$target_dir"
-  # NODE_PATH resolves @text-to-cad/core's remaining bare imports directly
+  # NODE_PATH resolves @cad/core's remaining bare imports directly
   # from workspace outputs, honoring the package's exports map, and resolves the
   # pinned meshoptimizer out of the tmp toolchain, so the bundle stays hermetic
   # on fresh checkouts with no packages/core/node_modules.
@@ -165,7 +165,7 @@ if [ "${BASH_SOURCE[0]}" = "$0" ]; then
   BUNDLE_REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
   out_dir="${1:-$BUNDLE_REPO_ROOT/tmp/bench/snapshot-page}"
   deps_dir="${CAD_SNAPSHOT_BUILD_DEPS_DIR:-$BUNDLE_REPO_ROOT/tmp/cadgen-snapshot-build}"
-  npm --prefix "$BUNDLE_REPO_ROOT" run build -w @text-to-cad/core >/dev/null
+  npm --prefix "$BUNDLE_REPO_ROOT" run build -w @cad/core >/dev/null
   ensure_snapshot_runtime_deps "$deps_dir"
   build_snapshot_runtime "$out_dir" "$deps_dir"
   echo "Built the snapshot page in $out_dir"

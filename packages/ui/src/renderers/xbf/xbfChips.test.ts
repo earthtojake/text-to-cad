@@ -1,6 +1,6 @@
 import { renderHook } from '@testing-library/react';
 import { expect, it } from 'vitest';
-import { parsePromptReference } from '@text-to-cad/core/prompt';
+import { parsePromptReference } from '@cad/core/prompt';
 import { useXbfSelectionChips, xbfCopyText, xbfNodeRefs } from '../../../dist/renderers/xbf/xbfChips.js';
 import { presentXbfTree, xbfCoveringIds } from '../../../dist/renderers/xbf/xbfTree.js';
 

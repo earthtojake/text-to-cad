@@ -1,11 +1,11 @@
 /**
  * The navbar's links as this Viewer builds them (`ViewerHost.links`): its version, and where GitHub
  * and Discord are for this build. The navbar draws them the same in every app
- * (`@text-to-cad/ui/links`). A newer release is cadgen's to say, through the update button
+ * (`@cad/ui/links`). A newer release is cadgen's to say, through the update button
  * (`/api/v1/server`).
  */
 import { useMemo } from "react";
-import { viewerLinks } from "@text-to-cad/ui/links";
+import { viewerLinks } from "@cad/ui/links";
 
 import {
   normalizeViewerDiscordUrl,
@@ -16,7 +16,7 @@ import {
 import viewerPackage from "../../package.json";
 
 // Which build this is, where it is not the release's own: vite.config.mjs names it
-// (`@text-to-cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
+// (`@cad/ui/build-id`), and the version then reads `<version>-dev.<build>` (`0.8.0-dev.<build>`).
 const BUILD = typeof __CAD_BUILD__ === "string" ? __CAD_BUILD__ : "";
 
 /** This Viewer's `ViewerHost.links`: the version it runs, X, its build's GitHub (and new issues there) and Discord. */

@@ -48,7 +48,7 @@ class PackagesNeverImportApps(unittest.TestCase):
 # The ships-alone law. Two surfaces leave this repo whole:
 #   - packages/cad, packages/cad-server and packages/cad-mcp each
 #     build into a PyPI wheel (each README.md is its long description; the server's
-#     @text-to-cad/core and viewer client arrive already bundled under _runtime/).
+#     @cad/core and viewer client arrive already bundled under _runtime/).
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
 #     models/ and never installs its packages/ — so a skill that points at this
@@ -147,7 +147,7 @@ class PackagedMarkdownShipsAlone(unittest.TestCase):
             "install alone (the Skills CLI copies skills/<name> by itself; "
             "the published tree has no models/), so their markdown must be "
             "true and actionable with "
-            "this repo gone. Name the bundled thing ('the @text-to-cad/core runtime "
+            "this repo gone. Name the bundled thing ('the @cad/core runtime "
             "bundled at build time'), not the repo path to its source; give "
             "a skill a self-contained exemplar in its references/, not a "
             "pointer at this repo's example projects; move repo-development "

@@ -1,6 +1,6 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createCrashReporter, type CadPageCrash } from '@text-to-cad/core/client';
+import { createCrashReporter, type CadPageCrash } from '@cad/core/client';
 import { version } from '../package.json';
 import Connection from './Connection';
 import Notice, { noticeTranslator } from './Notice';

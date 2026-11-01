@@ -1,17 +1,17 @@
-import { normalizeExplodedViewSettings } from "@text-to-cad/core/lib/displaySettings.js";
-import { clipAmount, clipAtForAmount, clipAxisBounds, normalizeStepClipSettings } from "@text-to-cad/core/lib/viewer/clipPlane.js";
+import { normalizeExplodedViewSettings } from "@cad/core/lib/displaySettings.js";
+import { clipAmount, clipAtForAmount, clipAxisBounds, normalizeStepClipSettings } from "@cad/core/lib/viewer/clipPlane.js";
 import { ChevronDown } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuSeparator, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
+} from "@cad/ui/primitives/dropdown-menu";
 import { DropdownMenu as MenuPrimitive } from "radix-ui";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { Slider } from "@cad/ui/primitives/slider";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const AXES = Object.freeze(["x", "y", "z"]);
 

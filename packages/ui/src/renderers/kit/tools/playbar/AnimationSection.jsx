@@ -1,16 +1,16 @@
 import { ChevronDown, Pause, Play, RotateCcw } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import PlaybackMenu from "../PlaybackMenu.jsx";
 import { SUB_TOOLBAR_SLIDER_CLASS } from "../SubToolbar.jsx";
 import ToolPanel, { TOOL_PANEL_BUTTON_CLASS, ToolPanelHeadAction } from "../ToolPanel.jsx";
 import { AnimationTimeControl, formatSeconds, playbarWords } from "./AnimationTimeControl.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * The file sidebar's Animation section, for a file with routines: the routine played in the tools

@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { isAbortError } from "@text-to-cad/core/lib/renderAssetClient.js";
-import { loadXbfDocument, waitForXbfVersion } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { createXbfScene } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { isAbortError } from "@cad/core/lib/renderAssetClient.js";
+import { loadXbfDocument, waitForXbfVersion } from "@cad/core/lib/xbf/xbfDocument.js";
+import { createXbfScene } from "@cad/core/lib/xbf/xbfScene.js";
 
 const SERVING = Object.freeze({ phase: "read", label: "Opening document", done: 0, total: 0, determinate: false });
 

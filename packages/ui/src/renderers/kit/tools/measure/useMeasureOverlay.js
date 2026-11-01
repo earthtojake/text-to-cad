@@ -11,13 +11,13 @@ import {
   measurementMark,
   measurementMarkLayout,
   screenSpaceDimensionLayout
-} from "@text-to-cad/core/lib/viewer/measureDimension.js";
+} from "@cad/core/lib/viewer/measureDimension.js";
 import {
   MEASURE_SNAP_LABELS,
   entityMeasurementFromPick,
   formatEntityMeasurement
-} from "@text-to-cad/core/lib/viewer/measurement.js";
-import { projectWorldPointToClient } from "@text-to-cad/core/lib/viewer/measureRuler.js";
+} from "@cad/core/lib/viewer/measurement.js";
+import { projectWorldPointToClient } from "@cad/core/lib/viewer/measureRuler.js";
 
 import { measureRulerDraftMeasurement } from "./measureRulerState.js";
 

@@ -64,7 +64,7 @@ PLUGIN_FILES=(
 # What each stage owes, checked after a --check build. A stage that emits nothing is the
 # failure this catches before a wheel carries the hole to a user. Each page ships beside it the
 # third-party notice its build wrote of the packages it inlines (THIRD_PARTY_LICENSES.txt,
-# @text-to-cad/core/third-party-licenses): shipping them in a wheel is redistribution. The
+# @cad/core/third-party-licenses): shipping them in a wheel is redistribution. The
 # plugin owes its files and every skill, byte for byte (check_plugin_copy).
 VIEWER_OUTPUTS=(index.html THIRD_PARTY_LICENSES.txt)
 MCP_OUTPUTS=(shell.html app.js THIRD_PARTY_LICENSES.txt)
@@ -310,7 +310,7 @@ check_plugin_copy() {
 }
 
 build_stage_packages() {
-  # Both page stages bundle @text-to-cad/core and @text-to-cad/ui from their compiled exports.
+  # Both page stages bundle @cad/core and @cad/ui from their compiled exports.
   npm --prefix "$REPO_ROOT" run build:packages
 }
 

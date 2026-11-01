@@ -8,7 +8,7 @@
  * is the whole of this renderer's input.
  */
 import { useEffect, useMemo, useState } from "react";
-import { DRAWING_SCHEMA_VERSION, prepareDrawing } from "@text-to-cad/core/lib/drawing2d/index.js";
+import { DRAWING_SCHEMA_VERSION, prepareDrawing } from "@cad/core/lib/drawing2d/index.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 import { english } from "../../i18n/core.js";
 
@@ -30,7 +30,7 @@ class DrawingSchemaError extends Error {
  * `updating` the next revision of the one shown, which stays until it arrives —
  * or, if that revision will not read, stays with the error beside it.
  *
- * @param {{ client: import("@text-to-cad/core/client").CadWorkspaceService, file: string, revision?: string }} options
+ * @param {{ client: import("@cad/core/client").CadWorkspaceService, file: string, revision?: string }} options
  * @returns {{ drawing: object|null, error: unknown, loading: boolean, updating: boolean }}
  */
 export function useDrawingPayload({ client, file, revision = "" }) {

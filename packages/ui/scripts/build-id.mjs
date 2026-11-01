@@ -1,6 +1,6 @@
 /**
  * Which build of the CAD Viewer or the CAD app a page is, for the version its app menu shows:
- * `viewerLinks({ version, build })` (`@text-to-cad/ui/links`) reads `0.7.15` for the release's own
+ * `viewerLinks({ version, build })` (`@cad/ui/links`) reads `0.7.15` for the release's own
  * build and `0.7.15-dev.<build>` for any other. Each app's Vite config hands it to its page as
  * `__CAD_BUILD__`.
  *

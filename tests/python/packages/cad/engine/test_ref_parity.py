@@ -1,7 +1,7 @@
 """The CAD Viewer reads and writes the refs of a document the engine draws (an .xbf, a STEP) as this
 engine does, case for case.
 
-``@text-to-cad/core``'s ``cadRefs.js`` holds a second parser of the ref grammar (the viewer's, for
+``@cad/core``'s ``cadRefs.js`` holds a second parser of the ref grammar (the viewer's, for
 the refs it copies and the ones pasted back to it) and a second speller of canonical refs (what Copy
 Prompt writes). The ``refCases`` and ``spellingCases`` of its ``cadRefs.parity.json`` are asserted
 there against those, and here against ``refs.parse`` and ``refs.resolve_structure`` -- the

@@ -1,4 +1,4 @@
-import type { ClipboardPort } from '@text-to-cad/ui/host';
+import type { ClipboardPort } from '@cad/ui/host';
 import { copyImageBlobToClipboard, copyTextToClipboard } from './browserClipboard.js';
 
 export function browserClipboardSupportsImages(): boolean {

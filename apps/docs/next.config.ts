@@ -5,7 +5,7 @@ const repoRoot = path.resolve(process.cwd(), "../..");
 const nextConfig: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
   outputFileTracingRoot: repoRoot,
-  transpilePackages: ["@text-to-cad/core"],
+  transpilePackages: ["@cad/core"],
   images: { remotePatterns: [{ hostname: "www.skills.sh", protocol: "https" }] },
   turbopack: { root: repoRoot },
   // texttocad.dev/install: the short link to the install box in the hero (`#install`). Temporary, so

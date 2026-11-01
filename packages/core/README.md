@@ -1,4 +1,4 @@
-# @text-to-cad/core
+# @cad/core
 
 The shared JavaScript half of text-to-cad: everything the distribution and its
 clients need to turn the meshes the engine made into pixels and motion.
@@ -12,9 +12,9 @@ this package's source nor supply ambient module declarations.
 helpers. Never React, ReactDOM, Electron, Next.js, UI or application source.
 Browser entry points never import Node-only code.
 
-**Consumers:** `@text-to-cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
+**Consumers:** `@cad/ui`, the docs, web and CAD (`apps/mcp`) apps, and the parity
 bench's bundler.
-`@text-to-cad/core/client` communicates with `cad_server.viewer` over HTTP; this
+`@cad/core/client` communicates with `cad_server.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
 ## The laws that live here
@@ -173,7 +173,7 @@ Where the mechanism is written:
 
 ## Public modules and lifetimes
 
-Use `@text-to-cad/core/client`, `/common/*` and `/lib/*` exports.
+Use `@cad/core/client`, `/common/*` and `/lib/*` exports.
 Construct `createCadClient({ origin, fetch })` in a host. Its `exports` service
 (`client/exports.js`) asks the session's epoch, submits idempotent jobs, long-polls their
 status and names a ready job's file URL (`fileUrl`). It
@@ -193,12 +193,12 @@ URL (`fileOf` names a script by its file's own name, `scriptFileOf` by default, 
 a frame in one of the page's own chunks also names its debug id, from the table the
 page's build wrote, `__cadChunkIds`) -- and sends each distinct one once a page, a few
 at most. A page's build stamps each chunk with the id its text and its source map decide
-(`@text-to-cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
+(`@cad/core/chunk-ids`, a Node module the builds import), never the bundler's,
 which names the code alone: PostHog keeps one map an id. That map leads into the shared
 packages' `src/`, not their `dist/`: the build loads their modules with the maps their own
-builds wrote (`@text-to-cad/core/source-maps`), and fails if a chunk's map still ends in
+builds wrote (`@cad/core/source-maps`), and fails if a chunk's map still ends in
 compiled code. Each page's build also writes `THIRD_PARTY_LICENSES.txt` beside it
-(`@text-to-cad/core/third-party-licenses`): every `node_modules` package its chunks and its
+(`@cad/core/third-party-licenses`): every `node_modules` package its chunks and its
 workers' chunks hold, by name, version and declared licence, with the licence text the package
 ships, and a build fails on a bundled package that declares no licence. `dispose()` stops polling, aborts
 requests and disposes render sessions. Each render session owns its abort signal and
@@ -245,7 +245,7 @@ cannot replace either base.
 ## Working on core
 
 From the root workspace run `npm ci`, `npm run build:packages`,
-`npm test --workspace @text-to-cad/core` and `npm run check:boundaries`.
+`npm test --workspace @cad/core` and `npm run check:boundaries`.
 Rebuild compiled packages after shared edits; apps resolve `dist/` exports.
 
 The Node test runner collects `*.test.js` and `*.test.mjs` under `src/` and
@@ -260,7 +260,7 @@ canonical release versions during normal development.
 
 ## Portable prompt context
 
-`@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
+`@cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization: `formatPromptContextText`, the
 parts as lines, and `formatPromptMessage`, the one message a Quick Edit is — what the
 person wrote, then `File:`, `References:` and, for a picture that travels as a file,

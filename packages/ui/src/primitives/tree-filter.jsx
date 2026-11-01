@@ -1,6 +1,6 @@
 import { Search, X } from 'lucide-react';
-import { cn } from '@text-to-cad/ui/utils';
-import { useI18n } from '@text-to-cad/ui/i18n';
+import { cn } from '@cad/ui/utils';
+import { useI18n } from '@cad/ui/i18n';
 
 /**
  * The filter box above a tree, and the highlight its matches use. Shared by the

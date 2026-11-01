@@ -308,7 +308,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(recorder._context["client"], {"name": "Caf-Studio", "version": "1.105-Universal-"})
 
     def test_a_views_controls_are_counted_by_name_and_seconds_only_with_consent(self) -> None:
-        # The page's report of what a person used (`@text-to-cad/ui`'s `usage/controls.js`), through the CAD app's
+        # The page's report of what a person used (`@cad/ui`'s `usage/controls.js`), through the CAD app's
         # own route: counted only under the person's yes.
         server, sent = self.serve("claude-directory")
         report = {"controls": [{"control": "pencil", "count": 2, "seconds": 95}, {"control": "display_xray", "count": 1, "seconds": 0}]}

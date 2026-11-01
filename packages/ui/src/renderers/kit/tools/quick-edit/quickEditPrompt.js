@@ -1,4 +1,4 @@
-import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@text-to-cad/core/prompt";
+import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const stemOf = resource => stem(resource.kind === "url" ? new URL(resource.url).pathname : resource.path);
@@ -17,7 +17,7 @@ const lazy = start => {
  * what it copied, to the chip — an annotation's file path) is `{ chip, token }`.
  *
  * @param {string} pasted
- * @returns {Array<string | import("@text-to-cad/core/prompt").PromptReference | { annotation: object }>}
+ * @returns {Array<string | import("@cad/core/prompt").PromptReference | { annotation: object }>}
  */
 export function pastedLines(pasted, copied = null) {
   const text = String(pasted || "");

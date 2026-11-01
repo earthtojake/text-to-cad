@@ -13,7 +13,7 @@ import { chromium } from 'playwright';
 // /api/v1/documents` where the page reads the document, and its kind's reads under
 // `/api/v1/documents/xbf/bracket` -- the structure, a buffer per part -- with the version a page waits
 // on, and the look (`look.json`) with an environment image of one texel.
-const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const STRUCTURE = readFileSync(join(FIXTURES, 'bracket', 'structure.json'));
 const VERSION = JSON.parse(STRUCTURE).version;
 const LOOK = readFileSync(join(FIXTURES, 'look.json'));
