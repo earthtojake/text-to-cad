@@ -18,6 +18,7 @@ import urllib.request
 from pathlib import Path
 from unittest import mock
 from tests.python.support import engine_daemon
+from tests.python.support.http_listener import listener
 from tests.python.support.paths import add_sources
 
 SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
@@ -1323,7 +1324,7 @@ class ListenTest(unittest.TestCase):
         taken.listen()
         port = taken.getsockname()[1]
         for engine, request in ((daemon.Daemon(), {"port": port}), (daemon.Daemon(port=port), {})):
-            with mock.patch("cad.engine.serve.Mesher") as mesher, mock.patch.object(daemon, "HTTP_FACTORY", None), \
+            with mock.patch("cad.engine.serve.Mesher") as mesher, mock.patch.object(daemon, "HTTP_FACTORY", listener), \
                     mock.patch.object(daemon, "_answers", return_value=False), mock.patch.object(daemon, "_note"):
                 # The listen tried (no probe answered first): the server it made fails its bind.
                 with self.assertRaisesRegex(daemon.PortHeld,

@@ -121,8 +121,8 @@ def _halt() -> None:
     halt()
 
 
-# The application the engine serves on its listener; None serves the documents' routes alone (``serve``).
-HTTP_FACTORY: Callable[[Any, str, int], Any] | None = _application
+# The engine's one listener and the application it serves (``serve.Server`` binds none of its own).
+HTTP_FACTORY: Callable[[Any, str, int], Any] = _application
 # Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
 # worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
 # the library's modules that start them are told here (``places.kernel``): the library knows no installation.

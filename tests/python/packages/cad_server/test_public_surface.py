@@ -57,7 +57,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The engine's verbs (cad_server.engine.cli), each a command of its own.
     "export": frozenset({"source", "destinations", "json"}),
     "snapshot": SNAPSHOT,
-    "serve": frozenset({"document", "port", "three"}),
+    "serve": frozenset({"document", "port"}),
     "inspect": frozenset({"document", "ref", "query", "json"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
