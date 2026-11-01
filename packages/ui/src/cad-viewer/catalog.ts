@@ -1,4 +1,5 @@
 import type { CadEntry, CadWorkspaceService } from '@text-to-cad/core/client';
+import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
 import type { ClipboardPort } from '../host/types.js';
 import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
@@ -78,14 +79,31 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEn
  * The file menu's host actions for a file on this machine: its path to the clipboard, and the
  * file shown in the system's file manager where the host can reveal one.
  */
-export function createCadFileActions({ platform, clipboard, reveal }: {
+export function createCadFileActions({ platform, clipboard, reveal, openIn }: {
   platform?: string; clipboard: Pick<ClipboardPort, 'writeText'>; reveal?: (path: string) => Promise<void>;
+  /**
+   * Open in's apps, through a CAD client (`openInApps`, `openIn`): a document is asked for by its id,
+   * a file's from the client's row of it (`entryOf`).
+   */
+  openIn?: Pick<CadWorkspaceService, 'openInApps' | 'openIn' | 'entryOf'>;
 }): FileActions {
+  const idOf = (path: string) => (isDocumentId(path) ? path : String(openIn?.entryOf?.(normalizePath(path))?.id || '') || null);
   return {
     platform: platform === 'darwin' || platform === 'win32' || platform === 'linux' ? platform : 'linux',
     perform: {
       'copy-path': (entry: { path: string }) => clipboard.writeText(normalizePath(entry.path)),
       ...(reveal ? { reveal: (entry: { path: string }) => reveal(normalizePath(entry.path)) } : {}),
     },
+    ...(openIn ? {
+      apps: async (entry: { path: string }, options: { signal?: AbortSignal } = {}) => {
+        const id = idOf(entry.path);
+        return id ? openIn.openInApps(id, options) : null;
+      },
+      openApp: async (entry: { path: string }, target: string, app: string) => {
+        const id = idOf(entry.path);
+        if (!id) throw new Error('This document has no id to open it by.');
+        await openIn.openIn(id, target, app);
+      },
+    } : {}),
   };
 }

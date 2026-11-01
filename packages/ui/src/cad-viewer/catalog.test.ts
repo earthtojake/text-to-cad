@@ -46,7 +46,23 @@ test('the file menu copies a file\'s absolute path, and reveals it only where it
   expect([copied, reveal.mock.calls, actions.platform]).toEqual([['C:/models/a.step'], [['/models/a.step']], 'darwin']);
   // A host that cannot reveal copies, and that is all; a platform it does not know is named the Linux way.
   const plain = createCadFileActions({ clipboard, platform: 'plan9' });
-  expect([Object.keys(plain.perform!), plain.platform]).toEqual([['copy-path'], 'linux']);
+  expect([Object.keys(plain.perform!), plain.platform, plain.apps, plain.openApp]).toEqual([['copy-path'], 'linux', undefined, undefined]);
+});
+
+test('Open in asks the client for a document\'s apps by its id: a model\'s by its own, a file\'s by its row\'s', async () => {
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  const files = { targets: [] };
+  const client = { openInApps: vi.fn(async () => files), openIn: vi.fn(async () => {}),
+    entryOf: vi.fn((path: string) => (path === '/models/a.step' ? { id: 'file-a', file: path } : null)) };
+  const actions = createCadFileActions({ clipboard: { writeText: async () => {} }, openIn: client as never });
+  const signal = new AbortController().signal;
+  expect(await actions.apps!({ path: id, kind: 'file' }, { signal })).toBe(files);
+  expect(await actions.apps!({ path: '/models/a.step', kind: 'file' })).toBe(files);
+  // A file the client holds no row of has no id to ask by: no apps, and nothing asked.
+  expect(await actions.apps!({ path: '/models/unknown.step', kind: 'file' })).toBeNull();
+  expect(client.openInApps.mock.calls).toEqual([[id, { signal }], ['file-a', {}]]);
+  await actions.openApp!({ path: '/models/a.step', kind: 'file' }, 'source', 'freecad');
+  expect(client.openIn).toHaveBeenCalledWith('file-a', 'source', 'freecad');
 });
 
 test('a document the engine holds by its id alone keeps its id, is named by its model and has no file to browse', async () => {

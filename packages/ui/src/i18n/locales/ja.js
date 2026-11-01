@@ -40,6 +40,7 @@ export default {
   "file.fileExplorer": "エクスプローラー",
   "file.fileManager": "ファイルマネージャー",
   "file.sourceMissing": "ソースは移動または削除されました。",
+  "file.defaultApp": "既定のアプリ",
 
   "menu.backToHome": "ホームへ戻る",
   "menu.theme": "テーマ",

@@ -16,12 +16,17 @@ export const ENTRY_ACTIONS: readonly EntryAction[];
 /** A home card's file actions: Copy path, then Reveal in the file manager, each where the host can do it. */
 export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string): EntryMenuItem[];
 export function revealLabel(platform: Platform, t?: (key: string) => string): string;
+/** Open in's groups, in order; the drawing parts them with separators. */
+export type OpenInGroup = "places" | "source" | "exports" | "default";
+/** One place Open in opens the document in; an app's (`action: "app"`) names the file (`target`) and the app (`app`, or `"default"`). */
+export type OpenInEntry = { action: EntryAction | "app"; label: string; enabled: boolean; reason?: string; group: OpenInGroup; target?: string; app?: string };
 /**
- * The navbar's Open in: Browser, then the file manager by its name (Finder, File Explorer, File manager), each where the
- * host can do it; the file manager disabled, with its reason, while the source was moved or deleted (`sourceMissing`).
+ * The navbar's Open in: Browser and the file manager by its name (Finder, File Explorer, File manager), each where the
+ * host can do it; then, from the host's answer (`files`), the source's apps, each present export's apps as "App (file)",
+ * and Default app. What opens the source is disabled, with its reason, while it was moved or deleted.
  */
-export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string) => string,
-  state?: { sourceMissing?: boolean }): (EntryMenuItem & { enabled: boolean })[];
+export function openInMenu(platform: Platform, capabilities: ReadonlySet<EntryAction>, t?: (key: string, params?: Record<string, unknown>) => string,
+  state?: { sourceMissing?: boolean; files?: import("../types.js").OpenInFiles | null }): OpenInEntry[];
 export function fileManagerName(platform: Platform, t?: (key: string) => string): string;
 
 /* -------------------------------------------------------------------- */
@@ -94,7 +99,10 @@ export const ViewerNavbar: ComponentType<{
    * where `capabilities` has it, then `items` (the host's own: the CAD viewer's Export submenu). None
    * where it would be empty.
    */
-  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean; onAction: (action: EntryAction) => void; items?: ReactNode } | null;
+  fileMenu?: { platform: Platform; capabilities: ReadonlySet<EntryAction>; sourceMissing?: boolean;
+    /** The host's apps for the document's files, asked each time the menu opens. */
+    apps?: (options: { signal: AbortSignal }) => Promise<import("../types.js").OpenInFiles | null>;
+    onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => void; items?: ReactNode } | null;
   trailing?: ReactNode;
   /** The host's update button, last among the controls (outermost), while its install is behind. */
   update?: ReactNode;

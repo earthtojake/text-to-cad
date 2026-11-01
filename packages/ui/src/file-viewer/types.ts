@@ -42,9 +42,27 @@ export interface RecentDocument {
   updated?: number | null;
   missing?: boolean;
 }
+/** One app Open in offers for a file: its id (what `openApp` names) and its product name, as drawn. */
+export interface OpenInApp { id: string; name: string }
+/**
+ * One of a document's files Open in lists: `source` (a model's script, a file document's file) or
+ * `export:<format>` (a file a model's last build wrote), its kind, its file's name, whether it is on
+ * disk now, and the apps this computer has that take it (in the host's order).
+ */
+export interface OpenInTarget { target: string; kind: string; name: string; present: boolean; apps: readonly OpenInApp[] }
+/** A document's files and their apps (`GET /api/v1/local/open-in`'s answer, for a CAD host). */
+export interface OpenInFiles { targets: readonly OpenInTarget[]; fileManager?: string }
 export interface FileActions {
   platform?: Platform;
   perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
+  /**
+   * Open in's apps, where the host can open a document's files in this computer's apps: the files
+   * and their apps for the document on screen (asked as its file menu opens, never before; null or a
+   * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
+   * `"default"`, the OS's own handler. Both or neither.
+   */
+  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
 }
 /**
  * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's

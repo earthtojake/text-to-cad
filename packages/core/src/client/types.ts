@@ -21,6 +21,16 @@ export interface CadEntry {
   bytes?: number;
   [key: string]: unknown;
 }
+/** One app Open in offers for a file: its id (`POST /api/v1/local/open`'s `app`) and its product name. */
+export interface CadOpenInApp { id: string; name: string }
+/**
+ * One of a document's files, as Open in lists it: `source` (a model's script, a file document's file)
+ * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
+ * on disk now, and the detected apps that take it.
+ */
+export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[] }
+/** `GET /api/v1/local/open-in`: a document's files and their apps, and which file manager this computer has. */
+export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
   autoReload?: boolean;
   identityToken?: string;
@@ -226,6 +236,10 @@ export interface CadWorkspaceService {
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */
   reveal(path: string): Promise<void>;
+  /** Open in: the document's files and the apps this computer has for each (`GET /api/v1/local/open-in?id=`). */
+  openInApps(id: string, options?: CadRequestOptions): Promise<CadOpenInApps>;
+  /** Open one of the document's files (`target`, from `openInApps`) in one of its apps, or `"default"`, the OS's own (`POST /api/v1/local/open`). */
+  openIn(id: string, target: string, app: string): Promise<void>;
   /** Whether the person's usage stats are sent; with `share`, their answer (the app menu's toggle). */
   consent(share?: boolean): Promise<CadConsent>;
   /** The language the person chose for every CAD view, or null (Automatic); with `locale`, their choice (null clears it). */

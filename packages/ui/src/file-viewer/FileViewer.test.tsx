@@ -390,6 +390,84 @@ it('puts Open in › Browser and the host\'s own items (Export) in the file menu
   expect(perform.browser).toHaveBeenLastCalledWith({ path: FILE, kind: 'file' });
 });
 
+// The contract's example (`GET /api/v1/local/open-in`): a model with its script and a STEP its last build wrote.
+const OPEN_IN = { fileManager: 'finder', targets: [
+  { target: 'source', kind: 'script', name: 'bracket.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }, { id: 'cursor', name: 'Cursor' }] },
+  { target: 'export:step', kind: 'step', name: 'bracket.step', present: true, apps: [{ id: 'freecad', name: 'FreeCAD' }, { id: 'bambu', name: 'Bambu Studio' }] },
+] };
+
+it('Open in adds the apps the host has for the document\'s files as the menu opens: the source\'s, each export\'s, then Default app, a separator between groups', async () => {
+  const user = userEvent.setup({ skipHover: true });
+  const id = '6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab';
+  // The submenu as drawn: its rows' names, a separator as a rule.
+  const drawn = () => [...screen.getByRole('menu', { name: 'Open in' }).querySelectorAll('[role="menuitem"], [role="separator"]')]
+    .map(node => node.getAttribute('role') === 'separator' ? '—' : `${node.textContent}${node.getAttribute('aria-disabled') === 'true' ? ' (disabled)' : ''}`);
+  let answer!: (files: unknown) => void;
+  const apps = vi.fn(() => new Promise(resolve => { answer = resolve; }));
+  const openApp = vi.fn();
+  const perform = { 'copy-path': vi.fn(), reveal: vi.fn() };
+  const view = (actions: object, file = id, stat: object = { navigationPath: null, sourceFile: '/m/bracket.py' }) => render(<FileViewer file={file} renderers={[renderer]} state={{}} onStateChange={() => {}}
+    host={{ ...host, fileActions: { platform: 'darwin', perform, apps, openApp, ...actions }, files: { id: 'one',
+      stat: async (path: string) => ({ path, name: 'bracket', kind: 'file' as const, extension: 'xbf', size: 0, ...stat }) } } as any} />);
+  const openMenu = async () => {
+    await user.click(screen.getByRole('button', { name: 'File actions' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Open in' }));
+  };
+
+  // The web viewer's: nothing is asked until the menu opens; what needs no answer is there at once,
+  // and the apps join it when the answer comes.
+  view({});
+  await screen.findByText('shown');
+  expect(apps).not.toHaveBeenCalled();
+  await openMenu();
+  expect(apps).toHaveBeenCalledWith({ path: id, kind: 'file' }, { signal: expect.any(AbortSignal) });
+  expect(drawn()).toEqual(['Finder']);
+  await act(async () => answer(OPEN_IN));
+  expect(drawn()).toEqual(['Finder', '—', 'Visual Studio Code', 'Cursor', '—', 'FreeCAD (bracket.step)', 'Bambu Studio (bracket.step)', '—', 'Default app']);
+  await user.click(screen.getByRole('menuitem', { name: 'Cursor' }));
+  expect(openApp).toHaveBeenLastCalledWith({ path: id, kind: 'file' }, 'source', 'cursor');
+  // Asked again at each opening: the answer may have changed.
+  await openMenu();
+  expect(apps).toHaveBeenCalledTimes(2);
+  await act(async () => answer(OPEN_IN));
+  await user.click(screen.getByRole('menuitem', { name: 'FreeCAD (bracket.step)' }));
+  expect(openApp).toHaveBeenLastCalledWith({ path: id, kind: 'file' }, 'export:step', 'freecad');
+  await openMenu();
+  await act(async () => answer(OPEN_IN));
+  await user.click(screen.getByRole('menuitem', { name: 'Default app' }));
+  expect(openApp).toHaveBeenLastCalledWith({ path: id, kind: 'file' }, 'source', 'default');
+  cleanup();
+
+  // The card's: Browser first. A source moved or deleted: Finder, its apps and Default app disabled,
+  // saying why; the export on disk still opens, and one whose file is gone is left out.
+  view({ perform: { ...perform, browser: vi.fn() } }, id, { navigationPath: null, sourceFile: '/m/bracket.py', sourceMissing: true });
+  await screen.findByText('shown');
+  await openMenu();
+  await act(async () => answer({ ...OPEN_IN, targets: [{ ...OPEN_IN.targets[0], present: false }, OPEN_IN.targets[1],
+    { target: 'export:stl', kind: 'stl', name: 'bracket.stl', present: false, apps: [{ id: 'bambu', name: 'Bambu Studio' }] }] }));
+  expect(drawn()).toEqual(['Browser', 'Finder (disabled)', '—', 'Visual Studio Code (disabled)', 'Cursor (disabled)', '—',
+    'FreeCAD (bracket.step)', 'Bambu Studio (bracket.step)', '—', 'Default app (disabled)']);
+  cleanup();
+
+  // A STEP file: its own apps; with none detected, Finder and Default app alone.
+  view({}, '/models/bracket.step', {});
+  await screen.findByText('shown');
+  await openMenu();
+  await act(async () => answer({ fileManager: 'finder', targets: [{ target: 'source', kind: 'step', name: 'bracket.step', present: true, apps: [{ id: 'freecad', name: 'FreeCAD' }] }] }));
+  expect(drawn()).toEqual(['Finder', '—', 'FreeCAD', '—', 'Default app']);
+  await user.keyboard('{Escape}');
+  await openMenu();
+  await act(async () => answer({ fileManager: 'finder', targets: [{ target: 'source', kind: 'dxf', name: 'bracket.step', present: true, apps: [] }] }));
+  expect(drawn()).toEqual(['Finder', '—', 'Default app']);
+  await user.keyboard('{Escape}');
+  // A failed answer leaves the menu as it is without apps.
+  apps.mockImplementationOnce(() => Promise.reject(new Error('offline')));
+  await openMenu();
+  await act(async () => {});
+  expect(drawn()).toEqual(['Finder']);
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Open in', 'Finder']);
+});
+
 it('says why a file will not open, and that it does not exist when it is missing', async () => {
   const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
   expect(isMissingFileError(missing)).toBe(true);

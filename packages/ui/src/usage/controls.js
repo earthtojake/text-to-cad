@@ -66,7 +66,7 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
-  'explorer', 'explorer_filter', 'file_copy_path', 'file_reveal', 'home',
+  'explorer', 'explorer_filter', 'file_copy_path', 'file_reveal', 'file_open_app', 'home',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',

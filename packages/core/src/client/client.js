@@ -349,6 +349,20 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         throw new Error(detail?.error || 'Could not reveal this file in the file manager.');
       }
     },
+    // Open in: the files of a document (its source, a model's recorded exports) and the apps this
+    // computer has for each (`GET /api/v1/local/open-in`), and one opened in one of them, or in the
+    // OS's default for it (`POST /api/v1/local/open`, `app: "default"`). The server opens only a file it
+    // knows for that document with an app of its own table.
+    openInApps(id, { signal } = {}) {
+      return request(`${API}/local/open-in`, { params: { id }, signal, timeoutMs: 10_000, operation: 'open-in' });
+    },
+    async openIn(id, target, app) {
+      const response = await fetchImpl(cadApiUrl(`${API}/local/open`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ id, target, app }) });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error || 'Could not open this file.');
+      }
+    },
     // The person's settings (`/api/v1/settings`): whether usage stats are shared, and the language.
     consent(share) {
       return (share === undefined ? request(`${API}/settings`, { operation: 'consent' })

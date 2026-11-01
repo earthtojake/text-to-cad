@@ -41,6 +41,7 @@ export default {
   "file.fileExplorer": "檔案總管",
   "file.fileManager": "檔案管理員",
   "file.sourceMissing": "來源檔案已被移動或刪除。",
+  "file.defaultApp": "預設應用程式",
 
   "menu.backToHome": "回到首頁",
   "menu.theme": "主題",

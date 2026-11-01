@@ -1,7 +1,7 @@
 import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
-import { useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
@@ -19,8 +19,9 @@ import { FolderExplorer } from "./FolderExplorer.jsx";
 import { ModelList } from "./ModelList.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 
-// The file menu's items as telemetry names them (`usage/controls.js`); Open in's Browser is counted by none.
-const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", reveal: "file_reveal" });
+// The file menu's items as telemetry names them (`usage/controls.js`): an app chosen in Open in is
+// `file_open_app`, never which app; Open in's Browser is counted by none.
+const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", reveal: "file_reveal", app: "file_open_app" });
 // The name menu's tabs as telemetry names them: Files is the explorer.
 const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 
@@ -103,25 +104,46 @@ function WhyDisabled({ reason, children }) {
 }
 
 /**
+ * The host's apps for the document's files (`fileMenu.apps`), asked each time the menu opens and never
+ * before: null until they come, and null for good where the host has none, or fails or never answers
+ * (the menu is then as without them). An answer to an opening since closed is dropped.
+ */
+function useOpenInApps(open, apps) {
+  const [files, setFiles] = useState(null);
+  useEffect(() => {
+    if (!open || !apps) return undefined;
+    const controller = new AbortController();
+    setFiles(null);
+    Promise.resolve().then(() => apps({ signal: controller.signal })).then(answer => {
+      if (!controller.signal.aborted) setFiles(answer && Array.isArray(answer.targets) ? answer : null);
+    }, () => {});
+    return () => controller.abort();
+  }, [open, apps]);
+  return open ? files : null;
+}
+
+/**
  * The ⋯ after the file's name: what can be done with the document. Copy path (where its source is,
  * or was); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
- * browser, the CAD app's, and the desktop's file manager by its name -- Finder, File Explorer, File
- * manager); then the host's own items (`items`: the CAD viewer's Export submenu). Each only where
- * the host can do it, and no ⋯ where it can do none. While the source was moved or deleted
- * (`sourceMissing`), what opens it is drawn disabled with the reason: Open in itself where nothing
- * in it can open, else each such entry.
+ * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
+ * the source's apps, each export's apps and Default app, a separator between groups); then the
+ * host's own items (`items`: the CAD viewer's Export submenu). Each only where the host can do it,
+ * and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
+ * disabled with the reason: Open in itself where nothing in it can open, else each such entry.
  */
-function FileMenu({ platform, capabilities, sourceMissing = false, onAction, items: hostItems = null }) {
+function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
+  const [open, setOpen] = useState(false);
+  const files = useOpenInApps(open, apps);
   const copy = capabilities.has("copy-path");
-  const openIn = openInMenu(platform, capabilities, t, { sourceMissing });
+  const openIn = openInMenu(platform, capabilities, t, { sourceMissing, files });
   if (!copy && !openIn.length && !hostItems) return null;
-  const perform = action => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action); };
+  const perform = (action, app) => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action, app); };
   const openable = openIn.some(item => item.enabled);
   const label = t("file.openIn");
   const trigger = <DropdownMenuSubTrigger data-open-in-menu="" disabled={!openable} className={DISABLED_ROW_CLASS}>{label}</DropdownMenuSubTrigger>;
-  return <DropdownMenu modal={false}>
+  return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
     <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
       className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
@@ -131,9 +153,14 @@ function FileMenu({ platform, capabilities, sourceMissing = false, onAction, ite
       {openIn.length ? <DropdownMenuSub>
         {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
         <DropdownMenuSubContent aria-label={label}>
-          {openIn.map(item => {
-            const row = <DropdownMenuItem key={item.action} data-open-in={item.action} disabled={!item.enabled} onSelect={() => perform(item.action)}>{item.label}</DropdownMenuItem>;
-            return item.enabled ? row : <WhyDisabled key={item.action} reason={item.reason}>{row}</WhyDisabled>;
+          {openIn.map((item, index) => {
+            const key = `${item.action}:${item.target ?? ""}:${item.app ?? ""}`;
+            const choose = () => perform(item.action, item.action === "app" ? { target: item.target, app: item.app } : undefined);
+            const row = <DropdownMenuItem data-open-in={item.action} data-open-in-app={item.app} disabled={!item.enabled} onSelect={choose}>{item.label}</DropdownMenuItem>;
+            return <Fragment key={key}>
+              {index && openIn[index - 1].group !== item.group ? <DropdownMenuSeparator /> : null}
+              {item.enabled ? row : <WhyDisabled reason={item.reason}>{row}</WhyDisabled>}
+            </Fragment>;
           })}
         </DropdownMenuSubContent>
       </DropdownMenuSub> : null}
@@ -230,7 +257,8 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]
  *   The host's library: the name menu's Models, its models alone.
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>, sourceMissing?: boolean,
- *   onAction(action: import("./entry-menu.js").EntryAction): void, items?: import("react").ReactNode } | null} [props.fileMenu]
+ *   apps?: (options: { signal: AbortSignal }) => Promise<import("./entry-menu.js").OpenInFiles | null>,
+ *   onAction(action: import("./entry-menu.js").EntryAction | "app", app?: { target: string, app: string }): void, items?: import("react").ReactNode } | null} [props.fileMenu]
  *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).

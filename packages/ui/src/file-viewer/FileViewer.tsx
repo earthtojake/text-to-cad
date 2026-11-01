@@ -112,6 +112,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
   // disk (a model's: the script that builds it, where its metadata names one), its page in the
   // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
+  // Open in's apps, where the host has them: asked by the document's own name as the menu opens.
+  const appsOf = host.fileActions?.apps;
+  const openApp = host.fileActions?.openApp;
   const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
   // A source moved or deleted keeps Copy path (where it was) and draws what opens it disabled.
   const sourceMissing = Boolean(shown?.file.sourceMissing);
@@ -119,11 +122,17 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
       .filter(action => action === "browser" ? Boolean(path) : Boolean(onDisk)));
     const target = (action: EntryAction) => action === "browser" ? path : onDisk;
+    const document = { path: path ?? "", kind: "file" as const };
+    const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
     return path && (capabilities.size || fileMenuItems) ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems,
-      onAction: (action: EntryAction) => { void Promise.resolve(perform?.[action]?.({ path: target(action) ?? "", kind: "file" })).catch(error => onError?.(error)); },
+      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps,
+      onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
+        const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
+          : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
+        void Promise.resolve(done).catch(error => onError?.(error));
+      },
     } : null;
-  }, [path, onDisk, sourceMissing, perform, host.fileActions?.platform, fileMenuItems, onError]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

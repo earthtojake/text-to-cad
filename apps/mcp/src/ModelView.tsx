@@ -111,7 +111,8 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   // The file menu: its path, Reveal in the desktop's file manager (the server is on this machine),
   // and, in a view with a home, the document's page in the browser (Open in › Browser).
   const fileActions = useMemo(() => {
-    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path) });
+    // Open in's apps too, through the tunnel as Reveal is: the server opens them on this computer.
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client });
     return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
   }, [platform, client, homed, openInBrowser]);
 

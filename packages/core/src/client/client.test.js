@@ -332,6 +332,28 @@ test('a drawing refused by the server raises the classified failure an alert is 
   client.dispose();
 });
 
+test('Open in reads a document\'s files and their apps by its id, and opens one with the guarded POST', async (t) => {
+  const calls = [];
+  const answer = { targets: [{ target: 'source', kind: 'script', name: 'bracket.py', present: true, apps: [{ id: 'vscode', name: 'Visual Studio Code' }] }], fileManager: 'finder' };
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const parsed = new URL(url);
+    calls.push([parsed.pathname + parsed.search, options.method || 'GET', options.headers?.['x-cadgen-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    if (parsed.pathname === '/api/v1/local/open-in') return Response.json(answer);
+    return options.body?.includes('gone') ? Response.json({ error: 'That file is not there.' }, { status: 404 }) : new Response(null, { status: 204 });
+  } });
+  t.after(() => client.dispose());
+  assert.deepEqual(await client.openInApps('d1'), answer);
+  await client.openIn('d1', 'source', 'vscode');
+  await client.openIn('d1', 'export:step', 'default');
+  await assert.rejects(client.openIn('gone', 'source', 'default'), /not there/);
+  assert.deepEqual(calls, [
+    ['/api/v1/local/open-in?id=d1', 'GET', null, null],
+    ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'source', app: 'vscode' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'd1', target: 'export:step', app: 'default' }],
+    ['/api/v1/local/open', 'POST', '1', { id: 'gone', target: 'source', app: 'default' }],
+  ]);
+});
+
 test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
   const calls = [];
   const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
