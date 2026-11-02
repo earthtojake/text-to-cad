@@ -135,7 +135,7 @@ def _stop(server: subprocess.Popen) -> None:
 def _client(socket: Path) -> Any:
     """kipy, connected to the server's socket (its ``ipc://`` form)."""
     try:
-        from kipy import KiCad
+        from kipy import KiCad  # pyrefly: ignore[missing-import] - the kicad extra, installed where a board script runs
     except ImportError:
         raise ImportError("a @kicad_pcb script edits its board through KiCad's IPC API, whose client is the "
                           "kicad extra: install cad[kicad]") from None

@@ -171,6 +171,15 @@ class IntegrationsTest(unittest.TestCase):
         self.assertEqual(sorted(extras), sorted(integration.extra for integration in INTEGRATIONS.values()
                                                 if integration.extra))
         self.assertEqual(sorted(EXTRA_MODULES), sorted(extras))
+        import re
+
+        for integration in INTEGRATIONS.values():
+            with self.subTest(integration=integration.name):
+                named = {re.split(r"[\s<>=!~;\[]", requirement, maxsplit=1)[0].lower().replace("_", "-")
+                         for requirement in extras.get(integration.extra or "", [])}
+                self.assertEqual(named, {name.lower().replace("_", "-") for name in integration.distributions},
+                                 "an integration's distributions are its extra's")
+                self.assertTrue(set(integration.modules) <= EXTRA_MODULES[integration.extra or ""])
         root = LIBRARY / "src" / "cad"
         packages = {path.parent.name for path in root.glob("*/__init__.py")}
         self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))

@@ -27,7 +27,7 @@ from types import MappingProxyType
 from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
-           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "help_text", "producer_for", "producers_for",
+           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "help_text", "integrations_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a fixed set shared by every type; each type implements those that make sense for it.
@@ -61,14 +61,17 @@ class Probe:
 
 @dataclass(frozen=True)
 class Integration:
-    """Our support for one third-party tool: its extra, its process kind and, for an external program,
-    its probe."""
+    """Our support for one third-party tool: its extra, its process kind, the top-level modules a script
+    imports it by (``modules``: a script that imports one uses the integration), the distributions its
+    extra installs (``distributions``) and, for an external program, its probe."""
 
     name: str
     summary: str
     extra: str | None
     process: str
     probe: Probe | None = None
+    modules: tuple[str, ...] = ()
+    distributions: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -112,6 +115,9 @@ class DocumentTypeEntry:
     content: tuple[str, ...]
     operations: tuple[Operation, ...]
     decorator: bool = False
+    #: The integration the type's decorator needs: the one whose producer it declares through, else the
+    #: engine's models' (build123d's).
+    decorator_integration: str | None = None
     reader: bool = False
     wire: str = ""
 
@@ -125,6 +131,8 @@ class DocumentTypeEntry:
                 raise ValueError(f"{self.id}: {operation.name!r} is not an operation ({', '.join(OPERATIONS)})")
         if not self.wire:
             object.__setattr__(self, "wire", self.id)
+        if self.decorator and self.decorator_integration is None:
+            object.__setattr__(self, "decorator_integration", "build123d")
 
     @property
     def suffix(self) -> str:
@@ -200,7 +208,7 @@ _TYPES = (
          Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-                   "kicad")), decorator=True),
+                   "kicad")), decorator=True, decorator_integration="kicad"),
 )
 
 #: Every document type, by id, in the table's order.
@@ -210,16 +218,26 @@ DOCUMENT_TYPES: Mapping[str, DocumentTypeEntry] = MappingProxyType({entry.id: en
 INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
     "build123d": Integration(
         "build123d", "build123d and the OCCT kernel under it (OCP): model code builds with it, and the engine "
-                     "makes, reads, writes and draws documents with it", extra="build123d", process="in-process"),
+                     "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
+        modules=("build123d", "OCP"),
+        distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
+                       "ezdxf", "pillow")),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
                  "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
         process="separate",
         probe=Probe("kicad-cli", "9.0", "install KiCad 9 or newer from https://www.kicad.org/download/, or set "
-                                        "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI")),
+                                        "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI"),
+        modules=("kipy",), distributions=("kicad-python",)),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})
+
+
+def integrations_of(modules: Any) -> tuple[str, ...]:
+    """The integrations a script uses, by the top-level modules it imports (``Integration.modules``)."""
+    roots = {str(module).split(".")[0] for module in modules}
+    return tuple(name for name, integration in INTEGRATIONS.items() if roots & set(integration.modules))
 
 
 def by_extension(extension: str) -> DocumentTypeEntry | None:
