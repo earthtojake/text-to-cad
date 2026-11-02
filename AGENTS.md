@@ -72,9 +72,11 @@ a worker, the library; run in the daemon or a command, the server; run inside th
 the shim. The plugin server configs run the shim as ONE uvx command,
 `uvx --no-config --managed-python --python 3.14 --from cad-mcp==<VERSION> cad-mcp`, and the
 server runs as `uvx ... --from cad-server==<VERSION> cad <verb>` (`cad_server._internal.launch`).
-The server installs the library with its `build123d` extra, with uv, into one base environment per
-installation that every model and kernel process runs in (`cad_server._internal.base`), a program's
-own folder last on its path. That installation registers itself and writes the `cad` command,
+The server installs the library with its `build123d` extra, with uv, on first need, into one base
+environment per installation that its kernel processes run in (`cad_server._internal.base`); `cad run`
+is `uv run` with the library pinned at the device's release and the integrations a program's imports
+use, in an environment the engine makes per set (`cad_server._internal.extras`), a program's own
+folder last on its path. That installation registers itself and writes the `cad` command,
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
 sandbox, the command can), which runs the current installation, so no skill names a release. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):

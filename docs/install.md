@@ -43,10 +43,11 @@ checksum. It:
 6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
    Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
    starts.
-7. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
-   build123d and what they need, about 220 MB the first time) on the same Python,
-   in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the
-   first model builds without a download.
+7. Installs no CAD kernel: the environment a model runs in, the release with its CAD
+   kernel (OCP, build123d and what they need, about 220 MB the first time), is made on
+   first need -- the first model, or the first view that needs the kernel -- in
+   text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
+   makes none either.
 8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them
@@ -430,17 +431,17 @@ step, and an agent with the CAD skill can follow it.
 The release the install command runs is text-to-cad's server (`cad-server`): the
 `cad` command, the CAD Viewer's server and the engine every build goes through, without
 the CAD kernel. Each app's CAD server is the smaller `cad-mcp`, which
-reaches it. A model runs where the kernel is: in one environment the server makes with uv
-in its cache folder and keeps, the library with its kernel (`cad[build123d]`) on the
-server's Python, 3.14. `cad run` runs models there, and the server's own kernel processes run
-there too: exports, snapshots and the meshes the viewer shows. The install command makes
-it; otherwise the server makes it as it starts, in the background (with a plugin alone,
-the first start of an app's CAD app), and a first model or view waits for it. A model run so
-imports what that environment holds: the library (`cad`), build123d and what they bring.
+reaches it. A model runs where the kernel is. `cad run` runs it exactly as `uv run` would -- the same
+options and the same script header -- in an environment the server makes with uv in its cache
+folder and keeps: the library pinned at the server's release, with the integrations the script's
+imports use (`import build123d`: `cad[build123d]`), on the server's Python, 3.14. The server's own
+kernel processes run in the `cad[build123d]` one: exports, snapshots and the meshes the viewer
+shows. Nothing is installed in advance: each environment is made the first time something needs
+it, and a first model or view waits for it. A model run so imports what its environment holds.
 
 A model that needs another package names it at the top of its script, in Python's inline
-script metadata, and `cad run` installs it beside the kernel once, in an environment of its
-own that the server keeps beside that one for the runs after:
+script metadata, and `cad run` installs it beside cad once, in an environment of its own that
+the server keeps for the runs after:
 
 ```python
 # /// script
@@ -448,16 +449,20 @@ own that the server keeps beside that one for the runs after:
 # ///
 ```
 
-`cad run --with pandas model.py` does the same for one run (repeat `--with`, or separate
-requirements with commas; a local folder or wheel works too, installed again on the next run
-after an edit). A requirement that cannot be installed beside the kernel's own is refused in one
-line, with uv's reason. `cad doctor --prune` removes the environments no model has used for a
-week.
+The header names the script's own packages; cad's integrations come from its imports, and a
+header may name `cad[...]` to choose them itself. A header that pins cad to another release than
+the server's is refused. `cad run --with pandas model.py` adds a package for one run (repeat
+`--with`, or separate requirements with commas; a local folder or wheel works too, installed again
+on the next run after an edit). A script with no header inside a Python project
+(`pyproject.toml`) runs with the project's dependencies. A requirement that cannot be installed
+beside cad's own is refused in one line, with uv's reason. After an update the environments of
+the release before are kept, as the way back; `cad doctor --prune` removes the environments no
+model has used for a week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,
-and `import build123d` fails there). A script run with that Python (`python model.py`,
+`pip install 'cad[build123d]==0.10.0'` (`cad requirement build123d` prints the exact
+requirement; `pip install cad==0.10.0` is the library alone, and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
 A release whose worker contract the server does not speak is refused in one line that says

@@ -108,7 +108,11 @@ small set of Python extras mirrored from skill runtime requirements. It installs
 library, the server and the shim editable, the library with its `build123d` extra (OCP,
 build123d and the rest; the library's required dependency is numpy alone), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
-makes no base for it (`cad_server/_internal/base.py`). The editable
+makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
+(not `cad setup`, `cad doctor` or an update). `cad run` of a program whose imports use another set of
+cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
+environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
+uv's cache where it holds it. The editable
 library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
 does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
