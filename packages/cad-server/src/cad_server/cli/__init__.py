@@ -31,8 +31,8 @@ from cad.registry import DOCUMENT_TYPES
 # ``cad --help`` stays a single readable column. The document types' commands are not here:
 # they are the registry's (``TYPE_COMMANDS``).
 #
-# A model script builds by running it (``cad run <model>.py``: the CAD kernel environment's
-# ``python <model>.py``): no command takes its place.
+# A model script builds by running it (``cad run <model>.py``: ``uv run``, cad pinned, in the environment the
+# device's engine makes for it): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
     # The engine's process control: documents served, its server, and documents deleted.
     "serve": ("cad_server.cli.serve", "serve a document over HTTP and print its URL"),
@@ -41,8 +41,10 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "delete": ("cad_server.cli.delete", "delete documents: record, cached document, the engine's copy"),
     "server": ("cad_server.cli.server", "run the engine server in this process"),
     # Generic / services
-    "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment, with the "
-                                  "packages its header or --with names"),
+    "run": ("cad_server.cli.run", "run a script (or -m, -c) as uv run does, cad pinned at this device's release "
+                                  "with the integrations its imports use"),
+    # The installation: the requirement a Python of a program's own installs this device's cad by.
+    "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
     "doctor": ("cad_server.cli.doctor", "install: register, write the cad command, start the engine"),
     # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
@@ -240,8 +242,9 @@ def _report(error: Exception) -> None:
 
 # Commands that never carry the analytics notice: the engine's server, writing nowhere; `telemetry` and
 # `setup` (`update`), which say it their own way; `uninstall`; `run`, which is only the python it runs,
-# as the `cad` command's `run` is; and `plugin`, which a switch runs with no one to read it.
-_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin"})
+# as the `cad` command's `run` is; `plugin`, which a switch runs with no one to read it; and `requirement`,
+# whose output a program reads.
+_UNTOLD = frozenset({"server", "telemetry", "setup", "update", "uninstall", "run", "plugin", "requirement"})
 
 
 # The told commands that register this installation (``cad_server._internal.installations.setup``).

@@ -7,7 +7,10 @@ document's record says builds it again."""
 from __future__ import annotations
 
 import base64
+import contextlib
+import dataclasses
 import hashlib
+import io
 import json
 import os
 import re
@@ -15,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 import zipfile
 from pathlib import Path
@@ -32,11 +36,16 @@ class NamingTest(unittest.TestCase):
     def test_with_takes_requirements_repeated_or_comma_separated_as_uv_does(self) -> None:
         self.assertEqual(extras.split("pandas>=2,<3,numpy"), ["pandas>=2,<3", "numpy"], "a version's comma is its own")
         self.assertEqual(extras.split("shapely[vectorized,x],scipy"), ["shapely[vectorized,x]", "scipy"])
-        self.assertEqual(extras.arguments(["--with", "a,b", "--with=c", "model.py", "--with", "x"]),
-                         (["a", "b", "c"], ["model.py", "--with", "x"]), "the program's own arguments are its own")
-        self.assertEqual(extras.arguments(["--", "-c", "print(1)"]), ([], ["-c", "print(1)"]))
+        from cad_server.cli import run
+
+        plan = run.parse(["--with", "a,b", "--with=c", "-w", "d", "model.py", "--with", "x"])
+        self.assertEqual((plan.with_, plan.kind, plan.target, plan.args),
+                         (["a", "b", "c", "d"], "script", "model.py", ["--with", "x"]),
+                         "the program's own arguments are its own")
+        plan = run.parse(["--", "-c", "print(1)"])
+        self.assertEqual((plan.kind, plan.target), ("code", "print(1)"))
         with self.assertRaisesRegex(extras.Refused, "^--with takes a requirement"):
-            extras.arguments(["--with"])
+            run.parse(["--with", "", "model.py"])
 
     def test_a_script_s_header_names_its_packages_and_its_python(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-header-"))
@@ -163,7 +172,8 @@ class NamingTest(unittest.TestCase):
             base.interpreter(env).write_bytes(b"")
             marker = {"schema": base.SCHEMA, "key": name, "inputs": {"release": release}}
             if given is not None:
-                marker.update({"with": given, "local": local or {}})
+                marker.update({"with": given, "local": local or {},
+                               "spec": extras.Spec(requirements=tuple(given)).keyed()})
             (env / base.MARKER).write_text(json.dumps(marker), encoding="utf-8")
             return env
 
@@ -179,21 +189,171 @@ class NamingTest(unittest.TestCase):
         with mock.patch("cad_server._internal.switch.last", return_value={"from": "0.8.0", "to": "0.10.0", "ok": True}):
             self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
-            self.assertEqual(sorted(extras._collect(folder, keep, made=now, requirements=["/w/gears"],
+            self.assertEqual(sorted(extras._collect(folder, keep, made=now, spec=extras.Spec(requirements=("/w/gears",)),
                                                     inputs={"release": "0.10.0"})), sorted([str(superseded), str(old)]))
         self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
                          "the release before's stay; a base is its release's to remove; one a process runs from "
                          "goes at a later making; the environments of other packages stay")
-        self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, ["/w/gears"], {"/w/gears": "later"}),
+        self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, extras.Spec(requirements=("/w/gears",)),
+                                         {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")
 
 
-def _wheel(folder: Path, width: int = 42) -> Path:
+class ChoosingTest(unittest.TestCase):
+    """What a ``cad run`` line's environment is made of (``run.prepare``, ``extras.integrations``): cad's
+    integrations from the program's imports, a header that names ``cad[...]`` deciding them, a project's packages
+    where no header is, and cad's pin. Nothing is made: no uv."""
+
+    RELEASE = "0.10.0"
+
+    def setUp(self) -> None:
+        self.folder = Path(tempfile.mkdtemp(prefix="extras-choose-")).resolve()
+        self.addCleanup(shutil.rmtree, self.folder, True)
+        here = os.getcwd()
+        self.addCleanup(os.chdir, here)
+        os.chdir(self.folder)
+
+    def write(self, name: str, text: str) -> Path:
+        path = self.folder / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(textwrap.dedent(text), encoding="utf-8")
+        return path
+
+    def spec(self, *argv: str) -> extras.Spec:
+        from cad_server.cli import run
+
+        found = run.prepare(run.parse(list(argv)), self.RELEASE).spec
+        assert isinstance(found, extras.Spec)
+        return found
+
+    def test_the_scan_finds_an_integration_through_local_imports_and_cad_s_decorators(self) -> None:
+        from cad_server._internal import scan
+
+        self.write("lib/__init__.py", "from .shapes import plate\n")
+        self.write("lib/shapes.py", "def plate():\n    import build123d as bd  # inside a body, as a model's\n"
+                                    "    return bd.Box(1, 1, 1)\n")
+        self.write("boards.py", "from cad import kicad_pcb as board\n\n@board('b.kicad_pcb')\ndef b():\n    pass\n")
+        self.write("model.py", "import numpy\nfrom lib import plate\nimport boards\n")
+        self.write("plain.py", "import json\nfrom cad import model\n")
+        self.write("attribute.py", "import cad as c\n\n@c.kicad_pcb('x')\ndef x():\n    pass\n")
+        self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
+        self.assertEqual(scan.scan(script=self.folder / "model.py"), {"build123d", "kicad"})
+        self.assertEqual(scan.scan(script=self.folder / "plain.py"), set(), "the core alone")
+        self.assertEqual(scan.scan(script=self.folder / "attribute.py"), {"kicad"})
+        self.assertEqual(scan.scan(script=self.folder / "dynamic.py"), set(), "an import by name is not seen")
+        self.assertEqual(scan.scan(module="lib", cwd=self.folder), {"build123d"})
+        self.assertEqual(scan.scan(code="import OCP.TopoDS", cwd=self.folder), {"build123d"})
+        self.assertEqual(self.spec("model.py").integrations, ("build123d", "kicad"))
+        self.assertTrue(self.spec("--with", "build123d", "plain.py").integrations == ("build123d",),
+                        "a requirement that is an integration's distribution is that integration")
+
+    def test_a_header_that_names_cad_decides_the_integrations_outright(self) -> None:
+        self.write("forced.py", """\
+            # /// script
+            # dependencies = ["cad[kicad]", "pandas"]
+            # ///
+            import build123d
+        """)
+        self.write("core.py", """\
+            # /// script
+            # dependencies = ["cad"]
+            # ///
+            import build123d
+        """)
+        self.assertEqual((self.spec("forced.py").integrations, self.spec("forced.py").requirements),
+                         (("kicad",), ("pandas",)), "the header's set, no scan; cad is pinned, never a requirement")
+        self.assertEqual(self.spec("core.py").integrations, (), "a bare cad: the core alone")
+        self.assertEqual(self.spec("--with", "cad[build123d]", "core.py").integrations, ("build123d",),
+                         "--with adds on top")
+        self.assertTrue(self.spec(str(self.write("m.py", "import build123d\n"))).default(), "the base")
+
+    def test_cad_pinned_to_the_device_s_release_is_kept_and_another_release_is_refused(self) -> None:
+        for pin in ("cad[build123d]", f"cad[build123d]=={self.RELEASE}"):
+            with self.subTest(pin=pin):
+                self.write("pinned.py", f'# /// script\n# dependencies = ["{pin}"]\n# ///\n')
+                self.assertEqual(self.spec("pinned.py").integrations, ("build123d",), "the device's pin either way")
+        for pin in ("cad[build123d]==0.9.0", "cad>=1", "cad @ https://example.com/cad.whl"):
+            with self.subTest(pin=pin):
+                self.write("pinned.py", f'# /// script\n# dependencies = ["{pin}"]\n# ///\n')
+                with self.assertRaisesRegex(extras.Refused, rf"^pinned\.py's header pins cad to .+, and this device "
+                                                            rf"runs cad {re.escape(self.RELEASE)}: drop the pin"):
+                    self.spec("pinned.py")
+        self.write("plain.py", "import build123d\n")
+        with self.assertRaisesRegex(extras.Refused, r"^--with cad==0\.9\.0 pins cad to ==0\.9\.0"):
+            self.spec("--with", "cad==0.9.0", "plain.py")
+
+    def test_a_project_is_read_where_no_header_is_and_a_header_wins(self) -> None:
+        self.write("pyproject.toml", """\
+            [project]
+            name = "gearbox"
+            version = "0.1"
+            dependencies = ["pandas", "cad[kicad]"]
+
+            [build-system]
+            requires = ["setuptools"]
+            build-backend = "setuptools.build_meta"
+        """)
+        self.write("src/model.py", "import build123d\n")
+        self.write("src/headed.py", '# /// script\n# dependencies = ["numpy"]\n# ///\nimport build123d\n')
+        spec = self.spec("--with", "scipy", "src/model.py")
+        self.assertEqual((spec.integrations, spec.editable, spec.requirements),
+                         (("build123d", "kicad"), (str(self.folder),), ("scipy",)),
+                         "the project installed editable, its cad's integrations with the scan's; --with on top")
+        spec = self.spec("src/headed.py")
+        self.assertEqual((spec.integrations, spec.editable, spec.requirements), (("build123d",), (), ("numpy",)),
+                         "a script with a header runs in its own environment: the project is not read")
+        self.assertEqual(self.spec("--no-project", "src/model.py").editable, ())
+        self.write("pyproject.toml", '[project]\nname = "loose"\nversion = "0.1"\ndependencies = ["cad==0.9.0"]\n')
+        with self.assertRaisesRegex(extras.Refused, rf"pyproject\.toml pins cad to ==0\.9\.0, and this device runs "
+                                                    rf"cad {re.escape(self.RELEASE)}"):
+            self.spec("src/model.py")
+        self.write("pyproject.toml", '[project]\nname = "loose"\nversion = "0.1"\ndependencies = ["pandas"]\n')
+        spec = self.spec("src/model.py")
+        self.assertEqual((spec.editable, spec.files), ((), (str(self.folder / "pyproject.toml"),)),
+                         "an unpackaged project: its dependencies alone")
+
+    def test_uv_s_options_are_handed_to_uv_as_given_and_only_the_making_reads_some(self) -> None:
+        self.write("m.py", "import build123d\n")
+        spec = self.spec("--index-url", "https://example.com/simple", "-f", "wheels", "--offline", "--resolution=lowest",
+                         "-p", "3.13", "--managed-python", "m.py")
+        self.assertEqual(spec.options, ("--index-url=https://example.com/simple",
+                                        f"--find-links={self.folder / 'wheels'}", "--resolution=lowest"))
+        self.assertEqual((spec.transient, spec.python, spec.python_options), (("--offline",), "3.13",
+                                                                              ("--managed-python",)))
+        installation = base.Installation.here()
+        self.assertEqual(extras.key(installation, spec), extras.key(installation, dataclasses.replace(spec, transient=())),
+                         "what only the making reads keys nothing")
+        self.assertEqual(extras.Spec.from_dict(spec.as_dict()), spec, "as the door carries it")
+        with self.assertRaisesRegex(extras.Refused, "is no requirement"):
+            extras.Spec.from_dict({**spec.as_dict(), "requirements": ["--index-url=https://x"]})
+
+    def test_cad_requirement_prints_the_device_s_exact_requirement(self) -> None:
+        from cad_server.cli import requirement
+
+        installation = base.Installation.here()
+        self.assertEqual(requirement.requirement(["kicad,build123d"])["requirement"],
+                         " ".join(installation.requirement(("build123d", "kicad"))))
+        release = dataclasses.replace(installation, source=None, release="0.10.0")
+        with mock.patch.object(base.Installation, "here", return_value=release):
+            self.assertEqual(requirement.requirement(["build123d"]),
+                             {"requirement": "cad[build123d]==0.10.0", "indexes": [], "findLinks": []})
+            self.assertEqual(requirement.requirement([])["requirement"], "cad==0.10.0")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                self.assertEqual(requirement.main(["build123d"]), 0)
+            self.assertEqual(out.getvalue(), "cad[build123d]==0.10.0\n")
+        with self.assertRaisesRegex(ValueError, "nope: no integration of cad's; it has build123d"):
+            requirement.requirement(["nope"])
+
+
+def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = ()) -> Path:
     """A tiny pure-Python package as a wheel uv installs with no build and no network: ``localpkg``, its
-    ``WIDTH`` the one given."""
+    ``WIDTH`` the one given, depending on ``requires``."""
     path = folder / "localpkg-0.1-py3-none-any.whl"
+    metadata = "Metadata-Version: 2.1\nName: localpkg\nVersion: 0.1\n" + "".join(f"Requires-Dist: {item}\n"
+                                                                                for item in requires)
     files = {"localpkg/__init__.py": f"WIDTH = {width}\n".encode(),
-             "localpkg-0.1.dist-info/METADATA": b"Metadata-Version: 2.1\nName: localpkg\nVersion: 0.1\n",
+             "localpkg-0.1.dist-info/METADATA": metadata.encode(),
              "localpkg-0.1.dist-info/WHEEL": b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\n"
                                               b"Tag: py3-none-any\n"}
 
@@ -303,6 +463,26 @@ class RunWithTest(unittest.TestCase):
         warm = self.run_("--with", str(wheel), "-c", said)
         self.assertEqual((warm.returncode, warm.stdout.strip()), (0, "142"), warm.stderr)
         self.assertNotIn("making", warm.stderr, "unchanged: the environment used again")
+
+    def test_an_integration_a_package_pulls_in_is_added_and_resolved_again_with_cad_s_pins(self) -> None:
+        folder = self.project / "pulls"
+        folder.mkdir()
+        wheel = _wheel(folder, requires=("build123d",))
+        # Nothing the scan sees names build123d: the package's own dependency pulls it in.
+        done = self.run_("--with", str(wheel), "-c", "import importlib, localpkg; "
+                                                     "print(importlib.import_module('build' + '123d').__name__)")
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "build123d"), done.stderr)
+        self.assertRegex(done.stderr, r"cad run: build123d came in through another package: resolving again with "
+                                      r"cad\[build123d\] \S+, so cad's pins decide it")
+        made = [base.complete(path) for path in (Path(os.environ["CAD_CACHE_DIR"]) / base.BASE).iterdir()
+                if (base.complete(path) or {}).get("with") == [str(wheel)]]
+        self.assertEqual([marker["integrations"] for marker in made], [["build123d"]])
+
+    def test_an_import_the_scan_cannot_see_ends_in_one_line_naming_the_extra(self) -> None:
+        done = self.run_("-c", "import importlib; importlib.import_module('build' + '123d')")
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertEqual(done.stderr.strip().splitlines()[-1],
+                         "build123d comes with cad's build123d integration: add `cad[build123d]` to the script's header")
 
     def test_what_uv_cannot_do_is_said_in_one_line(self) -> None:
         (self.project / "plain.py").write_text("print('ran')\n", encoding="utf-8")
