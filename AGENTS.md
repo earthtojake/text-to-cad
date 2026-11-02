@@ -78,7 +78,8 @@ own folder last on its path. That installation registers itself and writes the `
 `~/.local/bin/cad`; every skill that uses the server runs `cad` (uvx cannot start in an agent's
 sandbox, the command can), which runs the current installation, so no skill names a release. Every
 requirement on the library names its release exactly (`cad==<VERSION>`, `cad[build123d]==<VERSION>`):
-PyPI's `cad` project holds unrelated 1.x releases an open requirement would resolve to. The release
+the three distributions are released in lockstep, one `VERSION`, and the server speaks only its own
+release's library (the worker contract), so the server pins the library at its own release. The release
 stamps every pin (`sync-version.mjs`), with the installer's fallback release, and
 `scripts/release/check-version.sh` and the tests assert they all equal `VERSION`. The device runs one
 server, the current installation's (`<state>/installations/current`): the CAD app, every thread and
