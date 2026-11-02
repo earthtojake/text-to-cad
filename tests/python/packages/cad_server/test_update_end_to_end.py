@@ -338,9 +338,12 @@ class UpdateEndToEndTest(unittest.TestCase):
         # same token -- its release changed, which a page reloads on.
         stages: list[str] = []
         gone = back = None
+        status, answer = None, {}
         deadline = clicked + 300
         while back is None:
-            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered\n{self.said()}")
+            # Where it stopped, when it does: the stages the page saw, and the engine's last answer.
+            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered; stages {stages}, last answer "
+                            f"{status} {json.dumps(answer)[:600]}\n{self.said()}")
             status, answer = self.version(token)
             if status is None:
                 gone = gone or time.monotonic()
