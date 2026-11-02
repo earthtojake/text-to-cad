@@ -109,7 +109,7 @@ COPY_MARK = ".text-to-cad-copy"
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
 SKILLS = ("bambu-labs", "cad", "dfam-check", "dfm", "dxf", "engineering-drawing", "gcode", "sdf", "sendcutsend",
-          "srdf", "step-parts", "urdf")
+          "srdf", "step-parts", "urdf", "work-instructions")
 # Claude Desktop's server key, and the variable its server is told its install channel by.
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.

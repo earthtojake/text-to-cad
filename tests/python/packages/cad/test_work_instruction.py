@@ -325,22 +325,21 @@ class DocumentTests(_Assembly):
         self.assertFalse([text for page in pages for text in page if "DRAFT" in text or "NOT STATED" in text])
 
     def test_an_instruction_written_is_counted_and_one_refused_is_not(self) -> None:
-        """Counted as a drawing is: kept with a command's counts, since the script sends nothing."""
+        """Counted as a drawing is: handed to the server's telemetry where it is installed
+        (``cad._internal.counts``), since the script sends nothing."""
         from unittest import mock
 
-        from cad import analytics
+        from cad._internal import counts
 
-        with mock.patch.object(analytics, "hand_over") as handed:
+        with mock.patch.object(counts, "TELEMETRY") as telemetry:
             self._write("counted.pdf", self._complete)
-        handed.assert_called_once_with({"features": ["work_instruction"]})
-        self.assertIn("work_instruction", analytics.FEATURES)
-        with mock.patch.object(analytics, "hand_over") as handed, self.assertRaises(ValueError):
+        telemetry.hand_over.assert_called_once_with({"features": ["work_instruction"]})
+        with mock.patch.object(counts, "TELEMETRY") as telemetry, self.assertRaises(ValueError):
             self._write("refused.pdf", lambda: self.instruction(status="released"))
-        handed.assert_not_called()
-        with mock.patch.object(analytics, "hand_over", side_effect=RuntimeError("broken")):
+        telemetry.hand_over.assert_not_called()
+        with mock.patch.object(counts, "TELEMETRY") as telemetry:
+            telemetry.hand_over.side_effect = RuntimeError("broken")
             self._write("uncounted.pdf", self._complete)  # a count never fails what it counts
-        with self.assertRaisesRegex(ValueError, "'instruction' is not a feature"):
-            analytics.counted(lambda: None, "instruction")  # a closed set, as the receiver's is
 
     def test_the_output_path_is_required_and_names_a_pdf(self) -> None:
         from cad.work_instruction import work_instruction
