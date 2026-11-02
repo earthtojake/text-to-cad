@@ -1,6 +1,6 @@
 import React, { useState, useSyncExternalStore } from 'react';
 import { createViewSettingsStore } from '../../../../../dist/renderers/kit/view-settings/viewSettingsStore.js';
-import { resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
+import { resolveViewSettings } from '@cad/core/common/viewSettings.js';
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';

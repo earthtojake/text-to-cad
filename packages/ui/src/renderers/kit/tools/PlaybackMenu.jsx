@@ -3,14 +3,14 @@ import { Settings } from "lucide-react";
 import {
   DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { TOOLBAR_ICON_BUTTON_CLASS } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { Button } from "@cad/ui/primitives/button";
+import { TOOLBAR_ICON_BUTTON_CLASS } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { PLAYBACK_SPEEDS } from "./playbar/AnimationTimeControl.js";
 import ToolPopover from "./ToolPopover.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // The file sidebar's Animation section's Playback settings (`playbar/AnimationSection.jsx`), opening
 // down from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEXT_TO_CAD_LINKS } from "@text-to-cad/ui/links";
+import { TEXT_TO_CAD_LINKS } from "@cad/ui/links";
 
 import {
   DEFAULT_VIEWER_DISCORD_URL,

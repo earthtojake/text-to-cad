@@ -1,25 +1,25 @@
 /**
- * GET /v1/versions: the feed cadgen's daily version check reads (`cadgen/updates.py` in
- * packages/cadgen):
+ * GET /v1/versions: the feed text-to-cad's hourly version check reads (`cad_server/updates.py` in
+ * packages/cad-server):
  *
  *   {"latest": "0.9.0"}
  *
  * `latest` is the newest cadgen release PyPI's simple index has a file of that is not yanked: the index uv
  * resolves every pin through, so the feed names a release from the moment it can be installed, and never
- * before. A pre-release is no release here (cadgen reads only `X.Y.Z`), and a release whose every file is
+ * before. A pre-release is no release here (the server reads only `X.Y.Z`), and a release whose every file is
  * yanked is not one either. Only a copy installed by hand reads the feed: a store's copy never checks,
  * since its store updates it.
  *
  * Each instance keeps what it last read for a few minutes, and keeps answering it while PyPI fails. With
  * nothing read yet and PyPI failing, there is no feed (`null`): the handler answers 503, which a released
- * cadgen takes as a check that failed -- silently, keeping the feed it last read, and trying again the next
+ * the server takes as a check that failed -- silently, keeping the feed it last read, and trying again an hour
  * day. `fetch` is handed in, so the tests need no network.
  */
 
 export const INDEX = 'https://pypi.org/simple/cadgen/';
-const RELEASE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/; // cadgen's own `_RELEASE` (updates.py)
+const RELEASE = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/; // `cad_server/updates.py`'s own `_RELEASE`
 const FILE = /^cadgen-([^-]+?)(?:-.+\.whl|\.tar\.gz|\.zip)$/; // a wheel's or an sdist's name, and its version
-const TIMEOUT_MS = 3000; // well inside cadgen's own wait (5 s): a PyPI that hangs is a PyPI that failed
+const TIMEOUT_MS = 3000; // well inside the server's own wait (5 s): a PyPI that hangs is a PyPI that failed
 const FRESH_MS = 5 * 60 * 1000; // the edge keeps a reply far longer (handler.mjs); this only spares PyPI
 
 const parts = version => version.split('.').map(Number);

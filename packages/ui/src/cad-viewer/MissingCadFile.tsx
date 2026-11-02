@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { FileX } from 'lucide-react';
-import type { CadEntry } from '@text-to-cad/core/client';
+import type { CadEntry } from '@cad/core/client';
 import { EmptyState } from '../file-viewer/navigation/index.js';
 import { useI18n } from '../i18n/index.js';
 

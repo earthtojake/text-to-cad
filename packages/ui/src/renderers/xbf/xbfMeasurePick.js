@@ -1,5 +1,5 @@
-import { projectWorldPointToClient } from "@text-to-cad/core/lib/viewer/measureRuler.js";
-import { xbfMeasureEntity } from "@text-to-cad/core/lib/xbf/xbfMeasure.js";
+import { projectWorldPointToClient } from "@cad/core/lib/viewer/measureRuler.js";
+import { xbfMeasureEntity } from "@cad/core/lib/xbf/xbfMeasure.js";
 import { edgeEnds, nearestEnd, restrictMeasurePick } from "../kit/tools/measure/measureFilter.js";
 
 // What a Measure press, or the pointer resting, takes on an engine document: an ENTITY, whole, as a

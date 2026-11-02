@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@text-to-cad/core/common/animationClock.js";
-import { xbfMotions, xbfMotionTimeline } from "@text-to-cad/core/lib/xbf/xbfMotion.js";
+} from "@cad/core/common/animationClock.js";
+import { xbfMotions, xbfMotionTimeline } from "@cad/core/lib/xbf/xbfMotion.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 

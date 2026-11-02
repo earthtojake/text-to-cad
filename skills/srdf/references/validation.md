@@ -4,7 +4,7 @@ Every created or modified `.srdf` runs this recipe before the task is reported c
 
 ## Recipe
 
-1. **Bundled validator** (always): `cadgen srdf validate path/to/robot.srdf`. It runs in two phases — the SRDF's own structure, then everything cross-checked against the paired URDF — and collects all findings of a phase in one pass (severity, code, XML path). A structural error stops the cross-file phase, so a short first report is not a short list of problems: fix and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
+1. **Bundled validator** (always): `cad srdf validate path/to/robot.srdf`. It runs in two phases — the SRDF's own structure, then everything cross-checked against the paired URDF — and collects all findings of a phase in one pass (severity, code, XML path). A structural error stops the cross-file phase, so a short first report is not a short list of problems: fix and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
 2. **Viewer review** (open it as in [Show the model](../SKILL.md#show-the-model)): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states.
 3. **MoveIt smoke test** (when a MoveIt environment is available): load the URDF+SRDF pair in MoveIt Setup Assistant or a project launch; solve IK for the primary group; plan to a named state. Report as skipped when unavailable.
 
@@ -41,4 +41,4 @@ These are semantic decisions: document them in the ledger and verify interactive
 
 ## Failure Handling
 
-When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (`$urdf` for structure), then re-run the validator on the pair.
+When validation fails against the URDF, decide which side is wrong before editing: a missing name may mean a typo in the SRDF **or** a rename in the URDF that invalidated existing semantics. Fix the owning file (the URDF for structure), then re-run the validator on the pair.

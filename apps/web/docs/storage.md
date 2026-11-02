@@ -27,7 +27,7 @@ Everything the viewer keeps is one record in `sessionStorage`, under
 under way (`src/host/downloads.ts`; [the app README](../README.md#export-and-job-status)) —
 sessionStorage is the browser's own tab: it survives a reload and goes with the tab. The host's part is the adapter,
 [tabRecord.ts](../src/persistence/tabRecord.ts): a synchronous read and write of
-the whole record, handed to `createTabStore` (`@text-to-cad/ui/tab-store`), which
+the whole record, handed to `createTabStore` (`@cad/ui/tab-store`), which
 owns the record's shape, its version and its normalization
 ([tabRecord.ts](../../../packages/ui/src/tab-store/tabRecord.ts)). `main.tsx`
 builds the one store; `App.tsx` hands it to `CadViewer`, which reads `FileViewer`'s state out

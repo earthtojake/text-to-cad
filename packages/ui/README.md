@@ -1,11 +1,11 @@
-# @text-to-cad/ui
+# @cad/ui
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file view:
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the file's name and the name menu it opens (Models and Files), the file menu — with the file's
 content and the loading and error states ([FileViewer](docs/file-viewer.md)).
-`CadViewer` (`@text-to-cad/ui/cad-viewer`) is the CAD viewer every app shows:
+`CadViewer` (`@cad/ui/cad-viewer`) is the CAD viewer every app shows:
 FileViewer over a CAD client, with the five CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
@@ -17,7 +17,7 @@ remain its own.
 
 ## Ownership and dependencies
 
-UI may import `@text-to-cad/core` and browser-safe React dependencies. It must not
+UI may import `@cad/core` and browser-safe React dependencies. It must not
 import an application, Node services, desktop IPC schemas, app stores,
 or `window.textToCad`. Hosts inject file access, capabilities, navigation,
 persistence, appearance and CAD services. Importing a package starts no polling,
@@ -119,14 +119,14 @@ the host's source lists. A host that opens arbitrary files registers a
 fallback renderer (`fallback: true`) for the types nothing else matches.
 
 ```tsx
-import { FileViewer } from '@text-to-cad/ui/file-viewer';
-import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
-import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
-import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
-import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
-import { createXbfRenderer } from '@text-to-cad/ui/renderers/xbf';
-import '@text-to-cad/ui/tokens.css';
-import '@text-to-cad/ui/styles.css';
+import { FileViewer } from '@cad/ui/file-viewer';
+import { createDxfRenderer } from '@cad/ui/renderers/dxf';
+import { createGlbRenderer } from '@cad/ui/renderers/glb';
+import { createMeshRenderer } from '@cad/ui/renderers/mesh';
+import { createRobotRenderer } from '@cad/ui/renderers/robot';
+import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import '@cad/ui/tokens.css';
+import '@cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }),
@@ -151,7 +151,7 @@ the file on screen (absolute; `''` is the home) and how to show another (`onShow
 its library.
 
 ```tsx
-import { CadViewer, createCadFileSource } from '@text-to-cad/ui/cad-viewer';
+import { CadViewer, createCadFileSource } from '@cad/ui/cad-viewer';
 
 const host = { files: createCadFileSource(client), clipboard, promptContext, environment };
 <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file}
@@ -190,7 +190,7 @@ render-session disposal releases shared worker leases. One viewer cannot replace
 another viewer's cache provider or camera state.
 
 The host owns where state lives; the package owns what it is. Everything the
-viewer keeps is one tab record (`@text-to-cad/ui/tab-store`: the tab's settings and
+viewer keeps is one tab record (`@cad/ui/tab-store`: the tab's settings and
 the view of the file on screen — its camera, Display settings, Preview's Render settings,
 its playback settings and the renderer's own slices), thrown out with the tab and kept across a reload. Leaving a file, for
 another or for the home, drops its view (`CadViewer`), and an update of it keeps what
@@ -208,8 +208,8 @@ From the repository root:
 npm ci
 npx --no-install playwright install chromium
 npm run build:packages
-npm run typecheck --workspace @text-to-cad/ui
-npm test --workspace @text-to-cad/ui
+npm run typecheck --workspace @cad/ui
+npm test --workspace @cad/ui
 npm run check:boundaries
 ```
 
@@ -231,9 +231,13 @@ may rely on.
 
 ## CAD document updates
 
+A document is what a person reviews: a file in a format the viewer reads, or a model the engine built from
+code. The viewer exists so that a person can review an agent's subjective output and answer it through the
+tools, annotate, select and quick edit; every renderer serves that review.
+
 A STEP opens in the engine document's renderer (`renderers/xbf`), as an `.xbf` does: the page
-reads what the cadgen engine serves of it through the viewer (`client.engineDocument`,
-`/__cad/xbf`) — its structure and one buffer per part — and reads no source or sidecar. A
+reads what the engine serves of it through the viewer (`client.engineDocument`,
+`/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.
 The Model tree shares the explorer's row and filter primitives. Its rows are the
@@ -295,11 +299,13 @@ opens the app's menu: Back to home where the host
 has a home, the person's settings (Language, Telemetry, Theme), Send feedback
 (a new issue titled "Feedback: " where the host has a tracker), GitHub, Discord and, in
 gray, the version and who made it. Where the host keeps the view's own history (the CAD
-app's views), Back and Forward follow, disabled where they have nowhere to go. It names the
-file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path, Reveal). They share one look: transparent until the
+app's views), Back and Forward follow on a desktop (a phone has no room for them), disabled where they have nowhere to go. It names the
+file (no glyph) — the name opens Models and Files — and offers its ⋯ menu (Copy path; Open in,
+a submenu of Browser where the host has one and Finder, File Explorer or File manager; then
+Export, a submenu of the formats; a model's Copy path and file manager act on its script). They share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
-or a file adds: the host's update button, a dismissed alert's icon and, last, the host's
-actions (the web viewer's Export); the view's own controls (a 3D view's Projection, Display and
+or a file adds, kept for the update's nudge: a dismissed alert's icon, the host's actions (the
+CAD app's Full size) and, last, outermost, the host's update button; the view's own controls (a 3D view's Projection, Display and
 Preview) end its tool strip, never the navbar. A host whose own frame is its navigation shows
 the view alone (`chrome: "bare"`, the CAD app's file handler), with no navbar at all. With no
 file a view shows the host's home, the model library, under the same navbar (its logo and menu,
@@ -313,7 +319,7 @@ does not exist shows "File does not exist" and its path, and any other failure t
 renderer's loading and update status is its own, in its viewport. An error appears as a
 card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own
-icon, the first of the navbar's right-hand controls after the update button while it is put
+icon, the first of the navbar's right-hand controls (the update button last) while it is put
 away, brings it back.
 Retry reloads only the selected renderer; Report Issue, where the host has a tracker, opens a
 new issue titled "Issue: ", labelled `bug`, filled in from the card, with the file's name and

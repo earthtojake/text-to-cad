@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ExportControls } from '../export/ExportControls.js';
 import { FileWarning } from 'lucide-react';
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
+import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
@@ -17,7 +17,7 @@ import type { LibraryLayout } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
 import { normalizePath } from './catalog.js';
-import { isDocumentId } from '@text-to-cad/core/lib/cadRefs.js';
+import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
 
@@ -72,8 +72,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   /** The host's notice: a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   /**
-   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:
-   * first among the navbar's controls, over every file and on the home.
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), while its install is behind:
+   * last among the navbar's controls (outermost, after Full size), over every file and on the home.
    */
   update?: ReactNode;
   /**
@@ -83,12 +83,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   history?: ViewerHistory;
   /**
    * The host's Full size button, where it shows the view small (inline in a conversation) and can
-   * show it full size, and its way to open what is shown in a page of its own outside the host (the
-   * CAD app's Open in browser): the navbar's host actions, Full size first and Open in browser last,
-   * over every file and on the home. Nothing where there is no navbar (`chrome: "bare"`).
+   * show it full size: the navbar's host action, at its right end just before the update, over every file
+   * and on the home. Nothing where there is no navbar (`chrome: "bare"`). (A host's way to open what
+   * is shown in a page of its own, the CAD app's browser page, is a file action, `fileActions.perform.browser`:
+   * the file menu's Open in › Browser.)
    */
   fullSize?: ReactNode;
-  openInBrowser?: ReactNode;
   /** The chrome around the view (`FileViewerProps.chrome`): the navbar (`"page"`, the default), or the view alone (`"bare"`). */
   chrome?: "page" | "bare";
   onError?(error: Error): void;
@@ -107,7 +107,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, openInBrowser, history, chrome, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -237,7 +237,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // out of sight does, which is outside it.
   return <I18nProvider locale={locale}>
     <ControlUsageProvider report={host.usage?.controls}>
-    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ navbar, overlay }) => <FileViewer navbarActions={fullSize || openInBrowser ? <>{fullSize}{navbar}{openInBrowser}</> : navbar} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
+    <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}

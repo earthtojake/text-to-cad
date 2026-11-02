@@ -3,7 +3,7 @@
 import * as React from "react"
 import { Tooltip as TooltipPrimitive, Slot } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 function TooltipProvider({
   delayDuration = 400,

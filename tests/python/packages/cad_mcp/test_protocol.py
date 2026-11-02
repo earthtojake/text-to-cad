@@ -1,0 +1,181 @@
+"""The stdio JSON-RPC transport: framing, concurrency, cancellation."""
+
+from __future__ import annotations
+
+import io
+import json
+import os
+import queue
+import threading
+import time
+import unittest
+
+from cad_mcp.protocol import Connection, RpcError
+
+
+class _Pipe:
+    """A line source the test feeds; iteration ends when it is closed."""
+
+    def __init__(self) -> None:
+        self._lines: queue.Queue = queue.Queue()
+
+    def send(self, message: dict) -> None:
+        self._lines.put(json.dumps(message).encode() + b"\n")
+
+    def close(self) -> None:
+        self._lines.put(None)
+
+    def __iter__(self):
+        while (line := self._lines.get()) is not None:
+            yield line
+
+
+class _Sink(io.RawIOBase):
+    def __init__(self) -> None:
+        self.frames: queue.Queue = queue.Queue()
+        self._buffer = b""
+
+    def writable(self) -> bool:
+        return True
+
+    def write(self, data) -> int:
+        self._buffer += bytes(data)
+        while b"\n" in self._buffer:
+            line, self._buffer = self._buffer.split(b"\n", 1)
+            self.frames.put(json.loads(line))
+        return len(data)
+
+    def next(self, timeout: float = 5.0) -> dict:
+        return self.frames.get(timeout=timeout)
+
+
+class ConnectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.pipe, self.sink = _Pipe(), _Sink()
+        self.release = threading.Event()
+
+        def handler(method, params, context):
+            if method == "slow":
+                self.release.wait(5)
+                return {"slow": True}
+            if method == "fast":
+                return {"fast": True, "meta": context.meta}
+            if method == "bad":
+                raise RpcError(-32602, "bad params", {"field": "x"})
+            if method == "boom":
+                raise ValueError("kaboom")
+            raise RpcError(-32601, f"no {method}")
+
+        self.connection = Connection(self.pipe, self.sink, handler)
+        self.thread = threading.Thread(target=self.connection.serve, daemon=True)
+        self.thread.start()
+
+    def tearDown(self) -> None:
+        self.release.set()
+        self.pipe.close()
+        self.thread.join(5)
+
+    def test_a_slow_request_does_not_block_a_fast_one(self) -> None:
+        self.pipe.send({"jsonrpc": "2.0", "id": 1, "method": "slow"})
+        self.pipe.send({"jsonrpc": "2.0", "id": 2, "method": "fast", "params": {"_meta": {"threadId": "t"}}})
+        first = self.sink.next()
+        self.assertEqual(first, {"jsonrpc": "2.0", "id": 2, "result": {"fast": True, "meta": {"threadId": "t"}}})
+        self.release.set()
+        self.assertEqual(self.sink.next()["id"], 1)
+
+    def test_errors_keep_their_code_and_unexpected_ones_are_internal(self) -> None:
+        self.pipe.send({"jsonrpc": "2.0", "id": 1, "method": "bad"})
+        self.assertEqual(self.sink.next()["error"], {"code": -32602, "message": "bad params", "data": {"field": "x"}})
+        self.pipe.send({"jsonrpc": "2.0", "id": 2, "method": "boom"})
+        error = self.sink.next()["error"]
+        self.assertEqual(error["code"], -32603)
+        self.assertIn("kaboom", error["message"])
+
+    def test_garbage_gets_a_parse_error_and_the_stream_survives(self) -> None:
+        self.pipe._lines.put(b"{not json\n")
+        self.assertEqual(self.sink.next()["error"]["code"], -32700)
+        self.pipe.send({"jsonrpc": "2.0", "id": 3, "method": "fast"})
+        self.assertEqual(self.sink.next()["id"], 3)
+
+    def test_a_cancelled_request_gets_no_response(self) -> None:
+        self.pipe.send({"jsonrpc": "2.0", "id": 7, "method": "slow"})
+        self.pipe.send({"jsonrpc": "2.0", "method": "notifications/cancelled", "params": {"requestId": 7}})
+        deadline = time.monotonic() + 5
+        while not self.connection.is_cancelled(7):  # await the reader, not a fixed sleep
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.release.set()
+        self.pipe.send({"jsonrpc": "2.0", "id": 8, "method": "fast"})
+        self.assertEqual(self.sink.next()["id"], 8)
+        self.assertTrue(self.sink.frames.empty())
+
+    def test_a_response_from_the_host_is_ignored(self) -> None:
+        # This side sends no requests: a response that arrives answers nothing, and the stream goes on.
+        self.pipe.send({"jsonrpc": "2.0", "id": "cadgen-1", "result": {"a": 42}})
+        self.pipe.send({"jsonrpc": "2.0", "id": 9, "method": "fast"})
+        self.assertEqual(self.sink.next()["id"], 9)
+        self.assertTrue(self.sink.frames.empty())
+
+
+class EndTest(unittest.TestCase):
+    def test_the_process_ends_with_its_host_while_a_call_is_in_flight(self) -> None:
+        # A call the engine still holds (a status wait, a capture) once kept the shim alive after the
+        # host closed its pipe: the pool's threads are joined at interpreter exit.
+        import subprocess
+        import sys
+
+        script = (
+            "import sys, threading\n"
+            "from cad_mcp.protocol import Connection\n"
+            "def handler(method, params, context):\n"
+            "    sys.stderr.buffer.write(b'entered\\n'); sys.stderr.flush()\n"
+            "    threading.Event().wait()\n"
+            "Connection(sys.stdin.buffer, sys.stdout.buffer, handler).serve()\n"
+        )
+        process = subprocess.Popen([sys.executable, "-c", script], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE)
+        self.addCleanup(lambda: process.poll() is None and process.kill())
+        process.stdin.write(b'{"jsonrpc":"2.0","id":1,"method":"held"}\n')
+        process.stdin.flush()
+        self.assertEqual(process.stderr.readline(), b"entered\n")
+        process.stdin.close()
+        self.assertEqual(process.wait(timeout=60), 0)
+
+class ClaimStdoutTest(unittest.TestCase):
+    def test_stray_output_goes_to_stderr_not_the_protocol(self) -> None:
+        import subprocess
+        import sys
+
+        script = (
+            "import os,sys\n"
+            "from cad_mcp.protocol import claim_stdout\n"
+            "out = claim_stdout()\n"
+            "print('stray')\n"
+            "os.system('echo child')\n"
+            "out.write(b'{\"frame\":1}\\n')\n"
+        )
+        done = subprocess.run([sys.executable, "-c", script], capture_output=True, env={**os.environ}, timeout=60)
+        self.assertEqual(done.stdout, b'{"frame":1}\n')
+        self.assertIn(b"stray", done.stderr)
+        self.assertIn(b"child", done.stderr)
+
+
+class ClaimStdinTest(unittest.TestCase):
+    def test_requests_arrive_on_their_own_handle_and_standard_input_is_null(self) -> None:
+        import subprocess
+        import sys
+
+        script = (
+            "import os,sys\n"
+            "from cad_mcp.protocol import claim_stdin\n"
+            "requests = claim_stdin()\n"
+            "null = os.stat(os.devnull)\n"
+            "zero = os.fstat(0)\n"
+            "print((zero.st_dev, zero.st_ino) == (null.st_dev, null.st_ino) if os.name != 'nt' else True, sys.stdin.read() == '')\n"
+            "print(requests.readline().decode().strip())\n"
+        )
+        done = subprocess.run([sys.executable, "-c", script], input=b'{"id":1}\n', capture_output=True, timeout=60)
+        self.assertEqual(done.stdout.decode().split(), ["True", "True", '{"id":1}'], done.stderr)
+
+if __name__ == "__main__":
+    unittest.main()

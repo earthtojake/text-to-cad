@@ -1,14 +1,14 @@
 import { useState } from "react";
 import { RotateCcw } from "lucide-react";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { ChangedDot } from "../ChangedDot.jsx";
 import { useStripButtonClass } from "../stripTouch.js";
 import SubToolbar, { SLIDER_SUB_TOOLBAR_CLASS, SUB_TOOLBAR_SLIDER_CLASS, SubToolbarValue } from "../SubToolbar.jsx";
 import { CrossSectionControls, ExplodeControls, clipSummary } from "./ModelViewControls.js";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /** Separated assembly layers, distinct from an expand affordance. */
 function ExplodeIcon(props) {

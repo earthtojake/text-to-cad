@@ -15,27 +15,26 @@ where it is.
 
 ## Environment
 
-- Python: the repo's `.venv/bin/python` (cadgen is installed there, from
-  `requirements-dev.txt`). CLI: `.venv/bin/cadgen`.
+- Python: the repo's `.venv/bin/python` (the library is installed there, from
+  `requirements-dev.txt`). CLI: `.venv/bin/cad`.
 - Project root: `models/radial`. Run everything from there. Scratch work goes in
   `tmp/` (gitignored).
 - Skill docs: `skills/cad/SKILL.md`
   and `references/build123d-modeling.md` (read the pitfalls: `align=None`,
   `.located()` vs `.moved()`, multi-tool booleans, tangent booleans, fillets
   last; a colour is the sRGB hex you want to see).
-- Your system: `src/<name>.py` is a thin wrapper (do not edit it); you write
+- Your system: `src/radial.py` assembles every system (do not edit it); you write
   `src/lib/<name>.py`, which must define
   - `MATERIALS`: a tuple of the palette material ids your leaves use (exactly
     those — the build fails on a mismatch), and
   - `build() -> list[Shape]`: flat list of labelled, coloured leaf solids,
     authored DIRECTLY in the engine frame at crank angle θ = 0.
-- Build your system alone: `python tools/engine.py system <name>` (writes
-  `STEP/<name>.step`; unchanged sources are no-ops).
-- Build the whole engine + render it: `python tools/engine.py build-render <job.json>`.
-  Assembly builds and renders are serialised across all builders by a lock; if it
-  says it is waiting, another builder is rendering — just wait.
-- Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `systems.py`,
-  `radial.py`, `tools/`, or another builder's module. If you need a shared number
+- Build: `python src/radial.py` builds the whole engine into its document (an
+  unchanged system is a no-op: the server keeps each system's work in memory) and the
+  CAD Viewer follows it; `cad snapshot <id> out.png` renders it
+  (`skills/cad/references/snapshot-review.md` has the camera and size flags).
+- Never edit `spec.py`, `kin.py`, `geo.py`, `palette.py`, `mechanism.py`,
+  `radial.py`, or another builder's module. If you need a shared number
   changed, STOP and report it (say exactly what and why). Add helpers inside
   your own module. You may import `castings`, `fasteners`, `geo`, `kin`, `spec`,
   `palette` freely.
@@ -265,28 +264,20 @@ safety wire, casting parting line, machined boss and lifting eye.
    `geo.sound()` (check in a loop before you hand over) and is labelled and
    coloured. Prototype once, place copies (`geo.on_cylinder`, `.moved`) so
    repeated parts share geometry.
-2. `python tools/engine.py system <name>` exits 0.
+2. `python src/radial.py` exits 0.
 3. Clearances: ZERO interpenetration between ANY two leaves — within your own
    system too (every stud, bolt, pin and plug sits in a real drilled/bored hole;
    check pairwise boolean-common volume over your own leaves, AABB-prefiltered).
    Your static geometry must not touch any moving part at ANY crank
    angle, nor any neighbouring system. Use `kin` to sweep your moving neighbours
-   (e.g. 0..720° in 10° steps) and `cadgen.geometry` / OCP distance checks.
+   (e.g. 0..720° in 10° steps) and `cad.geometry` / OCP distance checks.
    Report the minimum clearances you measured. Moving-part builders must sweep
    their parts against their moving neighbours over 720°.
-4. Renders IN CONTEXT of the whole engine with the PRESENTATION envelope (never
-   the default theme), largest size profile:
-   ```json
-   {"render": "presentation", "mode": "view",
-    "outputs": [{"path": "tmp/<name>/front34.png",
-                 "camera": {"position": [x, y, z], "target": [x, y, z]}}],
-    "output": {"sizeProfile": "presentation-large", "padding": 0.04}}
-   ```
-   then `python tools/engine.py build-render tmp/<name>/job.json`. Camera
-   position/target are engine-frame mm (also `"direction": [..], "zoom": z`).
-   `"render": "presentation"` is substituted with `render/presentation.json`.
-   READ every render you make. Do not loop on renders: rerender only after a
-   change that alters what you are judging.
+4. Renders IN CONTEXT of the whole engine, largest size profile: `cad snapshot <id>
+   tmp/<name>/front34.png` with a camera of your own (`--camera`, `--size-profile`,
+   `--width`: `skills/cad/references/snapshot-review.md`); camera position and target
+   are engine-frame mm. READ every render you make. Do not loop on renders: rerender
+   only after a change that alters what you are judging.
 5. A short report: what you built, labels (groups), part count, checks run and
    minimum clearances, render paths, anything you could not make work. Be honest
    — a hidden fallback that changed the look is a bug.

@@ -1,15 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
-import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
-import { createSurfaceLook } from "@text-to-cad/core/lib/viewer/surfaceLook.js";
-import { releaseGeometry, shareGeometry } from "@text-to-cad/core/lib/render/sharedGeometry.js";
-import { createPromptContext, referencePart, textPart } from "@text-to-cad/core/prompt";
+import { EDGELESS_VIEW_FEATURES } from "@cad/core/common/viewSettings.js";
+import { createSurfaceLook } from "@cad/core/lib/viewer/surfaceLook.js";
+import { releaseGeometry, shareGeometry } from "@cad/core/lib/render/sharedGeometry.js";
+import { createPromptContext, referencePart, textPart } from "@cad/core/prompt";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
-import { TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
+import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is

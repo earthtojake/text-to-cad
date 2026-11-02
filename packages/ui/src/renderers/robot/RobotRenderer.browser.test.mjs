@@ -13,7 +13,7 @@ import { PNG } from 'pngjs';
 // as cadgen resolved them (`make_fixtures.py`; the Python suite holds the files current): a URDF of
 // primitives, the SRDF paired with it (a "home" state, a named pose, an end effector), a
 // long chain, a four-bar linkage cadgen closes, and the two cadgen refuses (their alerts are
-// `useRobotDocument.test.tsx`'s and `ViewportError.test.tsx`'s, an SDF's own section `SdfSection.test.tsx`'s: no GPU needed). This server answers `GET /__cad/robot` as the viewer's does, from
+// `useRobotDocument.test.tsx`'s and `ViewportError.test.tsx`'s, an SDF's own section `SdfSection.test.tsx`'s: no GPU needed). This server answers a robot document's `structure` as the viewer's does, from
 // those files, so the page here is the page a CAD Viewer serves. Scene, pose store and handle adapter
 // have unit tests; these are the flows a person actually uses.
 
@@ -43,15 +43,27 @@ before(async () => {
     const [, root, ...rest] = url.pathname.split('/');
     const name = rest.join('/');
     const json = (status, body) => { response.statusCode = status; response.setHeader('Content-Type', 'application/json'); response.end(body); };
+    if (url.pathname.endsWith('/api/v1/documents') && request.method === 'POST') {
+      // A file opened by its path: its document's reads are under its kind, by an id (here its name).
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
+      request.on('end', () => {
+        const file = String(JSON.parse(body || '{}').path || '').split('/').pop();
+        response.statusCode = 201;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(JSON.stringify({ id: file, kind: file.split('.').pop(), api: `/api/v1/documents/${file.split('.').pop()}/${file}` }));
+      });
+      return;
+    }
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
+    else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       const entry = file => ({ kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: 1 });
-      json(200, JSON.stringify({ entries: DESCRIPTIONS.map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file))) }));
-    } else if (url.pathname.endsWith('/__cad/server')) json(200, JSON.stringify({ backend: 'cadgen' }));
-    else if (url.pathname.endsWith('/__cad/robot')) {
+      json(200, JSON.stringify({ documents: (DESCRIPTIONS.map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file)))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) json(200, JSON.stringify({ backend: 'cadgen' }));
+    else if (url.pathname.endsWith('/structure')) {
       // As the viewer's route answers: the payload, or cadgen's refusal as a 400.
-      const file = String(url.searchParams.get('file') || '').replace(/^\/models\//, '');
+      const file = url.pathname.split('/').at(-2);
       if (PAYLOADS[file]) json(200, PAYLOADS[file]);
       else json(REFUSALS[file] ? 400 : 404, JSON.stringify({ error: REFUSALS[file] || `${file}: no such description` }));
     } else {

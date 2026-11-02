@@ -48,7 +48,7 @@ test("a loader names its STAGE in `phase`; its own label never has to be recogni
 });
 
 test("the engine's progress event is named by its key, for every kind, counted where its stage has units", () => {
-  // One event for every job the engine runs (`cadgen/engine/progress.py`): the page reads its kind and
+  // One event for every job the engine runs (`cad/engine/progress.py`): the page reads its kind and
   // stage and nothing of the engine's words, so the screen says each in the view's language.
   const event = (kind, stage, done, total, detail = "") => ({ kind, stage, job: "hand.py::hand", outputs: [], detail, done, total, elapsedMs: 42 });
   assert.deepEqual(loadingProgress(event("build", "body", 2, null, "finger")),
@@ -63,6 +63,8 @@ test("the engine's progress event is named by its key, for every kind, counted w
   assert.equal(loadingProgress(event("snapshot", "draw", 0, null)).label, "progress.snapshot.draw");
   assert.deepEqual(loadingProgress(event("inspect-measure", "measure", 37, 256, "peg")),
     { label: "progress.inspect-measure.measure", detail: "peg", counts: "37/256", percent: 14, connectionLost: null });
+  // A stage named for a technology keeps its digits: the update's base install.
+  assert.equal(loadingProgress(event("update", "build123d", 1, 4)).label, "progress.update.build123d");
   // The page's own words win while it is finding or preparing; a frame that only looks like an event is none.
   assert.equal(loadingProgress(event("build", "body", 0, null), { finding: true }).label, "Finding file");
   assert.equal(loadingProgress({ kind: "Build Model", stage: "body" }).label, "Opening model");

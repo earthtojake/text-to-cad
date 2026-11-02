@@ -1,6 +1,6 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { FileText } from "lucide-react";
-import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
+import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
@@ -25,7 +25,7 @@ class RenderBoundary extends Component<{ children: ReactNode; title: string; onE
  * The complete file view: one file, by its absolute path, under the one navbar. Its only knowledge
  * of formats comes from registrations. With no file it shows the host's home.
  */
-export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, colorScheme, language, appSettings, update, history, recent, explorerFolder = null, onExplorerFolderChange, notice, navbarActions, fileMenuItems, overlay, onError, presentation, chrome = "page" }: FileViewerProps) {
   // The language the host names (`environment.locale`): this frame's own strings, and everything
   // drawn under it (`I18nProvider`), the nodes the host hands it included.
   const locale = host.environment.locale;
@@ -108,15 +108,32 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     : path && !isDocumentId(path) ? path : null;
   const model = !navigationPath && Boolean(path) && (shown ? shown.file.navigationPath === null : isDocumentId(path));
   const folder = navigationPath ? null : explorerFolder;
-  // What the host can do with the file on screen: its ⋯ menu.
+  // The ⋯ menu: what the host can do with the document on screen -- Copy path and Reveal its file on
+  // disk (a model's: the script that builds it, where its metadata names one), its page in the
+  // browser whatever it is -- and the host's own items (`fileMenuItems`: the CAD viewer's Export).
   const perform = host.fileActions?.perform;
+  // Open in's apps, where the host has them: asked by the document's own name as the menu opens.
+  const appsOf = host.fileActions?.apps;
+  const openApp = host.fileActions?.openApp;
+  const onDisk = navigationPath ?? shown?.file.sourceFile ?? null;
+  // A source moved or deleted keeps Copy path (where it was) and draws what opens it disabled.
+  const sourceMissing = Boolean(shown?.file.sourceMissing);
   const fileMenu = useMemo(() => {
-    const capabilities = new Set(Object.keys(perform ?? {}) as EntryAction[]);
-    return navigationPath && capabilities.size ? {
-      platform: host.fileActions?.platform ?? "linux", capabilities,
-      onAction: (action: EntryAction, target: string) => { void Promise.resolve(perform?.[action]?.({ path: target, kind: "file" })).catch(error => onError?.(error)); },
+    const capabilities = new Set((Object.keys(perform ?? {}) as EntryAction[])
+      .filter(action => action === "browser" || action === "copy-link" ? Boolean(path) : Boolean(onDisk)));
+    // The page's own actions (Browser, Copy link) name the document; the rest, its file on disk.
+    const target = (action: EntryAction) => action === "browser" || action === "copy-link" ? path : onDisk;
+    const document = { path: path ?? "", kind: "file" as const };
+    const apps = appsOf && openApp && path ? (options: { signal: AbortSignal }) => appsOf(document, options) : undefined;
+    return path && (capabilities.size || fileMenuItems) ? {
+      platform: host.fileActions?.platform ?? "linux", capabilities, sourceMissing, items: fileMenuItems, apps,
+      onAction: (action: EntryAction | "app", app?: { target: string; app: string }) => {
+        const done = action === "app" ? (app ? openApp?.(document, app.target, app.app) : undefined)
+          : perform?.[action]?.({ path: target(action) ?? "", kind: "file" });
+        void Promise.resolve(done).catch(error => onError?.(error));
+      },
     } : null;
-  }, [navigationPath, perform, host.fileActions?.platform, onError]);
+  }, [path, onDisk, sourceMissing, perform, appsOf, openApp, host.fileActions?.platform, fileMenuItems, onError]);
   // The name opens its menu where this view shows another document: Files -- the explorer, rooted at
   // the file's folder, or for a model where the explorer was last -- where the host's files can be browsed, and
   // Models, the host's library's models, where it has one. A pick shows the document here. A view that shows

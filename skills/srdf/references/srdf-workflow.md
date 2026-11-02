@@ -11,15 +11,15 @@ Do this before writing any SRDF XML. Parse the paired URDF (read it, or run a th
 - every joint: name, type, parent link, child link, lower/upper limits, and whether it has `<mimic>`;
 - the root link and the main serial chains (walk parent→child).
 
-Every name that appears in the SRDF is **copied from this table**. If a name you want is not in the table, the URDF is wrong or your assumption is — resolve that first with `$urdf`. This single habit eliminates the most common SRDF failure class: plausible near-miss names and chains that do not exist in the tree.
+Every name that appears in the SRDF is **copied from this table**. If a name you want is not in the table, the URDF is wrong or your assumption is — resolve that first, in the URDF. This single habit eliminates the most common SRDF failure class: plausible near-miss names and chains that do not exist in the tree.
 
 ## Edit Loop
 
-1. Confirm the URDF is valid (`$urdf` validator) and extract the URDF table.
+1. Confirm the URDF is valid (`cad urdf validate`) and extract the URDF table.
 2. Read or create the planning ledger (`references/planning-ledger.md`); keep the compact form as a comment block in the `.srdf`.
 3. Author or edit the SRDF XML directly per `references/authoring-contract.md`, in element order: virtual joints, groups, group states, end effectors, passive joints, disabled collisions. Save it next to the URDF with the same robot name — colocation plus name match is how every consumer pairs the files.
 4. Derive — do not invent — disabled collisions (`references/disabled-collisions.md`) and group-state values (URDF-native units, within limits).
-5. Validate with `cadgen srdf validate <file.srdf>`; fix findings until clean.
+5. Validate with `cad srdf validate <file.srdf>`; fix findings until clean.
 6. Show the result for review ([Show the model](../SKILL.md#show-the-model)).
 7. Run MoveIt smoke tests when a MoveIt environment is available; otherwise report them skipped.
 8. Report assumptions: inferred TCP links, manual collision pairs, unverified planner behavior.

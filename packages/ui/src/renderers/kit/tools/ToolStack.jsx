@@ -1,5 +1,5 @@
 import { createContext, useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { normalizeToolStack, toolPanelDefaultHeight } from "./toolStackLayout.js";
 
 /**

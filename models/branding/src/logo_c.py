@@ -1,4 +1,4 @@
-from cadgen import model
+from cad import model
 
 from lib.logo_shape import make_logo
 

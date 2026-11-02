@@ -1,4 +1,4 @@
-// A robot as cadgen resolved it (`cadgen.robot_payload`: the articulation to play and the
+// A robot as cadgen resolved it (`cad_server.robot_payload`: the articulation to play and the
 // visuals to draw) and every mesh those visuals name, loaded into the once-built part list
 // its scene is made from (`robotParts.js`, then `robotScene.js`). No React and no DOM
 // beyond fetch: the viewer's robot renderer (`useRobotDocument`, which adds its progress,

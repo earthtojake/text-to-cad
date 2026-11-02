@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ViewerMobileContext } from '../../../file-viewer/responsive.js';
-import { I18nProvider } from '@text-to-cad/ui/i18n';
+import { I18nProvider } from '@cad/ui/i18n';
 import { loadingProgress } from './loadingState.js';
 import { MODEL_UPDATE_STATUS, modelUpdateStatus, ViewUpdateStatus } from './ViewUpdateStatus.jsx';
 Object.assign(globalThis, { React });
@@ -48,7 +48,7 @@ it('names cadgen meshing a cold load behind the view, counted, and calls anythin
   expect(modelUpdateStatus(null)).toBe(MODEL_UPDATE_STATUS);
 });
 
-// The engine's one progress event (`cadgen/engine/progress.py`), as the version wait or the import hands it to the page.
+// The engine's one progress event (`cad/engine/progress.py`), as the version wait or the import hands it to the page.
 const event = (kind: string, stage: string, done = 0, total: number | null = null, detail = '') =>
   ({ kind, stage, job: 'hand.py::hand', outputs: [], detail, done, total, elapsedMs: 120 });
 

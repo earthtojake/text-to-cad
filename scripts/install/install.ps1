@@ -2,9 +2,9 @@
 #
 #   irm https://www.texttocad.dev/install.ps1 | iex
 #
-# It finds uv, or installs it with uv's own installer, then runs `cadgen setup` from the newest
-# cadgen release through uvx: text-to-cad set up or updated in every agent app on this machine,
-# with nothing asked. Run it again to update; with --uninstall it runs `cadgen uninstall` instead.
+# It finds uv, or installs it with uv's own installer, then runs `cad setup` from the newest
+# release of text-to-cad's server through uvx: text-to-cad set up or updated in every agent app on this machine,
+# with nothing asked. Run it again to update; with --uninstall it runs `cad uninstall` instead.
 # For its options, run it as a script block:
 #
 #   & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --help
@@ -15,7 +15,7 @@
 function Install-TextToCad {
     $ErrorActionPreference = 'Stop'
     # The release this script was published with, installed when the version feed cannot be read.
-    $CadgenVersion = "0.8.4"
+    $CadVersion = "0.10.0"
     $VersionFeed = 'https://api.texttocad.dev/v1/versions'
     $Releases = 'https://github.com/earthtojake/text-to-cad/releases/download'
 
@@ -26,23 +26,24 @@ function Install-TextToCad {
         Write-Host '  irm https://www.texttocad.dev/install.ps1 | iex'
         Write-Host '  & ([scriptblock]::Create((irm https://www.texttocad.dev/install.ps1))) --dry-run'
         Write-Host ''
-        Write-Host 'Options (all but --version, --from and --uninstall go to `cadgen setup`, or to `cadgen uninstall`):'
+        Write-Host 'Options (all but --version, --from and --uninstall go to `cad setup`, or to `cad uninstall`):'
         Write-Host '  --dry-run          print the plan and stop: nothing is changed'
         Write-Host '  --only APP[,APP]   only these apps: claude, claude-desktop, codex, cursor, grok, gemini, or'
-        Write-Host '                     the agents the skills go to through the Skills CLI (cadgen setup --help)'
-        Write-Host '  --uninstall        take text-to-cad out again: runs cadgen uninstall (with --purge, cadgen''s state and caches too)'
+        Write-Host '                     the agents the skills go to through the Skills CLI (cad setup --help)'
+        Write-Host '  --uninstall        take text-to-cad out again: runs cad uninstall (with --purge, its state and caches too)'
         Write-Host '  --no-telemetry     turn telemetry off'
-        Write-Host "  --version X.Y.Z    install that cadgen release (default: the newest, from $VersionFeed,"
-        Write-Host "                     never older than this script's own, $CadgenVersion)"
-        Write-Host '  --from SPEC        run cadgen from SPEC instead: a wheel, a folder or a requirement'
-        Write-Host '                     (also the CADGEN_INSTALL_FROM variable); for testing a build before its release'
+        Write-Host "  --version X.Y.Z    install that release (default: the newest, from $VersionFeed,"
+        Write-Host "                     never older than this script's own, $CadVersion)"
+        Write-Host '  --from SPEC        run the server from SPEC instead: a wheel, a folder or a requirement'
+        Write-Host '                     (also the CAD_INSTALL_FROM variable); for testing a build before its release,'
+        Write-Host '                     with UV_FIND_LINKS naming the folder of the library''s wheel beside it'
         Write-Host ''
         Write-Host "uv comes from its own installer when it is missing; UV_NO_MODIFY_PATH=1 keeps it from editing"
         Write-Host 'your PATH. To read this script before running it, or to keep to one release, take the copy'
         Write-Host "attached to that release and check it against the release's SHA256SUMS:"
         Write-Host ''
-        Write-Host "  irm $Releases/v$CadgenVersion/install.ps1 -OutFile install.ps1"
-        Write-Host "  irm $Releases/v$CadgenVersion/SHA256SUMS"
+        Write-Host "  irm $Releases/v$CadVersion/install.ps1 -OutFile install.ps1"
+        Write-Host "  irm $Releases/v$CadVersion/SHA256SUMS"
         Write-Host '  (Get-FileHash install.ps1 -Algorithm SHA256).Hash'
         Write-Host '  powershell -ExecutionPolicy ByPass -File install.ps1'
         Write-Host ''
@@ -64,7 +65,7 @@ function Install-TextToCad {
 
     # Whether release $a is older than $b: the dotted numbers compared, a suffix ignored; never when
     # either is no version. The feed lags a release by up to an hour, and this script never installs
-    # a release older than the one it was published with: that one has no `cadgen setup`.
+    # a release older than the one it was published with: that one has no `cad setup`.
     function Test-Older($a, $b) {
         try {
             return ([version]($a -replace '[^0-9.].*$', '')) -lt ([version]($b -replace '[^0-9.].*$', ''))
@@ -84,7 +85,7 @@ function Install-TextToCad {
         if ($argument -eq '-h' -or $argument -eq '--help') { Show-Usage; return }
         if ($argument -eq '--version') {
             if ($index + 1 -ge $args.Count) {
-                Write-Host "error: --version needs a release, as in --version $CadgenVersion" -ForegroundColor Red
+                Write-Host "error: --version needs a release, as in --version $CadVersion" -ForegroundColor Red
                 return
             }
             $index++
@@ -106,7 +107,7 @@ function Install-TextToCad {
         $rest += $argument
     }
 
-    if (-not $from -and $env:CADGEN_INSTALL_FROM) { $from = $env:CADGEN_INSTALL_FROM }
+    if (-not $from -and $env:CAD_INSTALL_FROM) { $from = $env:CAD_INSTALL_FROM }
     if ($from) {
         # A build named outright (a wheel, a folder, a requirement): uvx takes it as it is, nothing refreshed.
         $requirement = $from
@@ -125,21 +126,22 @@ function Install-TextToCad {
                 $version = $null
             }
             if (-not $version) {
-                $version = $CadgenVersion
+                $version = $CadVersion
                 $origin = "this script's own: the version feed could not be read"
-            } elseif (Test-Older $version $CadgenVersion) {
+            } elseif (Test-Older $version $CadVersion) {
                 $origin = "this script's own: the version feed still names $version"
-                $version = $CadgenVersion
+                $version = $CadVersion
             } else {
                 $origin = 'the newest release'
             }
         }
         if ($version -notmatch '^[0-9][0-9A-Za-z.+-]*$') {
-            Write-Host "error: not a cadgen release: $version" -ForegroundColor Red
+            Write-Host "error: not a release: $version" -ForegroundColor Red
             return
         }
-        $requirement = "cadgen==$version"
-        $refresh = @('--refresh-package', 'cadgen')
+        $requirement = "cad-server==$version"
+        # The server, and the library it pins at its own release: uv reads both anew from the index.
+        $refresh = @('--refresh-package', 'cad-server', '--refresh-package', 'cad')
     }
 
     $uvx = Find-Uvx
@@ -154,16 +156,16 @@ function Install-TextToCad {
             return
         }
     }
-    # uvx's folder on PATH: `cadgen setup` writes uvx's absolute path into the apps' configs.
+    # uvx's folder on PATH: `cad setup` writes uvx's absolute path into the apps' configs.
     $env:Path = "$(Split-Path $uvx);$env:Path"
 
-    # cadgen asks nothing: every other argument goes to it as given.
-    $arguments = @('--no-config', '--managed-python', '--python', '3.13') + $refresh + @('--from', $requirement, 'cadgen', $verb) + $rest
-    Write-Host "text-to-cad: cadgen $version ($origin). The first run downloads it, which takes a minute."
+    # cad asks nothing: every other argument goes to it as given.
+    $arguments = @('--no-config', '--managed-python', '--python', '3.14') + $refresh + @('--from', $requirement, 'cad', $verb) + $rest
+    Write-Host "text-to-cad: $version ($origin). The first run downloads it, which takes a minute."
     Write-Host "Running: $uvx $($arguments -join ' ')"
     & $uvx @arguments
     if ($LASTEXITCODE) {
-        Write-Host "cadgen $verb exited $LASTEXITCODE; what it said is above." -ForegroundColor Red
+        Write-Host "cad $verb exited $LASTEXITCODE; what it said is above." -ForegroundColor Red
     }
 }
 

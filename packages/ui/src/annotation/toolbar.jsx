@@ -2,15 +2,15 @@ import { useEffect, useRef } from 'react';
 import { Circle, Eraser, Highlighter, MoveUpRight, Pencil, Slash, Square, Trash2, Type } from 'lucide-react';
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
-} from '@text-to-cad/ui/primitives/dropdown-menu';
-import { ToolbarButton } from '@text-to-cad/ui/primitives/toolbar-button';
-import { cn } from '@text-to-cad/ui/utils';
+} from '@cad/ui/primitives/dropdown-menu';
+import { ToolbarButton } from '@cad/ui/primitives/toolbar-button';
+import { cn } from '@cad/ui/utils';
 import { FLOATING_SURFACE_CLASS } from '../lib/floatingSurface.js';
 import SubToolbar, { SubToolbarSeparator } from '../renderers/kit/tools/SubToolbar.jsx';
 import { DRAWING_SHORTCUTS } from '../renderers/kit/tools/toolShortcuts.js';
 import { toolFamily } from './tools.js';
 import { useControlUsage } from '../usage/controls.js';
-import { useI18n } from '@text-to-cad/ui/i18n';
+import { useI18n } from '@cad/ui/i18n';
 
 /**
  * The drawing tools' sub-toolbar (`AnnotationToolbar`): one row, shared by the two strip tools that

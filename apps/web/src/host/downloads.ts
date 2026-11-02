@@ -1,4 +1,4 @@
-import type { DownloadPort, ExportRecord } from '@text-to-cad/ui/host';
+import type { DownloadPort, ExportRecord } from '@cad/ui/host';
 
 function tabStorage(): Storage | undefined {
   try { return window.sessionStorage; } catch { return undefined; }

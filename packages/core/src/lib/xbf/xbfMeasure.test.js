@@ -28,12 +28,12 @@ const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFOR
 /** The bracket's scene, read from an engine that answers the fixture. */
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith("/api/look")) return new Response(read("look.json"));
-    if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith("/api/v1/look")) return new Response(read("look.json"));
+    if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
+    const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : JSON.stringify(STRUCTURE));
   };
-  const document = await loadXbfDocument("http://127.0.0.1:9/api/doc/bracket", { fetch });
+  const document = await loadXbfDocument("http://127.0.0.1:9/api/v1/documents/xbf/bracket", { fetch });
   return createXbfScene(THREE, document);
 }
 
@@ -165,7 +165,7 @@ test("a reading is labelled by what it is, and drawn where its instance stands, 
   assert.equal(measureLabelText(measurementFromPicks(face(scene, TOP, [5, 5, 2]), face(scene, BOTTOM, [5, 5, -2]))), "⟂ 4.00 mm");
   assert.equal(measureLabelText(measurementFromPicks(face(scene, "i1/face/1", [15, 0, 8]), face(scene, "i2/face/1", [-9, 0, 8]))), "C-C 24.00 mm");
   assert.equal(measureLabelText(measurementFromPicks(face(scene, TOP, [5, 5, 2]), face(scene, RIGHT, [20, 0, 0]))), "∠ 90.0°");
-  // Taken, it is one mark -- what `cadgen snapshot --measurements` draws, `{start, end, label, color}` --
+  // Taken, it is one mark -- what `cad snapshot --measurements` draws, `{start, end, label, color}` --
   // between the ends its dimension is drawn between: square across the plate, not between the points pressed.
   const [pickA, pickB] = [face(scene, TOP, [15, 5, 2]), face(scene, BOTTOM, [-5, -5, -2])];
   const mark = measurementMark({ pickA, pickB, measurement: measurementFromPicks(pickA, pickB), colorIndex: 0 });

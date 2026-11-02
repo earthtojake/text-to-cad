@@ -1,4 +1,4 @@
-import { encodeBase64 } from '@text-to-cad/core/client';
+import { encodeBase64 } from '@cad/core/client';
 import { ServerError, type Launch, type Server, type ViewEvent } from './server';
 
 /** How often a view syncs with nothing happening (the server's `views.POLL_SECONDS`). */

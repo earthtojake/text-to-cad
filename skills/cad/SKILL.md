@@ -1,16 +1,15 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that cadgen's engine builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer.
+description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer. Covers 3D parts and assemblies, including the part a 2D drawing projects, not the 2D DXF drawing itself or URDF, SRDF and SDF robot descriptions.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # CAD modeling and inspection
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files for the current interface.
-
-A model is a Python function; running its script rebuilds it in cadgen's warm engine, and the
-page the person has open updates. Files are exports, made when asked.
+A model is a Python function; running its script rebuilds it in text-to-cad's warm server, and
+the page the person has open updates. Files are exports, made when asked.
 
 ## Start with the task
 
@@ -18,40 +17,54 @@ page the person has open updates. Files are exports, made when asked.
 | --- | --- | --- |
 | **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
-| **Export STEP, STL, 3MF, GLB or xbf** | `cadgen export <id> <file>`. | [Exports](references/exports.md) |
+| **Export STEP, STL, 3MF, GLB or xbf** | `cad export <id> <file>`. | [Exports](references/exports.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
-| **Resolve a reference from a prompt** | `cadgen inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
+| **Resolve a reference from a prompt** | `cad inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
-| **See a model, a view or a pose** | `cadgen snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
-| **Articulate a mechanism** | build123d joints in the body, then `cadgen.ap242`. | [Kinematics](references/kinematics.md) |
-| **Explode, reveal or showcase a model** | `cadgen.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
+| **See a model, a view or a pose** | `cad snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
+| **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
+| **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
-
-A project built with cadgen 0.7 may need migrating: see [migrations](references/migrations.md).
-
-For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
-Use the corresponding robot-description skill for URDF, SRDF or SDF.
 
 ## Setup and paths
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
-One engine serves the installation: the first run starts it, every run and every
-command goes through it, and it serves the viewer. `cadgen status` lists its workers
-and the documents it holds; `cadgen stop` stops it, and any older one left running.
-A build cut off by the shell's time limit keeps running in the engine; run the same
-command again and it waits for that build and replays it (`cadgen status` shows it).
+One server runs for the installation: the first run starts it, every run and every
+command goes through it, and it serves the viewer. `cad status` lists its workers
+and the documents it holds; `cad stop` stops it.
+A build cut off by the shell's time limit keeps running in the server; run the same
+command again and it waits for that build and replays it (`cad status` shows it).
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
-background. A command that ends with 'the system denies cadgen's local engine' is
-another case: [Setup and troubleshooting](references/setup.md#diagnose-a-failure).
+background.
+
+Build every model with `cad run`. It needs nothing set up: it runs a script in the server's own
+environment, which holds the library and build123d. A model that needs another package names it
+at the top of its script, and `cad run` installs it beside the kernel once, in an environment it
+keeps for the runs after:
+
+```python
+# /// script
+# dependencies = ["pandas>=2"]
+# ///
+```
+
+For a one-off, `cad run --with pandas src/plate.py` (repeat `--with`, or separate requirements
+with commas; a local folder or wheel works too, its path relative to the working directory, or in
+the block to the script's folder, and the next run installs it again after an edit). What cannot be
+installed beside the kernel is refused in one
+line with uv's reason: change the requirement it names, or, where the network is needed once, run
+it outside a sandbox or with its permission.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
@@ -68,7 +81,7 @@ and `.export(...)`. For example, `src/bracket.py`:
 
 ```python
 import build123d as bd
-from cadgen import model
+from cad import model
 
 
 def bracket_body(width, thickness, bore):
@@ -96,7 +109,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/bracket.py
+cad run src/bracket.py
 ```
 
 ```text
@@ -117,16 +130,16 @@ user the page once ([Show the model](#show-the-model)) and use the id for every 
 after it. The id comes from the
 script's path and the function's name, or the script's folder and an explicit `@model(name="...")`,
 so it is the same run after run, and the open page follows every run. A model's name is its identity
-within its namespace, the function's name by default, `name=` gives it another. In 0.8 the namespace
+within its namespace, the function's name by default, `name=` gives it another. The namespace
 is the script's folder; two explicit names in it must differ.
 
-- **Running the script is the rebuild.** It writes no file. The engine's warm worker for
+- **Running the script is the rebuild.** It writes no file. The server's warm worker for
   the script replays every operation an edit did not reach, so a comment re-runs nothing
   and a dimension edit re-runs what reads it
   ([what a run runs](references/model-contract.md#what-a-run-runs)). Decoration only
   declares: keep the calls under `if __name__ == "__main__":` so other scripts can import
   the models.
-- **`@memo` marks stages, never parts.** The engine already replays every kernel call, so
+- **`@memo` marks stages, never parts.** The server already replays every kernel call, so
   mark only a function holding seconds of kernel work that an edit elsewhere leaves
   alone, such as a whole sub-assembly stage; never a part, never a helper called many
   times ([`@memo`](references/model-contract.md#memo-marks-stages)).
@@ -145,30 +158,29 @@ is the script's folder; two explicit names in it must differ.
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
   project models by calling them, never by reading a file the project exported.
-- **References** to faces, edges and parts come from `cadgen inspect <id> [ref]`, and the
+- **References** to faces, edges and parts come from `cad inspect <id> [ref]`, and the
   body picks the same element with build123d's selectors; verify with a snapshot when in
   doubt ([references](references/inspection-and-validation.md#references)).
 - **A shape with no function** (a notebook cell, a REPL) is handed over:
   `model(shape, name="plate")` returns the same handle, and no command builds it again.
-- **The engine never reruns code.** A restart reopens every document from the engine's
+- **The server never reruns code.** A restart reopens every document from the server's
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
-  saved), the page, `cadgen inspect <id>` and `cad_show` print the command that brings it
-  back (`cadgen run src/bracket.py`). Run it.
-- Model units are millimetres, +Z up. `$step-parts` finds real vendor models of
-  purchasable parts such as fasteners, bearings and servos.
+  saved), the page, `cad inspect <id>` and `cad_show` print the command that brings it
+  back (`cad run src/bracket.py`). Run it.
+- Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
   revision decide how its numbers read. A missing or conflicting dimension that changes
   the result is the person's to settle; a value chosen in its place is an assumption.
 
 ## Files, when asked
 
-A file is an action on the document the engine holds, never part of the model: no code
+A file is an action on the document the server holds, never part of the model: no code
 change and no rebuild, written at once. It holds what the document held when it was
 written, so a change made after it is in the file only once it is written again. Write one
 when the person asks for it:
 
 ```bash
-cadgen export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
@@ -177,11 +189,11 @@ calls `export(x, path, ...)` on each (`x` a model call's handle); running it rew
 and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model.
 
-The xbf, cadgen's own document, is Save As: export one only to share a model without its
+The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
-engine's own cache reopens every document it built, as last built. A vendor STEP is
+server's own cache reopens every document it built, as last built. A vendor STEP is
 converted to an xbf once
-(`cadgen export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
+(`cad export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
 times faster than parsing the STEP.
 
 ## Projects built around exported files
@@ -191,9 +203,9 @@ iterate on the exported file itself or the project already does: an `exports.py`
 that reads the files (a robot description, a slicer, a drawing pipeline), or a 0.7-era
 layout, whose runs wrote files. The loop is three steps. The script writes the file on each
 run, by a file decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to
-the script), or `exports.py` or `cadgen export` follows the run. Show the file's page, not
+the script), or `exports.py` or `cad export` follows the run. Show the file's page, not
 the model's: it follows the file on disk, updating when a run rewrites the file.
-Verification reads the file: `cadgen snapshot` or `cadgen inspect` with its path, or
+Verification reads the file: `cad snapshot` or `cad inspect` with its path, or
 `read_step` in a check. The costs keep the default the default: each iteration pays the
 file's translation and the page's re-read, a STEP parsed again; a file names no model, so a
 ref picked on its page has no `made_by` and a Quick Edit from it no way back into the code;
@@ -205,7 +217,7 @@ and the model's page stays the better place to look while editing.
 After every run, read its line and the delta under it; a contradiction with what you
 intended is fixed before anything else. A number the person gave is checked by an assert
 inside the model's body on what the geometry measures, a bound, a distance or a volume, or by
-`cadgen inspect`, never by restating the constant, and never by code after the call in the
+`cad inspect`, never by restating the constant, and never by code after the call in the
 model's script ([inspection](references/inspection-and-validation.md)). A derived number they
 asked for is a check script; neither is ever read off a picture. A structural or appearance
 change, new parts, placements, colours or a mechanism,
@@ -213,12 +225,12 @@ gets the snapshots it takes to judge it, usually one from the angle that shows t
 more when a view leaves the question open, and a posed one for a mechanism state; never
 several angles by habit. For a large assembly, isolate the parts the edit touched or hide
 what covers them and frame them, instead of drawing the whole model. Resolve a reference with
-`cadgen inspect` only when a prompt names one.
+`cad inspect` only when a prompt names one.
 
 ```bash
-cadgen snapshot "$ID" tmp/review.png
-cadgen snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cadgen snapshot "$ID" tmp/open.png --pose open
+cad snapshot "$ID" tmp/review.png
+cad snapshot "$ID" tmp/top.png --camera top --display hidden-line
+cad snapshot "$ID" tmp/open.png --pose open
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing
@@ -229,14 +241,14 @@ grid, pose (`--pose open`) and size. It shows arrangement and appearance, not di
 ## Prompt references and inspection
 
 A reference such as `0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7` names geometry
-in a document by the engine's own names: the document (a model's id, or a file's
+in a document by the server's own names: the document (a model's id, or a file's
 absolute path), `#`, a part or an assembly by the labels on its way from the root
 (`hand/finger.2` is the second component labelled `finger` in `hand`), then, after a
 slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The CAD
-viewer copies them. When a prompt names one, resolve it with `cadgen inspect`:
+viewer copies them. When a prompt names one, resolve it with `cad inspect`:
 
 ```bash
-cadgen inspect "$ID" "bracket/face 7"
+cad inspect "$ID" "bracket/face 7"
 ```
 
 It answers in JSON what the ref names, placed where its occurrence stands: an element's
@@ -255,7 +267,7 @@ path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the pe
 drew their ink in, ink included:
 
 ```bash
-cadgen snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 Inspect supplied annotations before editing. Without annotations, the captured view is
@@ -264,7 +276,7 @@ draw it again to check the change
 ([annotations and Quick Edit views](references/snapshot-review.md#annotations-and-quick-edit-views)).
 
 A reference into a file that is not a document names what the viewer picked in it, in
-that file's own terms (none is a ref `cadgen inspect` resolves):
+that file's own terms (none is a ref `cad inspect` resolves):
 
 | File | Reference | Means |
 | --- | --- | --- |
@@ -284,7 +296,7 @@ Copy `world_parts` and `find_part` from
 first. They accumulate parent placements; raw `.leaves` do not.
 
 ```python
-from cadgen.geometry import closest_points
+from cad.geometry import closest_points
 
 from assembly import assembly
 
@@ -300,7 +312,7 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   on purpose, and a part meant to rest on another touches it when their
   `closest_points` distance is 0. Both describe the parts as built, not a pose
   ([measurements](references/inspection-and-validation.md#measurements)).
-- `cadgen inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
+- `cad inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
   is also the root name `inspect "$ID"` prints): each part's volume times its material's
   density, and the parts that have no material.
 - A check that fails or cannot decide has shown nothing about the design.
@@ -318,7 +330,7 @@ every assumption or departure from the request.
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cadgen snapshot`.
+own work; review with `cad snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.
@@ -334,10 +346,10 @@ own work; review with `cadgen snapshot`.
   run prints. For a file, run the CAD Viewer, from any folder:
 
   ```bash
-  cadgen viewer --json FILE [FILE ...]
+  cad viewer --json FILE [FILE ...]
   ```
 
-  The command ensures this installation's engine, registers each file and prints
+  The command ensures this installation's server, registers each file and prints
   its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
   JSON line (never guess the port); the URL carries its token query. A page follows
   every later run of its model and every rewrite of its file, so share it once.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties } from 'react';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
+import { unavailablePromptContext } from '@cad/core/prompt';
+import type { CadWorkspaceService } from '@cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import type { FileViewerState } from '../file-viewer/types.js';
 import { createLiveRegistry, type LiveRegistry } from '../host/liveRegistry.js';

@@ -46,15 +46,15 @@ The `drive` coupling is the gear train: one control in input revolutions,
 so the rotor, cages, carrier and planets turn only through it. Its range is
 the joints' limits over their rates, 0..4.5. The old `quarter_output` and
 `full_output` poses are configurations naming it (`rest` is as built):
-`cadgen snapshot "$ID" q.png --pose '{"drive": 2.25}'` (ID: the id: line the run prints).
+`cad snapshot "$ID" q.png --pose '{"drive": 2.25}'` (ID: the id: line the run prints).
 
-The old `ANIMATION_JS` clips by name (`cadgen export "$ID" GLB/qdd_actuator.glb` bakes
+The old `ANIMATION_JS` clips by name (`cad export "$ID" GLB/qdd_actuator.glb` bakes
 all three). The old clips looped; neither a motion nor an animation has a loop, and a
 player repeats it:
 
 - `drive` (12 s), a motion: `drive` swept 0 -> 4.5, linear: one closed cycle, 4.5
   input turns, seamless at tooth and pole phase.
-- `inspect` (12 s), a GLB animation (`cadgen.gltf`): the same cycle (`drive`, posed)
+- `inspect` (12 s), a GLB animation (`cad.gltf`): the same cycle (`drive`, posed)
   while every module moves to its station by `sin(pi * phase)`, the ring, sun and
   planets meshed at 210 mm (`GEAR_CLUSTER`), the connectors fixed and the housing
   rising 82 mm (`FLOOR_LIFT`), as the old `frame()` had them.

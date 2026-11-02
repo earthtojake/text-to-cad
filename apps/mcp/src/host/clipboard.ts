@@ -1,4 +1,4 @@
-import type { ClipboardPort } from '@text-to-cad/ui/host';
+import type { ClipboardPort } from '@cad/ui/host';
 
 /**
  * Text copied by the page's own selection and copy command, for a frame whose host did not grant

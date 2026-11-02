@@ -6,9 +6,9 @@ service per workspace and lends it to every mounted CAD view. The HTTP adapter,
 cache and worker-session lifetimes. Disposing a view releases its render session;
 disposing the service aborts its resources and sessions.
 
-Where a document the cadgen engine serves is read belongs to the service too:
-`engineDocument(file)` (an `.xbf`, or a STEP) answers the document's API URL through
-the viewer, `/__cad/api/doc/<id>`, asked again after the server's `retryMs` while
+Where a document the engine serves is read belongs to the service too:
+`engineDocument(file)` (an `.xbf`, a STEP, or a model by its id) answers the document's API URL,
+`/api/v1/documents/<kind>/<id>` (`POST /api/v1/documents` opens it), asked again after the server's `retryMs` while
 the engine still reads the file, and the fetch every read of it is made with. The
 HTTP implementation owns request encoding and cancellation. UI consumes the
 resulting tickets and never supplies a same-origin transport fallback.

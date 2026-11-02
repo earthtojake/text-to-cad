@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
@@ -16,7 +16,7 @@ import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);

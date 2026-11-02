@@ -70,7 +70,7 @@ export async function HeroSection() {
         </Button>
       </div>
 
-      {/* The stable address of the install (`/install` redirects here; the CAD app's update card links it). */}
+      {/* The stable address of the install (`/install` redirects here). */}
       <div id="install" className="mt-6 flex w-full max-w-[660px] scroll-mt-20 justify-center">
         <InstallBox />
       </div>

@@ -1,4 +1,4 @@
-import { boundsCenterAndRadius, fitDistanceForRadius } from '@text-to-cad/core/lib/viewer/autoZoom.js';
+import { boundsCenterAndRadius, fitDistanceForRadius } from '@cad/core/lib/viewer/autoZoom.js';
 import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from './viewportCameraKit.js';
 
 // Interactive framing only. Snapshot/export framing retains its own policy.

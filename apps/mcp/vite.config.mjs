@@ -6,15 +6,17 @@ import remapping from '@jridgewell/remapping';
 import MagicString from 'magic-string';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { buildId } from '@text-to-cad/ui/build-id';
-import { stampDebugId } from '@text-to-cad/core/chunk-ids';
-import { packageSourceMaps } from '@text-to-cad/core/source-maps';
-import { thirdPartyLicenses } from '@text-to-cad/core/third-party-licenses';
+import { buildId } from '@cad/ui/build-id';
+import { stampDebugId } from '@cad/core/chunk-ids';
+import { packageSourceMaps } from '@cad/core/source-maps';
+import { thirdPartyLicenses } from '@cad/core/third-party-licenses';
 
 // An MCP App is one HTML resource with no asset directory behind it: the host renders it in a
 // sandboxed frame whose only other origins are data: and blob:. So everything the page needs --
 // scripts, styles, workers, images -- is inside index.html, and the build fails if anything
-// would be left outside it.
+// would be left outside it. The same app is also one module, app.js: what the engine serves the
+// shell a host keeps (`src/host/shell.ts`, built by vite.shell.config.mjs as shell.html), which
+// imports it -- its styles put in the page's head first -- and so runs the engine's release.
 
 // The shared packages start workers with `new Worker(new URL(file, import.meta.url))`. Here
 // that URL would point at the sandbox, so each one becomes Vite's inline (blob) worker. The
@@ -51,13 +53,13 @@ function inlineWorkers() {
 // is decoded natively where the browser can (`Uint8Array.fromBase64`), else by a plain loop.
 //
 // A crash on the page names the chunk it ran in by its debug id (`IDS`, as `__cadChunkIds`; the
-// crash reporter in @text-to-cad/core reads it), and the release uploads each chunk with its source
+// crash reporter in @cad/core reads it), and the release uploads each chunk with its source
 // map (`dist/sourcemaps`, scripts/release/sourcemaps.py), so PostHog can show the source -- the
-// shared packages' own, since their modules load with their maps (@text-to-cad/core/source-maps)
+// shared packages' own, since their modules load with their maps (@cad/core/source-maps)
 // and rolldown chains them. The map must fit the text the page runs: every edit here is made with
 // its positions kept (magic-string) and folded into rolldown's map, and a placeholder is as wide as
 // the blob URL that replaces it (`WIDTH`, padded with spaces a URL's parser drops), so swapping it
-// moves no code. The id is the one that text and its map decide (@text-to-cad/core/chunk-ids), never
+// moves no code. The id is the one that text and its map decide (@cad/core/chunk-ids), never
 // rolldown's: rolldown names the code before these edits, which the CAD Viewer may ship unedited
 // under the same id.
 const CHUNK = 'cad-chunk:';
@@ -143,16 +145,21 @@ function inlineDocument() {
       if (!entry) throw new Error('The CAD app build has no entry chunk.');
       const bootstrap = `const SOURCES=${JSON.stringify(sources)},IMPORTS=${JSON.stringify(imports)},IDS=${JSON.stringify(ids)},ENTRY=${JSON.stringify(entry)};\n${LOADER}`;
       document = document.replace(/<script\b[^>]*\bsrc="[^"]+"[^>]*><\/script>/, () => `<script type="module">${bootstrap}</script>`);
+      const styles = [];
       for (const [name, item] of Object.entries(bundle)) {
         if (item.type === 'asset' && name.endsWith('.css')) {
+          styles.push(String(item.source));
           document = document.replace(/<link\b[^>]*\bhref="[^"]+\.css"[^>]*>/, () => `<style>${String(item.source).replace(/<\/style/gi, '<\\/style')}</style>`);
           delete bundle[name];
         }
       }
+      // The app as one module, for the shell: its styles into the shell's head, then the same loader.
+      const style = `{const s=document.createElement('style');s.textContent=${JSON.stringify(styles.join('\n'))};document.head.append(s);}`;
+      this.emitFile({ type: 'asset', fileName: 'app.js', source: `${style}\n${bootstrap}` });
       // The workers' maps, inline or not: a worker's crash never reaches the page's reporter, and the page
       // loads no map.
       for (const name of Object.keys(bundle)) if (name.endsWith('.js.map')) delete bundle[name];
-      const external = Object.keys(bundle).filter(name => name !== 'index.html');
+      const external = Object.keys(bundle).filter(name => name !== 'index.html' && name !== 'app.js');
       if (external.length) throw new Error(`Everything the CAD app loads must be inside index.html: ${external.join(', ')}`);
       html.source = document;
     } },
@@ -170,17 +177,17 @@ function inlineDocument() {
 }
 
 // Which build this is, for the version the app menu shows (src/App.tsx): none for the release's
-// own, this checkout's commit for any other (@text-to-cad/ui/build-id).
+// own, this checkout's commit for any other (@cad/ui/build-id).
 const appRoot = fileURLToPath(new URL('.', import.meta.url));
 const { version } = JSON.parse(fs.readFileSync(new URL('package.json', import.meta.url), 'utf8'));
 
 // The third-party notice beside index.html, of every package the page and its workers inline: the
-// runtime bundler ships it with the page (@text-to-cad/core/third-party-licenses).
+// runtime bundler ships it with the page (@cad/core/third-party-licenses).
 const licenses = thirdPartyLicenses();
 
 export default defineConfig({
-  define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version, cwd: appRoot })) },
-  plugins: [packageSourceMaps(['@text-to-cad/core', '@text-to-cad/ui']), inlineWorkers(), react(), inlineDocument(), licenses.plugin()],
+  define: { __CAD_BUILD__: JSON.stringify(buildId({ version, cwd: appRoot })) },
+  plugins: [packageSourceMaps(['@cad/core', '@cad/ui']), inlineWorkers(), react(), inlineDocument(), licenses.plugin()],
   resolve: { dedupe: ['react', 'react-dom', 'three', 'lucide-react'] },
   build: {
     assetsInlineLimit: Infinity, cssCodeSplit: false, modulePreload: false,

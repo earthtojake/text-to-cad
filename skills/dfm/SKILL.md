@@ -1,13 +1,12 @@
 ---
 name: dfm
-description: Design-for-manufacturing review of a part for sheet metal, CNC machining, or injection molding - bends, reliefs and flat patterns; machining access, internal corners, deep features and setups; draft, undercuts and projected area. Use when the user asks whether a part can be bent, machined or molded, asks about manufacturability or tooling, or asks for a DFM review or redesign.
+description: Design-for-manufacturing review of a part for sheet metal, CNC machining, or injection molding - bends, reliefs and flat patterns; machining access, internal corners, deep features and setups; draft, undercuts and projected area. Use when the user asks whether a part can be bent, machined or molded, asks about manufacturability or tooling, or asks for a DFM review or redesign. Not for additive manufacturing (3D printing) printability.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # DFM review
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth.
 
 Produce a process-specific DFM review of the supplied design. This is a guided
 review skill, not an automatic feature-recognition or manufacturing
@@ -25,9 +24,6 @@ when the user is comparing:
 Each reference carries that process's review checklist, its two fallback
 sources, and a worked reasoning example. The rules below apply to all three.
 
-For additive manufacturing, use `$dfam-check`, which measures mesh
-printability per process.
-
 ## Evidence first
 
 Prefer the user's actual supplier/tooling specification over general guidance.
@@ -42,8 +38,8 @@ supports a suspected issue, not a measured pass/fail. Source-code parameters
 describe design intent; verify that they match the artifact being reviewed
 before treating them as evidence.
 
-When $cad is available, use its documented inspection workflow for geometry
-facts. If it cannot measure a required feature, use supplied dimensions with
+Where the part is a text-to-cad model, measure geometry facts with its inspection
+workflow (`cad inspect`, a check script). If it cannot measure a required feature, use supplied dimensions with
 provenance or mark the check unverified; do not invent commands or
 measurements. Never infer alloy, resin, strength, or stock thickness from a
 rendering material or color.
@@ -86,8 +82,8 @@ provided, list visible concerns as review items and request geometry or
 dimensions for the required measurements. Never fill a report with invented
 feature IDs or sample values.
 
-For requested redesign, preserve the original artifact and use $cad if available
-to modify the source, regenerate, and recheck the new artifact. Check affected
+For requested redesign, preserve the original artifact and, where the model's
+source can be edited, modify the source, regenerate, and recheck the new artifact. Check affected
 neighboring features as well as the original finding. Without editing tools,
 provide a specific change list. A review request alone does not request edits,
 uploads, ordering, or machine operation.

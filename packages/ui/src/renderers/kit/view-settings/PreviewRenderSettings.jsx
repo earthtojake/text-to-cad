@@ -1,12 +1,12 @@
 import { Minus, Plus, RotateCcw } from "lucide-react";
-import { previewSettingsChanged, resolvePreviewSettings } from "@text-to-cad/core/common/viewSettings.js";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { previewSettingsChanged, resolvePreviewSettings } from "@cad/core/common/viewSettings.js";
+import { Button } from "@cad/ui/primitives/button";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { Slider } from "@cad/ui/primitives/slider";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 import {
   FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetColorPicker, FileSheetSettingRow,
   FileSheetSettingsSection, FileSheetValueInput

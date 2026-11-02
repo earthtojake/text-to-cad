@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import { useViewerMobile } from '../file-viewer/responsive.js';
 import { ChevronRight } from 'lucide-react';
-import { cn } from '@text-to-cad/ui/utils';
+import { cn } from '@cad/ui/utils';
 
 // Every tree's row is one compact 24px line: the explorer's in 12px text, a tree in the viewer's
 // tool stack (Features, Links) in the panels' 11px text (`dense`).

@@ -4,8 +4,8 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 import test from 'node:test';
 import * as THREE from 'three';
-import { loadXbfDocument } from '@text-to-cad/core/lib/xbf/xbfDocument.js';
-import { createXbfScene } from '@text-to-cad/core/lib/xbf/xbfScene.js';
+import { loadXbfDocument } from '@cad/core/lib/xbf/xbfDocument.js';
+import { createXbfScene } from '@cad/core/lib/xbf/xbfScene.js';
 
 import { lookAtFor } from '../kit/camera/lookAt.js';
 import { xbfLookSubject } from './xbfLookAt.js';
@@ -13,17 +13,17 @@ import { xbfLookSubject } from './xbfLookAt.js';
 /** An engine document's face or edge as what a double-click looks at: its kind from its surface or polyline, where it stands. */
 
 // Core's bracket: a 40 x 20 x 4 plate on z = -2..2 with a Ø8 hole at the origin, two Ø6 pegs at x = ±12.
-const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+const FIXTURES = path.join(path.dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const read = file => fs.readFileSync(path.join(FIXTURES, file));
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), 255, 255, 255, 128]).buffer;
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith('/api/look')) return new Response(read('look.json'));
-    if (url.endsWith('/api/look/environment')) return new Response(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith('/api/v1/look')) return new Response(read('look.json'));
+    if (url.endsWith('/api/v1/look/environment')) return new Response(ENVIRONMENT);
+    const part = /\/parts\/([^/]+)$/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : read('bracket/structure.json'));
   };
-  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/doc/bracket', { fetch }));
+  return createXbfScene(THREE, await loadXbfDocument('http://127.0.0.1:9/api/v1/documents/xbf/bracket', { fetch }));
 }
 const rounded = values => values.map(value => Math.round(value * 1000) / 1000 + 0);
 

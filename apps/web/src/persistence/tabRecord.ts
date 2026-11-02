@@ -1,4 +1,4 @@
-import type { TabRecordStorage } from '@text-to-cad/ui/tab-store';
+import type { TabRecordStorage } from '@cad/ui/tab-store';
 
 /**
  * Where the web host keeps the tab record: one `sessionStorage` entry. sessionStorage is the

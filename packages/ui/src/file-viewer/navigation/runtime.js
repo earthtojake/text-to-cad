@@ -1,5 +1,5 @@
 /**
- * `@text-to-cad/ui/navigation` — the chrome AROUND a file surface, shared by every
+ * `@cad/ui/navigation` — the chrome AROUND a file surface, shared by every
  * app that draws one.
  *
  * A renderer draws one file's contents; this is everything else a person sees:
@@ -15,7 +15,7 @@ export { ViewerNavbar } from "./ViewerNavbar.jsx";
 export { AppMenu } from "./AppMenu.jsx";
 export { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 export { FolderExplorer, folderTrail, parentFolder } from "./FolderExplorer.jsx";
-export { ENTRY_ACTIONS, entryMenu, revealLabel } from "./entry-menu.js";
+export { ENTRY_ACTIONS, entryMenu, fileManagerName, openInMenu, revealLabel } from "./entry-menu.js";
 export { fuzzyMatch } from "./fuzzy.js";
 export { TEXT_TO_CAD_LINKS, releaseNotesUrl, releaseVersion, viewerLinks } from "./links.js";
 export { FileIcon, FolderIcon, fileIconFor } from "./icons.jsx";

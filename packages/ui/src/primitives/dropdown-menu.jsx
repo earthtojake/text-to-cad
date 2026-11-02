@@ -4,8 +4,8 @@ import * as React from "react";
 import { Check, ChevronRight, Minus } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 
-import { cn } from "@text-to-cad/ui/utils"
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { cn } from "@cad/ui/utils"
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 
 function DropdownMenu({
   ...props
@@ -178,6 +178,7 @@ function DropdownMenuSub({
   return <DropdownMenuPrimitive.Sub data-slot="dropdown-menu-sub" {...props} />;
 }
 
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubTrigger> & { inset?: boolean }} props */
 function DropdownMenuSubTrigger({
   className,
   inset,
@@ -203,6 +204,7 @@ function DropdownMenuSubTrigger({
 // Portaled like the menu itself: rendered inside its parent menu, a submenu is positioned
 // against — and clipped by — that menu whenever it is a containing block (a translucent,
 // backdrop-blurred menu is one), which drew it off its trigger and out of sight.
+/** @param {React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.SubContent>} props */
 function DropdownMenuSubContent({
   className,
   ...props

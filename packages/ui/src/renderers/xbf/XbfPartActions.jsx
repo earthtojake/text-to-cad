@@ -1,10 +1,10 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { Eye, EyeOff, Focus } from 'lucide-react';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { cn } from '@text-to-cad/ui/utils';
-import { treeRowActionsClass } from '@text-to-cad/ui/primitives/tree-row';
+import { Button } from '@cad/ui/primitives/button';
+import { cn } from '@cad/ui/utils';
+import { treeRowActionsClass } from '@cad/ui/primitives/tree-row';
 import { useControlUsage } from '../../usage/controls.js';
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // A row's actions show on hover (or keyboard focus) and stay shown while they are ON: an
 // isolated row keeps its lit Isolate, a hidden row its crossed-out eye, so what is isolated

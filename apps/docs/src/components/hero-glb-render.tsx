@@ -5,18 +5,18 @@ import * as THREE from "three";
 import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 import { LineSegments2 } from "three/examples/jsm/lines/LineSegments2.js";
 import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeometry.js";
-import { renderModel } from "@text-to-cad/core/common/renderModel.js";
-import { cloneThemePresetSettings } from "@text-to-cad/core/common/themeSettings.js";
+import { renderModel } from "@cad/core/common/renderModel.js";
+import { cloneThemePresetSettings } from "@cad/core/common/themeSettings.js";
 import {
   createGlbAnimationRuntime,
   disposeGlbAnimationRuntime,
   setGlbAnimationTime,
-} from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
-import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "@text-to-cad/core/lib/render/glbMeshData.js";
-import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
+} from "@cad/core/lib/render/glbAnimationRuntime.js";
+import { buildGlbDocumentFromBuffer, disposeGlbDocument } from "@cad/core/lib/render/glbMeshData.js";
+import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 
 // The hero plays the planetary gear as one GLB, exported from the model's document by
-// `cadgen export` (scripts/sync-hero-glb.mjs): its parts, colours and the `meshCycle` motion,
+// `cad export` (scripts/sync-hero-glb.mjs): its parts, colours and the `meshCycle` motion,
 // which the export baked into a clip. The page reads it the way the CAD Viewer reads any GLB
 // (`buildGlbDocumentFromBuffer`) and plays the clip the way the viewer does
 // (`glbAnimationRuntime`): no gear math of the site's own.

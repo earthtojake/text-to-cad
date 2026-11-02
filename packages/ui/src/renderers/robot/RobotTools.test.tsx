@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
-import { createCadClient } from '@text-to-cad/core/client';
+import { createCadClient } from '@cad/core/client';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createRobotRenderer } from '../../../dist/renderers/robot/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
@@ -88,14 +88,19 @@ async function openRobot({ phone = false } = {}) {
   // and the loader reads cadgen's resolved payload for that revision.
   const id = ++nextRobot;
   const served = { revision: 1, robot: robotPayload() };
-  const fetch = vi.fn(async (input: RequestInfo | URL) => {
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://viewer.test');
-    if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`, hash: `tools-arm-${id}-${served.revision}`, bytes: 1 }] });
+    if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
+      // The description opened by its path: where its document's reads are.
+      expect(JSON.parse(String(init.body))).toEqual({ path: FILE });
+      return new Response(JSON.stringify({ id: `arm-${id}`, kind: 'urdf', api: `/api/v1/documents/urdf/arm-${id}` }), { status: 201 });
     }
-    if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/__cad/robot')) {
-      expect(url.searchParams.get('file')).toBe(FILE);
+    if (url.pathname.endsWith('/api/v1/documents')) {
+      const entry = { kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`, hash: `tools-arm-${id}-${served.revision}`, bytes: 1 };
+      return json({ documents: [{ entry, revision: entry.hash }] });
+    }
+    if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
+    if (url.pathname.endsWith(`/api/v1/documents/urdf/arm-${id}/structure`)) {
       return json(served.robot);
     }
     if (/\/primitives\/[^/]+\.glb$/.test(url.pathname)) {

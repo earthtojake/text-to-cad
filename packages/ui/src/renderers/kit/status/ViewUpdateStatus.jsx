@@ -1,11 +1,11 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import { Popover, PopoverTrigger, PopoverContent } from "@text-to-cad/ui/primitives/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@cad/ui/primitives/popover";
 import { useEffect, useState } from 'react';
 import { Eye, LoaderCircle, RotateCcw } from 'lucide-react';
-import { cn } from '@text-to-cad/ui/utils';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { useI18n } from '@text-to-cad/ui/i18n';
+import { cn } from '@cad/ui/utils';
+import { Button } from '@cad/ui/primitives/button';
+import { useI18n } from '@cad/ui/i18n';
 import { isProgressKey } from './progressEvent.js';
 import { statusLine } from './statusLabels.js';
 

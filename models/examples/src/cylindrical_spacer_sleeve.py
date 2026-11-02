@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Cylindrical spacer sleeve with a central through-bore and rounded rim edges.
 
 from lib.simple_model_library import make_cylindrical_spacer_sleeve

@@ -16,15 +16,15 @@ open them do.
 
 `cube.meshopt.glb` is a unit cube (12 triangles, #3366CC), welded, quantized
 (`KHR_mesh_quantization`) and meshopt-compressed (`EXT_meshopt_compression`, required):
-cadgen writes no compressed GLB, but a GLB a person opens can be one, and the loader
+The engine writes no compressed GLB, but a GLB a person opens can be one, and the loader
 decodes it. It was written by the JS writer this repository once kept for test fixtures
 (`git log --diff-filter=D -- packages/core/src/lib/glb/writeGlb.js` names the commit that
 deleted it). Both extensions are ratified glTF, so any writer of them can replace it
 (meshoptimizer's `gltfpack -c` over a cube) as long as `glbMeshoptRoundTrip.test.js` still
 describes it.
 
-`animation.glb` and `motion.glb` are the engine's GLB export, baked by today's cadgen from the
-two small models `tests/python/packages/cadgen/engine/test_animation.py` writes (`CHANNELS` and
+`animation.glb` and `motion.glb` are the engine's GLB export, baked by today's engine from the
+two small models `tests/python/packages/cad/engine/test_animation.py` writes (`CHANNELS` and
 `MOTION`), and that test holds them to what the baker writes now, key for key. `animation.glb`
 carries the motion-free box's `animation()`, `showcase` (2 s): every channel path (translation,
 rotation, scale) authored under every interpolation (STEP, LINEAR, CUBICSPLINE) and a `pose`
@@ -32,4 +32,4 @@ through the lid's hinge, written as the engine writes every GLB's keys, STEP as 
 LINEAR within a tenth of a millimetre and of a degree of the bake; `motion.glb` a box whose only
 animation is its motion `open_close`, an AP242 configuration sequence. `bakedGlbAnimation.test.js` runs the Khronos glTF-Validator over both and
 plays them with three.js. When the baker changes, write them again:
-`CADGEN_WRITE_FIXTURES=1 .venv/bin/python -m unittest tests.python.packages.cadgen.engine.test_animation`.
+`CAD_WRITE_FIXTURES=1 .venv/bin/python -m unittest tests.python.packages.cad.engine.test_animation`.

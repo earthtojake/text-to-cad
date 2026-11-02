@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { jointDeltas } from "@text-to-cad/core/common/articulation.js";
-import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
+import { jointDeltas } from "@cad/core/common/articulation.js";
+import { createRobotScene } from "@cad/core/lib/urdf/robotScene.js";
 import { armOffset, normalize, subtract } from "../kit/tools/pose/jointHandleMath.js";
 import { fixturePayload, robotOf } from "./__tests__/robotFixtures.js";
 import { prepareRobotJointHandles, robotJointHandles, robotPosableHandles } from "./jointHandles.js";

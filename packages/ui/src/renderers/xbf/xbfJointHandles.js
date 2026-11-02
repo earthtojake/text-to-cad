@@ -1,5 +1,5 @@
-import { xbfLinkPlacements, xbfPairMotion } from "@text-to-cad/core/lib/xbf/xbfKinematics.js";
-import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { xbfLinkPlacements, xbfPairMotion } from "@cad/core/lib/xbf/xbfKinematics.js";
+import { xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 import { add, armOffset, subtract } from "../kit/tools/pose/jointHandleMath.js";
 
 // What Position's knobs take hold of in an engine document: the kit's plain list, one

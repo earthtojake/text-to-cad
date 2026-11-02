@@ -5,7 +5,7 @@ import { Line2 } from 'three/examples/jsm/lines/Line2.js';
 import { LineGeometry } from 'three/examples/jsm/lines/LineGeometry.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
 
-import { normalizeAnnotation } from '@text-to-cad/core/common/annotation.js';
+import { normalizeAnnotation } from '@cad/core/common/annotation.js';
 import { annotationDocumentOf, levelOf, mountAnnotations, projectAnnotations } from './annotation3d.js';
 
 /**

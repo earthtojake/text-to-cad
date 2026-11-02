@@ -22,7 +22,7 @@ axes (three per digit), for 30 hand axes and 58 total modeled joint frames.
 
 from __future__ import annotations
 
-from cadgen import model
+from cad import model
 
 from dataclasses import asdict
 

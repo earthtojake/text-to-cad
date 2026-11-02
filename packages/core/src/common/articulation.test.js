@@ -12,7 +12,7 @@ import {
   rowValue
 } from "./articulation.js";
 
-// A hand-built articulation, in the shape cadgen writes (`cadgen.robot_payload`): an elbow
+// A hand-built articulation, in the shape cadgen writes (`cad_server.robot_payload`): an elbow
 // turning about z at x=10 carrying the forearm, a slider on the forearm carrying the carriage,
 // a cylindrical lead screw, a fixed pin riding the elbow, and a coupling `curl` gearing the
 // elbow and the slider. The player decides nothing: what it reads here is what it plays.
@@ -61,7 +61,7 @@ test("joint values are the rows' dot products: an own term and a coupling's add"
   assert.deepEqual(jointValues(ARTICULATION, { elbow: 10, curl: 0.5 }).elbow, { turn: 55, travel: 0 });
 });
 
-// A four-bar's crank as cadgen writes it (`cadgen.robot_payload`): no term of its own, a curve
+// A four-bar's crank as cadgen writes it (`cad_server.robot_payload`): no term of its own, a curve
 // over its driver's row, sampled from the closed form. The player only interpolates the keys.
 const CRANK = { bias: 0, terms: [], curve: { driver: { bias: 0, terms: [["rocker", 1]] }, input: [-30, -10, 0, 10, 30], output: [-40, -12, 0, 8, 20] } };
 

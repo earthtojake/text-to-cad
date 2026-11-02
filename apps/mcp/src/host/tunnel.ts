@@ -1,5 +1,5 @@
-import { createCadClient, encodeBase64 } from '@text-to-cad/core/client';
-import type { CadClientOptions } from '@text-to-cad/core/client';
+import { createCadClient, encodeBase64 } from '@cad/core/client';
+import type { CadClientOptions } from '@cad/core/client';
 import { HostError } from './bridge';
 import { isHostRefusal } from './channel';
 import { ServerError, type HttpReply, type Server } from './server';
@@ -14,7 +14,7 @@ export const TUNNEL_ORIGIN = 'http://cad.invalid';
 const NULL_BODY = new Set([101, 103, 204, 205, 304]);
 
 /**
- * The most body one `cad_http` reply carries (`cadgen/mcp/tunnel.py`'s `MAX_REPLY_BYTES`): one
+ * The most body one `cad_http` reply carries (`cad_server/mcp/tunnel.py`'s `MAX_REPLY_BYTES`): one
  * part of a longer body. A reply crosses the host's
  * JSON-RPC channel as one message, its body base64, 4/3 of its size, and a host reads its
  * server's messages with a ceiling: the MCP TypeScript SDK's stdio reader stops at 10 MiB unless
@@ -26,7 +26,7 @@ export const TUNNEL_REPLY_MAX_BYTES = 4 * 1024 * 1024;
 
 /**
  * A `cad_http` reply. `encoding: 'gzip'`: the server gzipped a JSON body for the trip
- * (`cadgen/mcp/tunnel.py`), and its headers describe the inflated body.
+ * (`cad_server/mcp/tunnel.py`), and its headers describe the inflated body.
  */
 type TunnelReply = HttpReply & { encoding?: string };
 

@@ -12,7 +12,7 @@ prints each one's id and page:
 
 ```
 cd planetary_gear_assembly && python planetary_gear_assembly.py
-cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
+cad snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
 ```
 
 | Script | Model | What it is |
@@ -29,7 +29,7 @@ cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run
 | `motorcycle_shock_absorber/motorcycle_shock_absorber.py` | `motorcycle_shock_absorber` | Coilover damper; the rod rides a linear joint, `damper_stroke` |
 | `pelican_riding_bicycle/pelican_riding_bicycle.py` | `pelican_riding_bicycle` | Pelican riding a bicycle |
 | `photo_coffee_cup/photo_coffee_cup.py` | `photo_coffee_cup` | Photo-inspired takeaway coffee cup |
-| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`apps/docs/scripts/sync-hero-glb.mjs` exports it) |
+| `planetary_gear_assembly/planetary_gear_assembly.py` | `planetary_gear_assembly` | The docs site's hero: a gear train driven by one coupling, `drive`, its `meshCycle` motion and its `inspectExplode` animation, which its GLB carries as clips (`cad export` writes it, by hand: `apps/docs/README.md`) |
 | `planetary_gear_stage/planetary_gear_stage.py` | `planetary_gear_stage` | Simplified planetary gear stage (`lib/gear_teeth.py`) |
 | `research_humanoid/research_humanoid.py` | `research_humanoid` | Adult-scale humanoid: 28 body joints, and 15 per hand from `lib.build_hand(side)` |
 | `robotic_hand_end_effector/robotic_hand_end_effector.py` | `robotic_hand_end_effector` | Cybernetic robotic hand end-effector |
@@ -42,9 +42,8 @@ cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run
 
 - `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
   imported directly. Nothing else reads these models' STEP, so no model declares
-  one; `cadgen export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
-  is the planetary gear's, written by the docs site's `sync-hero-glb.mjs` with
-  `cadgen.export(model, path)`.
+  one; `cad export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
+  is the planetary gear's, written by hand with `cad export`.
 - No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
   hands are plain functions called in the one body (the hand models' two scripts
   are gone). The engine places a part used twice as one prototype.
@@ -82,7 +81,7 @@ cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run
   0..1260 (the old control's range; the old sun mate allowed -1260..1260).
   `quarter_cycle` and `half_cycle` are configurations. `meshCycle` is `drive`
   swept 0 -> 1260 over 6 s, linear, a seamless cycle a player repeats.
-  `inspectExplode` is a GLB animation (`cadgen.gltf`): over 5 s it drives `drive`
+  `inspectExplode` is a GLB animation (`cad.gltf`): over 5 s it drives `drive`
   through the same sweep (`.pose`) while each planet and its pin move 16 mm out along
   the planet's rest radial and back, the sun lifts 7 mm and the carrier and pins drop
   4 mm, as the old clip did, the translations eased out to 2.5 s and back. A GLB
@@ -109,7 +108,7 @@ cadgen snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run
   `cutaway_open`. Limits are offsets from the display pose, as before. Its four
   clips keep the old clips' numbers: `driveAround` (18 s), `armCycle` (12 s) and
   `deploySequence` (20 s) are motions, functions of time over the joints, and
-  `explodedAssembly` (12 s) is a GLB animation (`cadgen.gltf`), none looped, as
+  `explodedAssembly` (12 s) is a GLB animation (`cad.gltf`), none looped, as
   before:
   - `heave`, a prismatic joint: the chassis rides the terrain, which is the ground
     and stays put while the body heaves over it in `driveAround`; every group the

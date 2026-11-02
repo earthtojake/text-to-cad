@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // An engine document's menus, which read as the STEP renderer's did.
 //

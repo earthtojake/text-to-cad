@@ -1,9 +1,9 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { Children, useEffect, useId, useRef, useState } from "react";
-import { cn } from "@text-to-cad/ui/utils";
-import { Checkbox } from "@text-to-cad/ui/primitives/checkbox";
-import { ColorPicker } from "@text-to-cad/ui/primitives/color-picker";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
+import { Checkbox } from "@cad/ui/primitives/checkbox";
+import { ColorPicker } from "@cad/ui/primitives/color-picker";
+import { useI18n } from "@cad/ui/i18n";
 
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";

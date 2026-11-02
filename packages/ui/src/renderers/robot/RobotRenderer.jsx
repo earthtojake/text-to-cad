@@ -2,10 +2,10 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import * as THREE from "three";
 import { Box, MousePointer2 } from "lucide-react";
 import { PositionIcon } from "../kit/tools/ChangedDot.jsx";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 const URDF_JOINT_VALUE_EPSILON = 1e-9;
-import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
-import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
+import { createRobotScene } from "@cad/core/lib/urdf/robotScene.js";
+import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -30,7 +30,7 @@ import { useLinkSelection } from "./useLinkSelection.js";
 import { useRobotVisibility } from "./useRobotVisibility.js";
 import { useRobotDocument } from "./useRobotDocument.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const NO_HANDLES = Object.freeze([]);
 const NO_REFERENCES = Object.freeze([]);

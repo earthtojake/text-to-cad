@@ -84,8 +84,8 @@ test('viewport PNG copy uses the guarded local endpoint without browser clipboar
   try {
     const png = new Blob(['png'], {type:'image/png'});
     await browserClipboard.writeImage(Promise.resolve(png));
-    assert.equal(calls[0][0], '/__cad/clipboard');
-    assert.equal(calls[0][1].headers['x-cadgen-viewer'], '1');
+    assert.equal(calls[0][0], '/api/v1/local/clipboard');
+    assert.equal(calls[0][1].headers['x-cad-viewer'], '1');
     assert.equal(calls[0][1].body, png);
   } finally { restore(); }
 });

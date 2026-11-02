@@ -1,9 +1,9 @@
 import { useCallback, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
-import { runtimeModelKeyMatches } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { runtimeModelKeyMatches } from "@cad/core/lib/viewer/modelRuntime.js";
 import { requestSceneFrame } from "../viewport/sceneFrames.js";
 import { CAMERA_TOUCH, fitCamera, touchCamera } from "./cameraTouch.js";
-import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
+import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@cad/core/lib/perspective.js";
 import { VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, applyOrbitDelta, readViewPlaneOrientation, runtimeFramingBounds } from "./viewportCameraKit.js";
 
 /**

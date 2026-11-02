@@ -1,7 +1,7 @@
 """Every Python process a watched test command starts records itself in the test's journal.
 
 ``tests.python.support.engine_daemon`` puts this folder first on ``PYTHONPATH`` and names a
-journal folder in ``CADGEN_TEST_JOURNAL``; the command, the engine daemon it starts and the
+journal folder in ``CAD_TEST_JOURNAL``; the command, the engine daemon it starts and the
 daemon's workers all inherit both, so each one, at its start, writes ``<role>-<pid>.txt``
 there: when it started, when it listened (a daemon that made its door, or on Windows listened on
 its port), when it left and with what, an uncaught error's traceback, and every thread's stack
@@ -30,15 +30,15 @@ def _record() -> None:
     import time
     import traceback
 
-    folder = os.environ.get("CADGEN_TEST_JOURNAL")
+    folder = os.environ.get("CAD_TEST_JOURNAL")
     if not folder or not os.path.isdir(folder):
         return
     argv = " ".join(getattr(sys, "orig_argv", sys.argv))
-    # Each by its module; the distribution starts the daemon as ``cadgen._internal.engine_daemon``
-    # (``engine_host``), its engine's own entry point being ``cadgen.engine.daemon``.
-    roles = {"cadgen.engine.daemon": "daemon", "cadgen._internal.engine_daemon": "daemon",
-             "cadgen.engine.worker": "worker", "cadgen.engine.reader": "reader",
-             "cadgen.engine.render.service": "render"}
+    # Each by its module; the distribution starts the daemon as ``cad_server._internal.engine_daemon``
+    # (``engine_host``), its engine's own entry point being ``cad_server.engine.daemon``.
+    roles = {"cad_server.engine.daemon": "daemon", "cad_server._internal.engine_daemon": "daemon",
+             "cad.engine.worker": "worker", "cad.engine.reader": "reader",
+             "cad.engine.render.service": "render"}
     role = next((role for module, role in roles.items() if module in argv), "process")
     path = os.path.join(folder, f"{role}-{os.getpid()}.txt")
     started = time.time()

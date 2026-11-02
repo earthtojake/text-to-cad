@@ -1,5 +1,5 @@
 """Write the DXF renderer's browser-test fixture: one tiny drawing, and the
-payload ``GET /__cad/drawing`` answers for it.
+payload ``GET /api/v1/documents/dxf/<id>/drawing`` answers for it.
 
 The drawing is deliberately one of each thing the renderer has to get right:
 
@@ -30,7 +30,7 @@ from pathlib import Path
 
 import ezdxf
 
-from cadgen.drawing_payload import build_drawing_payload
+from cad_server.drawing_payload import build_drawing_payload
 
 HERE = Path(__file__).resolve().parent
 DXF_PATH = HERE / "sample.dxf"

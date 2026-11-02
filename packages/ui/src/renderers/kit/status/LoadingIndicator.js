@@ -1,10 +1,10 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import LoadingIcon from "@text-to-cad/ui/loading-icon";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import LoadingIcon from "@cad/ui/loading-icon";
 import { useContext, useEffect, useState } from "react";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { statusLabel } from "./statusLabels.js";
 import { ViewerHostContext } from "../../../host/context.js";
-import { Progress } from "@text-to-cad/ui/primitives/progress";
+import { Progress } from "@cad/ui/primitives/progress";
 
 // Shared by file opening and graphics initialization. There is no headline and no clock:
 // that a model is opening is plain from the mark, and the step line under it says what is

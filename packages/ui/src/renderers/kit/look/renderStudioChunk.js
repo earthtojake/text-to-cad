@@ -31,8 +31,8 @@ export function loadStudioScene() {
   }
   if (!scenePromise) {
     scenePromise = Promise.all([
-      import("@text-to-cad/core/common/photographicStudio.js"),
-      import("@text-to-cad/core/common/environmentMap.js")
+      import("@cad/core/common/photographicStudio.js"),
+      import("@cad/core/common/environmentMap.js")
     ])
       .then(([studio, environment]) => {
         loadedScene = { ...studio, ...environment };

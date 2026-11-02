@@ -1,9 +1,9 @@
 import { Eye, EyeOff } from "lucide-react";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { treeRowActionsClass } from "@text-to-cad/ui/primitives/tree-row";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { Button } from "@cad/ui/primitives/button";
+import { treeRowActionsClass } from "@cad/ui/primitives/tree-row";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /** The room the eye takes at a row's right end: the row's `--row-actions`. */
 export const ROBOT_ROW_ACTIONS_WIDTH = "1.5rem";

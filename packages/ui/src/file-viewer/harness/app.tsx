@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { unavailablePromptContext } from "@text-to-cad/core/prompt";
+import { unavailablePromptContext } from "@cad/core/prompt";
 import { FileViewer, defineFileRenderer } from "../index.js";
 import type { FileActions, FileEntry, FileMetadata, FileRendererProps, FileSource, FileViewerState, JsonValue } from "../types.js";
 

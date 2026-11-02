@@ -79,7 +79,7 @@ softbox environment; the other modes use neutral CAD lighting, but for an engine
 `lib/viewer/sceneRig.js`): the viewport lights it by that in place of the theme's lights, with
 the look's environment and under its own tone curve. Authored finishes show in Solid and Shaded:
 a file's reflect a small neutral environment; an engine document's reflect its look's
-environment, the studio image its engine serves beside the look (`GET /api/look/environment`),
+environment, the studio image its engine serves beside the look (`GET /api/v1/look/environment`),
 which lights every surface of the document and which the engine's OCCT stills reflect too, and
 every surface of it answers light as OCCT's PBR program does (core's `lib/viewer/surfaceBrdf.js`,
 the look's `brdf`), not by three's own physical model. Parts draws a plain finish. An engine

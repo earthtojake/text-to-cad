@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Slider as SliderPrimitive } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 // shadcn's slider: every slider in the viewer is this one (a row may size and place it; Position's
 // joints leave out its fill). Two changes from shadcn's, for the viewer's denser, see-through

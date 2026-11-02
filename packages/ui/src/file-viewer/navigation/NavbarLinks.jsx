@@ -1,4 +1,4 @@
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 import { issueUrl } from "./links.js";
 

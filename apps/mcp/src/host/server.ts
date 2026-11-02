@@ -1,10 +1,10 @@
-import type { LibraryModel } from '@text-to-cad/ui/library';
-import type { UpdateNotice } from '@text-to-cad/ui/update';
+import type { LibraryModel } from '@cad/ui/library';
+import type { UpdateNotice } from '@cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 import { isHostRefusal, type Channel } from './channel';
 
 /**
- * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`): a launch names a
+ * The launch/view protocol this page speaks with `cad-mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
  * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
  * routes through `cad_http`. Every one of the page's calls carries its app capability (the launch's
@@ -29,8 +29,8 @@ export interface Launch {
   /** Whether a newer text-to-cad is out, as the server last read it: the update button draws with the page. */
   notice?: UpdateNotice | null;
   /**
-   * The ways to the engine that need no call, where it gives a page (`cadgen/mcp/server.py`'s
-   * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its day link
+   * The ways to the engine that need no call, where it gives a page (`cad_server/mcp/server.py`'s
+   * `_reach`): `browser`, the CAD Viewer's page of what the launch shows, with its link
    * (`?token=`), and `engine`, that page's origin. A card whose host carries no `tools/call` links
    * the page, and first tries the engine directly with the link's token (`host/direct.ts`).
    */
@@ -40,8 +40,11 @@ export interface Launch {
   view?: string;
   order?: { createdAt: number; seq: number };
 }
-/** A model in the library every CAD view shares, as the home lists it. */
-export type Recent = LibraryModel;
+/**
+ * A model in the library every CAD view shares, as `GET /api/v1/documents` lists it: its document's
+ * `id`, `kind` and `api`, its record's kind as `record` (the home hands it on as the library's, `libraryRow`).
+ */
+export type Recent = Omit<LibraryModel, 'kind'> & { id: string; kind: string; record: LibraryModel['kind']; api?: string };
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture'; requestId: string };
@@ -96,7 +99,7 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>, appToken: string,
       call('cad_capture_reply', { requestId, ...reply, app: appToken }),
     /** One request to the viewer's routes (`host/tunnel.ts`): everything else the page asks of the server. */
     http: (args: { method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
-      call<HttpReply>('cad_http', { ...args, headers: { ...args.headers, 'x-cadgen-app': appToken } }, options),
+      call<HttpReply>('cad_http', { ...args, headers: { ...args.headers, 'x-cad-app': appToken } }, options),
   };
 }
 export type Server = ReturnType<typeof createServer>;

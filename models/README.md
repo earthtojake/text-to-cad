@@ -1,6 +1,6 @@
 # Models
 
-The corpus of models built with cadgen 0.8: plain files, one flat level of
+The corpus of models built with text-to-cad: plain files, one flat level of
 self-contained projects, built by running their scripts; nothing installs it.
 Automated tests never read, build or import anything here: they make their own
 fixtures in fresh temporary directories. The manual-validation cases live in
@@ -10,7 +10,7 @@ Each project has one layout, the cad skill's: its sources in `src/` (shared modu
 `src/lib/`), each model a `@model` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cadgen export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad export <id> STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -19,7 +19,7 @@ before loading either URDF.
 Every model of the old corpus is ported, but for tendon_hand's 56 review models (reviews
 and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git history) and
 `tom`, the arm, which lives in its own repository. One file is no model:
-`tests/unported/joint_playground.urdf`, named nowhere, kept with its README.
+`tests/unported/joint_playground/joint_playground.urdf`, named nowhere, kept with its README.
 
 **Where does a new model go?** A standalone part that is one script goes in
 `examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
@@ -38,28 +38,28 @@ project delivers them and because something outside the model reads them:
 
 | Project | Files | How | Why |
 | --- | --- | --- | --- |
-| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `apps/docs/scripts/sync-hero-glb.mjs`, which calls `cadgen.export(model, path)` | the docs site's hero plays its `meshCycle` clip; a hand step, which checks what it writes (no CI job reads the model) |
+| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
 | `examples` (`mounting_plate`, `spur_gear_blank`) | `STL/`, `3MF/`, `GLB/<name>.*` | `@stl`, `@threemf`, `@glb` on the model | the example of declared files: a print part whose files every run writes |
 | `branding` (the three logos) | `STEP/logo_*.step` | `src/exports.py` | the STEP deliverable, kept current by an `exports.py` |
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
 | `juno`, `lyra` (every link model) | `3MF/<link>.3mf` | `src/exports.py` | the URDFs reference them |
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
-| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cadgen.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
+| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
 
 ## Build and snapshot
 
-From a model's `src/` folder, with the engine's environment (cadgen on the path):
+From a model's `src/` folder, with the engine's environment (the library on the path):
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cadgen snapshot "$ID" OUT.png            # drawn by OCCT
-cadgen export "$ID" GLB/NAME.glb         # a file of it, on request
+cad snapshot "$ID" OUT.png            # drawn by OCCT
+cad export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each
 model its `__main__` calls, in the script's warm worker (the engine starts on demand;
-`cadgen stop` stops it), so a second run of an unchanged model replays it from memory.
+`cad stop` stops it), so a second run of an unchanged model replays it from memory.
 A script's models count as one run of the memo's last four, however many it builds, so a
 robot and its links replay together. Nothing is written beside a model: no sidecar, no
 cache.
@@ -69,10 +69,9 @@ cache.
 The migration a user makes ([the migration guide](../docs/migrations/migrating-0.7-to-0.8.md)),
 and nothing more:
 
-- `from cadgen import step` -> `from cadgen import model` (and `memo`,
-  `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); cadgen's
-  build123d proxy -> `import build123d as bd`; `cadgen.ap242` for the mechanism and
-  `cadgen.gltf` for a GLB's animations.
+- `from cadgen import step` -> `from cad import model` (`from cadgen import model` in 0.8; and
+  `memo`, `paint`, `read_step`, `read_xbf`, `read_mesh`, `export`); 0.7's build123d proxy ->
+  `import build123d as bd`; `cad.ap242` for the mechanism and `cad.gltf` for a GLB's animations.
 - `@step(out=...)` -> `@model`, and nothing else, but where the table above keeps a file.
   Every script calls its models under `__main__`; a module of `@memo` stages or plain
   helpers calls nothing there.
@@ -93,7 +92,7 @@ and nothing more:
 - Animation (`animation=` JavaScript, `cadgen.clip`) -> two layers. The mechanism's own
   motion (a gait, a door, an engine running) is a `configuration_sequence`, kept in the
   document. A showcase (an explode, a teardown, a reveal, a part hidden) is a
-  `cadgen.gltf` `animation()`, baked into every GLB exported from the model: parts
+  `cad.gltf` `animation()`, baked into every GLB exported from the model: parts
   translated, turned or hidden after the mechanism's pose, and the mechanism posed at
   its keys where the old clip ran it. No joint exists only to slide a part apart. Every
   old clip keeps its name and duration in one or the other; what neither can say (an

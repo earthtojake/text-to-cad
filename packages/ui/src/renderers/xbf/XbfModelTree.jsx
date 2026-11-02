@@ -1,17 +1,17 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Focus } from 'lucide-react';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_INSET_PX, TREE_ROW_DENSE_ICON_CLASS, TreeRowSurface, useTreeRowHeight, TreeRowChevron, TreeRowGuides, TreeRowLabel } from '@text-to-cad/ui/primitives/tree-row';
-import { TreeFilterHighlight, TreeFilterInput } from '@text-to-cad/ui/primitives/tree-filter';
-import { cn } from '@text-to-cad/ui/utils';
+import { Button } from '@cad/ui/primitives/button';
+import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_INSET_PX, TREE_ROW_DENSE_ICON_CLASS, TreeRowSurface, useTreeRowHeight, TreeRowChevron, TreeRowGuides, TreeRowLabel } from '@cad/ui/primitives/tree-row';
+import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-filter';
+import { cn } from '@cad/ui/utils';
 import XbfPartMenu from './XbfPartMenu.jsx';
 import XbfPartActions, { rowActionsLayout } from './XbfPartActions.jsx';
 import ToolPanel from '../kit/tools/ToolPanel.jsx';
 import { modelTreeSearchChain, useTreeSearch } from '../kit/inspector/modelTreeSearch.js';
 import VirtualRows, { revealRow } from '../kit/inspector/VirtualRows.jsx';
 import { implicitXbfRoots, xbfSelectionPaths } from './xbfTree.js';
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // An engine document's Model tree, as the STEP renderer's was, over the engine's tree as
 // `xbfTree.js` presents it. An engine document's faces and edges are always to hand, so no row asks

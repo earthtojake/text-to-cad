@@ -1,8 +1,8 @@
-import { DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator } from "@cad/ui/primitives/dropdown-menu";
 import { ToolSettingsMenu } from "../ToolModeMenu.jsx";
 import { pickModeOf } from "./selectFilter.js";
 import { useControlUsage } from "../../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // A mode as telemetry names it (`usage/controls.js`): `select_filter_faces`; Measure's kinds in the plural.
 const PLURAL = Object.freeze({ vertex: "vertices", edge: "edges", face: "faces" });

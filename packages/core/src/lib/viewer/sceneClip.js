@@ -1,7 +1,7 @@
 // Clip over any family's scene (`sceneContract.js`): a GLB, an STL or 3MF, a robot. One plane
 // along an axis, from the view's `clip`, cuts every surface the scene drew and caps the cut where
 // it passes through a closed surface (`sectionCaps.js`, the stencil fill a STEP's cut wears). The
-// viewer's viewport (`@text-to-cad/ui` renderers/kit) and the parity page's headless stage
+// viewer's viewport (`@cad/ui` renderers/kit) and the parity page's headless stage
 // (`common/renderMeshScene.js`) both clip through this, so a cut cannot differ between them.
 //
 // The plane is placed in the box the camera frames (the scene's rest placement), so a pose or an

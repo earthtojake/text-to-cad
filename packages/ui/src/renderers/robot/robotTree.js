@@ -1,6 +1,6 @@
 /**
  * The Components tab's tree: a robot's kinematic tree, as plain data, from the payload
- * cadgen resolved (`cadgen.robot_payload`: its `links` and `joints` as the description
+ * cadgen resolved (`cad_server.robot_payload`: its `links` and `joints` as the description
  * writes them, and its `root`).
  *
  * Links are the nodes. A child link sits under its parent link through the joint

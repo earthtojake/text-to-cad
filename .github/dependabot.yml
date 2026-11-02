@@ -2,9 +2,10 @@
 # noise is one review, not twenty. Majors stay individual. Every PR carries the
 # `dependencies` label, which .github/release.yml files under Maintenance.
 #
-# packages/cadgen's pins are the Python floor a released wheel is built against, so
-# they are reviewed like any other change; @text-to-cad/core/viewer/docs are the three npm
-# trees CI installs (.github/actions/setup-deps).
+# The Python packages' pins (the library's, packages/cad, the server's,
+# packages/cad-server; the shim, packages/cad-mcp, has none) are the floor a
+# released wheel is built against, so they are reviewed like any other change;
+# @cad/core/viewer/docs are the three npm trees CI installs (.github/actions/setup-deps).
 version: 2
 updates:
   # `/` covers .github/workflows plus a root action.yml -- it does NOT reach a
@@ -64,7 +65,9 @@ updates:
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
-    directory: /packages/cadgen
+    directories:
+      - /packages/cad
+      - /packages/cad-server
     schedule:
       interval: weekly
     labels:
@@ -88,7 +91,7 @@ updates:
     # without OCP 8 ever being installed, then takes effect silently the day
     # build123d widens too.
     #
-    # build123d is capped for the reason pyproject.toml gives at length -- cadgen
+    # build123d is capped for the reason the library's pyproject.toml gives at length -- the library
     # patches its set de-duplication, `Vertex.__hash__` and `Compound.__init__`,
     # and a release that moves those stops applying the patch rather than
     # failing. 0.11 -> 0.12 is a semver MINOR, so without this it would arrive

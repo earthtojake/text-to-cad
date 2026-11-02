@@ -14,7 +14,7 @@ scripts, inputs and deliverables go.
 
 ## Layout
 
-cadgen infers nothing from folder names, so any layout works, and an existing
+text-to-cad infers nothing from folder names, so any layout works, and an existing
 project's layout is the one to extend. In a larger workspace, CAD work usually lives in
 its existing `models/`, `cad/` or `hardware/` area. For a new project of several models
 this is a good default; a one-off part can be one script in a flat folder.
@@ -36,7 +36,7 @@ this is a good default; a one-off part can be one script in a flat folder.
   vendor/                 # vendor STEP files, each with the xbf converted from it
     motor.step
     motor.xbf
-  STEP/  STL/  GLB/  3MF/  DXF/   # files written on request, by cadgen export or exports.py
+  STEP/  STL/  GLB/  3MF/  DXF/   # files written on request, by cad export or exports.py
   tmp/                    # ignored scratch: checks, snapshots
 ```
 
@@ -52,7 +52,7 @@ One part, `src/plate.py`:
 
 ```python
 import build123d as bd
-from cadgen import model
+from cad import model
 
 WIDTH = 60.0
 DEPTH = 40.0
@@ -71,7 +71,7 @@ if __name__ == "__main__":
 ```
 
 ```bash
-python src/plate.py
+cad run src/plate.py
 ```
 
 and a `.gitignore` beside `src/`:
@@ -91,44 +91,45 @@ A second run replays the model and changes nothing. Then a part with configurati
 `src/assembly.py`, as in [models](model-contract.md#assemblies-call-their-parts):
 
 ```bash
-python src/assembly.py
-cadgen inspect "$ID"
+cad run src/assembly.py
+cad inspect "$ID"
 ```
 
 Running the root builds its children in the same run, each keeping its own document;
-running a child alone leaves the root as it was until the root runs. `cadgen inspect`
+running a child alone leaves the root as it was until the root runs. `cad inspect`
 prints what the root's document holds (its parts, bounds, joints, couplings, states and motions) and
 what it was built from.
 
 | Need | Add |
 | --- | --- |
-| A file of a model | `cadgen export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
+| A file of a model | `cad export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
 | A variant | Another `@model` calling the part's helper with other values. |
 | Shared factory or hole pattern | A plain helper under `src/lib/`, with `src/lib/__init__.py`. |
 | Left/right geometry | Mirror inline, or separate models for independent files and reuse. |
 | Subassembly | A model that calls its child models. |
-| Motion | build123d joints in the assembly's body, then `cadgen.ap242`. See [kinematics](kinematics.md). |
-| An explode or a showcase | `cadgen.gltf`'s `animation()`. See [animation](animation.md). |
+| Motion | build123d joints in the assembly's body, then `cad.ap242`. See [kinematics](kinematics.md). |
+| An explode or a showcase | `cad.gltf`'s `animation()`. See [animation](animation.md). |
 | Materials | `from bd_materials import metals`; `part.material = metals.aluminum()`. See [colour and materials](build123d-modeling.md#colour-and-materials). |
-| 2D drawing | A separate drawing script using `$dxf`. |
-| Vendor CAD | The vendor STEP under `vendor/`, converted once with `cadgen export vendor/motor.step vendor/motor.xbf` and read with `read_xbf` (an anchored path). |
+| 2D drawing | A separate drawing script, beside the models it projects. |
+| Vendor CAD | The vendor STEP under `vendor/`, converted once with `cad export vendor/motor.step vendor/motor.xbf` and read with `read_xbf` (an anchored path). |
 
 ## Imports and shared code
 
-Models use ordinary Python imports. A script's folder is first on the module search
-path, so flat scripts import their siblings and `lib/` directly. A script inside a
+Models use ordinary Python imports. A script's folder is on the module search path,
+so flat scripts import their siblings and `lib/` directly. A script inside a
 package (`src/chassis/` holds an `__init__.py`) is that package's module: its relative
 imports work, and the folder above its topmost package is on the path too, so
 `src/chassis/frame.py` imports `lib.holes` as well. Both run alike:
 
 ```bash
-python src/chassis/frame.py
-cd src && python -m chassis.frame
+cad run src/chassis/frame.py
+cd src && cad run -m chassis.frame
 ```
 
-Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src python
+Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad run
 src/chassis/frame.py`), a relative entry read from the folder the command runs in, as
-Python reads it; cadgen adds no paths of its own. A module and a same-named
+Python reads it; the only path a run adds is the script's own folder, last, so nothing beside the
+script shadows an installed package. A module and a same-named
 model function shadow each other on import; an alias separates them.
 
 What a run re-runs follows what the code reaches: an edit to a `lib/` helper re-runs the
@@ -139,7 +140,7 @@ that read it, and a comment re-runs nothing
 ## Assemblies and model boundaries
 
 A parent calls its child models inside its body, and each child builds in the same run:
-**running the root is the whole rebuild** (`python src/assembly.py`). Running a child
+**running the root is the whole rebuild** (`cad run src/assembly.py`). Running a child
 alone rebuilds the child and leaves the assemblies that use it as they were.
 
 A child model has its own document and page; a helper runs within its caller and is no
@@ -168,6 +169,6 @@ Every exported file is reproducible from the code and its inputs, so the project
 unless the person asks for the files in the repository.
 
 Vendor STEP files are irreplaceable inputs: commit them. The xbf converted from one is
-made again by one `cadgen export`. A file that starts with `version https://git-lfs` is a
+made again by one `cad export`. A file that starts with `version https://git-lfs` is a
 Git LFS pointer, not CAD data: `git lfs checkout` restores objects already in the local
 cache, and missing ones need fetching from the project's LFS remote.

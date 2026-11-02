@@ -17,7 +17,7 @@ from unittest import mock
 
 from tests.python.support.paths import REPO_ROOT, add_repo_path
 
-add_repo_path("packages/cadgen/src")
+add_repo_path("packages/cad/src")
 
 spec = importlib.util.spec_from_file_location("isolated_unittest_runner", REPO_ROOT / "scripts/test/unittest_files.py")
 runner = importlib.util.module_from_spec(spec)
@@ -32,8 +32,8 @@ def _stand_in(calls: list, *, child_error: Exception | None = None, leaves_a_dae
         stopping = argv[1:3] == ["-P", "-c"]
         if not stopping:
             if leaves_a_daemon:
-                Path(env["CADGEN_ENGINE_DIR"]).mkdir(parents=True, exist_ok=True)
-                Path(env["CADGEN_ENGINE_DIR"], "0123456789ab.door").write_text("", encoding="utf-8")
+                Path(env["CAD_ENGINE_DIR"]).mkdir(parents=True, exist_ok=True)
+                Path(env["CAD_ENGINE_DIR"], "0123456789ab.door").write_text("", encoding="utf-8")
             if child_error is not None:
                 raise child_error
         return subprocess.CompletedProcess(argv, 0, "", "")
@@ -52,19 +52,19 @@ class PythonTestRunnerIsolation(unittest.TestCase):
 
     def test_each_file_has_an_engine_directory_of_its_own_never_the_developers(self):
         calls = []
-        with mock.patch.dict(os.environ, {"CADGEN_ENGINE_DIR": "developer-engine"}), \
+        with mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": "developer-engine"}), \
                 mock.patch.object(runner.subprocess, "run", side_effect=_stand_in(calls)), \
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["first.py", "second.py"], str(REPO_ROOT), 2, False)
-            self.assertEqual(os.environ["CADGEN_ENGINE_DIR"], "developer-engine")
+            self.assertEqual(os.environ["CAD_ENGINE_DIR"], "developer-engine")
         self.assertEqual(len(calls), 2, "no daemon was left, so none was stopped")
-        engines = [env["CADGEN_ENGINE_DIR"] for _argv, env in calls]
+        engines = [env["CAD_ENGINE_DIR"] for _argv, env in calls]
         self.assertNotIn("developer-engine", engines)
         self.assertNotEqual(engines[0], engines[1])
         self.assertEqual(Path(engines[0]).parent, Path(engines[1]).parent)
         self.assertFalse(Path(engines[0]).parent.exists(), "the run's folder goes with it")
         # Never the developer's 0.7 store, registry of documents, installations or ``cadgen`` command.
-        for name in ("CADGEN_CACHE_DIR", "CADGEN_STATE_DIR", "CADGEN_LAUNCHER_DIR"):
+        for name in ("CAD_CACHE_DIR", "CAD_STATE_DIR", "CAD_LAUNCHER_DIR"):
             folders = [env[name] for _argv, env in calls]
             self.assertEqual([Path(folder).parent for folder in folders], [Path(engine).parent for engine in engines])
             self.assertNotEqual(folders[0], folders[1])
@@ -75,8 +75,8 @@ class PythonTestRunnerIsolation(unittest.TestCase):
                 mock.patch.object(runner.sys, "stderr", io.StringIO()):
             runner.run_files(["leaves.py"], str(REPO_ROOT), 1, False)
         (_file_argv, file_env), (stop_argv, stop_env) = calls
-        self.assertEqual(stop_argv[1:], ["-P", "-c", "from cadgen.engine import api; api.stop()"])
-        self.assertEqual(stop_env["CADGEN_ENGINE_DIR"], file_env["CADGEN_ENGINE_DIR"])
+        self.assertEqual(stop_argv[1:], ["-P", "-c", "from cad.engine import api; api.stop()"])
+        self.assertEqual(stop_env["CAD_ENGINE_DIR"], file_env["CAD_ENGINE_DIR"])
 
     def test_a_failed_child_still_stops_its_daemon(self):
         calls = []
@@ -87,8 +87,8 @@ class PythonTestRunnerIsolation(unittest.TestCase):
                 runner.run_files(["failed.py"], str(REPO_ROOT), 1, False)
         (_file_argv, file_env), (stop_argv, stop_env) = calls
         self.assertIn("api.stop()", stop_argv[-1])
-        self.assertEqual(stop_env["CADGEN_ENGINE_DIR"], file_env["CADGEN_ENGINE_DIR"])
-        self.assertFalse(Path(file_env["CADGEN_ENGINE_DIR"]).exists())
+        self.assertEqual(stop_env["CAD_ENGINE_DIR"], file_env["CAD_ENGINE_DIR"])
+        self.assertFalse(Path(file_env["CAD_ENGINE_DIR"]).exists())
 
     def test_even_one_file_at_one_job_runs_in_an_interpreter_of_its_own(self):
         ran = ("only.py", 0, "Ran 0 tests in 0.000s\n\nOK\n", 0.0)
@@ -97,7 +97,7 @@ class PythonTestRunnerIsolation(unittest.TestCase):
             self.assertEqual(runner.main(["--top", str(REPO_ROOT), "only.py"]), 0)
         (path, top, verbose, env), _kwargs = one.call_args
         self.assertEqual((path, top, verbose), ("only.py", os.path.realpath(REPO_ROOT), False))
-        self.assertIn("CADGEN_ENGINE_DIR", env)
+        self.assertIn("CAD_ENGINE_DIR", env)
 
 
 class DefaultEngineGuard(unittest.TestCase):
@@ -106,7 +106,7 @@ class DefaultEngineGuard(unittest.TestCase):
 
     def run_with(self, answering: list[bool]) -> tuple[int, str, list]:
         stopped: list = []
-        door = "/default/cadgen-engine/0123456789ab.door"
+        door = "/default/cad-engine/engine.door"
         ran = lambda path, top, verbose, env, places: (path, 0, "Ran 1 test in 0.001s\n\nOK\n", 0.0)  # noqa: E731
         said = io.StringIO()
         with mock.patch.object(runner, "default_engine_door", return_value=door), \
@@ -121,8 +121,8 @@ class DefaultEngineGuard(unittest.TestCase):
     def test_an_engine_a_file_left_in_the_default_folder_is_stopped_and_fails_the_run(self):
         code, said, stopped = self.run_with([False, True])  # none before the run, one after the file
         self.assertEqual(code, 1)
-        self.assertIn("/default/cadgen-engine/0123456789ab.door, after leaves.py", said)
-        self.assertEqual(stopped, [("from cadgen.engine import api; api.stop()", {"CADGEN_ENGINE_DIR": "/default/cadgen-engine"})])
+        self.assertIn("/default/cad-engine/engine.door, after leaves.py", said)
+        self.assertEqual(stopped, [("from cad.engine import api; api.stop()", {"CAD_ENGINE_DIR": "/default/cad-engine"})])
 
     def test_the_developer_s_own_engine_running_there_before_the_run_is_left_alone(self):
         code, said, stopped = self.run_with([True])
@@ -142,7 +142,7 @@ class PersonStateGuard(unittest.TestCase):
                 "import os, pathlib, unittest\n\n\n"
                 "class Leaks(unittest.TestCase):\n"
                 "    def test_keeps_to_its_own_state(self):\n"
-                "        pathlib.Path(os.environ['CADGEN_STATE_DIR'], 'documents', 'mine').mkdir(parents=True)\n\n"
+                "        pathlib.Path(os.environ['CAD_STATE_DIR'], 'documents', 'mine').mkdir(parents=True)\n\n"
                 "    def test_registers_a_document_in_the_developer_s(self):\n"
                 f"        pathlib.Path({str(person)!r}, 'documents', '0123abcd').mkdir(parents=True)\n",
                 encoding="utf-8",
@@ -315,7 +315,7 @@ class HangGuard(unittest.TestCase):
         from tests.python.support import engine_daemon
 
         stub = ("import os, sys\n"
-                "path = os.path.join(os.environ['CADGEN_TEST_JOURNAL'], f'process-{os.getpid()}.stacks.txt')\n"
+                "path = os.path.join(os.environ['CAD_TEST_JOURNAL'], f'process-{os.getpid()}.stacks.txt')\n"
                 "with open(path, 'a', encoding='utf-8') as handle:\n"
                 "    handle.write('Fatal Python error: Segmentation fault\\n  File \"stub.py\", line 7 in load\\n')\n"
                 "sys.exit(1)\n")
@@ -348,7 +348,7 @@ class HangGuard(unittest.TestCase):
         env = engine_daemon.watched(dict(os.environ), lambda *call: cleanups.append(call))
         try:
             # Its argv names the module as the distribution starts it; it imports nothing of it.
-            done = engine_daemon.run([sys.executable, "-c", "import sys", "cadgen._internal.engine_daemon"], env=env)
+            done = engine_daemon.run([sys.executable, "-c", "import sys", "cad_server._internal.engine_daemon"], env=env)
             self.assertEqual(done.returncode, 0, done.stderr)
             self.assertEqual([role for role, _pid in engine_daemon._processes(env)], ["daemon"])
         finally:

@@ -23,7 +23,7 @@ skips such an edge (and fails when none is left); a chamfer fails on it. Shape
 equality compares native handles, so `edge in solid.edges()` is true only for the
 solid's own edge.
 
-A face or edge a person picked is named by a ref: `cadgen inspect` says what it is
+A face or edge a person picked is named by a ref: `cad inspect` says what it is
 and which code made it, and the body picks the same element with build123d's
 selectors ([a picked element in a model's body](inspection-and-validation.md#a-picked-element-in-a-models-body)).
 
@@ -60,7 +60,7 @@ after its material.
 
 ```python
 from bd_materials import metals
-from cadgen import paint
+from cad import paint
 
 body.material = metals.aluminum()
 body.material.pbr = body.material.pbr.override(roughness=0.35, anisotropy=0.3)
@@ -74,8 +74,8 @@ paint(body, body.faces().filter_by(bd.Axis.Z)[-1:], polished)
 A project's material is a native `FinishedMaterial`, with physics in `.material` and
 appearance in `.pbr`. For custom physics, use the native `custom_metal` and other family
 factories. Density is a single value in kg/m³; mechanical properties are native ranges,
-with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cadgen inspect` reports kilograms.
-There is no cadgen material class, catalogue or adapter.
+with modulus in GPa and strength in MPa. `shape.mass()` defaults to grams; `cad inspect` reports kilograms.
+There is no text-to-cad material class, catalogue or adapter.
 
 `PbrProperties.override` returns an edited look. Its controls include `metalness`,
 `roughness`, `ior`, `anisotropy`, `anisotropy_rotation`, `transmission`,
@@ -109,13 +109,13 @@ placed = bd.Location((5, 0, 0)) * rotated  # retains the rotation
 
 In build123d 0.11.1, a moved assembly compound's `intersect()` can traverse
 unmoved `.children` although `.wrapped` carries the placement: extract the placed
-`.solids()` first. `cadgen.geometry.overlap_volume` takes individual solids and
+`.solids()` first. `cad.geometry.overlap_volume` takes individual solids and
 handles placement itself.
 
 ## Kernel pitfalls
 
 - **Build with build123d's constructions** (`bd.Cylinder`, not OCCT's
-  `BRepPrimAPI_MakeCylinder`). The engine keys and names build123d's operations, and
+  `BRepPrimAPI_MakeCylinder`). The server keys and names build123d's operations, and
   of the OCCT makers a model drives itself only the transforms, `BRepBuilderAPI_Copy`,
   `ShapeFix_Shape`, `ShapeUpgrade_UnifySameDomain` and `BRepFilletAPI_MakeFillet`; a
   body built with another cannot be replayed. Where build123d has no construction for
@@ -154,6 +154,6 @@ handles placement itself.
 Topology validity does not prove positive orientation, the requested shape, or
 suitability for a later Boolean ([inspection](inspection-and-validation.md#geometry-diagnostics)).
 A validity gate inside a model body (a retry ladder that keeps a fillet only when
-the result is sound) uses `shape.is_valid` and `cadgen.geometry.is_sound`; each
+the result is sound) uses `shape.is_valid` and `cad.geometry.is_sound`; each
 check costs kernel time when its body runs. A periodic cylinder or revolved face has
 a seam edge that appears in CAD linework; it is not a crack.

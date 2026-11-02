@@ -1,4 +1,4 @@
-import { normalizePath } from '@text-to-cad/ui/cad-viewer';
+import { normalizePath } from '@cad/ui/cad-viewer';
 import type { LiveController, LiveRegistry } from './live';
 import { TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 

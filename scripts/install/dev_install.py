@@ -2,12 +2,12 @@
 """Install this checkout into an agent app, to test the plugin locally.
 
 Each host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills, and
-CAD's server run by this checkout's .venv (`cadgen mcp`), serving a copy of this checkout's
-apps/mcp build. That .venv is registered as this install's version (<version>-dev.<time>), the
-skills run `cadgen +<version>-dev.<time>` and the `cadgen` command is written (~/.local/bin/cadgen), so
-the server and the agent's scripts share this checkout's installation and warm daemon -- and every
-worktree has its own. With --wheel, the checkout's wheel is built as the release builds it, the
-server runs it through uvx and that installation is the one registered: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
+CAD's server run by this checkout's .venv (`cad-mcp`), serving a copy of this checkout's
+apps/mcp build. That .venv is registered as this install's version (<version>-dev.<time>) and
+made the current installation, and the `cad` command is written (~/.local/bin/cad), which the
+skills run, so the server and the agent's scripts share this checkout's installation and warm
+daemon -- and every worktree has its own. With --wheel, the checkout's wheels are built as the release builds them, the
+server runs them through uvx and that installation is the one registered: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
 gets that server alone. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
 install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
@@ -15,7 +15,7 @@ One copy per app: a host that already loads another copy (the published plugin, 
 another host, or this repository's skills installed loose) is refused, because two copies means
 every skill twice. Cursor and Grok Build both load the plugins Claude Code installed, so `claude`
 covers all three. How each app is read -- its commands, its config files, every copy of the plugin
-it loads -- is cadgen's own (cadgen/_internal/providers.py, loaded by its path), which `cadgen
+it loads -- is the server's own (cad_server/_internal/providers.py, loaded by its path), which `cad
 setup` reads the apps with too.
 
     scripts/install/dev_install.py claude              # Claude Code (and so Cursor and Grok Build)
@@ -24,7 +24,7 @@ setup` reads the apps with too.
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
     scripts/install/dev_install.py gemini              # Gemini CLI
     scripts/install/dev_install.py claude-desktop      # Claude Desktop's chat: the server alone
-    scripts/install/dev_install.py <host> --wheel        # this checkout's wheel, run through uvx
+    scripts/install/dev_install.py <host> --wheel        # this checkout's wheels, run through uvx
     scripts/install/dev_install.py <host> --uninstall
 
 The page is a copy taken at install, as an installed wheel serves its own: a page that changed
@@ -33,11 +33,11 @@ install again to see a page edit, and restart the app after a Python change -- a
 keeps the code it started with.
 
 Environment:
-    CADGEN_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
+    CAD_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
     CODEX_CLI               the codex CLI (default: the newer of `codex` on PATH and the Codex app's)
     GEMINI_CLI              the gemini CLI (default: `gemini` on PATH)
     CLAUDE_DESKTOP_CONFIG   Claude Desktop's config file (default: its own, per platform)
-    CADGEN_LAUNCHER_DIR     where the `cadgen` command goes (default: ~/.local/bin)
+    CAD_LAUNCHER_DIR     where the `cad` command goes (default: ~/.local/bin)
 """
 
 from __future__ import annotations
@@ -56,10 +56,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _shared_providers():
-    """cadgen's agent-app providers (``cadgen._internal.providers``), loaded by its path: this script
-    runs on any Python 3 and must not import cadgen, whose floor is newer, and that module imports
-    nothing of cadgen, so both installers read the apps one way."""
-    path = REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_internal" / "providers.py"
+    """The server's agent-app providers (``cad_server._internal.providers``), loaded by its path: this script
+    runs on any Python 3 and must not import the packages, whose floor is newer, and that module imports
+    nothing of them, so both installers read the apps one way."""
+    path = REPO_ROOT / "packages" / "cad-server" / "src" / "cad_server" / "_internal" / "providers.py"
     spec = importlib.util.spec_from_file_location("text_to_cad_providers", path)
     module = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = module  # its dataclasses look their module up by name
@@ -68,10 +68,10 @@ def _shared_providers():
 
 
 providers = _shared_providers()
-# cadgen._internal.launch.LAUNCHER, repeated because this script runs on any Python 3 and must
-# not import cadgen, whose floor is newer; test_dev_install holds the two equal.
-LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
-# cadgen.updates.INSTALL and INSTALL_WINDOWS, the install command, repeated for the same reason: a
+# cad_server._internal.launch.LAUNCHER, repeated because this script runs on any Python 3 and must
+# not import the packages, whose floor is newer; test_dev_install holds the two equal.
+LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.14", "--from")
+# cad_server.updates.INSTALL and INSTALL_WINDOWS, the install command, repeated for the same reason: a
 # development install's skills never send an agent to the release's installer, which would put the
 # published release over this checkout's engine.
 INSTALL_COMMANDS = ("curl -fsSL https://texttocad.dev/install.sh | sh", "irm https://www.texttocad.dev/install.ps1 | iex")
@@ -82,7 +82,7 @@ DESKTOP_SERVER = "cad-dev"
 CURSOR_PLUGINS = providers.cursor_plugins()
 # Written into the Cursor plugin folder, so --uninstall and a reinstall only ever touch our own.
 OWNER_MARK = providers.DEV_MARK
-# Every SKILL.md of this repository's says where it is maintained; a loose skill saying so is ours.
+# Every SKILL.md of this repository's names it; a loose skill naming it is ours.
 PROVENANCE = providers.PROVENANCE
 IGNORED = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 # A Codex thread waits this long for the server's first start, which may build the page's data.
@@ -104,14 +104,14 @@ def dev_root(host: str, root: Path = REPO_ROOT) -> Path:
 
 # A development install's channel, in its server's environment (cadgen's _internal/channel.py): its
 # analytics are told apart, and it is never offered an update.
-CHANNEL = {"CADGEN_INSTALL_CHANNEL": "dev"}
+CHANNEL = {"CAD_INSTALL_CHANNEL": "dev"}
 
 
 def server_entry(host: str, python: str, page_dir: Path, version: str | None = None) -> dict:
     """CAD's server for a development install: this checkout's interpreter, this install's page, and
     the version it registers as at each start, `version` (cadgen's _internal/installations.py; a
     source tree registers none unless named)."""
-    entry = {"command": python, "args": ["-m", "cadgen.cli", "mcp"], "env": {**CHANNEL, "CADGEN_MCP_APP_DIR": str(page_dir)}}
+    entry = {"command": python, "args": ["-m", "cad_mcp"], "env": {**CHANNEL, "CAD_MCP_APP_DIR": str(page_dir)}}
     if version:
         entry["env"][VERSION_ENV] = version
     if host == "codex":
@@ -121,31 +121,27 @@ def server_entry(host: str, python: str, page_dir: Path, version: str | None = N
 
 # The variable that names the version a development install registers as (cadgen's
 # _internal/installations.py NAME_ENV).
-VERSION_ENV = "CADGEN_INSTALLATION_VERSION"
-
-
-def launch(tool: str, version: str) -> str:
-    """The uvx command for ``tool`` (``cadgen`` or ``python``), as the release stamps it in the skills."""
-    return " ".join((*LAUNCHER, f"cadgen=={version}", tool))
+VERSION_ENV = "CAD_INSTALLATION_VERSION"
 
 
 def launcher_dir() -> str:
-    """The `cadgen` command's folder as a skill names it: ``~/.local/bin`` unless CADGEN_LAUNCHER_DIR moves it."""
-    return os.environ.get("CADGEN_LAUNCHER_DIR") or "~/.local/bin"
+    """The `cad` command's folder as a skill names it: ``~/.local/bin`` unless CAD_LAUNCHER_DIR moves it."""
+    return os.environ.get("CAD_LAUNCHER_DIR") or "~/.local/bin"
 
 
-# Registers this install and writes the `cadgen` command through its own cadgen (this script cannot
-# import it), printing the record's file.
+# Registers this install, makes it the device's current installation -- the one whose engine every
+# client starts, so the apps run this checkout -- and writes the `cad` command, through its own
+# cadgen (this script cannot import it), printing the record's file.
 REGISTER = ("import sys\n"
-            "from cadgen._internal import installations\n"
-            "(record, _, failed), (_, _, unwritten) = installations.setup(sys.argv[1])\n"
+            "from cad_server._internal import installations\n"
+            "(record, _, failed), (_, _, unwritten) = installations.setup(sys.argv[1], make_current=True)\n"
             "print(record)\n"
             "sys.exit('; '.join(error for error in (failed, unwritten) if error) or 0)\n")
 
 
 def register(host: str, python: list[str], version: str) -> None:
     """Register this install as `version` by `python` (its interpreter, or the uvx command that runs
-    the wheel's), write the `cadgen` command, and take out the records of this host's installs
+    the wheel's), write the `cad` command, and take out the records of this host's installs
     before it that are over a day old: a Codex thread started earlier may still run its own."""
     record = dev_root(host) / "installations.json"
     try:
@@ -169,7 +165,7 @@ def _older(path: str, than: float) -> bool:
 
 
 def unregister(host: str) -> None:
-    """Take out the record of every install of this host's (the `cadgen` command stays: it is every
+    """Take out the record of every install of this host's (the `cad` command stays: it is every
     installation's)."""
     try:
         recorded = json.loads((dev_root(host) / "installations.json").read_text(encoding="utf-8"))
@@ -179,21 +175,14 @@ def unregister(host: str) -> None:
         Path(path).unlink(missing_ok=True)
 
 
-def skill_rewrites(released: str, version: str, python: str | None = None, wheel: Path | None = None) -> dict:
+def skill_rewrites() -> dict:
     """What a development install changes in its skills' text, ``{release's: this install's}``: the
-    version they run (``cadgen +<version>``, ``cadgen.cmd +<version>``) is this install's, the `cadgen`
-    command's folder is CADGEN_LAUNCHER_DIR's, the install command becomes the checkout's interpreter
-    (the .venv shape) or the wheel through uvx (--wheel), told that version so its `cadgen doctor`
-    registers it (Windows shells take no such prefix), and the one-line installer
-    (``INSTALL_COMMANDS``) becomes a note that this is a development install."""
-    named = "" if os.name == "nt" else f"{VERSION_ENV}={version} "
-    command = " ".join((*LAUNCHER, str(wheel), "cadgen")) if wheel is not None else f"{python} -m cadgen.cli"
-    rewrites = {launch("cadgen", released): f"{named}{command}", f"cadgen +{released}": f"cadgen +{version}",
-                f"cadgen.cmd +{released}": f"cadgen.cmd +{version}",
-                f"it says {released} is not installed": f"it says {version} is not installed"}
+    `cad` command's folder is CAD_LAUNCHER_DIR's, and the one-line installer (``INSTALL_COMMANDS``)
+    becomes a note that this is a development install. The skills name no version: the `cad` command
+    runs the current installation, which this install is made."""
     note = f"This is a development install of {REPO_ROOT}; do not run the install command here"
     # The macOS and Linux command stands alone in a shell block: there the note is a comment.
-    rewrites.update({INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note})
+    rewrites = {INSTALL_COMMANDS[0]: f"# {note}", INSTALL_COMMANDS[1]: note}
     if launcher_dir() != "~/.local/bin":
         rewrites["~/.local/bin"] = launcher_dir()
     return rewrites
@@ -203,24 +192,19 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
              rewrites: dict | None = None) -> dict:
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
-    The skills are copied with ``rewrites`` applied (:func:`skill_rewrites`: the runtime the server
-    uses), the host's manifest takes `version` (each install its own, so a host that caches by
+    The skills are copied with ``rewrites`` applied to each SKILL.md (:func:`skill_rewrites`), the
+    host's manifest takes `version` (each install its own, so a host that caches by
     version takes this build) and names `server` alone: in a server config beside it, or, for
     Gemini, which keeps servers in the manifest itself, inline.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
-    # A skill's main file and its setup guide carry the runtime; a migration reference may name an
-    # old release on purpose, and is copied as it is.
     for skill in plugin_dir.glob("skills/*/SKILL.md"):
-        for document in (skill, skill.parent / "references" / "setup.md"):
-            if not document.is_file():
-                continue
-            text = document.read_text(encoding="utf-8")
-            for released, ours in (rewrites or {}).items():
-                text = text.replace(released, ours)
-            document.write_text(text, encoding="utf-8")
+        text = skill.read_text(encoding="utf-8")
+        for released, ours in (rewrites or {}).items():
+            text = text.replace(released, ours)
+        skill.write_text(text, encoding="utf-8")
     if host == "gemini":
         manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
         manifest["version"] = version
@@ -283,16 +267,17 @@ def codex_cli() -> str:
 
 def interpreter() -> str:
     default = REPO_ROOT / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
-    python = os.environ.get("CADGEN_PYTHON") or str(default)
+    python = os.environ.get("CAD_PYTHON") or str(default)
     check = ("import pathlib, sys\n"
-             "import cadgen.mcp.server  # the server must import\n"
-             "import cadgen\n"
+             "import cad_server.mcp.server  # the server must import\n"
+             "import cad, cad_mcp\n"
              "root = pathlib.Path(sys.argv[1]).resolve()\n"
-             "if root not in pathlib.Path(cadgen.__file__).resolve().parents:\n"
-             "    sys.exit(f'{sys.executable} imports cadgen from {cadgen.__file__}, not from {root}')\n")
+             "for package in (cad, cad_server, cad_mcp):\n"
+             "    if root not in pathlib.Path(package.__file__).resolve().parents:\n"
+             "        sys.exit(f'{sys.executable} imports {package.__name__} from {package.__file__}, not from {root}')\n")
     if subprocess.run([python, "-c", check, str(REPO_ROOT)]).returncode != 0:
         raise Refused(f"{python} cannot run this checkout's server; install requirements-dev.txt into .venv "
-                      "or set CADGEN_PYTHON.")
+                      "or set CAD_PYTHON.")
     return python
 
 
@@ -300,13 +285,14 @@ def copy_page(host: str, build: bool, version: str, prune: bool = True) -> Path:
     """This install's copy of the built page. Servers still running an earlier install read their own."""
     if build:
         subprocess.run(["npm", "run", "build:mcp"], cwd=REPO_ROOT, check=True)
-    page = REPO_ROOT / "apps" / "mcp" / "dist" / "index.html"
-    if not page.is_file():
+    built = [REPO_ROOT / "apps" / "mcp" / "dist" / name for name in ("shell.html", "app.js")]
+    if not all(page.is_file() for page in built):
         raise Refused("apps/mcp is not built; run without --no-build.")
     pages = dev_root(host) / "app"
     page_dir = pages / version
     page_dir.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(page, page_dir / "index.html")
+    for page in built:  # the shell a host keeps, and the app it loads (cadgen's mcp/ui.py)
+        shutil.copy2(page, page_dir / page.name)
     if prune:
         stale = time.time() - PAGE_COPY_DAYS * 86400
         for old in pages.iterdir():
@@ -315,8 +301,16 @@ def copy_page(host: str, build: bool, version: str, prune: bool = True) -> Path:
     return page_dir
 
 
+def uvx_from(wheel: Path) -> list[str]:
+    """``uvx ... --from`` the server's ``wheel``, with the library's wheel built beside it: the uvx
+    command an install by wheel runs, up to the command it runs."""
+    library = sorted(wheel.parent.glob("cad-[0-9]*.whl"))
+    return [*LAUNCHER[:-1], *(["--with", str(library[0])] if library else []), LAUNCHER[-1], str(wheel)]
+
+
 def build_wheel(host: str, bundle: bool) -> Path:
-    """This checkout's wheel, built as the release builds it, at a path of its own per build.
+    """This checkout's wheels -- the library's, the server's and the shim's -- built as the release
+    builds them, at a path of their own per build: the server's.
 
     uv keeps one installation per requirement, so a wheel at a new path is a new installation --
     and a warm daemon of its own -- never the previous build's, nor another worktree's.
@@ -326,10 +320,11 @@ def build_wheel(host: str, bundle: bool) -> Path:
         subprocess.run([str(REPO_ROOT / "scripts" / "bundle" / "bundle.sh")], cwd=REPO_ROOT, check=True)
     wheels = dev_root(host) / "wheels"
     out = wheels / time.strftime("%Y%m%d%H%M%S")
-    run(uv, "build", "--wheel", "--out-dir", str(out), str(REPO_ROOT / "packages" / "cadgen"))
-    built = sorted(out.glob("cadgen-*.whl"))
-    if not built:
-        raise Refused(f"uv build wrote no cadgen wheel to {out}.")
+    for project in ("cad", "cad-server", "cad-mcp"):
+        run(uv, "build", "--wheel", "--out-dir", str(out), str(REPO_ROOT / "packages" / project))
+    built = sorted(out.glob("cad_server-*.whl"))
+    if not built or not list(out.glob("cad-[0-9]*.whl")):
+        raise Refused(f"uv build wrote no server or library wheel to {out}.")
     # A server already running keeps the installation it started from; only new starts read the
     # wheel, and they read this one.
     for old in wheels.iterdir():
@@ -341,28 +336,30 @@ def build_wheel(host: str, bundle: bool) -> Path:
 def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, dict, Path | None]:
     """``(server, skill rewrites, page copy)`` for this install: the .venv, or with --wheel the wheel.
 
-    Either way the installation is registered as `version` and the `cadgen` command written before
+    Either way the installation is registered as `version` and the `cad` command written before
     the app restarts, by that installation's own interpreter; its server registers it again at each
     start.
     """
-    released = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
     if args.wheel:
         wheel = build_wheel(host, args.build)
-        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(wheel), "cadgen", "mcp"], "env": dict(CHANNEL)}
+        shim = sorted(wheel.parent.glob("cad_mcp-*.whl"))
+        if not shim:
+            raise Refused(f"no shim wheel beside {wheel}.")
+        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(shim[0]), "cad-mcp"], "env": dict(CHANNEL)}
         if host == "codex":
             server["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
         if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
             return server, {}, None
         server["env"][VERSION_ENV] = version
-        register(host, [*LAUNCHER, str(wheel), "python"], version)
-        return server, skill_rewrites(released, version, wheel=wheel), None
+        register(host, [*uvx_from(wheel), "python"], version)
+        return server, skill_rewrites(), None
     python = interpreter()
     # Codex keeps an earlier install's server running until it restarts, so its page stays too.
     page_dir = copy_page(host, args.build, version, prune=host != "codex")
     if host not in PLUGIN_HOSTS:  # Claude Desktop's chat runs no skills
         return server_entry(host, python, page_dir), {}, page_dir
     register(host, [python], version)
-    return server_entry(host, python, page_dir, version), skill_rewrites(released, version, python=python), page_dir
+    return server_entry(host, python, page_dir, version), skill_rewrites(), page_dir
 
 
 def dev_version() -> str:
@@ -578,7 +575,7 @@ def install_claude_desktop(args: argparse.Namespace) -> str:
         shutil.rmtree(dev_root("claude-desktop"), ignore_errors=True)
         return f"Removed {DESKTOP_SERVER} from {path}. Restart Claude Desktop to drop it."
     others = [key for key, entry in servers.items()
-              if key != DESKTOP_SERVER and "cadgen" in " ".join([entry.get("command", ""), *entry.get("args", [])])]
+              if key != DESKTOP_SERVER and providers.runs_cadgen(entry)]
     if others:
         raise Refused(f"{path} already runs CAD's server as {', '.join(others)}; remove that entry first: "
                       "two servers means every tool twice.")

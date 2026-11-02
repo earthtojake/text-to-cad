@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { fetchXbfElementFacts } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
+import { fetchXbfElementFacts } from "@cad/core/lib/xbf/xbfDocument.js";
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
+import { formatPromptReference } from "@cad/core/prompt";
 import { InfoRow, MonoValue, formatNumber } from "../kit/inspector/referenceRows.jsx";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // What is selected in an engine document, as Quick Edit's chips -- as the STEP renderer's were:
 // a part or subassembly a chip of its own, its card its part count (a
@@ -13,7 +13,7 @@ import { useI18n } from "@text-to-cad/ui/i18n";
 // measures on the exact shape when the element is picked (`fetchXbfElementFacts`).
 //
 // Each selected thing is also a reference into the document: the engine's canonical refs
-// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cadgen inspect` and `select` read, for an .xbf,
+// (`xbfTree.js`: `refOf`, `elementRefOf`), the ones `cad inspect` and `select` read, for an .xbf,
 // a STEP and a model alike: a part or subassembly by its label, or its occurrence path where the
 // label is shared (`hand/finger.2`), an element by its name, else its kind and number, under it
 // (`hand/finger.2/face 7`).

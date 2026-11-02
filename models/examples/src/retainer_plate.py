@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Retainer plate with elongated slot, two circular holes, and chamfered perimeter.
 
 from lib.simple_model_library import make_retainer_plate

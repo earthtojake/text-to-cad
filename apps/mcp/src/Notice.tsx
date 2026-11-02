@@ -1,4 +1,4 @@
-import { english, resolveLocale, translator } from '@text-to-cad/ui/i18n';
+import { english, resolveLocale, translator } from '@cad/ui/i18n';
 
 type Translate = (key: string, params?: Record<string, unknown>) => string;
 

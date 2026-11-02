@@ -1,6 +1,6 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // The card of a Quick Edit chip (`robotReferences.jsx`): what a selected link or object IS. Its
 // heading names it, so the rows never repeat the name.

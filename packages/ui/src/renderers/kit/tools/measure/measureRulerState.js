@@ -1,5 +1,5 @@
-import { isFinitePoint, measurementFromPicks } from "@text-to-cad/core/lib/viewer/measurement.js";
-import { pickEntityKey } from "@text-to-cad/core/lib/viewer/measureEntities.js";
+import { isFinitePoint, measurementFromPicks } from "@cad/core/lib/viewer/measurement.js";
+import { pickEntityKey } from "@cad/core/lib/viewer/measureEntities.js";
 
 export const MEASURE_RULER_MAX_MEASUREMENTS = 20;
 

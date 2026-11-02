@@ -1,5 +1,5 @@
 // A cadgen engine document's motions as a page plays them: the structure's `kinematics.motions`
-// (`cadgen/engine/mechanism.py`, `block`), each AP242's INTERPOLATED_CONFIGURATION_SEQUENCE: its
+// (`cad/engine/mechanism.py`, `block`), each AP242's INTERPOLATED_CONFIGURATION_SEQUENCE: its
 // keys' times (`t_parameter`), their states (a configuration's name, or pair values, a coupling's
 // value already made its joints' by the engine) and one interpolation between them (`ease`):
 // `linear` (`linear_interpolation_type`, constant speed) or `cubic`

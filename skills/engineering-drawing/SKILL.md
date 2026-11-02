@@ -1,15 +1,14 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part".
+description: Make an engineering drawing of a part as a PDF - orthographic views with hidden lines and centre marks, real dimensions, hole callouts, notes and a title block on ISO sheets, all projected from the part's geometry so the drawing follows the model. Use when the user asks for a drawing, a dimensioned sheet, shop or manufacturing drawings, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # Engineering drawing
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth.
-
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, places dimensions between points ON
 that geometry, finds centre marks on it, and lays the result out on an ISO
 sheet with a frame and a title block. Change the model, rerun the drawing
@@ -19,25 +18,27 @@ you chose to override a value.
 
 **The output is one PDF.** That is what a shop receives and what every
 operating system opens. No DXF is written, nothing is paired or linked, and
-there is no CLI: the script is the interface. `$dxf` makes cut layouts and flat
-patterns, which are toolpaths, not documents; the two are different jobs.
+there is no CLI: the script is the interface. Cut layouts and flat patterns are
+toolpaths, not documents, and a different job.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: run the command again in a few
+seconds. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Workflow
 
 1. Get the part. Call the model: `enclosure()`, imported from the model's script,
-   is built by cadgen's engine (a replay when the engine already holds it), and
+   is built by text-to-cad's server (a replay when the server already holds it), and
    its `.shape` is the part. For a part with no model, read its file: `read_step` for a
    STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
    shape works. The drawing documents geometry, it does not build it.
@@ -63,7 +64,7 @@ installed, an engine that is not running, or an installation or kernel load erro
    wider than the sheet's note column is refused, and `notes=` takes a LIST
    (`notes="BREAK EDGES"` is a sequence of eleven characters, so it is refused
    too).
-5. Run `python <name>_drawing.py`. It prints the PDF it wrote, and **anything
+5. Run `cad run <name>_drawing.py`. It prints the PDF it wrote, and **anything
    it noticed while drawing** — read those first:
    - *"measures blank paper"*: the dimension's model points do not land on the
      view's geometry. Almost always the part was built from a corner and the

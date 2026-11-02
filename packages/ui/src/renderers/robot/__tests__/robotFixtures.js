@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildRobotParts } from "@text-to-cad/core/lib/urdf/robotParts.js";
+import { buildRobotParts } from "@cad/core/lib/urdf/robotParts.js";
 
 // Under vitest's jsdom environment a module's URL is served over http from the package root
 // (or under `/@fs/` by its absolute path); under node it is a file URL.
@@ -26,7 +26,7 @@ export function fixtureGlb(url) {
   return fixtureBytes(String(url).replace(/^.*\/(primitives|meshes)\//, "$1/"));
 }
 
-/** `GET /__cad/robot`'s answer for a fixture description: `fixturePayload("arm.srdf")`. */
+/** A robot document's `structure` (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`) for a fixture description: `fixturePayload("arm.srdf")`. */
 export function fixturePayload(name) {
   const [stem, kind] = [name.slice(0, name.lastIndexOf(".")), name.slice(name.lastIndexOf(".") + 1)];
   return JSON.parse(readFileSync(path.join(FIXTURES, `${stem}.${kind}.robot.json`), "utf8"));
