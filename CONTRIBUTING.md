@@ -56,7 +56,7 @@ environment's interpreter for direct CLI calls:
 ```bash
 scripts/bundle/bundle.sh
 ./.venv/bin/python -m cad_server.cli snapshot --help
-./.venv/bin/python -m cad_server.cli urdf validate --help
+./.venv/bin/python -m cad_server.cli urdf check --help
 ```
 
 The engine draws every snapshot with OCCT in an OpenGL context. On Linux with no
@@ -195,7 +195,7 @@ subcommand (`cad <verb>`, or `python -m cad_server.cli <verb>` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is the library's now (`cad.{urdf,sdf,srdf}_*`), run
-by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
+by `cad urdf|sdf|srdf check`, so they need the server like everything else.
 
 ## Test In Agent Apps
 

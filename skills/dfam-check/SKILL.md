@@ -32,8 +32,8 @@ Set `--angle-limit` to the target process's self-supporting angle from
 process changes: the aggregate support-area facts are binned against it.
 
 STEP/STP input is boundary-representation CAD, not a mesh: export an STL first,
-then measure the STL here. For a text-to-cad model, `cad export <id> part.stl` writes one
-(or `cad export part.step part.stl` from a STEP).
+then measure the STL here. For a text-to-cad model, `cad xbf export <id> part.stl` writes one
+(or `cad step export part.step part.stl` from a STEP).
 Report that remediation instead of attempting raw STEP parsing. `measure`
 on a STEP exits 1 with `{"error": "failed to load mesh: ..."}`; that is the
 wrong-input signal, not a missing dependency — do not install extra mesh

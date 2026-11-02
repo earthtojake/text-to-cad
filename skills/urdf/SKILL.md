@@ -32,7 +32,7 @@ says what to do, and `cad doctor` explains the installation.
 4. Do not infer spatial transforms, mesh units, handedness, axes, or joint signs from vague prose. Use CAD transforms, dimensioned drawings, measured values, existing source data, or explicit documented assumptions.
 5. Never freehand numeric values that are the result of computation — inertia tensors, centers of mass, unit conversions across many links, mirrored transforms. Compute them: closed-form formulas for primitives, or a throwaway helper script for mesh-derived values. See `references/inertials.md`.
 6. For physical links, model `inertial`, `visual`, and `collision` separately when the target consumer needs them. Frame-only links may intentionally omit mass and geometry.
-7. Validate every created or modified `.urdf` with `cad urdf validate` before reporting completion. See `references/validation.md`.
+7. Validate every created or modified `.urdf` with `cad urdf check` before reporting completion. See `references/validation.md`.
 8. Helper scripts are allowed and encouraged for computation, but they are scaffolding, not the artifact's source of truth. For complex or genuinely parametric models it is reasonable to keep a model-local helper script on disk next to related source code (for example STEP generator sources) and note it in the ledger; this is optional, and the checked-in `.urdf` remains canonical.
 
 ## Show the model
@@ -40,7 +40,7 @@ says what to do, and `cad doctor` explains the installation.
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad snapshot`.
+own work; review with `cad <type> snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.
@@ -77,7 +77,7 @@ report any checks you could not perform.
 3. Prepare mesh assets first when links reference meshes: one mesh per link, exported in that link's frame by the owning CAD/mesh workflow. See `references/meshes.md`.
 4. Author or edit the URDF XML directly, following `references/authoring-contract.md` for structure, ordering, and naming.
 5. Compute — never guess — inertials and other derived numbers. See `references/inertials.md`.
-6. Validate with `cad urdf validate`; fix findings and re-validate until clean.
+6. Validate with `cad urdf check`; fix findings and re-validate until clean.
 7. Run the verification recipe in `references/validation.md`: external tools when available (`check_urdf`), then a viewer review sweeping every joint.
 8. Report remaining assumptions, unchecked spatial data, and validation gaps.
 
@@ -88,11 +88,11 @@ Run `cad` as Setup defines it. `cad doctor` reports the installation in use and 
 The validator shape is:
 
 ```bash
-cad urdf validate path/to/robot.urdf
-cad urdf validate path/to/robot.urdf --strict
-cad urdf validate path/to/robot.urdf --json
-cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
-cad snapshot path/to/robot.urdf review.png
+cad urdf check path/to/robot.urdf
+cad urdf check path/to/robot.urdf --strict
+cad urdf check path/to/robot.urdf --json
+cad urdf check path/to/robot.urdf --packages robot_description=/path/to/pkg
+cad urdf snapshot path/to/robot.urdf review.png
 ```
 
 The validator collects all findings in one pass (severity, code, XML path) across XML structure, tree topology, joint semantics (limits, mimic, dynamics), geometry, mesh references, materials, inertial physics, and misspelled elements, and prints a summary. One run validates ONE file: `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "issues": [{"severity", "code", "message", "element", "hint"}], "summary"}`, where `element` is the XML path; `--packages NAME=PATH` resolves `package://` mesh URIs and repeats for several roots. It exits nonzero if the target fails. Relative targets resolve from the current working directory; run from the workspace that owns the files.
@@ -101,12 +101,12 @@ Validation is a guardrail, not spatial proof: a URDF can pass every structural c
 
 ## Snapshot Tool
 
-`cad snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
+`cad urdf snapshot` draws the robot to a PNG still, as the CAD Viewer shows it,
 rendered by OCCT:
 
 ```bash
-cad snapshot path/to/robot.urdf review.png
-cad snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
+cad urdf snapshot path/to/robot.urdf review.png
+cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30, "gripper_slide": 0.02}'
 ```
 
 The robot opens where the CAD Viewer opens it, every joint at zero. `--pose` gives
@@ -143,7 +143,7 @@ unhydrated Git LFS pointer is not a mesh and fails the snapshot. Run
 `git lfs checkout <mesh dir>` first.
 
 OUT is written exactly as given and must be a `.png`; check the exit status before
-reading it. Use `cad snapshot --help` for the complete current interface.
+reading it. Use `cad urdf snapshot --help` for the complete current interface.
 
 ## References
 

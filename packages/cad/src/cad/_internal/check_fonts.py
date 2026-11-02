@@ -5,7 +5,7 @@ per-file guard, so one malformed file aborts the import and every cad command wi
 it. The resulting error names no file. This parses the same folders the same way and
 prints the ones that fail.
 
-Run: python -m cad.check_fonts [DIR ...]
+Run: python -m cad._internal.check_fonts [DIR ...]
 
 Exits 0 when every font parses, 1 when any file fails, 2 when fontTools is missing.
 Reads fonts and nothing else -- it never moves or edits a file, because the folder it

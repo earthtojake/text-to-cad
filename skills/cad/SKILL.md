@@ -17,11 +17,11 @@ the page the person has open updates. Files are exports, made when asked.
 | --- | --- | --- |
 | **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
-| **Export STEP, STL, 3MF, GLB or xbf** | `cad export <id> <file>`. | [Exports](references/exports.md) |
+| **Export STEP, STL, 3MF, GLB or xbf** | `cad xbf export <id> <file>`. | [Exports](references/exports.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
-| **Resolve a reference from a prompt** | `cad inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
+| **Resolve a reference from a prompt** | `cad xbf inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
-| **See a model, a view or a pose** | `cad snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
+| **See a model, a view or a pose** | `cad xbf snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
@@ -160,14 +160,14 @@ is the script's folder; two explicit names in it must differ.
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
   project models by calling them, never by reading a file the project exported.
-- **References** to faces, edges and parts come from `cad inspect <id> [ref]`, and the
+- **References** to faces, edges and parts come from `cad xbf inspect <id> [ref]`, and the
   body picks the same element with build123d's selectors; verify with a snapshot when in
   doubt ([references](references/inspection-and-validation.md#references)).
 - **A shape with no function** (a notebook cell, a REPL) is handed over:
   `model(shape, name="plate")` returns the same handle, and no command builds it again.
 - **The server never reruns code.** A restart reopens every document from the server's
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
-  saved), the page, `cad inspect <id>` and `cad_show` print the command that brings it
+  saved), the page, `cad xbf inspect <id>` and `cad_show` print the command that brings it
   back (`cad run src/bracket.py`). Run it.
 - Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
@@ -182,7 +182,7 @@ written, so a change made after it is in the file only once it is written again.
 when the person asks for it:
 
 ```bash
-cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad xbf export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
@@ -195,7 +195,7 @@ The xbf, text-to-cad's own document, is Save As: export one only to share a mode
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
 server's own cache reopens every document it built, as last built. A vendor STEP is
 converted to an xbf once
-(`cad export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
+(`cad step export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
 times faster than parsing the STEP.
 
 ## Projects built around exported files
@@ -205,9 +205,9 @@ iterate on the exported file itself or the project already does: an `exports.py`
 that reads the files (a robot description, a slicer, a drawing pipeline), or a 0.7-era
 layout, whose runs wrote files. The loop is three steps. The script writes the file on each
 run, by a file decorator in place of `@model` (`@step("../STEP/bracket.step")`, relative to
-the script), or `exports.py` or `cad export` follows the run. Show the file's page, not
+the script), or `exports.py` or `cad <type> export` follows the run. Show the file's page, not
 the model's: it follows the file on disk, updating when a run rewrites the file.
-Verification reads the file: `cad snapshot` or `cad inspect` with its path, or
+Verification reads the file: `cad <type> snapshot` or `cad <type> inspect` with its path, or
 `read_step` in a check. The costs keep the default the default: each iteration pays the
 file's translation and the page's re-read, a STEP parsed again; a file names no model, so a
 ref picked on its page has no `made_by` and a Quick Edit from it no way back into the code;
@@ -219,7 +219,7 @@ and the model's page stays the better place to look while editing.
 After every run, read its line and the delta under it; a contradiction with what you
 intended is fixed before anything else. A number the person gave is checked by an assert
 inside the model's body on what the geometry measures, a bound, a distance or a volume, or by
-`cad inspect`, never by restating the constant, and never by code after the call in the
+`cad <type> inspect`, never by restating the constant, and never by code after the call in the
 model's script ([inspection](references/inspection-and-validation.md)). A derived number they
 asked for is a check script; neither is ever read off a picture. A structural or appearance
 change, new parts, placements, colours or a mechanism,
@@ -227,12 +227,12 @@ gets the snapshots it takes to judge it, usually one from the angle that shows t
 more when a view leaves the question open, and a posed one for a mechanism state; never
 several angles by habit. For a large assembly, isolate the parts the edit touched or hide
 what covers them and frame them, instead of drawing the whole model. Resolve a reference with
-`cad inspect` only when a prompt names one.
+`cad <type> inspect` only when a prompt names one.
 
 ```bash
-cad snapshot "$ID" tmp/review.png
-cad snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cad snapshot "$ID" tmp/open.png --pose open
+cad xbf snapshot "$ID" tmp/review.png
+cad xbf snapshot "$ID" tmp/top.png --camera top --display hidden-line
+cad xbf snapshot "$ID" tmp/open.png --pose open
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing
@@ -247,10 +247,10 @@ in a document by the server's own names: the document (a model's id, or a file's
 absolute path), `#`, a part or an assembly by the labels on its way from the root
 (`hand/finger.2` is the second component labelled `finger` in `hand`), then, after a
 slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The CAD
-viewer copies them. When a prompt names one, resolve it with `cad inspect`:
+viewer copies them. When a prompt names one, resolve it with `cad <type> inspect`:
 
 ```bash
-cad inspect "$ID" "bracket/face 7"
+cad xbf inspect "$ID" "bracket/face 7"
 ```
 
 It answers in JSON what the ref names, placed where its occurrence stands: an element's
@@ -269,7 +269,7 @@ path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the pe
 drew their ink in, ink included:
 
 ```bash
-cad snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad xbf snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 Inspect supplied annotations before editing. Without annotations, the captured view is
@@ -278,7 +278,7 @@ draw it again to check the change
 ([annotations and Quick Edit views](references/snapshot-review.md#annotations-and-quick-edit-views)).
 
 A reference into a file that is not a document names what the viewer picked in it, in
-that file's own terms (none is a ref `cad inspect` resolves):
+that file's own terms (none is a ref `cad <type> inspect` resolves):
 
 | File | Reference | Means |
 | --- | --- | --- |
@@ -298,7 +298,7 @@ Copy `world_parts` and `find_part` from
 first. They accumulate parent placements; raw `.leaves` do not.
 
 ```python
-from cad.geometry import closest_points
+from cad.build123d import closest_points
 
 from assembly import assembly
 
@@ -314,7 +314,7 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   on purpose, and a part meant to rest on another touches it when their
   `closest_points` distance is 0. Both describe the parts as built, not a pose
   ([measurements](references/inspection-and-validation.md#measurements)).
-- `cad inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
+- `cad xbf inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
   is also the root name `inspect "$ID"` prints): each part's volume times its material's
   density, and the parts that have no material.
 - A check that fails or cannot decide has shown nothing about the design.
@@ -332,7 +332,7 @@ every assumption or departure from the request.
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad snapshot`.
+own work; review with `cad <type> snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.

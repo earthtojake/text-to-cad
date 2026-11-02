@@ -1,11 +1,15 @@
 """The ``cad`` console script -- a subcommand dispatcher over the distribution's CLIs.
 
-Every subcommand is also reachable as ``python -m cad_server.cli.<module>``; this is the friendly
-front door, not a second implementation. A subcommand's parser lives in its own module and
-owns its arguments, so the console and module entry points cannot drift. The engine's verbs
-(``export``, ``snapshot``, ``serve``, ``inspect``, ``status``, ``stop``, ``delete``, ``server``) are
-``cad_server.engine.cli``'s, each run by its name; the robot validators' parsers are DERIVED from
-the verb function's signature (``cad_server._internal.cli_from_function``).
+Two kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
+the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
+(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf check``). And the
+commands that are no document's: the engine's process control (``serve``, ``status``, ``stop``,
+``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
+``doctor``, ``plugin``, ``viewer``, ``telemetry``).
+
+Every command is also reachable as ``python -m <module>``; this is the friendly front door, not a
+second implementation. A command's parser lives in its own module and owns its arguments, so the
+console and module entry points cannot drift.
 
 **Dispatch is lazy on purpose.** Importing a CAD subcommand pulls in OCP/build123d, which
 costs seconds and needs the heavy dependency set installed. ``cad --help`` and an
@@ -20,29 +24,22 @@ import importlib
 import os
 import sys
 
+from cad.registry import DOCUMENT_TYPES
+
 # name -> (module, "one-line help"). The module must expose ``main(argv)`` returning an
 # exit code. Keep this list grouped as below and the help text under ~60 chars so
-# ``cad --help`` stays a single readable column.
-#
-# Two-word names are intentional where a noun has several verbs. Dispatch joins
-# argv[0:2] before argv[0], so the two-word form wins where it exists.
+# ``cad --help`` stays a single readable column. The document types' commands are not here:
+# they are the registry's (``TYPE_COMMANDS``).
 #
 # A model script builds by running it (``cad run <model>.py``: the CAD kernel environment's
 # ``python <model>.py``): no command takes its place.
 _COMMANDS: dict[str, tuple[str, str]] = {
-    # The engine (cad.engine): documents exported, drawn and served, its server.
-    "export": ("cad_server.cli.export", "write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf"),
-    "snapshot": ("cad_server.cli.snapshot", "render any supported file to an image"),
+    # The engine's process control: documents served, its server, and documents deleted.
     "serve": ("cad_server.cli.serve", "serve a document over HTTP and print its URL"),
-    "inspect": ("cad_server.cli.inspect", "an xbf's build closure, or what made one element of it"),
     "status": ("cad_server.cli.status", "show the engine server's workers and what it serves"),
     "stop": ("cad_server.cli.stop", "stop the engine server"),
     "delete": ("cad_server.cli.delete", "delete documents: record, cached document, the engine's copy"),
     "server": ("cad_server.cli.server", "run the engine server in this process"),
-    # Robot descriptions: the validators check a description (the engine's snapshot draws one).
-    "urdf validate": ("cad_server.cli.urdf_validate", "validate a URDF robot description"),
-    "sdf validate": ("cad_server.cli.sdf_validate", "validate an SDF world or model"),
-    "srdf validate": ("cad_server.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment, with the "
                                   "packages its header or --with names"),
@@ -60,9 +57,13 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "telemetry": ("cad_server.cli.telemetry", "show or change the usage stats and crash reports CAD sends: status, on, off"),
 }
 
-_USAGE_HEAD = "usage: cad <command> [args...]\n\ncommands:\n"
+# Each document type's command, by its id: ``cad <type> <operation>`` (``cad_server.cli.document_types``).
+TYPE_COMMANDS: dict[str, str] = {document_type: f"cad_server.cli.{document_type}" for document_type in DOCUMENT_TYPES}
+
+_USAGE_HEAD = "usage: cad <document_type> <operation> FILE [args...] | cad <command> [args...]\n\n"
 _USAGE_TAIL = (
-    "\nRun 'cad <command> --help' for a command's own options.\n"
+    "\nRun 'cad <document_type> --help' for a type's operations, 'cad <document_type> <operation> --help'\n"
+    "or 'cad <command> --help' for its options.\n"
     "Each command is also available as 'python -m <module>'.\n"
 )
 
@@ -72,21 +73,45 @@ def _command_lines(names) -> str:
     return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in sorted(names)) + "\n"
 
 
+def _type_lines() -> str:
+    """The document types, grouped: each with its operations and what it is (``cad.registry``)."""
+    from cad_server.cli.document_types import operations_of
+
+    width = max(len(name) for name in DOCUMENT_TYPES)
+    ops = {name: ", ".join(operations_of(name)) for name in DOCUMENT_TYPES}
+    ops_width = max(len(text) for text in ops.values())
+    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: {', '.join(entry.extensions)}"
+                     for name, entry in DOCUMENT_TYPES.items()) + "\n"
+
+
 def _usage() -> str:
-    return _USAGE_HEAD + _command_lines(_COMMANDS) + _USAGE_TAIL
+    return (_USAGE_HEAD + "document types (cad <type> <operation> FILE):\n" + _type_lines()
+            + "\ncommands:\n" + _command_lines(_COMMANDS) + _USAGE_TAIL)
 
 
-def _format_verbs(noun: str) -> list[str]:
-    """The two-word commands of one format noun (``urdf`` -> ``urdf validate``, ...)."""
-    return [name for name in _COMMANDS if name.split(" ")[0] == noun and " " in name]
+def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
+    """The command a command line names, as ``main`` dispatches it, and its arguments: ``("xbf export",
+    [...])`` for a document type's operation, ``("status", [...])`` for a command; None for neither."""
+    if argv[:1] and argv[0] in TYPE_COMMANDS:
+        from cad_server.cli.document_types import OPERATIONS
+
+        if len(argv) > 1 and (argv[0], argv[1]) in OPERATIONS:
+            return f"{argv[0]} {argv[1]}", argv[2:]
+        return None
+    if argv[:1] and argv[0] in _COMMANDS:
+        return argv[0], argv[1:]
+    return None
 
 
-def _format_usage(noun: str) -> str:
-    return (
-        f"usage: cad {noun} <verb> [args...]\n\n{noun} commands:\n"
-        + _command_lines(_format_verbs(noun))
-        + f"\nRun 'cad {noun} <verb> --help' for a command's own options.\n"
-    )
+def build_parser_for(name: str):
+    """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
+    if " " in name:
+        from cad_server.cli.document_types import build_parser
+
+        document_type, operation = name.split(" ", 1)
+        return build_parser(document_type, operation)
+    builder = getattr(importlib.import_module(_COMMANDS[name][0]), "build_parser", None)
+    return builder() if builder is not None else None
 
 
 def _harden_std_stream_errors() -> None:
@@ -172,24 +197,13 @@ def _main(argv: list[str] | None) -> int:
         sys.stdout.write(f"cad {own_version() or __version__}\n")
         return 0
 
-    # Longest match first, so `urdf validate` is dispatched as one command.
-    command, rest = " ".join(argv[:2]), argv[2:]
-    entry = _COMMANDS.get(command)
-    if entry is None:
-        command, rest = argv[0], argv[1:]
+    command, rest = argv[0], argv[1:]
+    if command in TYPE_COMMANDS:
+        entry: tuple[str, str] | None = (TYPE_COMMANDS[command], "")
+    else:
         entry = _COMMANDS.get(command)
     if entry is None:
-        noun = argv[0]
-        if _format_verbs(noun):
-            # A known format with a missing, unknown or `--help` verb: the noun is
-            # right, so answer with ITS verbs rather than calling the noun unknown.
-            if rest[:1] and rest[0] in {"-h", "--help", "help"}:
-                sys.stdout.write(_format_usage(noun))
-                return 0
-            problem = f"unknown {noun} command {rest[0]!r}" if rest else f"{noun} needs a verb"
-            sys.stderr.write(f"cad: {problem}\n\n" + _format_usage(noun))
-            return 2
-        sys.stderr.write(f"cad: unknown command {noun!r}\n\n" + _usage())
+        sys.stderr.write(f"cad: unknown command {command!r}\n\n" + _usage())
         return 2
 
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
@@ -267,7 +281,7 @@ def _run_module(command: str, module_name: str, rest: list[str]) -> int:
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so
-    # `cad urdf validate --help` says "cad urdf validate".
+    # `cad urdf check --help` says "cad urdf check".
     # Not every command takes a name for its parser, hence the signature check rather
     # than a blanket keyword.
     import inspect  # only the dispatcher needs it; `--help` does not.

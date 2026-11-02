@@ -442,7 +442,7 @@ class CommandCrashTest(unittest.TestCase):
             raise ValueError("no such file: /home/someone/secret.step")
 
         for invoke in (told, _cadgen_bug):
-            emit(invoke, prog="cad urdf validate", as_json=True, stdout=io.StringIO())
+            emit(invoke, prog="cad urdf check", as_json=True, stdout=io.StringIO())
         [crash] = self.crashes()
         self.assertEqual((crash["where"], crash["type"], crash["frames"][-1]["file"]), ("command", "KeyError", "cad_server/analytics.py"))
 

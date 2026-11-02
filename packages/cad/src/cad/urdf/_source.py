@@ -9,8 +9,8 @@ from urllib.parse import unquote, urlparse
 import xml.etree.ElementTree as ET
 
 from cad.engine import mesh_uri
-from cad.findings import FindingsReport
-from cad.xml_common import duplicate_values, display_path
+from cad._internal.findings import FindingsReport
+from cad._internal.xml_common import duplicate_values, display_path
 
 URDF_SUFFIX = ".urdf"
 SUPPORTED_JOINT_TYPES = {"fixed", "continuous", "revolute", "prismatic"}

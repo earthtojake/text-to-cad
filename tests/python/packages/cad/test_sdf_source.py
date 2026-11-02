@@ -3,7 +3,7 @@ from pathlib import Path
 
 from tests.python.support.tmp_root import generated_cad_directory
 
-from cad.sdf_source import SdfSource, SdfSourceError, parse_sdf_xml
+from cad.sdf._source import SdfSource, SdfSourceError, parse_sdf_xml
 
 
 class SdfSourceTests(unittest.TestCase):
@@ -29,7 +29,7 @@ class SdfSourceTests(unittest.TestCase):
         return sdf_path
 
     def _parse(self, path: Path) -> SdfSource:
-        """The file at ``path`` parsed as ``cad sdf validate`` parses it."""
+        """The file at ``path`` parsed as ``cad sdf check`` parses it."""
         return parse_sdf_xml(path.read_text(encoding="utf-8"), source_path=path, base_dir=path.parent)
 
     def test_accepts_minimal_model(self) -> None:
@@ -300,7 +300,7 @@ class SdfSourceTests(unittest.TestCase):
         # runs (missing_child_text), so the reader's own check is called directly.
         import xml.etree.ElementTree as ET
 
-        from cad.sdf_source import _required_child_text
+        from cad.sdf._source import _required_child_text
 
         for joint in ("<joint><child/></joint>", "<joint><child></child></joint>", "<joint><child> </child></joint>"):
             with self.subTest(joint=joint), self.assertRaisesRegex(SdfSourceError, "joint child is required"):

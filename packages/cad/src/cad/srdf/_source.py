@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Literal
 import xml.etree.ElementTree as ET
 
-from cad.findings import FindingsReport
-from cad.xml_common import duplicate_values, display_path
+from cad._internal.findings import FindingsReport
+from cad._internal.xml_common import duplicate_values, display_path
 
 SRDF_SUFFIX = ".srdf"
 

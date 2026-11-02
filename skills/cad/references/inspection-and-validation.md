@@ -4,7 +4,7 @@ Read this file when resolving a reference, measuring a model, checking clearance
 contact, or diagnosing geometry.
 
 This is the catalogue of what exists. Write a check only when the person asks for a dimension, a
-fit or a mass, or the change is numeric and the number matters; run `cad inspect` only when a
+fit or a mass, or the change is numeric and the number matters; run `cad <type> inspect` only when a
 prompt names a reference ([Pictures](../SKILL.md#pictures)).
 
 ## Contents
@@ -17,12 +17,12 @@ prompt names a reference ([Pictures](../SKILL.md#pictures)).
 - [Mass properties](#mass-properties)
 
 Checks are small Python scripts in the project's ignored `tmp/` (or a `checks/` folder
-for ones worth keeping); `cad inspect` answers what a ref names. A check calls the
+for ones worth keeping); `cad <type> inspect` answers what a ref names. A check calls the
 model, so it measures the model as its code is now.
 
 A dimension the person gave is checked where the server already holds the geometry: an
-`assert` inside the model's body, on the shape it is about to return, or `cad inspect`
-(`cad inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
+`assert` inside the model's body, on the shape it is about to return, or `cad <type> inspect`
+(`cad xbf inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
 check to the model's script after its call: reading `.shape` there brings the shape into the
 script's own process and loads the CAD kernel there, about 3 s, after the server has answered,
 on every run. A check script pays the same once, so it is for a derived number the person
@@ -38,7 +38,7 @@ def bracket():
 
 ## Opening geometry
 
-A model's `.shape`, `read_step(path)` and `read_xbf(path)` return a build123d tree.
+A model's `.shape`, `step.read(path)` and `read_xbf(path)` return a build123d tree.
 Each node's `location` is relative to its parent. `.children`, `.descendants` and
 `.leaves` expose those nodes without accumulating ancestor placements. Before comparing
 parts in different sub-assemblies, copy these helpers into the project's check script:
@@ -66,10 +66,10 @@ def find_part(tree, label):
 These are project helpers, not the library's imports. `find_part` requires a unique leaf label:
 it refuses both missing and repeated labels. For repeated components, walk a known branch
 while accumulating its parents' locations, or use an occurrence path with
-`cad inspect` ([references](#references)).
+`cad <type> inspect` ([references](#references)).
 
 ```python
-from cad import read_step
+from cad import step
 from kit import kit
 
 doc = kit().shape
@@ -78,14 +78,14 @@ for part in world_parts(doc):
 
 finger = find_part(doc, "index_finger")
 top = finger.faces().sort_by(bd.Axis.Z)[-1]   # the world-Z top, after placement
-plate = find_part(read_step("kit.step"), "plate")
+plate = find_part(step.read("kit.step"), "plate")
 ```
 
 - Calling a model from a plain script builds it in the server (a replay when nothing
   changed) and returns its document, whose `.shape` keeps each assembly's placement.
   Walk it by labels and select within a part with build123d
   (`faces()`, `edges()`, `sort_by`, `filter_by`).
-- A ref a person gave names one element exactly: `cad inspect` answers it
+- A ref a person gave names one element exactly: `cad <type> inspect` answers it
   ([below](#which-code-made-it)), and its facts (centroid, box, surface) tell which
   face of the part it is.
 - `bounding_box()` is the axis-aligned envelope in the shape's current frame. It is
@@ -121,7 +121,7 @@ plate/face 3                            in a document of one part, its elements 
   occurrences is refused with their paths (`finger names 3 occurrences in kit.xbf:
   hand/finger.1, hand/finger.2, hand/finger.3`).
 - **An element is named by its name or its number.** Numbers are the part's own
-  face, edge and vertex numbers, the ones the viewer and `cad inspect` show; a
+  face, edge and vertex numbers, the ones the viewer and `cad <type> inspect` show; a
   name survives edits that a number does not. A bare element after an owner belongs
   to that owner (`palm,f:palm.body.1`).
 - **`FILE` must be the document resolved in**: the same model's id, the same file, or
@@ -131,7 +131,7 @@ plate/face 3                            in a document of one part, its elements 
   resolves where it is; one it deleted fails, naming it; one whose making changed
   fails too, listing what its atom is named now (`plate.body.6 is now
   f:plate.body.6`), never guessing.
-- **The canonical ref**, what `cad inspect` answers, spells an element by its name under its part's label where that label
+- **The canonical ref**, what `cad <type> inspect` answers, spells an element by its name under its part's label where that label
   names one occurrence, else under the occurrence's path from the root.
 
 ### Element names
@@ -156,7 +156,7 @@ starts from, and a step for each feature that made it out of another:
   occurrence.
 - **An element read from a file** keeps the name the file gives it (a STEP or an
   `.xbf` text-to-cad wrote names every face), else it is named by the read and its
-  number within its part: `motor = read_step(...)` in `rig` names face 12 of a
+  number within its part: `motor = step.read(...)` in `rig` names face 12 of a
   foreign STEP `f:rig.motor.12`.
 - A long name folds to its last feature and a digest (`f:plate.relief~5d1e0c2f9a3b`):
   copy names whole.
@@ -166,13 +166,13 @@ renames nothing.
 
 ### A picked element in a model's body
 
-A ref resolves in the server (`cad inspect`, the viewer), never in a model: a
+A ref resolves in the server (`cad <type> inspect`, the viewer), never in a model: a
 body selects from the live shape it is building with build123d, by what the element
 is. To change what a person picked, read the ref's answer and either edit the code
 its `made_by` names or pick the same element in the body:
 
 ```bash
-cad inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
+cad xbf inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
 ```
 
 ```python
@@ -191,7 +191,7 @@ def bracket():
 
 ## Which code made it
 
-`cad inspect DOC REF` answers what a ref names, placed where its occurrence stands:
+`cad xbf inspect DOC REF` answers what a ref names, placed where its occurrence stands:
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's
   area, centroid, surface type, exact box, radius; an edge's length, curve type, class
@@ -201,7 +201,7 @@ def bracket():
   with the parts that have no material listed under `unweighed`.
 
 ```text
-$ cad inspect "$ID" "bracket/face 7"
+$ cad xbf inspect "$ID" "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
@@ -225,12 +225,12 @@ the xbf a model declares among them -- answers none: a file names no model. A re
 several selectors answers a list; one
 that names nothing is refused (exit 2).
 
-Without a REF, `cad inspect DOC` prints what the document holds, one screen, then what
+Without a REF, `cad xbf inspect DOC` prints what the document holds, one screen, then what
 it was built from. Read it for the names a ref, a pose or a snapshot takes, rather than
 guessing them:
 
 ```text
-$ cad inspect "$ID"
+$ cad xbf inspect "$ID"
 hinge  fb5d7d22-372e-5e1e-a44b-a2aebf954533
 state       live, cached, built 12s ago
 parts       2 in hinge
@@ -273,7 +273,7 @@ size = shape.bounding_box().size
 ```
 
 ```python
-from cad.geometry import closest_points, overlap_volume
+from cad.build123d import closest_points, overlap_volume
 
 result = closest_points(a, b)   # .distance, .point_a, .point_b
 volume = overlap_volume(solid_a, solid_b)
@@ -297,7 +297,7 @@ built: a part clear there can still pass through another in a pose
 ## Geometry diagnostics
 
 ```python
-from cad.geometry import is_sound, topology_errors, boundary_edges, self_intersections
+from cad.build123d import is_sound, topology_errors, boundary_edges, self_intersections
 
 ok = shape.is_valid                       # bool: BRepCheck passes (build123d)
 clean = is_sound(shape)                   # bool: the boolean kernel's argument check passes, expensive
@@ -322,10 +322,10 @@ usually a sliver a boolean left.
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
+`cad xbf inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
 
 ```python
-from cad.geometry import mass_properties
+from cad.build123d import mass_properties
 
 properties = mass_properties([
     (aluminum_body, 2.70e-6),  # kg/mm³; use the material density for the task

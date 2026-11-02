@@ -30,12 +30,14 @@ import re
 import stat as stat_module
 import threading
 
+from cad.registry import DOCUMENT_TYPES
 from cad_server._internal.shared_read import open_shared_for_read
 
 from .content_types import extension_of
 from .encoding import file_version, local_asset_url_for_path
 
 __all__ = [
+    "SOURCE_KINDS",
     "CAD_CATALOG_SCHEMA_VERSION",
     "SOURCE_EXTENSIONS",
     "VIEWER_EXTENSIONS",
@@ -53,13 +55,14 @@ __all__ = [
 # 5: a STEP's row is its file's, as every format's is (the engine draws it), no longer its tree's.
 CAD_CATALOG_SCHEMA_VERSION = 5
 
-# The CAD files whose bytes the asset route sends.
-SOURCE_EXTENSIONS = frozenset(
-    {".step", ".stp", ".stl", ".3mf", ".glb", ".dxf", ".urdf", ".srdf", ".sdf"}
-)
-# What every CAD view lists and opens: every CAD source, and a cadgen engine document (`.xbf`),
-# which the engine serves to the page as it serves a STEP (`documents.py`).
-VIEWER_EXTENSIONS = SOURCE_EXTENSIONS | frozenset({".xbf"})
+# The CAD files whose bytes the asset route sends, and the document type of each (``cad.registry``):
+# every type's extensions but the engine's own document's, which the engine serves to the page as
+# it serves a STEP (``documents.py``), never as bytes.
+SOURCE_KINDS = {extension: entry.id for entry in DOCUMENT_TYPES.values() if entry.id != "xbf"
+                for extension in entry.extensions}
+SOURCE_EXTENSIONS = frozenset(SOURCE_KINDS)
+# What every CAD view lists and opens: every document type's files.
+VIEWER_EXTENSIONS = frozenset(extension for entry in DOCUMENT_TYPES.values() for extension in entry.extensions)
 
 # The folders the explorer's search never walks (``folders.py``), beside every hidden one. Matched
 # with EXACT case: ``Dist/`` and ``Build/`` are walked, only the lowercase spellings are skipped.

@@ -43,7 +43,7 @@ ELISION = "..."
 def _command_forms(text: str) -> list[tuple[list[str], bool]]:
     """The `cad` argv forms inside this document's fenced code blocks.
 
-    Each carries whether an elision cut it short: `cad snapshot ...` names
+    Each carries whether an elision cut it short: `cad <type> snapshot ...` names
     a command but is not a complete invocation, so it is checked for existence
     and not put through the parser.
     """
@@ -90,25 +90,22 @@ def _documented_forms() -> list[tuple[Path, list[str], bool]]:
 
 
 def _split_command(argv: list[str]) -> tuple[str, list[str]] | None:
-    """The registry entry this form dispatches to, exactly as `cli.main` picks it."""
-    for width in (2, 1):
-        name = " ".join(argv[:width])
-        if name in cli._COMMANDS:  # noqa: SLF001 - the registry IS the thing under test
-            return name, argv[width:]
-    return None
+    """The command this form dispatches to, exactly as `cli.main` picks it: a document type's operation
+    (`xbf export`) or a command."""
+    return cli.resolve(argv)
 
 
-def _parse(module, rest: list[str]) -> None:
+def _parse(name: str, rest: list[str]) -> None:
     """Put the form through the command's real parser, or skip if it has none.
 
-    Every command in the schema — generated or argparse — answers with
-    ``build_parser``. A command that builds its parser inside ``main()`` has
-    nothing to call without running it, so those forms are checked for
-    existence only.
+    Every document type's operation, and every command in the schema, answers with
+    its parser (``cli.build_parser_for``). A command that builds its parser inside
+    ``main()`` has nothing to call without running it, so those forms are checked
+    for existence only.
     """
-    parser_builder = getattr(module, "build_parser", None)
-    if parser_builder is not None:
-        parser_builder().parse_args(rest)
+    parser = cli.build_parser_for(name)
+    if parser is not None:
+        parser.parse_args(rest)
 
 
 class DocumentedCommands(unittest.TestCase):
@@ -136,11 +133,10 @@ class DocumentedCommands(unittest.TestCase):
                 continue  # reported by the test above / not a complete invocation
             name, rest = split
             with self.subTest(source=str(source), form=" ".join(argv)):
-                module = importlib.import_module(cli._COMMANDS[name][0])  # noqa: SLF001
                 errors = io.StringIO()
                 try:
                     with contextlib.redirect_stderr(errors):
-                        _parse(module, rest)
+                        _parse(name, rest)
                 except SystemExit:  # argparse's usage error
                     self.fail(f"{source}: `cad {' '.join(argv)}` -> {errors.getvalue().strip()}")
                 except argparse.ArgumentError as exc:
@@ -179,8 +175,7 @@ class DocumentedSnapshotOutputPaths(unittest.TestCase):
             if split is None:
                 continue
             name, rest = split
-            module = importlib.import_module(cli._COMMANDS[name][0])  # noqa: SLF001
-            out = getattr(module.build_parser().parse_args(rest), "out", None)
+            out = getattr(cli.build_parser_for(name).parse_args(rest), "out", None)
             if out is not None:
                 forms.append((source, argv, str(out)))
         return forms

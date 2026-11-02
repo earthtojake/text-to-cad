@@ -22,7 +22,7 @@ from tests.python.support import engine_cache
 
 KIT = """
 import build123d as bd
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import paint, step, xbf
 from bd_materials import metals
 

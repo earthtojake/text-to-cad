@@ -39,7 +39,7 @@ describe design intent; verify that they match the artifact being reviewed
 before treating them as evidence.
 
 Where the part is a text-to-cad model, measure geometry facts with its inspection
-workflow (`cad inspect`, a check script). If it cannot measure a required feature, use supplied dimensions with
+workflow (`cad <type> inspect`, a check script). If it cannot measure a required feature, use supplied dimensions with
 provenance or mark the check unverified; do not invent commands or
 measurements. Never infer alloy, resin, strength, or stock thickness from a
 rendering material or color.

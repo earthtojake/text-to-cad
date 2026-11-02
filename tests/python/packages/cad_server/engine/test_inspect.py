@@ -1,4 +1,4 @@
-"""``cad inspect DOC`` without a ref: what the document holds, on one screen, before its build
+"""``cad xbf inspect DOC`` without a ref: what the document holds, on one screen, before its build
 closure -- its state, parts, bounds, volume, materials, joints, states, sequences and declared
 files -- read from the document the engine holds, and nothing built; ``--json`` the same as data;
 ``--query structure`` the same lists with nothing measured. Measuring is lazy: a build no inspection
@@ -27,7 +27,7 @@ import pathlib
 import build123d as bd
 from cad import model
 from bd_materials import metals
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 pathlib.Path(__file__).with_suffix(".ran").write_text("ran", encoding="utf-8")
 

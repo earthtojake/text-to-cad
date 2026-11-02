@@ -985,10 +985,12 @@ def _placement(value: Any) -> Any:
 
 
 def check_result(model: Model, result: Any) -> None:
-    import build123d as bd
+    """A body's result, refused unless one producer (``cad.registry``) makes its document and every file
+    the model declares of it: today a model returns a build123d shape, the build123d integration's."""
+    from cad.registry import producer_for
 
-    if not isinstance(result, bd.Shape):
-        raise TypeError(f"model {model.identity} returned {type(result).__name__}; a model returns a build123d shape")
+    for kind in dict.fromkeys(("xbf", *(output.kind for output in model.outputs))):
+        producer_for(kind, result, where=f"model {model.identity}")
     if result.__dict__.get("_wrapped") is None:
         raise ValueError(f"model {model.identity} returned an empty shape")
 

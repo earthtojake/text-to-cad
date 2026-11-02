@@ -10,6 +10,10 @@ from __future__ import annotations
 
 import posixpath
 
+from cad.registry import DOCUMENT_TYPES
+
+
+
 __all__ = ["content_type_for_static_asset", "content_type_for_path", "extension_of"]
 
 # Static dist/SPA assets. Unknown extension -> "" and the caller sets NO
@@ -30,19 +34,10 @@ _STATIC_CONTENT_TYPES = {
 
 # CAD files by path (/api/v1/local/files) and a document's source. Unknown -> octet-stream.
 #
-# Exactly the extensions that route can emit: the cataloged formats
-# (scanner.SOURCE_EXTENSIONS, scanner.is_served_cad_asset).
-_ASSET_CONTENT_TYPES = {
-    ".glb": "model/gltf-binary",
-    ".stl": "model/stl",
-    ".3mf": "model/3mf",
-    ".step": "application/step",
-    ".stp": "application/step",
-    ".dxf": "application/dxf",
-    ".urdf": "application/xml; charset=utf-8",
-    ".srdf": "application/xml; charset=utf-8",
-    ".sdf": "application/xml; charset=utf-8",
-}
+# Exactly the extensions that route can emit: the cataloged formats (scanner.SOURCE_EXTENSIONS,
+# scanner.is_served_cad_asset), each with its document type's MIME type (``cad.registry``).
+_ASSET_CONTENT_TYPES = {extension: entry.mime for entry in DOCUMENT_TYPES.values() if entry.id != "xbf"
+                        for extension in entry.extensions}
 
 
 def extension_of(file_path) -> str:

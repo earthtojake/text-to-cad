@@ -1,4 +1,4 @@
-"""References to geometry: ``cad inspect`` resolves a ref -- a part's label or an occurrence's
+"""References to geometry: ``cad <type> inspect`` resolves a ref -- a part's label or an occurrence's
 path (``hand/finger.2``), and an element's name or ordinal -- by name in the latest build; a model
 never reads a file its own build writes."""
 
@@ -134,7 +134,7 @@ class ReadAndPlaceTest(_Folder):
 
 
 class WhereTest(unittest.TestCase):
-    """``cad inspect`` resolves the same grammar, through a daemon of the test's own."""
+    """``cad <type> inspect`` resolves the same grammar, through a daemon of the test's own."""
 
     @classmethod
     def setUpClass(cls) -> None:

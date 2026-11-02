@@ -50,7 +50,7 @@ LIBRARY_REQUIRED=(
   "cad/_internal/lazy_kernel.py"
   "cad-lazy-kernel.pth"
   # The robot validators' library: a packaging regression here would ship a server whose
-  # `urdf validate` cannot import.
+  # `urdf check` cannot import.
   "cad/urdf_source.py"
   "cad/srdf_validation.py"
   "cad/findings.py"

@@ -1,4 +1,4 @@
-"""`cad snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
+"""`cad <type> snapshot`: a document drawn by OCCT (`engine/render`) into a PNG, its timings
 reported, and what an engine document's view does not offer refused by name before anything
 renders, with OUT untouched; the document's own mesh exports drawn by OCCT too, read by their
 readers (`engine/formats`, and `test_formats.py` for every kind), in this process and through the

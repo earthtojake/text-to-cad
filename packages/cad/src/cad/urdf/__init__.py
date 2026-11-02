@@ -1,41 +1,40 @@
-"""The public ``urdf`` namespace: the verbs that operate on URDF descriptions.
+"""``cad.urdf``: the URDF document type (``cad.registry``), a robot description.
 
-This namespace carries no decorator: a robot description is an AUTHORED file,
-not a document cadgen generates, so there is nothing to declare. It is a plain
-module. ``cad snapshot`` draws one (``cad.engine.snapshot``).
+It has no decorator: a robot description is an AUTHORED file, not a document a model makes.
+``urdf.check`` is ``cad urdf check``; ``urdf.snapshot`` is ``cad urdf snapshot``
+(``cad.engine.snapshot``).
 
-``cad urdf validate`` is an ADAPTER over :func:`validate` rather than a
-generated mirror: ``--packages NAME=PATH`` is repeatable, and a repeatable
-key/value map is outside the annotation set a parser can be derived from. The
-verb still answers with the same :class:`~cad.results.ValidationResult` the
-other two families' mirrors do.
+``cad urdf check`` is an ADAPTER over :func:`check` rather than a generated mirror:
+``--packages NAME=PATH`` is repeatable, and a repeatable key/value map is outside the
+annotation set a parser can be derived from. It still answers with the same
+:class:`~cad.results.CheckResult` every type's ``check`` does.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cad.results import ValidationResult
+from cad.results import CheckResult
 
-__all__ = ["validate"]
+__all__ = ["check"]
 
 SUFFIX = ".urdf"
 
 
-def validate(
+def check(
     path: Path,
     *,
     strict: bool = False,
     packages: "dict[str, Path] | None" = None,
     verbose: bool = False,
-) -> ValidationResult:
+) -> CheckResult:
     """Check one URDF robot description for conformance.
 
     Collects every finding in one pass — structure, joints, inertials, mesh
     references — rather than stopping at the first. Errors always block; under
     ``strict`` warnings do too.
 
-    path: the .urdf file to validate.
+    path: the .urdf file to check.
     strict: treat warnings as blocking.
     packages: ``package://NAME/...`` mesh URI roots, name -> directory.
     verbose: narrate the target on stderr.
@@ -53,7 +52,7 @@ def validate(
     if not target.is_file():
         return failed(target, "file not found")
 
-    from cad.urdf_source import validate_urdf_file
+    from cad.urdf._source import validate_urdf_file
 
     source, findings = validate_urdf_file(target, package_map=packages)
     findings = findings.deduplicated()
@@ -75,3 +74,8 @@ def _summary(path: Path, source) -> str:
         f"{len(source.links)} links, {len(source.joints)} joints ({movable} movable), "
         f"{len(source.mesh_paths)} resolved mesh references{mass}"
     )
+
+
+from cad._internal.document_type import bind as _bind  # noqa: E402
+
+_bind(__name__)

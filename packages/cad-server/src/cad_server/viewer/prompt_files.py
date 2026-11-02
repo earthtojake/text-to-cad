@@ -4,8 +4,8 @@ POST /api/v1/local/prompt-files validates a snapshot packet in memory, then retu
 with compact inline JSON up to 1024 UTF-8 bytes, or writes one .snapshot.json and
 returns its path. Shared input and inline annotation are stored once (Measure's
 measurements are the person's alone: a prompt carries none);
-jobs reserve output names for an agent to render later (``cad snapshot --job`` draws
-every one of them; ``cad snapshot`` reads the packet as ``--annotation``, and ``--camera
+jobs reserve output names for an agent to render later (``cad <type> snapshot --job`` draws
+every one of them; ``cad <type> snapshot`` reads the packet as ``--annotation``, and ``--camera
 authored`` draws a job's view). A packet with
 ink also names the parts hidden and isolated where the ink was last drawn, which
 ``--annotation`` leaves out of its stills. No PNG is produced by this route.
@@ -22,6 +22,8 @@ import tempfile
 import threading
 from pathlib import Path
 
+from cad.registry import DOCUMENT_TYPES
+
 from cad._internal.atomic_replace import write_bytes_atomic
 
 __all__ = ["PROMPT_FILES_ROUTE", "PromptFiles"]
@@ -35,8 +37,10 @@ INLINE_SNAPSHOT_BYTES = 1024
 _REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline"})
 _VIEW_KEYS = frozenset({"label", "camera", "display", "kinematics", "jointValues", "animation", "selection", "width", "height"})
 _ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
-# What ``cad snapshot`` draws, by suffix (``cad.engine.snapshot``): the files a packet's input may be.
-SNAPSHOT_SUFFIXES = (".xbf", ".step", ".stp", ".stl", ".3mf", ".glb", ".urdf", ".srdf", ".sdf", ".dxf")
+# What ``cad <type> snapshot`` draws (``cad.engine.snapshot``): the files a packet's input may be, every
+# type with a snapshot (``cad.registry``).
+SNAPSHOT_SUFFIXES = tuple(extension for entry in DOCUMENT_TYPES.values() if "snapshot" in entry.operation_names
+                          for extension in entry.extensions)
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 _FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.json")
 
@@ -115,7 +119,7 @@ class PromptFiles:
         packet: dict[str, object] = {"input": input_path, "jobs": jobs}
         if annotation is not None:
             packet["annotation"] = annotation
-            # What ``cad snapshot --annotation`` leaves out of the stills it draws the ink on.
+            # What ``cad <type> snapshot --annotation`` leaves out of the stills it draws the ink on.
             packet.update(_drawn_in(annotation, views))
         _accepted(packet)
         compact = json.dumps(packet, ensure_ascii=False, separators=(",", ":"))
@@ -205,7 +209,7 @@ def _drawn_in(annotation: dict, views: list[dict]) -> dict:
 
 
 def _accepted(packet: dict) -> None:
-    """The packet as ``cad snapshot`` reads it, checked before anything renders: its input a
+    """The packet as ``cad <type> snapshot`` reads it, checked before anything renders: its input a
     file the snapshot draws (or a document's id), each job's camera and display, its annotation and
     the parts it hides and isolates, by the snapshot's own parsers (``cad.engine.snapshot``).
     Their refusal is this request's 400.
@@ -216,7 +220,7 @@ def _accepted(packet: dict) -> None:
 
     suffix = Path(str(packet["input"])).suffix.lower()
     if not is_id(packet["input"]) and suffix not in SNAPSHOT_SUFFIXES:
-        raise ValueError(f"{Path(str(packet['input'])).name} is no file cad snapshot draws: "
+        raise ValueError(f"{Path(str(packet['input'])).name} is no file cad <type> snapshot draws: "
                          f"one of {', '.join(SNAPSHOT_SUFFIXES)}")
     try:
         for index, job in enumerate(packet["jobs"]):

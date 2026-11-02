@@ -25,7 +25,7 @@ is written in its body, and its document keeps it:
   connected at are the **as-built state**, the pose every file of the model shows.
 
 The functions that say more are `cad.ap242`'s, named after the STEP AP242 entities
-they write (`from cad.ap242 import mechanism_state, gear_pair`):
+they write (`from cad.build123d import mechanism_state, gear_pair`):
 
 - **Mechanism states** name other poses: `mechanism_state(assembly, name, **values)`.
 - **Couplings** make joints move together by ratio, one function per pair the document
@@ -55,7 +55,7 @@ onto whatever axis it is given:
 # src/hinge.py
 import build123d as bd
 from cad import model
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 ELBOW = ((40, 0, 20), (0, -1, 0))   # the elbow's origin and direction: +angle lifts the arm
 
@@ -88,7 +88,7 @@ slide along +Y would stand the child on end:
 # src/linear_guide.py
 import build123d as bd
 from cad import model
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 SLIDE = ((0, -50, 10), (0, 1, 0))   # the slide's origin and direction: +position runs the carriage along +Y
 
@@ -165,7 +165,7 @@ to make instead.
 ```python
 # src/hinge_poses.py
 from cad import model
-from cad.ap242 import posed
+from cad.build123d import posed
 
 from hinge import hinge
 
@@ -202,7 +202,7 @@ turn) have no pair: drive them by a configuration sequence.
 # src/index_finger.py
 import build123d as bd
 from cad import model
-from cad.ap242 import configuration_sequence, gear_pair
+from cad.build123d import configuration_sequence, gear_pair
 
 CURL = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
@@ -285,8 +285,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cad snapshot "$ID" tmp/open.png --pose open
-cad snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad xbf snapshot "$ID" tmp/open.png --pose open
+cad xbf snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn
@@ -305,8 +305,8 @@ mid-motion. Measure a pose by posing the model in the check, using `find_part` a
 `world_parts` copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
-from cad.ap242 import posed
-from cad.geometry import overlap_volume
+from cad.build123d import posed
+from cad.build123d import overlap_volume
 
 from hinge import hinge
 

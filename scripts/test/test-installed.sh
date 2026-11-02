@@ -131,14 +131,14 @@ step "The installed packages are the WHEELS', not the checkout's; cadgen is the 
 "$VENV/bin/python" - <<'PY' || exit 1
 import pathlib, sys
 import cad, cad_mcp, cad_server, cadgen
-import cadgen.ap242
+import cadgen.build123d
 for package in (cad, cad_server, cad_mcp, cadgen):
     where = pathlib.Path(package.__file__).resolve()
     if "site-packages" not in where.parts:
         sys.exit(f"FAIL: imported {package.__name__} from {where}, not an installed wheel")
     print(f"   {package.__name__} at {where.parent}")
-import cad.ap242
-if cadgen.ap242 is not cad.ap242 or cadgen.model is not cad.model:
+import cad.build123d
+if cadgen.build123d is not cad.build123d or cadgen.model is not cad.model:
     sys.exit("FAIL: the cadgen alias is not the library's own modules and names")
 releases = {cad.__version__, cad_server.__version__, cad_mcp.__version__}
 if len(releases) != 1:

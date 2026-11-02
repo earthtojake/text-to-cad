@@ -1,6 +1,6 @@
 """Flat patterns stay EXACT: an arc that goes in comes out an arc.
 
-``cad.flatten`` used to sample every wire into points, union polygons in
+``cad.build123d._flatten`` used to sample every wire into points, union polygons in
 shapely, and emit polylines — so a filleted corner reached the DXF as a run of
 chords at a resolution nobody chose, and kerf compensation compounded it. The
 union and the offset are OCC operations on the real faces now,
@@ -46,9 +46,9 @@ def _entity_kinds(shape) -> dict[str, int]:
 
 class FlatPatternTests(unittest.TestCase):
     def test_a_flat_pattern_keeps_arcs_and_circles(self) -> None:
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
-        kinds = _entity_kinds(flatten.flat_pattern(_plate(), coordinate=6.0))
+        kinds = _entity_kinds(flat_pattern(_plate(), coordinate=6.0))
         self.assertEqual(kinds.get("ARC"), 6, "four corner fillets and two slot ends")
         self.assertEqual(kinds.get("CIRCLE"), 2, "two bolt holes")
         self.assertNotIn("LWPOLYLINE", kinds, "an exact profile emits no sampled polyline")
@@ -56,39 +56,39 @@ class FlatPatternTests(unittest.TestCase):
     def test_kerf_compensation_keeps_arcs(self) -> None:
         """The reason the shapely path stopped being primary: its buffer()
         turned every offset curve into chords."""
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
-        kinds = _entity_kinds(flatten.flat_pattern(_plate(), coordinate=6.0, kerf=0.2))
+        kinds = _entity_kinds(flat_pattern(_plate(), coordinate=6.0, kerf=0.2))
         self.assertEqual(kinds.get("ARC"), 6)
         self.assertEqual(kinds.get("CIRCLE"), 2)
 
     def test_kerf_changes_the_geometry_in_the_right_direction(self) -> None:
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         plate = _plate()
-        plain = flatten.flat_pattern(plate, coordinate=6.0)
-        grown = flatten.flat_pattern(plate, coordinate=6.0, kerf=0.2)
-        shrunk = flatten.flat_pattern(plate, coordinate=6.0, kerf=-0.2)
+        plain = flat_pattern(plate, coordinate=6.0)
+        grown = flat_pattern(plate, coordinate=6.0, kerf=0.2)
+        shrunk = flat_pattern(plate, coordinate=6.0, kerf=-0.2)
         self.assertGreater(grown.area, plain.area)
         self.assertLess(shrunk.area, plain.area)
 
     def test_flatten_face_lands_the_face_on_z_zero(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         raised = bd.Location((3, -4, 12)) * bd.Rectangle(10, 5).face()
-        flat = flatten.flatten_face(raised)
+        flat = flatten_face(raised)
         self.assertLess(max(abs(v.Z) for v in flat.vertices()), 1e-9)
         self.assertAlmostEqual(flat.area, raised.area, places=6)
 
     def test_planar_faces_raises_when_the_selection_is_empty(self) -> None:
         """An empty selection means the plane or the sign is wrong. Returning
         nothing would write an empty drawing that nobody notices."""
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         with self.assertRaises(RuntimeError):
-            flatten.planar_faces(
+            planar_faces(
                 _plate(),
                 normal_axis="z",
                 normal_sign=1.0,
@@ -99,10 +99,10 @@ class FlatPatternTests(unittest.TestCase):
     def test_an_impossible_offset_says_what_went_wrong(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         with self.assertRaises(RuntimeError) as caught:
-            flatten.offset_profile(bd.Rectangle(2, 2).face(), -5.0)
+            offset_profile(bd.Rectangle(2, 2).face(), -5.0)
         self.assertIn("consumes it entirely", str(caught.exception))
 
 
@@ -110,11 +110,11 @@ class UnionTests(unittest.TestCase):
     def test_overlapping_faces_fuse_into_one(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(5, 0) * bd.Rectangle(10, 5).face()
-        fused = flatten.union_faces([left, right])
+        fused = union_faces([left, right])
         self.assertEqual(len(fused.faces()), 1)
         self.assertAlmostEqual(fused.area, 15 * 5, places=6)
         self.assertEqual(_entity_kinds(fused), {"LINE": 4}, "the shared edge is gone")
@@ -122,27 +122,27 @@ class UnionTests(unittest.TestCase):
     def test_disjoint_faces_stay_a_nested_layout(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(30, 0) * bd.Rectangle(10, 5).face()
-        fused = flatten.union_faces([left, right])
+        fused = union_faces([left, right])
         self.assertEqual(len(fused.faces()), 2)
         self.assertEqual(_entity_kinds(fused), {"LINE": 8})
 
     def test_a_single_face_passes_through_untouched(self) -> None:
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         face = bd.Rectangle(10, 5).face()
-        self.assertIs(flatten.union_faces([face]), face)
+        self.assertIs(union_faces([face]), face)
 
     def test_no_faces_is_an_error(self) -> None:
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         with self.assertRaises(RuntimeError):
-            flatten.union_faces([])
+            union_faces([])
 
     def test_the_shapely_fallback_still_produces_a_usable_profile(self) -> None:
         """It is the fallback, and it costs curvature: the rebuilt profile is
@@ -150,11 +150,11 @@ class UnionTests(unittest.TestCase):
         choice."""
         import build123d as bd
 
-        from cad import flatten
+        from cad.build123d import _shapely_union_fallback, flat_pattern, flatten_face, offset_profile, planar_faces, union_faces
 
         left = bd.Rectangle(10, 5).face()
         right = bd.Pos(5, 0) * bd.Rectangle(10, 5).face()
-        rebuilt = flatten._shapely_union_fallback([left, right], cause=RuntimeError("forced"))
+        rebuilt = _shapely_union_fallback([left, right], cause=RuntimeError("forced"))
         self.assertAlmostEqual(rebuilt.area, 15 * 5, places=3)
         kinds = _entity_kinds(rebuilt)
         self.assertNotIn("ARC", kinds)

@@ -2,14 +2,14 @@
 ordinary Python scripts call decorated models explicitly.
 
     python SCRIPT.py                                 the models the script explicitly calls
-    cad export SRC DST [DST ...] [--json]
-    cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
+    cad <type> export SRC DST [DST ...] [--json]
+    cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
     cad delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
-    cad inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
+    cad xbf inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
 
 SRC and DOC are an on-disk CAD file's path or a document's id (``ids``): a model's id is what
 ``python SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
@@ -144,8 +144,8 @@ def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
     return parser
 
 
-def _snapshot(args: argparse.Namespace, prog: str = "cad snapshot") -> int:
-    """``cad snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
+def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> int:
+    """``cad <type> snapshot``: the verb run from its parsed flags (``snapshot.snapshot`` through ``api.snapshot``); a
     failure raised as ``Failed``, which the command says (``answered``)."""
     from cad.engine import snapshot
 
@@ -179,7 +179,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad snapshot") -> int:
 
 
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
-    """``cad snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
+    """``cad xbf snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
     memory of the worker holding it (``api.snapshot``); nothing is built."""
     from cad.engine import api, snapshot
 
@@ -203,7 +203,7 @@ def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
 
 
 def _snapshot_job(args: argparse.Namespace, prog: str) -> int:
-    """``cad snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
+    """``cad <type> snapshot --job PACKET [SRC]``: every picture the job names (``api.snapshot(job=)``),
     a line each; with ``--json``, ``{"ok": true, "pictures": [what each drew]}``."""
     import time
 
@@ -242,7 +242,7 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
 
 
 def parser_for(verb: str, prog: str | None = None) -> argparse.ArgumentParser:
-    """One verb's parser, as a command of its own (``cad export``, ``cad snapshot``, ...)."""
+    """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...)."""
     help_text, arguments, _runner = VERBS[verb]
     parser = argparse.ArgumentParser(prog=prog or f"cad {verb}", description=help_text)
     arguments(parser)
@@ -328,7 +328,7 @@ def state_notice(model: dict[str, Any], doing: str) -> str | None:
 
 
 def _export(args: argparse.Namespace, prog: str) -> int:
-    """``cad export SRC DST...``: an ``.xbf``, a ``.step``, a document id or a mesh file written
+    """``cad <type> export SRC DST...``: an ``.xbf``, a ``.step``, a document id or a mesh file written
     to each destination (``api.export`` refuses any other source); with ``--json``, what was written
     as one JSON object."""
     from cad.engine import api
@@ -364,13 +364,13 @@ def _serve(args: argparse.Namespace, prog: str) -> int:
     return 0
 
 
-def inspect_parser(prog: str = "cad inspect") -> argparse.ArgumentParser:
-    """``cad inspect``'s parser: a document, and a ref into it or none."""
+def inspect_parser(prog: str = "cad <type> inspect") -> argparse.ArgumentParser:
+    """``cad <type> inspect``'s parser: a document, and a ref into it or none."""
     return parser_for("inspect", prog)
 
 
-def inspect_main(argv: list[str] | None = None, prog: str = "cad inspect") -> int:
-    """``cad inspect DOC``: the build closure the xbf holds; ``cad inspect DOC REF``: what the
+def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect") -> int:
+    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad xbf inspect DOC REF``: what the
     kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
     document no live worker built; none of a file, which names no model)."""
     return run("inspect", argv, prog)
@@ -433,7 +433,7 @@ def _joint_value(value: Any) -> str:
 
 
 def summary_text(summary: dict[str, Any]) -> str:
-    """``cad inspect DOC``'s first screen (``api._summary``): a line per fact the document
+    """``cad xbf inspect DOC``'s first screen (``api._summary``): a line per fact the document
     holds, its lists one item per line under it; a fact it has none of says so. A structure
     (``--query structure``) has no measured line: no bounds, volume or masses."""
     import time

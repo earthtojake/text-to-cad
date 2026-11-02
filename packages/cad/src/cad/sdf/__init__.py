@@ -1,18 +1,18 @@
-"""The public ``sdf`` namespace: the verbs that operate on SDFormat documents.
+"""``cad.sdf``: the SDF document type (``cad.registry``), an SDFormat world or model.
 
-No decorator, for the reason :mod:`cad.urdf` gives: a world or model
-description is authored, not generated. ``cad sdf validate`` is a generated
-MIRROR of :func:`validate`; ``cad snapshot`` draws one
-(``cad.engine.snapshot``).
+No decorator, for the reason :mod:`cad.urdf` gives: a world or model description is
+authored, not generated. ``cad sdf check`` is a generated MIRROR of :func:`check`;
+``cad sdf snapshot`` draws one (``cad.engine.snapshot``). ``GZ_CHECK_MODES`` is the
+vocabulary of its ``gz_check`` option.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
-from cad.results import ValidationResult
+from cad.results import CheckResult
 
-__all__ = ["validate"]
+__all__ = ["check"]
 
 SUFFIX = ".sdf"
 
@@ -22,21 +22,21 @@ SUFFIX = ".sdf"
 GZ_CHECK_MODES = ("auto", "required", "never")
 
 
-def validate(
+def check(
     path: Path,
     *,
     strict: bool = False,
     gz_check: str = "auto",
     gz_remote: bool = False,
     verbose: bool = False,
-) -> ValidationResult:
+) -> CheckResult:
     """Check one SDFormat world or model for conformance.
 
     The bundled checks are dependency-light and catch common structural errors;
     they are not a replacement for libsdformat or a target simulator. Errors
     always block; under ``strict`` warnings do too.
 
-    path: the .sdf file to validate.
+    path: the .sdf file to check.
     strict: treat warnings as blocking.
     gz_check: run `gz sdf --check` as external validation — auto (when the tool
         is installed), required (fail without it), or never.
@@ -63,9 +63,9 @@ def validate(
     except (OSError, UnicodeDecodeError) as exc:
         return failed(target, str(exc), code="unreadable_file")
 
-    from cad.sdf_external import run_gz_sdf_check
-    from cad.sdf_source import SdfSourceError, parse_sdf_xml
-    from cad.sdf_validation import validate_sdf_xml
+    from cad.sdf._external import run_gz_sdf_check
+    from cad.sdf._source import SdfSourceError, parse_sdf_xml
+    from cad.sdf._validation import validate_sdf_xml
 
     findings = validate_sdf_xml(xml_text, source_path=target, base_dir=target.parent)
     findings.extend(run_gz_sdf_check(xml_text, output_path=target, mode=gz_check, remote=gz_remote))
@@ -96,3 +96,8 @@ def _summary(path: Path, source) -> str:
         f"{len(source.links)} links, {len(source.joints)} joints, "
         f"{len(source.mesh_paths)} resolved mesh references"
     )
+
+
+from cad._internal.document_type import bind as _bind  # noqa: E402
+
+_bind(__name__)

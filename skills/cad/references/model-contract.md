@@ -140,7 +140,8 @@ of the first one's result. Outside a run it is its function.
   once; marking one that returns `body` renames nothing.
 
 ```python
-from cad import memo, model
+from cad import model
+from cad.build123d import memo
 
 
 @memo
@@ -238,18 +239,18 @@ timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
 What a body reads is an input of its run, by the file's bytes, and a changed file
 re-runs the body that read it:
 
-- **`read_step(path)` and `read_xbf(path)`** copy a document's geometry into the model as
+- **`read_step(path)` and `xbf.read(path)`** copy a document's geometry into the model as
   a build123d compound tree: each assembly a `Compound`, each part named, coloured and
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
   part. A STEP that names other files as its parts (an external reference, written by a
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
-  `cad export`: export it again from its CAD tool as one file.
-- **A vendor STEP is converted once**: `cad export vendor.step vendor.xbf` writes an
+  `cad <type> export`: export it again from its CAD tool as one file.
+- **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
   xbf of it, which `read_xbf` reads many times faster than `read_step` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
-- **`read_mesh(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
+- **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
   `name` and `bounding_box()`. A document holds B-rep alone, so a mesh is measured and
   built from, never placed in a model.
 - **Every file the body's Python opens** for reading is an input too: `open`,
@@ -270,16 +271,16 @@ Anchor paths on the script, so a run reads the same file from any working folder
 from pathlib import Path
 
 import build123d as bd
-from cad import model, read_mesh, read_xbf
+from cad import model, stl, xbf
 
 HERE = Path(__file__).resolve().parent
 
 
 @model
 def rig():
-    motor = read_xbf(HERE / "../vendor/motor.xbf")
+    motor = xbf.read(HERE / "../vendor/motor.xbf")
     motor.label = "motor"
-    pcb = read_mesh(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
+    pcb = stl.read(HERE / "../scans/pcb.stl").bounding_box()   # an input, by the scan's bytes
     tray = bd.Box(pcb.size.X + 6, pcb.size.Y + 6, 6)
     tray.label = "tray"
     return bd.Compound(children=[tray, bd.Pos(0, 0, 20) * motor], label="rig")
@@ -297,7 +298,7 @@ within its namespace, the function's name by default, `name=` gives it another. 
 is the script's folder, with no project detection. Moving a named model to another file of its folder
 keeps its id: run the file it left with `cad run` (or delete it) first, since until then the server
 knows that file by its last run, and refuses the new file's declaration naming both. The page is
-`/<id>` on the server's address; `cad export`, `snapshot` and `inspect`, and the
+`/<id>` on the server's address; `cad <type> export`, `snapshot` and `inspect`, and the
 CAD app's tools, take the id and read the document as the server holds it. No command
 imports, runs or builds a script: editing the script changes nothing until Python runs
 it again.
@@ -308,7 +309,7 @@ it again.
   machine's) that never drops a document a page watches.
 - **The server never reruns code.** A document it no longer holds (its file in the server's
   cache deleted, or never saved) is refused with the command that
-  brings it back, `cad run <the script that defines it>`, by the page, `cad inspect`
+  brings it back, `cad run <the script that defines it>`, by the page, `cad <type> inspect`
   and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:

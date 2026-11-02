@@ -4,7 +4,7 @@ Read this file when creating a new `<name>.py` drawing script. Copy the
 template for the workflow that applies and replace the TODO markers.
 
 Every template follows one contract: **the parameterless `@model` function returns
-build123d 2D geometry on z=0, and `cad export <id> <name>.dxf` writes the DXF.**
+build123d 2D geometry on z=0, and `cad xbf export <id> <name>.dxf` writes the DXF.**
 You never construct a document, name a file in the model, or think about entities.
 
 - Return **one shape** for a single-operation drawing: it lands on the `CUT`
@@ -13,7 +13,7 @@ You never construct a document, name a file in the model, or think about entitie
   than one CAM operation: each child's label is its layer (`CUT`, `ENGRAVE`,
   `SCORE`).
 - Geometry must lie on **z=0**. A face derived from a solid is at that solid's
-  height, so relocate it (`flatten.flatten_face`, or
+  height, so relocate it (`flatten_face`, or
   `bd.Location((0, 0, -z)) * face`). The export refuses a solid, and an edge with a
   point more than 1e-6 mm off z=0, rather than silently writing its XY shadow.
 - The drawing checks run when the DXF is exported, before the file is written: cut
@@ -21,7 +21,7 @@ You never construct a document, name a file in the model, or think about entitie
   bend/engrave/reference-named layer.
 - Decoration only declares: the script's `__main__` block calls the drawing, and
   `cad run <name>.py` builds what it calls and prints each drawing's id. Then
-  `cad export <id> DXF/<name>.dxf` writes the file.
+  `cad xbf export <id> DXF/<name>.dxf` writes the file.
 
 ## 1. Standalone drafting (DXF from scratch)
 
@@ -93,7 +93,8 @@ imported from the part counts by its value.
 ```python
 """Flat-pattern DXF drawing for <name>; geometry reused from <name>.py."""
 
-from cad import flatten, model
+from cad import model
+from cad.build123d import flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces, union_faces
 
 from <name> import <name>          # the model: importing builds nothing
 
@@ -103,7 +104,7 @@ KERF = 0.0
 
 @model
 def drawing():
-    return flatten.flat_pattern(
+    return flat_pattern(
         <name>().shape,
         coordinate=THICKNESS_MM,   # TODO: which face plane defines the profile
         kerf=KERF,
@@ -124,18 +125,18 @@ unions the result:
 def drawing():
     part = bracket().shape
     faces = [
-        *flatten.planar_faces(part, normal_axis="z", normal_sign=1.0,
+        *planar_faces(part, normal_axis="z", normal_sign=1.0,
                               coordinate_axis="z", coordinate=3.0),
-        *flatten.planar_faces(part, normal_axis="y", normal_sign=-1.0,
+        *planar_faces(part, normal_axis="y", normal_sign=-1.0,
                               coordinate_axis="y", coordinate=0.0),
     ]
-    return flatten.union_faces(flatten.flatten_faces(faces))
+    return union_faces(flatten_faces(faces))
 ```
 
 ## 3. Flat pattern of an imported STEP
 
 For a vendor `.step` with no Python source. Read it with `read_step`, or convert
-it once with `cad export vendor_panel.step vendor_panel.xbf` and read the xbf
+it once with `cad step export vendor_panel.step vendor_panel.xbf` and read the xbf
 with `read_xbf`, which is faster. Like every file a run reads, it is an input:
 replacing it re-runs the drawing.
 
@@ -151,7 +152,8 @@ drawing, and give the drawing its own stem:
 
 from pathlib import Path
 
-from cad import flatten, model, read_step
+from cad import model, step
+from cad.build123d import flat_pattern, flatten_face, flatten_faces, offset_profile, planar_faces, union_faces
 
 STEP_PATH = Path(__file__).resolve().parent / "vendor" / "vendor_panel.step"
 KERF = 0.15
@@ -159,9 +161,9 @@ KERF = 0.15
 
 @model
 def drawing():
-    part = read_step(STEP_PATH)
+    part = step.read(STEP_PATH)
     top_z = part.bounding_box().max.Z
-    return flatten.flat_pattern(part, coordinate=top_z, kerf=KERF)
+    return flat_pattern(part, coordinate=top_z, kerf=KERF)
 
 
 if __name__ == "__main__":
@@ -173,7 +175,7 @@ if __name__ == "__main__":
 - **Bend / fold lines**: put them on a layer whose name says so (`BEND`, `FOLD`),
   a labelled child beside the profile. Open geometry is allowed there, and
   downstream tools classify it as bends rather than cuts.
-- **Kerf / tool-radius compensation**: `flatten.offset_profile(shape, amount)`,
+- **Kerf / tool-radius compensation**: `offset_profile(shape, amount)`,
   or the `kerf=` argument of `flat_pattern`. Positive grows the profile (cut
   outside the line), negative shrinks it. Never hand-offset coordinates.
 - **Curves stay curves.** The union and the offset are OCC operations on the real
@@ -181,7 +183,7 @@ if __name__ == "__main__":
   included. If a drawing comes out as hundreds of short `LINE`s, something fell
   back to the sampled path: check the union inputs rather than accepting it.
 - **Why did it (not) rebuild?** The run's report says how each body went (`run` or
-  `replayed`); `cad inspect <id>`, the id the run printed, prints what the drawing
+  `replayed`); `cad xbf inspect <id>`, the id the run printed, prints what the drawing
   was built from.
 - **Kept current**: an `exports.py` beside the drawings calls `export(drawing, path)`
   for each, the model function itself, with paths anchored on `__file__`.

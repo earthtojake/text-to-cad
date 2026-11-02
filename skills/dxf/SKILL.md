@@ -36,15 +36,15 @@ that returns planar geometry.
 **A drawing is a model.** It builds as any text-to-cad model does: `cad run <name>.py`
 rebuilds it in the server, prints its document's `id:` and page, and writes nothing.
 The DXF is exported from that document, by build123d's own exporter, once the drawing
-checks pass: `cad export <id> drawing.dxf`. A drawing that calls a part model
+checks pass: `cad xbf export <id> drawing.dxf`. A drawing that calls a part model
 (`bracket()` in its body) builds that part in the same run. The CAD Viewer and
-`cad snapshot` read the `.dxf` itself, so the file you hand a cutting service,
+`cad dxf snapshot` read the `.dxf` itself, so the file you hand a cutting service,
 the file the viewer draws and the file a snapshot renders are one and the same.
 
 ## The contract
 
 **A drawing is a `@model` function that takes no parameters and returns build123d 2D
-geometry on z=0: a sketch, a face, wires or edges. `cad export` writes the DXF.**
+geometry on z=0: a sketch, a face, wires or edges. `cad xbf export` writes the DXF.**
 You never construct a document, name an entity, or write a file from the model.
 
 ```python
@@ -68,7 +68,7 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gasket.py                   # prints id: and view:
-cad export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
+cad xbf export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
 ```
 
 - **One shape** is one layer, `CUT`. That is the whole contract for most drawings.
@@ -81,7 +81,7 @@ cad export "$ID" DXF/gasket.dxf         # ID: the id: line it printed
 - **Planar means 2D, on z=0.** The export refuses a document holding a solid
   (`bracket is 3D: a DXF is drawn from 2D geometry a model returns`) and an edge with
   any point more than 1e-6 mm off z=0, by its element name. A face taken from a solid
-  sits at that solid's height; relocate it (`flatten.flatten_face(face)`, or
+  sits at that solid's height; relocate it (`flatten_face(face)`, or
   `bd.Location((0, 0, -z)) * face`).
 - **No parameters.** Dimensions are module constants (`HOLE_D = 4.5`) or constants
   imported from the part the drawing derives from; a different drawing is a
@@ -126,7 +126,8 @@ Copy the full template for the applicable workflow from
    part in the same run and returns its geometry.
 
    ```python
-   from cad import flatten, model
+   from cad import model
+   from cad.build123d import flat_pattern, flatten_face, offset_profile
 
    from bracket import bracket        # the model: importing builds nothing
 
@@ -135,7 +136,7 @@ Copy the full template for the applicable workflow from
 
    @model
    def bracket_drawing():
-       return flatten.flat_pattern(bracket().shape, coordinate=3.0, kerf=KERF)   # the top face's height
+       return flat_pattern(bracket().shape, coordinate=3.0, kerf=KERF)   # the top face's height
 
 
    if __name__ == "__main__":
@@ -146,14 +147,15 @@ Copy the full template for the applicable workflow from
    part's body does not reach (a comment, another model) re-runs nothing.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
-   read it with `read_step`, or convert it once (`cad export vendor_panel.step
+   read it with `read_step`, or convert it once (`cad step export vendor_panel.step
    vendor_panel.xbf`) and read the xbf with `read_xbf`, which is faster. Like every
    file a run reads, it is an input: replacing the vendor file re-runs the drawing.
 
    ```python
    from pathlib import Path
 
-   from cad import flatten, model, read_step
+   from cad import model, step
+   from cad.build123d import flat_pattern, flatten_face, offset_profile
 
    HERE = Path(__file__).resolve().parent
 
@@ -162,8 +164,8 @@ Copy the full template for the applicable workflow from
 
    @model
    def panel_flat():
-       panel = read_step(HERE / "vendor" / "vendor_panel.step")   # an input, by its bytes
-       return flatten.flat_pattern(panel, coordinate=3.0, kerf=KERF)
+       panel = step.read(HERE / "vendor" / "vendor_panel.step")   # an input, by its bytes
+       return flat_pattern(panel, coordinate=3.0, kerf=KERF)
 
 
    if __name__ == "__main__":
@@ -198,7 +200,7 @@ Use these defaults unless the user specifies otherwise:
   `flatten_face` lays a face into XY exactly, `union_faces` fuses, and
   `flat_pattern` does all of it in one call. Hand-drawn parametric outlines only
   when there is no reliable 3D topology.
-- Kerf / tool-radius compensation is `flatten.offset_profile(shape, amount)` or
+- Kerf / tool-radius compensation is `offset_profile(shape, amount)` or
   `flat_pattern(..., kerf=...)`; never hand-offset coordinates.
 - **Curves stay curves.** The union and the offset are exact OCC operations, and
   each edge is written as one entity, so a filleted corner exports as an `ARC` and a
@@ -214,15 +216,15 @@ Use these defaults unless the user specifies otherwise:
 
 ```bash
 cad run path/to/drawing.py                               # builds every model its __main__ calls
-cad export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
-cad snapshot path/to/drawing.dxf review.png              # draws it
-cad snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
+cad xbf export "$ID" path/to/drawing.dxf                     # writes the DXF, running the drawing checks
+cad dxf snapshot path/to/drawing.dxf review.png              # draws it
+cad dxf snapshot path/to/drawing.dxf review.png --display '{"appearance": "dark"}'
 ```
 
 **Running the script is the only way to build a drawing, and exporting it the only
 way to write its DXF.** `cad run <drawing>.py` takes no options and writes nothing; it
 prints each model's report (`built src/gasket.py::gasket cold in 2.29s: ...`), its
-`id:` and its page, and exits 1 when a body raises. `cad export` exits 2 when the
+`id:` and its page, and exits 1 when a body raises. `cad xbf export` exits 2 when the
 export refuses the drawing (3D, off the plane, a failed drawing check), naming which.
 An imported `.dxf` needs nothing at all: hand it straight to a snapshot or the viewer.
 
@@ -230,7 +232,7 @@ Paths on the command line, and those `export` takes from Python, resolve from th
 working directory; anchor them on `__file__` in an `exports.py`. Keep a drawing
 script in the same directory as the geometry it derives from, named `<name>.py`.
 
-`cad snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole,
+`cad dxf snapshot` draws a drawing the way the CAD Viewer's drawing pane does: whole,
 from above, fitted with a margin, in the pens the file declares (an entity with no
 pen of its own takes the paper's ink), on light paper or, with
 `--display '{"appearance": "dark"}'`, dark. `--size-profile`, `--width` and
@@ -248,8 +250,8 @@ are in drawing coordinates, on the sheet. Draw what the person saw, each window 
 their ink and dimensions on it, before editing:
 
 ```bash
-cad snapshot --job tmp/panel.snapshot.json                     # every view, into the paths its jobs name
-cad snapshot panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
+cad dxf snapshot --job tmp/panel.snapshot.json                     # every view, into the paths its jobs name
+cad dxf snapshot panel.dxf tmp/view.png --annotation tmp/panel.snapshot.json --camera authored
 ```
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
@@ -265,7 +267,7 @@ checks; review geometry visually (see [Show the model](#show-the-model)).
 
 ```bash
 cad run path/to/source.py
-cad export "$ID" path/to/drawing.dxf
+cad xbf export "$ID" path/to/drawing.dxf
 ```
 
 5. Validate the exported DXF deterministically, then hand off and report.
@@ -275,7 +277,7 @@ cad export "$ID" path/to/drawing.dxf
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad snapshot`.
+own work; review with `cad <type> snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.

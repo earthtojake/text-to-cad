@@ -82,8 +82,8 @@ The payload::
   so one authored in metres needs no mesh scale, while an STL or a 3MF is drawn as the
   numbers it holds, which the mesh scale converts (``0.001`` for millimetres). The placement
   carries the conversion from the page's decoded unit (a GLB decodes into millimetres).
-- Refusals are the validators' (``cad.urdf_source``, ``cad.sdf_validation``,
-  ``cad.srdf_validation``) plus what the page cannot draw: a mesh in a format it has no
+- Refusals are the validators' (``cad.urdf._source``, ``cad.sdf._validation``,
+  ``cad.srdf._validation``) plus what the page cannot draw: a mesh in a format it has no
   decoder for, a shape it has no mesh for, a mesh it cannot reach. Every refusal is a
   :class:`RobotReadError` saying what to change.
 
@@ -107,8 +107,8 @@ from urllib.parse import urlparse
 import xml.etree.ElementTree as ET
 
 from cad.engine import mesh_uri
-from cad.findings import format_findings
-from cad.xml_common import children, display_path, local_name
+from cad._internal.findings import format_findings
+from cad._internal.xml_common import children, display_path, local_name
 
 __all__ = [
     "DRAWABLE_MESH_FORMATS",
@@ -447,7 +447,7 @@ def _urdf_material_color(material: ET.Element | None, named: dict[str, str]) -> 
 
 
 def _resolve_urdf_mesh(filename: str, *, source_path: Path, where: str) -> dict:
-    from cad.urdf_source import MeshUriKind, classify_mesh_uri, resolve_mesh_uri
+    from cad.urdf._source import MeshUriKind, classify_mesh_uri, resolve_mesh_uri
 
     try:
         reference = classify_mesh_uri(filename)
@@ -485,7 +485,7 @@ def _package_mesh(reference: str, base_dir: Path, where: str) -> Path:
 def _four_bar_element(joint_element: ET.Element) -> dict[str, Any] | None:
     """The joint's ``<tcad:four_bar>`` as numbers, or None. The validator refused one with a
     length that is not positive, a zero angle that is not a number, or no driver."""
-    from cad.urdf_source import FOUR_BAR_LENGTHS, FOUR_BAR_TAG, FOUR_BAR_ZEROS
+    from cad.urdf._source import FOUR_BAR_LENGTHS, FOUR_BAR_TAG, FOUR_BAR_ZEROS
 
     element = joint_element.find(FOUR_BAR_TAG)
     if element is None:
@@ -504,7 +504,7 @@ def _four_bar_facts(four_bar: dict[str, Any] | None) -> dict[str, Any] | None:
 
 
 def _read_urdf(path: Path) -> _Description:
-    from cad.urdf_source import validate_urdf_file
+    from cad.urdf._source import validate_urdf_file
 
     source, findings = validate_urdf_file(path)
     if findings.errors or source is None:
@@ -860,8 +860,8 @@ def _resolve_sdf_mesh(uri: str, *, base_dir: Path, where: str) -> dict:
 
 
 def _read_sdf(path: Path) -> _Description:
-    from cad.sdf_source import SdfSourceError
-    from cad.sdf_validation import raise_for_validation_errors, validate_sdf_root
+    from cad.sdf._source import SdfSourceError
+    from cad.sdf._validation import raise_for_validation_errors, validate_sdf_root
 
     display = display_path(path)
     try:
@@ -1062,16 +1062,16 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
     """The URDF whose robot an SRDF plans for, or a refusal naming the search.
 
     An SRDF carries planning semantics only. It pairs with the same-folder ``.urdf``
-    whose ``<robot name>`` matches -- the rule ``cad srdf validate`` and the CAD Viewer
+    whose ``<robot name>`` matches -- the rule ``cad srdf check`` and the CAD Viewer
     use -- and exactly one may match.
     """
-    from cad.srdf_validation import find_paired_urdf
+    from cad.srdf._validation import find_paired_urdf
 
     folder = srdf_path.parent
     robot_name = _robot_name_of(srdf_path)
     rule = (
         "An SRDF renders the geometry of the same-folder .urdf whose <robot name> "
-        "matches its own, and exactly one may match (check with `cad srdf validate`)."
+        "matches its own, and exactly one may match (check with `cad srdf check`)."
     )
     if not robot_name:
         raise RobotReadError(f"{srdf_path.name} has no readable <robot name>, so its URDF cannot be found. {rule}")
@@ -1100,8 +1100,8 @@ def paired_urdf_for_srdf(srdf_path: Path) -> Path:
 
 
 def _read_srdf(path: Path) -> _Description:
-    from cad.srdf_source import parse_srdf_file
-    from cad.srdf_validation import _link_names_for_group, read_urdf_robot, validate_srdf_against_urdf
+    from cad.srdf._source import parse_srdf_file
+    from cad.srdf._validation import _link_names_for_group, read_urdf_robot, validate_srdf_against_urdf
 
     source, findings = parse_srdf_file(path)
     if findings.errors or source is None:

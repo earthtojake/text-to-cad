@@ -5,7 +5,7 @@
 command, the root function nor a document's handle (`Document.export`, what a model call returns)
 takes an option that selects a part or a state. A posed or partial file is a function in the
 model's code (`cad.ap242.posed`, a part's own model). This pins the surface where such an option
-would come back: the parser `cad export` runs and the Python signatures. The verbs moved from
+would come back: the parser `cad <type> export` runs and the Python signatures. The verbs moved from
 the decorated function (`Model`) to the handle deliberately: the function is the declaration and
 its id; the document a call returns is what a verb reads. Nothing here needs the CAD kernel.
 """
@@ -23,7 +23,13 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cad/src")
 
 import cad  # noqa: E402
-from cad_server.cli.export import build_parser  # noqa: E402
+import cad.engine.api  # noqa: E402
+from cad_server.cli.document_types import build_parser as _build_parser  # noqa: E402
+
+
+def build_parser():
+    """``cad xbf export``'s parser: the engine's export verb, which every type's export takes."""
+    return _build_parser("xbf", "export")
 from cad.engine.api import Document  # noqa: E402
 from cad.engine.model import Model  # noqa: E402
 
@@ -39,10 +45,10 @@ class ExportTakesADocumentAndDestinations(unittest.TestCase):
         found = {(action.dest, tuple(action.option_strings), action.nargs) for action in parser._actions
                  if not isinstance(action, argparse._HelpAction)}
         self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("json", ("--json",), 0)},
-                         f"`cad export` takes SRC DST [DST ...] [--json] alone; {LAW}")
+                         f"`cad <type> export` takes SRC DST [DST ...] [--json] alone; {LAW}")
 
     def test_the_function_takes_a_source_destinations_and_its_seams_alone(self) -> None:
-        parameters = inspect.signature(cad.export).parameters.values()
+        parameters = inspect.signature(cad.engine.api.export).parameters.values()
         self.assertEqual([(p.name, p.kind, p.default) for p in parameters], [
             ("source", inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.empty),
             ("destinations", inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.empty),
@@ -72,7 +78,7 @@ class SnapshotTakesThePictureAlone(unittest.TestCase):
         for option, value in (("preview", True), ("animation", "swing"), ("fps", 30)):
             with self.subTest(option=option):
                 with self.assertRaisesRegex(TypeError, "unexpected keyword argument"):
-                    cad.snapshot("missing.xbf", "picture.png", **{option: value})
+                    cad.engine.api.snapshot("missing.xbf", "picture.png", **{option: value})
                 with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
                     parser_for("snapshot").parse_args(["missing.xbf", "picture.png", f"--{option}"])
                 self.assertEqual(refused.exception.code, 2)
@@ -80,7 +86,7 @@ class SnapshotTakesThePictureAlone(unittest.TestCase):
                     job_pictures({"input": "missing.xbf", option: value, "outputs": ["picture.png"]})
 
     def test_a_handle_s_snapshot_takes_the_verb_s_picture_options_by_name(self) -> None:
-        verb = inspect.signature(cad.snapshot).parameters
+        verb = inspect.signature(cad.engine.api.snapshot).parameters
         parameters = list(inspect.signature(Document.snapshot).parameters.values())
         self.assertEqual([(p.name, p.kind) for p in parameters[:2]], [
             ("self", inspect.Parameter.POSITIONAL_OR_KEYWORD), ("out", inspect.Parameter.POSITIONAL_OR_KEYWORD)])
@@ -89,7 +95,7 @@ class SnapshotTakesThePictureAlone(unittest.TestCase):
                          f"Document.snapshot(out, ...) spells out the snapshot verb's options, each about the picture; {LAW}")
         self.assertEqual(set(verb) - {"source", "out", "job", "progress"}, set(self.PICTURE),
                          "the verb takes no option Document.snapshot leaves out but its job and its progress seam")
-        self.assertEqual(inspect.signature(cad.inspect).parameters["progress"].default, None,
+        self.assertEqual(inspect.signature(cad.engine.api.inspect).parameters["progress"].default, None,
                          "inspect's progress is a seam about where the measurement is, never about the model")
 
 

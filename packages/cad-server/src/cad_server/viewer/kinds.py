@@ -18,14 +18,17 @@ from __future__ import annotations
 
 import os
 
+from cad.registry import DOCUMENT_TYPES
+
 API = "/api/v1"
 
-FILE_KINDS = {".xbf": "xbf", ".step": "step", ".stp": "step", ".stl": "stl", ".glb": "glb", ".3mf": "3mf",
-              ".dxf": "dxf", ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
-KINDS = ("model", "xbf", "step", "stl", "glb", "3mf", "dxf", "urdf", "srdf", "sdf")
+# A file's kind is its document type as the API spells it (``cad.registry``'s ``wire``: the id, but
+# ``3mf`` for ``threemf``, the spelling released pages read).
+FILE_KINDS = {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
+KINDS = ("model", *(entry.wire for entry in DOCUMENT_TYPES.values()))
 # The documents the engine itself serves: their structure, parts and version are its reads.
-ENGINE_KINDS = frozenset({"model", "xbf", "step"})
-ROBOT_KINDS = frozenset({"urdf", "srdf", "sdf"})
+ENGINE_KINDS = frozenset({"model", *(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")})
+ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
 # (``exports.FORMATS``); ``dxf`` only where the view draws the document flat.

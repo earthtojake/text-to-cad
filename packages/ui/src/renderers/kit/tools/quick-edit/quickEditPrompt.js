@@ -1,7 +1,11 @@
+import { documentTypeFromPath } from "@cad/core/lib/fileFormats.js";
 import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
-const stemOf = resource => stem(resource.kind === "url" ? new URL(resource.url).pathname : resource.path);
+const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
+const stemOf = resource => stem(pathOf(resource));
+// The command that draws the packet again: the file's document type's snapshot (`cad <type> snapshot`).
+const snapshotCommand = resource => `cad ${documentTypeFromPath(pathOf(resource))} snapshot --annotation`;
 // Awaited the first time something reads it: a file is fetched only by a host that carries its bytes.
 const lazy = start => {
   let started = null;
@@ -62,8 +66,8 @@ export function createQuickEditContext({ resource, references = [], text, views 
     const made = pick => { const path = files.then(pick); path.catch(() => {}); return path; };
     const path = made(result => result.snapshot || "");
     const inlineText = made(result => typeof result.inline === "string"
-      ? `Snapshot JSON (cad snapshot --annotation):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
-    parts.push({ id: "snapshot", kind: "attachment", label: "Snapshot (cad snapshot --annotation)",
+      ? `Snapshot JSON (${snapshotCommand(resource)}):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
+    parts.push({ id: "snapshot", kind: "attachment", label: `Snapshot (${snapshotCommand(resource)})`,
       name: `${name}.snapshot.json`, mimeType: "application/json", path, inlineText,
       content: lazy(() => files.then(result => typeof result.inline === "string"
         ? new Blob([result.inline], { type: "application/json" }) : read(result.snapshot))), about: ["file"] });

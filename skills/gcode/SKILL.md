@@ -62,7 +62,7 @@ built-in profiles.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad export <id> part.3mf`, or `cad export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad xbf export <id> part.3mf`, or `cad step export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 

@@ -1,8 +1,8 @@
-"""What the ``urdf``/``srdf``/``sdf`` ``validate`` verbs share.
+"""What the ``urdf``/``srdf``/``sdf`` ``check`` operations share.
 
-The checkers all answer with :class:`cad.findings.FindingsReport` — an
+The checkers all answer with :class:`cad._internal.findings.FindingsReport` — an
 accumulator of Findings split by severity — and the public verbs all answer with
-:class:`cad.results.ValidationResult`, the typed line protocol every door
+:class:`cad.results.CheckResult`, the typed line protocol every door
 returns. That conversion, and the one rule that decides ``ok``, live here so the
 three verbs cannot come to disagree about what "valid" means.
 
@@ -16,19 +16,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cad.results import ValidationIssue, ValidationResult
+from cad.results import CheckFinding, CheckResult
 
 # Stdlib only, like cad.results: a robot validator must not wake the CAD
 # kernel, and these namespaces are imported to reach one small function.
 
 
-def issues_from_findings(findings) -> tuple[ValidationIssue, ...]:
+def issues_from_findings(findings) -> tuple[CheckFinding, ...]:
     """Every finding, errors first, as the public issue type."""
     return tuple(
-        ValidationIssue(
+        CheckFinding(
             severity=str(finding.severity),
             message=finding.message,
-            element=finding.path,
+            location=finding.path,
             code=finding.code,
             hint=finding.hint,
         )
@@ -47,27 +47,27 @@ def blocks(findings, *, strict: bool) -> bool:
 
 def result_from_findings(
     path: Path, findings, *, strict: bool, summary: str = ""
-) -> ValidationResult:
+) -> CheckResult:
     """One checker's findings as the verb's answer."""
     blocking = blocks(findings, strict=strict)
-    return ValidationResult(
+    return CheckResult(
         ok=not blocking,
         path=path,
-        issues=issues_from_findings(findings),
+        findings=issues_from_findings(findings),
         summary=summary if not blocking else "",
     )
 
 
-def failed(path: Path, message: str, *, code: str = "invalid_target") -> ValidationResult:
+def failed(path: Path, message: str, *, code: str = "invalid_target") -> CheckResult:
     """A precheck failure — wrong suffix, missing file, unreadable — as a result.
 
     These never reach a checker, so they have no findings to convert; the shape
     a caller sees has to be the same either way.
     """
-    return ValidationResult(
+    return CheckResult(
         ok=False,
         path=path,
-        issues=(ValidationIssue(severity="error", message=message, code=code),),
+        findings=(CheckFinding(severity="error", code=code, message=message),),
     )
 
 

@@ -22,7 +22,7 @@ prepares the file, the browser saves it. No code changes, nothing rebuilds, and 
 destination is written from the document the server holds, by its suffix:
 
 ```bash
-cad export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad xbf export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 `$ID` is the `id:` line the model's run printed. The output folders are generated on
@@ -30,13 +30,13 @@ request and gitignored by default ([version control](project-layout.md#version-c
 server reads as a document, an `.xbf` or a `.step`:
 
 ```bash
-cad export vendor/motor.step vendor/motor.xbf
-cad export share/arm.xbf GLB/arm.glb
+cad step export vendor/motor.step vendor/motor.xbf
+cad xbf export share/arm.xbf GLB/arm.glb
 ```
 
 A mesh file converts to another mesh format: an `.stl`, `.glb` or `.3mf` exports to
 either of the other two, keeping what the target format can hold, with no kernel loaded
-(`cad export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
+(`cad stl export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
 it has no B-rep, so model it in build123d, with `read_mesh` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
@@ -46,7 +46,7 @@ written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes
 An export takes a document and its destinations, and nothing else. What a file shows is
 the model's business: a different file is a different model.
 
-A written file is a detached copy, whether `cad export`, `exports.py` or a file
+A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
 decorator (`@step`, `@glb`, ...) wrote it: nothing ties it to the model, nothing reruns
 it, and a viewer page of it follows the file's bytes on disk, never the model. It
 changes only when it is written again. Give the person its path; open it only when they
@@ -60,7 +60,7 @@ files ([projects built around exported files](../SKILL.md#projects-built-around-
 | | Model page | File page |
 | --- | --- | --- |
 | When | The default. | The person asks to iterate on the exported file, or the project revolves around its files: an `exports.py`, a consumer reading them (a robot description, a slicer, a drawing pipeline), a 0.7-era layout. |
-| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad export`) and the page re-reads it, a STEP parsed again. |
+| Each run | The page updates; nothing is written. | The file is written too (a file decorator, `exports.py` or `cad <type> export`) and the page re-reads it, a STEP parsed again. |
 | A picked ref | `made_by` names the function, file and line. | `made_by` is null, a file names no model: a Quick Edit has no way back into the code. |
 | A failed run | The page says so. | The file keeps its last write and the page says nothing. |
 
@@ -95,7 +95,7 @@ cad run src/exports.py
 ```
 
 Write `exports.py` only when the person wants files kept current; a one-off file is a
-`cad export`. Nothing else in the project writes files.
+`cad <type> export`. Nothing else in the project writes files.
 
 ## Posed files and parts on their own
 
@@ -105,7 +105,7 @@ part's file is the part's own model:
 ```python
 # src/arm_poses.py
 from cad import model
-from cad.ap242 import posed
+from cad.build123d import posed
 
 from arm import arm                              # an assembly with a mechanism state "folded"
 
@@ -117,7 +117,7 @@ def arm_folded():
 
 ```bash
 cad run src/arm_poses.py                          # prints arm_folded's id
-cad export "$FOLDED_ID" STEP/arm_folded.step
+cad xbf export "$FOLDED_ID" STEP/arm_folded.step
 ```
 
 `posed(assembly, state)` places the assembly's parts at a state the assembly names
@@ -135,12 +135,12 @@ the model's animations, which only a GLB exported from it reads. Export one only
 - to compose it in another project, where `read_xbf` reads it as an input.
 
 A server restart needs none: the server keeps each model document it built in its own
-cache, so after a restart the document's id opens in the viewer, answers `cad inspect`,
+cache, so after a restart the document's id opens in the viewer, answers `cad <type> inspect`,
 exports and snapshots without a rebuild. It is the last built state: the server never
 checks the code against it and nothing reruns, so after an edit run the script to build it
 again.
 
-A vendor STEP converted once (`cad export vendor/motor.step vendor/motor.xbf`) is
+A vendor STEP converted once (`cad step export vendor/motor.step vendor/motor.xbf`) is
 read by `read_xbf` many times faster than `read_step` parses the STEP, with the same
 geometry, names, colours and materials. Keep the xbf beside the STEP, and read the xbf
 ([inputs](model-contract.md#inputs)).

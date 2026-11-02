@@ -39,6 +39,8 @@ from .content_types import content_type_for_path, content_type_for_static_asset,
 from .encoding import UriError, strict_decode_uri_component
 from .scanner import CAD_CATALOG_SCHEMA_VERSION, VIEWER_EXTENSIONS, catalog_entry, node_basename, to_posix_path
 from .documents import EngineDocuments
+from cad.registry import DOCUMENT_TYPES
+
 from .kinds import API, ENGINE_KINDS, EXPORTS, KINDS, ROBOT_KINDS, document_api, file_kind
 
 __all__ = [
@@ -212,10 +214,11 @@ _FUNNEL_HINTS = {400: "fix the request as the error says", 404: "check the path 
 _ELEMENTS = {"faces": "face", "edges": "edge", "vertices": "vertex"}
 _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /groups, /volume), measure, "
                   "kinematics, POST pose, POST mesh")
-_KIND_ROUTES = {"model": _ENGINE_ROUTES, "xbf": _ENGINE_ROUTES + ", source", "step": _ENGINE_ROUTES + ", source",
-                "dxf": "drawing, source", "urdf": "structure, parts/<digest>, source",
-                "srdf": "structure, parts/<digest>, source", "sdf": "structure, parts/<digest>, source",
-                "stl": "source", "glb": "source", "3mf": "source"}
+# What each kind's collection answers, by how its document type is viewed (``cad.registry``).
+_VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, source"}
+_KIND_ROUTES = {"model": _ENGINE_ROUTES,
+                **{entry.wire: _VIEW_ROUTES[entry.view] for entry in DOCUMENT_TYPES.values()}}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)

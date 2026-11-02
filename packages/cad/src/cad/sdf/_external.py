@@ -7,7 +7,7 @@ import tempfile
 from urllib.parse import urlsplit
 import xml.etree.ElementTree as ET
 
-from cad.findings import FindingsReport
+from cad._internal.findings import FindingsReport
 
 GzCheckMode = str
 

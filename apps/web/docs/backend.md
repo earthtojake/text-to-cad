@@ -210,7 +210,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `GET /api/v1/local/update` | `{notice, release, instance, update}`: whether a newer text-to-cad is out (the update button's `notice`, `{latest, version}`, or null), the release the engine runs, and the update a press started (`state`: `idle`, `working`, `restarting` or `failed`; its `target`, its last `progress` frame, its `error`): on the engine a failed switch started again, `failed` with that switch's error, for minutes (`Update.recall`). `GET /api/v1/server` says the same. |
 | `POST /api/v1/local/update` | The update button's press (`cad_server._internal.update`): the newest release installed, set up and switched to; answers `202` with what `GET /api/v1/local/update` says, at once. Not on an engine that cannot hand itself over (409). |
 | `GET /app` | The CAD app's module (`app.js`), which the shell a host keeps loads (`cad_server.mcp.ui`); 404 with none built. |
-| `POST /api/v1/local/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cad snapshot --job` draws the packet later. Carries `x-cad-viewer`, as the GET below does. |
+| `POST /api/v1/local/prompt-files` | `{name, input, views: [{label, camera, display?, kinematics?, jointValues?, animation?, selection?, width?, height?}], annotation?, acceptInline?}` (at most 16 views; Measure's measurements never travel in one): validate a Quick Edit's packet in memory and answer `200 {ok, inline}` (compact JSON up to 1024 bytes, only with `acceptInline: true`), else `200 {ok, snapshot}` (the absolute path of the `.snapshot.json` written), or a 400. Nothing renders and no PNG is written: `cad <type> snapshot --job` draws the packet later. Carries `x-cad-viewer`, as the GET below does. |
 | `GET /api/v1/local/prompt-files/<name>` | One of those JSON files, from this process's prompt-files directory only. |
 
 Every request that changes something (POST, PUT, PATCH, DELETE) must send `x-cad-viewer: 1`.
@@ -242,7 +242,7 @@ drawing add-on over the `.dxf`'s modelspace and returns what every entity
 flattens to — text placed, dimensions exploded, hatches filled or patterned,
 block inserts placed — so the client draws primitives and never parses DXF.
 
-`cad snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
+`cad <type> snapshot` draws a drawing by OCCT in the engine (`engine/render/drawing.py`),
 from the engine's own reading of the file, as this pane draws it: from above, fitted,
 hairlines in their pens, on the light or dark paper. This route
 (`GET /api/v1/documents/dxf/<id>/drawing`) is the pane's alone.

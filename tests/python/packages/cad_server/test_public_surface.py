@@ -37,8 +37,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
-    "sdf validate": ("cad.sdf", "validate"),
-    "srdf validate": ("cad.srdf", "validate"),
+    "sdf check": ("cad.sdf", "validate"),
+    "srdf check": ("cad.srdf", "validate"),
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -51,7 +51,7 @@ SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "wi
 ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
     # repeatable key/value map is outside the derivable set.
-    "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
+    "urdf check": frozenset({"path", "strict", "packages", "verbose"}),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli), each a command of its own.
@@ -152,7 +152,7 @@ class Manifest(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
-        for noun, verbs in {"urdf": ("urdf validate",), "srdf": ("srdf validate",)}.items():
+        for noun, verbs in {"urdf": ("urdf check",), "srdf": ("srdf check",)}.items():
             for rest in (("bogus",), ()):
                 with self.subTest(noun=noun, rest=rest):
                     code, out, err = self._dispatch(noun, *rest)
@@ -163,19 +163,19 @@ class Manifest(unittest.TestCase):
                     self.assertIn(f"usage: cad {noun} <verb>", err)
                     for verb in verbs:
                         self.assertIn(verb, err)
-                    self.assertNotIn("sdf validate" if noun == "urdf" else "urdf validate", err)
+                    self.assertNotIn("sdf check" if noun == "urdf" else "urdf check", err)
 
     def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
         code, out, err = self._dispatch("urdf", "--help")
         self.assertEqual((0, ""), (code, err))
-        self.assertIn("urdf validate", out)
-        self.assertNotIn("sdf validate", out)
+        self.assertIn("urdf check", out)
+        self.assertNotIn("sdf check", out)
 
     def test_an_unknown_noun_lists_every_command(self):
         code, out, err = self._dispatch("frobnicate", "export")
         self.assertEqual(2, code)
         self.assertIn("unknown command 'frobnicate'", err)
-        for command in ("export", "snapshot", "urdf validate", "viewer", "inspect"):
+        for command in ("export", "snapshot", "urdf check", "viewer", "inspect"):
             self.assertIn(command, err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):
@@ -236,7 +236,7 @@ class ImportBudget(unittest.TestCase):
     """Run in a subprocess: this one has the CAD stack loaded already."""
 
     def test_public_namespaces_import_without_the_cad_stack(self):
-        imports = "; ".join(f"import {name}" for name in (*PUBLIC_SURFACE, "cad.geometry"))
+        imports = "; ".join(f"import {name}" for name in (*PUBLIC_SURFACE, "cad.build123d._geometry"))
         code = f"import sys; {imports}; print('HEAVY:' + ','.join(m for m in {HEAVY!r} if m in sys.modules))"
         proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 0, proc.stderr)

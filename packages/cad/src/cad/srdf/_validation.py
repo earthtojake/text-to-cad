@@ -3,7 +3,7 @@
 SRDF is a description OF another robot: every group, chain, end effector and group
 state names links and joints that must exist in the paired URDF, with the right
 kinds and values. So validation is inherently cross-file, and the bulk of it is
-here rather than in :mod:`cad.srdf_source`, which only reads the SRDF itself.
+here rather than in :mod:`cad.srdf._source`, which only reads the SRDF itself.
 
 Lived in the srdf skill's cli.py until the validators moved into cadgen, where it
 was ~600 lines of cross-validation wedged behind an argparse front end.
@@ -14,9 +14,9 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-from cad.findings import FindingsReport
-from cad.xml_common import display_path
-from cad.srdf_source import SrdfPlanningGroup, SrdfSource
+from cad._internal.findings import FindingsReport
+from cad._internal.xml_common import display_path
+from cad.srdf._source import SrdfPlanningGroup, SrdfSource
 
 URDF_SUFFIX = ".urdf"
 MANUAL_PAIR_WARNING_THRESHOLD = 25
@@ -94,7 +94,7 @@ def read_urdf_robot(urdf_path: Path, result: FindingsReport) -> dict[str, object
     command validates the SRDF, and a broken URDF is one finding here plus a pointer at the
     tool that explains it properly.
     """
-    from cad.urdf_source import validate_urdf_file
+    from cad.urdf._source import validate_urdf_file
 
     try:
         source, urdf_result = validate_urdf_file(urdf_path)

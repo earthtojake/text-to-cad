@@ -32,10 +32,10 @@ if __name__ == "__main__":
 
 ```bash
 cad run arm.py                             # builds it in the engine's warm worker
-cad export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
-cad snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
+cad xbf export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
+cad xbf snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
 cad serve XBF/arm.xbf                      # the document on a local page
-cad inspect XBF/arm.xbf                    # what it holds, then its build closure
+cad xbf inspect XBF/arm.xbf                    # what it holds, then its build closure
 ```
 
 **PURPOSE** — the engine and its command surface: models built in a warm worker whose memo
@@ -135,7 +135,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    prototypes and instances with placements, a name on every part and instance, colours and
    materials per part and per painted face, element names on face, edge and vertex labels, and
    an assembly's mechanism. STEP, GLB, STL, 3MF and, of a planar document, DXF are translations
-   of it; `cad export` writes any of them from the xbf alone.
+   of it; `cad <type> export` writes any of them from the xbf alone.
 5. **The memo is the only build cache, and it lives in the worker.** Every kernel operation a model
    runs is keyed by its inputs, and so is every question it asks of what they made: a validity
    check, a volume, a distance. A hit hands back the objects the first run made, or the answer it
@@ -166,7 +166,7 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    engine's **Document lifetime**).
 7. **Provenance is served live, never written.** What made an element -- the feature, its
    operation, the function, file and line of its call -- lives in the trace of the worker that
-   built the document, and is asked of it while it lives (`made_by`, `cad inspect`). A model's
+   built the document, and is asked of it while it lives (`made_by`, `cad <type> inspect`). A model's
    document opened with no such worker has none to give, and says so (`made_by: null`); a file --
    a model's declared xbf among them -- names no model and answers none.
 8. **Poses and motion definitions, never frames.** The document carries kinematics -- the
@@ -405,11 +405,11 @@ expiry, revision checks and download delivery; running cancellation discards tha
 temporary artifact. Browser downloads choose the viewer user's local destination
 before starting. An agent's explicit host path is a different destination contract.
 
-`cad inspect`, `cad.inspect()` and `cad_inspect` read existing files or the
+`cad <type> inspect`, `cad.inspect()` and `cad_inspect` read existing files or the
 documents the engine holds by id. They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
-`cad inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
+`cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
 joints, couplings (name, kind, ratio, joints), states, sequences, animations and declared files -- then its build closure (`--json`:
 both as data; `--query structure`, the same with nothing measured: no bounds, volume or masses;
 `--query closure`, and `cad.inspect()` with no reference, the closure alone);

@@ -68,9 +68,9 @@ src/cad_server/
 
 ## Commands
 
-`cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
+`cad <type> export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
 engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them);
-`cad urdf|sdf|srdf validate` the validators; `cad doctor` the setup (the installation registered,
+`cad urdf|sdf|srdf check` the validators; `cad doctor` the setup (the installation registered,
 the `cad` command written, the CAD kernel environment made, the engine started; the releases on
 disk, the current one, the engine's and each app's plugin's) and what earlier releases left behind
 that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of

@@ -61,7 +61,7 @@ exits, each batch under an id of its own and stamped with the time it was made:
 A command sends nothing itself. What it counts -- a build, a snapshot, a drawing, a crash -- is kept beside
 the settings for the next process that sends (``spool``): only while sharing is on, under the answer in
 force, capped, and deleted by a no. The engine's verbs (``cad.engine.api``: a ``python model.py``, a
-``cad export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
+``cad <type> export`` or ``snapshot``, ``cadgen.export()``) are counted into it by cadgen's observer of
 them (``cad_server._internal.engine_telemetry``). Whichever process takes it sends it as a batch of its own,
 the process ``cli`` with no app named (``Recorder._spooled``): never in the CAD app's or the viewer's
 batch, whose client and presentation say who looked, not who built. With nothing taking it for a
@@ -314,20 +314,26 @@ HANDED = 16  # the most of each kind one command's counts carry (``Recorder.take
 # library every couple of seconds among them) and its capture replies say nothing about use and would
 # drown what does. A view's own activity is noted from its sync (``viewed``) and as it adds the model
 # on screen to the library (``opened``).
+def _file_kinds() -> dict[str, str]:
+    from cad.registry import DOCUMENT_TYPES
+
+    return {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
+
+
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # The tool a call naming none of cadgen's tools is counted as (``cad_server.mcp.server``): the name a host sent is its
 # own string, never sent.
 UNKNOWN_TOOL = "cad_unknown"
 # A file's format, by extension: what the viewer opens (``cad_server.viewer.scanner.SOURCE_EXTENSIONS``), the
 # native document file (``.xbf``) among them; a live model has no file extension.
-FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".xbf": "xbf"}
+# Each kind is its document type as the analytics schemas spell it (``cad.registry``'s ``wire``).
+FILE_KINDS = _file_kinds()
 KINDS = frozenset({"model", *FILE_KINDS.values()})  # a live model, or an actual file format
 # Who sends: the CAD app, the browser viewer, and the sender a command starts when nothing else has taken what
 # commands counted (``cad_server._internal.telemetry_send``).
 PROCESSES = frozenset({"app", "viewer", "cli"})
 # Who asked for a build: a model script (``python model.py``, or a Python caller's ``Model.build()``) or a
-# ``cadgen`` command (``cad export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
+# ``cadgen`` command (``cad <type> export``, ...). Releases before 0.8 also sent ``command`` for an xbf built from
 # source text (``cadgen build``); the receiver reads it still, as it reads every schema a release sent.
 VIAS = frozenset({"script", "command"})
 # How a build ended: built; failed (the model raised, or its command refused what it was given); crashed (its

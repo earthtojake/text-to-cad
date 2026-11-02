@@ -629,7 +629,7 @@ class CacheTest(unittest.TestCase):
         self.assertNotIn("files", self.record(ident), "nothing records which files a model wrote")
         self.assertEqual(self.cli("stop").returncode, 0)
         # Unchanged after a restart: taken by its key, nothing run; its STEP is the document's export, as
-        # `cad export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
+        # `cad <type> export` writes it of the document taken (OCCT's xbf read gives a -0. back for a 0.:
         # the first run after a restart may write it once, the same geometry).
         done = self.run_script("plate")
         self.assertIn("took plate.py::plate cold in", done.stdout)

@@ -7,12 +7,12 @@ import re
 import xml.etree.ElementTree as ET
 
 from cad.engine import mesh_uri
-from cad.findings import FindingsReport, format_findings
+from cad._internal.findings import FindingsReport, format_findings
 # The inertia tensor is the same physics in both formats, and this was a verbatim copy
 # of URDF's routine. Imported rather than duplicated -- a divergent eigenvalue check
 # would make one format accept a tensor the other rejects.
-from cad.urdf_source import symmetric_inertia_eigenvalues
-from cad.xml_common import children, display_path, local_name
+from cad.urdf._source import symmetric_inertia_eigenvalues
+from cad._internal.xml_common import children, display_path, local_name
 
 EXTERNAL_URI_SCHEMES = {"model", "package", "http", "https", "fuel"}
 COMMON_JOINT_TYPES = {
@@ -165,9 +165,9 @@ def validate_sdf_root(
 def raise_for_validation_errors(result: FindingsReport, *, strict: bool = False) -> None:
     findings = result.errors + (result.warnings if strict else [])
     if findings:
-        # Deferred: cad.sdf_source imports this module at import time, so taking
+        # Deferred: cad.sdf._source imports this module at import time, so taking
         # SdfSourceError at the top would close the cycle.
-        from cad.sdf_source import SdfSourceError
+        from cad.sdf._source import SdfSourceError
 
         raise SdfSourceError(format_findings(findings))
 

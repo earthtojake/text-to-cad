@@ -506,7 +506,7 @@ def export(source: Any, *destinations: Any,
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
     carries every configuration sequence the document defines, as a clip. A call the program's own
-    code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
+    code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
     terminal and nowhere when it is not, ``False`` nowhere, a callable each frame."""
@@ -612,7 +612,7 @@ def snapshot(source: Any = None, out: Any = None, *, job: Any = None, display: A
     (``snapshot.picture_path``). A snapshot refused or failed leaves the file at ``out`` as it
     was (``snapshot.write_png``).
 
-    ``job`` in place of ``out`` is every picture a job names (``cad snapshot --job``), a list of
+    ``job`` in place of ``out`` is every picture a job names (``cad <type> snapshot --job``), a list of
     ``Drawn``: a Quick Edit packet (the ``.snapshot.json`` the viewer writes, its path or its
     object), a job or a list of jobs, each job a view drawn as it was -- its camera, display, hidden
     and isolated parts, pose, the packet's ink and dimensions -- at its output settings, into each
@@ -744,7 +744,7 @@ def inspect(source: Any, ref: str | None = None, *, query: str | None = None, pr
     name (``refs.RefError``). No query builds a missing model or writes its declared
     outputs. ``query="build"`` returns file metadata/closure or live build metadata;
     ``query="geometry"`` requires a ref, and ``query="closure"`` accepts none.
-    ``query="summary"`` (``cad inspect DOC`` with no ref) is ``{"summary", "closure"}``:
+    ``query="summary"`` (``cad xbf inspect DOC`` with no ref) is ``{"summary", "closure"}``:
     what the document holds at a glance (``_summary``), and its closure, as the engine holds it; of
     a GLB, ``{"mesh"}``: its nodes, meshes and animations, from its JSON alone (``_mesh``).
     ``query="structure"`` is the summary without bounds, volume or mass and requests no measurements.
@@ -949,7 +949,7 @@ def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
 
 def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any], ident: str,
              progress: Callable[[dict], None] | None = None, *, measured: bool = True) -> dict[str, Any]:
-    """What a served document holds, at a glance (``cad inspect DOC``): its name and id; its
+    """What a served document holds, at a glance (``cad xbf inspect DOC``): its name and id; its
     state -- a model's (``live``, ``held``, ...: ``ModelDocuments.state``), where the engine holds
     it and whether its cache has it, or ``file`` for a file's document; its parts (occurrences,
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the

@@ -54,9 +54,9 @@ read from its file instead:
 ```python
 from pathlib import Path
 
-from cad import read_step
+from cad import step
 
-part = read_step(Path(__file__).parent / "../vendor/enclosure.step")
+part = step.read(Path(__file__).parent / "../vendor/enclosure.step")
 ```
 
 `read_xbf` reads an xbf the same way. Anchor the path on the

@@ -32,7 +32,7 @@ returns a `Document` (`api.Document`) -- `.id`, `.url` (its page), `.name`, `.sh
 result, transferred into the caller and the kernel loaded on first access, never before),
 `.export(*paths)` and `.snapshot(out, **picture_options)`, which are `export(handle, ...)` and
 `snapshot(handle, ...)`; an export the program's own code makes says each file it wrote, a line each,
-as `cad export` does. The decorated function stays the function and its id (`arm.id`);
+as `cad <type> export` does. The decorated function stays the function and its id (`arm.id`);
 `arm.build(verify=, profile=)` is the debug seam, a `Report`. Inside another model's body a call
 builds the child document as before and returns its handle too, whose `.shape` is the result in
 that process: a body composes `peg().shape`, and a child called for its files alone stays a bare
@@ -107,7 +107,7 @@ them; where `connect_to` cannot place them (a nested assembly), give the two joi
 where the parts stand.
 
 ```python
-from cad.ap242 import mechanism_state
+from cad.build123d import mechanism_state
 from cad.engine import xbf
 
 @xbf("XBF/hinge.xbf")
@@ -529,7 +529,7 @@ again.
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance, element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
-| `snapshot.py` | `cad snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
+| `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
 | `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
 | `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
@@ -547,7 +547,7 @@ again.
 | `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
-| `cli.py` | the verbs as commands, the server's: `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
+| `cli.py` | the verbs as commands, the server's: `cad <type> export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
 
 ## CLI
@@ -555,16 +555,16 @@ again.
 ```
 cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
                                              in an environment of the library's, with its kernel)
-cad export SRC DST [DST ...] [--json]
+cad <type> export SRC DST [DST ...] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
                                              (.glb, .stl, .3mf: to the other two mesh kinds)
-cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
+cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad snapshot --job PACKET [SRC] [the same flags, each over every job]
+cad <type> snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
 cad serve DOC [--port N]
-cad inspect DOC [REF] [--query Q] [--json]  what the document holds, then its build closure; with REF (**References**): an element's facts and
+cad xbf inspect DOC [REF] [--query Q] [--json]  what the document holds, then its build closure; with REF (**References**): an element's facts and
                                              what made it, or a part's or an assembly's volume, mass and
                                              world bounds (a part's placement too); of a GLB, its nodes,
                                              meshes and animations (an STL or a 3MF, and a ref into any
@@ -1065,7 +1065,7 @@ wrote, are no model's code. A document's state (`models.STATES`, what `cad statu
   cache**), or both (`Models.where`). In memory the daemon holds it whole: its served structure and shape bytes,
   and the document as the xbf bytes `@xbf` would write of it, mechanism and every assembly's
   placement included, and its build records with it -- the closure and the compiled animations
-  (**Animations**) -- so a GLB of it is the build's own. A page and `cad inspect` read the
+  (**Animations**) -- so a GLB of it is the build's own. A page and `cad <type> inspect` read the
   served structure; an export or a
   snapshot by its id, and the viewer's export, go to the documents worker with the xbf bytes
   (`Daemon.document`), which reads them as it reads an xbf on disk, so no worker of its script
@@ -1333,11 +1333,11 @@ the path; a word holding a `%` is quoted between each one, `"C:\my"%"20dir"`, si
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
 reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of
 its kind's, `{"error", "state", "rebuild", "hint"}`),
-`cad inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
+`cad <type> inspect` and `cad_show` of its id refuse with it, and `cad status` lists it. The engine never runs it: no access, no start
 and no restart runs code to bring a document back.
 Asked of the server, a document it does not hold is a refusal (`serve.NotHeld`): the server answers
 its type, state and command with its words (`daemon.refused`) and the caller raises it as that
-type (`api._failed`), so `cad inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
+type (`api._failed`), so `cad <type> inspect`, `export`, `snapshot` and `serve` of such an id exit 2.
 
 `cad stop` stops the engine, whatever release runs it (`places.endpoints()`: its one door).
 Both `stop` and `status` remove the door and lock of a dead server (nothing reads the door and nobody
@@ -1448,8 +1448,8 @@ destination. A snapshot's are three: `scene` while the document is served, meshe
 model's document, by the daemon as it draws a file through a render process (`Daemon.draw`,
 `renders.Renders.draw`) and by the verb's own process for the write, or wholly in that process
 with `daemon=False` (`render.service.draw_here_each`). A measurement's are `inspect`'s summary
-measuring a volume per part, in the process that asks (`api._summary`). `cad export`, `cad
-snapshot` and `cad inspect` draw them as `python model.py` draws a build's: the one bar, on a
+measuring a volume per part, in the process that asks (`api._summary`). `cad <type> export`, `cad
+snapshot` and `cad <type> inspect` draw them as `python model.py` draws a build's: the one bar, on a
 terminal, nothing piped (`api.export(progress=)`, `api.snapshot(progress=)` and
 `api.inspect(progress=)` take the frames instead, `False` none, as `build_script` does). An MCP
 operation (`cad_export`, `cad_snapshot`, `cad_inspect`) keeps the latest as its status's `progress`
@@ -1520,10 +1520,10 @@ document's scene brings them as its own lighting and surface rule (the bundled
 `@cad/core`'s `lib/xbf/xbfLook.js`), which the viewer's viewport and the snapshot page put
 up in place of the theme's. Preview is drawn as any file's is.
 
-`cad snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
+`cad <type> snapshot` writes technical PNG images with OCCT. Photographic Preview belongs to the
 browser viewer; snapshot has no Preview or video option. A packet requesting `preview` is refused.
 
-`cad snapshot` draws a document as the viewer does. The engine serves and meshes it (the
+`cad <type> snapshot` draws a document as the viewer does. The engine serves and meshes it (the
 daemon's meshes, or with `daemon=False` a server of this process), and OCCT draws it from those meshes
 (`render/`, below), in the look the viewer resolves for the same display settings. A mesh file
 passed through a worker's export request still uses its render reader, preserving textures,
@@ -1662,7 +1662,7 @@ decorator and no build flag draws one.
 ### Viewer exports
 
 The browser's Export action writes the displayed document as its code built it (law 22),
-through `export/viewer.py` and the same worker writer as `cad export`. Its source is the
+through `export/viewer.py` and the same worker writer as `cad <type> export`. Its source is the
 displayed document and revision, nothing else (`viewer.exports.specification`: `{doc,
 revision}`); no part, no pose, and nothing of the view -- selection, visibility, Clip, Explode,
 Preview -- is an input. A posed or partial file is a function in the model's code.
@@ -1679,7 +1679,7 @@ The page offers what the file's kind writes, and nothing is inspected first: an 
 (a STEP, an xbf, a held model) as STEP, STL, 3MF, GLB and xbf. An opened XBF file's XBF
 download returns its original bytes (`original`), including an `xbf/8` file converted in
 memory for viewing. Use
-`cad export old.xbf upgraded.xbf` to save that conversion to a different path
+`cad xbf export old.xbf upgraded.xbf` to save that conversion to a different path
 (**Document compatibility**). DXF is offered where the page draws it flat on z=0; a mesh
 file offers the other two mesh kinds and nothing else. A job the writer refuses (a DXF
 whose drawing checks fail) fails with its reason. A changed source is refused, saying to open Export again. There is no source bundle in
@@ -1695,10 +1695,10 @@ result without killing a worker shared with another caller.
 
 The xbf is the model's result; STEP, GLB, STL, 3MF and DXF are exports of a document, and an
 xbf can be one too. One writer, `export.translate(document, kind, path)`,
-writes every one, whether a decorator declares the file or `cad export` asks for it: the
+writes every one, whether a decorator declares the file or `cad <type> export` asks for it: the
 same document writes the same bytes. The file holds what the code built (law 22). Every file is written beside its
 target and moved over it, and only when its bytes change (`atomic_replace.put`): a target that
-holds them already is left as it is (`cad export` says `unchanged`). In a folder that takes no
+holds them already is left as it is (`cad <type> export` says `unchanged`). In a folder that takes no
 new file (read-only), the bytes are made aside and compared, so an unchanged file passes, and a
 changed or new one fails in one line naming the folder and its mode.
 
@@ -1715,7 +1715,7 @@ changed or new one fails in one line naming the folder and its mode.
   once, and every destination is checked before any is written; an export
   runs in the worker that built the document while the file is as it left it, else in the
   daemon's documents worker, which reads it.
-- **A mesh file is a source of the other mesh kinds**: `cad export part.stl part.3mf`, any
+- **A mesh file is a source of the other mesh kinds**: `cad stl export part.stl part.3mf`, any
   pair of GLB, STL and 3MF either way. It is read as a document of its own kind
   (`export/mesh_file.py`): triangles, with the parts, names, colours and placements its format
   carries, each part's mesh the file's own (never meshed again, never cached); the GLB, STL and
@@ -1785,7 +1785,7 @@ changed or new one fails in one line naming the folder and its mode.
   off z=0, by its element name. Layers are written in name order and edges in an order of
   their content (curve kind, sampled points, length), never the kernel's traversal, and
   ezdxf's provenance is pinned and its classes sorted: the same geometry is the same bytes in
-  any process on any day, so a declared DXF is the bytes `cad export flat.xbf flat.dxf`
+  any process on any day, so a declared DXF is the bytes `cad xbf export flat.xbf flat.dxf`
   writes. The drawing checks run on the document before it is written -- units set, no
   zero-length or duplicate entity, every cut profile closed, something drawn; open geometry
   only on a layer its name's whole tokens make a bend, engrave or reference one -- and an
@@ -1851,7 +1851,7 @@ keeps its document as any (a later build of it takes that, **Build closure**); a
 unchanged is kept. A declared file is an export appended to the run: translated from the document
 every time the model runs or is taken -- an xbf from the document's own bytes, serialised before any
 export meshes its shapes -- compared with the file, and written only where it differs or is missing
-(`atomic_replace.put`, the one writer `cad export` writes its files with too), nothing remembered
+(`atomic_replace.put`, the one writer `cad <type> export` writes its files with too), nothing remembered
 of what was written: a declared file is what the code that last ran makes, whichever model ran it. A child called
 twice is one model, written once; a child that is also a target of the build writes as the
 target; a child run inside a replayed body writes as one its caller ran; one that ran before its
@@ -1961,7 +1961,7 @@ configuration sequence says it.
 
 ```python
 import build123d as bd
-from cad.ap242 import configuration_sequence, gear_pair, mechanism_state, screw_pair
+from cad.build123d import configuration_sequence, gear_pair, mechanism_state, screw_pair
 from cad.engine import xbf
 
 CURL = {"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}  # degrees at a full curl
@@ -2006,7 +2006,7 @@ def hypercar():
     return mechanism_state(car, "open", **SWEEP)                      # shut is as built
 ```
 
-`cad snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
+`cad xbf snapshot XBF/index_finger.xbf c.png --pose '{"index_curl": 0.6}'` draws the
 knuckles at 54, 60 and 42 degrees: the picture of the same finger with no coupling at
 `--pose '{"index_mcp_flexion": 54, "index_pip": 60, "index_dip": 42}'`; its range, `[0, 1]`, is
 where every knuckle stays within its own. A model returning `posed(car().shape, {"left": -35,
@@ -2031,7 +2031,7 @@ segment's `discontinuous_interpolation_type`), and a coupling is its couplers un
 range null where nothing bounds it. **STEP carries none of it**: OCCT reads AP242
 kinematics but cannot write them, so every STEP, posed or not, is placements only.
 
-`--pose` on `cad snapshot` poses the mechanism at a
+`--pose` on `cad <type> snapshot` poses the mechanism at a
 mechanism state (its name, among the structure's `configurations`) or at joint and coupling values (`'{"elbow": 45}'`, `'{"curl": 0.6}'`:
 a turn in degrees, a slide in millimetres, the rest as built): the engine places each link by composing its pairs from the ground down,
 exact forward kinematics, and draws that. No flag is as built. An unknown configuration, joint or
@@ -2051,7 +2051,7 @@ A configuration sequence -- AP242's `interpolated_configuration_sequence`, a **m
 structure and the viewer -- is a definition in the model's code, beside its mechanism states:
 
 ```python
-from cad.ap242 import configuration_sequence, mechanism_state
+from cad.build123d import configuration_sequence, mechanism_state
 
 mechanism_state(arm, "folded", shoulder=0, elbow=0)
 mechanism_state(arm, "reach", shoulder=45, elbow=90)
@@ -2112,7 +2112,7 @@ parts, what it says beyond its keys, its label and its order), the build's JSON
 (`animations.to_json`), no code. A document with no animation holds no record. It is no part of the
 mechanism subtree, which stays AP242's alone (law 13), and only a GLB reads it:
 `document.Loaded.animations`, and so `Source.read`, give the tracks back as the harvest made them,
-so a GLB exported from the xbf (`cad export model.xbf model.glb`), from a held document by its
+so a GLB exported from the xbf (`cad xbf export model.xbf model.glb`), from a held document by its
 id (**Document lifetime**) and by the build's own worker are byte for byte one GLB, and a model
 taken from the cache after a restart (**Build closure**) writes that GLB too. Every other reader
 ignores it: `read_xbf` imports a part, never a child's record (a parent's GLB bakes its own
@@ -2123,8 +2123,8 @@ stacked on one function: the xbf records the animation, the GLB bakes it.
 ```python
 import build123d as bd
 from cad import glb, xbf
-from cad.ap242 import configuration_sequence, mechanism_state
-from cad.gltf import animation
+from cad.build123d import configuration_sequence, mechanism_state
+from cad.build123d import animation
 
 @xbf("XBF/box.xbf")
 @glb("XBF/box.glb")
@@ -2189,7 +2189,7 @@ and does not replace `Shape.material`.
 
 ```python
 from bd_materials import metals
-from cad import paint
+from cad.build123d import paint
 
 housing.material = metals.aluminum(metals.Alu.G6061_T6)
 housing.material.pbr = housing.material.pbr.override(
@@ -2214,7 +2214,7 @@ read can retain that cached value, so assign assembly materials before reading c
 `Range` values with bounds, rather than the library choosing a single typical number: modulus of elasticity is GPa, tensile and yield
 strengths are MPa. `bd_materials.core.PROPERTY_UNITS` defines the other units. A native
 physical material's `mass(volume_mm3)` and build123d's default `shape.mass()` return grams;
-`cad inspect` continues to report kilograms. `None` is unknown; the native
+`cad <type> inspect` continues to report kilograms. `None` is unknown; the native
 `NOT_SUITABLE` range is distinct and survives XBF serialization.
 
 **Appearance.** Use `material.pbr.override(...)` to return an edited native look, then
@@ -2239,7 +2239,7 @@ named by `type`; no flattened material fields of the library's own remain.
 A material edit changes document content without changing geometry keys. Warm document
 patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,
 anisotropy, transmission, attenuation and emission. OCCT stills use the documented
-approximations in **The look**. A part's chip card and `cad inspect` weigh it from its
+approximations in **The look**. A part's chip card and `cad <type> inspect` weigh it from its
 volume and native density, summed over an assembly.
 
 ## Imports
@@ -2288,7 +2288,7 @@ geometry (tom-sized: seconds against most of a minute) and keeps the engine's na
 Convert a vendor STEP once, keep the xbf beside it, and read the xbf:
 
 ```
-cad export vendor.step vendor.xbf
+cad step export vendor.step vendor.xbf
 ```
 
 The conversion is the author's: the engine writes no derived file beside an input of its own.
@@ -2375,7 +2375,7 @@ A part is meshed from its binary shape bytes read into a fresh shape, so its
 mesh is a function of those bytes alone. Those are its read-back bytes, the
 bytes its document holds of it. A build's live part is written and read once to
 get them, as saving its document does. A part read from a document (the served
-document, `cad export`) is written as it was read. So a worker, the
+document, `cad <type> export`) is written as it was read. So a worker, the
 server and an export all mesh one geometry key from the same bytes.
 The geometry key is the digest of those bytes (`document.geometry_key`), so a
 reader makes a part's key again from the part it read, and takes the key the file
@@ -2400,7 +2400,7 @@ shapes without faces still use `AddOptimal`. A failed distance measurement is an
 
 What the kernel measures of an element is asked for, never extracted ahead:
 `GET /api/v1/documents/<kind>/<id>/parts/<key>/faces/<ordinal>` (`serve.py`'s
-`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad inspect` asks it through the door) is its
+`/api/doc/<id>/part/<key>/face/<ordinal>`, as `cad <type> inspect` asks it through the door) is its
 area, centroid, surface type, exact bounding box and `BRepCheck` verdict (and a round face's radii), and
 whether the part's tessellation has it (`meshed`: null while the part is not meshed --
 an inspection meshes nothing);
@@ -2419,7 +2419,7 @@ worker that built it (for example, after a daemon restart), answers
 that worker's last build. The line is the call's in the run that named the part. A file's
 element -- a model's declared xbf among them -- answers no `made_by`: a file names no model,
 whichever run wrote it.
-`cad inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
+`cad xbf inspect DOC REF` serves the document on demand and resolves `REF` (**References**):
 an element answers its facts and, of a model's document, `made_by`, with its canonical `ref`, its occurrence's `path`
 (`hand/finger.2`), its part, key, kind, ordinal and name, its points (centroid, position,
 endpoints, box) placed where that occurrence stands; a part or an assembly answers what it
@@ -2504,7 +2504,7 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks
-too (`cad inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
+too (`cad <type> inspect`), never served over the engine's HTTP listener. The look is `serve.py`'s at the
 API's own paths (`/api/v1/look`, `/api/v1/look/environment`), the ones its record names, which the
 daemon's listener serves as they are.
 
@@ -2676,7 +2676,7 @@ of this grammar (`cadRefs` in the bundled runtime) are held to this module's, ca
 fixture both suites assert.
 
 A ref resolves inside the engine, for `inspect` and the viewer, never in a model:
-`cad inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
+`cad xbf inspect DOC REF` (`cad.inspect(source, ref)`) answers what it names, placed where its
 occurrence stands -- an element's kind, ordinal, name and canonical ref, the kernel's facts of it,
 and, of a model's document, `made_by`, the feature and the function, file and line of the call that made it; a part's or
 an assembly's volume and mass, and its world `bounds` (each part's measured box placed where it
@@ -2942,13 +2942,13 @@ Why that holds, checked:
   a cold build, a body re-run whose 2,673 kernel calls all replayed, and a second cold build
   in a new daemon wrote three different files of one size; their 15,646 element names are the
   same set, each on the same geometry (a face's area and centre, an edge's length and
-  centre, a vertex's point), and refs resolve to the same elements through `cad inspect`.
+  centre, a vertex's point), and refs resolve to the same elements through `cad <type> inspect`.
   `test_memo_marker.py` holds the same for a cold build, a replay and a second cold build.
 - **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
 The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf` and `read_step`
-(a document's tree) and `cad inspect DOC REF` (what a ref names) are the facts route.
+(a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
 
 ## Build closure
 
@@ -2990,7 +2990,7 @@ blank line changes no digest; a module the model loads and does not reach holds 
 `inputs` lists every file a body read -- through the engine (`file`: `read_step`, `read_xbf`,
 `read_mesh`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
-null (**Body retention**). `cad inspect DOC` prints the closure, `cad.inspect(doc)` and
+null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.
 
 **When the toolchain or the format moves.** The key covers the document format
@@ -3033,7 +3033,7 @@ An unsupported or failed conversion preserves the original bytes and cache recor
 To keep an upgraded file, explicitly export the converted document to a different XBF path:
 
 ```bash
-cad export saved-v8.xbf upgraded-v9.xbf
+cad xbf export saved-v8.xbf upgraded-v9.xbf
 ```
 
 This serializes the complete upgraded XCAF document, including its separate migration record,
@@ -3067,7 +3067,7 @@ under a second), and the declared files' translation and compare. Its bodies' me
 used by that build, as a replay's do, so an edit after any number of them still replays what it
 leaves alone. The key alone decides: a declared file, the model's xbf among them, is never read to
 take the model, and one moved, deleted or edited by hand changes nothing of it -- a model taken writes
-its declared files after, exactly as `cad export` would (**Exports**), so that file is written
+its declared files after, exactly as `cad <type> export` would (**Exports**), so that file is written
 again from the document, and every file `written: false` where each holds its bytes already.
 Anything else builds as before, and `cache.reason` says why: the cache holds none of it, written
 by another engine or program, a cache file that does not read, no key in it, or what changed, by
@@ -3113,8 +3113,8 @@ script again with changed code updates the same document and open viewers; `pyth
 prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url` is the page. No list
 of ids is saved.
 
-`cad serve ID`, `cad snapshot ID view.png`, `cad export ID part.step`, and `cad
-inspect ID 'face 1'` take the id; `cad inspect 'ID#face 1'` uses the same reference syntax.
+`cad serve ID`, `cad xbf snapshot ID view.png`, `cad xbf export ID part.step`, and `cad
+inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document the engine holds, as it is: editing the script changes nothing until
 Python runs it again, and no verb imports, runs or builds a script. An id the engine no longer
 holds (unsaved, detached) is refused with its state and the command that builds it again

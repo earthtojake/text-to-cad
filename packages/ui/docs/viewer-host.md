@@ -324,7 +324,7 @@ written as one temporary `.snapshot.json` and named by path. Hosts use
 path, keeping destination binding inside the gesture. Drawing, selecting and typing
 keep data in memory. Nothing renders at the press. The agent saves inline JSON to
 a temporary file, then draws a view the ink was drawn in with
-`cad snapshot <document> <out.png> --annotation <file> --camera authored`.
+`cad <type> snapshot <document> <out.png> --annotation <file> --camera authored`.
 **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
 inside the gesture while the files are still being made; its references name their

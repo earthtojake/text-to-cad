@@ -1,3 +1,4 @@
+import { DOCUMENT_TYPE_REGISTRY } from "./documentTypes.generated.js";
 import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 
 // WHAT EACH RENDER FORMAT CAN DO — one table, so viewer code asks "can this format
@@ -36,18 +37,25 @@ export const ENTRY_ICON_KIND = Object.freeze({
 const DEFAULT_CAPABILITIES = Object.freeze({ iconKind: ENTRY_ICON_KIND.STEP });
 const ROBOT_CAPABILITIES = Object.freeze({ iconKind: ENTRY_ICON_KIND.ROBOT });
 
-export const RENDER_CAPABILITIES = Object.freeze({
-  [RENDER_FORMAT.STEP]: DEFAULT_CAPABILITIES,
-  [RENDER_FORMAT.STL]: Object.freeze({ iconKind: ENTRY_ICON_KIND.STL_MESH }),
-  [RENDER_FORMAT.THREE_MF]: Object.freeze({ iconKind: ENTRY_ICON_KIND.THREE_MF_MESH }),
-  [RENDER_FORMAT.GLB]: Object.freeze({ iconKind: ENTRY_ICON_KIND.GLB_MESH }),
-  [RENDER_FORMAT.DXF]: Object.freeze({ iconKind: ENTRY_ICON_KIND.DXF }),
-  [RENDER_FORMAT.URDF]: ROBOT_CAPABILITIES,
-  [RENDER_FORMAT.SRDF]: ROBOT_CAPABILITIES,
-  [RENDER_FORMAT.SDF]: ROBOT_CAPABILITIES,
-  // A cadgen engine document (`packages/ui/src/renderers/xbf`), which a STEP opens as: one icon.
-  [RENDER_FORMAT.XBF]: DEFAULT_CAPABILITIES
+// A mesh's icon is its own format's; every other type's is its view's (`cad.registry`).
+const MESH_ICONS = Object.freeze({
+  [RENDER_FORMAT.STL]: ENTRY_ICON_KIND.STL_MESH,
+  [RENDER_FORMAT.THREE_MF]: ENTRY_ICON_KIND.THREE_MF_MESH,
+  [RENDER_FORMAT.GLB]: ENTRY_ICON_KIND.GLB_MESH
 });
+const VIEW_CAPABILITIES = Object.freeze({
+  // An engine document (`packages/ui/src/renderers/xbf`), which a STEP opens as: one icon.
+  document: DEFAULT_CAPABILITIES,
+  drawing: Object.freeze({ iconKind: ENTRY_ICON_KIND.DXF }),
+  robot: ROBOT_CAPABILITIES
+});
+
+export const RENDER_CAPABILITIES = Object.freeze(Object.fromEntries(
+  DOCUMENT_TYPE_REGISTRY.documentTypes.map((type) => [
+    type.wire,
+    type.view === "mesh" ? Object.freeze({ iconKind: MESH_ICONS[type.wire] }) : VIEW_CAPABILITIES[type.view] || DEFAULT_CAPABILITIES
+  ])
+));
 
 // Extension aliases that name the same render format.
 const FORMAT_ALIASES = Object.freeze({

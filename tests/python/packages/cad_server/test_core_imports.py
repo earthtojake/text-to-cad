@@ -12,6 +12,11 @@
   the base: ``cad_server._internal.base``). Of the library it imports the modules that need no kernel.
 - **The shim** (``cad-mcp``: ``cad_mcp``): the stdio transport an agent app starts, the standard
   library alone.
+
+Inside the library, each integration's package (``cad/<integration>/``, ``cad.registry.INTEGRATIONS``)
+imports only its own extra's dependencies, and each document type's (``cad/<type>/``) no third-party
+library at all: the type is neutral about who produces it. Every extra the library declares, every
+``cad.<name>`` namespace and every ``cad/<name>/`` package is a registered integration or document type.
 """
 
 from __future__ import annotations
@@ -37,8 +42,9 @@ KERNEL = ("OCP", "build123d", "bd_materials", "threejs_materials", "matplotlib",
 # What a model's process and a worker import first: none of them may bring a module of the server's.
 MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engine.model", "cad.engine.build",
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
-                      "cad.engine.render.service", "cad.engine.snapshot", "cad.ap242", "cad.gltf",
-                      "cad.geometry", "cad.flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
+                      "cad.engine.render.service", "cad.engine.snapshot", "cad.build123d", "cad.registry",
+                      "cad.step", "cad.xbf",
+                      "cad.build123d._geometry", "cad.build123d._flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
                       "cad.srdf")
 
 
@@ -135,6 +141,64 @@ class SidesTest(unittest.TestCase):
                 "print(json.dumps(sorted(name for name in set(sys.modules) - before "
                 f"if name.partition('.')[0] in {('cad', 'cadgen', SERVER_PACKAGE)!r})))\n")
         self.assertEqual(loaded(code), [])
+
+
+# Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
+EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
+                               "PIL"}}
+# The library's required dependencies, as modules, which any of its code may import.
+REQUIRED = {"numpy"}
+# The library's packages that are neither an integration nor a document type: the engine and the internals.
+INFRASTRUCTURE = {"engine", "_internal"}
+# Its top-level modules: the registry, the shared result types, and @eng_drawing (open: a future pdf type).
+MODULES = {"registry", "results", "eng_drawing"}
+
+
+def third_party(path: Path, name: str) -> set[str]:
+    stdlib = set(sys.stdlib_module_names)
+    return {module.split(".")[0] for _line, module in imports(name, path)
+            if module.split(".")[0] not in stdlib | {"cad", "cadgen", "__future__"}}
+
+
+class IntegrationsTest(unittest.TestCase):
+    def test_every_extra_namespace_and_package_is_registered(self) -> None:
+        import tomllib
+
+        from cad.registry import DOCUMENT_TYPES, INTEGRATIONS
+
+        extras = tomllib.loads((LIBRARY / "pyproject.toml").read_text(encoding="utf-8"))["project"]["optional-dependencies"]
+        self.assertEqual(sorted(extras), sorted(integration.extra for integration in INTEGRATIONS.values()
+                                                if integration.extra))
+        self.assertEqual(sorted(EXTRA_MODULES), sorted(extras))
+        root = LIBRARY / "src" / "cad"
+        packages = {path.parent.name for path in root.glob("*/__init__.py")}
+        self.assertEqual(sorted(packages - INFRASTRUCTURE), sorted({*DOCUMENT_TYPES, *INTEGRATIONS}))
+        self.assertEqual(sorted(path.stem for path in root.glob("*.py") if path.stem != "__init__"), sorted(MODULES))
+        import cad
+
+        self.assertEqual(sorted(cad._TYPES), sorted(DOCUMENT_TYPES))
+        self.assertEqual(sorted(cad._INTEGRATIONS), sorted(INTEGRATIONS))
+
+    def test_each_integration_imports_its_own_extras_dependencies_alone(self) -> None:
+        from cad.registry import INTEGRATIONS
+
+        library = modules("cad")
+        for integration in INTEGRATIONS.values():
+            allowed = EXTRA_MODULES.get(integration.extra or "", set()) | REQUIRED
+            for name, path in library.items():
+                if of(f"cad.{integration.name}", name):
+                    with self.subTest(module=name):
+                        self.assertEqual(set(), third_party(path, name) - allowed)
+
+    def test_each_document_type_imports_no_third_party_library(self) -> None:
+        from cad.registry import DOCUMENT_TYPES
+
+        library = modules("cad")
+        for document_type in DOCUMENT_TYPES:
+            for name, path in library.items():
+                if of(f"cad.{document_type}", name):
+                    with self.subTest(module=name):
+                        self.assertEqual(set(), third_party(path, name))
 
 
 if __name__ == "__main__":

@@ -5,8 +5,8 @@ from pathlib import Path
 import xml.etree.ElementTree as ET
 
 from cad.engine import mesh_uri
-from cad.sdf_validation import raise_for_validation_errors, validate_sdf_root
-from cad.xml_common import duplicate_values, children, display_path, local_name
+from cad.sdf._validation import raise_for_validation_errors, validate_sdf_root
+from cad._internal.xml_common import duplicate_values, children, display_path, local_name
 
 SDF_SUFFIX = ".sdf"
 
