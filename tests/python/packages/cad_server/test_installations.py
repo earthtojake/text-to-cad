@@ -291,9 +291,9 @@ class WindowsCommandTests(Fixture):
         super().setUp()
         self.bin = str(self.root / "bin")
         self.exe = Path(installations.proxy_path(self.bin, windows=True))
-        made = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
-        self.made = made.start()
-        self.addCleanup(made.stop)
+        self.making = mock.patch.object(installations, "_make_interpreter", side_effect=self.interpreter)
+        self.made = self.making.start()
+        self.addCleanup(self.making.stop)
 
     def interpreter(self, folder: str) -> None:
         """The command's Python as uv makes it, without uv: a venv's python.exe and the home it names."""
@@ -391,7 +391,10 @@ class WindowsCommandTests(Fixture):
                 raise PermissionError(13, "Access is denied", str(path))
             return remove(path)
 
-        with mock.patch.object(installations.os, "replace", side_effect=held_replace), \
+        from cad._internal import atomic_replace
+
+        with mock.patch.object(atomic_replace.os, "replace", side_effect=held_replace), \
+                mock.patch.object(atomic_replace.time, "sleep"), \
                 mock.patch.object(installations.os, "remove", side_effect=held_remove):
             self.assertEqual(self.write(), installations.STALE)
         self.assertEqual(installations.proxy_status(str(self.exe), windows=True), installations.OK)
@@ -469,11 +472,12 @@ class WindowsCommandTests(Fixture):
 
     @unittest.skipUnless(os.name == "nt", "cad.exe runs on Windows")
     def test_on_windows_cad_exe_runs_this_installation_with_the_arguments_as_given(self) -> None:
-        self.made.stop()  # the real one: uv makes the command's Python
-        self.addCleanup(self.made.start)
+        self.making.stop()  # the real one: uv makes the command's Python
+        self.addCleanup(self.making.start)
         self.assertEqual(self.write(), installations.MISSING)
         python = os.path.join(self.bin, "cad-launcher", "Scripts", "python.exe")
         self.assertTrue(os.path.isfile(python))
+        self.assertFalse((self.root / "home").exists(), "uv made it, not the test's stand-in")
         ran = subprocess.run([str(self.exe), "--version"], capture_output=True, text=True, encoding="utf-8")
         from cad_server import __version__
 
