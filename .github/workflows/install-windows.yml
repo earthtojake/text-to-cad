@@ -378,12 +378,12 @@ jobs:
           if ($r.Code) { Fail "writing a stale cad.exe exited $($r.Code)" }
           [IO.File]::WriteAllText((Join-Path $bin 'cad.cmd'), "@echo off`r`nrem cad proxy: 9`r`n", (New-Object System.Text.UTF8Encoding($false)))
           $r = Invoke-Cad doctor --no-server
-          Need $r 'cad doctor through a stale cad.exe' @('(?m)^command\s+\S.*cad\.exe written \(was stale\)', 'cad\.cmd, the batch file cad\.exe replaces')
+          Need $r 'cad doctor through a stale cad.exe' @('(?m)^\s*command\s+\S.*cad\.exe written \(was stale\)', 'cad\.cmd, the batch file cad\.exe replaces')
           $aside = @(Get-ChildItem -LiteralPath $bin -Filter 'cad.exe.*.old' | ForEach-Object { $_.Name })
           if ($aside.Count -ne 1) { Fail "the running cad.exe was not set aside: $($aside -join ', ')" }
           Write-Host "set aside while it ran: $($aside[0])"
           $r = Invoke-Cad doctor --no-server
-          Need $r 'cad doctor through the new cad.exe' @('(?m)^command\s+\S.*cad\.exe OK')
+          Need $r 'cad doctor through the new cad.exe' @('(?m)^\s*command\s+\S.*cad\.exe OK')
           if (@(Get-ChildItem -LiteralPath $bin -Filter 'cad.exe.*.old').Count) { Fail "what was set aside was not swept" }
           if (Test-Path -LiteralPath (Join-Path $bin 'cad.cmd')) { Fail "the cad.cmd before cad.exe was not removed" }
           $r = Invoke-Cad --version
