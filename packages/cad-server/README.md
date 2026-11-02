@@ -26,8 +26,8 @@ src/cad_server/
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a robot's (robots), Quick Edit's packets
-                         #   (prompt_files)
+                         #   payload (drawings), a KiCad board's plot (plots), a robot's
+                         #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
                          #   engine sessions (http), tools and launches (server), the agent
                          #   operations (operations), how a host presents CAD (host), open
@@ -38,6 +38,7 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
+  pcb.py, kicad/         # `cad pcb drc`: KiCad's design rule check, by the installed kicad-cli
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
@@ -69,8 +70,13 @@ src/cad_server/
 ## Commands
 
 `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
-engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them);
-`cad urdf|sdf|srdf validate` the validators; `cad doctor` the setup (the installation registered,
+engine's verbs (`snapshot` draws every file the viewer opens, a DXF, a robot or a KiCad board among
+them); `cad urdf|sdf|srdf validate` the validators; `cad pcb drc` KiCad's design rule check of a saved
+board (`pcb.py`: the installed `kicad-cli`, found by `kicad/install.py` -- `CAD_KICAD_CLI`, else
+`kicad-cli` on PATH, else the one in the usual macOS or Windows installation, and only ever a file named
+`kicad-cli` -- and run by `kicad/cli.py` headless, with no display and a private settings folder; the
+server never starts KiCad's app, and Open in never opens a `.kicad_*` file; viewing a board needs no
+KiCad); `cad doctor` the setup (the installation registered,
 the `cad` command written, the CAD kernel environment made, the engine started; the releases on
 disk, the current one, the engine's and each app's plugin's) and what earlier releases left behind
 that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of

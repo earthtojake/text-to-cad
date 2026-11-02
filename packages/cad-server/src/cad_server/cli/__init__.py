@@ -43,6 +43,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "urdf validate": ("cad_server.cli.urdf_validate", "validate a URDF robot description"),
     "sdf validate": ("cad_server.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cad_server.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # KiCad boards: KiCad's own design rule check (the engine's snapshot draws one).
+    "pcb drc": ("cad_server.cli.pcb_drc", "check a saved KiCad board with KiCad's DRC"),
     # Generic / services
     "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment, with the "
                                   "packages its header or --with names"),

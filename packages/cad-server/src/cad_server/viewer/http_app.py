@@ -215,7 +215,7 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
 _KIND_ROUTES = {"model": _ENGINE_ROUTES, "xbf": _ENGINE_ROUTES + ", source", "step": _ENGINE_ROUTES + ", source",
                 "dxf": "drawing, source", "urdf": "structure, parts/<digest>, source",
                 "srdf": "structure, parts/<digest>, source", "sdf": "structure, parts/<digest>, source",
-                "stl": "source", "glb": "source", "3mf": "source"}
+                "stl": "source", "glb": "source", "3mf": "source", "kicad_pcb": "plot, source"}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)
@@ -867,6 +867,8 @@ class CadApp:
             return self._engine_route(request, response, kind, ident, rest)
         if kind == "dxf" and rest == ["drawing"]:
             return self._methods(request, {"GET": lambda: self._handle_drawing(response, path)})
+        if kind == "kicad_pcb" and rest == ["plot"]:
+            return self._methods(request, {"GET": lambda: self._handle_plot(response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None
             return self._methods(request, {"GET": lambda: self._handle_robot(response, path, mesh, document_api(kind, ident))})
@@ -1034,14 +1036,17 @@ class CadApp:
     def open_in(self, ident) -> dict:
         """``GET /api/v1/local/open-in?id=<id>``: the document's files (``_open_targets``), each with
         its ``name``, whether it is there now (``present``) and the apps this computer has that take
-        its kind (``apps``, as last found: never looked for on a request), and the desktop's file
-        manager (``fileManager``)."""
-        from cad_server._internal.apps import DETECTED, apps_for, file_manager
+        its kind (``apps``, as last found: never looked for on a request), whether the operating system's
+        own handler may not open it (``default: false``: a KiCad file's, ``apps.NEVER_OPENED``), and the
+        desktop's file manager (``fileManager``)."""
+        from cad_server._internal.apps import DETECTED, apps_for, file_manager, opens
 
         found = DETECTED.found()
         return {"targets": [{"target": target["target"], "kind": target["kind"],
                              "name": node_basename(target["path"]) if target["path"] else "",
-                             "present": _is_file(target["path"]), "apps": apps_for(target["kind"], found)}
+                             "present": _is_file(target["path"]),
+                             **({"apps": apps_for(target["kind"], found)} if opens(target["path"])
+                                else {"apps": [], "default": False})}
                             for target in self._open_targets(ident)],
                 "fileManager": file_manager()}
 
@@ -1062,6 +1067,9 @@ class CadApp:
         if chosen is None:
             raise ApiError(400, f"the document has no target {payload['target']!r}",
                            f"name one of {', '.join(targets)}: GET /api/v1/local/open-in?id= lists them")
+        if not apps.opens(chosen["path"]):
+            raise ApiError(400, f"{node_basename(chosen['path'])} is never opened in an app from here",
+                           "reveal it in the file manager and open it there")
         app = None
         if payload["app"] != "default":
             found = apps.DETECTED.found()
@@ -1292,6 +1300,20 @@ class CadApp:
         re-encoded on the way past.
         """
         status, body = self.drawings.response(path or "")
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "application/json; charset=utf-8")
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_plot(self, response, path):
+        """``GET /api/v1/documents/kicad_pcb/<id>/plot``: a KiCad board drawn from its file, as geometry
+        per layer (``plots.py`` owns the rules). Each request reads the file as it is now: no board is
+        held. A file that is not a readable board is a 400 saying why (``PlotError``)."""
+        from .plots import plot_payload_response
+
+        status, body = plot_payload_response(path or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
             return

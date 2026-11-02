@@ -39,6 +39,7 @@ _ASSET_CONTENT_TYPES = {
     ".step": "application/step",
     ".stp": "application/step",
     ".dxf": "application/dxf",
+    ".kicad_pcb": "text/plain; charset=utf-8",
     ".urdf": "application/xml; charset=utf-8",
     ".srdf": "application/xml; charset=utf-8",
     ".sdf": "application/xml; charset=utf-8",

@@ -91,7 +91,7 @@ _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(VIEWER_EXTENSIONS)
 # The formats every surface opens, as the agent is told them: a cadgen engine document (XBF) among them.
-FORMATS = "STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF"
+FORMATS = "STEP, XBF, STL, GLB, 3MF, DXF, URDF, SDF, KiCad PCB"
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
 # from an inline cad_show) to sync for the first time: the host loads the page, then the page its

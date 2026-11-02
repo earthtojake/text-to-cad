@@ -32,6 +32,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
     "cad.urdf": ("validate",),
     "cad.srdf": ("validate",),
     "cad.sdf": ("validate",),
+    # A KiCad board is an authored file too; its one verb is KiCad's own check, run by the server.
+    "cad_server.pcb": ("drc",),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
@@ -39,6 +41,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad.sdf", "validate"),
     "srdf validate": ("cad.srdf", "validate"),
+    # KiCad's design rule check of a saved board: the server's verb, since it runs kicad-cli.
+    "pcb drc": ("cad_server.pcb", "drc"),
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
