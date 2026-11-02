@@ -587,19 +587,20 @@ class Daemon:
 
     def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
-        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``with``, the environment of a
-        model's own packages beside it (``cad run --with``, a script's header: ``extras.ensure``): made here
-        when it is not -- the making under way followed, or one started (``base.Making.follow``) -- each of
-        its lines a ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one
-        line. One of another installation's (``key``) is not this engine's to make: ``{"ok": false,
-        "other": true}``."""
-        named = request.get("with")
-        if isinstance(named, list) and named and all(isinstance(item, str) for item in named):
+        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``spec``, the environment ``cad run``
+        makes for a program beside it (its integrations, packages and uv's options: ``extras.Spec``,
+        ``extras.ensure``; ``with`` alone, an earlier client's: those requirements): made here when it is not
+        -- the making under way followed, or one started (``base.Making.follow``) -- each of its lines a
+        ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one line. One of
+        another installation's (``key``) is not this engine's to make: ``{"ok": false, "other": true}``."""
+        named, spec = request.get("with"), request.get("spec")
+        if isinstance(spec, dict) or (isinstance(named, list) and named
+                                      and all(isinstance(item, str) for item in named)):
             from cad_server._internal import extras
 
             try:
-                making = extras.making(named)
-            except extras.Refused as refused:  # an option of uv's handed as a requirement: uv never sees it
+                making = extras.making(spec if isinstance(spec, dict) else named)
+            except extras.Refused as refused:  # no spec, or an option of uv's handed as a requirement
                 send({"failed": str(refused), "base": True})
                 return
         else:
