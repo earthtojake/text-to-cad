@@ -75,7 +75,8 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
     root = Path(temporary)
     env = {**os.environ, "CAD_ENGINE_DIR": str(root / "engine"),
            "CAD_STATE_DIR": str(root / "state"), "CAD_ENGINE_MESH": "inline",
-           "CAD_CACHE_DIR": str(root / "no-0.7-store"), "CAD_ENGINE_PORT": "0"}
+           "CAD_CACHE_DIR": str(root / "no-0.7-store"), "CAD_ENGINE_PORT": "0",
+           "CAD_ENGINE_STANDBY": "0"}
     # The state folder registers this interpreter as its current installation, as an installation
     # registers itself: the engine the launch starts is this one's (with none, a client starts none).
     sys.path.append(sys.argv[1])

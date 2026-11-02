@@ -48,7 +48,7 @@ clones where available. An existing output folder is refused.
 
 Every model gets private engine, state, cache and launcher directories. The door is
 under a fresh batch folder in `--engine-dir`; the other three directories are under
-`<out>/runtime/<model>`. The engine uses a free port, telemetry off,
+`<out>/runtime/<model>`. The engine uses a free port, no standby worker, telemetry off,
 and a browser stub that records any attempted launch in `<out>/browser-requests.log`.
 The batch never stops another batch's engine or clears its cache. Steps are:
 

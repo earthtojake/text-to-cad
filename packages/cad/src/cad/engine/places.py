@@ -615,7 +615,7 @@ def bytecode_tag() -> str:
 
 
 # The environment every process of the engine's that loads the kernel runs in -- a model's worker (but
-# one a script names its own Python for: ``contract.interpreter``), the documents worker,
+# one a script names its own Python for: ``contract.interpreter``), the standby, the documents worker,
 # the meshing and reading pools, the render processes -- as the server makes it
 # (``cad_server._internal.base.kernel``: the installation's base): ``KERNEL(make)`` answers
 # ``{"python", "prefix", "path", "own"}``, or None when it is not made and ``make`` is false, and raises,

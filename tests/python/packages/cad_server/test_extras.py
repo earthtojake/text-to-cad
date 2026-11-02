@@ -153,7 +153,7 @@ class NamingTest(unittest.TestCase):
                          r"uv's cache does not hold: ")
         self.assertNotIn("\n", said)
 
-    def test_making_one_removes_releases_older_than_the_one_before_but_the_bases_and_one_a_process_runs_from(self) -> None:
+    def test_making_one_removes_other_releases_environments_but_the_bases_and_one_a_process_runs_from(self) -> None:
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))
         self.addCleanup(shutil.rmtree, folder, True)
 
@@ -167,23 +167,18 @@ class NamingTest(unittest.TestCase):
             (env / base.MARKER).write_text(json.dumps(marker), encoding="utf-8")
             return env
 
-        old = made("old", "0.8.0", ["pandas"])
+        old = made("old", "0.9.0", ["pandas"])
         superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
         now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
-        for name, release, given in (("held", "0.8.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
-                                     ("before", "0.9.0", ["pandas"]), ("base", "0.8.0", None)):
+        for name, release, given in (("held", "0.9.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
+                                     ("base", "0.9.0", None)):
             made(name, release, given)
-        with mock.patch("cad_server._internal.switch.last", return_value=None):
-            keep = extras.kept(folder, "0.10.0")
-        self.assertEqual(keep, {"0.10.0", "0.9.0"}, "the current release and the one before it: the way back")
-        with mock.patch("cad_server._internal.switch.last", return_value={"from": "0.8.0", "to": "0.10.0", "ok": True}):
-            self.assertEqual(extras.kept(folder, "0.10.0"), {"0.10.0", "0.8.0"}, "the release the update came from")
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
-            self.assertEqual(sorted(extras._collect(folder, keep, made=now, requirements=["/w/gears"],
+            self.assertEqual(sorted(extras._collect(folder, "0.10.0", made=now, requirements=["/w/gears"],
                                                     inputs={"release": "0.10.0"})), sorted([str(superseded), str(old)]))
-        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "before", "held", "now", "same"],
-                         "the release before's stay; a base is its release's to remove; one a process runs from "
-                         "goes at a later making; the environments of other packages stay")
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "held", "now", "same"],
+                         "a base is its release's to remove; one a process runs from goes at a later making; the "
+                         "environments of other packages stay")
         self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, ["/w/gears"], {"/w/gears": "later"}),
                          ["/w/gears"], "the line that makes it again names the local package edited")
 

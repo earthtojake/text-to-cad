@@ -1,10 +1,11 @@
 """The daemon's workers, by the supervisor's rules: at most a cap of them alive, requests past it
 waiting first come first served, the least recently used idle worker retired to make room, workers
-retired for memory and never on a timer, no process standing by, and a retired script's next build a
-fresh worker's."""
+retired for memory and never on a timer, the standby a new script's build takes, and a retired
+script's next build a fresh worker's."""
 
 from __future__ import annotations
 
+import dataclasses
 import itertools
 import json
 import os
@@ -39,13 +40,13 @@ def _address(name: str) -> str:
 
 
 class Fake:
-    """A worker as the supervisor sees one (its ``launch``): of 100 MB."""
+    """A worker as the supervisor sees one (its ``launch``): a standby of 440 MB, a worker of 100."""
 
-    def __init__(self, service, key: str, label: str, environment: dict, cwd: str | None,
+    def __init__(self, service, key: str, label: str, environment: dict, cwd: str | None, standby: bool = False,
                  rss: float | None = None) -> None:
         self.service, self.key, self.label, self.environment, self.cwd = service, key, label, environment, cwd
         self.pid, self.requests, self.started = next(_PIDS), 0, time.time()
-        self.rss = 100.0 if rss is None else rss
+        self.rss = (440.0 if standby else 100.0) if rss is None else rss
         self.leased, self.since, self.used, self.retired, self.stopped = False, 0.0, time.monotonic(), False, False
 
     def alive(self) -> bool:
@@ -53,6 +54,9 @@ class Fake:
 
     def stop(self) -> None:
         self.stopped = True
+
+    def adopt(self, key: str, label: str, environment: dict, cwd: str | None) -> None:
+        self.key, self.label, self.environment, self.cwd = key, label, environment, cwd
 
 
 def await_(condition, what: str, seconds: float = 30.0) -> None:
@@ -67,7 +71,7 @@ class PoolTest(unittest.TestCase):
     def pool(self, cap: int, memory: float | None = None) -> Supervisor:
         self.started: list[str] = []
 
-        def launch(service, key: str, label: str, environment: dict, cwd: str | None) -> Fake:
+        def launch(service, key: str, label: str, environment: dict, cwd: str | None, standby: bool) -> Fake:
             self.started.append(label)
             return Fake(service, key, label, environment, cwd)
 
@@ -178,7 +182,7 @@ class PoolTest(unittest.TestCase):
         self.assertEqual(sorted(row["reason"] for row in pool.retired), ["RSS", "exited"])
 
     def test_a_worker_that_fails_to_start_gives_its_slot_back(self) -> None:
-        def launch(service, key: str, label: str, environment: dict, cwd: str | None) -> Fake:
+        def launch(service, key: str, label: str, environment: dict, cwd: str | None, standby: bool) -> Fake:
             if label == "bad.py":
                 raise RuntimeError("no")
             return Fake(service, key, label, environment, cwd)
@@ -189,8 +193,119 @@ class PoolTest(unittest.TestCase):
         self.assertEqual(pool.lease("worker", "good.py", {}).label, "good.py")
 
 
-class DaemonSwitchesTest(unittest.TestCase):
-    """The daemon's own switches and its status, with fake workers."""
+class StandbyTest(unittest.TestCase):
+    """The workers' standby: a worker with the kernel loaded that a new script's build takes."""
+
+    def pool(self, cap: int = 4, memory: float | None = None, gate: threading.Event | None = None,
+             patience: float | None = None) -> Supervisor:
+        self.started: list[str] = []
+
+        def launch(service, key: str, label: str, environment: dict, cwd: str | None, standby: bool) -> Fake:
+            if standby:
+                if gate is not None:
+                    gate.wait(30)
+                return Fake(service, key, label, environment, None, standby=True)
+            self.started.append(label)
+            return Fake(service, key, label, environment, cwd)
+
+        declared = WORKER if patience is None else \
+            dataclasses.replace(WORKER, standby=dataclasses.replace(WORKER.standby, patience=patience))
+        pool = Supervisor(cap, (declared,), launch=launch, memory=lambda: memory)
+        pool.enable_standby("worker")
+        self.addCleanup(pool.stop)
+        return pool
+
+    def standing(self, pool: Supervisor, besides: Fake | None = None) -> Fake:
+        await_(lambda: pool.standby("worker") is not None and pool.standby("worker") is not besides, "the standby")
+        return pool.standby("worker")
+
+    def test_a_new_script_takes_the_standby_of_its_interpreter_and_another_stands_by(self) -> None:
+        pool = self.pool()
+        pool.stand("worker", {"PATH": "/one"})
+        spare = self.standing(pool)
+        worker = pool.lease("worker", "/w/a.py", {"PATH": "/two", "TURN": "1"}, "/w")
+        self.assertIs(worker, spare, "the standby is a.py's worker")
+        self.assertEqual((worker.key, worker.environment, worker.cwd),
+                         (os.path.normcase("/w/a.py"), {"PATH": "/two", "TURN": "1"}, "/w"), "as a fresh one of it")
+        self.assertEqual(self.started, [], "no worker started for it")
+        again = self.standing(pool, spare)
+        self.assertEqual(again.environment, {"PATH": "/two", "TURN": "1"}, "the next in the taker's environment")
+        pool.release(worker)
+        self.assertIs(pool.lease("worker", "/w/a.py", {}), worker, "from then on a.py's warm worker")
+
+    def test_another_interpreter_starts_a_fresh_worker_and_the_standby_follows_it(self) -> None:
+        pool = self.pool()
+        pool.stand("worker", {})
+        spare = self.standing(pool)
+        worker = pool.lease("worker", "b.py", {"PYTHONPATH": "/other"})
+        self.assertEqual(self.started, ["b.py"])
+        self.assertIsNot(worker, spare)
+        self.assertTrue(spare.stopped, "a standby of another interpreter goes")
+        self.assertEqual(self.standing(pool, spare).environment, {"PYTHONPATH": "/other"})
+        self.assertEqual(list(pool.retired), [], "the standby is never a script's retirement")
+
+    def test_a_build_arriving_while_the_standby_starts_waits_for_it_and_a_long_wait_is_said(self) -> None:
+        gate = threading.Event()
+        pool = self.pool(gate=gate, patience=0.01)
+        pool.stand("worker", {})
+        got: list = []
+        said: list = []
+        thread = threading.Thread(target=lambda: got.append(pool.lease("worker", "a.py", {}, None, said.append)),
+                                  daemon=True)
+        thread.start()
+        await_(lambda: said, "the wait for the standby's kernel to be said")
+        self.assertEqual(said, ["loading the CAD kernel for the first time in this environment, up to a minute"])
+        self.assertEqual(self.started, [], "no second kernel load beside the standby's")
+        gate.set()
+        thread.join(5)
+        self.assertEqual((got[0].label, self.started, len(said)), ("a.py", [], 1))
+        pool.release(got[0])
+        pool.lease("worker", "a.py", {}, None, said.append)  # its warm worker: nothing waits, nothing is said
+        self.assertEqual(len(said), 1)
+
+    def test_the_standby_holds_a_slot_and_is_the_first_to_make_room(self) -> None:
+        pool = self.pool(cap=2)
+        pool.stand("worker", {})
+        a = pool.lease("worker", "a.py", {})  # the standby, taken
+        pool.release(a)
+        spare = self.standing(pool, a)
+        b = pool.lease("worker", "b.py", {"PYTHONPATH": "/other"})  # the cap is a and the standby: one goes
+        self.assertTrue(spare.stopped and not a.stopped, "the standby made room, not a's idle worker")
+        self.assertEqual([w.label for w in pool.processes("worker")], ["a.py", "b.py"])
+        self.assertIsNone(pool.standby("worker"), "no room for another")
+        self.assertEqual(b.environment, {"PYTHONPATH": "/other"})
+
+    def test_memory_retires_the_standby_before_any_script_s_worker(self) -> None:
+        pool = self.pool(memory=1000.0)
+        pool.stand("worker", {})
+        worker = pool.lease("worker", "a.py", {})
+        spare = self.standing(pool, worker)
+        worker.rss = 600.0  # once the next standby stands: with it, over the cap from now on
+        pool.release(worker)  # 1040 MB: over the cap, and the standby goes first
+        self.assertTrue(spare.stopped and not worker.stopped)
+        self.assertEqual([(row["script"], row["reason"]) for row in pool.retired], [("standby", "RSS")])
+        worker.rss = 400.0
+        pool.stand("worker", {})
+        spare = self.standing(pool)
+        self.assertEqual(pool.shed(pressure=True), [spare], "under pressure the standby goes at once; 400 MB "
+                                                            "is under half the cap, so a's worker stays")
+        self.assertFalse(worker.stopped)
+        self.assertEqual(pool.retired[0]["reason"], "pressure")
+
+
+    def test_under_memory_pressure_no_standby_starts_to_be_retired_again(self) -> None:
+        pool = self.pool()
+        under = [True]
+        pool.pressed = lambda: under[0]
+        pool.stand("worker", {})
+        worker = pool.lease("worker", "a.py", {})  # a build under pressure: its own worker, and no standby after it
+        pool.release(worker)
+        self.assertEqual(self.started, ["a.py"])
+        self.assertIsNone(pool.readying("worker"), "no kernel loaded for the pressure poller to retire")
+        self.assertIsNone(pool.standby("worker"))
+        under[0] = False
+        pool.release(pool.lease("worker", "b.py", {}))
+        self.standing(pool)
 
     def test_the_pressure_switch_answers_for_the_host_and_anything_else_is_refused(self) -> None:
         # CAD_ENGINE_PRESSURE is Pressure.simulate for a daemon in another process.
@@ -204,7 +319,7 @@ class DaemonSwitchesTest(unittest.TestCase):
                 self.addCleanup(made.shutdown)
                 self.assertEqual(made.pressure.simulated, simulated, "unset: the system's signal, measured")
                 if simulated is not None:
-                    self.assertEqual(made.pressure.under(), simulated)
+                    self.assertEqual((made.pressure.under(), made.supervisor.pressed()), (simulated, simulated))
         folder = Path(tempfile.mkdtemp(prefix="eng-"))
         self.addCleanup(shutil.rmtree, folder, True)
         with mock.patch.dict(os.environ, {"CAD_ENGINE_PRESSURE": "yes", "CAD_ENGINE_DIR": str(folder)}):
@@ -214,21 +329,28 @@ class DaemonSwitchesTest(unittest.TestCase):
                 self.assertEqual(engine.main([]), 1, "refused at the start")
             self.assertIn("CAD_ENGINE_PRESSURE is 'yes'", json.loads(engine.failure_path().read_text(encoding="utf-8"))["reason"])
 
-    def test_status_counts_the_workers_against_the_cap_and_no_process_stands_by(self) -> None:
+    def test_status_shows_the_standby_with_its_memory_and_never_as_a_script_s_worker(self) -> None:
         from cad_server.engine.cli import status_text
 
         daemon = Daemon(cap=4)
+        daemon.pressure.simulate(False)  # this machine's memory pressure would keep any standby from starting
         daemon.supervisor.launch = Fake
         self.addCleanup(daemon.shutdown)
+        daemon.supervisor.enable_standby("worker")
+        daemon.supervisor.stand("worker", {})
+        self.standing(daemon.supervisor)
+        # A fresh worker; the standby follows.
         worker = daemon.supervisor.lease("worker", "/w/tube.py", {"PYTHONPATH": "/other"})
         daemon.supervisor.release(worker)
+        spare = self.standing(daemon.supervisor)
         answer = daemon.status()
         self.assertEqual([Path(w["script"]).name for w in answer["workers"]], ["tube.py"])
-        self.assertEqual(answer["rssMb"], 100)
-        self.assertNotIn("standby", answer)
+        self.assertEqual((answer["standby"]["pid"], answer["standby"]["rssMb"], answer["rssMb"]), (spare.pid, 440, 540))
+        self.assertNotIn("workerIdle", answer, "no idle time to report")
         lines = status_text(answer).splitlines()
-        self.assertIn("workers 1/4 · ", lines[0])
-        self.assertNotIn("standby", status_text(answer))
+        self.assertIn("workers 2/4 with the standby", lines[0])
+        self.assertIn("RSS 0.5 GB of", lines[0])
+        self.assertRegex(lines[2], rf"^  standby +{spare.pid}  +0\.4 GB  kernel loaded · \d+s$")
 
 
 class ConnectedPoolTest(unittest.TestCase):
@@ -464,6 +586,34 @@ class DaemonPoolTest(unittest.TestCase):
         status = self.status()
         self.assertEqual([Path(w["script"]).name for w in status["workers"]], ["b.py"], "the cap holds")
         self.assertEqual([(Path(row["script"]).name, row["reason"]) for row in status["retired"]], [("a.py", "LRU")])
+
+    def test_a_new_script_s_first_build_takes_the_standby_and_another_stands_by(self) -> None:
+        # The runners' standby is off; and the host's memory pressure, which keeps a standby from
+        # starting, is no part of this test (``CAD_ENGINE_PRESSURE``).
+        env = {**self.env, "CAD_ENGINE_WORKERS": "", "CAD_ENGINE_STANDBY": "1", "CAD_ENGINE_PRESSURE": "0"}
+
+        def standby(besides: int | None = None) -> dict:
+            found: dict = {}
+
+            def ready() -> bool:
+                found.update(self.status().get("standby") or {})
+                return bool(found.get("pid")) and found["pid"] != besides
+
+            await_(ready, "a standby with the kernel loaded", 120)
+            return found
+
+        self.script("a")
+        self.build("a", env)  # the standby stands by in a's environment from now on
+        spare = standby()
+        self.script("b")
+        self.assertIn(" cold ", self.build("b", env))
+        status = self.status()
+        self.assertEqual({Path(w["script"]).name: w["pid"] for w in status["workers"]}["b.py"], spare["pid"],
+                         "b's worker is the standby")
+        self.assertGreater(spare["rssMb"], 0)
+        again = standby(spare["pid"])
+        self.assertNotIn("standby", [Path(w["script"]).name for w in status["workers"]])
+        self.assertRegex(self.cli("status").stdout, rf"with the standby .*\n(.*\n)*  standby +{again['pid']} ")
 
 
 if __name__ == "__main__":
