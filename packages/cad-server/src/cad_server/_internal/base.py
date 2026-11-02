@@ -86,6 +86,19 @@ WHAT = "the CAD kernel environment"
 # A folder of wheels uv reads beside its index for every cadgen it installs (``--find-links``): a test's
 # seam, a local release a test publishes there, never a setting of a person's.
 FIND_LINKS_ENV = "CAD_UPDATE_FIND_LINKS"
+# The variables of uv's that say how it resolves -- its indexes, find-links, strategy, credentials' provider,
+# TLS, pre-releases, timeouts, build settings, its configuration file, the Python it asks for -- which ``cad
+# run`` hands the making from its caller's environment, as ``uv run`` reads them from its own (an environment
+# made for a run is made with the caller's alone: one of these in the engine's own is not read). The settings
+# the engine owns -- its cache, its link mode, where it installs Pythons, whether it goes online -- stay its.
+UV_SETTINGS = frozenset({
+    "UV_INDEX", "UV_DEFAULT_INDEX", "UV_INDEX_URL", "UV_EXTRA_INDEX_URL", "UV_FIND_LINKS", "UV_INDEX_STRATEGY",
+    "UV_KEYRING_PROVIDER", "UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_PRERELEASE", "UV_HTTP_TIMEOUT", "UV_RESOLUTION",
+    "UV_FORK_STRATEGY", "UV_EXCLUDE_NEWER", "UV_NO_BUILD", "UV_NO_BUILD_PACKAGE", "UV_NO_BINARY",
+    "UV_NO_BINARY_PACKAGE", "UV_NO_BUILD_ISOLATION", "UV_NO_BUILD_ISOLATION_PACKAGE", "UV_NO_SOURCES",
+    "UV_INSECURE_HOST", "UV_CONFIG_FILE", "UV_NO_CONFIG", "UV_TORCH_BACKEND", "UV_PYTHON", "UV_MANAGED_PYTHON",
+    "UV_NO_MANAGED_PYTHON", "UV_PYTHON_DOWNLOADS", "UV_LOCKED", "UV_FROZEN",
+})
 
 
 class Refused(Exception):
@@ -443,6 +456,15 @@ class Recipe:
     # Asked once uv has installed it, before its marker: a requirement to install again and the line said of
     # it, or None (``cad_server._internal.extras``: an integration a resolution pulled in).
     revise: Callable[[Path], tuple[tuple[str, ...], str] | None] | None = field(default=None, compare=False)
+    # uv's settings from the run's caller (``UV_SETTINGS``, as ``NAME``/``value`` pairs; None: this process's
+    # own, the base's and a release's), and the folder uv runs
+    # in -- a project's, so its uv configuration is read, and the paths of its lock's export resolve -- (None:
+    # the environments' own folder, where no project's settings are read).
+    environment: tuple[tuple[str, str], ...] | None = None
+    folder: str | None = None
+    # Asked once the virtual environment is made, before uv installs into it: more of what it installs (a
+    # project's lock, exported: ``-r`` and the file), or ``Refused`` in one line.
+    before: Callable[[Path], tuple[str, ...]] | None = field(default=None, compare=False)
 
 
 def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
@@ -514,9 +536,14 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
         told(f"{recipe.making}, in {env}")
         started = time.monotonic()
         venv, install = steps
-        result = _uv(venv, env.parent)
+        folder = Path(recipe.folder) if recipe.folder else env.parent
+        result = _uv(venv, folder, recipe.environment)
         if result.returncode == 0:
-            result, install = _install(install, env.parent, recipe, told)
+            extra: tuple[str, ...] = ()
+            if recipe.before is not None:
+                extra = recipe.before(env)
+                install = steps[1] = [*install, *extra]
+            result, install = _install(install, folder, recipe, told)
             steps[1] = step = install
             if result.returncode == 0 and recipe.revise is not None:
                 again = recipe.revise(env)
@@ -524,7 +551,8 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
                     requirement, said = again
                     told(said)
                     again_recipe = dataclasses.replace(recipe, requirement=requirement, revise=None)
-                    result, step = _install(commands(steps[0][0], env, again_recipe)[1], env.parent, again_recipe, told)
+                    again_install = [*commands(steps[0][0], env, again_recipe)[1], *extra]
+                    result, step = _install(again_install, folder, again_recipe, told)
                     steps.append(step)
         else:
             step = venv
@@ -545,19 +573,20 @@ def _install(install: list[str], folder: Path, recipe: Recipe,
     """``uv pip install`` as ``install`` says it: from uv's cache first, ``--offline``, and from the network
     only for what it does not hold, said in a line first -- unless the recipe's own options say ``--offline``.
     Its result, and the command that gave it."""
+    environment = recipe.environment
     if "--offline" in recipe.options:
-        return _uv(install, folder), install
-    result = _uv([*install, "--offline"], folder)
+        return _uv(install, folder, environment), install
+    result = _uv([*install, "--offline"], folder, environment)
     if result.returncode == 0:
         return result, install
     # uv's cache did not hold all of it: from the network, once.
     told(recipe.downloading)
-    result = _uv(install, folder)
+    result = _uv(install, folder, environment)
     if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
         # uv reads an index page it cached (ten minutes, PyPI's): one from before the release was listed says
         # there is none. Asked again, that page alone fetched anew.
         install = [*install, "--refresh-package", LIBRARY, "--refresh-package", SERVER]
-        result = _uv(install, folder)
+        result = _uv(install, folder, environment)
     return result, install
 
 
@@ -601,11 +630,22 @@ _RUNNING: set[subprocess.Popen] = set()
 _RUNNING_LOCK = threading.Lock()
 
 
-def _uv(step: list[str], folder: Path) -> subprocess.CompletedProcess:
-    """A uv command run in the environments' folder, where no project's uv settings are read."""
+def uv_environment(settings: tuple[tuple[str, str], ...] | None = ()) -> dict[str, str]:
+    """The environment a uv command runs in: this process's, but for uv's resolution settings
+    (``UV_SETTINGS``), which are ``settings`` alone -- a run's caller's."""
+    found = {name: value for name, value in os.environ.items() if name not in UV_SETTINGS}
+    found.update(dict(settings or ()))
+    return found
+
+
+def _uv(step: list[str], folder: Path, settings: tuple[tuple[str, str], ...] | None = None) -> subprocess.CompletedProcess:
+    """A uv command run in ``folder`` -- the environments' own, where no project's uv settings are read, or a
+    run's project's -- with uv's settings ``settings`` (a run's caller's: ``uv_environment``; None, this
+    process's own)."""
     try:
         process = subprocess.Popen(step, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace")
+                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                   env=None if settings is None else uv_environment(settings))
     except OSError as error:
         raise Refused(f"cannot run uv ({step[0]}): {error.strerror or error}") from None
     with _RUNNING_LOCK:

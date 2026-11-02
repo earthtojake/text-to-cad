@@ -327,6 +327,54 @@ class ChoosingTest(unittest.TestCase):
         with self.assertRaisesRegex(extras.Refused, "is no requirement"):
             extras.Spec.from_dict({**spec.as_dict(), "requirements": ["--index-url=https://x"]})
 
+    def test_uv_s_settings_in_the_caller_s_environment_reach_the_making_and_key_it(self) -> None:
+        self.write("m.py", "import build123d\n")
+        extra = "https://extra.example.com/simple"
+        with mock.patch.dict(os.environ, {"UV_EXTRA_INDEX_URL": extra, "UV_CACHE_DIR": str(self.folder / "c")}):
+            spec = self.spec("m.py")
+        self.assertIn(f"UV_EXTRA_INDEX_URL={extra}", spec.environment)
+        self.assertFalse(any(item.startswith("UV_CACHE_DIR=") for item in spec.environment), "the engine's own")
+        self.assertFalse(spec.default(), "another index: not the base")
+        installation = base.Installation.here()
+        without = dataclasses.replace(spec, environment=tuple(item for item in spec.environment
+                                                              if not item.startswith("UV_EXTRA_INDEX_URL=")))
+        self.assertNotEqual(extras.key(installation, spec), extras.key(installation, without))
+        asked: list = []
+
+        def uv(step, folder, settings=None):
+            asked.append((step[1], str(folder), base.uv_environment(settings)))
+            return subprocess.CompletedProcess(step, 1, "", "error: stop here")
+
+        with mock.patch.object(base, "_uv", side_effect=uv), mock.patch.object(base, "find_uv", return_value="uv"), \
+                mock.patch.dict(os.environ, {"UV_EXTRA_INDEX_URL": "https://the-engine-s-own.example.com"}), \
+                self.assertRaises(extras.Refused):
+            extras.ensure(installation, spec, told=lambda _line: None)
+        step, folder, environment = asked[0]
+        self.assertEqual((step, folder, environment["UV_EXTRA_INDEX_URL"]), ("venv", str(self.folder), extra),
+                         "uv runs in the run's folder, with the caller's settings, never the engine's")
+
+    def test_a_project_s_lock_and_uv_configuration_are_read_and_its_cad_is_the_device_s(self) -> None:
+        self.write("pyproject.toml", '[project]\nname = "p"\nversion = "0.1"\ndependencies = ["cad"]\n\n'
+                                     '[tool.uv]\nindex-url = "https://private.example.com/simple"\n')
+        self.write("m.py", "import build123d\n")
+        with self.assertRaisesRegex(extras.Refused, r"^--locked: .+ has no uv\.lock to read$"):
+            self.spec("--locked", "m.py")
+        spec = self.spec("m.py")
+        self.assertEqual((spec.config, spec.lock, spec.folder), ((str(self.folder / "pyproject.toml"),), None,
+                                                                  str(self.folder)))
+        lock = self.write("uv.lock", 'version = 1\nrequires-python = ">=3.14"\n\n[[package]]\nname = "cad"\n'
+                                     'version = "0.10.0"\nsource = { registry = "https://pypi.org/simple" }\n')
+        spec = self.spec("--frozen", "--group", "dev", "m.py")
+        self.assertEqual((spec.lock, spec.lock_options, spec.editable, spec.files),
+                         (str(lock), ("--frozen", "--group=dev"), (), ()), "the locked set, in place of a resolution")
+        installation = base.Installation.here()
+        before = extras.key(installation, spec)
+        lock.write_text(lock.read_text(encoding="utf-8") + "\n", encoding="utf-8")
+        self.assertNotEqual(extras.key(installation, spec), before, "the key covers the lock's content")
+        lock.write_text(lock.read_text(encoding="utf-8").replace('"0.10.0"', '"0.9.0"'), encoding="utf-8")
+        with self.assertRaisesRegex(extras.Refused, r"uv\.lock pins cad to ==0\.9\.0, and this device runs cad 0\.10\.0"):
+            self.spec("m.py")
+
     def test_cad_requirement_prints_the_device_s_exact_requirement(self) -> None:
         from cad_server.cli import requirement
 
@@ -346,16 +394,16 @@ class ChoosingTest(unittest.TestCase):
             requirement.requirement(["nope"])
 
 
-def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = ()) -> Path:
-    """A tiny pure-Python package as a wheel uv installs with no build and no network: ``localpkg``, its
-    ``WIDTH`` the one given, depending on ``requires``."""
-    path = folder / "localpkg-0.1-py3-none-any.whl"
-    metadata = "Metadata-Version: 2.1\nName: localpkg\nVersion: 0.1\n" + "".join(f"Requires-Dist: {item}\n"
-                                                                                for item in requires)
-    files = {"localpkg/__init__.py": f"WIDTH = {width}\n".encode(),
-             "localpkg-0.1.dist-info/METADATA": metadata.encode(),
-             "localpkg-0.1.dist-info/WHEEL": b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\n"
-                                              b"Tag: py3-none-any\n"}
+def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = (), version: str = "0.1") -> Path:
+    """A tiny pure-Python package as a wheel uv installs with no build and no network: ``localpkg`` at
+    ``version`` (its ``VERSION``), its ``WIDTH`` the one given, depending on ``requires``."""
+    path = folder / f"localpkg-{version}-py3-none-any.whl"
+    info = f"localpkg-{version}.dist-info"
+    metadata = f"Metadata-Version: 2.1\nName: localpkg\nVersion: {version}\n" + "".join(f"Requires-Dist: {item}\n"
+                                                                                       for item in requires)
+    files = {"localpkg/__init__.py": f"WIDTH = {width}\nVERSION = {version!r}\n".encode(),
+             f"{info}/METADATA": metadata.encode(),
+             f"{info}/WHEEL": b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\nTag: py3-none-any\n"}
 
     def digest(data: bytes) -> str:
         return "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
@@ -364,7 +412,7 @@ def _wheel(folder: Path, width: int = 42, requires: tuple[str, ...] = ()) -> Pat
     with zipfile.ZipFile(path, "w") as wheel:
         for name, data in files.items():
             wheel.writestr(name, data)
-        wheel.writestr("localpkg-0.1.dist-info/RECORD", record + "localpkg-0.1.dist-info/RECORD,,\n")
+        wheel.writestr(f"{info}/RECORD", record + f"{info}/RECORD,,\n")
     return path
 
 
@@ -396,8 +444,41 @@ class RunWithTest(unittest.TestCase):
         cls.env = engine_daemon.watched({**os.environ, "UV_OFFLINE": "1", "CAD_ENGINE_MESH": "inline"},
                                         cls.addClassCleanup)
 
-    def run_(self, *args: str) -> subprocess.CompletedProcess:
-        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "run", *args], env=self.env, cwd=self.project)
+    def run_(self, *args: str, cwd: Path | None = None) -> subprocess.CompletedProcess:
+        return engine_daemon.run([sys.executable, "-m", "cad_server.cli", "run", *args], env=self.env,
+                                 cwd=cwd or self.project)
+
+    def test_a_project_s_lock_is_installed_exactly_and_its_uv_configuration_is_read(self) -> None:
+        # Its packages come from a folder of wheels its pyproject.toml's [tool.uv] names, which no index serves.
+        locked, unlocked = self.project / "locked", self.project / "unlocked"
+        for folder in (locked, unlocked):
+            (folder / "wheels").mkdir(parents=True)
+            _wheel(folder / "wheels", version="0.1")
+            (folder / "pyproject.toml").write_text(
+                '[project]\nname = "gearbox"\nversion = "0.1"\nrequires-python = ">=3.14"\n'
+                'dependencies = ["localpkg"]\n\n[tool.uv]\nfind-links = ["wheels"]\n', encoding="utf-8")
+        made = subprocess.run([base.find_uv(), "lock", "--offline"], cwd=locked, capture_output=True, text=True,
+                              env=self.env)
+        self.assertEqual(made.returncode, 0, made.stderr)
+        for folder in (locked, unlocked):
+            _wheel(folder / "wheels", version="0.2")  # newer than the lock's
+        said = "import localpkg; print(localpkg.VERSION)"
+        done = self.run_("-c", said, cwd=locked)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "0.1"), done.stderr)
+        self.assertIn(f"the locked set of {locked / 'uv.lock'}", done.stderr)
+        done = self.run_("-c", said, cwd=unlocked)
+        self.assertEqual((done.returncode, done.stdout.strip()), (0, "0.2"),
+                         "no lock: a resolution, through the project's own [tool.uv] find-links\n" + done.stderr)
+        # A lock out of date with its project: --locked refuses it, in uv's words, and nothing runs.
+        project = locked / "pyproject.toml"
+        project.write_text(project.read_text(encoding="utf-8").replace('["localpkg"]', '["localpkg>=0.2"]'),
+                           encoding="utf-8")
+        done = self.run_("--locked", "-c", "print('ran')", cwd=locked)
+        self.assertEqual(done.returncode, 1, done.stdout + done.stderr)
+        self.assertNotIn("ran", done.stdout)
+        self.assertRegex(done.stderr.strip().splitlines()[-1],
+                         r"^cad run: uv could not export .+uv\.lock: The lockfile at `uv\.lock` needs to be updated, "
+                         r"but `--locked` was provided")
 
     def rebuild(self, done: subprocess.CompletedProcess) -> str | None:
         from cad.engine import records

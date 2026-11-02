@@ -37,7 +37,7 @@ class Fake:
         self.steps: list[list[str]] = []
         self.answers = list(answers)
 
-    def __call__(self, step: list[str], folder: Path) -> subprocess.CompletedProcess:
+    def __call__(self, step: list[str], folder: Path, settings=None) -> subprocess.CompletedProcess:
         self.steps.append(list(step))
         if step[1] == "venv":
             python = base.interpreter(Path(step[-1]))

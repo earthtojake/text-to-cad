@@ -454,7 +454,9 @@ header may name `cad[...]` to choose them itself. A header that pins cad to anot
 the server's is refused. `cad run --with pandas model.py` adds a package for one run (repeat
 `--with`, or separate requirements with commas; a local folder or wheel works too, installed again
 on the next run after an edit). A script with no header inside a Python project
-(`pyproject.toml`) runs with the project's dependencies. A requirement that cannot be installed
+(`pyproject.toml`) runs with the project's dependencies -- exactly its `uv.lock`'s where it has one
+-- and reads the project's uv configuration and your shell's uv settings (a private index, say), as
+`uv run` does. A requirement that cannot be installed
 beside cad's own is refused in one line, with uv's reason. After an update the environments of
 the release before are kept, as the way back; `cad doctor --prune` removes the environments no
 model has used for a week.

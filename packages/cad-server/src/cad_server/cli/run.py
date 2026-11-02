@@ -65,6 +65,13 @@ TRANSIENT = frozenset({"-q", "--quiet", "-v", "--verbose", "--no-progress", "--c
 PATHS = frozenset({"-f", "--find-links", "--config-file", "--cache-dir"})
 # uv's options for the Python an environment is made on, which ``uv venv`` takes.
 PYTHON_OPTIONS = frozenset({"--managed-python", "--no-managed-python", "--no-python-downloads"})
+# A project's lock, as uv reads it: ``--locked`` (refused where it is out of date) and ``--frozen`` (as it is).
+LOCK_MODES = frozenset({"--locked", "--frozen"})
+# A project's own options of what of it is installed: its extras and dependency groups, which a lock's export
+# takes (with no lock, uv's pip interface takes the groups, of the project's ``pyproject.toml``).
+PROJECT_OPTIONS = frozenset({"--no-extra", "--group", "--no-group", "--only-group", "--all-groups", "--no-dev",
+                             "--only-dev", "--no-default-groups", "--package", "--all-packages", "--no-editable",
+                             "--no-editable-package"})
 # The no-ops: every environment ``cad run`` makes is its own, and never the project's ``.venv``.
 NO_OPS = frozenset({"--isolated", "--no-env-file"})
 # Each option's long spelling, for a run's options said as one word each (the rebuild command).
@@ -95,6 +102,8 @@ class Plan:
     no_project: bool = False
     extras: list[str] = field(default_factory=list)  # a project's extras (``--extra``)
     all_extras: bool = False
+    lock_mode: list[str] = field(default_factory=list)  # ``--locked``, ``--frozen``
+    project_options: list[tuple[str, str | None]] = field(default_factory=list)  # its groups and the rest
     env_file: list[str] = field(default_factory=list)
 
 
@@ -186,6 +195,10 @@ def _option(plan: Plan, name: str, value: str | None) -> None:
         plan.extras.append(value or "")
     elif name == "--all-extras":
         plan.all_extras = True
+    elif name in LOCK_MODES:
+        plan.lock_mode.append(name)
+    elif name in PROJECT_OPTIONS:
+        plan.project_options.append((name, value))
     elif name == "--env-file":
         plan.env_file.append(value or "")
     elif name in NO_OPS:
@@ -283,19 +296,37 @@ def prepare(plan: Plan, release: str) -> Prepared:
     editable = [extras.absolute(item, here) for item in plan.editable]
     files = [extras.absolute(item, here) for item in plan.files]
     options = list(_words(plan.options, here))
+    lock: str | None = None
+    lock_options: list[str] = []
+    project_options = list(_words(plan.project_options, here))
     if project is not None:
         where = f"{Path(project.root).name}'s pyproject.toml"
         for item in project.dependencies:
             extra = extras.pinned(item, release, where)
             if extra is not None:
                 project_cad.update(extra)
-        if project.packaged:
-            extra_names = ",".join(sorted(set(plan.extras)))
-            editable.append(f"{project.root}[{extra_names}]" if extra_names else project.root)
+        found_lock = Path(project.root) / "uv.lock"
+        if found_lock.is_file():
+            # The locked set, exactly, as uv run installs it: exported by uv at the making, its cad refused here
+            # when it is another release.
+            lock = str(found_lock)
+            extras.locked_cad(lock, release)
+            lock_options = [*dict.fromkeys(plan.lock_mode), *(f"--extra={extra}" for extra in sorted(set(plan.extras))),
+                            *(["--all-extras"] if plan.all_extras else []), *project_options]
         else:
-            files.append(str(Path(project.root) / "pyproject.toml"))
-            options += [f"--extra={extra}" for extra in sorted(set(plan.extras))]
-            options += ["--all-extras"] if plan.all_extras else []
+            if plan.lock_mode:
+                raise extras.Refused(f"{plan.lock_mode[0]}: {project.root} has no uv.lock to read")
+            if project.packaged:
+                extra_names = ",".join(sorted(set(plan.extras)))
+                editable.append(f"{project.root}[{extra_names}]" if extra_names else project.root)
+            else:
+                files.append(str(Path(project.root) / "pyproject.toml"))
+                options += [f"--extra={extra}" for extra in sorted(set(plan.extras))]
+                options += ["--all-extras"] if plan.all_extras else []
+            options += project_options  # uv's pip interface reads the project's groups itself
+    # Where uv runs, so the uv configuration it reads is the run's (a project's, a uv.toml): the project's
+    # folder, else the run's.
+    folder = project.root if project is not None else here
 
     def scanned() -> set[str]:
         # The import roots beside the program's own: its project's, and what ``PYTHONPATH`` names (as the
@@ -318,7 +349,9 @@ def prepare(plan: Plan, release: str) -> Prepared:
         files=tuple(dict.fromkeys(files)), options=tuple(options),
         python=(extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
                 else plan.python),
-        python_options=tuple(plan.python_options), transient=_words(plan.transient, here))
+        python_options=tuple(plan.python_options), environment=extras.uv_settings(),
+        config=extras.uv_config(folder), lock=lock, lock_options=tuple(lock_options),
+        transient=_words(plan.transient, here), folder=folder)
     # What builds a document of its run again, from any folder: its command line's options, one word each, and
     # its requirements (``extras.tell``).
     again = [*(f"--with-editable={item}" for item in editable if project is None or not item.startswith(project.root)),
@@ -326,6 +359,8 @@ def prepare(plan: Plan, release: str) -> Prepared:
                if project is None or item != str(Path(project.root) / "pyproject.toml")),
              *([f"--project={project.root}"] if project is not None else []),
              *(f"--extra={extra}" for extra in sorted(set(plan.extras)) if project is not None),
+             *(dict.fromkeys(plan.lock_mode) if lock else []),
+             *(project_options if lock else []),
              *([f"--python={spec.python}"] if spec.python else []), *plan.python_options, *options,
              *([f"cad[{','.join(sorted(given_cad))}]"] if given_cad else []), *sorted(set(with_))]
     return Prepared(spec, again, str(script) if declared else None, sorted(set(declared)), found.get("requires-python"))

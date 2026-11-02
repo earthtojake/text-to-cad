@@ -430,11 +430,25 @@ verbosity) key nothing. What it adds is two things:
 A script with a header runs in an environment of its header's `dependencies`, and any project around
 it is not read, as `uv run` reads none. Without one, inside a uv project -- a `pyproject.toml` with a
 `[project]` table, found from the working folder up as uv finds one, or named by `--project` --
-the project's dependencies are installed with it: the project itself, editable, when it is packaged
-(a `[build-system]`, `--extra` naming its extras), else its dependencies (`-r pyproject.toml`); its
-lock is not read. `--with`, `--with-editable` and `--with-requirements` add on top in either case.
-Then uv's options, and the Python: `--python` as uv reads it (a version, a path, an implementation;
-uv may fetch a managed one), by default the engine's own. **After uv installs it**, the distributions
+the project's dependencies are installed with it. Where the project has a `uv.lock`, exactly its
+locked set: the engine exports it with uv (`uv export --format requirements-txt --no-hashes`, the
+project's extras and groups as given), its path, git and other sources as uv writes them, and installs
+that beside cad's pin, cad's own line taken out -- `--frozen` takes the lock as it is, `--locked`
+refuses one out of date with its project in uv's words, and neither makes it current first, as `uv
+run` does; a lock that pins cad to another release is refused in one line, as a header is
+(`extras.locked_cad`). With no lock, the project itself, editable, when it is packaged (a
+`[build-system]`, `--extra` naming its extras), else its dependencies (`-r pyproject.toml`), and
+`--locked` or `--frozen` is refused, there being no lock to read. `--with`, `--with-editable` and
+`--with-requirements` add on top in either case. Then uv's options; **uv's settings** as the caller's
+shell has them, an allowlist of the variables that say how uv resolves (`base.UV_SETTINGS`: its
+indexes and find-links, index strategy, keyring provider, TLS, pre-releases, HTTP timeout, build
+settings, its configuration file), which the making is run with in place of the engine's own (the
+settings the engine owns -- its cache, its link mode, where it installs Pythons -- stay its); the uv
+configuration of the run's folder, read as uv reads it, uv running in the project's folder (else the
+run's), so a project's `[tool.uv]` or `uv.toml` -- a private index -- is used (`extras.uv_config`);
+and the Python: `--python` as uv reads it (a version, a path, an implementation; uv may fetch a
+managed one), by default the engine's own. A run that differs from the base's only in how uv reaches
+an index (TLS, a timeout, a keyring) still runs in the base (`extras.HOW`). **After uv installs it**, the distributions
 it holds are read: one of an integration it was not given (`build123d`, `cadquery-ocp-novtk`,
 pulled in by a package that depends on it) adds that integration's extra, and uv resolves again,
 saying so (`build123d came in through another package: resolving again with cad[build123d] 0.10.0,
@@ -445,7 +459,9 @@ so cad's pins decide it`); its marker names the integrations it was made with (`
 (`Spec.keyed`: the integrations, the requirements normalized, each once and sorted -- a local path
 made absolute, against the working folder for `--with` and the script's folder for the header, a
 name as PEP 503 spells it, its extras sorted, its specifier without spaces -- the editable folders,
-the requirements files, uv's options, the Python), and what each local thing is now
+the requirements files, uv's options and settings, the uv configuration, the lock and its export's
+options, the Python), and what each local thing is now -- a lock, its project's `pyproject.toml` and
+a uv configuration by their bytes --
 (`extras.fingerprints`: a wheel's or a file's size and modification time; a folder's files' paths,
 sizes and modification times, but for `.git`, `__pycache__`, `build`, `dist`, environments and
 `*.egg-info`; an editable folder's metadata files alone, its code read as it is). An edit to a local
