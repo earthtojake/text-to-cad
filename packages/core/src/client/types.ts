@@ -28,7 +28,7 @@ export interface CadOpenInApp { id: string; name: string }
  * or `export:<format>` (a file a model's last build wrote); its kind, its file's name, whether it is
  * on disk now, and the detected apps that take it.
  */
-export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[] }
+export interface CadOpenInTarget { target: string; kind: string; name: string; present: boolean; apps: CadOpenInApp[]; default?: boolean }
 /** `GET /api/v1/local/open-in`: a document's files and their apps, and which file manager this computer has. */
 export interface CadOpenInApps { targets: CadOpenInTarget[]; fileManager?: 'finder' | 'explorer' | 'files' }
 export interface CadServerInfo {
@@ -255,6 +255,8 @@ export interface CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
+  /** A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files. */
+  plotPayload(file: string, options?: CadRequestOptions): Promise<CadPlotPayload>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
@@ -325,4 +327,17 @@ export interface ExportService {
   status(id: string, sequence?: number, signal?: AbortSignal): Promise<ExportJob>;
   /** Where the browser downloads a ready job's file: the session's own origin, never a token. */
   fileUrl(id: string): string;
+}
+
+export interface CadPlotPayload {
+  schemaVersion: number;
+  kind: string;
+  /** What wrote the file (`"pcbnew 10.99"`), for wording only. */
+  generator?: string;
+  /** The board's connections still to make, each drawn as a ratsnest line. */
+  unrouted: number | null;
+  sheets: { name: string; width: number; height: number; background: string; layers: { id: string; kind: string; side: string; items: Record<string, unknown>[] }[] }[];
+  /** The board's index, in sheet millimetres: what the board view's tools point with. */
+  board?: Record<string, unknown>;
+  [key: string]: unknown;
 }

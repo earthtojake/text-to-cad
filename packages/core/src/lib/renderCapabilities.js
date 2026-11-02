@@ -26,6 +26,7 @@ import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 export const ENTRY_ICON_KIND = Object.freeze({
   LOADING: "loading",
   DXF: "dxf",
+  KICAD_PCB: "kicad_pcb",
   ROBOT: "robot",
   STEP: "step",
   STL_MESH: "stl-mesh",
@@ -42,6 +43,7 @@ export const RENDER_CAPABILITIES = Object.freeze({
   [RENDER_FORMAT.THREE_MF]: Object.freeze({ iconKind: ENTRY_ICON_KIND.THREE_MF_MESH }),
   [RENDER_FORMAT.GLB]: Object.freeze({ iconKind: ENTRY_ICON_KIND.GLB_MESH }),
   [RENDER_FORMAT.DXF]: Object.freeze({ iconKind: ENTRY_ICON_KIND.DXF }),
+  [RENDER_FORMAT.KICAD_PCB]: Object.freeze({ iconKind: ENTRY_ICON_KIND.KICAD_PCB }),
   [RENDER_FORMAT.URDF]: ROBOT_CAPABILITIES,
   [RENDER_FORMAT.SRDF]: ROBOT_CAPABILITIES,
   [RENDER_FORMAT.SDF]: ROBOT_CAPABILITIES,
