@@ -449,8 +449,10 @@ own that the server keeps beside that one for the runs after:
 ```
 
 `cad run --with pandas model.py` does the same for one run (repeat `--with`, or separate
-requirements with commas; a local folder or wheel works too). A requirement that cannot be
-installed beside the kernel's own is refused in one line, with uv's reason.
+requirements with commas; a local folder or wheel works too, installed again on the next run
+after an edit). A requirement that cannot be installed beside the kernel's own is refused in one
+line, with uv's reason. `cad doctor --prune` removes the environments no model has used for a
+week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:

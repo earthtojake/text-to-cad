@@ -416,24 +416,38 @@ takes it: a name, a pin, extras, a local folder or wheel). `cad run` reads both
 requirements, resolved together by uv on the engine's Python with the base's link mode, find-links and
 index settings. It is made once, as the base is -- by the device's engine when one runs (`{"op": "base",
 "key", "with"}`, `extras.Making`), its lines said as they come, else by `cad run` itself -- at
-`base/<key>` beside the base: its key digests the base's inputs, the release among them, and the
+`base/<key>` beside the base: its key digests the base's inputs, the release among them, the
 requirements normalized, each once and sorted (`extras.normalized`: a local path made absolute, against
-the working folder for `--with` and the script's folder for the header; a name as PEP 503 spells it,
-its extras sorted, its specifier without spaces), so `--with pandas` and a header's `Pandas` share one.
-Its marker names the installation and the requirements (`with`): a process there reaches the device's
-engine as one in the base does, and names its Python in its orders, with the requirements `cad run
---with` gave it (`places.RUN_WITH`); the engine builds the script in a warm worker of that Python, as
-for **a Python of the script's own** below, of one release with the engine, so no update notice is
-said. A header's `requires-python` the server's Python does not meet is refused in one line, before
-anything is made. Making one removes the environments of models' packages of other releases, but one a
-process runs from, which a later making removes (`extras._collect`; the bases are their releases',
-`releases.collect`). What uv cannot do is said in one line (`base.failure`): requirements it cannot
+the working folder for `--with` and the script's folder for the header, and so a `file:` URL and a
+name's direct reference to a local one, `gears @ ./vendor/gears`, as a path; a name as PEP 503 spells it,
+its extras sorted, its specifier without spaces), so `--with pandas` and a header's `Pandas` share one --
+and what each local package is now (`extras.fingerprint`: a wheel's size and modification time, a
+folder's files' paths, sizes and modification times, but for `.git`, `__pycache__`, `build`, `dist`, the
+environments in it and `*.egg-info`). An edit to a local package is so another environment: the next run
+makes it, saying `making the environment of the model's packages again, as <path> changed: ...`, and
+builds in a fresh worker of its Python, which imports the package as it is now; the run before's goes
+(below). Its marker names the installation, the requirements (`with`) and the local packages'
+fingerprints (`local`): a process there reaches the device's engine as one in the base does, and names
+its Python in its orders, with how `cad run` named the packages (`places.RUN_WITH`: the requirements
+its `--with` was given, and the script whose header named the rest, with them); the engine builds the
+script in a warm worker of that Python, as for **a Python of the script's own** below, of one release
+with the engine, so no update notice is said. A header's `requires-python` the server's Python does not
+meet is refused in one line, before anything is made (read as PEP 440 reads it, `>=3.11.0rc1` too).
+Making one removes the environments of models' packages of other releases, and the one an edit to its
+local packages superseded, but one a process runs from (`releases.running`: named on a process's
+command line, as written or by a link to it), which a later making removes (`extras._collect`; the
+bases are their releases', `releases.collect`). The environments of other requirements stay, one per
+set a model named, through the release: `cad doctor` reports those unused for a week (each use marks
+its marker), `cad doctor --prune` removes them (`leftovers.package_environments`), and a release change
+removes them all. What uv cannot do is said in one line (`base.failure`): requirements it cannot
 resolve beside the kernel's pins, with its reason -- `build123d<0.1 cannot be resolved beside
 cad[build123d] 0.10.0: Because ...` -- and a package its cache lacks where the network cannot be
 reached, by name -- `the environment of the model's packages needs the network once, for pandas, which
 uv's cache does not hold: ...`. The record of a document a `cad run --with` built names the
 requirements it was given (`with`), and the command that builds it again gives them again (**The
-rebuild command**); a header's are its script's, so `cad run` and the script build it again. With no
+rebuild command**); a header's are its script's, so `cad run` and the script build it again -- but the
+header of a program that calls a model another script defines (a check script's), which the record
+names too, so its rebuild command gives them with `--with` (`models._given`). With no
 package named, `cad run` runs the base, as ever.
 
 **A Python of the script's own.** A script run by any other Python that has the library -- a venv's
@@ -1314,7 +1328,8 @@ daemon's record of it, or after a restart the registry's. Each word is quoted fo
 pastes it into (`records.rerun`): `shlex.quote` on POSIX; on Windows the double quotes cmd.exe and
 PowerShell both read, only where a space, a quote or an operator of cmd.exe's needs them
 (`records._windows`: `"pandas>=2"`, a redirection bare), since to cmd.exe a single quote is part of
-the path. A shape handed over has none: its words say that a program the engine did
+the path; a word holding a `%` is quoted between each one, `"C:\my"%"20dir"`, since cmd.exe expands a
+`%NAME%` inside double quotes too, and a name with quotes in it is none it holds. A shape handed over has none: its words say that a program the engine did
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
 reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of
 its kind's, `{"error", "state", "rebuild", "hint"}`),

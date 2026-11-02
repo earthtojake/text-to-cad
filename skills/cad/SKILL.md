@@ -61,7 +61,8 @@ keeps for the runs after:
 
 For a one-off, `cad run --with pandas src/plate.py` (repeat `--with`, or separate requirements
 with commas; a local folder or wheel works too, its path relative to the working directory, or in
-the block to the script's folder). What cannot be installed beside the kernel is refused in one
+the block to the script's folder, and the next run installs it again after an edit). What cannot be
+installed beside the kernel is refused in one
 line with uv's reason: change the requirement it names, or, where the network is needed once, run
 it outside a sandbox or with its permission.
 
