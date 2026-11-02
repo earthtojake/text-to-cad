@@ -3,13 +3,13 @@ import { Ellipsis } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent,
   DropdownMenuSubTrigger, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
 import { ChangedDot } from "./ChangedDot.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 export { STRIP_BUTTON_CLASS, StripTouchProvider, TOUCH_STRIP_BUTTON_CLASS, useStripButtonClass, useStripTouch } from "./stripTouch.js";
 

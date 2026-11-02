@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import glb, stl, threemf
+from cad import glb, stl, threemf
 # Prompt: Spur gear blank with central bore, raised hub, and simplified perimeter teeth.
 
 from lib.simple_model_library import make_spur_gear_blank

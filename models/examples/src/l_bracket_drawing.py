@@ -7,7 +7,7 @@ bracket is symmetric about its middle across X, and the views that measure X say
 the spacings across that line place the holes and the gussets either side.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from l_bracket import (
     BACK_CENTER_Y,
     BACK_HOLE_LOCATIONS,

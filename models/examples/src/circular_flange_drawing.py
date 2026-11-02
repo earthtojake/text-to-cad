@@ -7,7 +7,7 @@ the part itself; the constants the script references come from the model module.
 
 import math
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from circular_flange import BOLT_CIRCLE_DIAMETER, OUTER_DIAMETER, OUTER_FILLET, THICKNESS, circular_flange
 
 

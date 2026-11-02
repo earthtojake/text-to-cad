@@ -9,7 +9,7 @@ about both centre lines, and the drawing says so: one wall each way, and the
 standoff spacings across the centre lines, place the rest.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 
 from electronics_enclosure_base import (
     FLOOR_THICKNESS,

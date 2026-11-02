@@ -4,7 +4,7 @@ Built in car coordinates by `lib/suspension.py`; `f1.py` calls it in the car's b
 a `@memo` stage of its own.
 """
 
-from cadgen import memo
+from cad import memo
 
 from lib import suspension as suspension_lib
 

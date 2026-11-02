@@ -23,7 +23,7 @@ the rod runs in the gland cap's and both spring seats' bores.
 """
 
 from __future__ import annotations
-from cadgen import model
+from cad import model
 
 from math import cos, sin, tau
 

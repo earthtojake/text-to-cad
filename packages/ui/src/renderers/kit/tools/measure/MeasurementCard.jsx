@@ -1,6 +1,6 @@
-import { MEASURE_SNAP_LABELS, formatMeasurement, formatMeasurementAngle } from "@text-to-cad/core/lib/viewer/measurement.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { measureLabelText } from "@text-to-cad/core/lib/viewer/measureDimension.js";
+import { MEASURE_SNAP_LABELS, formatMeasurement, formatMeasurementAngle } from "@cad/core/lib/viewer/measurement.js";
+import { useI18n } from "@cad/ui/i18n";
+import { measureLabelText } from "@cad/core/lib/viewer/measureDimension.js";
 import { CoordValue, InfoRow, MonoValue } from "../../inspector/referenceRows.jsx";
 
 // What the pair's headline reading is called, by its key: what a CAD measure tool calls it.

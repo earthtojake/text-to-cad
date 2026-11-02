@@ -1,4 +1,4 @@
 export { UpdateButton } from "./UpdateButton.js";
-export { useUpdateNotice } from "./useUpdateNotice.js";
-export type { UpdateCall, UpdateNotice } from "./useUpdateNotice.js";
-export { UpdateCard } from "./UpdateCard.js";
+export { UPDATE_POLL_MS, useUpdate } from "./useUpdate.js";
+export type { UpdateCall, UpdateNotice, UpdatePhase, UpdateReply, UpdateState } from "./useUpdate.js";
+export { RELOAD_RETRY_MS, pageHasUnsaved, reloadWhenClean } from "./reload.js";

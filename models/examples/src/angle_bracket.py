@@ -4,7 +4,7 @@ from math import cos, radians, sin
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 import build123d as bd
 
 

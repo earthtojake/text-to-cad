@@ -26,24 +26,25 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     def test_viewer_server_info_schema_version_is_gone(self) -> None:
         self.assertNotIn(
             "VIEWER_SERVER_INFO_SCHEMA_VERSION",
-            (ROOT / "packages/cadgen/src/cadgen/viewer/http_app.py").read_text(encoding="utf-8"),
+            (ROOT / "packages/cad-server/src/cad_server/viewer/http_app.py").read_text(encoding="utf-8"),
         )
 
     def test_the_glb_container_is_declared_once(self) -> None:
         # The container's magic, version and chunk types are the glTF 2.0 spec's, not ours
         # to bump, and two copies of an external constant is two places to get it wrong:
-        # the one GLB cadgen writes outside the engine (a robot primitive's mesh) is framed in
-        # cadgen._internal.primitive_mesh. cadgen.engine is the one exception: it is standalone
-        # by law (it imports nothing of cadgen outside itself) and writes its own GLB, so it
+        # the one GLB the server writes outside the engine (a robot primitive's mesh) is framed in
+        # cad_server._internal.primitive_mesh. cad.engine is the one exception: it is standalone
+        # by law (it imports nothing of the packages outside itself) and writes its own GLB, so it
         # declares the container once more, in its GLB writer.
-        package = ROOT / "packages/cadgen/src/cadgen"
+        sources = [ROOT / "packages" / project / "src" for project in ("cad", "cad-server", "cad-mcp")]
         magic = re.compile(r"0x46546c67|b[\"']glTF[\"']", re.IGNORECASE)
         declarations = sorted(
-            path.relative_to(package).as_posix()
-            for path in package.rglob("*.py")
+            path.relative_to(source).as_posix()
+            for source in sources
+            for path in source.rglob("*.py")
             if magic.search(path.read_text(encoding="utf-8"))
         )
-        self.assertEqual(["_internal/primitive_mesh.py", "engine/export/glb.py"], declarations)
+        self.assertEqual(["cad/engine/export/glb.py", "cad_server/_internal/primitive_mesh.py"], declarations)
 
 
 if __name__ == "__main__":

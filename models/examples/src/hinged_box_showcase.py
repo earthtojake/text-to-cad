@@ -4,15 +4,15 @@ The lid's hinge is the mechanism (a revolute joint, two configurations, one moti
 keeps it, and every GLB of the box carries the motion `open_close` as a clip. The showcase is the
 GLB's own (`animation`): the lid opens through the mechanism's forward kinematics, the feet drop
 out one after the other, the latch spins off and is hidden. The document never holds it; a GLB
-exported while the model is live bakes it (`cadgen export <id> GLB/hinged_box_showcase.glb`, the
+exported while the model is live bakes it (`cad export <id> GLB/hinged_box_showcase.glb`, the
 id its run prints); one exported from a saved xbf carries the motion alone.
 """
 
 import build123d as bd
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
+from cad.gltf import animation
 
 HINGE = ((-40, 0, 30), (0, -1, 0))  # the hinge axis, point and direction: +angle lifts the lid
 

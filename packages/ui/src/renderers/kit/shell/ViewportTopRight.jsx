@@ -1,4 +1,4 @@
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 const INSET = `${VIEWPORT_INSET_PX}px`;

@@ -11,7 +11,7 @@ Use this reference when editing SDF robot model structure, world structure, mesh
 5. If the model describes a robot that already has a URDF, derive the SDF from that URDF rather than re-authoring geometry from scratch (see `references/interoperability.md`).
 6. For every pose and axis, state the frame in which it is expressed. Write `relative_to` / `expressed_in` explicitly wherever ambiguity would otherwise remain (see `references/frame-semantics.md`).
 7. Author the XML per the golden skeletons in `references/examples.md`. Compute derived numbers — inertia tensors, unit conversions — with formulas or a throwaway helper script; never freehand them.
-8. Validate with `cadgen sdf validate <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof.
+8. Validate with `cad sdf validate <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof.
 9. Show new or modified `.sdf` files ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 10. Run available smoke tests (`gz sdf --check`, simulator load).
 11. Report assumptions and skipped checks.
@@ -47,7 +47,7 @@ Good URI choices include:
 
 Mesh assets themselves are owned by the CAD/mesh workflow: one asset per link, exported in the link's own frame, with source units recorded. If a mesh is wrong, fix the export, not the SDF poses.
 
-SDF lengths are meters, and `<mesh><scale>` converts a mesh's numbers to them. An STL carries no unit and a 3MF is read as the numbers it holds (its `unit` attribute is not applied): `cadgen` writes both in millimeters, which take `<scale>0.001 0.001 0.001</scale>`. A GLB is meters by the glTF specification (`cadgen` writes GLB in meters), so it takes no `<scale>`.
+SDF lengths are meters, and `<mesh><scale>` converts a mesh's numbers to them. An STL carries no unit and a 3MF is read as the numbers it holds (its `unit` attribute is not applied): `cad` writes both in millimeters, which take `<scale>0.001 0.001 0.001</scale>`. A GLB is meters by the glTF specification (`cad` writes GLB in meters), so it takes no `<scale>`.
 
 ## Inertials and physics
 

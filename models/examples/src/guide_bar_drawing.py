@@ -6,7 +6,7 @@ leave it out between two break lines, and the sheet chooses its own size and sca
 for what is left. The overall length is still stated true.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from guide_bar import (
     CROSS_HOLE_INSET, DIAMETER, END_CHAMFER, LENGTH, SPIGOT_DIAMETER, SPIGOT_LENGTH, guide_bar,
 )

@@ -49,6 +49,20 @@ test("an engine-served page is never reloaded into another process on its port",
   }
 });
 
+test("an engine of another release that admits the page is an update: the page reloads into it", () => {
+  // Whether or not a poll missed the gap: the answer names another release, and it admitted the page.
+  const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", release: "0.9.0", now: 10 });
+  for (const state of [watching, down]) {
+    const next = nextAutoReloadState(state, { ok: true, identityToken: "b", release: "0.9.1" },
+      { baseline: "a", release: "0.9.0", now: 500 });
+    assert.equal(next.reload, true);
+  }
+  // Another identity of the same release is no update: another process the page cannot tell apart.
+  const same = nextAutoReloadState(watching, { ok: true, identityToken: "b", release: "0.9.0" },
+    { baseline: "a", release: "0.9.0", now: 500 });
+  assert.equal(same.phase, AUTO_RELOAD_PHASE.FOREIGN);
+});
+
 test("a transient fetch failure that resolves to the same server is not a restart", () => {
   const down = nextAutoReloadState(watching, { ok: false }, { baseline: "a", now: 10 });
   const back = nextAutoReloadState(down, { ok: true, identityToken: "a" }, { baseline: "a", now: 500 });

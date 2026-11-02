@@ -1,20 +1,20 @@
-# `cadgen.eng_drawing` reference
+# `cad.eng_drawing` reference
 
 ```python
-from cadgen.eng_drawing import eng_drawing, Sheet, Frame, geometry_notes
+from cad.eng_drawing import eng_drawing, Sheet, Frame, geometry_notes
 ```
 
 ## Template
 
 ```python
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 # The part, and the facts the dimensions reference, come from the model, not from this file.
 from enclosure import FLOOR, HOLES, L, H, W, enclosure
 
 
 @eng_drawing(out="../PDF/enclosure_drawing.pdf")
 def enclosure_drawing():
-    part = enclosure().shape    # the model, built by the engine (a replay when it holds it)
+    part = enclosure().shape    # the model, built by the server (a replay when it holds it)
     sheet = Sheet("A3", title="ENCLOSURE", part_number="ENC-001", material="ABS",
                   revision="A", general_tolerance="ISO 2768-m",
                   notes=["BREAK SHARP EDGES."])
@@ -69,14 +69,14 @@ script. Both are checked when the module is imported. There is no CLI verb: a
 
 ## The part
 
-Call the model: `enclosure()` is built by cadgen's engine, a replay when the engine
+Call the model: `enclosure()` is built by text-to-cad's server, a replay when the server
 already holds it, and its `.shape` is the part as a build123d tree. A part with no model is
 read from its file instead:
 
 ```python
 from pathlib import Path
 
-from cadgen import read_step
+from cad import read_step
 
 part = read_step(Path(__file__).parent / "../vendor/enclosure.step")
 ```

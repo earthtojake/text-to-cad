@@ -35,8 +35,8 @@ Push the branch to `origin` and open the pull request against
 ### Development environment
 
 Choose the setup for the environment where the tools and tests will run. Every
-environment needs Python 3.11 or newer. Install Node.js 22 for the
-packaged runtime, Viewer, `@text-to-cad/core`, or documentation site; Python-only work
+environment needs Python 3.14 or newer, the packages' floor. Install Node.js 22 for the
+packaged runtime, Viewer, `@cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
 ### Linux, macOS, and WSL
@@ -45,7 +45,7 @@ Use the POSIX shell. On WSL, install dependencies inside the distribution; do
 not reuse a Windows `.venv` or `node_modules` directory across the boundary.
 
 ```bash
-python3.12 -m venv .venv
+python3.14 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
 ./.venv/bin/python -m pip install -r requirements-dev.txt
 ```
@@ -55,14 +55,14 @@ environment's interpreter for direct CLI calls:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cadgen.cli snapshot --help
-./.venv/bin/python -m cadgen.cli urdf validate --help
+./.venv/bin/python -m cad_server.cli snapshot --help
+./.venv/bin/python -m cad_server.cli urdf validate --help
 ```
 
 The engine draws every snapshot with OCCT in an OpenGL context. On Linux with no
 screen (a server, a container, CI) that context is an X server's: install Xvfb,
-Mesa's software GL and the font the stills set their text in, and run the cadgen
-suite or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
+Mesa's software GL and the font the stills set their text in, and run the package
+suites or a snapshot under `xvfb-run`, as CI's Linux job does. Without a display a
 snapshot fails, saying so.
 
 ```bash
@@ -96,37 +96,49 @@ Use the Windows virtual-environment path for direct CLI calls, and the runner fo
 focused test, so the file builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cadgen.cli snapshot --help
+.\.venv\Scripts\python.exe -m cad_server.cli snapshot --help
 & $gitBash scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 ```
 
 ### Development dependencies
 
 `requirements-dev.txt` installs the source packages from `packages/` and the
-small set of Python extras mirrored from skill runtime requirements. Its editable
-cadgen installs `cadgen-lazy-kernel.pth` into the venv's site-packages as the wheel
-does (`packages/cadgen/setup.py`), so `import build123d` defers the kernel and a
+small set of Python extras mirrored from skill runtime requirements. It installs the
+library, the server and the shim editable, the library with its `build123d` extra (OCP,
+build123d and the rest; the library's required dependency is numpy alone), so the
+checkout's `.venv` carries the CAD kernel and is its own base environment: the server
+makes no base for it (`cad_server/_internal/base.py`). The editable
+library installs `cad-lazy-kernel.pth` into the venv's site-packages as its wheel
+does (`packages/cad/setup.py`), so `import build123d` defers the kernel and a
 `python model.py` from a checkout costs what a user's does; a venv installed before
 that has no such file until `requirements-dev.txt` is installed again. This is
 the default Python environment for broad repo checks and source-checkout
 development. After pulling, reinstall `requirements-dev.txt` to refresh the
-editable-install metadata: `cadgen.__version__` reports the installed
+editable-install metadata: `cad.__version__` reports the installed
 dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Skills run cadgen as `cadgen +<VERSION>` through `~/.local/bin/cadgen`, the proxy
-that runs the installation registered as that version: the RELEASE's (`uvx ... --from
-cadgen==<VERSION>`, from PyPI), which registers itself and writes the proxy as its CAD
-app server (`cadgen mcp`) starts or `cadgen doctor` runs, and at no other command; a
-checkout's editable cadgen registers nothing unless named (`CADGEN_INSTALLATION_VERSION`). To run your working copy, use the checkout's
-`.venv` (`requirements-dev.txt`), or `scripts/install/dev_install.py`, which points a
-dev install's server and skills at it (see [Test In Agent Apps](#test-in-agent-apps)).
+Skills run the server as `cad` through `~/.local/bin/cad`, the proxy
+that runs the device's current installation (`<state>/installations/current`): the release `cad setup` or an update made current, from its folder
+(`<state>/releases/<VERSION>`), else the first installation a CAD app server (`cad-mcp`) or
+`cad doctor` registered on the device. Every installation registers itself and writes the
+proxy as its server starts, `cad doctor` runs or `cad setup` sets it up; a checkout's
+editable server registers nothing unless named (`CAD_INSTALLATION_VERSION`). A model script
+starts no server of its own environment: it reaches the current installation's engine, and on a
+device with none it says ``cad-server is not installed on this computer: install cad-server and run
+`cad doctor` once, then run this again``. To run your working copy, make it the current installation:
+`scripts/install/dev_install.py` makes a dev install of it current (see
+[Test In Agent Apps](#test-in-agent-apps)), as does `CAD_INSTALLATION_VERSION=<VERSION>-dev.0
+./.venv/bin/cad doctor`, run once. With another installation current, the checkout's `.venv` still
+runs models, each built in a worker of the `.venv`'s own Python on the checkout's library, while the
+current installation's engine (its server code, not the checkout's) serves them, and refuses a
+library whose worker contract it does not speak.
 
-`packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
+`packages/cad-server/src/cad_server/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
 fresh clone therefore has no Viewer client or CAD app page until
-`scripts/bundle/bundle.sh` runs, and cadgen says so by name the
+`scripts/bundle/bundle.sh` runs, and the server says so by name the
 first time it reaches for one. Building a model needs none of it.
 
 For CAD Viewer development:
@@ -138,58 +150,66 @@ npm run build:packages
 
 ### The engine server
 
-Every build, export and snapshot runs in cadgen's engine server, a daemon: one per
-installation (the interpreter and the engine folder it runs), started by the first
-command that needs it and running until `cadgen stop` (no timer stops it), so a worktree's
-checkout gets a daemon of its own. Its door, a named pipe (on Windows, a port file), and lock live in `cadgen-engine`
+Every build, export and snapshot runs in the engine server, a daemon: one per
+engine folder, the current installation's, started by the first command that needs it --
+whatever release that command is -- and running until `cad stop` or an update (no timer stops
+it). A checkout's `.venv` reaches the device's engine like any client, and starts the current
+installation's when none runs: to run a worktree's own engine, give it its own
+`CAD_ENGINE_DIR` and `CAD_STATE_DIR` (its own registry, so its own current installation), and
+register the worktree's `.venv` as that state folder's current installation
+(`CAD_INSTALLATION_VERSION=<VERSION>-dev.0 ./.venv/bin/cad doctor` with those set). Its door, a
+named pipe (on Windows, a port file), and lock live in `cad-engine`
 in `$XDG_RUNTIME_DIR`, else in the per-user temporary folder (on macOS the system's
-`/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cadgen-<uid>`
-(Windows: the temporary folder); `CADGEN_ENGINE_DIR` moves them, which gives a
-test, a benchmark or an experiment a daemon to itself. `cadgen status` lists its
+`/var/folders/...` one, whatever `$TMPDIR` a sandbox sets; else a per-user `$TMPDIR`), else in `/tmp/cad-<uid>`
+(Windows: the temporary folder); `CAD_ENGINE_DIR` moves them, which gives a
+test, a benchmark or an experiment a daemon to itself. `cad status` lists its
 workers, one per model script, each with its memo, and what each is building;
-`cadgen stop` stops it (`cadgen server` runs one in the foreground); a running `cadgen mcp` holds it,
-so no other installation retires it: one wanting its port rolls past it (or refuses a port it was named). A running daemon keeps the engine code it started with:
-after editing `packages/cadgen/src/cadgen`, stop the daemon you started so the next
+`cad stop` stops it (`cad server` runs one in the foreground); a running `cad-mcp` holds it
+until its host quits. A running daemon keeps the engine code it started with:
+after editing the library or the server (`packages/cad/src/cad`,
+`packages/cad-server/src/cad_server`), stop the daemon you started so the next
 build runs the new code. Never stop one you did not start.
 
 The engine's switches are environment variables, never script options (the
 engine's README, **The engine server and its workers** and **Body retention**):
-`CADGEN_ENGINE_WORKERS`, `CADGEN_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
-retires a worker), `CADGEN_ENGINE_MEMORY_MB` (the daemon's one memory budget,
-**Document lifetime**), `CADGEN_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
-tests' seam), `CADGEN_ENGINE_PORT` (its HTTP port,
-`0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CADGEN_ENGINE_MEMO=0` (no memo
-hits), `CADGEN_ENGINE_BODIES=0` (no body replay), `CADGEN_ENGINE_MESH=processes|inline`,
-`CADGEN_ENGINE_THREE` (the three.js folder `cadgen serve` pages load) and
-`CADGEN_VIEWER_WARM=0` (no engine warm-up at `cadgen viewer`'s launch). What the
+`CAD_ENGINE_WORKERS`, `CAD_ENGINE_WORKER_RSS_MB` (the workers' memory cap, together; no timer
+retires a worker), `CAD_ENGINE_MEMORY_MB` (the daemon's one memory budget,
+**Document lifetime**), `CAD_ENGINE_CACHE_IDLE` (the document cache's idle seconds, the
+tests' seam), `CAD_ENGINE_PORT` (its HTTP port,
+`0` for any free one, refused when held; unset, 3245, else the next free port, kept per installation), `CAD_ENGINE_MEMO=0` (no memo
+hits), `CAD_ENGINE_BODIES=0` (no body replay), `CAD_ENGINE_MESH=processes|inline` and
+`CAD_VIEWER_WARM=0` (no engine warm-up at `cad viewer`'s launch). What the
 engine builds is written beside a project only as the files models declare or a command
-exports. Beside cadgen's settings, in the state folder, it keeps one record per model or
+exports. Beside the person's settings, in the state folder, it keeps one record per model or
 opened file (`documents/<uuid>/document.json`: the script and function that build it, or
-the file's path; never geometry). In the cache folder (`CADGEN_CACHE_DIR`, else the platform's:
-`~/.cache/cadgen`) it keeps each model document's bytes as last built,
+the file's path; never geometry). In the cache folder (`CAD_CACHE_DIR`, else the platform's:
+`~/.cache/cad`) it keeps each model document's bytes as last built,
 `documents/<uuid>/document.xbf`, regenerable and wiped at no loss, so a restart reopens
 every document without a build, and under `pycache/` the bytecode the daemon and its
 workers compile of the libraries they load (`PYTHONPYCACHEPREFIX`); it touches nothing else in
-that folder, which a 0.7 install's store may share. Tests point both folders at temporary ones
+that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no build reads. Tests point both folders at temporary ones
 (`scripts/test/unittest_files.py` does).
 
-The skills ship no launcher scripts: every operational verb is a `cadgen`
-subcommand (`cadgen <verb>`, or `python -m cadgen.cli <verb>` when the console
+The skills ship no launcher scripts: every operational verb is a `cad`
+subcommand (`cad <verb>`, or `python -m cad_server.cli <verb>` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
-their logic lived under `skills/`; that logic is `cadgen.{urdf,sdf,srdf}_*` now,
-so they need cadgen like everything else.
+their logic lived under `skills/`; that logic is the library's now (`cad.{urdf,sdf,srdf}_*`), run
+by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
 ## Test In Agent Apps
 
 A person installs and updates text-to-cad, in every agent app on the computer, with
 the install command (`curl -fsSL https://texttocad.dev/install.sh | sh`; on Windows
 `irm https://www.texttocad.dev/install.ps1 | iex`): `scripts/install/install.sh` and
-`install.ps1`, which run the newest release's `cadgen setup` through uvx
-(`cadgen.cli.setup`; `cadgen uninstall` takes it out). It reads the apps through
-`cadgen._internal.providers`, as the development installer below does, and takes a
-development install out of an app as a second copy (its plan, or `--dry-run`, says so
-first).
+`install.ps1`, which run the newest release's `cad setup` through uvx
+(`cad_server.cli.setup`; `cad uninstall` takes it out). It reads the apps through
+`cad_server._internal.providers`, as the development installer below does, points each at
+the plugin folder the release writes (`cad plugin` prints its path; `docs/install.md`, "What
+each app gets"), and takes a development install out of an app as a second copy (its plan,
+or `--dry-run`, says so first). `tests/python/global/test_plugin_folder.py` points a real
+Claude Code and Gemini CLI at a folder written from the checkout, in a home of their own,
+wherever their commands are installed.
 
 Test the skills the way users get them: as the plugin, with CAD's server. One
 script installs this checkout into an agent app, and running it again replaces
@@ -216,15 +236,14 @@ npx skills add . -g -a <agent>
 ```
 
 A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
-`cadgen mcp` run by this checkout's `.venv` (`CADGEN_PYTHON` overrides it), serving
+`cad-mcp` run by this checkout's `.venv` (`CAD_PYTHON` overrides it), serving
 a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
-build). That `.venv` is registered as that install's version (`<VERSION>-dev.<time>`),
-the copied skills run `cadgen +<VERSION>-dev.<time>` and the proxy is written (the server
-registers it again at each start, told the version by `CADGEN_INSTALLATION_VERSION`;
-`--uninstall` takes the record out), so the server and the agent's scripts share this
-checkout's installation and its engine daemon;
-each worktree is an installation of its own (one daemon per installation), so
-several can be installed side by side, one per app. With `--wheel`, the checkout's
+build). That `.venv` is registered as that install's version (`<VERSION>-dev.<time>`)
+and the proxy the copied skills run is written (the server
+registers it again at each start, told the version by `CAD_INSTALLATION_VERSION`;
+`--uninstall` takes the record out). The install is made the device's current installation, so the
+engine every app and the agent's scripts reach is this checkout's, started afresh by the next client
+once the one running stops (`cad stop`); the last dev install made is the current one. With `--wheel`, the checkout's
 wheel is built as the release builds it (`bundle.sh`, then `uv build`), the
 server runs it through `uvx --from <wheel>` and that installation is the one
 registered as the install's version: exactly what users get, each build its own
@@ -236,10 +255,10 @@ app menu of every view says which build it shows: any build but the release's
 own reads `v<VERSION>-dev.<commit>` (`-dirty` when the checkout had uncommitted
 changes), the commit of the checkout the Viewer or the CAD app was built from.
 `--uninstall` removes a host's install. Its server names its install channel
-`dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
+`dev` (`CAD_INSTALL_CHANNEL`), and a checkout's editable server counts as one
 too: neither is ever offered an update. To see the update button, run a server or
-a Viewer with `CADGEN_INSTALL_CHANNEL=claude-github` and a `versions.json` in its
-state directory (`CADGEN_STATE_DIR`) naming a newer `latest`.
+a Viewer with `CAD_INSTALL_CHANNEL=claude-github` and a `versions.json` in its
+state directory (`CAD_STATE_DIR`) naming a newer `latest`.
 
 Keep one copy of the plugin per app. The script refuses to install where another
 copy would load beside it: the published plugin, this one installed through
@@ -261,7 +280,7 @@ What the CAD app is and how hosts present it is in
 so the standard path is also checked in the MCP Apps reference host
 (`basic-host` from `modelcontextprotocol/ext-apps`): it speaks Streamable HTTP,
 so a local bridge to the stdio server is needed, and it does not advertise the UI
-extension, so start the server with `CADGEN_MCP_PRESENTATION=inline`.
+extension, so start the server with `CAD_MCP_PRESENTATION=inline`.
 
 ## Test From This Repository
 
@@ -271,10 +290,13 @@ smallest fixture needed in a fresh temporary directory, or use a tiny fixture
 committed with the tests (a CAD or mesh one only when no test can make it, and then
 listed in `tests/python/global/test_no_cad_assets_tracked.py`); do not rely on existing outputs.
 Repo `tmp/` and system temporary directories are both fine. Give builds an
-engine daemon of their own (`CADGEN_ENGINE_DIR`) and clean up their processes and
-files. The runner gives every test file its own state, cache and `cadgen` command
-folders, and fails the run, naming the test, when the run's cadgen writes a
-document, engine or installation record in your own state folder, or your `cadgen`
+engine daemon of their own (`CAD_ENGINE_DIR`) and clean up their processes and
+files. The runner gives every test file its own state, cache and `cad` command
+folders, its state folder registering the file's interpreter as its current installation
+(`tests/python/support/engine_daemon.py`'s `register`, as `isolate` and `watched` do for the folders a
+test makes: a client with no installation starts no engine), and fails the run, naming the test,
+when the run's server writes a
+document, engine or installation record in your own state folder, or your `cad`
 command. The shared
 temporary-directory helper retains the Windows cleanup retries used by the suite.
 
@@ -296,7 +318,7 @@ software renderer, to reproduce a CI-only browser failure locally.
 
 A test's COST is part of its design. Model runs go through the engine's daemon,
 as every build does: the runner gives each test file an engine directory of its
-own (`CADGEN_ENGINE_DIR`), so a build the file asks for runs on a daemon of that
+own (`CAD_ENGINE_DIR`), so a build the file asks for runs on a daemon of that
 file's alone, and stops the daemon the file left there when it ends; a test that
 needs a daemon to itself -- a cold start, its workers -- names a directory of its
 own (the run's files share one bytecode folder, so the kernel's libraries compile once a run).
@@ -310,15 +332,17 @@ the underlying property can be pinned directly, pin it and run the case once.
 `scripts/test/test-python.sh --print-weights` prints what the slow files cost,
 the first thing to read when a run is slow.
 
-With the development environment active, check cadgen's Python sources with:
+With the development environment active, check the three distributions' Python sources with:
 
 ```sh
-python -m pyrefly check --config packages/cadgen/pyproject.toml
+for project in cad cad-server cad-mcp; do
+  python -m pyrefly check --config "packages/$project/pyproject.toml"
+done
 ```
 
-Pyrefly is pinned in `requirements-dev.txt`. The package's `[tool.pyrefly]`
+Pyrefly is pinned in `requirements-dev.txt`. Each package's `[tool.pyrefly]`
 configuration uses the [basic preset](https://pyrefly.org/en/docs/configuration/#preset-basic)
-over `packages/cadgen/src`. It checks a limited set of diagnostics, including
+over its own `src`. It checks a limited set of diagnostics, including
 undefined names in annotations, and skips unannotated function bodies and broader
 argument and assignment checks. Tests, scripts and skill helpers are outside this
 check's scope. Both cadgen CI jobs run it before the package suite.
@@ -339,22 +363,22 @@ diff content: a comment in a module selects what the module's code would.
 
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
-| Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, the engine's and the CAD Viewer backend's included (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
-| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@text-to-cad/core`'s units, the dependency and kit-boundary checks |
+| Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
+| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
+| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), dfm and dfam-check (their skills) |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`), dfm and dfam-check (their skills) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
-| packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
+| packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
 the workflow, `setup-deps`, the selector and the runners' shared parts, and any
 path the table does not name. Prose inside a code tree (`packages/**/*.md`,
-`apps/**/*.md`) is read by the light contracts alone — except cadgen's README,
-the wheel's description, and `apps/web`'s Markdown, whose links its tests
+`apps/**/*.md`) is read by the light contracts alone — except the packages' READMEs,
+the wheels' descriptions, and `apps/web`'s Markdown, whose links its tests
 resolve. Root prose, the plugin manifests and configs, the release scripts and
 `models/` run the light contracts and nothing else.
 
@@ -382,10 +406,10 @@ Every job has a timeout of about twice its slowest recent run, so a hang fails
 in minutes. Within a Python suite, a test file still running after 15 minutes
 prints every thread's stack and fails by name.
 
-The CAD Viewer's backend and the CAD app's server are leaves of cadgen:
-outside them and the commands that start them, nothing in cadgen imports either
-but `cadgen.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
-change confined to one of them can run the cadgen tests that reach it instead of
+The CAD Viewer's backend and the CAD app's server are leaves of the server:
+outside them and the commands that start them, nothing in the server imports either
+but `cad_server.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
+change confined to one of them can run the package tests that reach it instead of
 the whole suite. Windows runs the Python package suite because paths, locks,
 subprocesses, file URLs and daemon behavior are platform-sensitive.
 
@@ -446,15 +470,15 @@ that removes a cache or a performance mechanism first lists what it made faster.
 #478 removed a kernel-op memo for correctness and slowed re-runs (f1's
 `power_unit` forced rebuild went from 24 s to 102 s); that cost sat deep in a long
 PR body instead of being approved as a trade-off. The engine's memo
-(`packages/cadgen/src/cadgen/engine/README.md`, **Body retention**) is keyed by
+(`packages/cad-server/src/cad_server/engine/README.md`, **Body retention**) is keyed by
 each operation's parameters and the keys of the shapes it was given, and answers
 a hit with the live object the first run made; its pressure tests are
-`tests/python/packages/cadgen/engine/test_memo.py` and `test_bodies.py`, and a
+`tests/python/packages/cad/engine/test_memo.py` and `test_bodies.py`, and a
 change to it runs them first.
 
 Those numbers come from one batch, measured once every change that moves them is
 in the branch: on one machine with nothing else building, `main` and the branch side
-by side on the same models, each on a daemon of its own (`CADGEN_ENGINE_DIR`), cold
+by side on the same models, each on a daemon of its own (`CAD_ENGINE_DIR`), cold
 and warm. The benchmarks are manual and write under `tmp/` (`scripts/bench/`); their
 output is never committed.
 
@@ -463,7 +487,7 @@ A part is meshed at one tolerance, 0.25 % of its size and 28.5 degrees, by
 second pass, no repair. A change
 to that opens its PR with what it does to the faces left unmeshed and the triangle
 counts across the sample corpus, `main` against the branch; the engine's mesh tests
-(`tests/python/packages/cadgen/engine/test_mesh.py`) assert the contract on small
+(`tests/python/packages/cad/engine/test_mesh.py`) assert the contract on small
 fixtures.
 
 ## Source Boundaries
@@ -473,48 +497,53 @@ must not put `skills/`, the repository root, or a sibling skill directory on
 `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any similar lookup path. Skills are
 independent of *each other*.
 
-They are not independent of `cadgen`. Each cadgen skill's SKILL.md runs that
-distribution through the `cadgen` command its installation writes, and a skill's `scripts/<tool>` is a thin
-entrypoint whose parser and behaviour live in `cadgen.cli` — so what a published skill
-needs is an install, not a copy. Skills used to vendor cadgen and its JavaScript builders into
+They are not independent of the server, `cad-server`. Each skill that uses it runs it
+through the `cad` command its installation writes, and a skill's `scripts/<tool>` is a thin
+entrypoint whose parser and behaviour live in `cad_server.cli` — so what a published skill
+needs is an install, not a copy. Skills used to vendor the runtime and its JavaScript builders into
 `skills/*/scripts/packages/`; six copies of one runtime is what that cost, and it
-is gone. cadgen now carries the JavaScript it executes as well as the Python.
+is gone. The server now carries the JavaScript it executes as well as the Python.
 
 Canonical source directories are:
 
 - `skills/*` for skill instructions, references, and the thin entrypoints.
 - `apps/web/` for the CAD Viewer's React client. Its backend is
-  `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
-  cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
+  `cad_server.viewer` (in `packages/cad-server`), and its built `dist/` ships inside the
+  server's wheel as `cad_server/_runtime/viewer` — built at release time, never
   committed.
 - `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Claude Desktop). Its
-  server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
-  build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
+  server is the engine's MCP endpoint (`cad_server/mcp` in `packages/cad-server`), which
+  `cad-mcp` (`packages/cad-mcp`) carries a host's requests to, and its one-file
+  build ships inside the server's wheel as `cad_server/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
 - `apps/api/` for `api.texttocad.dev`, the version feed and the telemetry receiver
-  cadgen talks to: a Vercel project of its own, with no dependencies.
-- `packages/cadgen/` for the Python distribution and bundled runtime assets.
+  the server talks to: a Vercel project of its own, with no dependencies.
+- `packages/cad/`, `packages/cad-server/` and `packages/cad-mcp/` for the three
+  Python distributions (the library, the server with its bundled runtime assets, and the shim), and
+  `packages/aliases/` for the `cadgen` alias distribution.
 - `packages/core/` for non-React CAD/client code.
 - `packages/ui/` for FileViewer, renderers, controls and shared styles.
 
-One source tree ships whole and must work in isolation outside this repo — the
+Three source trees ship whole and must each work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
-`tests/python/global/test_package_boundaries.py`: `packages/cadgen` builds into
-the PyPI wheel with @text-to-cad/core and the viewer client bundled in at build time; its
-README is the PyPI long description. Markdown under it must be true and
-actionable with this repo gone: name the bundled thing ("the @text-to-cad/core runtime
+`tests/python/global/test_package_boundaries.py`: `packages/cad`,
+`packages/cad-server` (with @cad/core and the viewer client bundled in at build
+time) and `packages/cad-mcp` each build into a PyPI wheel whose README is its long
+description. Markdown under it must be true and
+actionable with this repo gone: name the bundled thing ("the @cad/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
 relative to the package itself. Repo-development guidance belongs here, not in
 the package. `apps/web` is a client package with a boundary of its own
-(`apps/web/scripts/selfContained.test.mjs`): it imports @text-to-cad/core and @text-to-cad/ui by their public exports; relative
+(`apps/web/scripts/selfContained.test.mjs`): it imports @cad/core and @cad/ui by their public exports; relative
 imports remain inside its directory.
 
-## Working On cadgen In This Repo
+## Working On The Packages In This Repo
 
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine
-  (`tests/python/packages/cadgen/engine/`); `tests/python/global/` holds the policy
-  gates that enforce the design laws in `packages/cadgen/README.md`.
+  (`tests/python/packages/cad/engine/`, `tests/python/packages/cad_server/engine/`);
+  `tests/python/global/` holds the policy
+  gates that enforce the design laws in `packages/cad/README.md`.
 - Editing anything the bundlers consume? Run `scripts/bundle/bundle.sh` and
   there is nothing to commit: all of `_runtime/` is gitignored, so a JS edit
   shows up in the diff as the shared package source it was made in and reaches a user
@@ -526,7 +555,7 @@ imports remain inside its directory.
 
 The npm apps are `docs`, `web` and `mcp` (`apps/api` is a Vercel project of its own, with no
 dependencies). Framework-independent CAD code lives
-in `@text-to-cad/core`; `@text-to-cad/ui` owns the complete FileViewer and injectable
+in `@cad/core`; `@cad/ui` owns the complete FileViewer and injectable
 renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,
 including aliases, re-exports and dynamic imports.
@@ -541,13 +570,13 @@ Install from the repository root, selecting only the workflow being exercised:
 
 ```bash
 # Python engine/runtime or shared core work:
-npm ci --workspace @text-to-cad/core
-npm run build --workspace @text-to-cad/core
+npm ci --workspace @cad/core
+npm run build --workspace @cad/core
 # Viewer and shared UI work:
-npm ci --workspace @text-to-cad/core --workspace @text-to-cad/ui --workspace @text-to-cad/web
+npm ci --workspace @cad/core --workspace @cad/ui --workspace @cad/web
 npm run build:packages
 # Docs work:
-npm ci --workspace @text-to-cad/core --workspace cad-skills-docs
+npm ci --workspace @cad/core --workspace cad-skills-docs
 npm run build:docs
 ```
 
@@ -565,27 +594,27 @@ VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-Vite announces itself to the installation's engine with an API-only launch.
+Vite announces itself to the device's engine with an API-only launch.
 Closing Vite leaves that engine and its other clients running. `VIEWER_PYTHON`
-must name an interpreter that satisfies cadgen's Python floor and imports this
+must name an interpreter that satisfies the packages' Python floor and imports this
 checkout. The backend opens any file by its absolute path. The web app owns
 URL/history and browser preferences. FileViewer
 state is scoped by file and renderer; each CAD render session owns its
 cache provider and worker lease.
 
-`cadgen viewer [FILE ...]` ensures the installation's engine, opens its one page -- each
+`cad viewer [FILE ...]` ensures the device's engine, opens its one page -- each
 FILE's at `/<id>`, else the home -- and exits. `--json` prints the authenticated launch record
 without opening a browser. Each launch's folder becomes the folder the home shows.
 An explicit `--host` or `--port` pins the engine listener; a conflict with an
 already-running engine fails. The engine's default port is 3245, rolled past when another
-program holds it (`cadgen status` says which); there is no viewer process of its own.
-A checkout serves its local web build; `CADGEN_VIEWER_DIST` and
-`CADGEN_MCP_APP_DIR` are explicit asset overrides. A wheel resolves its
+program holds it (`cad status` says which); there is no viewer process of its own.
+A checkout serves its local web build; `CAD_VIEWER_DIST` and
+`CAD_MCP_APP_DIR` are explicit asset overrides. A wheel resolves its
 bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
 editing build inputs to refresh all packaged outputs.
 
 The self-contained browser suite creates tiny inputs and owns its project,
-viewer and cache. It never reads the sample-model corpus. cadgen itself needs no
+viewer and cache. It never reads the sample-model corpus. The server itself needs no
 browser: OCCT draws its snapshots, and the wheel depends on no Playwright. The
 tests do: the UI/web tests and the browser suite drive npm Playwright's Chromium,
 and the viewer's launch smoke test (`scripts/test/test-viewer-launch.sh`) drives
@@ -605,14 +634,14 @@ Use `--with-deps` when installing browsers on Linux. The browser suite runs
 exactly what CI runs: every load path (STEP, STL, DXF, URDF) and the camera
 across modes and a saved revision, through the real backend (picking and
 kinematics are the `packages/ui` browser specs' on every PR). Backend tests live in
-`tests/python/packages/cadgen/viewer` and are selected with
+`tests/python/packages/cad_server/viewer` and are selected with
 `scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
-Nothing in `cadgen.viewer` imports the CAD kernel at module scope.
+Nothing in `cad_server.viewer` imports the CAD kernel at module scope.
 
 The engine is keyed by the Python installation, so the CLI, page and each host's
 stdio shim share it. Different installations have different engines. There is one page per
 engine, every document at `/<id>`, and no page sessions. Python
-source edits require restarting your test engine with `cadgen stop`; it does not
+source edits require restarting your test engine with `cad stop`; it does not
 re-execute under active pages. Never stop an instance you did not start. See
 `apps/web/README.md` for the launcher contract and catalog/link behavior.
 
@@ -625,9 +654,12 @@ scripts/bundle/bundle.sh --check
 
 `--clean` removes old runtime outputs before building. `--check` builds and
 asserts the required outputs (the Viewer client's and the CAD app's
-`index.html`, and the `THIRD_PARTY_LICENSES.txt` each build writes beside its page of the
-packages it inlines); wheel validation checks the complete packaged runtime too. Per-stage `cadgen-runtime.sh` flags are for
-debugging; normal iteration goes through `bundle.sh`.
+`index.html`, the `THIRD_PARTY_LICENSES.txt` each build writes beside its page of the
+packages it inlines, and the plugin's files and every skill file, byte for byte as the checkout
+holds them); wheel validation checks the complete packaged runtime too, and that the wheel's
+plugin is the repository's (`scripts/release/check-wheel-contents.sh`). Per-stage `cadgen-runtime.sh` flags are for
+debugging; normal iteration goes through `bundle.sh`. A skill's file must not be hidden (a dot
+name): the wheel's package data takes no hidden file (`tests/python/global/test_plugin_folder.py`).
 
 ## Branch Layout
 
@@ -661,8 +693,8 @@ on every push:
   `npx skills add`. `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law.
 
-Every cadgen pin in the tree — the plugin server configs and each skill's launch
-command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
+Every pin of the release's own in the tree — the four `pyproject.toml`s, the plugin server
+configs and each skill's launch command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
 bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
 skill pin equals `VERSION` — so a stale pin fails the `Version Check` job.
 
@@ -680,9 +712,9 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 ## Releases
 
 A pull request that changes `VERSION` is a release: merging it starts `Publish
-Release`, which uploads the wheel to PyPI and only then moves the branches
+Release`, which uploads the release's four projects to PyPI and only then moves the branches
 installers follow, so the canonical repo version, the skill pins, the Git tag,
-the PyPI wheel and the GitHub Release all describe one commit. Normal
+the PyPI wheels and the GitHub Release all describe one commit. Normal
 development PRs leave `VERSION` alone. A PR that touches release state must keep
 `VERSION`, the derived metadata and the pins valid; `Test`'s Version Check job
 checks all three, apart from the code tests, so those still run when they are
@@ -690,9 +722,11 @@ wrong.
 
 ### Build artifacts live in the wheel, never in git
 
-`main` is source. Everything cadgen serves that is not Python — the CAD Viewer
-client under `cadgen/_runtime/viewer` and the CAD app page under `_runtime/mcp`
-— is gitignored and
+`main` is source. Everything the server serves that is not Python — the CAD Viewer
+client under `cad_server/_runtime/viewer` and the CAD app page under `_runtime/mcp`
+— and the agent-app plugin it writes into the plugin folder every app is pointed at
+(`_runtime/plugin`: the root's plugin manifests and `skills/`, byte for byte,
+`cad_server/_internal/plugin.py`) are gitignored and
 produced by `scripts/bundle/bundle.sh`. Nothing built is ever
 committed: a rebundle used to add a megabyte of history per commit, and a
 committed bundle can drift from the source that claims to produce it.
@@ -718,14 +752,25 @@ Where the built things live instead:
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
 
+### Versions a release cannot take
+
+The PyPI project `cad` (the library's distribution) was transferred to this project on
+2026-10-31, and its previous owner published these versions before the transfer: `0.8.0`, `0.8.1`, `0.8.2`, `0.8.3`, `0.8.4`, `0.8.5`, `0.9.0`, `0.9.1`, `0.9.5`, `0.9.6`, `0.9.7`, `0.9.8`, `0.9.9.1`, `0.9.9.3`, `1.0`, `1.0.1`, `1.0.2`, `1.0.3`, `1.0.4`, `1.1.1`, `1.1.2`.
+PyPI never accepts a filename again, yanked or deleted or not, so no release of text-to-cad can
+carry any of them (`VERSION` is one number for every distribution, which is why the release that
+was to be 0.9.0 is 0.10.0). `scripts/release/unavailable-versions.txt` is the
+machine-checked source: `check-version.sh` and `bump-version.sh` (which `Prepare Release` runs) refuse a
+`VERSION` on it (1.0.0 too, since a trailing `.0` is insignificant to PyPI), and a test keeps
+this list identical to the file.
+
 ### Shipping a release
 
 Merging a pull request that changes `VERSION` releases it: `Publish Release`
 (`release-publish.yml`) runs on that merge. Installers never take `main` as the
 plugin: they follow the `latest` branch (see
 [The install branches](#the-install-branches)), which `Publish Release` moves
-only once PyPI serves the wheel. A cadgen pin must never reach anything an
-installer tracks before PyPI has that wheel. When installers took `main`, anyone
+only once PyPI serves the release's wheels. A pin of the release's must never reach
+anything an installer tracks before PyPI has its wheel. When installers took `main`, anyone
 who updated between a release's merge and its upload got a CAD server that would
 not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
 minutes the release took to reach PyPI.
@@ -757,18 +802,20 @@ scripts/release/bump-version.sh patch           # or minor, major, or an exact X
 ```
 
 `bump-version.sh` sets `VERSION`
-past `main`'s and stamps the derived metadata and every `cadgen==` pin
-(`sync-version.mjs`: package, plugin and lockfile versions, the plugin server
-configs, each skill's launch command). It works from `main`'s version, not the
-branch's, so running it twice changes nothing and running it again after `main`
-moves moves the bump with it; it refuses a branch that does not contain `main`
-yet, whose stamps would conflict.
+past `main`'s and stamps the derived metadata and every pin of the release's own
+(`sync-version.mjs`: package, plugin and lockfile versions, the four
+`pyproject.toml`s and their `cad==` pins, the plugin server configs'
+`cad-mcp==`, the installers' `cad-server==` fallback); the skills name no
+release. It works from `main`'s version, not the branch's, so running it twice
+changes nothing and running it again after `main` moves moves the bump with it;
+it refuses a branch that does not contain `main` yet, whose stamps would conflict.
 
 The pull request's Version Check says what merging it releases, and refuses:
 
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
-- a version that is not past the target branch's and the latest release tag's;
+- a version that is not past the target branch's and the latest release tag's, or that is on
+  the list of [versions a release cannot take](#versions-a-release-cannot-take);
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never
   start. Release such a change after it merges, from its own pull request;
@@ -797,43 +844,51 @@ green: that is the release. `Publish Release`, on the merge commit:
    irreversible; the ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
    does the same for both copies of the plugin the install branches get. Then
-   `bundle.sh --clean` — which is where cadgen's whole runtime comes into
+   `bundle.sh --clean` — which is where the server's whole runtime comes into
    existence, Viewer client and CAD app alike, because the release
-   commit carries none of it; its `TEXT_TO_CAD_RELEASE` names the version, so
+   commit carries none of it; its `CAD_RELEASE` names the version, so
    the Viewer and the CAD app show `v<VERSION>` where every other build shows
-   `v<VERSION>-dev.<commit>` (`@text-to-cad/ui/build-id`) — `check-builds.sh`,
-   the wheel-contents check, `python -m build`, and an `unzip -l` assertion that
-   the wheel about to ship really holds `_runtime/viewer` and `_runtime/mcp`. The pages' source maps, which the bundle
+   `v<VERSION>-dev.<commit>` (`@cad/ui/build-id`) — `check-builds.sh`,
+   the wheel-contents check, `python -m build` of the release's four projects on
+   PyPI into one folder (the library `cad`, the server `cad-server`, the
+   shim `cad-mcp`, and the alias `cadgen`, a wheel and an
+   sdist each, and nothing else at any other version), and an `unzip -l` assertion
+   that the server's wheel about to ship really holds `_runtime/viewer` and
+   `_runtime/mcp`. The pages' source maps, which the bundle
    builds and the wheel leaves out, are gathered too
    (`scripts/release/sourcemaps.py`): every chunk a crash on the CAD Viewer or
    the CAD app can name, by the debug id its build stamped on it, with its map
    -- a page whose maps PostHog could not use stops the release here.
-4. **Install test.** The built wheel into a fresh venv — `cadgen --help`,
-   `cadgen viewer --help`, `cadgen doctor --no-server skills/cad` — then
-   `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
-   uploaded as a workflow artifact (`cadgen-<version>`).
+4. **Install test.** The library's, the server's and the shim's wheels together
+   into a fresh venv — `cad --help`, `cad viewer --help`, `cad-mcp --help`,
+   `cad doctor --no-server` — then
+   `scripts/test/test-installed.sh --wheels <the built folder>`; the distributions
+   are uploaded as a workflow artifact (`dist-<version>`).
 5. **Source maps, then PyPI** (on `main` only). The maps go to PostHog first
    (`posthog-cli sourcemap upload`, pinned), each filed under its chunk's debug
    id, which the chunk's text and its map decide together
-   (`@text-to-cad/core/chunk-ids`; rolldown's own names the code alone): one id
+   (`@cad/core/chunk-ids`; rolldown's own names the code alone): one id
    names one map in every page and version, so no page's or version's map
    overwrites another's, and a later release that ships the same chunk and map
-   uploads it once. Then the `pypi` job uploads the wheel and sdist: the only job
-   that may mint a PyPI token, in the `release` environment (below, "Repository
-   settings"). It uploads only what PyPI does not hold yet
-   (`scripts/release/pypi_release.py`), so a resumed release uploads nothing twice,
-   and what PyPI already holds is downloaded and checked against PyPI's sha256 for
-   the GitHub Release to attach; a file PyPI holds that the run did not build stops
-   the release. Then the job waits until PyPI's simple index, which uv resolves a
-   pin through, lists the version: usually seconds.
+   uploads it once. Then the `pypi` job uploads the four projects, one at a time:
+   the only job that may mint a PyPI token, in the `release` environment (below,
+   "Repository settings"). The library goes first, since the server and the alias
+   pin it at their own release, then the server, the shim and `cadgen`, whose index the
+   version feed reads (`PROJECTS` in
+   `scripts/release/pypi_release.py`); each is listed by PyPI's simple index, which
+   uv resolves a pin through, before the next goes up (`--wait`: usually seconds).
+   It uploads only what PyPI does not hold yet, so a resumed release uploads nothing
+   twice, and what PyPI already holds is downloaded and checked against PyPI's
+   sha256 for the GitHub Release to attach; a file PyPI holds that the run did not
+   build stops the release.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
    alone onto `latest` and `claude-plugin`, in one atomic push. Only now does
    an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, whose
    header names the release; and the `v<VERSION>`
-   tag and the GitHub Release, with the wheel and sdist as PyPI serves them (the
-   `pypi` job's artifact, `cadgen-<version>-released`),
-   the plugin ZIP and the source maps (`cadgen-sourcemaps-<version>.zip`, to
+   tag and the GitHub Release, with the four projects' wheels and sdists as PyPI
+   serves them (the `pypi` job's artifact, `dist-<version>-released`),
+   the plugin ZIP and the source maps (`text-to-cad-sourcemaps-<version>.zip`, to
    upload a version's maps again) attached as release assets (PyPI stays the
    install channel; the release page is the provenance copy), and beside them the
    one-line installer, `install.sh` and `install.ps1`, with their `SHA256SUMS`: the
@@ -844,7 +899,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    effort, and nothing waits on it.
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
-wheel. Only an install of `main` itself sees that: a command that names no
+wheels. Only an install of `main` itself sees that: a command that names no
 branch, and the Cursor Marketplace, which takes the repository.
 
 When two pull requests bump at once, the first merged wins. The other then
@@ -899,21 +954,23 @@ What each store and installer reads:
 | Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
 | Cursor, by hand | `latest` (`git clone --branch latest`) |
+| The install command (`cad setup`), in every app | no branch: the plugin folder the server writes from its wheel's copy of the plugin (`<state>/plugin`, `cad_server/_internal/plugin.py`), the same files as `latest`'s at the release, its catalog a local one (`text-to-cad`) |
 | claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
 
 Each plugin's CAD server startup config says where its installs come from, its
-install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and adds
-`CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
-date: the store that reviewed it, or the app that installed it. The Viewer the
+install channel, in the server's environment (`CAD_INSTALL_CHANNEL`), and adds
+`CAD_AUTO_UPDATED=1` where something other than the person keeps the copy up to
+date: the store that reviewed it. The Viewer the
 server starts inherits both. The server also writes its channel down in the state
 directory for its uv installation (`install-channels.json`), which its skills'
-commands share, so a skill's Viewer and its commands report it too. cadgen reports the channel
-with telemetry and says a new release is out only to a copy that is not
-auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
+commands share, so a skill's Viewer and its commands report it too. The server reports the channel
+with telemetry and says the feed's new release only to a copy that is not
+auto-updated (a store's copy hears of a release once its store has moved an app's
+plugin ahead of the engine; `cad_server/_internal/channel.py`, `cad_server/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
-environment, never flags: an install of `main` pins the last release, and a cadgen
+environment, never flags: an install of `main` pins the last release, and a release
 ignores a variable it does not know but refuses a flag, so a new setting would
 stop every such server until the next release. Nothing works them out at
 runtime, so a plugin that ships somewhere new writes its own, and the telemetry
@@ -925,17 +982,18 @@ hold each one:
 | ------- | ------------------ | ----------------- | ---------- |
 | `claude.mcp.json` on `main` and `latest` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
 | `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
-| `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
-| the README's Claude Desktop config | `claude-desktop` | yes | the README |
+| `gemini-extension.json` | `gemini-github` | yes | the checked-in file |
+| `docs/install.md`'s Claude Desktop config, and the one the install command writes | `claude-desktop` | yes | `docs/install.md`; `cad_server/cli/setup.py` |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
 | `mcp.json` on `main` and `latest`, beside `plugin.json`: the [Agent Plugins](https://agent-plugins.org) standard's, which VS Code reads before Claude's manifest | `agent-plugins` | yes | the checked-in file |
 | `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| the plugin folder's configs, which the install command points every app at | each as `latest`'s: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `agent-plugins` | yes | `cad_server/_internal/plugin.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
 | a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
 
-A skill's own `cadgen` command never says a release is out: the same skill files
+A skill's own `cad` command never says a release is out: the same skill files
 ship in every plugin, so it cannot tell which one it came with. The CAD app and
 the Viewer say it.
 
@@ -992,13 +1050,13 @@ skill and policy scans still run after upload.
 
 ### The version feed
 
-cadgen's daily version check reads `api.texttocad.dev/v1/versions`
+The server's hourly version check reads `api.texttocad.dev/v1/versions`
 (`apps/api/src/versions.mjs`): `latest` is the newest release PyPI's simple
 index lists, the index uv resolves every pin through, so the feed names a
 release the moment it can be installed (Vercel's edge keeps a reply an hour, which
 `Publish Release` purges once the install branches carry the release), and no release
-deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The plugin
-branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
+deploys it. The install command reads it too, for the release to install. Only a copy nothing else updates reads it (its channel, "The install
+branches" above): a store's copy (the Claude or OpenAI directory, the Cursor
 Marketplace) and Gemini's extension never check and are never told, since their
 store or Gemini updates them. Telemetry passes through the same API to PostHog: a deploy (`Deploy API`, on every
 change to `apps/api` on `main`) needs the project's PostHog settings in Vercel, which
@@ -1065,8 +1123,8 @@ on every change to `apps/api` on `main`, and redeploys `main` on dispatch
 After bundling, `scripts/release/check-wheel-contents.sh` builds from a clean
 temporary package copy and verifies that every bundled runtime file is present
 with identical bytes, with no obsolete assets left in the wheel. It leaves the
-checkout's build scratch untouched. Set `CADGEN_WHEEL_OUT_DIR` and
-`CADGEN_KEEP_WHEEL=1` to retain that checked wheel for an installed smoke test.
+checkout's build scratch untouched. Set `CAD_WHEEL_OUT_DIR` and
+`CAD_KEEP_WHEEL=1` to retain that checked wheel for an installed smoke test.
 
 To check a bump locally the way the gate and Version Check will:
 
@@ -1097,9 +1155,11 @@ requests `Prepare Release` opens start their checks. It needs Contents and Pull
 requests write on this repository; nothing merges with it, so it need not be an
 admin's.
 PyPI is published to from one place. The `pypi` job runs in the GitHub environment
-`release`, whose deployment branches are `main` alone, and cadgen's trusted publisher on
-PyPI names this repository, `release-publish.yml` and that environment, so no run on
-another branch (or a workflow changed on one) can mint a token PyPI takes. No other
+`release`, whose deployment branches are `main` alone, and the trusted publisher of each
+of the four projects on PyPI (`cad`, `cad-server`, `cad-mcp`, `cadgen`) names this repository, `release-publish.yml` and that environment, so no
+run on another branch (or a workflow changed on one) can mint a token PyPI takes. A
+project PyPI does not have yet takes a pending publisher, the same three names, before
+its first release. No other
 job asks for `id-token`. `build-test` is protected as `main` is (a pull request to
 change it, no force pushes or deletions): a push there runs `Publish Release`, and
 its irreversible steps are skipped by the workflow, not by who may push. The
@@ -1175,7 +1235,7 @@ scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 `skills/<skill>`, `packages/<package>`, and `global`. The CAD Viewer backend's
-suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
+suite is `tests/python/packages/cad_server/viewer/`, part of the server's package suite.
 
 For fast CAD Viewer source iteration, build the shared packages, then invoke
 the web app in dev mode from a folder of models (outside `apps/web`). The app
@@ -1193,7 +1253,7 @@ the process working directory, skipping either when it is inside `apps/web`. Vit
 fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the invocation directory,
 so `--prefix` selects the app while keeping your folder. The page is the bare
 origin, the home; a document's page is `/<id>` (`http://127.0.0.1:5173/<id>`), a file's id
-given by `cadgen viewer FILE --json` or by opening it from the home.
+given by `cad viewer FILE --json` or by opening it from the home.
 
 Vite defaults to port 5173 and fails if it is taken; select another with
 `--port`. See [the app's launcher contract](apps/web/README.md#launching) for

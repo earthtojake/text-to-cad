@@ -2,8 +2,11 @@ name: Windows installer rehearsal
 
 # install.ps1 on a fresh Windows runner, the way a person runs it: Windows PowerShell 5.1, the
 # piped `irm | iex` form and the script form with options, against the wheel this tree builds.
-# uv installed by its own installer when the image has none, `cadgen setup` run with nothing
-# asked, the `cadgen` command registered, the doctor's verdict, a second run and the uninstall.
+# uv installed by its own installer when the image has none, `cad setup` run with nothing
+# asked, the `cad` command registered, the doctor's verdict and a second run; then models built on
+# it (a box, a box with a hand-made wheel through `--with`, through a script's header, from a
+# venv of the user's own with the library installed, and the page link's token), and the uninstall;
+# then the same again into a state folder named with accents and a non-Latin script.
 # A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
 # installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
 on:
@@ -18,12 +21,12 @@ on:
     paths:
       - .github/workflows/install-windows.yml
       - scripts/install/install.ps1
-      - packages/cadgen/src/cadgen/cli/setup.py
-      - packages/cadgen/src/cadgen/cli/uninstall.py
-      - packages/cadgen/src/cadgen/cli/doctor.py
-      - packages/cadgen/src/cadgen/_internal/providers.py
-      - packages/cadgen/src/cadgen/_internal/launch.py
-      - packages/cadgen/src/cadgen/_internal/installations.py
+      - packages/cad-server/src/cad_server/cli/setup.py
+      - packages/cad-server/src/cad_server/cli/uninstall.py
+      - packages/cad-server/src/cad_server/cli/doctor.py
+      - packages/cad-server/src/cad_server/_internal/providers.py
+      - packages/cad-server/src/cad_server/_internal/launch.py
+      - packages/cad-server/src/cad_server/_internal/installations.py
 
 permissions:
   contents: read
@@ -48,19 +51,19 @@ jobs:
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean
 
-      - name: Build and check the wheel
+      - name: Build and check the wheels
         env:
-          CADGEN_KEEP_WHEEL: "1"
-          CADGEN_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/wheels
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      - name: Keep the wheel for the Windows job
+      - name: Keep the wheels for the Windows job
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-wheel
-          path: ${{ runner.temp }}/cadgen-wheel/*.whl
+          name: wheels
+          path: ${{ runner.temp }}/wheels/*.whl
           if-no-files-found: error
           retention-days: 1
 
@@ -68,7 +71,7 @@ jobs:
     name: install.ps1 (Windows PowerShell 5.1)
     needs: wheel
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 50
     env:
       UV_NO_MODIFY_PATH: "1"
     steps:
@@ -80,17 +83,20 @@ jobs:
       - name: Take the wheel
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-wheel
+          name: wheels
           path: ${{ runner.temp }}\wheel
 
+      # The server's wheel, the one the installer runs; uv finds the library's beside it (UV_FIND_LINKS), at
+      # the release the server pins, which no index has before it is released.
       - name: The wheel to install from, and the release it is
         shell: pwsh
         run: |
-          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\*.whl" | Select-Object -First 1).FullName
-          if (-not $wheel) { throw "no wheel in $env:RUNNER_TEMP\wheel" }
+          $wheel = (Get-ChildItem "$env:RUNNER_TEMP\wheel\cad_server-*.whl" | Select-Object -First 1).FullName
+          if (-not $wheel) { throw "no server wheel in $env:RUNNER_TEMP\wheel" }
           $release = (Get-Content VERSION -Raw).Trim()
-          "CADGEN_WHEEL=$wheel" >> $env:GITHUB_ENV
-          "CADGEN_RELEASE=$release" >> $env:GITHUB_ENV
+          "CAD_WHEEL=$wheel" >> $env:GITHUB_ENV
+          "UV_FIND_LINKS=$env:RUNNER_TEMP\wheel" >> $env:GITHUB_ENV
+          "CAD_RELEASE=$release" >> $env:GITHUB_ENV
           Write-Host "wheel: $wheel"
           Write-Host "release: $release"
           if (Get-Command uv -ErrorAction SilentlyContinue) {
@@ -120,23 +126,23 @@ jobs:
       # stderr line of uv's becomes a PowerShell error record.
       - name: Dry run, as a script with options (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CADGEN_WHEEL%" --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --dry-run > "%RUNNER_TEMP%\dry-run.txt" 2>&1
 
       - name: The dry run's plan
         shell: pwsh
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\dry-run.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen setup exited') { throw "cadgen setup failed" }
-          if ($out -notmatch "text-to-cad $([regex]::Escape($env:CADGEN_RELEASE)) for this machine") { throw "the plan does not name the release" }
+          if ($out -match 'cad setup exited') { throw "cad setup failed" }
+          if ($out -notmatch "text-to-cad $([regex]::Escape($env:CAD_RELEASE)) for this machine") { throw "the plan does not name the release" }
           if ($out -notmatch 'Dry run: nothing was changed\.') { throw "the dry run did not end as one" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cadgen.cmd'
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
           if (Test-Path $cmd) { throw "a dry run wrote $cmd" }
 
       - name: Install, piped as the docs say (irm | iex, 5.1)
         shell: cmd
         env:
-          CADGEN_INSTALL_FROM: ${{ env.CADGEN_WHEEL }}
+          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
         run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install.txt" 2>&1
 
       - name: What the install did
@@ -144,33 +150,328 @@ jobs:
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\install.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen setup exited') { throw "cadgen setup failed" }
-          if ($out -notmatch "cadgen\s+registered $([regex]::Escape($env:CADGEN_RELEASE))") { throw "cadgen did not register" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cadgen.cmd'
-          if (-not (Test-Path $cmd)) { throw "the cadgen command was not written at $cmd" }
-          "CADGEN_CMD=$cmd" >> $env:GITHUB_ENV
+          if ($out -match 'cad setup exited') { throw "cad setup failed" }
+          if ($out -notmatch "server\s+registered $([regex]::Escape($env:CAD_RELEASE))") { throw "the server did not register" }
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
+          if (-not (Test-Path $cmd)) { throw "the cad command was not written at $cmd" }
+          "CAD_CMD=$cmd" >> $env:GITHUB_ENV
 
       - name: The registered command, the doctor and a second run
         shell: pwsh
         run: |
-          & $env:CADGEN_CMD --version
-          if ($LASTEXITCODE) { throw "cadgen --version exited $LASTEXITCODE" }
-          & $env:CADGEN_CMD doctor
-          if ($LASTEXITCODE) { throw "cadgen doctor exited $LASTEXITCODE" }
-          & $env:CADGEN_CMD setup --dry-run
-          if ($LASTEXITCODE) { throw "a second cadgen setup --dry-run exited $LASTEXITCODE" }
+          & $env:CAD_CMD --version
+          if ($LASTEXITCODE) { throw "cad --version exited $LASTEXITCODE" }
+          & $env:CAD_CMD doctor
+          if ($LASTEXITCODE) { throw "cad doctor exited $LASTEXITCODE" }
+          & $env:CAD_CMD setup --dry-run
+          if ($LASTEXITCODE) { throw "a second cad setup --dry-run exited $LASTEXITCODE" }
+
+      # What the model steps share: run a program and keep its stdout and stderr together (Windows
+      # PowerShell 5.1 turns a native command's stderr lines into error records, so they are
+      # stringified here, and the checks throw on their own); write a file without a byte-order mark.
+      #
+      # An argument containing > or < is never passed on a command line here: PowerShell 5.1 hands
+      # it unquoted to cad.cmd, and cmd.exe reads it as a redirection. A requirement with a version
+      # range goes through a script's `# /// script` header, as the models below do for theirs.
+      - name: The helpers the model steps use
+        shell: pwsh
+        run: |
+          $helpers = @'
+          $ErrorActionPreference = 'Continue'
+          $utf8 = New-Object System.Text.UTF8Encoding($false)
+          function Save([string]$Path, [string]$Text) {
+            New-Item -ItemType Directory -Force (Split-Path $Path) | Out-Null
+            [IO.File]::WriteAllText($Path, $Text, $utf8)
+          }
+          function Fail([string]$Message) { Write-Host "::error::$Message"; throw $Message }
+          function Invoke-Native {
+            $exe = $args[0]
+            $rest = @($args | Select-Object -Skip 1)   # an array: one argument splatted as a string would be taken by its characters
+            $lines = @(& $exe @rest 2>&1 | ForEach-Object { "$_" })
+            $code = $LASTEXITCODE
+            $text = $lines -join "`n"
+            Write-Host $text
+            [pscustomobject]@{ Code = $code; Text = $text }
+          }
+          function Invoke-Cad { Invoke-Native $env:CAD_CMD @args }
+          function Need($Result, [string]$What, [string[]]$Patterns) {
+            if ($Result.Code -ne 0) { Fail "$What exited $($Result.Code)" }
+            foreach ($pattern in $Patterns) {
+              if ($Result.Text -notmatch $pattern) { Fail "${What}: the output lacks /$pattern/" }
+            }
+          }
+          function Find-Uv {
+            $command = Get-Command uv -ErrorAction SilentlyContinue
+            if ($command) { return $command.Source }
+            $folders = @($env:UV_INSTALL_DIR, (Join-Path $env:USERPROFILE '.local\bin'), (Join-Path $env:USERPROFILE '.cargo\bin'))
+            if ($env:UV_INSTALL_DIR) { $folders += (Join-Path $env:UV_INSTALL_DIR 'bin') }
+            foreach ($folder in $folders) {
+              if ($folder -and (Test-Path (Join-Path $folder 'uv.exe'))) { return (Join-Path $folder 'uv.exe') }
+            }
+            Fail "uv was not found on PATH or where its installer puts it"
+          }
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\e2e.ps1" -Value $helpers -Encoding utf8
+
+      # 1. A model builds: the output says `built ` and the bounds. The first build also makes the
+      # CAD kernel environment, once (minutes).
+      - name: cad run, a box (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $dir = Join-Path $env:RUNNER_TEMP 'models\box'
+          Save "$dir\box.py" @'
+          from cad import model
+
+
+          @model
+          def box():
+              import build123d as bd
+
+              return bd.Box(40, 20, 6)
+
+
+          if __name__ == "__main__":
+              box()
+          '@
+          Set-Location $dir
+          $r = Invoke-Cad run box.py
+          Need $r 'cad run box.py' @('(?m)^built \S+', 'bounds 40\D+20\D+6 mm')
+          Save "$env:RUNNER_TEMP\box-output.txt" $r.Text
+
+      # 2. A hand-made wheel through --with: the model imports it, and a second run is warm.
+      - name: Make a local wheel, own-extra 1.0
+        shell: pwsh
+        run: |
+          $maker = @'
+          import base64, hashlib, sys, zipfile
+          from pathlib import Path
+
+          out = Path(sys.argv[1])
+          out.mkdir(parents=True, exist_ok=True)
+          info = "own_extra-1.0.dist-info"
+          files = {
+              "own_extra/__init__.py": b"WIDTH = 33.0\n",
+              info + "/METADATA": b"Metadata-Version: 2.1\nName: own-extra\nVersion: 1.0\n",
+              info + "/WHEEL": b"Wheel-Version: 1.0\nGenerator: rehearsal\nRoot-Is-Purelib: true\nTag: py3-none-any\n",
+          }
+
+
+          def digest(data):
+              return "sha256=" + base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b"=").decode()
+
+
+          record = "".join(f"{name},{digest(data)},{len(data)}\n" for name, data in files.items())
+          wheel = out / "own_extra-1.0-py3-none-any.whl"
+          with zipfile.ZipFile(wheel, "w") as archive:
+              for name, data in files.items():
+                  archive.writestr(name, data)
+              archive.writestr(info + "/RECORD", record + info + "/RECORD,,\n")
+          print(wheel)
+          '@
+          Set-Content -Path "$env:RUNNER_TEMP\make_wheel.py" -Value $maker -Encoding utf8
+          python "$env:RUNNER_TEMP\make_wheel.py" "$env:RUNNER_TEMP\own"
+          if ($LASTEXITCODE) { throw "making the wheel exited $LASTEXITCODE" }
+          $wheel = Join-Path $env:RUNNER_TEMP 'own\own_extra-1.0-py3-none-any.whl'
+          if (-not (Test-Path $wheel)) { throw "no wheel at $wheel" }
+          "OWN_WHEEL=$wheel" >> $env:GITHUB_ENV
+          "OWN_WHEEL_URL=file:///$($wheel -replace '\\', '/')" >> $env:GITHUB_ENV
+
+      - name: cad run --with the wheel, twice (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $dir = Join-Path $env:RUNNER_TEMP 'models\with'
+          Save "$dir\strip.py" @'
+          import own_extra
+          from cad import model
+
+
+          @model
+          def strip():
+              import build123d as bd
+
+              return bd.Box(own_extra.WIDTH, 20, 4)
+
+
+          if __name__ == "__main__":
+              strip()
+          '@
+          Set-Location $dir
+          $first = Invoke-Cad run --with $env:OWN_WHEEL strip.py
+          Need $first 'cad run --with the wheel' @('(?m)^built \S+', 'bounds 33\D+20\D+4 mm')
+          $again = Invoke-Cad run --with $env:OWN_WHEEL strip.py
+          Need $again 'the second cad run --with' @('(?m)^(built|took) \S+ warm', 'bounds 33\D+20\D+4 mm')
+          if ($again.Text -match '(?m)^(built|took) \S+ cold') { Fail "the second run was cold" }
+
+      # 3. The same wheel named in the script's own header: plain `cad run` builds it.
+      - name: cad run, a header naming the wheel (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $dir = Join-Path $env:RUNNER_TEMP 'models\header'
+          $header = "# /// script`n# dependencies = [`"own-extra @ $env:OWN_WHEEL_URL`"]`n# ///`n"
+          Save "$dir\headed.py" ($header + @'
+          import own_extra
+          from cad import model
+
+
+          @model
+          def headed():
+              import build123d as bd
+
+              return bd.Box(own_extra.WIDTH, 20, 5)
+
+
+          if __name__ == "__main__":
+              headed()
+          '@)
+          Set-Location $dir
+          $r = Invoke-Cad run headed.py
+          Need $r 'cad run headed.py' @('(?m)^(built|took) \S+', 'bounds 33\D+20\D+5 mm')
+
+      # 4. Option B: the user's own venv holds the library and their package; running its Python on
+      # a model builds through the device's installed server, and `cad status` names that Python.
+      - name: A venv of the user's own (uv, Python 3.14), a model run by its Python (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $uv = Find-Uv
+          $venv = Join-Path $env:RUNNER_TEMP 'optionb-venv'
+          $r = Invoke-Native $uv venv --python 3.14 $venv
+          if ($r.Code) { Fail "uv venv exited $($r.Code)" }
+          $py = Join-Path $venv 'Scripts\python.exe'
+          $r = Invoke-Native $uv pip install --python $py --find-links "$env:RUNNER_TEMP\wheel" "cad[build123d]==$env:CAD_RELEASE" $env:OWN_WHEEL
+          if ($r.Code) { Fail "uv pip install exited $($r.Code)" }
+          $dir = Join-Path $env:RUNNER_TEMP 'models\venv'
+          Save "$dir\model.py" @'
+          import own_extra
+          from cad import model
+
+
+          @model
+          def viaenv():
+              import build123d as bd
+
+              return bd.Box(own_extra.WIDTH, 20, 4)
+
+
+          if __name__ == "__main__":
+              viaenv()
+          '@
+          Set-Location $dir
+          $r = Invoke-Native $py model.py
+          Need $r 'the venv Python on model.py' @('(?m)^built \S+', 'bounds 33\D+20\D+4 mm')
+          $status = Invoke-Cad status
+          if ($status.Code) { Fail "cad status exited $($status.Code)" }
+          if ($status.Text.IndexOf($py, [StringComparison]::OrdinalIgnoreCase) -lt 0) {
+            Fail "cad status does not name the venv's Python, $py"
+          }
+
+      # 5. The page link of a build (step 1's) opens with its token and is refused without it.
+      - name: The page link and its token
+        shell: powershell
+        timeout-minutes: 5
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $out = Get-Content "$env:RUNNER_TEMP\box-output.txt" -Raw
+          if ($out -notmatch '(?m)^\s*view:\s+(http://\S+\?token=\S+)') { Fail "the build printed no view: link with a token" }
+          $link = $Matches[1]
+          $bare = $link -replace '\?token=.*$', ''
+          Write-Host "page: $bare (token elided)"
+          $page = Invoke-WebRequest -Uri $link -UseBasicParsing -ErrorAction Stop
+          if ($page.StatusCode -ne 200) { Fail "the link with its token answered $($page.StatusCode), not 200" }
+          $status = $null
+          try { $status = [int](Invoke-WebRequest -Uri $bare -UseBasicParsing -ErrorAction Stop).StatusCode }
+          catch {
+            if ($_.Exception.Response) { $status = [int]$_.Exception.Response.StatusCode }
+            else { Fail "the page without its token: $($_.Exception.Message)" }
+          }
+          if ($status -ne 403) { Fail "the page without its token answered $status, not 403" }
+          Write-Host "with the token: 200; without it: 403"
+
+      - name: The engine's state, on a failure
+        if: failure()
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          if ($env:CAD_CMD -and (Test-Path $env:CAD_CMD)) {
+            & $env:CAD_CMD status
+            & $env:CAD_CMD doctor
+          }
 
       # The uninstall as the docs give it, through the installer: never through the proxy it removes,
       # a batch file cmd is still reading.
       - name: Uninstall, through the installer (5.1)
         shell: cmd
-        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CADGEN_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
 
       - name: What the uninstall did
         shell: pwsh
         run: |
           $out = Get-Content "$env:RUNNER_TEMP\uninstall.txt" -Raw
           Write-Host $out
-          if ($out -match 'cadgen uninstall exited') { throw "cadgen uninstall failed" }
-          if (Test-Path $env:CADGEN_CMD) { throw "the proxy is still there after the uninstall: $env:CADGEN_CMD" }
+          if ($out -match 'cad uninstall exited') { throw "cad uninstall failed" }
+          if (Test-Path $env:CAD_CMD) { throw "the proxy is still there after the uninstall: $env:CAD_CMD" }
           Write-Host "the proxy is gone"
+
+      # 6. A state folder named with accents and a non-Latin script, as %LOCALAPPDATA% is under a user
+      # folder such as C:\Users\José: the release's Python lives there, so the installation's record
+      # names non-ASCII paths, which the cad command (cad.cmd) reads. Installed again into it, then the
+      # doctor and a model through `cad` on PATH, then uninstalled. The folder's name stays out of the
+      # scripts' text: Windows PowerShell 5.1 reads a script without a byte-order mark as ANSI.
+      - name: Install into an accented, non-Latin state folder (5.1)
+        shell: cmd
+        env:
+          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install-accented.txt" 2>&1
+
+      - name: cad doctor and cad run, with that state folder (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        env:
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          Write-Host (Get-Content "$env:RUNNER_TEMP\install-accented.txt" -Raw)
+          if (-not (Test-Path $env:CAD_CMD)) { Fail "the cad command was not written at $env:CAD_CMD" }
+          $records = @(Get-ChildItem -LiteralPath (Join-Path $env:CAD_STATE_DIR 'installations') -Filter *.json)
+          if (-not $records) { Fail "no installation is recorded in the accented state folder" }
+          $record = [IO.File]::ReadAllText($records[0].FullName, [Text.Encoding]::UTF8) | ConvertFrom-Json
+          Write-Host "the record's python: $($record.python)"
+          if (-not $record.python.StartsWith($env:CAD_STATE_DIR, [StringComparison]::OrdinalIgnoreCase)) {
+            Fail "the record's python is not in the accented state folder: $($record.python)"
+          }
+          $env:Path = "$(Split-Path $env:CAD_CMD);$env:Path"
+          $doctor = Invoke-Native cad doctor
+          if ($doctor.Code) { Fail "cad doctor exited $($doctor.Code) with the accented state folder" }
+          $dir = Join-Path $env:RUNNER_TEMP 'models\accented'
+          Save "$dir\box.py" @'
+          from cad import model
+
+
+          @model
+          def box():
+              import build123d as bd
+
+              return bd.Box(40, 20, 6)
+
+
+          if __name__ == "__main__":
+              box()
+          '@
+          Set-Location $dir
+          $r = Invoke-Native cad run box.py
+          Need $r 'cad run box.py, accented state folder' @('(?m)^built \S+', 'bounds 40\D+20\D+6 mm')
+
+      - name: Uninstall the accented state folder's installation (5.1)
+        if: always()
+        shell: cmd
+        env:
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall-accented.txt" 2>&1 & type "%RUNNER_TEMP%\uninstall-accented.txt"

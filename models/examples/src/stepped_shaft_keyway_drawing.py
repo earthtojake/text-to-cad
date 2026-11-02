@@ -7,7 +7,7 @@ a detail draws the end chamfer large enough to dimension. The keyway is centred 
 the shaft, and the top view says so.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from stepped_shaft_keyway import (
     END_CHAMFER,
     KEYWAY_DEPTH,

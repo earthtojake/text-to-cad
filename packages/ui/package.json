@@ -1,6 +1,6 @@
 {
-  "name": "@text-to-cad/ui",
-  "version": "0.8.4",
+  "name": "@cad/ui",
+  "version": "0.10.0",
   "private": true,
   "type": "module",
   "files": [
@@ -97,7 +97,7 @@
   "dependencies": {
     "class-variance-authority": "0.7.1",
     "radix-ui": "1.8.1",
-    "@text-to-cad/core": "*",
+    "@cad/core": "*",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.7.0",
     "perfect-freehand": "1.2.3",

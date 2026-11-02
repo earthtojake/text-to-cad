@@ -54,7 +54,7 @@ EDIT_KEYS = frozenset({"file", "from", "to"})
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
 TARGET = re.compile(r"[^:]+\.py")
 DOCUMENT = re.compile(r"[^:]+\.py::[A-Za-z_][A-Za-z0-9_]*")
-TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CADGEN_TELEMETRY": "0"}
+TELEMETRY_OFF = {"DO_NOT_TRACK": "1", "CAD_TELEMETRY": "0"}
 MARK = "corpus-bench:"  # the line the build process answers on
 
 # Record only builds requested by the program's own calls. The normal Python control flow,
@@ -63,7 +63,7 @@ MARK = "corpus-bench:"  # the line the build process answers on
 DRIVER = """
 import json, runpy, sys
 from pathlib import Path
-from cadgen.engine import api
+from cad.engine import api
 builds = []
 script = sys.argv[1]
 build_script = api.build_script
@@ -84,7 +84,12 @@ except BaseException as error:
 finally:
     print("\\n" + MARK + json.dumps(answer), flush=True)
 """.replace("MARK", repr(MARK))
-PROBE = "import json, sys, cadgen; print(json.dumps({'cadgen': cadgen.__file__, 'python': sys.version.split()[0]}))"
+PROBE = "import json, sys, cad; print(json.dumps({'cadgen': cad.__file__, 'python': sys.version.split()[0]}))"
+# The bench's interpreter registered as the current installation of a model's private state folder
+# (``Bench.register``), under a version no release takes.
+BENCH_INSTALLATION = "0.0.0+bench"
+REGISTER = ("import sys\nfrom cad_server._internal import installations\n"
+            "installations.register(sys.argv[1])\ninstallations.point(sys.argv[1])")
 
 
 # --- the config ---------------------------------------------------------------------------------
@@ -273,7 +278,7 @@ def build_row(answer: Any, document: str | None = None) -> dict[str, Any]:
 
 def worker_memory(status: Any, scripts: Iterable[str]) -> int | None:
     """The resident memory in MB of the workers that build ``scripts``, as each measured it after its
-    last build (``cadgen status --json``), summed; None when the daemon names none of them."""
+    last build (``cad status --json``), summed; None when the daemon names none of them."""
     if not isinstance(status, dict):
         return None
     wanted = [str(script) for script in scripts]
@@ -539,10 +544,10 @@ def prepare(spec: dict[str, Any], out: Path, engine_dir: Path, cadgen_src: Path)
     selected_script, _, function = spec["document"].partition("::")
     path = os.pathsep.join([str(cadgen_src), *(str(work / folder) for folder in spec.get("pythonpath", []))])
     private = out / "runtime" / spec["name"]
-    env = {**os.environ, "CADGEN_ENGINE_DIR": str(engine_dir / spec["name"]),
-           "CADGEN_STATE_DIR": str(private / "state"), "CADGEN_CACHE_DIR": str(private / "cache"),
-           "CADGEN_LAUNCHER_DIR": str(private / "launcher"), "CADGEN_ENGINE_PORT": "0",
-           "CADGEN_ENGINE_STANDBY": "0", "PYTHONPATH": path,
+    env = {**os.environ, "CAD_ENGINE_DIR": str(engine_dir / spec["name"]),
+           "CAD_STATE_DIR": str(private / "state"), "CAD_CACHE_DIR": str(private / "cache"),
+           "CAD_LAUNCHER_DIR": str(private / "launcher"), "CAD_ENGINE_PORT": "0",
+           "CAD_ENGINE_STANDBY": "0", "PYTHONPATH": path,
            "PYTHONPYCACHEPREFIX": str(private / "cache" / "pycache"),
            "BROWSER": str(out / "no-browser.py") + " %s", **TELEMETRY_OFF}
     env.pop("PYTHONDONTWRITEBYTECODE", None)  # compile into this model's private prefix
@@ -581,13 +586,21 @@ class Bench:
             done = None
         return done, time.perf_counter() - started
 
+    def register(self, model: Model) -> None:
+        """The interpreter registered as the current installation of the model's private state folder, as
+        an installation registers itself: its daemon is this interpreter's, and a model's run starts none
+        where no installation is registered."""
+        done, _wall = self.run(model, ["-c", REGISTER, BENCH_INSTALLATION], timeout=120)
+        if done is None or done.returncode:
+            raise RuntimeError(f"the interpreter did not register: {done.stderr[-500:] if done else 'no answer'}")
+
     def stop(self, model: Model) -> None:
-        done, _wall = self.run(model, ["-m", "cadgen.cli", "stop"], timeout=300)
+        done, _wall = self.run(model, ["-m", "cad_server.cli", "stop"], timeout=300)
         if done is None or done.returncode:
             raise RuntimeError(f"its daemon did not stop: {done.stderr[-500:] if done else 'no answer'}")
 
     def status(self, model: Model) -> Any:
-        done, _wall = self.run(model, ["-m", "cadgen.cli", "status", "--json"], timeout=120)
+        done, _wall = self.run(model, ["-m", "cad_server.cli", "status", "--json"], timeout=120)
         if done is None or done.returncode:
             raise RuntimeError(f"status failed: {done.stderr[-500:] if done else 'no answer'}")
         found = json.loads(done.stdout)
@@ -602,7 +615,7 @@ class Bench:
 
     def daemon(self, model: Model) -> list[int]:
         """The pid of the model's own engine daemon, if one holds its door open."""
-        done, _wall = self.run(model, ["-c", "from cadgen.engine.daemon import address; print(address())"], 60)
+        done, _wall = self.run(model, ["-c", "from cad.engine.places import address; print(address())"], 60)
         path = done.stdout.strip() if done is not None and done.returncode == 0 else ""
         if not path or not os.path.exists(path):
             return []
@@ -653,7 +666,7 @@ class Bench:
         ident = self.ids[model.name]
         inside(model.work, model.document)
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cadgen.cli", "export", ident, str(model.document), "--json"], timeout=1800)
+        done, wall = self.run(model, ["-m", "cad_server.cli", "export", ident, str(model.document), "--json"], timeout=1800)
         report = last_json(done.stdout) if done is not None else None
         files = report.get("files") if isinstance(report, dict) else None
         if (done is None or done.returncode or not report or report.get("ok") is not True
@@ -667,7 +680,7 @@ class Bench:
         self.step(model, "export", wall, load, ok=True, document_id=ident,
                   xbf_bytes=files[0]["bytes"], xbf_seconds=files[0]["seconds"], written=files[0]["written"])
         load = self.quiet(model)
-        done, wall = self.run(model, ["-m", "cadgen.cli", "serve", ident], timeout=600)
+        done, wall = self.run(model, ["-m", "cad_server.cli", "serve", ident], timeout=600)
         url = (done.stdout.strip().splitlines() or [""])[-1] if done is not None else ""
         page = urllib.parse.urlsplit(url)
         if (done is None or done.returncode or page.hostname not in ("127.0.0.1", "localhost", "::1")
@@ -677,9 +690,9 @@ class Bench:
             return
         else:
             self.step(model, "serve", wall, load, ok=True)
-            # The page is ``<engine>/<id>?token=...``: the document's routes are under
-            # ``/api/doc/<id>``, and take the page's token as a bearer.
-            api = f"{page.scheme}://{page.netloc}/api/doc/{ident}"
+            # The page is ``<engine>/<id>?token=...``: the model's routes are under
+            # ``/api/v1/documents/model/<id>``, and take the page's token as a bearer.
+            api = f"{page.scheme}://{page.netloc}/api/v1/documents/model/{ident}"
             token = (urllib.parse.parse_qs(page.query).get("token") or [""])[0]
             auth = {"Authorization": f"Bearer {token}"} if token else {}
             for step, query in (("mesh-cold", ""), ("mesh-warm", "?drop=1")):
@@ -687,7 +700,7 @@ class Bench:
                 try:
                     # A POST carries the viewer's guard header, as the page's do.
                     with urllib.request.urlopen(urllib.request.Request(f"{api}/mesh{query}", data=b"", method="POST",
-                                                                       headers={**auth, "x-cadgen-viewer": "1"}),
+                                                                       headers={**auth, "x-cad-viewer": "1"}),
                                                 timeout=self.timeout) as response:  # noqa: S310 - the engine, on loopback
                         answer = json.loads(response.read())
                         required = {"seconds", "parts", "meshed", "triangles", "bytes", "unmeshed", "mode", "workers", "per_part"}
@@ -703,7 +716,7 @@ class Bench:
                           slowest=(answer.get("per_part") or {}).get("slowest"))
             load, started = loads(), time.perf_counter()
             try:
-                with urllib.request.urlopen(urllib.request.Request(api, headers=auth), timeout=600) as response:  # noqa: S310 - the engine, on loopback
+                with urllib.request.urlopen(urllib.request.Request(f"{api}/structure", headers=auth), timeout=600) as response:  # noqa: S310 - the engine, on loopback
                     data = response.read()
                 structure = json.loads(data)
                 if not isinstance(structure, dict) or not {"prototypes", "instances"} <= structure.keys():
@@ -720,7 +733,7 @@ class Bench:
         for step in ("snapshot-first", "snapshot"):
             png = pictures / f"{model.name}{'-first' if step == 'snapshot-first' else ''}.png"
             load = self.quiet(model)
-            done, wall = self.run(model, ["-m", "cadgen.cli", "snapshot", ident, str(png), "--json"],
+            done, wall = self.run(model, ["-m", "cad_server.cli", "snapshot", ident, str(png), "--json"],
                                   timeout=1800)
             report = last_json(done.stdout) if done is not None else None
             report = report if isinstance(report, dict) else {}
@@ -742,6 +755,7 @@ class Bench:
         stopped = False
         try:
             copy_project(ROOT / spec["root"], model.work)
+            self.register(model)
             inside(model.work, model.edit)
             inside(model.work, model.document)
             original = model.edit.read_bytes()
@@ -754,7 +768,7 @@ class Bench:
                 elif step in ("restart", "restart-cold"):
                     self.stop(model)
                     if step == "restart-cold":
-                        remove(Path(model.env["CADGEN_CACHE_DIR"]) / "documents")
+                        remove(Path(model.env["CAD_CACHE_DIR"]) / "documents")
                 if not self.build(model, step)["ok"]:
                     return
             phase = "document"
@@ -848,7 +862,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-dir", type=Path, default=Path(tempfile.gettempdir()) / "cadgen-bench",
                         help="parent for a fresh batch folder containing each model's private engine door")
     parser.add_argument("--python", default=sys.executable, help="the interpreter that builds (default: this one)")
-    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/cadgen/src",
+    parser.add_argument("--cadgen-src", type=Path, default=ROOT / "packages/cad/src",
                         help="the cadgen it imports (default: this checkout's)")
     parser.add_argument("--max-load", type=float, help="before each step, wait until the 1-minute load is at most this and no other cadgen build "
                         "uses more than 5%% of a core")
@@ -912,7 +926,7 @@ def main(argv: list[str] | None = None) -> int:
            "cadgen": found_cadgen["cadgen"], "python": found_cadgen["python"], "interpreter": args.python,
            "platform": platform.platform(), "cpus": os.cpu_count(), "memory_gb": memory_gb(),
            "engine_dir": str(args.engine_dir), "config": str(args.config), "models": [model["name"] for model in chosen],
-           "environment": {key: value for key, value in os.environ.items() if key.startswith("CADGEN_")}}
+           "environment": {key: value for key, value in os.environ.items() if key.startswith("CAD_")}}
     bench.emit(run)
     print(f"corpus_bench: {len(chosen)} model{'s' if len(chosen) != 1 else ''} into {out}", file=sys.stderr, flush=True)
     for spec in chosen:

@@ -16,7 +16,7 @@
  * its region, `us` or `eu`. `fetch` is handed in, so the tests need no network.
  */
 
-import { FIELDS } from './events.mjs';
+import { FIELDS, OUR_FRAMES } from './events.mjs';
 
 // PostHog's name for each kind of row, as a product reads them.
 export const EVENTS = {
@@ -60,7 +60,7 @@ const statusOf = status => (status >= 0xC0000000 ? `0x${status.toString(16).toUp
 /**
  * A crash as PostHog's error tracking reads one (`$exception_list`): its type, a value that is only ever
  * a dead worker's exit status, whether the process went on, and its frames, oldest first -- Python's,
- * or a page's JavaScript -- with only cadgen's own (or the page's own, never a vendor chunk's) in the app:
+ * or a page's JavaScript -- with only our own (or the page's own, never a vendor chunk's) in the app:
  * PostHog blames an issue on its innermost in-app frame, which a react or radix frame must not be.
  */
 export function exceptionOf(row) {
@@ -70,7 +70,7 @@ export function exceptionOf(row) {
     ...(frame.line ? { lineno: frame.line } : {}), ...(frame.column ? { colno: frame.column } : {}),
     // PostHog resolves a page's frame through the source map the release uploaded under this id.
     ...(page && frame.chunk_id ? { chunk_id: frame.chunk_id } : {}),
-    in_app: page ? !NOT_OURS.has(frame.file) && !VENDOR.test(frame.file) : frame.file.startsWith('cadgen/'),
+    in_app: page ? !NOT_OURS.has(frame.file) && !VENDOR.test(frame.file) : OUR_FRAMES.test(frame.file),
   }));
   return [{
     type: row.type, value: row.status === undefined ? '' : `exit status ${statusOf(row.status)}`,

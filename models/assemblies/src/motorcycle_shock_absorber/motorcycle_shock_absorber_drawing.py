@@ -18,7 +18,7 @@ segments, so its sheet says so and gives the spring's data, and lists what is no
 yet specified.
 """
 
-from cadgen.eng_drawing import GENERIC, Sheet, assembly_sheets, eng_drawing, parts_list
+from cad.eng_drawing import GENERIC, Sheet, assembly_sheets, eng_drawing, parts_list
 from motorcycle_shock_absorber import (
     BODY_OD, BODY_TOP_Z, PRELOAD_COLLAR_TOP_Z, SPRING_BOTTOM_Z, SPRING_HEIGHT, SPRING_MEAN_D, SPRING_TURNS,
     SPRING_WIRE_D, motorcycle_shock_absorber,

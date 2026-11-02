@@ -1,15 +1,14 @@
 ---
 name: engineering-drawing
-description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts, notes and a title block, and for an assembly balloons, a parts list, flag notes and a sheet per part, all projected from the geometry. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part".
+description: Make an engineering drawing of a part or an assembly as a PDF - views, sections and details, measured dimensions with the tolerances, GD&T and datums the person confirms, hole callouts, notes and a title block, and for an assembly balloons, a parts list, flag notes and a sheet per part, all projected from the geometry. Use when the user asks for a drawing, a dimensioned sheet, shop or assembly drawings, a parts list, a print, or "2D views of this part". Not for DXF cut layouts or flat patterns.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # Engineering drawing
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth.
-
-An engineering drawing is a DOCUMENT derived from a part. `cadgen.eng_drawing`
+An engineering drawing is a DOCUMENT derived from a part. `cad.eng_drawing`
 projects views from the part's geometry, measures dimensions between points ON
 it, reads hole sizes, depths and counts off its faces, draws centre lines on its
 turned features, and lays the result out on an ISO sheet: a zoned border, a
@@ -17,20 +16,22 @@ title block with the projection symbol, numbered notes. Change the model, rerun
 the drawing script, and every view and value moves with it.
 
 **The output is one PDF**, a page per sheet. No DXF is written and there is no
-CLI: the script is the interface. `$dxf` makes cut layouts and flat patterns,
-which are toolpaths, not documents.
+CLI: the script is the interface. Cut layouts and flat patterns are toolpaths,
+not documents, and a different job.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: wait five seconds and run the
+command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.4` (`~/.local/bin/cadgen +0.8.4` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.4 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-For first-time setup or an update, a missing `cadgen` command, a release it says is not
-installed, an engine that is not running, or an installation or kernel load error, read
-[Setup and troubleshooting](references/setup.md).
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Workflow
 
@@ -43,7 +44,7 @@ installed, an engine that is not running, or an installation or kernel load erro
      where parts meet: a pin in a bushing in a bore is two fits.
    - **Ask** the stage (concept, prototype, production) and the use, then
      propose which interfaces need a requirement, one numbered item at a
-     time, each with a picture of the part with that feature marked (`cadgen
+     time, each with a picture of the part with that feature marked (`cad
      snapshot --annotation`).
    - **For an assembly, ask joint by joint what it does**: turns, slides,
      locates or stays fixed, which decides its fit; how it is held (a torque,
@@ -75,8 +76,8 @@ installed, an engine that is not running, or an installation or kernel load erro
    dimensions only; to show tolerancing, let's set the pin and bushing fits and
    the mounting faces first").
 1. **Get the part.** Call the model: `enclosure()`, imported from the model's
-   script, is built by cadgen's engine (a replay when the engine already holds
-   it), and its `.shape` is the part. For a part with no model, read its file:
+   script, is built by text-to-cad's server (a replay when the server already
+   holds it), and its `.shape` is the part. For a part with no model, read its file:
    `read_step` for a STEP, `read_xbf` for an xbf, anchored on
    `Path(__file__).parent`. Any build123d shape works. The drawing documents
    geometry; it does not build it.
@@ -173,7 +174,12 @@ installed, an engine that is not running, or an installation or kernel load erro
      one, and never present a guess as a requirement: a field you leave blank
      prints as an empty, captioned cell, which says the drawing does not
      state it, and the run reports what the sheet's stage still needs.
-5. **Run `python <name>_drawing.py` and read what it prints** before the PDF:
+5. **Run the drawing script and read what it prints** before the PDF:
+
+   ```bash
+   cad run <name>_drawing.py
+   ```
+
    - *"incomplete: …"*: a hole or slot not called out or not located, a flat
      face not placed, an inclined face with no angle, a taper's end or a
      groove's size or place, an overall size (or one given only as reference
@@ -238,7 +244,7 @@ An assembly is drawn as a set: a general arrangement (GA) that shows it whole,
 keys every part to a parts list with a balloon, and one sheet per distinct part.
 
 ```python
-# in the @eng_drawing function; from cadgen.eng_drawing import assembly_sheets, parts_list
+# in the @eng_drawing function; from cad.eng_drawing import assembly_sheets, parts_list
 parts = parts_list(rig().shape)                    # the assembly model, called
 parts.merge("eye:upper", "eye:lower")              # one part the model names twice
 parts.set("base_plate", material="AL 6061-T6", spec="AMS 4027")   # only what the person states

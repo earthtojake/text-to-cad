@@ -13,7 +13,7 @@ from math import cos, radians, sin
 from angle_bracket import (
     BASE_HOLE_X, BASE_LENGTH, TAB_FACE_POINT, TAB_HEIGHT, TAB_HOLE_HEIGHT, TAB_LEAN, THICKNESS, angle_bracket,
 )
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 
 LEFT = -BASE_LENGTH / 2
 FOOT = (BASE_LENGTH / 2, 0.0, 0.0)  # the tab's outer face meets the bottom here

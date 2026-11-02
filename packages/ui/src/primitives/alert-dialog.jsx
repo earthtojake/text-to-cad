@@ -3,8 +3,8 @@
 import * as React from "react"
 import { AlertDialog as AlertDialogPrimitive } from "radix-ui"
 
-import { cn } from "@text-to-cad/ui/utils"
-import { buttonVariants } from "@text-to-cad/ui/primitives/button"
+import { cn } from "@cad/ui/utils"
+import { buttonVariants } from "@cad/ui/primitives/button"
 
 // shadcn's AlertDialog as shipped, on the viewer's type scale (`text-ui`) and with no window
 // breakpoints (settings-ui.md): one centred card, never wider than the window less 1rem a side.

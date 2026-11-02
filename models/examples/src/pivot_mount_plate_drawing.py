@@ -15,7 +15,7 @@ company's profile is its own: ASME Y14.5-2018, CAGE CODE and DISTRIBUTION cells,
 its two release categories.
 """
 
-from cadgen.eng_drawing import Frame, Profile, Sheet, eng_drawing, parts_list
+from cad.eng_drawing import Frame, Profile, Sheet, eng_drawing, parts_list
 from pivot_mount_plate import (
     BOLT_HOLES, BORE_DIAMETER, BORE_X, BORE_Y, BUSHING_BORE, CORNER_RADIUS, LINER_THICKNESS, PIN_DIAMETER,
     PLATE_LENGTH, PLATE_THICKNESS, PLATE_WIDTH, pivot_mount_plate,

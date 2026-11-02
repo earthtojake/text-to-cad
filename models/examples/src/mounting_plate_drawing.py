@@ -10,7 +10,7 @@ and the holes' spacing across it puts them half of it either side. The slot is o
 one side only, so along X the holes and the bore are placed from the left edge.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from mounting_plate import mounting_plate
 
 

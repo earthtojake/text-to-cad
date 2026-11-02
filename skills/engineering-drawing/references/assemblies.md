@@ -1,7 +1,7 @@
 # Assembly drawings
 
 ```python
-from cadgen.eng_drawing import eng_drawing, parts_list, assembly_sheets, JOINTS
+from cad.eng_drawing import eng_drawing, parts_list, assembly_sheets, JOINTS
 ```
 
 An assembly is a drawing set: a general arrangement keyed to a parts list,
@@ -10,7 +10,7 @@ then a sheet per part, each one refined like any sheet:
 ```python
 @eng_drawing(out="../PDF/rig_drawing.pdf")
 def rig_drawing():
-    parts = parts_list(rig().shape)          # the assembly model, built by the engine
+    parts = parts_list(rig().shape)          # the assembly model, built by the server
     parts.merge("eye:upper", "eye:lower")                                # one part, named twice
     parts.set("base_plate", material="AL 6061-T6", spec="AMS 4027", part_number="RIG-101")   # stated, never guessed
     parts.add("LOCTITE 243", spec="MIL-S-46163 TYPE II")                 # in no model: QTY AR
@@ -27,7 +27,7 @@ def rig_drawing():
 ## `parts_list(source)`
 
 `source` is an assembly: a build123d `Compound` made with `children=`, as an
-assembly model's `.shape`, `cadgen.read_xbf(path)` and `cadgen.read_step(path)`
+assembly model's `.shape`, `cad.read_xbf(path)` and `cad.read_step(path)`
 hand one back. Returns a `PartsList`: one `Item` per
 distinct part, numbered in the order the assembly first holds them.
 Occurrences are one part when they have the same name, the same colour, the

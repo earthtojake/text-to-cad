@@ -6,7 +6,7 @@ tagged and tabulated from the part, so none of their sizes or positions is typed
 here.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 from perforated_plate import CORNER_RADIUS, LENGTH, THICKNESS, WIDTH, perforated_plate
 
 
