@@ -48,11 +48,22 @@ command again and it waits for that build and replays it (`cad status` shows it)
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background.
 
-`cad run` needs nothing set up: it runs a script in the server's own environment. A Python of the
-project's own (a venv's `python model.py`, `uv run`) whose environment has `cad[build123d]` at the
-server's release runs models too, with its own packages: the server builds the script in a warm
-worker of that same Python. A release the server cannot build with is refused in one line that
-says which package to update; do what it says.
+Build every model with `cad run`. It needs nothing set up: it runs a script in the server's own
+environment, which holds the library and build123d. A model that needs another package names it
+at the top of its script, and `cad run` installs it beside the kernel once, in an environment it
+keeps for the runs after:
+
+```python
+# /// script
+# dependencies = ["pandas>=2"]
+# ///
+```
+
+For a one-off, `cad run --with pandas src/plate.py` (repeat `--with`, or separate requirements
+with commas; a local folder or wheel works too, its path relative to the working directory, or in
+the block to the script's folder). What cannot be installed beside the kernel is refused in one
+line with uv's reason: change the requirement it names, or, where the network is needed once, run
+it outside a sandbox or with its permission.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor

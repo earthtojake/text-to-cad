@@ -18,9 +18,10 @@ else `/tmp/cad-<uid>`). The client and the daemon refuse a folder that
 another user owns or that others can write to. A shell inside an agent's
 sandbox that can open the door builds with the server's own rights, outside
 the sandbox -- in the Python its build names, too: a script's worker runs the
-interpreter the script was launched with -- by design (the door is how a
-sandboxed agent reaches the server), so the boundary is your user account, not
-the sandbox.
+interpreter the script was launched with; and the packages a `cad run` names
+(its `--with`, a script's `# /// script` block) the server installs with uv,
+the network included -- by design (the door is how a sandboxed agent reaches
+the server), so the boundary is your user account, not the sandbox.
 
 **The CAD Viewer and the MCP endpoint.** The server serves the CAD Viewer and
 the CAD app's MCP endpoint over HTTP on `127.0.0.1` (port 3245 unless you name

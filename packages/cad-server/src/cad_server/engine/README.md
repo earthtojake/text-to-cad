@@ -251,8 +251,9 @@ skill's `cad` command; `cad run`; a model run directly -- starts that installati
 Python (`places.engine`, `client._start`); one running is attached to, whatever its release. On a
 device with no current installation, the CAD app's server makes its own installation current, once
 (`installations.bootstrap`), as `cad setup` and `cad doctor` do. A model's own process -- the library,
-which never starts a server of its own environment -- starts none there, but in a base an installation
-made (`places.HOME`, `cad run`'s), whose installation's engine it starts; elsewhere it says, in one
+which never starts a server of its own environment -- starts none there, but in a base or an environment
+of a model's packages an installation made (`places.HOME`, `cad run`'s), whose installation's engine it
+starts; elsewhere it says, in one
 line, ``cad-server is not installed on this computer: install cad-server and run `cad doctor` once,
 then run this again`` (`client.NOT_INSTALLED`): the remedy the `cad` command's own line gives. No
 client starts its own release's engine beside the device's, and none stops an engine to start
@@ -395,14 +396,51 @@ while uv works -- and runs the arguments with the base's Python, in the caller's
 environment. The marker names the installation the base belongs to, which the distribution hands
 the engine as `places.HOME`: a process there reaches the device's one engine, and starts the current
 installation's when none runs (`client._start`), so the script, its worker and every other client
-share one engine. The project's own files and `.venv` are not read: the base is what
-the script imports. `cad run` is the way that needs nothing set up.
+share one engine. The project's own files and `.venv` are not read: the base, and the packages the
+model names (below), is what the script imports. `cad run` is the way that needs nothing set up, and
+the one way an agent builds.
+
+**A model's own packages.** A model that needs a package the base lacks names it in its script's
+inline metadata (PEP 723), a `# /// script` block whose `dependencies` lists requirements:
+
+```python
+# /// script
+# dependencies = ["pandas>=2", "./vendor/gears"]
+# ///
+```
+
+or, for a one-off, with `cad run --with REQ` (repeated, or a comma-separated list, as `uv run --with`
+takes it: a name, a pin, extras, a local folder or wheel). `cad run` reads both
+(`cad_server._internal.extras`) and runs the script in **an environment of its packages**:
+`cad[build123d]` as the base has it (the installation's release, source tree or wheel) and those
+requirements, resolved together by uv on the engine's Python with the base's link mode, find-links and
+index settings. It is made once, as the base is -- by the device's engine when one runs (`{"op": "base",
+"key", "with"}`, `extras.Making`), its lines said as they come, else by `cad run` itself -- at
+`base/<key>` beside the base: its key digests the base's inputs, the release among them, and the
+requirements normalized, each once and sorted (`extras.normalized`: a local path made absolute, against
+the working folder for `--with` and the script's folder for the header; a name as PEP 503 spells it,
+its extras sorted, its specifier without spaces), so `--with pandas` and a header's `Pandas` share one.
+Its marker names the installation and the requirements (`with`): a process there reaches the device's
+engine as one in the base does, and names its Python in its orders, with the requirements `cad run
+--with` gave it (`places.RUN_WITH`); the engine builds the script in a warm worker of that Python, as
+for **a Python of the script's own** below, of one release with the engine, so no update notice is
+said. A header's `requires-python` the server's Python does not meet is refused in one line, before
+anything is made. Making one removes the environments of models' packages of other releases, but one a
+process runs from, which a later making removes (`extras._collect`; the bases are their releases',
+`releases.collect`). What uv cannot do is said in one line (`base.failure`): requirements it cannot
+resolve beside the kernel's pins, with its reason -- `build123d<0.1 cannot be resolved beside
+cad[build123d] 0.10.0: Because ...` -- and a package its cache lacks where the network cannot be
+reached, by name -- `the environment of the model's packages needs the network once, for pandas, which
+uv's cache does not hold: ...`. The record of a document a `cad run --with` built names the
+requirements it was given (`with`), and the command that builds it again gives them again (**The
+rebuild command**); a header's are its script's, so `cad run` and the script build it again. With no
+package named, `cad run` runs the base, as ever.
 
 **A Python of the script's own.** A script run by any other Python that has the library -- a venv's
 `python model.py`, `uv run`, a person's own interpreter with `cad[build123d]` -- names that Python in
 each order that starts or reaches its worker (`contract.interpreter`: its executable, its
 environment, the library's release and its worker contract); a process in a base (`places.HOME`)
-names none. The engine builds such a script in a warm worker running that Python
+names none, and one in an environment of a model's packages names its own (above). The engine builds such a script in a warm worker running that Python
 (`Daemon.caller`, the worker service's `interpreter="lease"`), its import path that environment's own,
 so the script's own packages import in its worker as they do in its run; one whose environment is the
 base itself (an installation that carries the kernel) is built there as any other. The worker is
@@ -498,7 +536,8 @@ again.
 ## CLI
 
 ```
-python SCRIPT.py                             the models the script explicitly calls
+cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
+                                             in an environment of the library's, with its kernel)
 cad export SRC DST [DST ...] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
                                              (.glb, .stl, .3mf: to the other two mesh kinds)
@@ -524,7 +563,7 @@ cad delete DOC [DOC ...] [--json]        each document deleted: its record, its 
 `python -m cad_server.engine VERB ...` takes the same verbs, the engine's own entry.
 
 Every `SRC` and `DOC` is an on-disk CAD file's path or a document's id (`ids`): a model's id is
-what `python SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
+what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
 id is read as the engine holds it, never built: one it does not hold is refused with the command
 that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`
 and `x.py::fn` are refused as any other file that is no document is.
@@ -849,8 +888,9 @@ between requests: an idle worker holds no project folder (on Windows, one a proc
 cannot be renamed or deleted). A meshing or reading pool's processes exit with the process that
 started them, however it ends.
 
-A worker is an interpreter -- the base's Python, the one `cad run` ran the script with, or the Python
-a script was run with directly where that is not the base's (**Running a model**) --; a run is the
+A worker is an interpreter -- the base's Python, the one `cad run` ran the script with (the base's, or
+an environment of the model's packages'), or the Python a script was run with directly where that is not
+the base's (**Running a model**) --; a run is the
 script in its caller's environment. A build goes to its script's live worker of its Python whatever
 the caller's environment but for what shapes the interpreter's import system (`places.RESTARTS`): `PYTHONPATH`, `PYTHONHOME`, `PYTHONSAFEPATH`,
 `PYTHONNOUSERSITE`, `PYTHONUSERBASE` and `PYTHONPLATLIBDIR`. A relative `PYTHONPATH` entry is the
@@ -1053,10 +1093,11 @@ one id is one document.
 distribution names the folder, `places.state_dir`): it points; a document's bytes
 are the cache's, in the cache folder (**The cache**).
 Every record has one shape, `{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?, revision, built, created?, facts?,
-program?, python?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart needs
-and no more. `kind` says what it is: `model` (`home` and `entry`, its script and function; the
-command that builds it again is `cad run` of its home, or, where its last run was in a Python of its
-own, `python`, that Python and its home), `shape` (a shape handed over:
+program?, python?, with?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart
+needs and no more. `kind` says what it is: `model` (`home` and `entry`, its script and function; the
+command that builds it again is `cad run` of its home, with the requirements its last run's `cad run
+--with` was given, `with`, or, where its last run was in a Python of its own, `python`, that Python and
+its home), `shape` (a shape handed over:
 `program`, where there was one, names the program that showed it, and nothing builds it again) or
 `file` (a CAD file a page opened: its path, `opened` and `pinned`, never a revision or bytes). A
 model's and a shape's hold their revision and when they were built, their name and a build's facts
@@ -1262,12 +1303,14 @@ Where none can be read, the budget alone applies. `Pressure.simulate` is the tes
 **The rebuild command.** A document that is not held -- `unsaved` -- names the exact
 command that builds it again: `cad run` and the script that defines its model -- never a
 program that imported it and called it, a check script, whose next run may do something else -- the engine that says it is the one `cad run` reaches, and its
-python has the kernel a bare `python` may lack; for one its last run built in a Python of its own (its
-record's `python`: a venv's, with packages the base lacks), that Python and the script, which `cad run`
-could not build -- from the daemon's record of it, or after a
-restart the registry's. Each word is quoted for the shell a person pastes it into (`records.rerun`):
-`shlex.quote` on POSIX; on Windows the double quotes cmd.exe and PowerShell both read, only where a
-space or a quote needs them (`subprocess.list2cmdline`), since to cmd.exe a single quote is part of
+python has the kernel a bare `python` may lack -- with `--with` and each requirement its last run's
+`cad run --with` was given (its record's `with`; a header's are its script's, which `cad run` reads
+again); for one its last run built in a Python of its own (its record's `python`: a venv's, with
+packages the base lacks), that Python and the script, which `cad run` could not build -- from the
+daemon's record of it, or after a restart the registry's. Each word is quoted for the shell a person
+pastes it into (`records.rerun`): `shlex.quote` on POSIX; on Windows the double quotes cmd.exe and
+PowerShell both read, only where a space, a quote or an operator of cmd.exe's needs them
+(`records._windows`: `"pandas>=2"`, a redirection bare), since to cmd.exe a single quote is part of
 the path. A shape handed over has none: its words say that a program the engine did
 not run showed it, and that only running that program again hands it over again. A child model's is its own script too. The page
 reads it from its document's 404 (`GET /api/v1/documents/<id>`: `{"error", "hint", "state"}`; a read of

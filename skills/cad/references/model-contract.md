@@ -312,8 +312,8 @@ it again.
   and `cad_show` alike (`cad status`: `unsaved`, or `detached` once its script is gone).
   Running it updates the same document and its open pages.
 - **Each document has a record** in text-to-cad's state folder (`documents/<uuid>/document.json`:
-  the script and function that build it (the rebuild command is always `cad run` of that script); never
-  geometry). The home lists the records, models and files alike, pinned first, then by
+  the script and function that build it (the rebuild command is `cad run` of that script, with the
+  `--with` its last run was given); never geometry). The home lists the records, models and files alike, pinned first, then by
   last activity. A record whose
   script is gone is detached: listed, saying so, with no rebuild command. Nothing else is
   written beside your files: no record of a run.

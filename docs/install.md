@@ -438,6 +438,20 @@ it; otherwise the server makes it as it starts, in the background (with a plugin
 the first start of an app's CAD app), and a first model or view waits for it. A model run so
 imports what that environment holds: the library (`cad`), build123d and what they bring.
 
+A model that needs another package names it at the top of its script, in Python's inline
+script metadata, and `cad run` installs it beside the kernel once, in an environment of its
+own that the server keeps beside that one for the runs after:
+
+```python
+# /// script
+# dependencies = ["pandas>=2"]
+# ///
+```
+
+`cad run --with pandas model.py` does the same for one run (repeat `--with`, or separate
+requirements with commas; a local folder or wheel works too). A requirement that cannot be
+installed beside the kernel's own is refused in one line, with uv's reason.
+
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
 `pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,

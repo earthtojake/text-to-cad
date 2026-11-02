@@ -126,7 +126,7 @@ cad run src/chassis/frame.py
 cd src && cad run -m chassis.frame
 ```
 
-Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src python
+Without packages, `PYTHONPATH` names the import root (`PYTHONPATH=src cad run
 src/chassis/frame.py`), a relative entry read from the folder the command runs in, as
 Python reads it; the only path a run adds is the script's own folder, last, so nothing beside the
 script shadows an installed package. A module and a same-named
