@@ -11,6 +11,7 @@ import xml.etree.ElementTree as ET
 from cad.engine import mesh_uri
 from cad._internal.findings import FindingsReport
 from cad._internal.xml_common import duplicate_values, display_path
+from cad.engine.errors import UserError
 
 URDF_SUFFIX = ".urdf"
 SUPPORTED_JOINT_TYPES = {"fixed", "continuous", "revolute", "prismatic"}
@@ -40,7 +41,7 @@ _INERTIA_KEYS = ("ixx", "ixy", "ixz", "iyy", "iyz", "izz")
 _AXIS_UNIT_TOLERANCE = 1e-3
 
 
-class UrdfSourceError(ValueError):
+class UrdfSourceError(UserError, ValueError):
     pass
 
 

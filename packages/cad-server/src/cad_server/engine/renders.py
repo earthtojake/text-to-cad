@@ -18,11 +18,12 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cad_server.engine.supervisor import Gone
+from cad.engine.errors import UserError
 
 __all__ = ["Refused", "Renders", "answer_png"]
 
 
-class Refused(ValueError):
+class Refused(UserError, ValueError):
     """A request the document does not offer, refused by name before anything was drawn."""
 
 

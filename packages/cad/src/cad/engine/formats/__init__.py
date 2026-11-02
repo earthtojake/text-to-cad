@@ -40,6 +40,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
+from cad.engine.errors import UserError
 
 if TYPE_CHECKING:  # a reader's module loads no kernel until it reads (the viewer resolves a robot's meshes here)
     from cad.engine.mesh_format import Mesh
@@ -54,7 +55,7 @@ ROBOTS = (".urdf", ".sdf", ".srdf")
 DRAWING = ".dxf"
 
 
-class FormatError(ValueError):
+class FormatError(UserError, ValueError):
     """A file its reader cannot read as what its suffix says, said by name before anything is drawn."""
 
 

@@ -56,6 +56,7 @@ import fnmatch
 import math
 from dataclasses import dataclass
 from typing import Any
+from cad.engine.errors import UserError
 
 __all__ = ["ANIMATIONS", "Animation", "AnimationError", "INTERPOLATIONS", "Resolved", "Track", "animation",
            "from_json", "from_record", "harvest", "record", "to_json"]
@@ -71,7 +72,7 @@ PATHS = {"translation": ("translation",), "rotation": ("translation", "rotation"
          "pose": ("translation", "rotation")}
 
 
-class AnimationError(ValueError):
+class AnimationError(UserError, ValueError):
     """An animation the build will not keep, said by name."""
 
 

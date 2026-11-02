@@ -555,10 +555,11 @@ def rotate_token() -> str | None:
 def _reportable(report: dict[str, Any]) -> bool:
     """Whether a failed build's error is a mistake in cadgen's own code, for its page to offer to report:
     what telemetry counts as a crash of a build (``analytics.told_signature`` of the report's error as the
-    verbs tell it, ``api.told_error``). The model's own error -- its code, a library it called, the kernel
-    refusing a call, cadgen refusing what it was given -- is the model's to correct, and is not. One rule
-    for both, so the tracker hears of what telemetry would. Never raises: a failure it cannot tell is
-    reported."""
+    verbs tell it, ``api.told_error``). By the error's class first (``cad.engine.errors``: a ``UserError`` is not,
+    any other ``CadError`` is), else by the frame rule. The model's own error -- its code, a library it
+    called, the kernel refusing a call, cadgen refusing what it was given -- is the model's to correct, and
+    is not. One rule for both, so the tracker hears of what telemetry would. Never raises: a failure it
+    cannot tell is reported."""
     try:
         from cad.engine.api import told_error
         from cad_server import analytics

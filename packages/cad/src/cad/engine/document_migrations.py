@@ -12,11 +12,12 @@ import json
 import math
 from dataclasses import MISSING, fields
 from typing import Any
+from cad.engine.errors import UserError
 
 MIGRATION_GUID = "7406c53e-8344-4cf2-8b65-6f8708871215"
 
 
-class DocumentCompatibilityError(ValueError):
+class DocumentCompatibilityError(UserError, ValueError):
     """A document whose declared format cannot be safely read or converted."""
 
 

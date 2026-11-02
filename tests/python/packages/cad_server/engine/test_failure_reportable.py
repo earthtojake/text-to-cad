@@ -1,6 +1,7 @@
 """Whether a failed build is cadgen's to fix, for its page to offer Report Issue (``daemon._reportable``):
-telemetry's rule for a build's crash (``analytics.told_signature``) read from the report's error, its
-whole traceback kept as facts (``build._raised``). Real builds, in this process."""
+telemetry's rule for a build's crash (``analytics.told_signature``) read from the report's error -- by its
+class first (``cad.engine.errors``: ``owner``), else by its whole traceback kept as facts (``build._raised``).
+Real builds, in this process."""
 
 from __future__ import annotations
 
@@ -12,6 +13,8 @@ from pathlib import Path
 from unittest import mock
 
 from cad.engine import build as engine_build
+from cad.engine.errors import InternalError
+from cad_server import analytics
 from cad_server.engine import daemon
 
 SCRIPT = """
@@ -39,6 +42,13 @@ def rounded():
 @model
 def mistyped():
     return bd.Box(10, 10, 10).fillet(1, "edges")
+
+
+@model
+def refused_by_the_person():
+    from cad.engine.errors import UserError
+
+    raise UserError("the person's own refusal, raised where cadgen's code would be")
 
 
 @dxf("plate.dxf")
@@ -77,7 +87,10 @@ class FailureReportableTest(unittest.TestCase):
         self.assertFalse(daemon._reportable(mistyped), mistyped["raised"])
         refused = self.failed("solid_drawing")  # cadgen refusing what it was given (``ExportRefused``)
         self.assertIn("3D", refused["error"])
+        self.assertEqual(refused["raised"]["owner"], "user")  # by its class: a ``UserError``
         self.assertFalse(daemon._reportable(refused))
+        self.assertEqual(self.failed("refused_by_the_person")["raised"]["owner"], "user")
+        self.assertFalse(daemon._reportable(self.failed("refused_by_the_person")))
         self.script.write_text("def broken(:\n", encoding="utf-8")
         self.assertFalse(daemon._reportable(self.failed(None)))  # a script that does not parse
 
@@ -85,7 +98,19 @@ class FailureReportableTest(unittest.TestCase):
         with mock.patch.object(engine_build, "_finish", side_effect=KeyError("lost")):
             report = self.failed("plate")
         self.assertEqual(report["raised"]["type"], "KeyError")
+        self.assertNotIn("owner", report["raised"])  # no ``CadError``: the frame rule decides
         self.assertTrue(daemon._reportable(report))
+
+    def test_an_internal_error_is_reportable_whatever_its_frames_and_named_in_telemetry(self) -> None:
+        # Raised from the mock's own frame, the standard library's: the frame rule alone would not tell.
+        with mock.patch.object(engine_build, "_finish", side_effect=InternalError("an impossible state")):
+            report = self.failed("plate")
+        self.assertEqual(report["raised"]["owner"], "ours")
+        self.assertTrue(daemon._reportable(report))
+        from cad.engine.api import told_error
+
+        crash = analytics.told_signature(told_error(report), "build")
+        self.assertEqual(crash["type"], "cad.engine.errors.InternalError")
 
     def test_the_page_s_record_carries_it_and_a_worker_that_died_is_reportable(self) -> None:
         server = mock.Mock()

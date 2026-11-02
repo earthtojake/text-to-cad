@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import string
 from typing import Iterable
+from cad.engine.errors import UserError
 
 __all__ = [
     "UriError",
@@ -31,7 +32,7 @@ __all__ = [
 ]
 
 
-class UriError(ValueError):
+class UriError(UserError, ValueError):
     """Raised where JavaScript raises ``URIError``.
 
     ``decodeURIComponent`` throws on a malformed escape, on overlong UTF-8 and

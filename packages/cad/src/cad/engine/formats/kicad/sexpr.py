@@ -35,6 +35,7 @@ from __future__ import annotations
 import math
 import re
 from typing import Iterator
+from cad.engine.errors import UserError
 
 __all__ = [
     "Sym",
@@ -60,7 +61,7 @@ class Sym(str):
         return f"Sym({str.__repr__(self)})"
 
 
-class SexprError(ValueError):
+class SexprError(UserError, ValueError):
     """Bytes that are not one well-formed S-expression."""
 
 

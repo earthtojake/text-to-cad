@@ -44,12 +44,13 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
+from cad.engine.errors import UserError
 
 __all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "Kind", "Source", "View", "kind_of", "refused",
            "tolerance_of", "translate"]
 
 
-class ExportRefused(ValueError):
+class ExportRefused(UserError, ValueError):
     """An export the engine will not write, said by name before anything is written."""
 
 
