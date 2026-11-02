@@ -3,7 +3,7 @@
 `sample.dxf` is a 100 x 60 mm drawing carrying one of each thing the renderer
 has to get right: default-pen line-work, a red circle, a solid hatch with an
 island, TEXT, and a bulged LWPOLYLINE. `sample.drawing.json` is exactly what
-`GET /__cad/drawing` answers for it — what `DxfRenderer.browser.test.mjs`
+`GET /api/v1/documents/dxf/<id>/drawing` answers for it — what `DxfRenderer.browser.test.mjs`
 serves, so the browser test needs neither Python nor ezdxf.
 
 `layered.dxf` is the drawing with the structure a Layers section is for — five layers, a block

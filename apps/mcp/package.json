@@ -1,16 +1,16 @@
 {
-  "name": "@text-to-cad/mcp",
+  "name": "@cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.8.4",
+  "version": "0.10.0",
   "scripts": {
-    "build": "vite build",
+    "build": "vite build && vite build --config vite.shell.config.mjs",
     "test": "node scripts/run-tests.mjs",
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@text-to-cad/core": "*",
-    "@text-to-cad/ui": "*",
+    "@cad/core": "*",
+    "@cad/ui": "*",
     "lucide-react": "^1.61.0",
     "meshoptimizer": "^1.3.0",
     "react": "19.3.1",

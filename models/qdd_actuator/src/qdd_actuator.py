@@ -25,7 +25,7 @@ The assembled model carries the mechanism: every mount a rigid fastening, every
 turning member a revolute joint geared by the `drive` coupling, its two
 configurations, and the old `drive` clip as a motion. The old `inspect` and
 `teardown` clips, which run the drive while the stack opens to its stations, are
-GLB animations (`cadgen.gltf`).
+GLB animations (`cad.gltf`).
 """
 
 from __future__ import annotations
@@ -35,9 +35,9 @@ from bd_materials.core import RangeMaterial
 from threejs_materials import PbrProperties
 
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, gear_pair, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, gear_pair, mechanism_state
+from cad.gltf import animation
 
 import math
 

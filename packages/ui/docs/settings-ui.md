@@ -24,9 +24,9 @@ it, the file sidebar, Quick Edit, the view cube and Preview, with Preview's own 
 their tools, their tools' rows, their sidebar sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
 
-| The host (web, desktop) supplies | The shared UI decides |
+| The host (web, the CAD app) supplies | The shared UI decides |
 | --- | --- |
-| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
+| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@cad/ui/tab-store`, `kit/shell/fileView.js`) |
 | `chrome` (the navbar, `"page"`, or the view alone, `"bare"`), `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings), `colorScheme` (the person's theme and how it changes) | The navbar's order and look, over a file and over the home, the app menu (one menu in the viewer and on the home) and what a new issue says |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `promptFiles` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
@@ -47,32 +47,62 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   host keeps the view's own history (`history`: the CAD app's views, which no browser holds),
   **Back** and **Forward**, two arrows walking it as a browser's do, from file to file and to
   and from the home (a step like a file), each there always and disabled where it has
-  nowhere to go; then the open file's name, alone (no glyph: the name and, where it opens the
+  nowhere to go — on a desktop's row alone: a phone's (`useViewerMobile`, a view under 600px)
+  has no room for them and draws neither, the history kept; then the open file's name, alone (no glyph: the name and, where it opens the
   name menu, its chevron), and its ⋯. Each of these that
   is a control (`NAV_ITEM_CLASS`) is transparent at rest, takes the same accent background
   while the pointer is on it and while its menu is open, has a pointer cursor and no tooltip:
   it says what it is. The name
   is that control where it opens the name menu (below), where the view can show another
   document; where it cannot it is plain text. The ⋯
-  is the file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host can do it, and no ⋯ where it can do none. The name has
+  is the file menu, stock shadcn items and submenus (`DropdownMenuSub`), the menu and each
+  submenu shadcn's own width (`min-w-[8rem]`, sized to its items: no width of their own), in this order:
+  **Copy path**; **Copy link** (the document's page with a fresh link, `<engine origin>/<id>?token=<link>`,
+  the address the page itself holds: on every document, model or file of any kind, always enabled,
+  its source there or not; copied silently, as Copy path is; `fileActions.perform["copy-link"]`); **Open in**, a submenu of **Browser** (the document's page in the person's
+  browser: the CAD app's, where a launch carried the web viewer's page, `fileActions.perform.browser`)
+  and the desktop's file manager by its plain name — **Finder** on macOS, **File Explorer** on
+  Windows, **File manager** on Linux (`reveal`); then, where the host has this computer's apps
+  (`fileActions.apps`), in groups parted by separators: the apps that take the source (a model's
+  script: Visual Studio Code, Cursor …; a file's: FreeCAD, Bambu Studio …, by their product names,
+  untranslated as Finder is); each file the model's last build wrote that is on disk, its apps as
+  **App (file name)** (FreeCAD (bracket.step)); and **Default app**, the OS's own handler for the
+  source. A group with no item is left out with its separator, and an export whose file is gone is
+  left out. The apps are asked for as the menu opens, never before: what needs no answer is there
+  at once, the apps join it when it comes, and a failed or slow answer leaves the menu as without
+  them. Choosing one is counted as `file_open_app`, never which app. Then the host's own items, the CAD viewer's
+  **Export**, a submenu of the formats the document's kind writes (where the host can download,
+  the web viewer's). Each only where the host can do it. A model's document, which has no file of
+  its own, has the same menu on the script that builds it (its envelope's `source.path`,
+  `FileMetadata.sourceFile`): Copy path copies the script's path and the file manager reveals it,
+  while Browser opens the model's own page; where the engine names no script, only Browser and
+  Export. A document whose source was moved or deleted (a model's script gone or never on disk, a
+  file gone: the envelope's `source.present` false, `FileMetadata.sourceMissing`) keeps Copy path
+  (where it was) and draws what opens the source disabled, with one hint, **The source was moved
+  or deleted.** (`file.sourceMissing`, on a wrapper, as shadcn hints a disabled control): Open in
+  itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
+  needs no source and stays enabled, its Finder disabled. The source's apps and Default app are
+  disabled the same way; an export on disk still opens. Open in's entries are one list, each with
+  whether it opens now and why not (`openInMenu`). There is no Copy link: a page's link carries its
+  credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
-  and the name 4px in from its edges, so about 7px separate one glyph from the next. Right, only what a host or a file adds: first, the
-  update — a blue download button, there only when the host
-  found a newer release, whose menu says the step to it, how this host updates and what
-  is new. Then, while a person has put an alert card away: the card's own icon (a circle
+  and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
+  kept clean for the update's nudge, only what a host or a file adds, in this order: first, while
+  a person has put an alert card away, the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
-  navbar action. Then the host's own actions: inline, where the host can show the view full size,
-  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button); the web viewer's
-  **Export**; last, **Open in browser** (the CAD app's: an arrow out of a box, a ghost icon button,
-  where a launch carried the web viewer's page of what it shows). A CAD file publishes no
+  navbar action. Then the host's own actions (`actions`): inline, where the host can show the view full size,
+  **Full size** (the CAD app's: two diagonal arrows, a ghost icon button) — today the slot's
+  only control. Last, outermost, the update — the blue update button (a download icon and
+  nothing else, no popover), there only while the host's install is behind, which updates when
+  pressed. Export and Open in are the file menu's, never here. A CAD file publishes no
   navbar action but that icon. The person's own settings, the theme among them, are never here: they are the app
   menu's.
 
   *Design note: the navbar carries nothing the view needs.* What a host or the file adds (the
-  update, an alert's icon, the host's actions) is the navbar's right end. The view's own
+  update, an alert's icon, the host's actions) is the navbar's right end; what can be done with
+  the document (copy its path, open it elsewhere, export it) is its ⋯, beside its name. The view's own
   controls are the strip's, in every host, with or without a navbar: **Projection**, **Display**
   and **Preview** end it; they act on the whole view, whatever tool is in hand, so they are no
   tools, and a new per-file button that is no tool goes with them. In Preview, Preview's own
@@ -81,7 +111,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
   A host's home has the same navbar, with only the logo and its app menu (without Back to
   files) and, where the host keeps the view's history, **Back** and **Forward** at the left
-  and, at the right end, the host's update, when there is one, and its actions — the same
+  (a desktop's alone) and, at the right end, the host's actions and, last, its update, when there is one — the same
   buttons, sizes and places as over a file. Under it,
   the page, after Figma's Recents, with no hero (no wordmark, tagline or links: GitHub and
   Discord are the app menu's, X its footer's "Made by"; no light/dark button: Theme is the
@@ -97,7 +127,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   the **grid/list switch**, two `icon-xs` buttons, the chosen one on the `muted` fill; and last,
   where the host's computer has a file chooser (`ModelLibrarySource.pick`), **Open**, a stock
   `xs` button (24px) with the folder icon and "Open", which opens the desktop's own chooser
-  (`POST /__cad/pick`) and shows the file picked. Then the
+  (`POST /api/v1/local/pick`) and shows the file picked. Then the
   documents opened or built before, pinned first, then by last activity. The home is the
   library and Open alone: no folder of a launch. It is a **centred column**, 1128px wide at most,
   on 24px gutters of its own (not the navbar's 16px, which the logo keeps), 44px under the navbar,
@@ -112,16 +142,15 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   name, then its `updated` and `created` ages with no verb, muted, in two 160px columns (Created dropped under a 560px page), transparent with the
   hover fill. Each has a **pin** toggle and **one ⋯ menu** (a stock DropdownMenu), shown on hover
   or focus, at a tile's picture's top-right (Figma's star) or a row's end; a pinned one keeps its
-  filled pin at rest. The menu holds Open, a file's Copy path and Reveal where the host can, Pin or
+  filled pin at rest. The menu holds Open, a file's Copy path, Copy link (every card's) and a file's Reveal where the host can, Pin or
   Unpin, a rule, then Delete (destructive), which asks first in a stock AlertDialog saying
   what goes and what stays on disk ("Delete wheel?"), Cancel / Delete; the card leaves the
   list at once. Every model is a tile and a row of its own, nothing folded, opened, pinned and
   deleted alone, and nothing on the Home or in the menus ties a model to the script it was
-  built from: a model shows its name, its glyph and its age; its menu is Open, Pin or Unpin and
+  built from: a model shows its name, its glyph and its age; its menu is Open, Copy link, Pin or Unpin and
   Delete, with no Copy path or Reveal (a file's alone); a search matches a model's name (a
   file's name and path); and the Delete dialog's words name no path.
-  The update shows only for a release
-  later than the version the page names, whatever the host says. A file that will not open
+  A file that will not open
   shows a page under the navbar: "File does not exist" and the file's path, or "Could not
   open that file" and the reason, each with **Go home** where the host has a home. A view
   drawn as a picture (`compact`, the home's thumbnails) has no navbar either, and draws the
@@ -130,11 +159,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   A host that shows the view alone (`chrome: "bare"`: the CAD app's file handler, Codex's *Open
   with CAD*, one file whose host's file tree is its navigation) draws no navbar over the file or
   over a page that will not open: no logo or app menu, no Back and Forward, no name or name menu,
-  no ⋯, no Export and no Open in browser. What it still adds is its corner at the viewport's
+  no ⋯ (so no Export and no Open in). What it still adds is its corner at the viewport's
   top-right, first in the column of the host's notice and Quick Edit (`ViewportTopRight`): where
   the host can show the view full size, **Full size**; then, while its install is behind, the
-  update as a notice — the update card itself, Send to agent or Copy prompt, closable for the
-  view — rather than the blue button. In Preview it is gone with the rest of the column.
+  blue update button, the navbar's own: an icon, no text and no popover, which updates when
+  pressed. In Preview it is gone with the rest of the column.
 - **Name menu** is a popover under the file's name, aligned to the name's left edge, 17.5rem
   (280px, the explorer's natural width) wide and never resized: two stock shadcn Tabs on top,
   **Models** and **Files**, in the explorer's type (`text-xs`, a 28px list) and each as wide as its
@@ -154,7 +183,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   own, starts it where the explorer was last in this tab (the tab's `explorer.folder`, kept as
   it moves), else in the person's home folder (the server's `home`), never in the folder of the
   script that built it. It lists one folder at a time — its subfolders, then its CAD files,
-  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/cadgen` and the
+  `.xbf` among them, hidden folders left out but the engine's cache (`~/.cache/cad` and the
   folders on the way to it), which holds each model's `documents/<id>/document.xbf` — in compact rows: one 24px
   line of 12px text each, its kind a small light glyph in one column 5px in from the row's
   left end and 4px before the name (a folder its disclosure chevron, with no folder icon; a
@@ -424,7 +453,7 @@ a curve and the area the engine's facts of it, shown once they are in). With one
 only that kind is taken: an edge's end is still its vertex under Vertices, and anywhere else a
 press takes nothing. Shift held, a press takes the point on the model as it is.
 
-The reading follows from the pair (`@text-to-cad/core/lib/viewer/measureEntities.js`), not from
+The reading follows from the pair (`@cad/core/lib/viewer/measureEntities.js`), not from
 where on each the pointer happened to be:
 
 - two vertices: the distance, with ΔX ΔY ΔZ;
@@ -648,7 +677,7 @@ Display is a choice of mode and the Grid switch, and nothing else: a mode has no
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
 the model's CAD edges, the default), **Shaded** (no edges), **Parts** (Solid with each part
 its own colour), **X-ray**, **Hidden line** and **Wireframe**, filtered by the view's
-injected capabilities (`viewFeaturesForKind`, `@text-to-cad/core/common/viewSettings.js`; the
+injected capabilities (`viewFeaturesForKind`, `@cad/core/common/viewSettings.js`; the
 rows and icons `DisplayModeOptions.js`): a STEP assembly
 offers all six, a STEP part file all but Parts, and a file without CAD edges (STL, 3MF, GLB,
 a robot) Solid, with Parts when it has several parts, objects or links. **Grid** draws the
@@ -726,7 +755,7 @@ what the host supplies, the person's settings in the order Language, Telemetry, 
   mainland China and Singapore read 简体中文, Traditional script or Taiwan, Hong Kong and Macau
   繁體中文, any Japanese 日本語, any Korean 한국어, anything else English. A language chosen
   overrides the inference until Automatic clears it. The host resolves the language and hands
-  it down as `environment.locale` (`@text-to-cad/ui/i18n`'s `useLanguage`); the shared UI holds
+  it down as `environment.locale` (`@cad/ui/i18n`'s `useLanguage`); the shared UI holds
   no locale of its own.
 - The host's own on/off settings (`appSettings`), a checkbox item each, in the order they
   come, checked at the right; a press turns one without closing the menu. An info icon after
@@ -746,20 +775,20 @@ what the host supplies, the person's settings in the order Language, Telemetry, 
   **Discord**.
 - Last, in gray, a footer of two rows: "v<version>", a link to its release notes, and under
   it "Made by @<handle>", the handle a link to the host's X account. A build that is not the release's
-  own adds its id to the version: `v0.7.15-dev.b80844940`, the commit it was built from.
+  own adds its id to the version: `v0.10.0-dev.b80844940`, the commit it was built from.
 
 Nothing of a file is in it: a file's view is
 [Display](#display-settings-and-section-primitives)'s. Every setting is the person's, not a
 view's or a tab's: the host keeps it where every view of theirs reads it (both apps: their
-settings, `settings.json` in cadgen's state directory), and a view reads it again whenever
+settings, `settings.json` in text-to-cad's state directory), and a view reads it again whenever
 the person comes back to the page.
 
-Every string of the chrome reads through `@text-to-cad/ui/i18n` (`useI18n().t`), English
+Every string of the chrome reads through `@cad/ui/i18n` (`useI18n().t`), English
 first: `en.js` holds every key, each other locale the same keys (a parity test), and a key a
 locale misses reads English. No view spells a word itself: `scripts/test/check-ui-strings.mjs`
 refuses English in JSX text, the attributes a person reads and a table's labels across
 `packages/ui/src`, `apps/web/src` and `apps/mcp/src` (a table entry says its `key` beside its
-English `label`), with an allow-list for what is no language. What a file or cadgen says (an alert's own title and message,
+English `label`), with an allow-list for what is no language. What a file or the engine says (an alert's own title and message,
 a part's name) stays as it was written. The loading and view-update lines are a closed
 vocabulary (`kit/status/loadingState.js`), English in the code and said in the view's language
 on screen (`kit/status/statusLabels.js`).
@@ -912,7 +941,7 @@ in the prompt as JSON. Larger packets are written to system temporary storage as
 one `.snapshot.json` and named by path. Drawing, selecting and typing write nothing.
 Captured 3D views preserve projection and lens. No PNG is rendered or attached.
 To render inline JSON, the receiving agent saves it to a temporary file first,
-then draws a view with `cadgen snapshot <document> <out.png> --annotation <file>
+then draws a view with `cad snapshot <document> <out.png> --annotation <file>
 --camera authored`.
 
 
@@ -921,9 +950,9 @@ note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
 shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
 `References:` and one reference per line; then each file that travels as a file by its
-label and path — `Snapshot (cadgen snapshot --annotation):` — or the compact object under
-`Snapshot JSON (cadgen snapshot --annotation):`. An agent draws each view with
-`cadgen snapshot SRC OUT.png --annotation PACKET --camera authored`.
+label and path — `Snapshot (cad snapshot --annotation):` — or the compact object under
+`Snapshot JSON (cad snapshot --annotation):`. An agent draws each view with
+`cad snapshot SRC OUT.png --annotation PACKET --camera authored`.
 
 ## Camera, animation and Preview
 
@@ -1102,7 +1131,7 @@ delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
 strip's buttons (Display and Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the navbar's right-hand controls (the
-update, an alert's icon, the host's actions: the CAD app's Full size and Open in browser among them), Preview's bar (Preview
+update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
 settings, Exit preview) and the
 Animation section's Reset are hinted by name — the strip's hints above their buttons, the
 others' below; there is no hint on the navbar's left (the logo,
@@ -1125,15 +1154,15 @@ job is queued or running and while a dropped connection is asked again (**Prepar
 part.step…**), dismissed the moment the file is handed to the browser's download (whose own
 downloads say the rest), with no success toast of its own; or, where the export fails, its
 error icon with the engine's one-line reason, kept until its dismiss, the one button a toast
-has. No other action earns a toast. Export is an icon button at
-the navbar's right end, named on hover as the view controls are, never in the tool strip.
-It opens a dropdown as the file's ⋯ does, on Display's surface and in its type, as wide as its
-items (shadcn's 8rem least), aligned to the button's end (`export/ExportControls.tsx`): the formats the file's kind writes, plain items, known
+has. No other action earns a toast. Export is the file's ⋯'s last item, a stock shadcn
+submenu (`DropdownMenuSub`), never the navbar's right end and never the tool strip. It opens
+the formats in the menu's own surface and type, as wide as its
+items (shadcn's 8rem least) (`export/ExportControls.tsx`): the formats the file's kind writes, plain items, known
 from the kind and the scene the view already holds, so nothing loads before it shows
 (`export/formats.ts`: a STEP's, an xbf's and a held model's STEP, STL, 3MF, GLB and XBF, and
 DXF where the view draws it flat on z=0, an xbf's XBF its own bytes; a GLB's, an STL's or a
 3MF's the other two mesh kinds), and nothing else: no job list, no rule, no note. A view
-whose file writes nothing has no Export. A format chosen closes the menu and starts its export
+whose file writes nothing has no Export. A format chosen closes the file menu and starts its export
 at once; nothing is asked first, and choosing it again is another export.
 A finished file is a plain browser download, started once by itself; where it lands is
 the browser's setting (its download bubble, or its Save dialog), and the page never says it
@@ -1147,7 +1176,7 @@ moment, or, where the clipboard refuses, a line under the box saying so. Errors 
 the host's `onError` are the host's to show. A card the
 model survives (a failed update, a warning beside the model) has an X, **Dismiss**: it puts
 the card away for as long as that alert stands, and its icon, first of the navbar's
-right-hand controls after the update button, brings it back. The dismissal goes once the alert changes or clears, or
+right-hand controls (before the host's actions and the update button), brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
 

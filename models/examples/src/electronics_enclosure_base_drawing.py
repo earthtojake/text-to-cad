@@ -7,7 +7,7 @@ constant a dimension references is imported from it, so moving a standoff in the
 moves the dimension here.
 """
 
-from cadgen.eng_drawing import Sheet, eng_drawing
+from cad.eng_drawing import Sheet, eng_drawing
 
 from electronics_enclosure_base import (
     FLOOR_THICKNESS,

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { encodeBase64 } from '@text-to-cad/core/client';
-import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
+import { encodeBase64 } from '@cad/core/client';
+import { createPromptContext, referencePart } from '@cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
@@ -264,14 +264,14 @@ describe('the fetch tunnel', () => {
       },
     }, 'app-capability');
     const tunnel = createTunnelFetch(server);
-    const posted = await tunnel(`${TUNNEL_ORIGIN}/__cad/parts?x=1`, { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, body: '{"a":1}' });
-    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/__cad/parts?x=1` } });
-    expect(calls[0].args.headers['x-cadgen-viewer']).toBe('1');
-    expect(calls[0].args.headers['x-cadgen-app']).toBe('app-capability');
+    const posted = await tunnel(`${TUNNEL_ORIGIN}/api/v1/parts?x=1`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, body: '{"a":1}' });
+    expect(calls[0]).toMatchObject({ name: 'cad_http', args: { method: 'POST', url: `${TUNNEL_ORIGIN}/api/v1/parts?x=1` } });
+    expect(calls[0].args.headers['x-cad-viewer']).toBe('1');
+    expect(calls[0].args.headers['x-cad-app']).toBe('app-capability');
     expect(new TextDecoder().decode(decodeBase64(calls[0].args.body))).toBe('{"a":1}');
     expect(posted.status).toBe(201);
     expect(await posted.json()).toEqual({ ok: true });
-    const head = await tunnel(`${TUNNEL_ORIGIN}/__cad/asset?file=a`, { method: 'HEAD' });
+    const head = await tunnel(`${TUNNEL_ORIGIN}/api/v1/local/files?path=a`, { method: 'HEAD' });
     expect([head.status, head.headers.get('content-length'), await head.text()]).toEqual([200, '11', '']);
   });
 
@@ -281,7 +281,7 @@ describe('the fetch tunnel', () => {
       calls.push(args);
       return { structuredContent: { status: 200, headers: {}, body: '' } };
     } }, 'app-capability');
-    await createTunnelFetch(server)(`${TUNNEL_ORIGIN}/__cad/api/doc/part/version?after=v&wait=60`);
+    await createTunnelFetch(server)(`${TUNNEL_ORIGIN}/api/v1/documents/part/version?after=v&wait=60`);
     expect(new URL(calls[0].url).searchParams.get('wait')).toBe('0');
   });
 
@@ -294,21 +294,21 @@ describe('the fetch tunnel', () => {
         headers: { 'content-type': 'application/json', 'content-length': String(json.length) } } }),
     }, 'app-capability');
     const tunnel = createTunnelFetch(server);
-    const reply = await tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`);
+    const reply = await tunnel(`${TUNNEL_ORIGIN}/api/v1/documents`);
     expect([reply.headers.get('content-length'), await reply.text()]).toEqual([String(json.length), json]);
     encoding = 'br';
-    await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+    await expect(tunnel(`${TUNNEL_ORIGIN}/api/v1/documents`)).rejects.toThrow(TypeError);
   });
 
   it('turns a failed call into the TypeError fetch throws', async () => {
     const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }, 'app-capability'));
-    await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+    await expect(tunnel(`${TUNNEL_ORIGIN}/api/v1/documents`)).rejects.toThrow(TypeError);
   });
 
   it('reads a body longer than one reply a part at a time, each within the bound and naming the body it continues, and hands over the whole', async () => {
     const bytes = pattern(3 * TUNNEL_REPLY_MAX_BYTES + 1000);
     const parted = servingInParts(bytes);
-    const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+    const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/api/v1/local/files?path=big.stl`);
     expect([reply.status, reply.headers.get('content-length'), reply.headers.get('content-range')]).toEqual([200, String(bytes.length), null]);
     expect(same(new Uint8Array(await reply.arrayBuffer()), bytes)).toBe(true);
     expect(parted.ranges).toEqual([0, 1, 2, 3].map(part => `bytes=${part * TUNNEL_REPLY_MAX_BYTES}-${Math.min(bytes.length, (part + 1) * TUNNEL_REPLY_MAX_BYTES) - 1}`));
@@ -323,7 +323,7 @@ describe('the fetch tunnel', () => {
       servingInParts(bytes, { etag: first => (first ? '"rewritten"' : '"v1"') }),
       servingInParts(bytes, { offset: first => (first ? first + 1 : 0) }),
     ]) {
-      const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/__cad/asset?file=big.stl`);
+      const reply = await createTunnelFetch(parted.server)(`${TUNNEL_ORIGIN}/api/v1/local/files?path=big.stl`);
       await expect(reply.arrayBuffer()).rejects.toThrow(TypeError);
     }
   });
@@ -341,7 +341,7 @@ function same(a: Uint8Array, b: Uint8Array) {
 }
 
 /**
- * A server that answers a ranged GET as `cadgen mcp` does (`cadgen/mcp/tunnel.py`) for a body
+ * A server that answers a ranged GET as `cad-mcp` does (`cad_server/mcp/tunnel.py`) for a body
  * longer than the range: its part (206). `etag` names the body a part is of, `offset` moves where
  * a part starts, and `alter` changes a part's bytes.
  */

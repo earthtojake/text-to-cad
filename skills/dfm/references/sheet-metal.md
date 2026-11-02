@@ -34,9 +34,8 @@ that change the current decision; otherwise state provisional assumptions.
   risks when relevant. Missing tooling or a valid unfold leaves these unverified;
   a valid STEP solid alone does not establish forming feasibility.
 
-Use $dxf, when available, for drawing/flat-pattern work and $sendcutsend only for
-that supplier's requested handoff. Neither a clean DXF nor a successful upload
-establishes that all bends can be made.
+A clean DXF or flat pattern, or a successful upload to a supplier, does not
+establish that all bends can be made.
 
 ## Worked reasoning example
 

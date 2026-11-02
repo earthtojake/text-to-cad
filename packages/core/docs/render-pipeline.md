@@ -1,6 +1,6 @@
 # Render Pipeline
 
-`@text-to-cad/core` exposes a staged render for the viewer, the docs hero and the OCCT parity
+`@cad/core` exposes a staged render for the viewer, the docs hero and the OCCT parity
 bench's headless page: a family's scene builder makes the scene, `renderModel` draws it on a
 canvas, and `captureModel` (the parity page's) returns its pictures.
 
@@ -22,13 +22,13 @@ The stages keep ownership narrow:
 
 - A family builder owns its scene: `createGlbScene` (`lib/render/glbScene.js`),
   `buildMeshScene` (`lib/render/meshScene.js`), `createRobotScene`
-  (`lib/urdf/robotScene.js`), `createXbfScene` (`lib/xbf/xbfScene.js`, a cadgen engine
+  (`lib/urdf/robotScene.js`), `createXbfScene` (`lib/xbf/xbfScene.js`, an engine
   document read by `loadXbfDocument` from the engine that serves it: one geometry per
   prototype over its XBM2 buffer's own typed-array views, one placed group per instance, CAD
   edges by class from the edge table, faces, edges and vertices picked by ordinal; the
   document's edges are the view's `edges`, which the scene wears through `setEdgeLook`; its
-  regular modes are drawn in the engine's look, `GET /api/look`, and its environment image,
-  `GET /api/look/environment`, read beside the document: `lib/xbf/xbfLook.js`). Each returns the
+  regular modes are drawn in the engine's look, `GET /api/v1/look`, and its environment image,
+  `GET /api/v1/look/environment`, read beside the document: `lib/xbf/xbfLook.js`). Each returns the
   scene contract of
   `lib/viewer/sceneContract.js`, and each scene gives a sibling (`createSibling()`): a
   second scene of the same file with its own objects, materials and look over the first's
@@ -63,7 +63,7 @@ The stages keep ownership narrow:
   as the other: three sorts each object back to front and draws a two-sided one back faces first,
   OCCT draws them as they were displayed, which is most of what still differs.
 - `captureModel` draws the scene headless and returns its pictures, with no filesystem
-  writes. cadgen's stills are OCCT's (`cadgen snapshot`); this headless scene is what the
+  writes. the engine's stills are OCCT's (`cad snapshot`); this headless scene is what the
   renderer parity measurement drives beside OCCT (`scripts/bench/occt_parity.py`).
 
 ## Modules
@@ -71,7 +71,7 @@ The stages keep ownership narrow:
 ### `common/viewSettings.js` and `common/sceneSettings.js`
 
 `normalizeViewSettings(display)` is the strict public schema shared with the parity page's
-snapshot job and mirrored by `cadgen snapshot`'s `--display`. It preserves omitted groups and inherited appearance, defaulting
+snapshot job and mirrored by `cad snapshot`'s `--display`. It preserves omitted groups and inherited appearance, defaulting
 only `mode` to `solid`. A file's modes, in order, are `solid`, `shaded`, `parts`,
 `xray`, `hidden-line`, and `wireframe` (`VIEW_MODE_VALUES`); `grid` is a boolean
 switch every mode draws, off unless said. Appearance, camera, clip and exploded are
@@ -439,7 +439,7 @@ geometry whose key the new version still holds, and builds only the parts the ed
 Use this module for interactive browser canvases, including the docs hero.
 
 ```js
-import { renderModel } from "@text-to-cad/core/common/renderModel.js";
+import { renderModel } from "@cad/core/common/renderModel.js";
 ```
 
 `renderModel(THREE, model, options)` returns an interactive viewport API:
@@ -496,7 +496,7 @@ import {
   renderJobContext,
   renderModel,
   captureModel
-} from "@text-to-cad/core/common/renderMeshScene.js";
+} from "@cad/core/common/renderMeshScene.js";
 ```
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
@@ -548,10 +548,10 @@ that rest box.
   in its scene graph's order (a robot's scene attaches a link's meshes before the joints it
   carries, so its rows run down the tree from the root).
 
-It does not write files: its caller does. Consumers use compiled `@text-to-cad/core`
+It does not write files: its caller does. Consumers use compiled `@cad/core`
 exports; the OCCT parity bench bundles this entrypoint into a snapshot page of its own, built
 on demand outside the wheel, and loads it in a headless Chromium to compare with OCCT's stills.
-cadgen's own snapshots are drawn by OCCT and never load it.
+The engine's own snapshots are drawn by OCCT and never load it.
 
 ### `common/headlessScene.js`
 
@@ -564,11 +564,11 @@ document's), as the xbf renderer hands them to its scene in the viewer. A family
 `{ load(job, { resources }), build(THREE, loaded, job), release(loaded) }`, each a call to
 the module the viewer's renderer calls: `loadRenderGlbDocument` + `createGlbScene`,
 `loadRenderMeshByUrl` + `buildMeshScene`, `loadRobot` + `createRobotScene`. A robot is
-drawn from the payload cadgen resolved for it (`resolved.robot`: the articulation, the
+drawn from the payload the engine resolved for it (`resolved.robot`: the articulation, the
 visuals at their rest placements, each mesh by a URL the snapshot's asset server answers)
 and posed as it is built, at the articulation's opening (every control at rest, then an
 SRDF's `home` group state: where the viewer opens it) with the job's `resolved.controls` on
-top, the bench's control values (`cadgen snapshot` poses a robot by `--pose`).
+top, the bench's control values (`cad snapshot` poses a robot by `--pose`).
 
 `headlessSceneModel(THREE, scene, headlessSceneDress(context.sceneSettings))` dresses the
 scene exactly as the viewer's viewport dresses one it adopts, with the look
@@ -582,20 +582,20 @@ The still's tight frame reads a skinned or morphed mesh where the GPU draws it.
 
 A still of a robot is posed as the viewer opens it — every control at rest, then an SRDF's
 `home` group state — with the job's `resolved.controls` on top (`scene.setControlValues`,
-`common/articulation.js`), the parity bench's control values. `cadgen snapshot` poses a
+`common/articulation.js`), the parity bench's control values. `cad snapshot` poses a
 document's or a robot's mechanism by `--pose`: a mechanism state's name, or a JSON object of
 joint values; a Quick Edit packet carries the same as `jointValues`.
 
 ## Examples
 
-Docs usage, the hero: one GLB cadgen exported, read and played the way the viewer reads
+Docs usage, the hero: one GLB the engine exported, read and played the way the viewer reads
 and plays a GLB, and drawn by `renderModel` from a model of a root and its bounds:
 
 ```js
 import * as THREE from "three";
-import { buildGlbDocumentFromBuffer } from "@text-to-cad/core/lib/render/glbMeshData.js";
-import { createGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
-import { renderModel } from "@text-to-cad/core/common/renderModel.js";
+import { buildGlbDocumentFromBuffer } from "@cad/core/lib/render/glbMeshData.js";
+import { createGlbAnimationRuntime, setGlbAnimationTime } from "@cad/core/lib/render/glbAnimationRuntime.js";
+import { renderModel } from "@cad/core/common/renderModel.js";
 
 const glb = await buildGlbDocumentFromBuffer(await (await fetch("/hero/planetary.glb")).arrayBuffer(), {});
 const placed = new THREE.Group();                 // the file in CAD space: millimetres, Z up

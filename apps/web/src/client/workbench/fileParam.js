@@ -1,5 +1,5 @@
 /**
- * The document a page shows, in its URL's path: `/<id>` -- a document's id (`cadgen.engine.ids`): a
+ * The document a page shows, in its URL's path: `/<id>` -- a document's id (`cad.engine.ids`): a
  * model's, or a file's, which the server derives from its canonical path and registers when a
  * launcher or the page opens it -- and `/` for the home. A path that names no id is the home.
  */

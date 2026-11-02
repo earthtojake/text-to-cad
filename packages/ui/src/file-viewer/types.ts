@@ -13,6 +13,16 @@ export interface FileMetadata extends FileEntry {
    * `path`. Null for a document with no file of its own (a model's, by its id): no file menu.
    */
   navigationPath?: string | null;
+  /**
+   * For a document with no file of its own (`navigationPath: null`), the file it is built from (a
+   * model's script): what its file menu's Copy path and file manager act on. Its Files never start there.
+   */
+  sourceFile?: string;
+  /**
+   * The document's source (its file, a model's script) was moved or deleted: the file menu keeps
+   * Copy path (where it was) and draws what opens the source disabled, saying why.
+   */
+  sourceMissing?: boolean;
   size: number;
   extension: string;
   mime?: string;
@@ -20,7 +30,7 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-/** A document of the host's library, as the name menu's Recent lists it (`@text-to-cad/ui/library`'s rows). */
+/** A document of the host's library, as the name menu's Recent lists it (`@cad/ui/library`'s rows). */
 export interface RecentDocument {
   /** A file's absolute path, a model's id: what `navigation.openFile` opens. */
   path: string;
@@ -32,9 +42,32 @@ export interface RecentDocument {
   updated?: number | null;
   missing?: boolean;
 }
+/** One app Open in offers for a file: its id (what `openApp` names) and its product name, as drawn. */
+export interface OpenInApp { id: string; name: string }
+/**
+ * One of a document's files Open in lists: `source` (a model's script, a file document's file) or
+ * `export:<format>` (a file a model's last build wrote), its kind, its file's name, whether it is on
+ * disk now, and the apps this computer has that take it (in the host's order).
+ */
+export interface OpenInTarget { target: string; kind: string; name: string; present: boolean; apps: readonly OpenInApp[] }
+/** A document's files and their apps (`GET /api/v1/local/open-in`'s answer, for a CAD host). */
+export interface OpenInFiles { targets: readonly OpenInTarget[]; fileManager?: string }
 export interface FileActions {
   platform?: Platform;
-  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
+  /**
+   * Each action the host can perform on a document, by its path (a model's: its id) and, where the
+   * caller knows it, its document's id: `copy-path`, `copy-link` (its page with a fresh link, to the
+   * clipboard), `reveal`, `browser`.
+   */
+  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind"> & { id?: string }) => void | Promise<void>>>;
+  /**
+   * Open in's apps, where the host can open a document's files in this computer's apps: the files
+   * and their apps for the document on screen (asked as its file menu opens, never before; null or a
+   * failure, and the menu is as without), and one opened in one of them -- `app` an app's id, or
+   * `"default"`, the OS's own handler. Both or neither.
+   */
+  apps?: (entry: Pick<FileEntry, "path" | "kind">, options?: { signal?: AbortSignal }) => Promise<OpenInFiles | null>;
+  openApp?: (entry: Pick<FileEntry, "path" | "kind">, target: string, app: string) => void | Promise<void>;
 }
 /**
  * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's
@@ -50,7 +83,7 @@ export interface FileSource {
 export interface FileViewerState {
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
-   * holds (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
+   * holds (`@cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
    */
   renderers?: Record<string, JsonValue>;
 }
@@ -157,8 +190,13 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
-  /** Additive host actions at the navbar right, and persistent feedback below it. */
+  /** Additive host actions at the navbar right (the CAD app's Full size), and persistent feedback below it. */
   navbarActions?: ReactNode;
+  /**
+   * The host's own items at the end of the file's ⋯ menu, after Copy path and Open in: menu items or
+   * submenus (`DropdownMenuItem`, `DropdownMenuSub`), the CAD viewer's Export. Over a document only.
+   */
+  fileMenuItems?: ReactNode;
   overlay?: ReactNode;
   /** The file on screen, by its absolute path; null shows the host's home. */
   file: string | null;
@@ -176,7 +214,7 @@ export interface FileViewerProps {
    */
   appSettings?: readonly AppSetting[];
   /**
-   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), first among the navbar's
+   * The host's update button (`@cad/ui/update`'s `UpdateButton`), first among the navbar's
    * controls, while the host's install is behind; nothing otherwise.
    */
   update?: ReactNode;

@@ -1,6 +1,6 @@
 /**
  * 2D drawing rendering, shared by the CAD Viewer's DXF pane and the headless
- * snapshot bundle. Payload in (`GET /__cad/drawing`), Canvas 2D out.
+ * snapshot bundle. Payload in (`GET /api/v1/documents/dxf/<id>/drawing`), Canvas 2D out.
  *
  * Nothing here knows what DXF is: the backend already flattened the file into
  * primitives, and this is the half that turns those primitives into pixels.

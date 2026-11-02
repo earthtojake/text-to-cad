@@ -1,18 +1,18 @@
 # Docs site
 
-The documentation website (Next.js) — texttocad.dev. A @text-to-cad/core CLIENT: the
+The documentation website (Next.js) — texttocad.dev. A @cad/core CLIENT: the
 hero and example scenes render real CAD models in the browser through the
 same shared runtime the viewer uses.
 
 **PURPOSE** — the public documentation and marketing site.
 
-**MAY DEPEND ON** — compiled `@text-to-cad/core` exports and this app's own
-npm dependencies. Never another app or the running cadgen Python service.
+**MAY DEPEND ON** — compiled `@cad/core` exports and this app's own
+npm dependencies. Never another app or the running CAD server.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
 **DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install.
-`api.texttocad.dev`, which cadgen talks to, is its own project: [`apps/api`](../api/README.md).
+`api.texttocad.dev`, which the CAD server talks to, is its own project: [`apps/api`](../api/README.md).
 
 Normal development, checks and deployment use existing static assets and do not
 start Python; regenerating an asset is an explicit operation. The hero reads one
@@ -30,7 +30,7 @@ local development.
 
 ```bash
 npm ci --workspace packages/core --workspace apps/docs
-npm run build --workspace @text-to-cad/core
+npm run build --workspace @cad/core
 npm --prefix apps/docs run check    # the CI gate: lint + typecheck + build
 ```
 
@@ -41,14 +41,14 @@ Vercel, not this repo) must point at `apps/docs`.
 
 The hero is one GLB, `public/hero/planetary.glb`: the planetary gear model
 (`models/assemblies/src/planetary_gear_assembly/`) exported from its document by
-`cadgen export`, its parts, colours and its `meshCycle` motion, which the export bakes
+`cad export`, its parts, colours and its `meshCycle` motion, which the export bakes
 into a clip. It is committed as a PLAIN file (never LFS: Vercel serves it statically
 with no backend), one of the few CAD files Git holds
 (`tests/python/global/test_no_cad_assets_tracked.py` lists it, with a size cap). The page
 frames it, draws each part's folds and outline in the hero's edge colour, and plays the
 clip slowed to a display pace. The site and its checks read only that committed file;
 nothing in the docs app's build or `npm run check` reads the sample corpus. Refresh it
-by hand after changing the model using `cadgen export`. Preserve the `meshCycle`
+by hand after changing the model using `cad export`. Preserve the `meshCycle`
 clip and verify playback before committing the refreshed GLB.
 
 ## The shape of the app
@@ -58,7 +58,7 @@ src/app/         # routes
 src/components/  # site components incl. the CAD hero renderers
 src/lib/         # site utilities
 public/hero/     # the hero's GLB, a plain file (never LFS)
-scripts/         # loading-icon export and verification
+scripts/         # loading-icon export and verification; the install scripts' copy into public/
 ```
 
 ## Brand and loading icon
@@ -133,7 +133,7 @@ uppercase label, WORKS WITH THESE AGENTS, over the agents' logos (no section tit
 scrolling as skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from Lobe
 Icons (MIT) in the same tile, each tile blended into the page's background. The logos are not
 links; under them one line asks for a plugin request (a new GitHub issue). Overview has the
-plugin's description, which every manifest and the README's Overview say word for word
+plugin's description, which every manifest and the README's opening paragraph say word for word
 (`test_plugin_manifests.py` holds them to one text), and How it works: three steps from a model's
 script to the CAD viewer (`howItWorks`), the README's How it works. Then Skills. The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
@@ -152,7 +152,7 @@ the privacy policy. The site has the hero and the agents carousel. The page's co
 `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
 `/install` redirects to the hero's install box (`/#install`, `next.config.ts`): the stable address
-of the install instructions, which the CAD app's update card links to.
+of the install instructions.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 commands, what they do and the link to installing by hand to one text, and holds the `#install`
 anchor to the hero. The unboxed
@@ -194,7 +194,7 @@ as well.
 
 ## api.texttocad.dev
 
-cadgen's version feed and its telemetry receiver are their own Vercel project:
+The version feed and the telemetry receiver are their own Vercel project:
 [`apps/api/README.md`](../api/README.md). This site's part is the privacy policy
 (`src/app/privacy-policy/page.tsx`), which describes every event the receiver passes
 on: a new field is a change to it in the same PR.

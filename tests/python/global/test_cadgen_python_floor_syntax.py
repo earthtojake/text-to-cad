@@ -1,6 +1,6 @@
-"""Every cadgen source parses on the OLDEST Python the wheel says it supports.
+"""Every source of the three distributions parses on the OLDEST Python their wheels say they support.
 
-This shipped. ``cadgen/cli/store.py`` printed a clause with an f-string nesting
+This shipped. ``cad_server/cli/store.py`` printed a clause with an f-string nesting
 the same quote character inside its replacement field -- syntax PEP 701 made
 legal in 3.12 and nothing earlier. CI runs 3.12, so every test passed; the
 wheel declares ``requires-python >= 3.11``, so ``pip install cadgen`` succeeded
@@ -14,9 +14,9 @@ everything but f-strings: their grammar is not versioned, so on 3.12+ it
 accepts PEP 701's -- the very syntax that shipped. Below a 3.12 floor the
 f-strings are checked on the tokens as well.
 
-The floor is read from the package's own ``requires-python``, so raising the
-declared minimum automatically relaxes this check -- the two can never
-disagree.
+The floor is read from the library's own ``requires-python``, which the server's, the shim's
+and the alias distributions' declare alike (held here too), so raising the declared minimum
+automatically relaxes this check -- the two can never disagree.
 """
 
 from __future__ import annotations
@@ -30,10 +30,11 @@ import tomllib
 import unittest
 from pathlib import Path
 
-from tests.python.support.paths import repo_path
+from tests.python.support.paths import LIBRARY, PROJECTS, REPO_ROOT, SOURCES
 
-CADGEN_ROOT = repo_path("packages/cadgen")
-CADGEN_SRC = CADGEN_ROOT / "src"
+# Every pyproject.toml a distribution is built from: the three packages' and the alias's.
+PYPROJECTS = (*(project / "pyproject.toml" for project in PROJECTS),
+              *sorted((REPO_ROOT / "packages" / "aliases").glob("*/pyproject.toml")))
 
 # ast.parse only honours feature_version back to 3.7, and only forward to the
 # running interpreter. A floor outside that window is not a failure of the
@@ -41,14 +42,17 @@ CADGEN_SRC = CADGEN_ROOT / "src"
 _OLDEST_SUPPORTED_FEATURE_VERSION = (3, 7)
 
 
+def _requires_python(pyproject: Path) -> str:
+    return tomllib.loads(pyproject.read_text(encoding="utf-8"))["project"]["requires-python"]
+
+
 def _declared_floor() -> tuple[int, int]:
-    """The (major, minor) of the package's declared ``requires-python``."""
-    metadata = tomllib.loads((CADGEN_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    requires = metadata["project"]["requires-python"]
+    """The (major, minor) of the library's declared ``requires-python``."""
+    requires = _requires_python(LIBRARY / "pyproject.toml")
     match = re.search(r">=\s*(\d+)\.(\d+)", requires)
     if not match:
         raise AssertionError(
-            f"cadgen's requires-python ({requires!r}) has no '>=<major>.<minor>' floor; "
+            f"the library's requires-python ({requires!r}) has no '>=<major>.<minor>' floor; "
             "this check needs one to know which grammar to parse against",
         )
     return int(match.group(1)), int(match.group(2))
@@ -140,12 +144,19 @@ def _pep701_fstrings(source: str) -> dict[int, str]:
 
 def _sources() -> list[Path]:
     return sorted(
-        path for path in CADGEN_SRC.rglob("*.py")
+        path for source in SOURCES for path in source.rglob("*.py")
         if "__pycache__" not in path.parts
     )
 
 
-class CadgenParsesOnItsDeclaredFloor(unittest.TestCase):
+class EveryPackageParsesOnItsDeclaredFloor(unittest.TestCase):
+    def test_every_distribution_declares_the_one_floor(self) -> None:
+        library = _requires_python(LIBRARY / "pyproject.toml")
+        self.assertTrue(PYPROJECTS)
+        self.assertEqual({str(path.relative_to(REPO_ROOT)): _requires_python(path) for path in PYPROJECTS},
+                         {str(path.relative_to(REPO_ROOT)): library for path in PYPROJECTS},
+                         "one release is one product: every distribution of it runs on the library's Python floor")
+
     def test_every_module_parses_with_the_declared_minimum_grammar(self) -> None:
         floor = _declared_floor()
         if floor < _OLDEST_SUPPORTED_FEATURE_VERSION or floor > sys.version_info[:2]:
@@ -155,7 +166,7 @@ class CadgenParsesOnItsDeclaredFloor(unittest.TestCase):
             )
 
         sources = _sources()
-        self.assertTrue(sources, f"no cadgen sources found under {CADGEN_SRC}")
+        self.assertTrue(sources, f"no sources found under {SOURCES}")
 
         offenders = []
         for path in sources:
@@ -164,25 +175,25 @@ class CadgenParsesOnItsDeclaredFloor(unittest.TestCase):
                 ast.parse(source, filename=str(path), feature_version=floor)
             except SyntaxError as error:
                 offenders.append(
-                    f"{path.relative_to(CADGEN_SRC)}:{error.lineno}: {error.msg}",
+                    f"{path.relative_to(REPO_ROOT)}:{error.lineno}: {error.msg}",
                 )
                 continue
             if floor < (3, 12):
                 offenders.extend(
-                    f"{path.relative_to(CADGEN_SRC)}:{line}: {problem} (PEP 701, 3.12+)"
+                    f"{path.relative_to(REPO_ROOT)}:{line}: {problem} (PEP 701, 3.12+)"
                     for line, problem in sorted(_pep701_fstrings(source).items())
                 )
 
         self.assertEqual(
             [],
             offenders,
-            f"cadgen declares requires-python >= {floor[0]}.{floor[1]}, so every module "
+            f"the packages declare requires-python >= {floor[0]}.{floor[1]}, so every module "
             f"must parse under that grammar; these do not:\n  " + "\n  ".join(offenders),
         )
 
     def test_pep701_fstrings_are_caught(self) -> None:
         # Each is a SyntaxError on 3.11 that ast.parse(feature_version=(3, 11)) on 3.12+
-        # accepts. The first is the line that shipped in cadgen/cli/store.py.
+        # accepts. The first is the line that shipped in cad_server/cli/store.py.
         if not hasattr(tokenize, "FSTRING_START"):
             self.skipTest("this interpreter (< 3.12) rejects the syntax in ast.parse already")
         for illegal in (

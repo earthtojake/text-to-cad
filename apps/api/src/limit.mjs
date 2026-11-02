@@ -2,7 +2,7 @@
  * A limit on how often one caller may ask for something, kept in memory by the instance that answers (the
  * host reuses a warm one, and each instance keeps its own). /v1/forget is open to anyone and each deletion
  * spends PostHog's personal key, so it is limited per client address and per install id: a real client asks
- * once, when `cadgen telemetry off` runs, and again only while the deletion it owes has not been taken.
+ * once, when `cad telemetry off` (`cadgen telemetry off` before 0.9) runs, and again only while the deletion it owes has not been taken.
  * Beyond the limit, a refusal and the time to wait: nothing is queued. The host's firewall is the second
  * layer (README.md).
  *

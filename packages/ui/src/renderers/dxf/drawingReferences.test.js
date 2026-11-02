@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import test from "node:test";
 
-import { prepareDrawing } from "@text-to-cad/core/lib/drawing2d/index.js";
-import { parsePromptReference } from "@text-to-cad/core/prompt";
+import { prepareDrawing } from "@cad/core/lib/drawing2d/index.js";
+import { parsePromptReference } from "@cad/core/prompt";
 import {
   createDrawingScene, describeEntity, drawingHandleOf, drawingReferenceId, drawingUnits, layerRows, layersSectionShown
 } from "./drawingReferences.js";

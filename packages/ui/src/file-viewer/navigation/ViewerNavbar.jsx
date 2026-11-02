@@ -1,11 +1,12 @@
 import { ArrowLeft, ArrowRight, ChevronDown, Ellipsis } from "lucide-react";
-import { useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@text-to-cad/ui/primitives/tabs";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@cad/ui/primitives/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@cad/ui/primitives/tabs";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 
 import logo from "../../assets/logo-c.svg";
 import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js";
@@ -13,13 +14,14 @@ import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { useViewerMobile } from "../responsive.js";
 
 import { AppMenu } from "./AppMenu.jsx";
-import { entryMenu } from "./entry-menu.js";
+import { openInMenu } from "./entry-menu.js";
 import { FolderExplorer } from "./FolderExplorer.jsx";
 import { ModelList } from "./ModelList.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 
-// The file menu's item as telemetry names it (`usage/controls.js`).
-const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", reveal: "file_reveal" });
+// The file menu's items as telemetry names them (`usage/controls.js`): an app chosen in Open in is
+// `file_open_app`, never which app; Open in's Browser is counted by none.
+const FILE_ACTION_CONTROLS = Object.freeze({ "copy-path": "file_copy_path", "copy-link": "file_copy_link", reveal: "file_reveal", app: "file_open_app" });
 // The name menu's tabs as telemetry names them: Files is the explorer.
 const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
 
@@ -33,14 +35,17 @@ const TAB_CONTROLS = Object.freeze({ models: "models", files: "explorer" });
  * Left, in this order: the text-to-cad logo (the C mark, over the home and over a document
  * alike), which opens the app's menu (`AppMenu`: Back to home
  * where the host has a home, then the person's settings, feedback and links); Back and Forward,
- * where the host keeps the view's own history (`history`); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
- * where the view can show another; and the ⋯ menu of what the host can do with the file.
+ * where the host keeps the view's own history (`history`), on a desktop's row alone (a phone's has
+ * no room for them); the open document's name, which opens the name menu (Models, the host's library's models, and Files, the explorer)
+ * where the view can show another; and the ⋯ menu of what can be done with the document: Copy path,
+ * Open in (Browser, the file manager) and the host's own items (the CAD viewer's Export) — a model's
+ * Copy path and file manager acting on its script. The menu and its submenus are shadcn's own width.
  *
- * Right, only what a host or a file adds: the host's update button while its install is behind
- * (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the
- * CAD viewer's one: a dismissed alert's icon, which brings its card back); last, the host's own
- * actions (`actions`: the web viewer's Export). The colour scheme is the app menu's. A view's own
- * controls are never here: Display and Preview end its tool strip.
+ * Right, only what a host or a file adds, kept for the update's nudge, in this order: the file's own
+ * actions (the CAD viewer's one: a dismissed alert's icon, which brings its card back); the host's own
+ * actions (`actions`: the CAD app's Full size, inline); last, outermost, the host's update button
+ * while its install is behind (`update`, the blue `UpdateButton` from `@cad/ui/update`).
+ * The colour scheme is the app menu's. A view's own controls are never here: Display and Preview end its tool strip.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -86,19 +91,83 @@ function HistoryButtons({ viewHistory }) {
   </span>;
 }
 
-/** The ⋯ after the file's name: what the host can do with the file. A host that can do nothing has none. */
-function FileMenu({ path, platform, capabilities, onAction }) {
+// A disabled menu row, as shadcn's disabled item is: dimmed and deaf to the pointer (stock
+// `DropdownMenuSubTrigger` has no disabled style of its own).
+const DISABLED_ROW_CLASS = "data-[disabled]:pointer-events-none data-[disabled]:opacity-50";
+
+/**
+ * A disabled row with its reason as a hint. A disabled Radix item takes no pointer, so the hint is
+ * on a wrapper that does, as shadcn hints a disabled button.
+ */
+function WhyDisabled({ reason, children }) {
+  return <TooltipHint content={reason} side="right"><span className="block" data-disabled-reason="">{children}</span></TooltipHint>;
+}
+
+/**
+ * The host's apps for the document's files (`fileMenu.apps`), asked each time the menu opens and never
+ * before: null until they come, and null for good where the host has none, or fails or never answers
+ * (the menu is then as without them). An answer to an opening since closed is dropped.
+ */
+function useOpenInApps(open, apps) {
+  const [files, setFiles] = useState(null);
+  useEffect(() => {
+    if (!open || !apps) return undefined;
+    const controller = new AbortController();
+    setFiles(null);
+    Promise.resolve().then(() => apps({ signal: controller.signal })).then(answer => {
+      if (!controller.signal.aborted) setFiles(answer && Array.isArray(answer.targets) ? answer : null);
+    }, () => {});
+    return () => controller.abort();
+  }, [open, apps]);
+  return open ? files : null;
+}
+
+/**
+ * The ⋯ after the file's name: what can be done with the document. Copy path (where its source is,
+ * or was); Copy link (its page, with a fresh link: every document, its source there or not); Open in, a submenu of the places it opens in (`openInMenu`: the document's page in the
+ * browser, the CAD app's, and the desktop's file manager by its name; then, once the host answers,
+ * the source's apps, each export's apps and Default app, a separator between groups); then the
+ * host's own items (`items`: the CAD viewer's Export submenu). Each only where the host can do it,
+ * and no ⋯ where it can do none. While the source was moved or deleted, what opens it is drawn
+ * disabled with the reason: Open in itself where nothing in it can open, else each such entry.
+ */
+function FileMenu({ platform, capabilities, sourceMissing = false, apps = null, onAction, items: hostItems = null }) {
   const { t } = useI18n();
   const usage = useControlUsage();
-  const items = entryMenu(platform, capabilities, t);
-  if (!items.length) return null;
-  return <DropdownMenu modal={false}>
+  const [open, setOpen] = useState(false);
+  const files = useOpenInApps(open, apps);
+  const copy = capabilities.has("copy-path");
+  // A link to the page needs no source: always there where the host can make one.
+  const copyLink = capabilities.has("copy-link");
+  const openIn = openInMenu(platform, capabilities, t, { sourceMissing, files });
+  if (!copy && !copyLink && !openIn.length && !hostItems) return null;
+  const perform = (action, app) => { if (FILE_ACTION_CONTROLS[action]) usage.used(FILE_ACTION_CONTROLS[action]); onAction(action, app); };
+  const openable = openIn.some(item => item.enabled);
+  const label = t("file.openIn");
+  const trigger = <DropdownMenuSubTrigger data-open-in-menu="" disabled={!openable} className={DISABLED_ROW_CLASS}>{label}</DropdownMenuSubTrigger>;
+  return <DropdownMenu modal={false} open={open} onOpenChange={setOpen}>
     <DropdownMenuTrigger asChild><button aria-label={t("navbar.fileActions")} data-testid="file-actions" type="button"
       className={cn(NAV_ITEM_CLASS, "w-5 justify-center text-muted-foreground")}>
       <Ellipsis className="size-3.5" />
     </button></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="w-56" sideOffset={6}>
-      {items.map(item => <DropdownMenuItem key={item.action} onSelect={() => { usage.used(FILE_ACTION_CONTROLS[item.action]); onAction(item.action, path); }}>{item.label}</DropdownMenuItem>)}
+    <DropdownMenuContent align="start" sideOffset={6}>
+      {copy ? <DropdownMenuItem onSelect={() => perform("copy-path")}>{t("file.copyPath")}</DropdownMenuItem> : null}
+      {copyLink ? <DropdownMenuItem onSelect={() => perform("copy-link")}>{t("file.copyLink")}</DropdownMenuItem> : null}
+      {openIn.length ? <DropdownMenuSub>
+        {openable ? trigger : <WhyDisabled reason={openIn.find(item => item.reason)?.reason}>{trigger}</WhyDisabled>}
+        <DropdownMenuSubContent aria-label={label}>
+          {openIn.map((item, index) => {
+            const key = `${item.action}:${item.target ?? ""}:${item.app ?? ""}`;
+            const choose = () => perform(item.action, item.action === "app" ? { target: item.target, app: item.app } : undefined);
+            const row = <DropdownMenuItem data-open-in={item.action} data-open-in-app={item.app} disabled={!item.enabled} onSelect={choose}>{item.label}</DropdownMenuItem>;
+            return <Fragment key={key}>
+              {index && openIn[index - 1].group !== item.group ? <DropdownMenuSeparator /> : null}
+              {item.enabled ? row : <WhyDisabled reason={item.reason}>{row}</WhyDisabled>}
+            </Fragment>;
+          })}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub> : null}
+      {hostItems}
     </DropdownMenuContent>
   </DropdownMenu>;
 }
@@ -190,33 +259,37 @@ function FileName({ path, name: given, kind = "file", explorer, recent }) {
  *   Where the host's files can be browsed: the name menu's Files, from `folder` where given.
  * @param {{ list(): Promise<readonly import("../types").RecentDocument[]>, onOpen(path: string): void } | null} [props.recent]
  *   The host's library: the name menu's Models, its models alone.
- * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
- *   onAction(action: import("./entry-menu.js").EntryAction, path: string): void } | null} [props.fileMenu]
+ * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>, sourceMissing?: boolean,
+ *   apps?: (options: { signal: AbortSignal }) => Promise<import("./entry-menu.js").OpenInFiles | null>,
+ *   onAction(action: import("./entry-menu.js").EntryAction | "app", app?: { target: string, app: string }): void, items?: import("react").ReactNode } | null} [props.fileMenu]
+ *   The ⋯ after the name: what the host can do with the document on screen, and its own items (Export).
  * @param {import("react").ReactNode} [props.trailing] The file's actions.
- * @param {import("react").ReactNode} [props.actions] Host workflow controls at the right end.
- * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
+ * @param {import("react").ReactNode} [props.actions] The host's own controls at the right end (the CAD app's Full size).
+ * @param {import("react").ReactNode} [props.update] The host's update button, last among the controls (outermost).
  * @param {string} [props.className]
  */
 export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file = null, name, kind = "file", explorer = null, recent = null, fileMenu = null, trailing = null, update = null, actions = null, className }) {
   const { t } = useI18n();
   const usage = useControlUsage();
   const onHome = goHome ? () => { usage.used("home"); goHome(); } : goHome;
+  const mobile = useViewerMobile();
   return (
     // `pl-3`: the logo's mark (its button's 4px in) stands on the page's 16px gutter, the Home's
     // grid's left edge (`.cad-library-content`), over the home and over a page alike.
     <header className={cn(NAVBAR_ROW_CLASS, "pl-3 border-border bg-background text-foreground", className)} data-viewer-navbar="">
       <nav aria-label={t("navbar.viewer")} className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
         {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
-        {history ? <HistoryButtons viewHistory={history} /> : null}
+        {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}
+        {history && !mobile ? <HistoryButtons viewHistory={history} /> : null}
         {file ? <span className="flex min-w-0 items-center">
           <FileName path={file} name={name} kind={kind} explorer={explorer} recent={recent} />
-          {fileMenu ? <FileMenu path={file} {...fileMenu} /> : null}
+          {fileMenu ? <FileMenu {...fileMenu} /> : null}
         </span> : null}
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>
-        {update}
         {trailing}
         {actions}
+        {update}
       </div>
     </header>
   );
