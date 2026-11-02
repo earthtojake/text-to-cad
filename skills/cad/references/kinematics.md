@@ -24,8 +24,8 @@ is written in its body, and its document keeps it:
   `BallJoint` and `RigidJoint`, connected with `connect_to`. The values they are
   connected at are the **as-built state**, the pose every file of the model shows.
 
-The functions that say more are `cadgen.ap242`'s, named after the STEP AP242 entities
-they write (`from cadgen.ap242 import mechanism_state, gear_pair`):
+The functions that say more are `cad.ap242`'s, named after the STEP AP242 entities
+they write (`from cad.ap242 import mechanism_state, gear_pair`):
 
 - **Mechanism states** name other poses: `mechanism_state(assembly, name, **values)`.
 - **Couplings** make joints move together by ratio, one function per pair the document
@@ -54,8 +54,8 @@ onto whatever axis it is given:
 ```python
 # src/hinge.py
 import build123d as bd
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
 
 ELBOW = ((40, 0, 20), (0, -1, 0))   # the elbow's origin and direction: +angle lifts the arm
 
@@ -87,8 +87,8 @@ slide along +Y would stand the child on end:
 ```python
 # src/linear_guide.py
 import build123d as bd
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
 
 SLIDE = ((0, -50, 10), (0, 1, 0))   # the slide's origin and direction: +position runs the carriage along +Y
 
@@ -129,7 +129,7 @@ if __name__ == "__main__":
   no `connect_to` moved, and every part no joint places.
 - **A nested assembly is paired by label.** build123d's `connect_to` cannot place a part
   inside a nested assembly: put each part where it stands, write the two joints there
-  with one label, and the engine pairs the moving joint with the `RigidJoint` of the same
+  with one label, and the server pairs the moving joint with the `RigidJoint` of the same
   label nearest it in the tree. Two rigid joints of one label fasten their parts.
 - **The document keeps what STEP AP242 can say, and nothing else.** A pair the built
   parts contradict (its part moved after `connect_to`, connected after its compound was
@@ -157,15 +157,15 @@ sequences, with the asked values as its as-built state, so its page's Position a
 motions still work. An unknown state or joint is refused by name.
 
 `posed` takes the handle the model call returns, as every verb does. In a body it poses
-the child's shape. In a plain script (a check) it poses the document the engine holds and
+the child's shape. In a plain script (a check) it poses the document the server holds and
 returns the tree `.shape` would, at that pose: placed parts, no joints. A plain script's
 `.shape` carries no joints, so `posed(hinge().shape, ...)` there is refused with the call
 to make instead.
 
 ```python
 # src/hinge_poses.py
-from cadgen import model
-from cadgen.ap242 import posed
+from cad import model
+from cad.ap242 import posed
 
 from hinge import hinge
 
@@ -201,8 +201,8 @@ turn) have no pair: drive them by a configuration sequence.
 ```python
 # src/index_finger.py
 import build123d as bd
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, gear_pair
+from cad import model
+from cad.ap242 import configuration_sequence, gear_pair
 
 CURL = {"index_mcp": 90, "index_pip": 100, "index_dip": 70}           # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X
@@ -285,8 +285,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cadgen snapshot "$ID" tmp/open.png --pose open
-cadgen snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad snapshot "$ID" tmp/open.png --pose open
+cad snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn
@@ -305,8 +305,8 @@ mid-motion. Measure a pose by posing the model in the check, using `find_part` a
 `world_parts` copied from [Opening geometry](inspection-and-validation.md#opening-geometry):
 
 ```python
-from cadgen.ap242 import posed
-from cadgen.geometry import overlap_volume
+from cad.ap242 import posed
+from cad.geometry import overlap_volume
 
 from hinge import hinge
 

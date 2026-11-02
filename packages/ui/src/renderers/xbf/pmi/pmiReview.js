@@ -1,4 +1,4 @@
-import { pmiDimensionPlaces } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
+import { pmiDimensionPlaces } from "@cad/core/lib/xbf/xbfPmi.js";
 
 // What the PMI section reads out to review a requirement by, all of it the document's: a
 // dimension's current limits (its nominal plus each signed deviation, or the limits the code gave

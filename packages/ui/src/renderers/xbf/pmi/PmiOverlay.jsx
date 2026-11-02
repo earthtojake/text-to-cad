@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
-import { ANNOTATION_HIDDEN_OPACITY } from "@text-to-cad/core/common/annotation.js";
-import { cn } from "@text-to-cad/ui/utils";
+import { ANNOTATION_HIDDEN_OPACITY } from "@cad/core/common/annotation.js";
+import { cn } from "@cad/ui/utils";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import PmiLabel, { PMI_STATUS_TOKENS } from "./PmiLabel.jsx";
 import { separateLabels } from "./separateLabels.js";

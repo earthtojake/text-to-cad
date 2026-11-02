@@ -6,7 +6,7 @@ imports its builder itself, so a document's closure holds its own builder's modu
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import paint
+from cad import paint
 
 from lib import materials as M
 

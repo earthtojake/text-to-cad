@@ -8,7 +8,7 @@ A renderer only one host registers belongs to that host, with its own
 dependencies and tests. It uses only this package's public exports, and they are
 what a host renderer may rely on:
 
-- `defineFileRenderer` and the registration contract from `@text-to-cad/ui/file-viewer`
+- `defineFileRenderer` and the registration contract from `@cad/ui/file-viewer`
   ([FileViewer](file-viewer.md)), including `fallback: true` for the one
   renderer that takes files nothing else matches.
 - The file it is handed (`FileMetadata`) and its `FileSource`, which names and
@@ -17,8 +17,8 @@ what a host renderer may rely on:
   Every resource a renderer acquires carries a release; it returns that as the
   prepared document's `dispose`, and FileViewer releases it when the request is
   cancelled, the file changes, or the view unmounts.
-- The host ports in `@text-to-cad/ui/host`: `useViewerHost`, and `usePromptDestination`
+- The host ports in `@cad/ui/host`: `useViewerHost`, and `usePromptDestination`
   for the prompt destination a renderer's prompt actions deliver to.
-- Shared chrome from `@text-to-cad/ui/navigation` (`EmptyState`),
-  `@text-to-cad/ui/primitives/*` and `@text-to-cad/ui/utils`, styled by this
+- Shared chrome from `@cad/ui/navigation` (`EmptyState`),
+  `@cad/ui/primitives/*` and `@cad/ui/utils`, styled by this
   package's `styles.css` and the host's own Tailwind build.

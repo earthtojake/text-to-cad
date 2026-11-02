@@ -1,5 +1,5 @@
 // An engine document's PMI as the viewer reads, says and asks for it (`xbfPmi.js`): the entries
-// `structure.pmi` carries, read defensively; the callout each says; and the `cadgen.ap242` call
+// `structure.pmi` carries, read defensively; the callout each says; and the `cad.ap242` call
 // a change in the viewer is, which Quick Edit hands the agent to write into the model.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -10,7 +10,7 @@ import { pmiConstruction } from "./xbfPmiLayout.js";
 
 // The annotations of a document as the viewer reads them (`readXbfPmi`'s `entries`).
 const entriesOf = structure => readXbfPmi(structure).entries;
-// The engine's own, as it served a plate built with `cadgen.ap242`'s calls (`__fixtures__/pmi_plate`,
+// The engine's own, as it served a plate built with `cad.ap242`'s calls (`__fixtures__/pmi_plate`,
 // which its `make_fixtures.py` builds and captures again).
 const served = version => JSON.parse(readFileSync(new URL(`./__fixtures__/pmi_plate/${version}/structure.json`, import.meta.url), "utf8"));
 
@@ -19,7 +19,7 @@ const BOTTOM = "plate/f:bracket.fillet1~908aee34f872";
 const HOLE = "plate/f:bracket.make_cylinder1.1;M:bracket.cut1";
 const ref = (role, at, extra = {}) => ({ role, ref: at, written: at, status: "ok", candidates: null, ...extra });
 
-// The supported subset, as `cadgen.engine.pmi` serves it.
+// The supported subset, as `cad.engine.pmi` serves it.
 const PMI = [
   { id: "A", kind: "datum", label: null, status: "ok", problem: null, refs: [ref("feature", BOTTOM)], datum: { letter: "A" }, presentation: null, xcaf_type: null },
   { id: "thickness", kind: "dimension", label: null, status: "ok", problem: null, refs: [ref("from", BOTTOM), ref("to", TOP)],
@@ -165,7 +165,7 @@ test("a reference that names nothing, or several things, is said in words", () =
   assert.equal(pmiStatusText({ status: "ok", refs: [] }), "");
 });
 
-test("a new annotation is the cadgen.ap242 call that declares it, its refs verbatim", () => {
+test("a new annotation is the cad.ap242 call that declares it, its refs verbatim", () => {
   assert.equal(pmiCallText({ kind: "datum", id: "B", letter: "B", ref: TOP }), `datum("B", "${TOP}")`);
   assert.equal(pmiCallText({ kind: "dimension", type: "distance", id: "thickness", from: BOTTOM, to: TOP, tolerance: { upper: 0.2, lower: -0.2 } }),
     `dimensional_location("thickness", "${BOTTOM}", "${TOP}", tolerance=plus_minus_tolerance(0.2))`);
@@ -211,19 +211,19 @@ test("a reference the code wrote as a face of the body is called by its canonica
   assert.equal(pmiCallText(pmiEntryCall(broken)), `flatness_tolerance("top-flat", "plate/f:gone", 0.05)`);
 });
 
-test("a change goes to the agent as what to do to the model's annotate call, its cadgen.ap242 names, then the call exactly", () => {
+test("a change goes to the agent as what to do to the model's annotate call, its cad.ap242 names, then the call exactly", () => {
   const [, thickness] = entriesOf({ pmi: PMI });
   const add = { kind: "geometric_tolerance", characteristic: "flatness", id: "flatness", ref: BOTTOM, value: 0.02 };
   assert.equal(pmiChangeRequest({ kind: "add", call: add }),
-    `Add this PMI to the model's annotate(...) call (from cadgen.ap242 import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`);
+    `Add this PMI to the model's annotate(...) call (from cad.ap242 import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`);
   const values = { tolerance: { upper: 0.1, lower: -0.05 } };
   assert.equal(pmiChangeRequest({ kind: "edit", id: "thickness", values, call: pmiEntryCall(thickness, values), placementOnly: false }),
-    `Change the PMI "thickness" in the model's annotate(...) call (from cadgen.ap242 import annotate, dimensional_location, place, plus_minus_tolerance): `
+    `Change the PMI "thickness" in the model's annotate(...) call (from cad.ap242 import annotate, dimensional_location, place, plus_minus_tolerance): `
     + `tolerance=plus_minus_tolerance(0.1, -0.05). Keep its references as the code writes them. `
     + `The whole call, its references as this build resolves them:\ndimensional_location("thickness", "${BOTTOM}", "${TOP}", tolerance=plus_minus_tolerance(0.1, -0.05), presentation=place(anchor=(20, 0, -2), offset=(6, 0, 2)))`);
   const moved = { presentation: { anchor: [20, 0, -2], offset: [10, 0, 2] } };
   assert.match(pmiChangeRequest({ kind: "edit", id: "thickness", values: moved, call: pmiEntryCall(thickness, moved), placementOnly: true }),
-    /^Move the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cadgen\.ap242 import annotate, dimensional_location, place, plus_minus_tolerance\), its placement only \(what it says is unchanged\): presentation=place\(anchor=\(20, 0, -2\), offset=\(10, 0, 2\)\)\./);
+    /^Move the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cad\.ap242 import annotate, dimensional_location, place, plus_minus_tolerance\), its placement only \(what it says is unchanged\): presentation=place\(anchor=\(20, 0, -2\), offset=\(10, 0, 2\)\)\./);
   assert.equal(pmiChangeRequest({ kind: "add", call: { ...add, value: null } }), "");
 });
 
@@ -284,14 +284,14 @@ test("an id is unique on its part only: two parts' datum A are two entries, each
   const presentation = { anchor: [0, 0, 8], offset: [0, 0, 6] };
   const values = { presentation };
   const change = { kind: "edit", part: 1, partName: "peg", id: "A", values, call: pmiEntryCall(read[1], values), placementOnly: true };
-  assert.match(pmiChangeRequest(change), /^Move the PMI "A" in the annotate\(\.\.\.\) call of the model's part "peg" \(from cadgen\.ap242 import annotate, datum, place\), its placement only/);
+  assert.match(pmiChangeRequest(change), /^Move the PMI "A" in the annotate\(\.\.\.\) call of the model's part "peg" \(from cad\.ap242 import annotate, datum, place\), its placement only/);
   const placed = part => entriesOf({ pmi: raw.map(item => (item.part === part ? { ...item, presentation } : item)) });
   assert.equal(pmiChangeSettled(change, placed(1)), true);
   assert.equal(pmiChangeSettled(change, placed(0)), false, "the plate's A placed there is not the peg's");
   // A new one is its part's: the plate's A is not the peg's B, nor the peg's A the plate's.
   assert.equal(pmiChangeSettled({ kind: "add", part: 0, id: "A", call: {} }, entriesOf({ pmi: [datum(1, PEG_END)] })), false);
   assert.match(pmiChangeRequest({ kind: "add", part: 0, partName: "plate", id: "B", call: { kind: "datum", id: "B", letter: "B", ref: TOP } }),
-    /^Add this PMI to the annotate\(\.\.\.\) call of the model's part "plate" \(from cadgen\.ap242 import annotate, datum\):\ndatum\("B"/);
+    /^Add this PMI to the annotate\(\.\.\.\) call of the model's part "plate" \(from cad\.ap242 import annotate, datum\):\ndatum\("B"/);
 });
 
 // The engine's plate as made (v1), and after an edit put a square cut where the hole was (v3): the
@@ -455,7 +455,7 @@ test("each new kind's call is the engine's call exactly", () => {
   const values = { tolerance: { type: "limits", lower: 9.9, upper: 10.1 } };
   const thickness = read.entries.find(entry => entry.id === "thickness");
   assert.match(pmiChangeRequest({ kind: "edit", id: "thickness", values, call: pmiEntryCall(thickness, values), placementOnly: false }),
-    /^Change the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cadgen\.ap242 import annotate, dimensional_location, limits, place\): tolerance=limits\(9\.9, 10\.1\)\. .*tolerance=limits\(9\.9, 10\.1\), presentation=/s);
+    /^Change the PMI "thickness" in the model's annotate\(\.\.\.\) call \(from cad\.ap242 import annotate, dimensional_location, limits, place\): tolerance=limits\(9\.9, 10\.1\)\. .*tolerance=limits\(9\.9, 10\.1\), presentation=/s);
   // What a kind needs and lacks makes no call: a note with no words, a profile on no face, a view seen down nothing, a general profile placed (it takes no placement).
   assert.equal(pmiCallText({ kind: "note", id: "n", text: " " }), null);
   assert.equal(pmiCallText({ kind: "geometric_tolerance", characteristic: "surface_profile", id: "p", refs: [], value: 0.1 }), null);
@@ -467,5 +467,5 @@ test("each new kind's call is the engine's call exactly", () => {
 test("a new note asks for its call, its words as typed", () => {
   const call = { kind: "note", id: "edges", text: "Break all sharp edges 0.2 max", faces: [] };
   assert.equal(pmiChangeRequest({ kind: "add", part: 0, partName: "plate", id: "edges", call }),
-    `Add this PMI to the annotate(...) call of the model's part "plate" (from cadgen.ap242 import annotate, note):\nnote("edges", "Break all sharp edges 0.2 max")`);
+    `Add this PMI to the annotate(...) call of the model's part "plate" (from cad.ap242 import annotate, note):\nnote("edges", "Break all sharp edges 0.2 max")`);
 });

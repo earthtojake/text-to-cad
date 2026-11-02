@@ -1,4 +1,4 @@
-"""Write the PMI tests' plate fixtures: an engine document as ``cadgen serve`` answers it (its
+"""Write the PMI tests' plate fixtures: an engine document as ``cad serve`` answers it (its
 structure and its part buffer), built in four versions of one model, in one folder, as a person's
 edits are:
 
@@ -15,7 +15,7 @@ edits are:
   section "A-A" (front, cut across y through the hole's axis, keeping the far side so the front
   camera sees the cut) placing the diameter its own way, and an iso view showing everything.
 
-Tolerance values and note texts are illustrative: a project's words, never cadgen's.
+Tolerance values and note texts are illustrative: a project's words, never text-to-cad's.
 ``constructions.json`` beside them is the layout the viewer makes of them (``xbfPmiLayout.test.js``);
 write it again after these change. Regenerate, from the repository root:
 
@@ -29,8 +29,8 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from cadgen.engine import build as engine_build
-from cadgen.engine.serve import Server
+from cad.engine import build as engine_build
+from cad.engine.serve import Server
 
 HERE = Path(__file__).resolve().parent
 
@@ -44,8 +44,8 @@ MODEL = '''from __future__ import annotations
 # illustrative.
 import build123d as bd
 
-from cadgen import xbf
-from cadgen.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
+from cad import xbf
+from cad.ap242 import (annotate, datum, dimensional_location, dimensional_size, flatness_tolerance, general_profile,
                           limits, note, place, plus_minus_tolerance, position_tolerance, section,
                           surface_profile_tolerance, view)
 
@@ -115,7 +115,7 @@ def main() -> None:
                                   definition=definition)
             (folder / "edit_plate.py").write_text(source, encoding="utf-8")
             # Its one model built as a program's call of it builds it, its declared xbf written (as the
-            # engine's own goldens are: ``tests/python/packages/cadgen/engine/test_kinematics.py``).
+            # engine's own goldens are: ``tests/python/packages/cad/engine/test_kinematics.py``).
             reports = engine_build.build(folder / "edit_plate.py", ["edit_plate"], cwd=folder)
             assert all(report["ok"] for report in reports), reports
             server = Server(port=0, mesh_mode="inline")

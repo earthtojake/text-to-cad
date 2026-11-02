@@ -4,7 +4,7 @@ A DXF's bytes are a function of its geometry, so an unchanged drawing rewrites n
 """
 from pathlib import Path
 
-from cadgen import export
+from cad import export
 
 from angled_tab import angled_tab
 from cabinet_panel_drawing import cabinet_panel_drawing

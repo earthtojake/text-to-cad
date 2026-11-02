@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
-import { sceneFramingBounds } from "@text-to-cad/core/lib/viewer/sceneContract.js";
-import { boundsInUnits } from "@text-to-cad/core/lib/viewer/sceneUnits.js";
-import { clipAxisPosition, normalizeStepClipSettings } from "@text-to-cad/core/lib/viewer/clipPlane.js";
-import { fetchXbfPartGroups } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
-import { parseXbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
-import { isDocumentId } from "@text-to-cad/core/lib/cadRefs.js";
+import { viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
+import { sceneFramingBounds } from "@cad/core/lib/viewer/sceneContract.js";
+import { boundsInUnits } from "@cad/core/lib/viewer/sceneUnits.js";
+import { clipAxisPosition, normalizeStepClipSettings } from "@cad/core/lib/viewer/clipPlane.js";
+import { fetchXbfPartGroups } from "@cad/core/lib/xbf/xbfDocument.js";
+import { parseXbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
+import { isDocumentId } from "@cad/core/lib/cadRefs.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import { interactiveCameraFrameForBounds } from "../kit/camera/viewportCameraFit.js";
@@ -51,7 +51,7 @@ import { usePmiViewApplied } from "./pmi/usePmiView.js";
 import { pmiCreateOptions } from "./pmi/pmiCreate.js";
 import { createHiddenTest } from "./pmi/pmiHidden.js";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // A part menu's item as telemetry names it (`usage/controls.js`), by the action it runs.
 const MENU_CONTROLS = Object.freeze({
@@ -226,7 +226,7 @@ function XbfSurface({ view, data }) {
   // The PMI's slice of the file's view, its own hook's (below): what it restores and what it writes.
   const pmiViewRef = useRef({ restore: () => {}, slice: null });
   // A prompt's view, as a STEP's carried its pose and what it hid: the pose Position holds off as
-  // built, as `cadgen snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
+  // built, as `cad snapshot --pose` takes it (`jointValues`), and the parts hidden and isolated as
   // its `--display` takes them (`hidden`, `isolated`), each node as Copy Prompt copies it and the
   // hidden parts by the fewest nodes that name them, and the PMI where it is off (`pmi`) -- so the
   // view ink was drawn in is drawn as it was. While a motion owns the pose, the pose on screen is its frame.

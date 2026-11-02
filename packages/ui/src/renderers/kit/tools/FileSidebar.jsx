@@ -1,17 +1,17 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Clapperboard, FileText, ListTree, Menu, X } from "lucide-react";
 import { ChangedDot, PositionIcon } from "./ChangedDot.jsx";
-import { ToggleGroup, ToggleGroupItem } from "@text-to-cad/ui/primitives/toggle-group";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { cn } from "@text-to-cad/ui/utils";
+import { ToggleGroup, ToggleGroupItem } from "@cad/ui/primitives/toggle-group";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { cn } from "@cad/ui/utils";
 import { FILE_SIDEBAR_SURFACE_CLASS, FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "./stripTouch.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { FILE_SIDEBAR_MIN_WIDTH, TOOL_PANEL_WIDTH, fileSidebarSizeId, clampToolPanelHeight, clampToolPanelWidth, normalizeToolStack } from "./toolStackLayout.js";
 
 const KEY_NUDGE_PX = 16;

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { pmiCallText, pmiCallout, pmiChangeRequest, pmiChangeSettled, pmiEntryCall, pmiKey, pmiStatusText, readXbfPmi } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
-import { pmiConstructions, pmiDrawnOnPart, pmiMovedPlacement, pmiPresentationToPart } from "@text-to-cad/core/lib/xbf/xbfPmiLayout.js";
-import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { pmiCallText, pmiCallout, pmiChangeRequest, pmiChangeSettled, pmiEntryCall, pmiKey, pmiStatusText, readXbfPmi } from "@cad/core/lib/xbf/xbfPmi.js";
+import { pmiConstructions, pmiDrawnOnPart, pmiMovedPlacement, pmiPresentationToPart } from "@cad/core/lib/xbf/xbfPmiLayout.js";
+import { xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
+import { useI18n } from "@cad/ui/i18n";
 import { xbfElementLabel } from "../xbfChips.jsx";
 import { newPmiName } from "./pmiCreate.js";
 import { PmiGlyph } from "./pmiGlyphs.jsx";
@@ -14,7 +14,7 @@ import { pmiViewAt, pmiViewFromHere, pmiViewPlacements, pmiViewShows } from "./p
 // (`readXbfPmi`); which of it the person has hidden (the file's view, `xbfViewSlices`), the view
 // picked and whether the faces no requirement is on are lit; and the changes asked for it -- a new
 // annotation or note, a view from where the viewport looks now, a value edited, a label moved --
-// each the `cadgen.ap242` call it would make the code say, which Quick Edit hands the agent
+// each the `cad.ap242` call it would make the code say, which Quick Edit hands the agent
 // (`changeChips`). The viewer writes nothing: the model's code is the document's source, and a
 // change reaches the view as the engine's next version.
 //

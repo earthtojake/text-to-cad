@@ -14,7 +14,7 @@ export default function TermsOfServicePage() {
       <LegalSection>
         <p>
           These terms govern your use of text-to-cad, provided by Thompson Labs LLC (“we”, “us”): the
-          text-to-cad plugin and its skills, the cadgen software they run, the step.parts part
+          text-to-cad plugin and its skills, the software they run, the step.parts part
           library, and this website, texttocad.dev. By using text-to-cad you agree to them.
         </p>
       </LegalSection>

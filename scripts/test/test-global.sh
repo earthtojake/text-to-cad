@@ -14,7 +14,7 @@ for argument in "$@"; do
   esac
 done
 
-# The checkout's own cadgen, as test-python.sh does: without it a worktree run tests
-# whatever the venv's editable install points at (the primary checkout).
-run_python_unittest "Global policy tests" "tests/python/global" "packages/cadgen/src"
+# The checkout's own packages, as test-python.sh does: without them a worktree run tests
+# whatever the venv's editable installs point at (the primary checkout).
+run_python_unittest "Global policy tests" "tests/python/global" "${PACKAGE_SOURCES[@]}"
 require_selected_tests

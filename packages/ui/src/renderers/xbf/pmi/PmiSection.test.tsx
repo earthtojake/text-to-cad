@@ -89,7 +89,7 @@ it('says a nominal another system\'s file gives as the file\'s, and one the engi
 // ---- the MBD panel, over the engine's v4 plate: its views, notes, coverage and annotations ----------
 // The plate's served document (`pmi_plate/v4`), its part on a scene that knows no geometry: what is
 // drawn is drawn where its code (or a view) placed it.
-const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const V4 = JSON.parse(readFileSync(join(FIXTURES, 'pmi_plate', 'v4', 'structure.json'), 'utf8'));
 const V4_BOTTOM = 'plate/f:edit_plate.body_make_box1.5;M:edit_plate.body';
 const PLATE = { min: [-50, -30, -5], max: [50, 30, 5] };
@@ -257,8 +257,8 @@ it('a flag note naming annotations alone is listed with its flag, drawn nowhere,
 // ---- New: what a model-based definition adds, each the call it asks the code for -------------------
 const V4_HOLE = 'plate/f:edit_plate.cut.1;M:edit_plate.body';
 const HOLE_FACE = { id: 'i0/face/7', part: 0, ref: V4_HOLE, surface: { type: 'cylinder', axis: [0, 0, 1], origin: [0, 0, 0], radius: 5 } };
-// A new annotation's request, of the names its call takes from cadgen.ap242.
-const ADD = (...names: string[]) => `Add this PMI to the annotate(...) call of the model's part "plate" (from cadgen.ap242 import ${['annotate', ...names].join(', ')})`;
+// A new annotation's request, of the names its call takes from cad.ap242.
+const ADD = (...names: string[]) => `Add this PMI to the annotate(...) call of the model's part "plate" (from cad.ap242 import ${['annotate', ...names].join(', ')})`;
 const requests = () => live.changeChips.map((chip: any) => chip.request);
 const form = () => document.querySelector<HTMLElement>('[data-pmi-new]')!;
 async function openNew(user: ReturnType<typeof userEvent.setup>, edit?: (structure: any) => any, props: Record<string, unknown> = {}) {

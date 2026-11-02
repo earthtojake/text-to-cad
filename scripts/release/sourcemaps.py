@@ -3,7 +3,7 @@
 
 The CAD Viewer's client and the CAD app's page are built with hidden source maps and a debug id on
 every chunk with code of its own (apps/web/vite.config.mjs, apps/mcp/vite.config.mjs), and a crash on
-either page names the chunk each of its frames ran in by that id (@text-to-cad/core's crash reporter).
+either page names the chunk each of its frames ran in by that id (@cad/core's crash reporter).
 The maps never ship in the wheel. This gathers each such chunk -- the text the page runs -- with its map
 into one directory, for `posthog-cli sourcemap upload`, and zips them for the GitHub Release, so any
 version's maps can be uploaded again. The CLI files a map under the id a chunk's `//# chunkId=` line names
@@ -15,7 +15,7 @@ after the code moves no code, so the map fits the copy as it fits the page.
 
 It fails when a page built no maps, when a map has no debug id, when a chunk and its map name
 different ones, or when one id names two texts or maps (PostHog keeps one map an id; each page's build
-names a chunk by its text and map, @text-to-cad/core/chunk-ids): a release whose crashes PostHog could not
+names a chunk by its text and map, @cad/core/chunk-ids): a release whose crashes PostHog could not
 show the source of stops here.
 """
 

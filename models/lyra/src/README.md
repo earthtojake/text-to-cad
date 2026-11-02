@@ -17,9 +17,9 @@ URDF.
 ```
 python lyra.py                                    # prints each model's id: and view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
-cadgen snapshot "$ID" lyra.png --pose fist         # ID: the lyra model's id: line
-cadgen snapshot ../lyra.urdf urdf.png
-cadgen export "$ID" GLB/lyra.glb                  # the five motions, baked as clips
+cad snapshot "$ID" lyra.png --pose fist         # ID: the lyra model's id: line
+cad snapshot ../lyra.urdf urdf.png
+cad export "$ID" GLB/lyra.glb                  # the five motions, baked as clips
 ```
 
 ## How it is built
@@ -62,7 +62,7 @@ way. Their key orders are the ones `lib/clearance.py` checks.
 
 ## Not ported
 
-- Per-link STEP files. `cadgen export` writes one of a link model on demand.
+- Per-link STEP files. `cad export` writes one of a link model on demand.
 - The 17 one-link scripts. Each link is a model of `lyra.py` now, so no model
   calls another.
 - The clips' display labels ("Pose tour", ...): a motion has its name alone.

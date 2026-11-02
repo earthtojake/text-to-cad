@@ -7,11 +7,11 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import test from "node:test";
 
-import { pmiCallText, readXbfPmi } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
+import { pmiCallText, readXbfPmi } from "@cad/core/lib/xbf/xbfPmi.js";
 import { english } from "../../../i18n/core.js";
 import { PMI_SECTION_OFF, pmiViewAt, pmiViewFromHere, pmiViewPlacements, pmiViewShows, pmiViewShowsText } from "./pmiViews.js";
 
-const FIXTURES = join(dirname(createRequire(import.meta.url).resolve("@text-to-cad/core/lib/xbf/xbfDocument.js")), "__fixtures__");
+const FIXTURES = join(dirname(createRequire(import.meta.url).resolve("@cad/core/lib/xbf/xbfDocument.js")), "__fixtures__");
 const V4 = JSON.parse(readFileSync(join(FIXTURES, "pmi_plate", "v4", "structure.json"), "utf8"));
 const [SECTION, ISO] = readXbfPmi(V4).views;
 const near = (actual, expected, what) => expected.forEach((value, axis) => assert.ok(Math.abs(actual[axis] - value) < 1e-9, `${what}[${axis}] ${actual[axis]} is not ${value}`));

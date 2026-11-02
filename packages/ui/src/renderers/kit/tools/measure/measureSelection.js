@@ -1,4 +1,4 @@
-import { dimensionLayoutHit, screenSpaceDimensionLayout } from "@text-to-cad/core/lib/viewer/measureDimension.js";
+import { dimensionLayoutHit, screenSpaceDimensionLayout } from "@cad/core/lib/viewer/measureDimension.js";
 import { TOUCH_HIT_PX } from "../../viewport/dom.js";
 
 /**

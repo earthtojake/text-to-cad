@@ -58,7 +58,7 @@ The imports read the STEP inputs as they are, without materials.
 
 A run writes nothing, but the mounting plate's and the gear blank's declared files, and the
 two PMI examples' STEP (their PMI as AP242's, the notes and views staying in the document, saved as
-an xbf from the viewer or `cadgen export <id> NAME.xbf`; their notes' texts come from `lib/notes.py`,
+an xbf from the viewer or `cad export <id> NAME.xbf`; their notes' texts come from `lib/notes.py`,
 the project's own notes, illustrative). The import script's `__main__` exports the
 enclosure and the fixture to `../STEP/` (gitignored, like every export: Git holds no CAD files)
 and reads them back; run it before opening either import model, which reads those files.

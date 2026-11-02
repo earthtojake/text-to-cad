@@ -1,19 +1,19 @@
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
-import { FileViewer } from '@text-to-cad/ui/file-viewer';
-import type { FileSource } from '@text-to-cad/ui/file-viewer';
-import { createCadClient, createHttpPromptFiles } from '@text-to-cad/core/client';
-import { createTabStore, memoryTabRecord, useTabViewerState } from '@text-to-cad/ui/tab-store';
-import type { TabRecordStorage, TabStore } from '@text-to-cad/ui/tab-store';
-import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
-import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
-import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
-import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
-import { createXbfRenderer } from '@text-to-cad/ui/renderers/xbf';
-import { createHarnessRenderer } from '@text-to-cad/ui/renderers/shell-harness';
-import type { ViewerHost } from '@text-to-cad/ui/host';
-import type { LiveViewController } from '@text-to-cad/ui/renderers/xbf';
-import type { ViewerCommands as CadCommands } from '@text-to-cad/ui/renderers/workspace';
+import { FileViewer } from '@cad/ui/file-viewer';
+import type { FileSource } from '@cad/ui/file-viewer';
+import { createCadClient, createHttpPromptFiles } from '@cad/core/client';
+import { createTabStore, memoryTabRecord, useTabViewerState } from '@cad/ui/tab-store';
+import type { TabRecordStorage, TabStore } from '@cad/ui/tab-store';
+import { createDxfRenderer } from '@cad/ui/renderers/dxf';
+import { createGlbRenderer } from '@cad/ui/renderers/glb';
+import { createMeshRenderer } from '@cad/ui/renderers/mesh';
+import { createRobotRenderer } from '@cad/ui/renderers/robot';
+import { createXbfRenderer } from '@cad/ui/renderers/xbf';
+import { createHarnessRenderer } from '@cad/ui/renderers/shell-harness';
+import type { ViewerHost } from '@cad/ui/host';
+import type { LiveViewController } from '@cad/ui/renderers/xbf';
+import type { ViewerCommands as CadCommands } from '@cad/ui/renderers/workspace';
 // The module the built renderers publish their export view through (the CAD Viewer's ExportControls
 // provides it): the same built file, so this harness's provider is the one they reach.
 import { ExportContext } from '../../../dist/export/context.js';

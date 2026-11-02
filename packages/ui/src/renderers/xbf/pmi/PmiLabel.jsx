@@ -1,4 +1,4 @@
-import { cn } from "@text-to-cad/ui/utils";
+import { cn } from "@cad/ui/utils";
 import { PmiGlyph } from "./pmiGlyphs.jsx";
 
 // What a PMI callout says, drawn as a drawing draws it, at the UI's own size: a dimension's

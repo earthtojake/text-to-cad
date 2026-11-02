@@ -2,7 +2,7 @@
 // datum features, geometric tolerances and numbered notes, with each part's named views and
 // coverage -- as the page reads them from the document the engine serves
 // (`structure.pmi`, `pmi_views` and `pmi_coverage`, the document's XCAF GD&T,
-// notes and views read by `cadgen.engine.pmi`), and as the viewer says them and asks for them.
+// notes and views read by `cad.engine.pmi`), and as the viewer says them and asks for them.
 //
 // What is said comes from the document alone: a dimension's nominal is the engine's, measured on
 // the geometry; a tolerance is what the model's code supplied (deviations from the nominal, or its
@@ -18,7 +18,7 @@
 // by its part and its id (`key`), and asked for by both; a view by its part and its name.
 //
 // The document is made from code (`annotate(body, datum("A", ...), ...)` in the model, each call
-// `cadgen.ap242`'s, named after the AP242 entity it writes), so a change asked for in the viewer is
+// `cad.ap242`'s, named after the AP242 entity it writes), so a change asked for in the viewer is
 // the call it would write there (`pmiCallText`, `pmiPlaceText`): what Quick Edit hands the agent,
 // which writes it into the model and builds.
 
@@ -417,7 +417,7 @@ function pmiViewText(call) {
 }
 
 /**
- * The call that declares an annotation in the model's `annotate(body, ...)`, as `cadgen.ap242` takes
+ * The call that declares an annotation in the model's `annotate(body, ...)`, as `cad.ap242` takes
  * it, named after the AP242 entity it writes: its id first, then its references (each its canonical
  * ref, verbatim), then its values:
  *
@@ -560,7 +560,7 @@ function pmiEditSettings(values) {
   return set;
 }
 
-// The names a request's call and its `annotate` take from `cadgen.ap242`, in order: the import its
+// The names a request's call and its `annotate` take from `cad.ap242`, in order: the import its
 // request names. The call's strings (refs, ids, a note's words) are left out, so a name in one is none.
 function pmiCallNames(call) {
   const code = call.replace(/"(?:[^"\\]|\\.)*"/g, '""');
@@ -570,7 +570,7 @@ function pmiCallNames(call) {
 /**
  * A change asked for in the viewer as the request Quick Edit hands the agent: one paragraph of what
  * to do to the `annotate(...)` call of its part (`partName`, where the part has one), with the names
- * it and the call take from `cadgen.ap242`, then the call itself, exactly. `change`: a new annotation
+ * it and the call take from `cad.ap242`, then the call itself, exactly. `change`: a new annotation
  * (`{ kind: "add", part, partName, id, call }`) or an edit of one the document holds
  * (`{ kind: "edit", part, partName, id, values, call, placementOnly }`: what it sets, and the call it
  * makes), `id` the author's. "" for a call that lacks what its kind needs.
@@ -579,7 +579,7 @@ export function pmiChangeRequest(change) {
   const call = pmiCallText(change.call);
   if (!call) return "";
   const annotate = change.partName ? `the annotate(...) call of the model's part ${pyString(change.partName)}` : "the model's annotate(...) call";
-  const names = `(from cadgen.ap242 import ${pmiCallNames(call).join(", ")})`;
+  const names = `(from cad.ap242 import ${pmiCallNames(call).join(", ")})`;
   if (change.kind === "add") return `Add this PMI to ${annotate} ${names}:\n${call}`;
   const what = change.placementOnly
     ? `Move the PMI "${change.id}" in ${annotate} ${names}, its placement only (what it says is unchanged)`

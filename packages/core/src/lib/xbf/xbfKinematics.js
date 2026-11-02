@@ -1,5 +1,5 @@
 // A cadgen engine document's mechanism as a page poses it: the structure's `kinematics` block
-// (`cadgen/engine/mechanism.py`, `block`), which the engine harvests from the model's build123d
+// (`cad/engine/mechanism.py`, `block`), which the engine harvests from the model's build123d
 // joints. Its links are the instances that move as one, its pairs join two links with a frame on
 // each (4x4, column-major, in its link's frame, coinciding at value 0), and link 2 stands at
 // `link_1 · item_1 · M(v) · item_2⁻¹`: M a turn about Z (revolute), a slide along Z (prismatic),

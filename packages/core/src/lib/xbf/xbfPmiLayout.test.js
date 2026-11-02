@@ -23,12 +23,12 @@ const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFOR
 
 async function bracket() {
   const fetch = async (url) => {
-    if (url.endsWith("/api/look")) return new Response(read("look.json"));
-    if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
-    const part = /\/part\/([^/]+)$/.exec(url);
+    if (url.endsWith("/api/v1/look")) return new Response(read("look.json"));
+    if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
+    const part = /\/parts\/([^/?]+)(\?|$)/.exec(url);
     return new Response(part ? read(`bracket/${part[1]}.xbm`) : JSON.stringify(STRUCTURE));
   };
-  return createXbfScene(THREE, await loadXbfDocument("http://127.0.0.1:9/api/doc/bracket", { fetch }));
+  return createXbfScene(THREE, await loadXbfDocument("http://127.0.0.1:9/api/v1/documents/xbf/bracket", { fetch }));
 }
 
 const TOP = "i0/face/2", BOTTOM = "i0/face/5", HOLE = "i0/face/11";
@@ -179,8 +179,8 @@ test("a placement is in its part's frame: drawn where the part stands, and writt
   assert.equal(pmiPresentationToScene(placed, null), placed, "no placement, one frame");
 });
 
-// The constructions cadgen's stills are held to (`__fixtures__/pmi_plate/constructions.json`, which
-// `cadgen/engine/render/pmi.py` is held to through `tests/python/packages/cadgen/engine/test_render_pmi.py`):
+// The constructions the engine's stills are held to (`__fixtures__/pmi_plate/constructions.json`, which
+// `cad/engine/render/pmi.py` is held to through `tests/python/packages/cad/engine/test_render_pmi.py`):
 // what the viewer's own loop (`pmiConstructions`, as `useXbfPmi` calls it) makes of the plate the
 // engine served (`__fixtures__/pmi_plate`, which its `make_fixtures.py` builds and captures again),
 // as its code placed its PMI (v1), with no placement at all (every default: a feature's point, a
@@ -192,7 +192,7 @@ test("a placement is in its part's frame: drawn where the part stands, and writt
 // said in the notes, take no turn of a face), and v4 as its view A-A places what it places
 // (`placements`, by key: the view's own placements, in its part's frame). The file was made by this loop over these
 // fixtures; a deliberate change to the layout or the fixtures changes it, and the port follows it.
-test("the constructions cadgen's stills are held to are the ones this layout makes", async () => {
+test("the constructions the engine's stills are held to are the ones this layout makes", async () => {
   const variants = { "v1": structure => structure, "v1-unplaced": structure => ({ ...structure, pmi: structure.pmi.map(item => ({ ...item, presentation: null })) }),
     "v1-reversed": structure => ({ ...structure, pmi: structure.pmi.map(item => (item.dimension?.basic
       ? { ...item, presentation: null, refs: item.refs.map(ref => ({ ...ref, role: ref.role === "from" ? "to" : "from" })).reverse() } : item)) }),
@@ -206,12 +206,12 @@ test("the constructions cadgen's stills are held to are the ones this layout mak
     const served = JSON.parse(read(`pmi_plate/${version}/structure.json`));
     const structure = change(served);
     const fetch = async (url) => {
-      if (url.endsWith("/api/look")) return new Response(read("look.json"));
-      if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
-      const part = /\/part\/([^/]+)$/.exec(url);
+      if (url.endsWith("/api/v1/look")) return new Response(read("look.json"));
+      if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
+      const part = /\/parts\/([^/?]+)(\?|$)/.exec(url);
       return new Response(part ? read(`pmi_plate/${version}/${part[1]}.xbm`) : JSON.stringify(structure));
     };
-    const scene = createXbfScene(THREE, await loadXbfDocument("http://127.0.0.1:9/api/doc/pmi_plate", { fetch }));
+    const scene = createXbfScene(THREE, await loadXbfDocument("http://127.0.0.1:9/api/v1/documents/xbf/pmi_plate", { fetch }));
     // One part, one occurrence: a ref's element is its name among the part's faces, the part's
     // placement its frame (an annotation linked to no part's, the scene's).
     const ordinals = new Map(Object.entries(structure.prototypes[0].faceNames).map(([ordinal, faceName]) => [faceName, Number(ordinal)]));

@@ -9,7 +9,7 @@ tracked by value, so only a changed mount moves this mirror.
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from handlebar import MIRROR_MOUNT_LEFT
 from lib import trim as T

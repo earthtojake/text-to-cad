@@ -7,7 +7,7 @@ drawn on the model, picked, hidden, walked view by view, and asked for. It is th
 not the person's: ink (Pencil and Shapes, [annotation](annotation.md)) is a note on a view and goes
 with a prompt; PMI is what the part is made to, and goes with the part.
 
-The document is made from code. A model declares its PMI with `cadgen.ap242`'s calls, each that
+The document is made from code. A model declares its PMI with `cad.ap242`'s calls, each that
 writes an AP242 entity named after it (`annotate(body, datum("A", ...), dimensional_location(...),
 flatness_tolerance(...), ...)`; `note` and `view`, the xbf's alone, write none), the engine writes
 its requirements into the document's XCAF GD&T attributes, which its AP242 export reads, and the
@@ -19,7 +19,7 @@ Edit hands the agent, and the change reaches the view as the engine's next versi
 
 ## What is said, and where it comes from
 
-`@text-to-cad/core/lib/xbf/xbfPmi.js` reads the structure (`readXbfPmi`), each field read as it is
+`@cad/core/lib/xbf/xbfPmi.js` reads the structure (`readXbfPmi`), each field read as it is
 or as nothing, never guessed, into `{ entries, notes, views, coverage }`: every annotation
 and note (`entries`); the ones said as each part's numbered notes, in their numbers (`notes`: its
 general profile Note 1, then its notes); each part's named views in the code's order, keyed by
@@ -46,7 +46,7 @@ requirements that cannot both hold (`coverage`). An entry is one of:
 - Anything else the document holds (a STEP's cylindricity, an angle) is an entry the viewer
   does not draw: listed, saying why (`unsupported`: the engine's `reason` where it gives one, else
   the viewer's own, with its XCAF type), never dropped. Whether it is drawn is the viewer's to say;
-  `cadgen snapshot` reads it by the same rule.
+  `cad snapshot` reads it by the same rule.
 
 An id is the author's and unique on its part (a datum's is its letter), so an annotation is known
 by its part (`part`, the structure's prototype) and its id together (`key`, `pmiKey`: `0:thickness`),
@@ -64,7 +64,7 @@ fonts lack them. A kind's glyph is neutral, never a status's colour.
 
 ## References and their state
 
-Each reference is the engine's ref grammar (`cadgen.engine.refs`): `refs[].ref` canonical where it
+Each reference is the engine's ref grammar (`cad.engine.refs`): `refs[].ref` canonical where it
 resolved, `refs[].written` as the code wrote it, and a status — `ok`, `missing` (it names nothing
 in this build), `ambiguous` (it names several, its `candidates` listed) or `invalid` (it names a
 face the annotation cannot stand on: a diameter on a flat face, say). A dimension whose reference
@@ -81,7 +81,7 @@ its copy.
 
 ## Drawing it
 
-`@text-to-cad/core/lib/xbf/xbfPmiLayout.js` makes each annotation's construction in the scene's
+`@cad/core/lib/xbf/xbfPmiLayout.js` makes each annotation's construction in the scene's
 coordinates from the elements its references name (`elementGeometry`): the point on its feature
 a leader starts from (a flat face's own node nearest its middle, so never in a hole; a hole's rim),
 where its label stands, and a distance's dimension and extension lines: along what it measures (the
@@ -92,7 +92,7 @@ it, in millimetres in its part's frame, `part` the structure's prototype; drawn 
 stands, `pmiPresentationToScene`, and written back in its frame) is where the code
 placed it; one the code never placed stands out from its feature, each of a
 feature's turned from the last. A placement says where a callout is drawn and nothing else.
-`pmiConstructions` is that loop over a document, the one the viewer draws and cadgen's stills are
+`pmiConstructions` is that loop over a document, the one the viewer draws and the engine's stills are
 held to (`__fixtures__/pmi_plate/constructions.json`). A flag note is drawn as a frame is, out from
 its first face. What is said in the notes alone is drawn on no face (`pmiDrawnOnPart`): a general
 note, the general profile, and a flag note naming annotations and no face — drawn on its
@@ -167,7 +167,7 @@ parts), never the document. Turned off, PMI is off in a prompt's views too (`dis
 Where the document is made from code (a model's, by its id, or an `.xbf`), what the person
 changes is asked for, never written (`xbf/pmi/useXbfPmi.jsx`), each a chip in Quick Edit (its `requests`) that carries one
 paragraph of what to do to its part's `annotate(...)` call, the annotation by its author's id,
-the part by its name and the names it and the call take from `cadgen.ap242` (`from cadgen.ap242
+the part by its name and the names it and the call take from `cad.ap242` (`from cad.ap242
 import annotate, ...`), and the call itself (`pmiChangeRequest`), what it does not change as the
 document says it (a label, a position's zone, round or not):
 
@@ -194,7 +194,7 @@ document says it (a label, a position's zone, round or not):
   Until it is built it is called by its id ("Add flatness"), a datum by its letter ("Add datum B").
   After a rule, what is of the faces' part, or, with nothing picked, of the document's one part:
   - **Note**: a flag note on the faces picked, a general note where none are (`note`). Its
-    words are typed; nothing starts them, cadgen ships none. A face's menu offers it as
+    words are typed; nothing starts them, text-to-cad ships none. A face's menu offers it as
     "Add note", a flag note.
   - **General profile**: no face to pick (`general_profile`, its faces each build's), its value
     and its datums given; offered while its part has none, built or asked for ("Its part has one").
@@ -244,7 +244,7 @@ pose or of one part to refuse: those are models of their own.
 Once the STEP is written, before it is handed over, the worker reads that same file back on its
 own and compares its supported annotations with the document's, one to one, each part against its
 own product's records: values, units, datum order, tolerance-zone form and the faces each is on,
-by name and geometry -- as `cadgen export` does. The result and the file's SHA-256 go with the
+by name and geometry -- as `cad export` does. The result and the file's SHA-256 go with the
 export job, and stay with it when another model opens. An export has no success toast of its own
 (the browser's downloads say the file came); a STEP's check is its toast once the file is handed
 over, the check's headline as its title (every annotation verified, which goes on its own): the
@@ -269,7 +269,7 @@ dimension is. What interoperability is tested with is the exported STEP itself.
 
 - No leader routing: labels the code placed can cover each other, and a leader can cross the
   model.
-- Not drawn under Explode or a pose, or in Preview. `cadgen snapshot` draws it as this does, on the
+- Not drawn under Explode or a pose, or in Preview. `cad snapshot` draws it as this does, on the
   parts as made (the engine README's snapshot section); a label moved here and not yet in the code
   is drawn where the document places it.
 - Only the supported subset is drawn: distance (basic or not, its tolerance or its limits),

@@ -11,7 +11,7 @@ import { presentXbfTree } from "../xbfTree.js";
 import { createPmiRefResolver, pmiDrawnAt, pmiFeatureIds, resolvePmiEntryRefs } from "./pmiRefs.js";
 import { featureRequirements } from "./pmiReview.js";
 
-const FIXTURES = join(dirname(createRequire(import.meta.url).resolve("@text-to-cad/core/lib/xbf/xbfDocument.js")), "__fixtures__");
+const FIXTURES = join(dirname(createRequire(import.meta.url).resolve("@cad/core/lib/xbf/xbfDocument.js")), "__fixtures__");
 const STRUCTURE = JSON.parse(readFileSync(join(FIXTURES, "bracket", "structure.json"), "utf8"));
 const resolver = createPmiRefResolver(STRUCTURE, presentXbfTree(STRUCTURE));
 

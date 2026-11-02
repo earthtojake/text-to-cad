@@ -1,6 +1,6 @@
 import { forwardRef } from "react";
 import { Spline } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
+import { cn } from "@cad/ui/utils";
 
 /**
  * The small dot (4px, as the dots of Position's own icon) in a tile's top-right corner while what the tile controls is off its default (an

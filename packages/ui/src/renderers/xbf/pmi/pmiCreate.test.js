@@ -3,7 +3,7 @@
 // starting as its call with the picked faces' refs, a fresh id, and no tolerance filled in.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pmiCallText, pmiToleranceText, readXbfPmi } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
+import { pmiCallText, pmiToleranceText, readXbfPmi } from "@cad/core/lib/xbf/xbfPmi.js";
 import { newPmiName, nextDatumLetter, parseToleranceInput, pmiCreateOptions, toggleDatum } from "./pmiCreate.js";
 
 const TOP = { id: "i0/face/2", part: 0, ref: "plate/f:top", surface: { type: "plane", normal: [0, 0, 1], origin: [0, 0, 2] } };
@@ -84,7 +84,7 @@ test("the general profile takes no face, and is offered while its part has none"
 test("a note is general where no face is picked, a flag note on the faces picked; its words are given, typed", () => {
   const general = of(pmiCreateOptions({ picked: [], entries: [], parts: [0] }), "note");
   assert.deepEqual([general.available, general.call], [true, { kind: "note", id: "note", text: "", faces: [] }]);
-  // No words given, no call: cadgen offers no starter text.
+  // No words given, no call: text-to-cad offers no starter text.
   assert.equal(pmiCallText(general.call), null);
   assert.equal(pmiCallText({ ...general.call, text: "Break all sharp edges 0.2 max" }), `note("note", "Break all sharp edges 0.2 max")`);
   const flag = of(pmiCreateOptions({ picked: [HOLE, TOP], entries: [] }), "note");

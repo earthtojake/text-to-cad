@@ -9,16 +9,16 @@ from one master surface. `hypercar.py` is the one model (`@model`; a run writes 
 | `body.py` ... `details.py` (13) | nothing | One system each, a `@memo` stage the car calls in its body |
 
 Build from this folder: `python hypercar.py`. The GLB is exported on demand
-(`cadgen export "$ID" GLB/hypercar.glb`, the id the run prints), its three clips baked.
+(`cad export "$ID" GLB/hypercar.glb`, the id the run prints), its three clips baked.
 
 ```
 python hypercar.py
-cadgen snapshot "$ID" open.png --pose open
-cadgen snapshot "$ID" half.png --pose '{"door_left": [-31, 155], "door_right": [31, 155]}'
+cad snapshot "$ID" open.png --pose open
+cad snapshot "$ID" half.png --pose '{"door_left": [-31, 155], "door_right": [31, 155]}'
 ```
 
 A half-open STEP is a model of its own: one returning `posed(hypercar(), {"door_left": [-31, 155],
-"door_right": [31, 155]})` (`cadgen.ap242`) and declaring `@step`.
+"door_right": [31, 155]})` (`cad.ap242`) and declaring `@step`.
 
 ## How it is built
 
@@ -85,7 +85,7 @@ apart and back) moved 37 groups of parts and 10 of the engine's,
 each by one fixed vector times a 0..1 factor: radial (away from the car's long axis,
 from the group's pinned rest centre), lateral (out in Y by its side) or fixed. The
 chassis never moved.
-Both are GLB animations now (`cadgen.gltf`): each group a translation along its
+Both are GLB animations now (`cad.gltf`): each group a translation along its
 vector, that factor times it, sampled every 0.1 s, after the pose; the vectors, centres,
 windows and engine anchor are the old clip's numbers, and the groups name parts by the
 old occurrence ids (`o1.3.49`), the port's tree being the old one, child for child:

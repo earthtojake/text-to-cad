@@ -1,6 +1,6 @@
-import { pmiKey } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
-import { placeXbfDirection, placeXbfPoint } from "@text-to-cad/core/lib/xbf/xbfEntities.js";
-import { invert } from "@text-to-cad/core/lib/xbf/xbfKinematics.js";
+import { pmiKey } from "@cad/core/lib/xbf/xbfPmi.js";
+import { placeXbfDirection, placeXbfPoint } from "@cad/core/lib/xbf/xbfEntities.js";
+import { invert } from "@cad/core/lib/xbf/xbfKinematics.js";
 import { english } from "../../../i18n/core.js";
 import { pmiShownOccurrence } from "./pmiRefs.js";
 
@@ -54,7 +54,7 @@ function placedSection(section, matrix) {
  * where the placement turns its axis off a world axis (`sectionOff`). Null where no occurrence of
  * its part is shown, or the view is one the viewer cannot apply.
  *
- * @param {import("@text-to-cad/core/lib/xbf/xbfPmi.js").XbfPmiView} view
+ * @param {import("@cad/core/lib/xbf/xbfPmi.js").XbfPmiView} view
  * @param {readonly object[]} instances  The structure's.
  * @param {{ hidden?: readonly string[], isolated?: readonly string[] }} [shown]
  * @returns {{ instance: number, direction: number[], up: number[], section: { axis: string, at: number, invert: boolean } | null,

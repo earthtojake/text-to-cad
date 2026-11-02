@@ -1,5 +1,5 @@
-import { pmiFreshId } from "@text-to-cad/core/lib/xbf/xbfPmi.js";
-import { pmiDistanceAlong } from "@text-to-cad/core/lib/xbf/xbfPmiLayout.js";
+import { pmiFreshId } from "@cad/core/lib/xbf/xbfPmi.js";
+import { pmiDistanceAlong } from "@cad/core/lib/xbf/xbfPmiLayout.js";
 import { english } from "../../../i18n/core.js";
 
 // What a new annotation can be made of the faces Select has picked, as the supported subset has
@@ -59,8 +59,8 @@ export const newPmiName = (call, t = english) => (call.kind === "datum" ? t("pmi
  * view's call is its name alone until it is seen from somewhere (`pmiViewFromHere`).
  *
  * @param {{ picked: Array<{ id: string, part: number | null, ref: string, surface: { type: string, normal?: number[], axis?: number[], origin?: number[], radius?: number } | null }>,
- *   entries: ReturnType<typeof import("@text-to-cad/core/lib/xbf/xbfPmi.js").readXbfPmi>["entries"], pending?: Array<{ part: number | null, call: object }>,
- *   parts?: readonly number[], views?: ReturnType<typeof import("@text-to-cad/core/lib/xbf/xbfPmi.js").readXbfPmi>["views"],
+ *   entries: ReturnType<typeof import("@cad/core/lib/xbf/xbfPmi.js").readXbfPmi>["entries"], pending?: Array<{ part: number | null, call: object }>,
+ *   parts?: readonly number[], views?: ReturnType<typeof import("@cad/core/lib/xbf/xbfPmi.js").readXbfPmi>["views"],
  *   moving?: boolean,
  *   t?: (key: string, values?: object) => string }} options
  *   `picked`: the faces Select has picked, each with its part (the structure's prototype), its
@@ -146,7 +146,7 @@ export function parseToleranceInput(text, t = english) {
   const limits = value.match(LIMITS);
   if (limits) {
     const [lower, upper] = [Number(limits[1]), Number(limits[2])];
-    // As `cadgen.ap242`'s `limits` holds them: a size above 0, then a greater one.
+    // As `cad.ap242`'s `limits` holds them: a size above 0, then a greater one.
     if (!(lower > 0)) return { error: t("pmi.error.sizePositive") };
     return upper > lower ? { tolerance: { type: "limits", lower, upper } } : { error: t("pmi.error.limitsOrder") };
   }

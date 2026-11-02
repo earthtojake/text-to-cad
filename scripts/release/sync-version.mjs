@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -20,42 +20,46 @@ export const jsonTargets = [
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
 ];
 
-const tomlTargets = [
-  "packages/cadgen/pyproject.toml",
+// The four distributions released together: the library, the server, the shim and the alias.
+export const tomlTargets = [
+  "packages/cad/pyproject.toml",
+  "packages/cad-server/pyproject.toml",
+  "packages/cad-mcp/pyproject.toml",
+  "packages/aliases/cadgen/pyproject.toml",
 ];
 
-// Every skill that runs cadgen names the version the server's installation registers as
-// (`cadgen +<version>`, run by the `cadgen` command it writes, and "it says <version> is not
-// installed") and the command that installs it (`uvx ... --from cadgen==<version> cadgen doctor`) in
-// its SKILL.md, pinned like the server's so the two share one installation.
-function skillLaunchTargets() {
-  const skills = path.join(repoRoot, "skills");
-  if (!existsSync(skills)) {
-    return [];
-  }
-  return readdirSync(skills, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => `skills/${entry.name}/SKILL.md`)
-    .filter((relative) => existsSync(path.join(repoRoot, relative)))
-    .filter((relative) => readFileSync(path.join(repoRoot, relative), "utf8").includes("--from cadgen=="))
-    .sort();
-}
+// A requirement pinning one of the three distributions at a release: the library (`cad==`, with its
+// build123d extra or not), the server (`cad-server==`) and the shim (`cad-mcp==`). The name stands
+// alone: `cad` at the end of another name (`my-cad==`) pins no distribution of the release.
+export const pinPattern = /(?<![\w.-])(cad(?:-server|-mcp)?(?:\[[a-z0-9_,.-]+\])?==)([^"'`\s]+)/g;
 
-// Files that pin the cadgen runtime by a requirement string rather than a version field: the
-// commands the agent apps run to start CAD's MCP server, the README's Claude Desktop config,
-// and every cadgen skill's install command and `cadgen +<version>`. A file may also be a JSON target (the Gemini
-// extension carries both); its pin is stamped on top of that change, not over it.
+// Files that pin a release by a requirement string rather than a version field: the commands the
+// agent apps run to start the CAD app's transport (`cad-mcp==`), the install page's Claude Desktop
+// config and the command it says the installer runs, and the distributions that pin the library at
+// their own release (the server, the alias). The skills name no release: they run the `cad` command,
+// whatever installation is current. A file may
+// also be a JSON or TOML target (the Gemini extension, those pyprojects); its pin is stamped on top of that
+// change, not over it.
 export const pinTargets = [
+  "packages/cad-server/pyproject.toml",
+  "packages/aliases/cadgen/pyproject.toml",
   "codex.mcp.json",
   "claude.mcp.json",
   "cursor.mcp.json",
   "mcp.json",
   "gemini-extension.json",
-  "README.md",
-  // The turn-off command the README and the docs site print, the plugin's own launch line.
-  "apps/docs/src/lib/content.ts",
+  "docs/install.md",
+  // The turn-off command the privacy policy prints, the plugin's own launch line. The README and
+  // the docs site's homepage pin nothing: a target without a pin is refused.
   "apps/docs/src/app/privacy-policy/page.tsx",
-  ...skillLaunchTargets(),
+];
+
+// The one-line installer's scripts carry the release they were published with, which each installs
+// when the version feed cannot be read. Neither is a pin target: each runs `cad-server==$version`,
+// a variable a pin's stamp would overwrite.
+export const bootstrapTargets = [
+  { path: "scripts/install/install.sh", pattern: /^(CAD_VERSION=")([^"\n]*)(")$/m },
+  { path: "scripts/install/install.ps1", pattern: /^([ \t]*\$CadVersion = ")([^"\n]*)(")$/m },
 ];
 
 function usage() {
@@ -206,33 +210,35 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
-// A skill runs its version by the `cadgen` command (`cadgen +0.8.0`), and says it in the
-// command's refusal ("it says 0.8.0 is not installed").
-export const skillVersionPattern = /(cadgen \+|it says )(\d[^\s`"'\\)]*)/g;
-
 function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
-  const pin = /(cadgen(?:\[[a-z0-9_,.-]+\])?==)([^"\s]+)/g;
+  const pin = new RegExp(pinPattern.source, "g");
   const matches = [...text.matchAll(pin)];
   if (matches.length === 0) {
-    throw new Error(`${relativePath} must pin cadgen==<version>`);
+    throw new Error(`${relativePath} must pin cad[-server|-mcp]==<version>`);
   }
-  const named = [...text.matchAll(skillVersionPattern)];
-  const labels = [];
-  if (!matches.every((match) => match[2] === version)) {
-    labels.push("cadgen pin");
-  }
-  if (!named.every((match) => match[2] === version)) {
-    labels.push("cadgen +<version>");
-  }
-  if (labels.length === 0) {
+  if (matches.every((match) => match[2] === version)) {
     return null;
   }
   return {
     path: relativePath,
-    labels,
-    text: text
-      .replace(pin, (_, prefix) => `${prefix}${version}`)
-      .replace(skillVersionPattern, (_, prefix) => `${prefix}${version}`),
+    labels: ["release pin"],
+    text: text.replace(pin, (_, prefix) => `${prefix}${version}`),
+  };
+}
+
+function syncBootstrapTarget(target, version) {
+  const text = readRequiredText(target.path);
+  const matches = [...text.matchAll(new RegExp(target.pattern.source, "gm"))];
+  if (matches.length !== 1) {
+    throw new Error(`${target.path} must stamp exactly one fallback version (${target.pattern.source})`);
+  }
+  if (matches[0][2] === version) {
+    return null;
+  }
+  return {
+    path: target.path,
+    labels: ["fallback version"],
+    text: text.replace(target.pattern, (_, before, _stale, after) => `${before}${version}${after}`),
   };
 }
 
@@ -294,6 +300,12 @@ function main() {
   }
   for (const target of tomlTargets) {
     const change = syncTomlTarget(target, version);
+    if (change) {
+      changes.push(change);
+    }
+  }
+  for (const target of bootstrapTargets) {
+    const change = syncBootstrapTarget(target, version);
     if (change) {
       changes.push(change);
     }

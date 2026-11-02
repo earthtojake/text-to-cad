@@ -1,8 +1,8 @@
-import { engineSelectorText, parseEngineRef } from "@text-to-cad/core/lib/cadRefs.js";
-import { parseXbfElementId, xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { engineSelectorText, parseEngineRef } from "@cad/core/lib/cadRefs.js";
+import { parseXbfElementId, xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 
 // What a PMI reference names in the document on screen: the scene's element ids (`i3/face/12`) of
-// the face, edge or vertex its canonical ref spells, as `cadgen.engine.refs` resolves it against the
+// the face, edge or vertex its canonical ref spells, as `cad.engine.refs` resolves it against the
 // served structure (`refs.resolve_structure`). The engine has already resolved every reference of a
 // served annotation (its `status`); this finds the same element on the page, by spelling each
 // candidate's canonical ref as the tree does (`xbfTree.js`'s `elementRefOf`) and keeping the ones

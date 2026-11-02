@@ -1,4 +1,4 @@
-import { cn } from "@text-to-cad/ui/utils";
+import { cn } from "@cad/ui/utils";
 
 // The grip's two strokes, drawn into the corner they sit in.
 const STROKES = Object.freeze({ "bottom-left": "M1 2L6 7M1 5L3 7", "bottom-right": "M7 2L2 7M7 5L5 7" });

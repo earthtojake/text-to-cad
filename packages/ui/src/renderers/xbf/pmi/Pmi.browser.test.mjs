@@ -4,7 +4,7 @@ import { PNG } from 'pngjs';
 import { serveXbfHarness } from '../../harness/xbfScenario.mjs';
 
 // An engine document's PMI in a real browser, over core's bracket (a 40 x 20 x 4 plate on
-// z = -2..2 with a Ø8 hole at the origin) served carrying PMI as `cadgen.engine.pmi` serves it: a
+// z = -2..2 with a Ø8 hole at the origin) served carrying PMI as `cad.engine.pmi` serves it: a
 // datum on the bottom, the thickness toleranced and placed in code, a flatness on the top, each of
 // the plate (its part, the structure's first prototype). Its
 // callouts are drawn on the model and stay put on it, a fixed size, as the camera moves; a pick of
@@ -243,7 +243,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   await pane.locator('[data-pmi-add]').click();
   await pane.getByRole('button', { name: 'Add flatness', exact: true }).waitFor();
   text = await prompt();
-  assert.ok(text.includes(`Add this PMI to the annotate(...) call of the model's part "plate" (from cadgen.ap242 import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`), text);
+  assert.ok(text.includes(`Add this PMI to the annotate(...) call of the model's part "plate" (from cad.ap242 import annotate, flatness_tolerance):\nflatness_tolerance("flatness", "${BOTTOM}", 0.02)`), text);
 
   // The model rebuilt without the top's name: the flatness names nothing now. It is drawn where the
   // code placed it, broken, and its row says why; an annotation the viewer does not draw is listed,
@@ -266,7 +266,7 @@ test('a change to PMI goes to Quick Edit as the code it asks for, and a rebuild 
   assert.deepEqual(errors, []);
 });
 
-// The engine's own: a plate built with `cadgen.ap242`'s calls (`annotate`, its faces named by the
+// The engine's own: a plate built with `cad.ap242`'s calls (`annotate`, its faces named by the
 // engine's element names), served as the engine served it (`pmi_plate/v1`), then rebuilt twice: 10
 // mm thick with a Ø10 hole, located by basic distances from the front and the left side to its axis,
 // then 12 mm with a Ø12 hole (every name kept: the same annotations, measured anew), then with a

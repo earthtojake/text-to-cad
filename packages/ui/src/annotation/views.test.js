@@ -41,7 +41,7 @@ test("a view is the viewer's camera at the prompt's size, its mode and Grid swit
   assert.ok(!sameView(view({ display: { mode: 'solid', grid: false } }), view({ display: hiding.display })));
 });
 
-test("PMI the person turned off is off in the view, as `cadgen snapshot --display` takes it", () => {
+test("PMI the person turned off is off in the view, as `cad snapshot --display` takes it", () => {
   const view = state => promptView({ camera: camera(), width: 800, height: 600 }, { display: { mode: 'solid' }, state });
   assert.deepEqual(view({ pmi: false }).display, { mode: 'solid', grid: false, pmi: false });
   // Shown, as a snapshot draws it by default: nothing to say.
