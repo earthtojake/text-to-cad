@@ -24,10 +24,13 @@ warm worker of it, of one release with the engine, so no update notice is said. 
 ``requires-python`` the server's Python does not meet is refused in one line. With no packages named, ``cad
 run`` runs the base, as ever.
 
-When one is made, the environments of other releases go, and the one its local packages' edit superseded
-(``_collect``), but one a process runs from, which goes at a later making. Those of other requirements stay,
-one per set a model named, until ``cad doctor --prune`` removes those unused for a week (``leftovers``,
-each use marking its marker) or a release change does. What uv cannot do is said in one line
+Environments are tied to their release (cad is pinned in each). When one is made, the environments of
+releases older than the one before the current go -- the current release's and the one before's stay, the
+way back, as ``releases/`` keeps the release before (``kept``) -- and the one its local packages' edit
+superseded (``_collect``), but one a process runs from, which goes at a later making. Those of other
+requirements stay, one per set a model named, until ``cad doctor --prune`` removes those unused for a week
+(``leftovers``, each use marking its marker). Nothing is made ahead of a run: after an update, a new
+release's environments are made as its runs ask for them, from uv's cache. What uv cannot do is said in one line
 (``base.failure``): requirements it cannot resolve beside the kernel's pins, with its reason; a package its
 cache lacks where the network cannot be reached, by name.
 """
@@ -471,7 +474,8 @@ def _make(env: Path, installation: base.Installation, requirements: list[str], p
     changed = _changed(env.parent, inputs, requirements, prints)
     marker = base.make(env, recipe(installation, requirements, changed), told, finish=finish, marker=base.MARKER,
                        done=lambda folder: _complete(folder, requirements))
-    _collect(env.parent, installation.release, made=env, requirements=requirements, inputs=inputs)
+    _collect(env.parent, kept(env.parent, installation.release), made=env, requirements=requirements,
+             inputs=inputs)
     return marker
 
 
@@ -492,12 +496,49 @@ def _changed(folder: Path, inputs: dict[str, Any], requirements: list[str], prin
     return sorted(changed)
 
 
-def _collect(folder: Path, release: str, made: Path | None = None, requirements: list[str] | None = None,
+def _releases(folder: Path) -> set[str]:
+    """The releases the environments of models' packages in ``folder`` are of, as their markers say."""
+    found: set[str] = set()
+    try:
+        entries = [Path(entry.path) for entry in os.scandir(folder) if entry.is_dir(follow_symlinks=False)]
+    except OSError:
+        return found
+    for env in entries:
+        marker = base.complete(env)
+        release = ((marker or {}).get("inputs") or {}).get("release")
+        if marker is not None and isinstance(marker.get("with"), list) and isinstance(release, str):
+            found.add(release)
+    return found
+
+
+def kept(folder: Path, current: str) -> set[str]:
+    """The releases whose environments of models' packages stay: the current one, and the one before it --
+    the release the last update switched from, where that switch went to ``current``
+    (``cad_server._internal.switch.last``), else the newest of the environments' releases older than
+    ``current`` (as PEP 440 orders them) -- the way back, as ``releases.collect`` keeps it."""
+    from cad.engine.contract import _order
+
+    try:
+        from cad_server._internal.switch import last
+
+        switched = last() or {}
+    except Exception:  # noqa: BLE001 - no record: the order of the releases says the one before
+        switched = {}
+    if switched.get("to") == current and switched.get("ok") and isinstance(switched.get("from"), str):
+        return {current, switched["from"]}
+    mine = _order(current)
+    older = [(_order(release), release) for release in _releases(folder) if release != current]
+    older = [(order, release) for order, release in older if order is not None and mine is not None and order < mine]
+    return {current, *([max(older)[1]] if older else [])}
+
+
+def _collect(folder: Path, keep: set[str], made: Path | None = None, requirements: list[str] | None = None,
              inputs: dict[str, Any] | None = None) -> list[str]:
-    """The environments of a model's packages in ``folder`` of other releases than ``release`` removed, and
-    those the one just ``made`` supersedes -- of its installation's base (``inputs``) and ``requirements``,
-    a local package since edited --, but one a process runs from (``releases.running``), which goes at a
-    later making: the paths removed. The bases are their releases' to remove (``releases.collect``)."""
+    """The environments of a model's packages in ``folder`` of releases other than ``keep`` (``kept``: the
+    current one and the one before it) removed, and those the one just ``made`` supersedes -- of its
+    installation's base (``inputs``) and ``requirements``, a local package since edited --, but one a process
+    runs from (``releases.running``), which goes at a later making: the paths removed. The bases are their
+    releases' to remove (``releases.collect``)."""
     from cad_server._internal.releases import running
 
     removed = []
@@ -509,7 +550,7 @@ def _collect(folder: Path, release: str, made: Path | None = None, requirements:
         marker = base.complete(env) if env != made else None
         if marker is None or not isinstance(marker.get("with"), list):
             continue
-        other = (marker.get("inputs") or {}).get("release") != release
+        other = (marker.get("inputs") or {}).get("release") not in keep
         superseded = made is not None and marker.get("with") == requirements and marker.get("inputs") == inputs
         if not (other or superseded) or running(env):
             continue
