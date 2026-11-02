@@ -1,7 +1,7 @@
 """Tools: the closed tool vocabulary a job's ``tools`` list is read in (:func:`parse_tool`).
 
 A tool is one of FreeCAD's built-in tool bit shapes (``freecad_job.SHAPES``): ``flat``, ``ball``, ``bull`` or ``drill``.
-Nothing about a tool is guessed (law 10): the T number the program loads it by, its diameter, its flute length (every
+Nothing about a tool is guessed (law 17): the T number the program loads it by, its diameter, its flute length (every
 cut is held to it) and its stickout (FreeCAD's model of the tool); a milling tool's flutes (its feed is worked out from
 them) and shank diameter (FreeCAD's model again); a bull nose's corner radius and a drill's point angle (how far past
 a through hole's bottom it drills) are required, and a tool without one is refused. A key that means nothing for a
