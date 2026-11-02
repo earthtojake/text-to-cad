@@ -101,9 +101,11 @@ class Models:
         if not isinstance(reports, list):
             return
         program = answer.get("program")
-        # The Python a run in its own builds with (``Daemon.caller``), which builds its documents again;
-        # None: the base's, which ``cad run`` reaches.
+        # How its run was made, which builds its documents again: the Python a run in its own builds with
+        # (``Daemon.caller``), or the requirements ``cad run --with`` was given; neither, the base's, which
+        # ``cad run`` reaches (a script's header names its own packages again).
         python = answer.get("python") if isinstance(answer.get("python"), str) else None
+        given = [item for item in answer.get("with") or [] if isinstance(item, str)]
         # Per script of the run: the explicit names it declares now, and those its models' records
         # say it declared before (None: no record says), to give up what it declares no more.
         declared: dict[str, tuple[list[str], set[str] | None]] = {}
@@ -123,7 +125,7 @@ class Models:
                         held = self.registry()
                         if held is not None:
                             claimed(held, source, source["explicit_name"])
-                    had = self.record(report, recorded, facts, python)
+                    had = self.record(report, recorded, facts, python, given)
                     if isinstance(source.get("declares"), list):
                         _now, was = declared.get(source["script"], (source["declares"], None))
                         if isinstance(had.get("declares"), list):
@@ -146,7 +148,7 @@ class Models:
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],
-                                           "kind": "model", "python": python,
+                                           "kind": "model", "python": python, "with": given,
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts}
@@ -232,10 +234,11 @@ class Models:
         return registry.current()
 
     def record(self, report: dict[str, Any], recorded: str, facts: dict[str, Any] | None = None,
-               python: str | None = None) -> dict[str, Any]:
+               python: str | None = None, given: list[str] | None = None) -> dict[str, Any]:
         """The registry's record of a document a build made (``registry``), written when it changed;
         the record it had (``{}``: none). ``python``: the Python a run in its own built it with, which
-        its record names (``python``: absent, the base's); nothing with no registry."""
+        its record names (``python``: absent, the base's); ``given``: the requirements ``cad run --with``
+        was given (``with``). Nothing with no registry."""
         from cad_server.engine import registry as registering
 
         held = self.registry()
@@ -263,6 +266,8 @@ class Models:
             found["created"] = old["created"]
         if python is not None:
             found["python"] = python  # absent: built in the base, which ``cad run`` reaches
+        if given:
+            found["with"] = list(given)  # ``cad run --with`` builds it again
         if source.get("explicit_name") is not None:
             found["line"] = source["line"]  # its claim of the name in its folder (``identity.claimed``)
         if isinstance(source.get("declares"), list):
@@ -437,7 +442,7 @@ class Models:
             return None  # handed over by a program the engine did not run: nothing builds it again
         from cad_server.engine.registry import rerun
 
-        return rerun(found["source"]["script"], found.get("python"))
+        return rerun(found["source"]["script"], found.get("python"), found.get("with"))
 
     def recorded(self, ident: str) -> dict[str, Any] | None:
         """What the registry knows of a model document this process never built (one built before a

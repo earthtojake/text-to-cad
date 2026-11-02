@@ -44,7 +44,8 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cad_server.cli.sdf_validate", "validate an SDF world or model"),
     "srdf validate": ("cad_server.cli.srdf_validate", "validate an SRDF against its URDF"),
     # Generic / services
-    "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment"),
+    "run": ("cad_server.cli.run", "run a model script (or -m, -c) in the CAD kernel environment, with the "
+                                  "packages its header or --with names"),
     "doctor": ("cad_server.cli.doctor", "install: register, write the cad command, start the engine"),
     # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.

@@ -6,7 +6,9 @@ to update."""
 from __future__ import annotations
 
 import io
+import os
 import re
+import sys
 import tomllib
 import unittest
 from pathlib import Path
@@ -85,8 +87,15 @@ class ContractTest(unittest.TestCase):
     def test_an_order_from_a_base_the_server_made_names_no_python(self) -> None:
         here = contract.interpreter()
         self.assertEqual((here["release"], here["contract"]), (contract.release(), contract.CONTRACT))
-        with mock.patch.object(places, "HOME", {"executable": "/base/bin/python", "prefix": "/base", "root": "/"}):
+        base = {"executable": "/base/bin/python", "prefix": "/base", "root": "/"}
+        with mock.patch.object(places, "HOME", base):
             self.assertIsNone(contract.interpreter(), "cad run's script is built in the server's own environment")
+        # An environment of a model's own packages (``cad run --with``, a script's header): its Python, and
+        # the requirements ``cad run --with`` handed the program, which build its documents again.
+        with mock.patch.object(places, "HOME", base), mock.patch.object(places, "EXTRAS", ("pandas",)), \
+                mock.patch.dict(os.environ, {places.RUN_WITH: '["pandas"]'}):
+            here = contract.interpreter()
+        self.assertEqual((here["executable"], here["with"]), (sys.executable, ["pandas"]))
 
 
 @model

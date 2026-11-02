@@ -321,7 +321,8 @@ def state_notice(model: dict[str, Any], doing: str) -> str | None:
     name = (model.get("source") or {}).get("name") or model.get("id")
     if model.get("state") == "failed":
         program = (model.get("source") or {}).get("script")  # the script that defines it, never a caller
-        fix = f"; fix it and run `{rerun(program, model.get('python'))}` to update it" if program else ""
+        fix = (f"; fix it and run `{rerun(program, model.get('python'), model.get('with'))}` to update it"
+               if program else "")
         return f"the last run of {name} failed; {doing} its previous good build{fix}"
     return None
 

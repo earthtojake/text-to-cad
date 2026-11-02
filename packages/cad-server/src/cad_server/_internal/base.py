@@ -426,6 +426,9 @@ class Recipe:
     source: str | None
     making: str  # said before uv starts
     downloading: str  # said before uv is asked online, for what its cache did not hold
+    # Said, before uv's reason, of requirements uv finds unsatisfiable together (a model's own packages
+    # beside the kernel's pins: ``cad_server._internal.extras``); None: uv's words alone.
+    unsatisfiable: str | None = None
 
 
 def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
@@ -611,17 +614,32 @@ def _remove(env: Path, what: str = WHAT) -> None:
 
 
 def _explained(said: str) -> str:
-    """uv's resolver explanation (the lines after ``╰─▶``), unwrapped into one line; else ''."""
+    """uv's resolver explanation -- the lines after ``╰─▶``, or after ``cause:`` as uv 0.13 says it --
+    unwrapped into one line; else ''."""
     lines = said.splitlines()
     at = next((index for index, line in enumerate(lines) if "╰─▶" in line), None)
-    if at is None:
-        return ""
-    found = [lines[at].split("╰─▶", 1)[1].strip()]
+    if at is not None:
+        first = lines[at].split("╰─▶", 1)[1].strip()
+    else:
+        at = next((index for index, line in enumerate(lines) if line.strip().startswith("cause:")), None)
+        if at is None:
+            return ""
+        first = lines[at].strip()[len("cause:"):].strip()
+    found = [first]
     for line in lines[at + 1:]:
-        if not line.strip() or line.lstrip().startswith("hint:"):
+        if not line.strip() or line.lstrip().startswith(("hint:", "cause:", "error:")):
             break
         found.append(line.strip())
     return " ".join(found)
+
+
+# What uv says of a package its cache does not hold, offline: ``Because pandas was not found in the cache``.
+UNCACHED = re.compile(r"([A-Za-z0-9][A-Za-z0-9._-]*(?:\[[^\]]*\])?) was not found in the cache")
+
+
+def uncached(said: str) -> list[str]:
+    """The packages uv says its cache does not hold (``UNCACHED``), each once, in the order said."""
+    return list(dict.fromkeys(UNCACHED.findall(said)))
 
 
 def _last(said: str) -> str:
@@ -648,6 +666,10 @@ def failure(step: list[str], said: str, recipe: Recipe) -> str:
         return (f"the system denies uv what {what} needs ({_last(said)}); a sandbox that forbids it does: run this "
                 "once outside it, or with its permission")
     if NETWORK.search(said):
+        missing = uncached(said)
+        if missing:  # what the cache lacks, by name: the network is needed once, for it
+            return (f"{what} needs the network once, for {', '.join(missing)}, which uv's cache does not hold: "
+                    f"{_last(said)}")
         return f"{what} needs the network once: {_last(said)}"
     if step[1] == "venv":
         return f"uv cannot make {what} on {recipe.python}: {words}"
@@ -655,4 +677,6 @@ def failure(step: list[str], said: str, recipe: Recipe) -> str:
     if recipe.source is None and any(f"no version of {name}=={release}" in explained
                                      for name in (LIBRARY, f"{LIBRARY}[{EXTRA}]", SERVER)):
         return f"release {release} is on no package index uv reads: {explained}"
+    if recipe.unsatisfiable and explained and "unsatisfiable" in explained:
+        return f"{recipe.unsatisfiable}: {explained}"
     return f"uv could not make {what}: {words}"

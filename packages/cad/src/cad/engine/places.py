@@ -33,10 +33,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-__all__ = ["BYTECODE", "HOME", "KERNEL", "NAME", "RESTARTS", "WINDOWS", "Endpoint", "address", "alive", "bytecode",
-           "bytecode_tag", "cache_dir", "current", "detached", "door_path", "earlier_cache_dir", "earlier_state_dir",
-           "endpoints", "engine", "engine_dir", "engine_root", "failure_path", "folder_refusal", "home", "installation",
-           "kernel", "lock", "lock_path", "port_path", "registered", "state_dir", "windowless"]
+__all__ = ["BYTECODE", "EXTRAS", "HOME", "KERNEL", "NAME", "RESTARTS", "RUN_WITH", "WINDOWS", "Endpoint", "address",
+           "alive", "bytecode", "bytecode_tag", "cache_dir", "current", "detached", "door_path", "earlier_cache_dir",
+           "earlier_state_dir", "endpoints", "engine", "engine_dir", "engine_root", "extras", "failure_path",
+           "folder_refusal", "home", "installation", "kernel", "lock", "lock_path", "port_path", "registered",
+           "run_with", "state_dir", "windowless"]
 
 WINDOWS = os.name == "nt"
 # The engine's name in its engine folder: its lock, door (on Windows its port file) and failure note
@@ -370,18 +371,34 @@ def names(handle: Any, path: Path) -> bool:
 # --- the installation ------------------------------------------------------------------------------
 
 
-def home(prefix: str | None = None) -> dict[str, Any] | None:
-    """The installation the environment at ``prefix`` (this process's, ``sys.prefix``) belongs to, as the
-    marker the server wrote in it names it (``MARKER``) -- ``executable``, ``prefix``, ``root`` and the rest
-    of what made it -- or None for an environment the server did not make."""
+def _marker(prefix: str | None = None) -> dict[str, Any] | None:
+    """The marker the server wrote in the environment at ``prefix`` (this process's), of its schema; None
+    for an environment the server did not make."""
     try:
         marker = json.loads((Path(prefix or sys.prefix) / MARKER).read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    found = marker.get("installation") if isinstance(marker, dict) and marker.get("schema") == MARKER_SCHEMA else None
+    return marker if isinstance(marker, dict) and marker.get("schema") == MARKER_SCHEMA else None
+
+
+def home(prefix: str | None = None) -> dict[str, Any] | None:
+    """The installation the environment at ``prefix`` (this process's, ``sys.prefix``) belongs to, as the
+    marker the server wrote in it names it (``MARKER``) -- ``executable``, ``prefix``, ``root`` and the rest
+    of what made it -- or None for an environment the server did not make."""
+    marker = _marker(prefix)
+    found = marker.get("installation") if marker is not None else None
     if not isinstance(found, dict) or not all(isinstance(found.get(name), str) for name in ("executable", "prefix", "root")):
         return None
     return found
+
+
+def extras(prefix: str | None = None) -> tuple[str, ...]:
+    """The packages the environment at ``prefix`` (this process's) holds beside the base's, as its
+    marker names them (``with``: an environment ``cad run`` made for a model's own packages, the server's
+    ``extras``); ``()`` for the base, and for an environment the server did not make."""
+    marker = _marker(prefix)
+    found = marker.get("with") if marker is not None else None
+    return tuple(found) if isinstance(found, list) and all(isinstance(item, str) for item in found) else ()
 
 
 # The installation this process belongs to when it runs in the base that installation made (``home``):
@@ -390,6 +407,21 @@ def home(prefix: str | None = None) -> dict[str, Any] | None:
 # with no current installation (``engine``), starts the engine with its installation's Python
 # (``client._start``).
 HOME: dict[str, Any] | None = home()
+# The packages this process's environment holds beside the base's, where ``cad run`` made it for a model's
+# own (``extras``): its scripts name their Python, which the engine builds them in (``contract.interpreter``).
+EXTRAS: tuple[str, ...] = extras()
+# The requirements ``cad run --with`` was given, normalized, which it hands the program it runs as JSON: what
+# a document's record says builds it again (``contract.interpreter``'s ``with``). A header's are its script's.
+RUN_WITH = "CAD_RUN_WITH"
+
+
+def run_with() -> list[str]:
+    """The requirements ``cad run --with`` gave this process (``RUN_WITH``); ``[]`` with none."""
+    try:
+        found = json.loads(os.environ.get(RUN_WITH) or "[]")
+    except ValueError:
+        return []
+    return [item for item in found if isinstance(item, str)] if isinstance(found, list) else []
 
 
 def installation_record(data: bytes | None) -> dict[str, Any] | None:

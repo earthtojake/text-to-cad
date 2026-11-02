@@ -624,11 +624,19 @@ class Daemon:
 
     def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
-        sandboxed ``cad run``, ``base.ensure``'s ``engine``): made here when it is not -- the making
-        under way followed, or one started (``base.Making.follow``) -- each of its lines a ``log`` frame,
-        then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one line. A base of another
-        installation's (``key``) is not this engine's to make: ``{"ok": false, "other": true}``."""
-        making = _making()
+        sandboxed ``cad run``, ``base.ensure``'s ``engine``) -- or, with ``with``, the environment of a
+        model's own packages beside it (``cad run --with``, a script's header: ``extras.ensure``): made here
+        when it is not -- the making under way followed, or one started (``base.Making.follow``) -- each of
+        its lines a ``log`` frame, then ``{"ok": true, "base": true}``, or ``{"failed", "base": true}`` in one
+        line. One of another installation's (``key``) is not this engine's to make: ``{"ok": false,
+        "other": true}``."""
+        named = request.get("with")
+        if isinstance(named, list) and named and all(isinstance(item, str) for item in named):
+            from cad_server._internal import extras
+
+            making = extras.making(named)
+        else:
+            making = _making()
         if request.get("key") != making.key():
             send({"ok": False, "other": True})
             return
@@ -1098,7 +1106,7 @@ class Daemon:
                 send(refused(self.models.not_held(ident)))
             else:
                 model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
-                                                          "kind", "python")}
+                                                          "kind", "python", "with")}
                 model["state"] = self.models.state(ident)
                 # On disk in the engine's cache, at its revision: a restart reopens it as last built.
                 model["cached"] = (self.models.where(ident) or "").endswith("disk")
@@ -1236,11 +1244,17 @@ class Daemon:
                         answer = worker.request(order, send)
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
-                        # when it is another (``contract.notice``); and that Python, which the documents'
-                        # records name as the one that builds them again (``models.Models.register``).
+                        # when it is another (``contract.notice``); and how that run was made, which the
+                        # documents' records say to build them again by (``models.Models.register``): the
+                        # requirements ``cad run --with`` was given, in an environment it made for the
+                        # model's own packages; else that Python.
                         answer["release"] = version()
                         if python is not None:
-                            answer["python"] = python
+                            given = (request.get("interpreter") or {}).get("with")
+                            if isinstance(given, list):
+                                answer["with"] = [item for item in given if isinstance(item, str)]
+                            else:
+                                answer["python"] = python
                         if ahead is not None:
                             # The build it waited for, the one its own replays: began how long before it asked.
                             for report in answer.get("done") or []:

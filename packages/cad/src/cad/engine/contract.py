@@ -55,14 +55,20 @@ def release() -> str:
 
 def interpreter() -> dict[str, Any] | None:
     """What an order says of the Python it comes from, so the server builds its script there: the
-    executable, its environment (``sys.prefix``), this library's release and its contract. None in a
-    base the server made (``places.HOME``: ``cad run``'s, and its own kernel processes'), whose scripts
-    the server builds in its own environment, and where Python names no executable of its own."""
+    executable, its environment (``sys.prefix``), this library's release and its contract -- and, in an
+    environment ``cad run`` made for a model's own packages (``places.EXTRAS``), the requirements its
+    ``--with`` was given (``with``, ``places.run_with``), which a document's record says builds it again.
+    None in the base the server made (``places.HOME``: ``cad run``'s with no packages, and the server's own
+    kernel processes'), whose scripts the server builds in its own environment, and where Python names no
+    executable of its own."""
     from cad.engine import places
 
-    if places.HOME is not None or not sys.executable:
+    if (places.HOME is not None and not places.EXTRAS) or not sys.executable:
         return None
-    return {"executable": sys.executable, "prefix": sys.prefix, "release": release(), "contract": dict(CONTRACT)}
+    named = {"executable": sys.executable, "prefix": sys.prefix, "release": release(), "contract": dict(CONTRACT)}
+    if places.HOME is not None:
+        named["with"] = places.run_with()
+    return named
 
 
 def spelled(contract: Any) -> str:
