@@ -8,9 +8,9 @@ from __future__ import annotations
 import os
 import re
 import shutil
-import site
 import subprocess
 import sys
+import sysconfig
 import tempfile
 import textwrap
 import unittest
@@ -58,7 +58,8 @@ class OwnPythonTest(unittest.TestCase):
         purelib = Path(subprocess.run([self.python, "-I", "-c", "import sysconfig; print(sysconfig.get_path('purelib'))"],
                                       check=True, capture_output=True, text=True).stdout.strip())
         (purelib / "_cad_source.pth").write_text(f"{LIBRARY / 'src'}\n", encoding="utf-8")
-        (purelib / "zz_kernel.pth").write_text(f"{site.getsitepackages()[0]}\n", encoding="utf-8")
+        kernel = dict.fromkeys(sysconfig.get_path(name) for name in ("purelib", "platlib"))  # where this one's are
+        (purelib / "zz_kernel.pth").write_text("".join(f"{folder}\n" for folder in kernel), encoding="utf-8")
         (purelib / "ownpackage").mkdir()
         (purelib / "ownpackage" / "__init__.py").write_text("WIDTH = 42\n", encoding="utf-8")
         self.project = self.folder / "project"
