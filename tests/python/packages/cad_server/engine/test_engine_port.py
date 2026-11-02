@@ -322,8 +322,7 @@ class EnginePortTest(unittest.TestCase):
         """An engine of another engine folder on the device's port -- as 0.8's server is to 0.10's -- is
         rolled from as any program is, said as a text-to-cad's, never asked to stop: it runs on."""
         default = free_port()
-        other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state"),
-                 "CAD_ENGINE_STANDBY": "0"}
+        other = {"CAD_ENGINE_DIR": str(self.root / "other-engine"), "CAD_STATE_DIR": str(self.root / "other-state")}
         theirs = self.server("--port", str(default), **other)
         self.addCleanup(lambda: self.cli("stop", **other))
         done = self.started(CAD_ENGINE_DEFAULT_PORT=str(default))

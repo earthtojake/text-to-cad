@@ -1,5 +1,5 @@
 """``cad doctor`` — set the server up and report it: register the installation, write the ``cad``
-command, make the CAD kernel environment, start the engine, and say what this device runs.
+command, start the engine, and say what this device runs.
 
 The skills' one-time step (``uvx ... --from cad-server==<version> cad doctor``), and the repair
 command. On a device where no installation is current it registers this one
@@ -25,11 +25,10 @@ copied, and when (``cad_server._internal.providers``) --, and the agents the Ski
 skills for. Registering the current installation writes the plugin folder again, so it repairs one
 that is gone.
 
-It makes the CAD kernel environment, the base every build and the engine's own kernel
-processes start from (``cad_server._internal.base``: ``cad[build123d]`` at this release),
-when it is not made -- an installation that carries the kernel itself is its own -- saying what uv
-does as it works, so the first build after an install waits on nothing; ``--no-server`` says only
-whether it is made. Then it proves the CAD kernel loads there. ``OCP`` is imported in a fresh
+It says whether the CAD kernel environment, the base the engine's own kernel processes start from
+(``cad_server._internal.base``: ``cad[build123d]`` at this release), is made -- it never makes it: it is
+made on first need, by the first build or view that needs the kernel; an installation that carries the
+kernel itself is its own -- and, where it is, proves the CAD kernel loads there. ``OCP`` is imported in a fresh
 interpreter of that environment (never in this one, so the report itself stays stdlib-only and
 fast to reach), and a refused load is named for what it is: on Windows 11 that is Smart App
 Control blocking the unsigned ``.pyd``, which the bare ``ImportError`` never
@@ -37,13 +36,13 @@ says (``cad_server._internal.kernel_load_hint``). Run by an installation that is
 leaves the base to the current one's ``cad doctor``. And it says where the engine's server, where
 every build runs, keeps its door, and whether it was running or was started -- the current
 installation's engine, whatever release this doctor is (``cad.engine.client``). ``--no-server``
-does all of it but start the engine and make the CAD kernel environment, saying whether each is there:
-a CI job's smoke check, which must leave no engine behind.
+does all of it but start the engine, saying whether one runs: a CI job's smoke check, which must leave
+no engine behind.
 
 Exit codes: 0 = done; 4 = the kernel is installed but cannot be loaded (the report says why when it
 can tell). A kernel environment that is not made, or cannot be made here (no uv, no network), is
-reported, not failed: a no-deps install of the wheel (what the release workflow smoke-tests) is
-still a correct install, and the first build makes it.
+reported, not failed: it is made on first need, and a no-deps install of the wheel (what the release
+workflow smoke-tests) is still a correct install.
 
 stdlib-only on purpose: this must work when the heavy dependency set is broken.
 """
@@ -79,8 +78,7 @@ def _server(start: bool = True) -> str:
         return f"not running ({where}); a build starts it outside a sandbox; inside one, run `cad server` outside first"
     from cad_server.engine.cli import workers_text
 
-    # The version the engine runs as, and its environment; the workers as `cad status` counts them:
-    # the standby with them.
+    # The version the engine runs as, and its environment; the workers as `cad status` counts them.
     version = answer.get("installation") or answer.get("version")
     prefix = answer.get("prefix")
     return (f"{'started' if started else 'running'}, pid {answer.get('pid')}"
@@ -219,21 +217,16 @@ KERNEL_MISSING = "missing"
 KERNEL_FAILED = "failed"
 
 
-def _kernel_environment(make: bool) -> tuple[str | None, str]:
-    """The CAD kernel environment (``cad_server._internal.base``), made first when it is not and
-    ``make``, each line of uv's work said as it goes: ``(its Python, where it is)``, or ``(None, why there
-    is none)``."""
+def _kernel_environment() -> tuple[str | None, str]:
+    """The CAD kernel environment (``cad_server._internal.base``), never made here: ``(its Python, where it
+    is)``, or ``(None, why there is none)``."""
     from cad_server._internal import base
-
-    def say(line: str) -> None:
-        sys.stdout.write(f"  kernel   {line}\n")
-        sys.stdout.flush()
 
     try:
         installation = base.Installation.here()
-        found = base.ensure(installation, make=make, told=say)
+        found = base.ensure(installation, make=False)
         if found is None:
-            return None, f"{base.where(installation)}, not made: cad doctor, or the first build, makes it"
+            return None, f"{base.where(installation)}, made on first need: the first build or view that needs it"
     except base.Refused as refused:
         return None, str(refused)
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
@@ -531,21 +524,20 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
 
     from cad_server._internal.kernel_load_hint import kernel_load_hint
 
-    # The CAD kernel environment, made here when it is not (but with --no-server), and its kernel loaded
-    # there, before the engine starts: an engine that finds it made starts its standby there, which
-    # loads the kernel while nobody waits. The current installation's doctor makes the current one's.
+    # The CAD kernel environment, never made here (it is made on first need), and its kernel loaded there
+    # where it is made. The current installation's doctor checks the current one's.
     current = installations.current()
     if current is not None and not installations.mine(current):
         python, where = None, f"the current installation's (text-to-cad {current['version']}): its `cad doctor` checks it"
     else:
-        python, where = _kernel_environment(make=not args.no_server)
+        python, where = _kernel_environment()
     kernel_state, detail = _probe_kernel(python) if python is not None else (KERNEL_MISSING, where)
     kernel_loaded = kernel_state != KERNEL_FAILED
     status = 0 if kernel_loaded else 4
     if kernel_state == KERNEL_OK:
         sys.stdout.write(f"  kernel   OK — OCP at {detail} ({where})\n")
     elif python is None:
-        # Not a failure: the first build makes it, and a wheel installed --no-deps (the release smoke
+        # Not a failure: it is made on first need, and a wheel installed --no-deps (the release smoke
         # test) is still a correct install.
         sys.stdout.write(f"  kernel   not made — {detail}\n")
     elif kernel_state == KERNEL_MISSING:

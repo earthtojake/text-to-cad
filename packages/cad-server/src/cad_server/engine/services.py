@@ -5,11 +5,12 @@ each by its declaration, and the daemon binds its hooks to them by name (``drain
 ``WORKER``: a model script's warm worker, one per script and Python (and one for the documents no
 worker built, keyed ``documents``), in the installation's base -- or in the Python the script was run
 with, which its build names (``contract.interpreter``) when its environment is not the base: one of the
-caller's own, with its packages, and no standby (``interpreter="lease"``) -- with the caller's
+caller's own, with its packages (``interpreter="lease"``) -- with the caller's
 environment adopted at each request (``worker.adopt``) but for what binds it to its interpreter
 (``places.RESTARTS``), the daemon's bytecode and ``CAD_ENGINE_WORKER``; started in its script's folder,
-its stderr the model's log. It counts toward the count cap, is drained of its documents before it stops
-(``models.Models.drain``), and keeps a standby with the kernel loaded in the base (``worker.load_kernel``).
+its stderr the model's log. It counts toward the count cap, and is drained of its documents before it
+stops (``models.Models.drain``). It starts with a build, never before: its first build loads the kernel
+(``worker.kernel``, which says so when the load is long).
 
 ``RENDER``: a served document's render process (``cad.engine.render.service``), one per document by
 its id on the server (and per file no document, ``file:`` and its path: ``renders``), in the base,
@@ -17,16 +18,15 @@ with the daemon's environment and no bytecode written, standing where the daemon
 kept, its last lines said when it is gone. It does not count toward the count cap, is retired for
 memory before any worker, and its retirements are listed in ``status`` by its document.
 
-Their ranks give the order memory is shed in, today's: the standby (0), then render processes (1),
-then the workers no page watches (2), and a watched worker (3) only when no other is left.
+Their ranks give the order memory is shed in: render processes (1), then the workers no page watches
+(2), and a watched worker (3) only when no other is left.
 """
 
 from __future__ import annotations
 
 from cad.engine.places import RESTARTS
-from cad.engine.worker import KERNEL_NOTICE, KERNEL_PATIENCE
 
-from cad_server.engine.supervisor import Service, Standby, Words
+from cad_server.engine.supervisor import Service, Words
 
 __all__ = ["RENDER", "SERVICES", "WORKER"]
 
@@ -52,10 +52,6 @@ WORKER = Service(
     noted=("script", "builds"),
     drain=True,
     ready_seconds=300.0,  # a worker says it is ready before it loads the kernel, at its first build
-    # The standby loads the kernel first: a fresh installation's first load, which the operating system
-    # looks at library by library, has been measured at 43 s.
-    standby=Standby(args=("--standby",), adopt="adopt", rank=0, notice=KERNEL_NOTICE, patience=KERNEL_PATIENCE,
-                    ready_seconds=600.0),
 )
 
 RENDER = Service(

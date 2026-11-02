@@ -1,6 +1,6 @@
 """``cad doctor`` — the skills' one-time setup step and the repair command: it registers the
-installation where none is current, writes the ``cad`` command, makes the CAD kernel environment,
-starts the engine, and reports what the device runs -- the current installation, the releases on
+installation where none is current, writes the ``cad`` command, says whether the CAD kernel environment
+is made (never making it: it is made on first need), starts the engine, and reports what the device runs -- the current installation, the releases on
 disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 4 when
 the CAD kernel is installed but cannot be loaded -- naming Smart App Control on Windows, where a
 refused ``OCP`` load is otherwise a bare ImportError. A kernel that is simply absent is reported and
@@ -232,20 +232,20 @@ class DoctorTests(unittest.TestCase):
         self.assertRegex(out, r"server   not running \(.+\): no engine server is running, and this shell's sandbox cannot start one")
         self.assertFalse((self.state / "engine").exists(), "nothing started")
         # Running: said. None running: started, by the client's start (a request that may start one).
-        # The workers counted as `cad status` counts them: the standby with them, against the cap.
+        # The workers counted as `cad status` counts them, against the cap.
         # And the version it runs as, so a stale engine is seen (one that says none: its release).
-        answer = {"pid": 4242, "workers": [{"script": "a.py"}], "standby": {"pid": 4343}, "cap": 10,
+        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "cap": 10,
                   "version": "0.8.0", "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", return_value=answer):
             _, out, _ = _run([])
-        self.assertRegex(out, r"server   running, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 with the standby \(.+\)\n")
+        self.assertRegex(out, r"server   running, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 \(.+\)\n")
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request",
                                                      return_value={**answer, "installation": None}):
             self.assertRegex(_run([])[1], r"server   running, pid 4242, text-to-cad 0\.8\.0, workers 2/10")
         from cad_server.engine.cli import status_text
 
-        self.assertIn(" · workers 2/10 with the standby · ", status_text({**answer, "up": 1}))
-        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "standby": None, "cap": 10,
+        self.assertIn(" · workers 2/10 · ", status_text({**answer, "up": 1}))
+        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "cap": 10,
                   "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", side_effect=[None, answer]) as asked:
             _, out, _ = _run([])
@@ -267,7 +267,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_kernel_environment_not_made_is_reported_and_is_not_a_failure(self) -> None:
         # The release workflow installs the wheel --no-deps and runs doctor: no kernel environment
-        # there (no uv, no network) is a correct install, and the first build makes it.
+        # there (no uv, no network) is a correct install, and the first need makes it.
         from cad_server._internal import base
 
         refused = base.Refused("the CAD kernel environment needs the network once: dns error")
@@ -277,26 +277,24 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("  kernel   not made — the CAD kernel environment needs the network once: dns error\n", out)
         self.assertNotIn("FAILED", err)
 
-    def test_the_report_makes_the_kernel_environment_and_loads_the_kernel_there(self) -> None:
+    def test_the_report_makes_no_kernel_environment_and_loads_the_kernel_where_one_is_made(self) -> None:
         from cad_server._internal import base
 
         made = base.Environment("/cache/base/k/bin/python", "/cache/base/k", False, ("/cache/base/k/site",))
-
-        def ensure(installation=None, *, make=True, told=None):
-            told("making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in /cache/base/k")
-            return made
-
-        with mock.patch.object(base, "ensure", side_effect=ensure) as asked, TemporaryDirectory() as tmp:
+        with mock.patch.object(base, "ensure", return_value=made) as asked, TemporaryDirectory() as tmp:
             code, out, _err = _run([])
             _code, quiet, _err = _run(["--no-server"])
         self.assertEqual(code, 0)
-        self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [True, False],
-                         "--no-server makes nothing: it says whether it is there")
-        self.assertIn("  kernel   making the CAD kernel environment, once: cad[build123d] 9.9.9 on Python 3.14.0, in "
-                      "/cache/base/k\n  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n",
-                      out)
+        self.assertEqual([call.kwargs["make"] for call in asked.call_args_list], [False, False],
+                         "never made here: it is made on first need")
+        self.assertIn("  kernel   OK — OCP at /site/OCP.pyd (the CAD kernel environment, /cache/base/k)\n", out)
         doctor._probe_kernel.assert_called_with("/cache/base/k/bin/python")
         self.assertIn("kernel   OK", quiet)
+        with mock.patch.object(base, "ensure", return_value=None), TemporaryDirectory() as tmp:
+            code, out, err = _run([])
+        self.assertEqual(code, 0)
+        self.assertRegex(out, r"  kernel   not made — \S+, made on first need: the first build or view that needs it\n")
+        self.assertNotIn("FAILED", err)
 
     def test_a_kernel_that_will_not_load_exits_4(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
