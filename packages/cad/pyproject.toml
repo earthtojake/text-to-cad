@@ -32,7 +32,7 @@ dependencies = [
   # its wire format, and the STL/3MF/GLB writers read them back. The server's own process reads the
   # wire format's buffers too, so numpy is required. build123d requires numpy 2 already; the library
   # names the same range because it imports numpy itself.
-  "numpy>=2,<3",
+  "numpy>=2.5.4,<3",
 ]
 
 [project.optional-dependencies]
