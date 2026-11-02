@@ -32,9 +32,13 @@ Python's own key together (``python_key``: the caller's environment and release,
 says), so the same key leased from two environments is two processes, and a process started in one
 never serves a lease of another; the process runs the first Python its key was leased with, whatever
 spelling of that environment's interpreter a later lease names. It never takes its service's standby,
-nor waits for one, nor starts one, nor retires one to make room at the cap -- an idle process is its
-victim there, as below, else it waits: a standby runs the service's own environment, and stays for its
-leases. A request that needs a process of its own
+nor waits for one, nor starts one: a standby runs the service's own environment. At the cap it makes room
+with an idle process, as below, never the standby while another process is busy or being started: it
+waits for that one to be free, and holds up no lease in the service's own environment meanwhile, which may
+take the standby it cannot. Where the standby is all that holds the cap (a cap of one), the slot is the
+lease's: the standby retired, unnoted, and owed -- it stands again, in the environment it stood in, at the
+first slot free (``_restand``). So no cap leaves a lease waiting on what never frees. A request that needs
+a process of its own
 takes its service's standby when the binding is the standby's; waits for the standby being started,
 the first such request alone, when it is (and hears the standby's ``notice`` after its
 ``patience``); starts one at once when its service does not count; else starts one in a free slot
@@ -42,7 +46,8 @@ under the count cap (``cap``, shared by every counted service). At the cap a sta
 first (unnoted), then the idle counted process of the lowest rank no page watches -- one no waiting
 request wants, then the least recently used -- retired ``LRU``. When every idle one is watched the
 new one starts past the cap: connected means warm. With none idle the request waits, and so does
-every counted request after it. ``release`` gives the process back: free again, or, retired by its
+every counted request after it -- but for a lease in its caller's Python, which holds up only the leases
+in a caller's Python after it. ``release`` gives the process back: free again, or, retired by its
 own answer (``retire``) or gone, out of the table (``RSS``, ``exited``), drained when its service
 drains, and stopped. A process that dies idle leaves the table at the next grant (``exited``).
 
@@ -568,6 +573,9 @@ class _Standing:
     readying: dict[str, str] | None = None
     size: float | None = None
     follow: dict[str, str] | None = None
+    # The environment of the standby a lease in its caller's Python retired for its slot at the cap: owed,
+    # it stands again there at the first slot free (``Supervisor._restand``).
+    owed: dict[str, str] | None = None
 
 
 # ``launch(service, key, label, environment, cwd, standby)``, and ``python=`` the caller's Python for a
@@ -700,6 +708,7 @@ class Supervisor:
             with self.lock:
                 self.starting.discard(place)
                 self._grant()
+            self._restand()
             raise
         other = None
         if python is not None:
@@ -752,6 +761,15 @@ class Supervisor:
         if gone:
             self._retire(process)
         self.shed()
+        self._restand()
+
+    def _restand(self) -> None:
+        """Each standby owed -- retired for the slot of a lease in its caller's Python (``_Standing.owed``) --
+        stood again in the environment it stood in, where there is room for it now (``stand`` says)."""
+        with self.lock:
+            owed = [(name, slot.owed) for name, slot in self.standbys.items() if slot.owed is not None]
+        for name, environment in owed:
+            self.stand(name, environment)
 
     def _retire(self, process: Any, drain: bool = True) -> None:
         """A process retired: drained when its service drains (a standby holds nothing to drain), then
@@ -845,7 +863,7 @@ class Supervisor:
                 return
             if cap is not None and self._resident() + (slot.size or 0.0) > cap:
                 return
-            slot.readying = dict(environment)
+            slot.readying, slot.owed = dict(environment), None
         threading.Thread(target=self._stood, args=(declared, slot, dict(environment), os.getcwd()),
                          name=f"cadgen-standby-{service}", daemon=True).start()
 
@@ -971,6 +989,9 @@ class Supervisor:
         wanted = {(ticket.service.name, ticket.key) for ticket in self.queue}
         taken: set[int] = set()  # the processes this pass granted or retired
         blocked = False  # a counted lease before found no slot: no later one takes one
+        # A lease in its caller's Python before found none: no later one of a caller's takes one. It holds up no
+        # lease in the service's own environment, which may take what it cannot (the module).
+        callers_blocked = False
         awaited: set[str] = set()  # the services whose standby being started a lease before awaits
         granted = False
         for ticket in self.queue:
@@ -996,7 +1017,7 @@ class Supervisor:
                     taken.add(id(process))
                     granted = True
                 continue
-            if service.counted and blocked:
+            if service.counted and (blocked or (ticket.python is not None and callers_blocked)):
                 continue
             # A standby runs its service's environment: a lease in its caller's Python takes none.
             slot = self.standbys.get(service.name) if ticket.python is None else None
@@ -1016,7 +1037,7 @@ class Supervisor:
                 granted = True
                 continue
             # Another binding's standby, or another service's: the first to make room, unnoted -- but for a
-            # lease in its caller's Python, which never moves a standby (the module).
+            # lease in its caller's Python, which makes room with an idle process first (below).
             spare = self._spare() if ticket.python is None else None
             if spare is not None:
                 self._slot(ticket, spare)
@@ -1026,7 +1047,19 @@ class Supervisor:
             idle = [held for held in self.table.values()
                     if held.service.counted and not held.leased and id(held) not in taken]
             if not idle:
-                blocked = True
+                # A lease in its caller's Python where the standby is all that holds the cap -- no process of
+                # it busy or being started, to be free in time: the standby's slot, the standby owed
+                # (``_restand``). Else it waits, as any lease, holding up only a caller's after it.
+                spare = self._spare(owed=True) if ticket.python is not None and not self._busy() else None
+                if spare is not None:
+                    self._slot(ticket, spare)
+                    ticket.drains = False
+                    granted = True
+                    continue
+                if ticket.python is None:
+                    blocked = True
+                else:
+                    callers_blocked = True
                 continue
             # Connected means warm: a process whose document a page watches is never the count cap's
             # victim. With only watched idle ones the cap is exceeded instead, so a request never waits
@@ -1047,15 +1080,24 @@ class Supervisor:
             self.queue = [ticket for ticket in self.queue if not ticket.granted]
             self.lock.notify_all()
 
-    def _spare(self) -> Any:
+    def _busy(self) -> bool:
+        """Whether a process of the count cap is busy or being started (call with the lock held): one that
+        will be free, for a lease waiting at the cap to have."""
+        return (any(process.leased for process in self.table.values() if process.service.counted)
+                or any(self.services[name].counted for name, _key in self.starting))
+
+    def _spare(self, owed: bool = False) -> Any:
         """A counted service's ready standby, the lowest ranked, taken out to make room at the cap
-        (call with the lock held); None when there is none."""
+        (call with the lock held); None when there is none. ``owed``: for a lease in its caller's Python,
+        which owes it back (``_Standing.owed``)."""
         ready = [(self.services[name].standby.rank, name, slot) for name, slot in self.standbys.items()
                  if slot.ready is not None and self.services[name].counted]
         if not ready:
             return None
         _rank, _name, slot = min(ready, key=lambda row: row[:2])
         spare, slot.ready = slot.ready, None
+        if owed:
+            slot.owed = dict(spare.environment)
         return spare
 
     def _slot(self, ticket: _Ticket, victim: Any) -> None:

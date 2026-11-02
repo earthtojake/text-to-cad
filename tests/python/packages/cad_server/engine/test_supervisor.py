@@ -249,7 +249,7 @@ class SchedulingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "a render runs its own environment's Python"):
             supervisor.lease("render", "doc", {}, python="/venv/bin/python")
 
-    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker_never_the_standby(self) -> None:
+    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker_before_the_standby(self) -> None:
         supervisor, started = self.caller_s(2)
         spare = self.standing(supervisor)
         idle, = self.used(supervisor, "worker", "a.py")  # the standby, taken
@@ -262,6 +262,44 @@ class SchedulingTest(unittest.TestCase):
         self.assertFalse(standby.stopped)
         self.assertEqual([row["reason"] for row in supervisor.retired], ["LRU"])
         supervisor.release(theirs)
+
+    def test_waiting_at_the_cap_a_lease_in_its_caller_s_python_holds_up_no_build_in_the_server_s_own(self) -> None:
+        supervisor, _started = self.caller_s(2)
+        busy = supervisor.lease("worker", "a.py", {})
+        self.standing(supervisor)
+        standby = supervisor.standby("worker")
+        got: list = []
+        theirs = threading.Thread(target=lambda: got.append(supervisor.lease(
+            "worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")), daemon=True)
+        theirs.start()
+        await_(lambda: supervisor.waiting("worker") == 1, "the caller's lease to wait for the busy worker")
+        self.assertFalse(standby.stopped, "a busy worker will be free: the standby stays")
+        # A build in the server's own Python behind it takes the standby the waiting one cannot.
+        self.assertIs(supervisor.lease("worker", "c.py", {}), standby)
+        supervisor.release(busy)
+        theirs.join(5)
+        self.assertTrue(got and busy.stopped, "the caller's lease took the slot of the worker once it was free")
+
+    def test_at_a_cap_of_one_a_lease_in_its_caller_s_python_takes_the_standby_s_slot_and_it_stands_again(self) -> None:
+        # The standby is all that holds the cap: the slot is the lease's, never a wait on nothing.
+        supervisor, started = self.caller_s(1)
+        spare = self.standing(supervisor)
+        theirs = supervisor.lease("worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
+        self.assertTrue(spare.stopped, "the standby retired for its slot")
+        self.assertEqual((started[-1], list(supervisor.retired)), (("b.py", "/venv/bin/python"), []), "unnoted")
+        # A build in the server's own Python behind it waits for that worker to be free, then takes its slot.
+        got: list = []
+        behind = threading.Thread(target=lambda: got.append(supervisor.lease("worker", "a.py", {})), daemon=True)
+        behind.start()
+        await_(lambda: supervisor.waiting("worker") == 1, "the build behind it to wait for the slot")
+        supervisor.release(theirs)
+        behind.join(5)
+        self.assertTrue(got and theirs.stopped, "the idle worker made room")
+        self.assertIsNone(supervisor.standby("worker"), "no room for the standby while a worker holds the slot")
+        # The slot free again (the worker over its memory cap): the standby owed stands again.
+        got[0].retired = True
+        supervisor.release(got[0])
+        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
 
     def test_a_build_s_worker_is_its_environment_s_and_its_release_s_whatever_spelling_names_its_python(self) -> None:
         from cad.engine import contract

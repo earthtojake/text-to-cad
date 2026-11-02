@@ -450,9 +450,12 @@ which runs the first of them to ask; the same script run from two environments i
 another release of cad in one environment, under the same contract, gets a fresh worker, never the warm
 one that holds the release before's code. It keeps its memo and the warm edits as any worker, and
 adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); it has no standby, so
-its first build loads the kernel cold, and it never takes, waits for or moves the standby: at the cap,
-it makes room by retiring an idle worker, as any build does, never the standby, and with none idle it
-waits for one. The rest of the engine's kernel processes stay in the base: the documents worker, the
+its first build loads the kernel cold, and it never takes or waits for the standby. At the cap it makes
+room by retiring an idle worker, as any build does; with none idle it waits for a busy worker to be free,
+and holds up no build in the base meanwhile, which may take the standby. Where the standby is all that
+holds the cap (`CAD_ENGINE_WORKERS=1`, or one core), it takes the standby's slot: the standby is retired
+and stands again at the first slot free (`Supervisor._restand`), so no cap leaves a build waiting on
+nothing. The rest of the engine's kernel processes stay in the base: the documents worker, the
 meshing and reading pools, the render processes and the standby. A document such a worker holds is
 asked of it alone (`via` and its environment's key): with that worker gone, an export or a shape of the
 document is refused as not held, never asked of another worker of its script. Its record names that
