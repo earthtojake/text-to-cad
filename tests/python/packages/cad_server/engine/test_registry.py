@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shlex
 import shutil
 import sys
 import tempfile
@@ -98,11 +99,11 @@ class RegistryTest(unittest.TestCase):
         self.registry.put({**_record(self.ident, self.state), "python": "/w/.venv/bin/python"})
         with mock.patch.object(records, "WINDOWS", False):
             self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
-                             f"/w/.venv/bin/python {self.state / 'parts.py'}")
+                             f"/w/.venv/bin/python {shlex.quote(str(self.state / 'parts.py'))}")
         self.registry.put({**_record(self.ident, self.state), "with": ["/w/pkg", "pandas>=2"]})
         with mock.patch.object(records, "WINDOWS", False):
             self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
-                             f"cad run --with /w/pkg --with 'pandas>=2' {self.state / 'parts.py'}")
+                             f"cad run --with /w/pkg --with 'pandas>=2' {shlex.quote(str(self.state / 'parts.py'))}")
 
     def test_a_record_is_relocated_by_its_root_alone_and_a_shape_s_is_never_detached(self) -> None:
         moved = self.state / "elsewhere"
