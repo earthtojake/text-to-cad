@@ -55,7 +55,7 @@ build123d = [
   # non-VTK provider: the library does not import VTK or cadquery, and this keeps the optional
   # visualization stack out of every CAD install. OCP 8 collection, vector and downcast names are
   # used directly.
-  "cadquery-ocp-novtk>=8.0,<8.1",
+  "cadquery-ocp-novtk>=8.0.1.1.0,<8.1",
   # @eng_drawing renders its PDF through ezdxf's drawing add-on, whose matplotlib backend is the page
   # renderer. The add-on also imports Pillow at module level and ezdxf declares neither, so a module
   # of the library would otherwise import packages it does not depend on -- and the drawing IS the
