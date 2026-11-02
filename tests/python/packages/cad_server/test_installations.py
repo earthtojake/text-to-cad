@@ -479,9 +479,11 @@ class WindowsCommandTests(Fixture):
         self.assertTrue(os.path.isfile(python))
         self.assertFalse((self.root / "home").exists(), "uv made it, not the test's stand-in")
         ran = subprocess.run([str(self.exe), "--version"], capture_output=True, text=True, encoding="utf-8")
-        from cad_server import __version__
-
-        self.assertEqual((ran.returncode, ran.stdout.strip()), (0, f"cad {__version__}"), ran.stderr)
+        # The current installation of the runner's state folder: this interpreter, by the version it is
+        # registered as, which the proxy tells it.
+        current = installations.current()
+        self.assertIsNotNone(current)
+        self.assertEqual((ran.returncode, ran.stdout.strip()), (0, f"cad {current['version']}"), ran.stderr)
         # cmd parsed these: `>` and `|` redirected, `&` split the line, `^` and `!` went, `%PATH%` expanded.
         odd = 'a&b>c|d ^e !f! %PATH% "g"'
         ran = subprocess.run([str(self.exe), odd], capture_output=True, text=True, encoding="utf-8", cwd=self.root)
