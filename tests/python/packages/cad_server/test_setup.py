@@ -466,14 +466,16 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertIn("Gemini CLI: install the text-to-cad extension", err)
         switch.handover.assert_not_called()
 
-    def test_the_cad_kernel_environment_is_said_in_the_plan_and_never_made_at_setup(self) -> None:
+    def test_the_cad_kernel_environment_is_planned_and_made_once(self) -> None:
         from cad_server._internal import base
 
         core = base.Installation(**{**base.dataclasses.asdict(base.Installation.here()), "kernel": False})
         made: dict = {}
 
         def ensure(installation=None, *, make=True, told=None):
-            self.assertFalse(make, "setup makes no environment: it is made on first need")
+            if make and "env" not in made:
+                told("making the CAD kernel environment, once: cad[build123d] in the cache folder")
+                made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
             return made.get("env")
 
         where = providers.shown(str(base.where(core)), self.machine)
@@ -481,14 +483,16 @@ class InstallUpdateAndUninstall(Fixture):
                 mock.patch.object(base, "ensure", side_effect=ensure):
             planned = self.run_setup("--dry-run")
             first = self.run_setup()
-            made["env"] = base.Environment("/base/bin/python", "/base", False, ("/base",))
             again = self.run_setup()
-        self.assertEqual((planned[0], first[0], again[0]), (0, 0, 0), first[1])
-        for said in (planned[1], first[1]):
-            self.assertRegex(said, rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)}, made on "
-                                   rf"first need in {re.escape(where)}\n")
-        self.assertRegex(again[1], rf"\n  build123d\s+leave\s+cad\[build123d\] {re.escape(core.release)} in ")
-        self.assertNotIn("making", first[1])
+        self.assertEqual(planned[0], 0)
+        self.assertRegex(planned[1], rf"\n  build123d\s+make\s+cad\[build123d\] {re.escape(core.release)} in "
+                                     rf"{re.escape(where)}, once\n")
+        self.assertNotIn("making", planned[1], "a dry run makes nothing")
+        self.assertEqual(first[0], 0, first[1])
+        self.assertIn("build123d making the CAD kernel environment, once: cad[build123d] in the cache folder\n", first[1])
+        self.assertEqual(again[0], 0)
+        self.assertNotIn("making", again[1])
+        self.assertRegex(again[1], r"build123d\s+leave\s+cad\[build123d\] ")
 
     def test_a_failed_app_exits_1_and_the_other_apps_are_still_done(self) -> None:
         command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")

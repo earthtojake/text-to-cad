@@ -5,8 +5,8 @@ command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, buil
 its ``build123d`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
-processes (the documents worker, the meshing and reading pools, the render processes: ``kernel``, which
-the engine is handed as ``cad.engine.places.KERNEL``).
+processes (the standby, the documents worker, the meshing and reading pools, the render processes:
+``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``).
 
 - **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
@@ -25,12 +25,10 @@ the engine is handed as ``cad.engine.places.KERNEL``).
 - **One maker**: a lock beside it, so a process that finds another making it waits for it.
 - **The network** waits on nothing it need not: uv is asked ``--offline`` first, from its cache, and
   online only for what the cache does not hold, said in a line before it starts.
-- **Made on first need**, never ahead of it: nothing makes it at install time or at the engine's
-  start. The first ``cad run`` that needs it, or the first of the engine's kernel processes -- a build's
-  worker, a view or an operation that reads a STEP or an xbf or meshes one -- makes it (``kernel``,
-  ``Making``), and what needs it waits on its making. An engine a host's CAD app starts runs outside any
-  sandbox, so an agent's sandboxed ``cad run``, which cannot write the cache folder, asks it over its door
-  (``ensure``'s ``engine``) and follows its making; with no engine to ask, the command makes it itself.
+- **The engine makes it** when it starts and finds none (``Making``, in the background): an engine a
+  host's CAD app starts runs outside any sandbox, so an agent's sandboxed first ``cad run``, which cannot
+  write the cache folder, asks it over its door (``ensure``'s ``engine``) and follows its making; with no
+  engine to ask, the command makes it itself.
 """
 
 from __future__ import annotations
@@ -297,15 +295,8 @@ def _by_the_engine(env: Path, told: Callable[[str], None]) -> dict[str, Any] | N
 def kernel(make: bool = True) -> dict[str, Any] | None:
     """The environment the engine's kernel processes run in, as the engine is handed it
     (``cad.engine.places.KERNEL``): the base's Python, its folder, its import path and whether it is this
-    installation's own; None when it is not made and ``make`` is false. With ``make``, one not made is made
-    now, on first need, by the engine's one making (``MAKING``: its state in ``status``, every asker waiting
-    on the same making). ``Refused`` when it cannot be."""
-    found = ensure(make=False)
-    if found is None and make:
-        error = MAKING.follow(lambda _line: None)
-        if error is not None:
-            raise Refused(error)
-        found = ensure(told=lambda _line: None)  # made now: its marker read, nothing resolved
+    installation's own; None when it is not made and ``make`` is false. ``Refused`` when it cannot be."""
+    found = ensure(make=make, told=lambda _line: None)
     if found is None:
         return None
     return {"python": found.python, "prefix": found.prefix, "path": None if found.path is None else list(found.path),
@@ -313,11 +304,12 @@ def kernel(make: bool = True) -> dict[str, Any] | None:
 
 
 class Making:
-    """The installation's base made in this process's background, on first need, for whoever needs it
-    (``follow``: a kernel process's start, ``kernel``; a client's ``cad run`` over the engine's door). One
-    making at a time, under the base's own lock as every maker's; its lines go to the engine's log and are
-    kept for whoever follows it and for ``status``. Nothing remembers a failure: the next follower makes it
-    again."""
+    """The installation's base made in this process's background: the engine's, at its start when the base
+    is absent (``start``), and again for whoever needs it later (``follow``: a client's ``cad run`` over the
+    engine's door). One making at a time, under the base's own lock as every maker's (a lease that needs the
+    kernel meanwhile waits on it); its lines go to the engine's log and are kept for whoever follows it and for
+    ``status``; ``made`` is told when it is made (the engine stands its standby). Nothing remembers a
+    failure: the next start or follower makes it again."""
 
     def __init__(self) -> None:
         self.changed = threading.Condition()
@@ -325,6 +317,7 @@ class Making:
         self.lines: list[str] = []
         self.error: str | None = None
         self.since: float | None = None
+        self.made: Callable[[], None] | None = None
 
     def key(self) -> str | None:
         """The name of this installation's base folder (``where``), which a client names the base it
@@ -364,6 +357,8 @@ class Making:
         with self.changed:
             self.state, self.error = state, error
             self.changed.notify_all()
+        if state == "made" and self.made is not None:
+            self.made()
 
     def follow(self, told: Callable[[str], None]) -> str | None:
         """The base made, by the making under way here or one started now: each of its lines said to

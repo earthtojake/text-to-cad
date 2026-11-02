@@ -19,8 +19,7 @@ current installation's
 2. **Plan.** Under a lock in the state folder, every agent app is read (``cad_server._internal.providers``),
    and the plan printed: per app, ``install``, ``update``, ``remove duplicate`` or ``leave``, with each
    command it runs and each file it edits; what serves the engine's port (``CAD_ENGINE_PORT``, else
-   3245); and build123d, the CAD kernel, and whether it is made. ``--dry-run`` stops there and writes
-   nothing. Nothing is asked.
+   3245); and build123d, the CAD kernel. ``--dry-run`` stops there and writes nothing. Nothing is asked.
 3. **0.8's server.** Where 0.8 is installed -- an installation's record in 0.8's own state folder
    whose Python and console script are still there (``cad_server._internal.installations.earlier``) --
    that installation's own stop, ``cadgen stop``, is run, with its telemetry off (``NO_TELEMETRY``), and
@@ -32,10 +31,10 @@ current installation's
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
-5. **build123d.** The environment the engine's own kernel processes start from, ``cad[build123d]`` at
-   this release (``cad_server._internal.base``), is said in the plan and never made here: it is made on
-   first need (the first build, or a view or operation that needs the kernel), from uv's cache where it
-   holds it. Nothing is installed at setup, nor after an update.
+5. **build123d.** The environment every build and the engine's own kernel processes start from,
+   ``cad[build123d]`` at this release (``cad_server._internal.base``), made now when it is not, so the
+   first build after an install or an update waits on nothing: its line said while uv works, and a step
+   that fails when it cannot be made. An installation that carries the kernel itself makes none.
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
    (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
    a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
@@ -62,7 +61,7 @@ current installation's
    and changed nothing.
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
-steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
+steps 2 and 4 to 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
 each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
@@ -133,7 +132,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Install the newest release of text-to-cad and set it up in every agent app on this machine, "
-                        "as the update button does: its release folder, each app's own command, and "
+                        "as the update button does: its release folder, build123d, each app's own command, and "
                         "the engine switched to it. With the version feed out of reach, this release's setup.",
             epilog=f"The install command does the same: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
         )
@@ -142,7 +141,7 @@ def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: b
             prog=prog,
             allow_abbrev=False,
             description="Set up text-to-cad in every agent app on this machine as this release, or bring it up to "
-                        "date there: its release folder, each app's own command, Claude Desktop's "
+                        "date there: its release folder, build123d, each app's own command, Claude Desktop's "
                         "config, second copies removed, and the engine switched to this release. `cad update` "
                         "runs the newest release's; `cad uninstall` takes it out.",
             epilog=f"The install command runs this with the newest release: {INSTALL} (on Windows: {INSTALL_WINDOWS}).",
@@ -492,9 +491,9 @@ class Installer:
         return {**row, "action": "switch", "subject": f"{who}: drains, then text-to-cad {self.release}'s takes its place"}
 
     def _kernel(self) -> dict[str, Any] | None:
-        """The CAD kernel environment, the base the engine's own kernel processes start from
-        (``cad_server._internal.base``), as the plan says it: made, or made on first need -- never by this
-        run. None for an installation that carries the kernel itself."""
+        """The CAD kernel environment, the base every build and the engine's own kernel processes start
+        from (``cad_server._internal.base``): made by this run when it is not, so the first build
+        after an install waits on nothing. None for an installation that carries the kernel itself."""
         from cad_server._internal import base
 
         row: dict[str, Any] = {"app": "build123d", "label": "build123d", "action": "leave"}
@@ -509,7 +508,19 @@ class Installer:
         shown = self.providers.shown(str(folder), self.machine)
         if found is not None:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
-        return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
+        return {**row, "action": "make", "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}, once"}
+
+    def _make_kernel(self) -> bool:
+        """The CAD kernel environment made (``_kernel``'s ``make``), each line uv's work says as it goes;
+        False, said in its line, when it cannot be."""
+        from cad_server._internal import base
+
+        try:
+            base.ensure(told=lambda line: self.say(f"build123d {line}"))
+        except base.Refused as refused:
+            self.say(f"build123d {refused}")
+            return False
+        return True
 
     def _switch(self) -> tuple[bool, dict[str, Any] | None]:
         """Step 8: the device's engine moved to this release (``switch.handover``), said in its lines:
@@ -804,8 +815,14 @@ class Installer:
             for row in earlier:
                 self._stop_earlier(row)
             registered = self._register()
-            # An app whose command fails fails the run, and the rest goes on: the switch among it.
-            failed = False
+            made = kernel is not None and kernel["action"] == "make"
+            # The kernel that cannot be made fails the run and keeps the engine where it is; an app whose
+            # command fails fails the run too, and the rest goes on: the switch among it.
+            kernel_failed = False
+            if made:
+                self.stage("build123d", f"cad[build123d] {self.release}")
+                kernel_failed = not self._make_kernel()
+            failed = kernel_failed
             self.stage("apps")
             # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
             # written changes no app that would point at it.
@@ -838,10 +855,11 @@ class Installer:
                     receipt["launcher"] = {"path": launcher["path"], "written": True, "at": providers.stamp()}
                 self._keep(receipt)
             switched = None
-            if not self.engine_update:
+            if not self.engine_update and not kernel_failed:
                 switch_failed, switched = self._switch()
                 failed = failed or switch_failed
-            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or switched):
+            if not (self.actions or self.stopped or registered["record_written"] or launcher["written"] or made
+                    or switched):
                 self.say(f"text-to-cad {self.release} is already up to date here.")
         if switched is not None and switched.get("restored"):
             # The release before runs again: its plugin folder, and the apps' copies of it, come back with
@@ -850,7 +868,7 @@ class Installer:
 
             switch.follow(told=lambda line: self.say(f"plugin   {line}"))
         if self.engine_update:
-            return 0
+            return 1 if kernel_failed else 0
         verified = self._verify()
         self._telemetry_into(verified)
         restart = self._restart(apps, changed)
