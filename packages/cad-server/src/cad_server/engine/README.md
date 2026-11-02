@@ -159,7 +159,7 @@ viewer's one page on that listener, every document at `/<id>`. Document routes r
 process, with no network relay. Kernel reads, topology, poses and meshes run in
 reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. The daemon's own
 process imports no kernel: its installation may have none (the wheel's core), and every process
-of the engine's that loads the kernel -- a model's worker, the documents worker, the
+of the engine's that loads the kernel -- a model's worker, the documents worker, the standby, the
 meshing and reading pools, the render processes -- runs in an environment that has it (**Running a
 model**): the base, or the Python a script was run with, for that script's worker. If Python cannot
 start those processes (on Windows, a loader refusing `_multiprocessing.pyd`), or the environment they
@@ -205,7 +205,7 @@ own lock, independent of document reads and the supervisor's leases. A page watc
 while it has a version wait outstanding or completed a sync within `serve.LIVE` seconds; its heartbeats
 name the document by its id (`ids`): a file's `file_id`, a model's `model_id`, never turning
 a model into a file path. To admit a new script at the worker-count cap, the
-least recently used unwatched idle worker goes. When every idle worker is
+standby goes first, then the least recently used unwatched idle worker. When every idle worker is
 watched, the new worker starts past the cap instead: a build never waits on an open page, and never
 costs one its warm worker. The workers' memory cap retires a watched worker only when no unwatched one
 is left to retire. A retired worker's documents stay served: the daemon takes them from it first, and
@@ -264,8 +264,7 @@ An update moves the device to another release in one step, and only when the per
 button in the CAD Viewer and the CAD app (`POST /api/v1/local/update`, `cad_server._internal.update`), `cad
 update`, or the install command run again (both `cad setup`). Each installs the release in a folder
 of its own, `<state>/releases/<release>` (`cad_server._internal.releases`: made by uv, from its cache
-where it holds it) -- and makes no environment for it: that release's base, and every environment a
-script's run asks for, is made on first need, from uv's cache (**Running a model**) --, writes the plugin folder every
+where it holds it), makes that release's base (**Running a model**), writes the plugin folder every
 agent app is pointed at, `<state>/plugin`, from that release (`cad_server._internal.plugin`: in place,
 each file renamed over), brings the apps' copies of it along (`cad_server._internal.providers`; an app
 that reads the folder in place needs nothing), and then switches (`cad_server._internal.switch`):
@@ -464,11 +463,14 @@ cad the build names: `python`, `python3` and `python3.14` of one environment sha
 which runs the first of them to ask; the same script run from two environments is two workers; and
 another release of cad in one environment, under the same contract, gets a fresh worker, never the warm
 one that holds the release before's code. It keeps its memo and the warm edits as any worker, and
-adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); its first build loads
-the kernel, as any worker's does. At the cap it makes room by retiring an idle worker, as any build
-does; with none idle it waits for a busy worker to be free, first come first served with every other
-build. The rest of the engine's kernel processes stay in the base: the documents worker, the meshing and
-reading pools and the render processes. A document such a worker holds is
+adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); it has no standby, so
+its first build loads the kernel cold, and it never takes or waits for the standby. At the cap it makes
+room by retiring an idle worker, as any build does; with none idle it waits for a busy worker to be free,
+and holds up no build in the base meanwhile, which may take the standby. Where the standby is all that
+holds the cap (`CAD_ENGINE_WORKERS=1`, or one core), it takes the standby's slot: the standby is retired
+and stands again at the first slot free (`Supervisor._restand`), so no cap leaves a build waiting on
+nothing. The rest of the engine's kernel processes stay in the base: the documents worker, the
+meshing and reading pools, the render processes and the standby. A document such a worker holds is
 asked of it alone (`via` and its environment's key): with that worker gone, an export or a shape of the
 document is refused as not held, never asked of another worker of its script. Its record names that
 Python (`python`), and the command that builds it again is that Python and the script (**The rebuild
@@ -493,21 +495,19 @@ no Python and hears neither.
 
 Every other process of the engine's that loads the kernel runs the base's Python (`places.kernel`,
 which the distribution makes as `places.KERNEL`): a model's worker but one in its script's own Python,
-the documents worker, the render processes, and the meshing and reading pools, whose spawned processes
-start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is made on
-first need**, never ahead of it: nothing makes it at install time (`cad setup`, `cad doctor` and an
-update leave it alone), and the engine starts and serves with none made -- pages, the home, documents
-held in the cache, `status`. The first thing that needs it makes it: a `cad run` of a script whose
-environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
-an operation that opens or draws a STEP or an xbf, or meshes one (`places.kernel`, `base.kernel`) --, by
-the engine's one making (`base.Making`, its lines in the engine's log and its state in `status`), and
-every kernel process asked for meanwhile waits on it; those processes start only once it exists. An
-engine a host's CAD app started runs outside any sandbox, where an agent's command may not write the
-cache folder: a `cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`,
-its key naming the installation's base) and follows its making, each line said as it comes; it makes the
-base itself only when no engine of its installation answers. A base that cannot be made fails the
-request that needed it in one line (`serve.KernelProcessesUnavailable`), and nothing remembers the
-failure: the next asker makes it again.
+the documents worker, the standby, the render processes, and the meshing and reading pools, whose
+spawned processes start on the base's own import path, which the marker records (`serve._spawn_in`).
+The engine starts and serves with no base
+made -- pages, the home, documents held in the cache, `status` -- and makes it then, in the background
+(`base.Making`, its lines in the engine's log and its state in `status`): an engine a host's CAD app
+started runs outside any sandbox, where an agent's command may not write the cache folder. The standby
+stands once it is made, and a kernel process asked for meanwhile waits for it (the base's lock). A
+`cad run` that finds no base asks the device's engine over its door (`{"op": "base"}`, its key naming
+the installation's base) and follows its making, each line said as it comes; it makes the base itself
+only when no engine of its installation answers. `cad setup` and `cad doctor` make it at install time,
+so the first build waits on nothing. A base that cannot be made fails the request that needed it in one
+line (`serve.KernelProcessesUnavailable`), and nothing remembers the failure: the next asker makes it
+again.
 
 ## Layout
 
@@ -662,13 +662,12 @@ start compiled build123d and the pure-Python libraries it loads: measured on a f
 environment of the wheel, a fresh daemon's first build of a one-body model took 5.2-6.2 s with
 none cached and 2.4-2.9 s cached. A folder no daemon started in 30 days goes
 (`PYCACHE_UNUSED_DAYS`). With no cache folder that is this user's alone, nothing is written.
-No process stands by: a worker starts with its script's first build and loads the kernel then
-(`worker.kernel`), about 2.5 s on a one-box model (measured on a 10-core Mac with an installed
-bytecode cache); the first load of a fresh environment on macOS also waits on the system's first look
-at each native library, 43 s measured. A build that waits on such a load says so once, on stderr, when
-it has waited `worker.KERNEL_PATIENCE` (5 s): `loading the CAD kernel for the first time in this
-environment, up to a minute`. A warm worker says nothing. An environment without the build123d
-integration (**Running a model**) loads none.
+The daemon's standby (**The engine server and its workers**) loads the kernel at the daemon's
+start: the first load of a fresh installation on macOS also waits on the system's first look at
+each native library, 43 s measured, which the standby pays while nobody waits. A build that waits
+on such a load -- one arriving before the standby is ready, or the first of a worker whose kernel is
+not loaded -- says so once, on stderr, when it has waited `worker.KERNEL_PATIENCE` (5 s): `loading
+the CAD kernel for the first time in this environment, up to a minute`. A warm worker says nothing.
 A warm build does not make the document again: the worker holds the XCAF
 document it last wrote and patches it (`document.Kept`). A prototype whose label
 holds what a cold build would make of it keeps that label untouched; one that
@@ -770,9 +769,7 @@ cache); and with the machine. **No timer retires a worker either**: memory alone
 documents are saved to the cache, past the memory budget what no page watches leaves memory for it
 (**Document lifetime**), and past the workers' memory cap, or under the system's memory pressure,
 idle workers go (below). It holds a pool of warm workers, one per model script and Python (and one for
-the documents no worker built), each a process whose memo lives as long as it does, and nothing
-standing by: a worker starts with its script's first build. Its rules are a standard pool's, and nothing
-else: no admission guess, no refusal;
+the documents no worker built), each a process whose memo lives as long as it does, and one standby. Its rules are a standard pool's, and nothing else: no admission guess, no refusal;
 the operating system does the rest. (What the daemon itself holds, the documents and their
 tessellations, is under one memory budget: **Document lifetime**.)
 
@@ -786,19 +783,34 @@ tessellations, is under one memory budget: **Document lifetime**.)
   build that waits for its own script's busy worker takes no slot.
 - **The cap never retires a watched worker.** When every idle worker has a document a page
   watches, the new worker starts past the cap. The memory cap may still retire a watched one.
-- **Nothing ahead of a request.** No worker stands by with the kernel loaded, and the engine starts no
-  kernel process at its start: a new script's first build starts its worker, which loads the kernel
-  then (2.5-2.6 s for a one-box model on a 10-core Mac, an installed bytecode cache; its worker holds
-  450-520 MB). Its environment, the base, is made on first need (**Running a model**), and the build
-  waits on its making.
+- **A standby.** One worker stands by with the kernel loaded and no script (`Supervisor.stand`): started
+  with the daemon once the base is made (a start with none makes it first: **Running a model**), and again each
+  time a build takes it or starts a worker of its own, while the pool has a slot for it under the cap
+  and room for it under the memory cap. A build for a script
+  with no live worker takes it when the build's environment shapes the interpreter as the
+  standby's does (`places.RESTARTS`), and starts a fresh worker otherwise -- after which the
+  standby, of another interpreter, is replaced by one of the build's. A build in its script's own
+  Python (**Running a model**) never takes it, nor waits for it, nor moves it, nor retires it for room
+  at the cap: the standby is the base's, and stays for its builds. Taken, it is that script's
+  worker (the standby's adoption, `Process.adopt`): its key, the environment it was asked in and the folder a fresh worker
+  of it would start in, its run's environment adopted as every run's is (`worker.adopt`). A build
+  arriving while the standby starts, of its interpreter, waits for it rather than start another.
+  It counts toward the cap, is the first retired for room at the cap or for memory, and is never a
+  script's worker in `status`. Measured on a 10-core Mac (one-box models, an installed bytecode
+  cache): a new script's first build took 2.5-2.6 s in a fresh worker and 0.15-0.23 s in the
+  standby; the standby holds 440 MB, a one-box model's worker 450-520 MB.
+  `CAD_ENGINE_STANDBY=0` keeps none (`daemon.standby`): an operator's seam for CI and machines
+  short of memory, not a setting a model's author touches; unset or any other value, the standby
+  stands by. A test suite sets it for every daemon it starts but the standby's own.
 - **Memory retires, never a timer.** The workers' resident memory -- each one's as it measured it at
-  its start and after each build, the render processes' with it -- is held to one
+  its start and after each build, the standby's and the render processes' with it -- is held to one
   cap, `CAD_ENGINE_WORKER_RSS_MB` (default: a quarter of the machine's memory, at least 2 GiB;
   `0` for no cap; `Supervisor.shed`). After each build and picture, and each `Daemon.tend` round, past
-  it idle processes are retired, least recently used first within each rank: render processes, the
-  workers no page watches, then the watched ones, only when no other is left; a
+  it idle processes are retired, least recently used first within each rank: the standby, render
+  processes, the workers no page watches, then the watched ones, only when no other is left; a
   worker is drained first, so its documents stay held. Under the system's memory pressure (the server's
-  `serve.Pressure`, polled every two seconds), they go down to half the cap (`CAD_ENGINE_PRESSURE`: `0` never under it, `1` always, unset
+  `serve.Pressure`, polled every two seconds), the standby goes at once, none starts while it lasts, and
+  the rest go down to half the cap (`CAD_ENGINE_PRESSURE`: `0` never under it, `1` always, unset
   measured; a test's seam, `Pressure.from_environment`). A busy process is never retired, and an idle worker under the cap lives as long as the
   engine. A worker alone over the cap after a build is retired at once: the report says so
   (`retired`), and once it has answered the daemon drains it and closes its stdin.
@@ -820,11 +832,12 @@ the process runs and in which environment, whether a lease may name the Python i
 caller's (`interpreter`: the worker's), what one process serves (its key: a script's path, a
 document's id; with a Python a lease named, that Python too), what binds a process to its caller's
 interpreter (`places.RESTARTS`), whether it
-counts toward the count cap, its rank when memory is shed (a render process 1, a worker 2, a watched
-worker 3), whether the daemon drains it before it stops, whether its retirements are listed in `status`
-and how long its start may take: a process that has not said it is ready by then -- a worker in 300 s, a
-render process in 120 -- is killed, and the request that waited for it refused in one line saying so,
-never asked again. The rules above
+counts toward the count cap, its rank when memory is shed (the standby 0, a render process 1, a
+worker 2, a watched worker 3), whether the daemon drains it before it stops, whether its retirements
+are listed in `status`, whether it keeps a standby and how long its start may take: a process that
+has not said it is ready by then -- a worker in 300 s, the standby in 600, a render process in 120 --
+is killed, and the request that waited for it refused in one line saying so, never asked again (a
+standby is simply not there, and the daemon's log says why, once). The rules above
 are the supervisor's, for every service alike: a new kind of process is a declaration, and no code of
 the daemon's. A new service's large outputs go by path, a file on disk its caller reads, and its small
 answers in frames; today's children keep their bulk in frames as they always have (a drained
@@ -845,8 +858,8 @@ for each request, its `log`, `notice` and `progress` frames, which go to whoever
 answer, which may say `rssMb` and `retire`. A line before a frame that is no JSON object is skipped
 (a banner). A child that answers side requests while a request runs (a worker's `where`) reads its
 stdin on a thread of its own. It exits when its stdin closes. The supervisor holds it from its spawn:
-`cad stop` kills one still being started, which reads nothing until it is ready, so none outlives the
-engine. Its memory is what it says (`rssMb`):
+`cad stop` kills one still being started, which reads nothing until it is ready (the standby loading
+the kernel), so none outlives the engine. Its memory is what it says (`rssMb`):
 a child that cannot measure itself is never retired for memory.
 
 The meshing pool starts with the first page, view or inspection, never with a build. A build
@@ -856,7 +869,8 @@ pool waits. Every process starts on the first mesh a page asks for, or on `Serve
 when a build's `view:` link lands. An inspection's measurements, picked elements and poses start
 only the processes their jobs need (`Mesher.processes`, `warm=False`; a
 document's measurements take two at most while no page has warmed the pool, **Mesh**). With no page
-and no inspection, the daemon's only child is the worker. Measured on a 24-part model (5 shapes) on a 10-core machine: 1 child and 0.5 GB with no page,
+and no inspection, the daemon's only children are the worker and the standby. Measured (before the
+standby) on a 24-part model (5 shapes) on a 10-core machine: 1 child and 0.5 GB with no page,
 against 12 and 3.2 GB when the pool started with the server. The pool's start costs a first page
 about 0.8 s, less the time the page takes to load after the warm.
 
@@ -914,9 +928,10 @@ agent's shell may give each turn its own `PATH` (Codex puts a temporary folder o
 `cad status` says what the server holds (`--json`: the same as data, `api.status()`):
 
 ```
-engine server 98307, up 2h10m · workers 2/10 · held by 1 app server · RSS 4.3 GB of 16.0 GB
+engine server 98307, up 2h10m · workers 3/10 with the standby · held by 1 app server · RSS 4.7 GB of 16.0 GB
   busy  tom.py         98310   12 builds   3.7 GB  building tom.py::tom · Building geometry · 3/7 stages · 41s
   idle  motorbike.py   98410    3 builds   0.6 GB  4m
+  standby              98512               0.4 GB  kernel loaded · 4m
   waiting  2 builds, first come first served
 retired: finger_01.py (LRU) 3m ago · qdd_actuator.py (pressure) 41m ago · tom.py (RSS) 2h ago
 serving http://127.0.0.1:52811: 3 documents · 2.1 GB of 16.0 GB held
@@ -930,8 +945,10 @@ documents:
 
 A worker's memory is as it measured it after its last build; a busy one's build is where its
 last progress frame says (**Progress**); the time is how long it has been busy, or idle; a worker in
-its script's own Python ends its line with that Python (`--json`: `python`). The header gives the
-workers' RSS against the cap (`--json`: `rssMb`, `rssCapMb`). A retirement's reason is
+its script's own Python ends its line with that Python (`--json`: `python`). The
+standby's line has no script: its process, its memory and how long it has stood by (`starting`
+while it loads the kernel); it counts toward the workers' count (`with the standby`) and the RSS
+the header gives against the cap (`--json`: `standby`, `rssMb`, `rssCapMb`). A retirement's reason is
 `LRU` (room at the cap), `RSS` (over the workers' memory cap), `pressure` (the system's memory pressure),
 `environment` (a build asked for the script with another `PYTHONPATH`, or another of the variables
 that shape the interpreter's import system: its worker is replaced in its slot) or `exited` (it died).

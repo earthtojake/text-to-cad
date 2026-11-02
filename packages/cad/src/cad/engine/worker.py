@@ -15,6 +15,11 @@ worker exits when its stdin closes: the daemon's supervisor closes it to retire 
 (``cad_server.engine.supervisor``, which speaks this protocol to every process the daemon starts).
 Its first frame, ``{"ready": pid, "rssMb"}``, says it is up and its resident memory then.
 
+A worker started with ``--standby`` is the daemon's standby: it loads the kernel before it says it is
+ready (``load_kernel``) and builds nothing until a build takes it, when the daemon sends
+``{"op": "adopt", "home"}`` -- the folder a fresh worker of that script would have started in, where
+a request with no ``cwd`` runs -- and the build after it; it answers nothing to the adoption.
+
 A ``{"id", "op": "where", "doc", "key", "kind", "ordinal"}`` request asks what made one
 element of a document this worker built (``doc``, its id) (``build.made_by``): it is answered at once,
 ``{"id", "where": {...} | null}``, by the thread that reads the requests -- during a
@@ -79,7 +84,8 @@ from cad.engine import frames
 
 # How long the worker waits for a next request, once it has answered, before it collects.
 COLLECT_IDLE = 0.5
-# A build on a worker whose kernel is not loaded (a fresh worker) loads it first (``kernel``); a load still going after this many seconds is said
+# A build on a worker whose kernel is not loaded (a fresh worker, or one that came before the
+# standby was ready) loads it first (``kernel``); a load still going after this many seconds is said
 # to the caller, once (a ``{"id", "notice"}`` frame): the operating system's first look at a fresh
 # installation's native libraries (macOS checks each once) takes up to about 50 s, where a load
 # it has already looked at takes 2 to 3.
@@ -169,7 +175,7 @@ def _physical_mb() -> float | None:
 
 
 def rss_cap_mb() -> float | None:
-    """The resident memory the daemon's workers and its render processes may hold
+    """The resident memory the daemon's workers, its standby and its render processes may hold
     together (``Supervisor.shed``), and so one of them alone after a build or a frame:
     ``CAD_ENGINE_WORKER_RSS_MB`` (``0`` for no cap), else a quarter of the machine's memory, at
     least 2 GiB. None: no cap."""
@@ -217,10 +223,11 @@ def resident_after_build(cap: float | None) -> float | None:
 
 
 def load_kernel() -> None:
-    """The kernel loaded: OCP's native libraries and build123d imported, the engine's kernel layer with
-    them (imported, never installed: a build installs it in its run's environment, ``build._build``), and
-    one shape made. A fresh worker pays this in its first build, the operating system's first look at a
-    fresh installation's native libraries (macOS checks each once) with it."""
+    """The kernel loaded, as a standby loads it before it is ready: OCP's native libraries and
+    build123d imported, the engine's kernel layer with them (imported, never installed: a build
+    installs it in its run's environment, ``build._build``), and one shape made. A fresh
+    worker pays this in its first build; the operating system's first look at a fresh
+    installation's native libraries (macOS checks each once) is paid here, while nobody waits."""
     import build123d
     import OCP.TopoDS  # noqa: F401
 
@@ -237,10 +244,8 @@ _KERNEL_LOADED = False
 def kernel(say: Callable[[str], None]) -> None:
     """The kernel loaded before a build of this worker, unless it is (``load_kernel``): a load that
     takes longer than ``KERNEL_PATIENCE`` is said once, while it goes on (``KERNEL_NOTICE``), and
-    a warm worker says nothing. An environment without the build123d integration (a script whose
-    imports name none of it: the server's ``cad run`` makes it with the integrations they name) loads
-    none: what its build imports is its own."""
-    if _KERNEL_LOADED or not _has_kernel():
+    a warm worker says nothing."""
+    if _KERNEL_LOADED:
         return
     told = threading.Timer(KERNEL_PATIENCE, say, (KERNEL_NOTICE,))
     told.daemon = True
@@ -250,16 +255,6 @@ def kernel(say: Callable[[str], None]) -> None:
     finally:
         told.cancel()
         told.join()  # gone before the build: a profile records every thread's calls (``profiling``)
-
-
-def _has_kernel() -> bool:
-    """Whether this environment has build123d installed (found, not loaded)."""
-    import importlib.util
-
-    try:
-        return importlib.util.find_spec("build123d") is not None
-    except (ImportError, ValueError):
-        return False
 
 
 def kept() -> dict[str, str]:
@@ -560,6 +555,8 @@ def main() -> int:
         except OSError:
             pass
 
+    if "--standby" in sys.argv[1:]:
+        load_kernel()
     resident = resident_mb()
     send({"ready": os.getpid(), "rssMb": None if resident is None else round(resident)})
     gc.disable()
@@ -626,6 +623,9 @@ def main() -> int:
             finally:
                 leave()
             owed = True
+            continue
+        if op == "adopt":
+            home = str(request.get("home") or home)  # the standby, taken: its script's folder from now on
             continue
         if op != "build":
             send({"id": ident, "failed": f"unknown request {op!r}"})

@@ -65,7 +65,7 @@ class RenderProcessTest(unittest.TestCase):
 
 class RenderStatusTest(unittest.TestCase):
     def test_a_render_process_that_is_gone_is_no_row_of_the_status(self) -> None:
-        def launch(service, key, label, environment, cwd):
+        def launch(service, key, label, environment, cwd, standby):
             return SimpleNamespace(service=service, key=key, label=label, environment=environment, pid=1, rss=10,
                                    requests=0, leased=False, retired=False, used=0.0,
                                    state={"version": "v", "held": {}, "frames": 1},
