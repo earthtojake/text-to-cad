@@ -10,7 +10,7 @@ no code with the engine's writer or OCCT's STEP translator, and walks AP242's PM
   ``DIMENSIONAL_CHARACTERISTIC_REPRESENTATION``'s ``SHAPE_DIMENSION_REPRESENTATION``, its
   limits (its items named ``'lower limit'`` and ``'upper limit'``), its descriptive notes (a basic
   dimension's ``'theoretical'``), and their ``PLUS_MINUS_TOLERANCE``'s ``TOLERANCE_VALUE``
-  (lower, upper);
+  (lower, upper) or ``LIMITS_AND_FITS`` (a fit);
 - datums: ``DATUM`` (its identification), the ``DATUM_FEATURE`` a ``SHAPE_ASPECT_RELATIONSHIP``
   ties to it;
 - geometric tolerances: any ``*_TOLERANCE`` entity (simple or complex), its magnitude, its
@@ -442,8 +442,14 @@ class Report:
         return found
 
     def plus_minus(self, dimension: int) -> dict[str, Any] | None:
+        """A dimension's plus-minus tolerance: its deviations (a ``TOLERANCE_VALUE``), or its fit (a
+        ``LIMITS_AND_FITS``, ISO 286's H7), which no plus-minus entry matches."""
         for holder in self.referring(dimension, "PLUS_MINUS_TOLERANCE"):
             tolerance_value = self.part(holder, "PLUS_MINUS_TOLERANCE")[0].id
+            if "LIMITS_AND_FITS" in self.types(tolerance_value):
+                form_variance, zone_variance, grade, source = self.part(tolerance_value, "LIMITS_AND_FITS")
+                return {"fit": {"form_variance": form_variance, "zone_variance": zone_variance, "grade": grade,
+                                "source": source}}
             lower, upper = self.part(tolerance_value, "TOLERANCE_VALUE")
             low, high = self.measure(lower.id), self.measure(upper.id)
             if low["unit"] != high["unit"]:

@@ -322,6 +322,20 @@ class VerificationTest(unittest.TestCase):
         reader.plus_minus(3)
         self.assertTrue(any("unit" in problem.lower() for problem in reader.problems))
 
+    def test_reader_reads_a_fit_and_never_matches_it_as_a_plus_minus(self) -> None:
+        # A plus-minus tolerance's range is a TOLERANCE_VALUE or a LIMITS_AND_FITS (ISO 286's H7).
+        reader = Report(parse("""ISO-10303-21; HEADER; ENDSEC; DATA;
+          #1=PLUS_MINUS_TOLERANCE(#2,#3);
+          #2=LIMITS_AND_FITS('H','hole','7','');
+          #3=DIMENSIONAL_SIZE($,'diameter');
+          ENDSEC; END-ISO-10303-21;"""))
+        self.assertEqual(reader.plus_minus(3),
+                         {"fit": {"form_variance": "H", "zone_variance": "hole", "grade": "7", "source": ""}})
+        self.assertEqual(reader.problems, [])
+        entries, found = fixtures()
+        found["dimensions"][0]["tolerance"] = reader.plus_minus(3)
+        self.assertTrue(compare(entries, found)["problems"])
+
 
 class BuiltPlateTest(unittest.TestCase):
     """The plate of ``test_pmi`` built once, its xbf and its AP242 STEP written by the engine into a
