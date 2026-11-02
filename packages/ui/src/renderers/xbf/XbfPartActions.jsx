@@ -10,7 +10,7 @@ import { useI18n } from "@text-to-cad/ui/i18n";
 // isolated row keeps its lit Isolate, a hidden row its crossed-out eye, so what is isolated
 // or hidden can be read down the tree without hovering. Isolate is an assembly's; a single
 // part has nothing to isolate it from.
-const REVEAL_ON_HOVER = 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100';
+const REVEAL_ON_HOVER = 'opacity-0 group-hover/row:opacity-100 focus-visible:opacity-100 [@media(hover:none)]:opacity-100';
 
 /**
  * Whether a row's actions are showing without a hover — an isolated row's lit Isolate, a hidden
