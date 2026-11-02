@@ -131,7 +131,7 @@ class Headless(unittest.TestCase):
                 mock.patch.object(cli.subprocess, "run", run):
             self.assertEqual(cli.run_drc(fake_cli, Path("/boards/a.kicad_pcb")), [])
         # The command carries str(Path): backslashes on Windows, so compare against the Path, not a literal.
-        self.assertEqual(seen["command"][:3], [str(fake_cli), "kicad_pcb", "check"])
+        self.assertEqual(seen["command"][:3], [str(fake_cli), "pcb", "drc"])
         self.assertNotIn("DISPLAY", seen["env"])
         self.assertNotIn("WAYLAND_DISPLAY", seen["env"])
         settings = Path(seen["env"]["KICAD_CONFIG_HOME"])

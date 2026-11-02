@@ -37,7 +37,7 @@ def library_files() -> list[Path]:
 
 
 # The library's modules the engine reads beside itself: the registry and the producers it gathers.
-REGISTRY = {"cad.registry", "cad.build123d", "cad.build123d._producers"}
+REGISTRY = {"cad.registry", "cad.build123d", "cad.build123d._producers", "cad.kicad", "cad.kicad._producers"}
 
 
 def ours_beyond_the_engine(name: str) -> bool:

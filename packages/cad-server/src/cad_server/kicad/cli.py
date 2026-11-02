@@ -79,7 +79,7 @@ def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> lis
     when ``kicad-cli`` cannot run or refuses the board."""
     with private_run("cad-drc-") as (scratch, env):
         report = scratch / "drc.json"
-        command = [str(cli), "kicad_pcb", "check", "--format", "json", "--severity-all", "-o", str(report), str(board)]
+        command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "-o", str(report), str(board)]
         try:
             completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
