@@ -8,11 +8,12 @@ daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD
 and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
 an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
 page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
-*source* never ships). Snapshots are drawn by OCCT, never in a browser. This file holds the laws of
+*source* never ships). Snapshots are drawn by OCCT (a KiCad board's flat, with Pillow), never in a
+browser. This file holds the laws of
 all three.
 
 A **document** is what a person reviews. Its kind is either a file format the viewer reads (STEP, XBF, STL, GLB,
-3MF, DXF, URDF, SRDF, SDF) or something derived from code: a model, built by the engine. Documents exist so that a
+3MF, DXF, URDF, SRDF, SDF, KiCad PCB) or something derived from code: a model, built by the engine. Documents exist so that a
 person can review the subjective output of an agent, a design, and answer it through the viewer's tools:
 annotate, select, quick edit. The laws below say how they are made, named, kept and served.
 
@@ -42,8 +43,8 @@ cad inspect XBF/arm.xbf                    # what it holds, then its build closu
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators; and
-engineering drawings (`@eng_drawing`).
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF validators;
+engineering drawings (`@eng_drawing`); and native KiCad boards, read, drawn and referenced (`cad.pcb`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -439,6 +440,9 @@ src/cad/
   urdf.py, sdf.py,       # the robot validators: one public namespace per format, its
   srdf.py                #   `validate` verb, and the checks behind it (*_source.py,
                          #   *_validation.py, sdf_external.py, findings.py, xml_common.py)
+  pcb.py                 # a saved KiCad board read as what a person can point at
+                         #   (`read_board`; its reader is engine/formats/kicad, the standard
+                         #   library alone, and its flat still engine/render/board.py)
   results.py             # what a `validate` verb returns: the JSON line protocol, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
@@ -458,3 +462,14 @@ src/cadgen/              # the earlier import name: every name and every module 
 
 The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
 their own READMEs.
+
+## Native KiCad files
+
+A `.kicad_pcb` is source, edited in KiCad or as text and read directly for each plot or snapshot:
+the library never builds, caches or writes back an XCAF model of a board. The parser and read-only
+board index live under `src/cad/engine/formats/kicad/`, the standard library alone, so the server
+and a script run with `cad run` import them without the CAD kernel; the flat renderer is
+`src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.pcb.read_board`
+exposes the inspection index. KiCad owns authoring, DRC (`cad pcb drc`, the server's) and
+mechanical and fabrication exports; an exported STEP enters the ordinary foreign-file path. No KiCad
+IPC client is bundled.
