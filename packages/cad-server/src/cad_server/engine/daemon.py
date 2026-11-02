@@ -28,18 +28,25 @@ No timer retires a process: memory alone does (``Supervisor.shed``). Each proces
 as it last said it (its ``ready`` frame and each answer's ``rssMb``), is held with the others' to one
 cap (``CAD_ENGINE_WORKER_RSS_MB``, ``worker.rss_cap_mb``). Past it, or under the system's
 memory-pressure signal (``serve.Pressure``), idle processes are retired in the order their
-declarations rank them, least recently used first within a rank: render processes, then the workers no page watches, and a watched one only when no other is left. A process that says,
+declarations rank them, least recently used first within a rank: the standby, then render processes,
+then the workers no page watches, and a watched one only when no other is left. A process that says,
 answering, that it alone is over the cap (``retire``: ``worker.retirement``) is retired once its
 request is done. Before a worker is stopped, every document of it the server does not hold is taken
 from it (``models.Models.drain``): a document outlives its worker. A retired script's next build is a
 fresh worker's, a restart. Each such document is also kept in the engine's cache once it is idle, at
 its drain and at shutdown (``cache``), so a restart of the daemon opens it at once.
 
-Nothing is started ahead of a request: a worker starts with its script's first build, and no process
-stands by. Every process that loads the kernel runs in the installation's default environment (the
-base), which is made on first need -- a build, or a view or operation that reads a STEP or an xbf or
-meshes one -- and never at the daemon's start (``places.kernel``, ``base.kernel``): the request that
-needs it waits on its making, and every request after it until it is made.
+The workers keep a standby with the kernel loaded (``services.WORKER``, ``Supervisor.stand``): started
+once the installation's default environment, the base, exists -- with the daemon when it is made already,
+else the moment the engine's making of it, on first need, is done (``made_base``); never before, and
+nothing waits on a standby that cannot stand -- and again each time a build takes it or starts a worker
+of its own while there is room for it. The engine never makes the base to stand one: it is made on first
+need (``places.kernel``, ``base.kernel``), and a kernel process asked for meanwhile waits on its making. A build for a script with no live worker takes the standby when its environment shapes
+the interpreter as the standby's does (``places.RESTARTS``), and starts a fresh worker otherwise;
+taken, the standby is that script's worker from then on (``Process.adopt``), so a new script's first
+build pays no kernel load. The standby counts toward the cap, is the first retired for room or
+memory, and is never a script's worker in ``status``. ``CAD_ENGINE_STANDBY=0`` keeps none
+(``standby``): an operator's seam for CI and machines short of memory.
 
 Every service speaks one protocol (``cad.engine.frames``). Requests are one JSON object per line on
 the process's stdin, a request's ``bytes`` exactly that many bytes after its line. The process
@@ -129,7 +136,7 @@ def _halt() -> None:
 
 # The engine's one listener and the application it serves (``serve.Server`` binds none of its own).
 HTTP_FACTORY: Callable[[Any, str, int], Any] = _application
-# Every process of the engine's that loads the kernel -- a model's worker, the documents
+# Every process of the engine's that loads the kernel -- a model's worker, the standby, the documents
 # worker, the meshing and reading pools, the render processes -- runs in the installation's base, which
 # the library's modules that start them are told here (``places.kernel``): the library knows no installation.
 _places.KERNEL = _kernel
@@ -181,6 +188,12 @@ def _prune(ours: Path) -> None:
                 shutil.rmtree(entry, ignore_errors=True)
         except OSError:
             pass
+
+
+def standby() -> bool:
+    """Whether the daemon keeps a standby (``Daemon.stand``): ``CAD_ENGINE_STANDBY=0`` is the
+    operator's seam to keep none (CI, a machine short of memory); unset or anything else, it does."""
+    return os.environ.get("CAD_ENGINE_STANDBY", "").strip() != "0"
 
 
 def worker_cap() -> int:
@@ -532,7 +545,7 @@ class Daemon:
         from cad.engine.worker import rss_cap_mb
 
         # The system's memory-pressure signal, the server's too once it runs (``serve``): under it the
-        # supervisor sheds its least recently used processes (``Supervisor.shed``); as
+        # supervisor sheds the standby and its least recently used processes (``Supervisor.shed``); as
         # ``CAD_ENGINE_PRESSURE`` says, where it is set (``Pressure.from_environment``).
         self.pressure = Pressure.from_environment()
         # Every process the daemon starts, by its service's declaration (``services``), its hooks bound
@@ -540,7 +553,7 @@ class Daemon:
         # watches, the progress that wakes pages, and the cache's ``saved``.
         self.supervisor = Supervisor(cap or worker_cap(), SERVICES, watched=self.connected,
                                      drain=lambda process: self.models.drain(process), memory=rss_cap_mb,
-                                     on_progress=self.progressed,
+                                     pressed=self.pressure.under, on_progress=self.progressed,
                                      on_event={"saved": lambda process, header, payload:
                                                self.models.cache.saved(process, header, payload)})
         self.workers_lock = threading.Lock()  # each worker's ``held``
@@ -578,12 +591,41 @@ class Daemon:
     def touch(self) -> None:
         self.last = time.monotonic()
 
-    def begin(self) -> None:
-        """At the daemon's start: the bytecode folders of installations no daemon started in
-        ``PYCACHE_UNUSED_DAYS`` go, in the background (``prune_bytecode``). Nothing else is started or made:
-        the kernel environment, the base, is made on first need (``places.kernel``), by the request that
-        needs it, and no process stands by."""
+    def stand(self) -> None:
+        """At the daemon's start: each service's standby (``Supervisor.stand``) -- the workers', a worker
+        with the kernel loaded, so a new script's first build pays no kernel load, nor, on a fresh
+        installation, the operating system's first look at its native libraries (macOS checks each once:
+        43 s measured on a new uvx environment, against 2.5 s loaded again), which the standby pays while
+        nobody waits -- once the engine's kernel environment, the base, exists: now, where it is made
+        already (or the installation carries the kernel), else the moment the engine's making of it is done
+        (``made_base``). The base is never made here: it is made on first need (``base.kernel``), and until
+        then no standby stands and nothing waits on one. Started in the environment of the client that
+        started the daemon (``environment``); each standby after it in that of the lease that took the last
+        one. And the bytecode folders of installations no daemon started in ``PYCACHE_UNUSED_DAYS`` go, in
+        the background (``prune_bytecode``). With ``CAD_ENGINE_STANDBY=0`` (``standby``) no service's standby
+        is enabled: none stands by, and none replaces one."""
         prune_bytecode()
+        _making().made = self.made_base
+        if not standby():
+            return
+        for service in SERVICES:
+            if service.standby is not None:
+                self.supervisor.enable_standby(service.name)
+        try:
+            made = _kernel(False) is not None
+        except Exception:  # noqa: BLE001 - none to stand in: its first need makes it, and the standby follows
+            made = False
+        if made:
+            self.made_base()
+
+    def made_base(self) -> None:
+        """The base made here (``base.Making``): each service's standby, when standbys are enabled,
+        stands in it now."""
+        if self.stopping.is_set():
+            return
+        for service in SERVICES:
+            if service.standby is not None:
+                self.supervisor.stand(service.name, self.environment())
 
     def base(self, request: dict[str, Any], send: Callable[[dict[str, Any]], None]) -> None:
         """The base, asked of the engine by a client that cannot make it (``{"op": "base", "key"}``: a
@@ -615,7 +657,7 @@ class Daemon:
     def environment() -> dict[str, str]:
         """The environment of the client that started the daemon, as near as the daemon can tell:
         its own, without the engine's folder its starter put first on ``PYTHONPATH``
-        (``client._start``)."""
+        (``client._start``), so a caller's run shapes the interpreter as the standby's does."""
         env = dict(os.environ)
         root = engine_root()
         rest = [item for item in env.get("PYTHONPATH", "").split(os.pathsep) if item and item != root]
@@ -766,11 +808,14 @@ class Daemon:
         return executable, f"{os.path.normcase(os.path.realpath(prefix))}\0{named.get('release')}"
 
     def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
-              python: str | None = None, python_key: str | None = None) -> Process:
+              loading: Callable[[str], None] | None = None, python: str | None = None,
+              python_key: str | None = None) -> Process:
         """The warm worker of a script (by its path, and the caller's ``python`` and its environment's key
         where its build named one: ``caller``) or of the documents no worker built (``documents``), for one
-        request: waiting its turn, started when none is alive (``Supervisor.lease``). ``release`` it after."""
-        return self.supervisor.lease("worker", script, environment, cwd, python=python, python_key=python_key)
+        request: waiting its turn, started when none is alive (``Supervisor.lease``); ``loading`` as there.
+        ``release`` it after."""
+        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python,
+                                     python_key=python_key)
 
     def release(self, worker: Process) -> None:
         self.supervisor.release(worker)
@@ -1191,7 +1236,9 @@ class Daemon:
                     waited = time.monotonic()
                     try:
                         try:
-                            worker = self.lease(key, request.get("env") or {}, cwd, python, python_key)
+                            worker = self.lease(key, request.get("env") or {}, cwd,
+                                                lambda text: send({"log": text, "stream": "notice"}), python,
+                                                python_key)
                         finally:
                             if ahead is not None and send in ahead[0].followers:
                                 ahead[0].followers.remove(send)
@@ -1358,6 +1405,7 @@ class Daemon:
     def status(self) -> dict[str, Any]:
         """The daemon, its workers (each its script, its builds, its memory after its last build
         in MiB, how long it has been busy or idle, and a busy one's last progress frame), its
+        standby (never a script's worker: its process, its memory, how long it has stood by), its
         processes' memory against its cap, the builds waiting for a worker, the last retirements, and
         what it serves and draws."""
         from cad.engine.worker import rss_cap_mb
@@ -1370,11 +1418,16 @@ class Daemon:
                     "busy": w.leased, "rssMb": None if w.rss is None else round(w.rss),
                     "seconds": round(now - (w.since if w.leased else w.used), 1),
                     "progress": w.progress if w.leased else None} for w in supervisor.processes("worker")]
+        with supervisor.lock:
+            spare, readying = supervisor.standby("worker"), supervisor.readying("worker") is not None
+        standby = ({"pid": spare.pid, "rssMb": None if spare.rss is None else round(spare.rss),
+                    "seconds": round(time.time() - spare.started, 1)} if spare is not None
+                   else {"pid": None, "rssMb": None, "seconds": None, "starting": True} if readying else None)
         # What uses it, which `cad status` says: its holds, the documents pages watch, its builds and draws,
         # and HTTP work underway.
         return {"ok": True, "pid": os.getpid(), "version": version(), "installation": installation(),
                 "up": round(time.time() - self.born, 1),
-                "workers": workers, "cap": supervisor.cap, "waiting": supervisor.waiting("worker"),
+                "workers": workers, "standby": standby, "cap": supervisor.cap, "waiting": supervisor.waiting("worker"),
                 "rssMb": round(supervisor.resident()), "rssCapMb": rss_cap_mb(), "retired": list(supervisor.retired),
                 "idle": round(now - self.last, 1), "holders": self.holders, "hosts": dict(self.hosts),
                 "busy": self.busy, "prefix": sys.prefix,
@@ -1467,7 +1520,7 @@ class Daemon:
         # The documents built or read in the last idle window, saved first, best effort (``cache``).
         self.models.cache.final()
         _halt()  # a making of the base under way: its uv goes with the engine
-        self.supervisor.stop()  # its workers and the render processes
+        self.supervisor.stop()  # its workers, the standby and the render processes
         if self.server is not None:
             self.server.stop()
 
@@ -1703,7 +1756,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
     except Exception as error:  # noqa: BLE001
         daemon.identity = {"filled": 0, "moved": 0, "skipped": [f"the pass failed: {type(error).__name__}: {error}"]}
         print(f"cad: identity migration failed: {type(error).__name__}: {error}", file=sys.stderr, flush=True)
-    daemon.begin()
+    daemon.stand()
     if foreground:
         try:
             daemon.serve({})

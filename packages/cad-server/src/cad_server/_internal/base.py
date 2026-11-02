@@ -5,8 +5,9 @@ command, the CAD Viewer's server, the MCP shim --, and the CAD kernel (OCP, buil
 its ``build123d`` extra. So an installation of the core, as uvx makes the plugin's server, runs no model
 itself: the engine makes one environment per installation, the base, and every process that loads
 the kernel starts from it -- the script ``cad run`` runs, its worker, and the engine's own kernel
-processes (the documents worker, the meshing and reading pools, the render processes: ``kernel``, which
-the engine is handed as ``cad.engine.places.KERNEL``).
+processes (the standby, the documents worker, the meshing and reading pools, the render processes:
+``kernel``, which the engine is handed as ``cad.engine.places.KERNEL``). The engine's standby stands once it
+exists (``Making.made``), never before.
 
 - **What it is**: ``cad[build123d]`` at the installation's own release -- or the source tree, or the
   wheel, the installation was made from (``Installation.requirement``) -- on the installation's own
@@ -331,8 +332,8 @@ class Making:
     """The installation's base made in this process's background, on first need, for whoever needs it
     (``follow``: a kernel process's start, ``kernel``; a client's ``cad run`` over the engine's door). One
     making at a time, under the base's own lock as every maker's; its lines go to the engine's log and are
-    kept for whoever follows it and for ``status``. Nothing remembers a failure: the next follower makes it
-    again."""
+    kept for whoever follows it and for ``status``; ``made`` is told when it is made (the engine stands its
+    standby then). Nothing remembers a failure: the next follower makes it again."""
 
     def __init__(self) -> None:
         self.changed = threading.Condition()
@@ -340,6 +341,7 @@ class Making:
         self.lines: list[str] = []
         self.error: str | None = None
         self.since: float | None = None
+        self.made: Callable[[], None] | None = None
 
     def key(self) -> str | None:
         """The name of this installation's base folder (``where``), which a client names the base it
@@ -379,6 +381,8 @@ class Making:
         with self.changed:
             self.state, self.error = state, error
             self.changed.notify_all()
+        if state == "made" and self.made is not None:
+            self.made()
 
     def follow(self, told: Callable[[str], None]) -> str | None:
         """The base made, by the making under way here or one started now: each of its lines said to

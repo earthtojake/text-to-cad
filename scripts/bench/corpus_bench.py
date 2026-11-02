@@ -547,7 +547,7 @@ def prepare(spec: dict[str, Any], out: Path, engine_dir: Path, cadgen_src: Path)
     env = {**os.environ, "CAD_ENGINE_DIR": str(engine_dir / spec["name"]),
            "CAD_STATE_DIR": str(private / "state"), "CAD_CACHE_DIR": str(private / "cache"),
            "CAD_LAUNCHER_DIR": str(private / "launcher"), "CAD_ENGINE_PORT": "0",
-           "PYTHONPATH": path,
+           "CAD_ENGINE_STANDBY": "0", "PYTHONPATH": path,
            "PYTHONPYCACHEPREFIX": str(private / "cache" / "pycache"),
            "BROWSER": str(out / "no-browser.py") + " %s", **TELEMETRY_OFF}
     env.pop("PYTHONDONTWRITEBYTECODE", None)  # compile into this model's private prefix
