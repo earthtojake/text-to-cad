@@ -521,7 +521,7 @@ export default {
   "alert.schema.summary": "バージョンの不一致",
   "alert.schema.title": "このアプリとサーバーで図面の形式が一致しません",
   "alert.schema.message": "ビューアーが受け取った図面データは schemaVersion {received} ですが、このビルドのアプリが読めるのはバージョン {version} です。",
-  "alert.schema.recovery": "サーバーとアプリを一緒に更新してから再読み込みしてください。両者が同じリリースで配布されているのはこのためです。",
+  "alert.schema.recovery": "「アップデート」ボタンか `cad update` で cad-server を更新してから、このページを再読み込みするか、このページを表示しているアプリを再起動してください。",
   "alert.srdf.summary": "URDF が見つかりません",
   "alert.srdf.title": "この SRDF と同じ場所に URDF がありません",
   "alert.srdf.message": "SRDF はロボットの計画方法を記述するもので、外観は記述しません。そのためビューアーは、それが属する URDF を描画します。「{folder}」で同じ <robot name> を持つ .urdf ファイルをちょうど 1 つ探しましたが、見つからないか、複数ありました。{detail}",

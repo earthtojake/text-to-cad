@@ -522,7 +522,7 @@ export default {
   "alert.schema.summary": "版本不匹配",
   "alert.schema.title": "此应用与服务器的图纸格式不一致",
   "alert.schema.message": "查看器收到的图纸数据为 schemaVersion {received}，但此版本的应用读取的是版本 {version}。",
-  "alert.schema.recovery": "请同时更新服务器和此应用，然后重新加载。正因如此，它们随同一个版本一起发布。",
+  "alert.schema.recovery": "请用“更新”按钮或 `cad update` 更新 cad-server，然后重新加载此页面，或重启显示此页面的应用。",
   "alert.srdf.summary": "未找到 URDF",
   "alert.srdf.title": "此 SRDF 旁没有 URDF",
   "alert.srdf.message": "SRDF 描述的是机器人的规划方式，而不是它的外观，因此查看器会绘制它所属的 URDF。查看器在“{folder}”中查找恰好一个具有相同 <robot name> 的 .urdf 文件，但没有找到，或找到了不止一个。{detail}",

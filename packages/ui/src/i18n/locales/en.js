@@ -548,7 +548,7 @@ export default {
   "alert.schema.summary": "Version mismatch",
   "alert.schema.title": "This app and the server disagree about drawings",
   "alert.schema.message": "The viewer received a drawing payload at schemaVersion {received}, but this build of the app reads version {version}.",
-  "alert.schema.recovery": "Update the server and the app together, then reload. They ship from one release for exactly this reason.",
+  "alert.schema.recovery": "Update cad-server with the Update button or `cad update`, then reload this page, or restart the app that shows it.",
   "alert.srdf.summary": "URDF not found",
   "alert.srdf.title": "No URDF beside this SRDF",
   "alert.srdf.message": "An SRDF says how a robot is planned, not what it looks like, so the viewer draws the URDF it belongs to. It looked in “{folder}” for exactly one .urdf file with the same <robot name>, and found none, or more than one. {detail}",

@@ -521,7 +521,7 @@ export default {
   "alert.schema.summary": "버전 불일치",
   "alert.schema.title": "이 앱과 서버의 도면 형식이 일치하지 않습니다",
   "alert.schema.message": "뷰어가 받은 도면 데이터는 schemaVersion {received}이지만 이 앱 빌드는 버전 {version}을 읽습니다.",
-  "alert.schema.recovery": "서버와 앱을 함께 업데이트한 다음 새로 고치세요. 바로 이 이유로 둘은 같은 릴리스로 배포됩니다.",
+  "alert.schema.recovery": "업데이트 버튼이나 `cad update`로 cad-server를 업데이트한 다음, 이 페이지를 새로 고치거나 이 페이지를 표시하는 앱을 다시 시작하세요.",
   "alert.srdf.summary": "URDF를 찾을 수 없음",
   "alert.srdf.title": "이 SRDF 옆에 URDF가 없습니다",
   "alert.srdf.message": "SRDF는 로봇의 모양이 아니라 계획 방식을 설명하므로 뷰어는 SRDF가 속한 URDF를 그립니다. “{folder}”에서 같은 <robot name>을 가진 .urdf 파일을 정확히 하나 찾았지만 없거나 둘 이상이었습니다. {detail}",
