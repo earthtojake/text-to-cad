@@ -338,9 +338,12 @@ class UpdateEndToEndTest(unittest.TestCase):
         # same token -- its release changed, which a page reloads on.
         stages: list[str] = []
         gone = back = None
+        status, answer = None, {}
         deadline = clicked + 300
         while back is None:
-            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered\n{self.said()}")
+            # Where it stopped, when it does: the stages the page saw, and the engine's last answer.
+            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered; stages {stages}, last answer "
+                            f"{status} {json.dumps(answer)[:600]}\n{self.said()}")
             status, answer = self.version(token)
             if status is None:
                 gone = gone or time.monotonic()
@@ -367,7 +370,7 @@ class UpdateEndToEndTest(unittest.TestCase):
         for version in (A, B):  # A's folder stays: the way back, and what a process of A's may still run from
             self.assertTrue((self.release(version) / "cad-release.json").is_file(), version)
         self.assertIn(f"cad-mcp=={B}", desktop.read_text(encoding="utf-8"))
-        proxy = self.work / "bin" / ("cad.cmd" if WINDOWS else "cad")  # the cad command runs current
+        proxy = self.work / "bin" / ("cad.exe" if WINDOWS else "cad")  # the cad command runs current
         self.assertEqual(self.run_here([proxy, "--version"]).stdout.strip(), f"cad {B}")
         # The plugin folder is B's, written by B's setup; the helper, once B's engine answered, had B write it
         # again (`cad plugin --refresh`), which found it already B's.

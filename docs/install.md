@@ -41,8 +41,8 @@ checksum. It:
    lists the apps to restart); a 0.8 server it starts again keeps CAD's port (3245, or
    `CAD_ENGINE_PORT`), and 0.10's serves on the next free port, and says so.
 6. Registers the release and writes the `cad` command (`~/.local/bin/cad`; on
-   Windows `%USERPROFILE%\.local\bin\cad.cmd`), as the CAD server does when it
-   starts.
+   Windows `%USERPROFILE%\.local\bin\cad.exe`, with the Python it runs by beside it,
+   `cad-launcher`), as the CAD server does when it starts.
 7. Makes the CAD kernel environment, once: the release with its CAD kernel (OCP,
    build123d and what they need, about 220 MB the first time) on the same Python,
    in text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)), so the

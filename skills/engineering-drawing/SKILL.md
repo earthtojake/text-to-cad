@@ -24,7 +24,7 @@ toolpaths, not documents, and a different job.
 ## Setup
 
 Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+project's environment puts its own `cad` first; `cad.exe` on Windows). If `cad` is not found and
 the CAD app was only just added, its server may still be starting: wait five seconds and run the
 command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 

@@ -593,6 +593,23 @@ class Installer:
                 "record_written": recorded == installations.REGISTERED,
                 "launcher": {"path": proxy, "status": before, "written": wrote, "error": proxy_error}}
 
+    def _done(self, step: Any) -> str | None:
+        """What the app ``step`` installs this release in has of it now, read again, when a command of the step
+        failed (``providers.apply``): this release's copy, ours, in words -- a tool that exits non-zero after
+        doing its work (``gemini extensions link`` once its integrity store warns) did it -- else None."""
+        providers = self.providers
+        if step.action not in ("install", "update") or step.app not in providers.APPS:
+            return None
+        try:
+            app = providers.detect(self.machine, [step.app], folder=self.folder)[step.app]
+        except Exception:  # noqa: BLE001 - a check that cannot read the app finds nothing: the failure stands
+            return None
+        ours = app.ours()
+        if ours is None or ours.version != self.release:
+            return None
+        origin = ours.origin(self.machine)
+        return ours.words(self.machine) + (f", {origin}" if origin else "")
+
     # --- the report ---------------------------------------------------------------------------
 
     def _verify(self) -> dict[str, Any]:
@@ -837,7 +854,7 @@ class Installer:
             for step in work:
                 self.say(f"{step.label}: {step.action} {step.subject}")
                 ok, records = providers.apply(step, self.machine, say=lambda line: self.say(f"  {line}"),
-                                              aside=aside, backed_up=backed_up)
+                                              aside=aside, backed_up=backed_up, done=self._done)
                 self.actions += records
                 failed = failed or not ok
                 # A plugin installed or updated loads in the app's next session; a config, as the app opens.
@@ -898,9 +915,13 @@ class Installer:
         extra: list[dict[str, Any]] = []
         proxy = installations.proxy_path()
         status = installations.proxy_status(proxy)
-        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines carry the
-        # proxy's mark. A file of that name that is not (``uv tool install``'s link) stays.
-        ours = status in (installations.OK, installations.STALE, installations.NEWER)
+        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines (on Windows,
+        # cad.exe's __main__.py's) carry the proxy's mark, or it is a cad.cmd an earlier revision wrote. A
+        # file of that name that is not (``uv tool install``'s) stays.
+        earlier = installations.earlier_command()
+        ours = status in (installations.OK, installations.STALE, installations.NEWER) or earlier is not None
+        if status == installations.MISSING and earlier is not None:
+            proxy = earlier
         whole = not self.only
         launcher = whole and ours
         if launcher:
@@ -946,14 +967,7 @@ class Installer:
                     changed.add(step.app)
                     changed.update(step.agents)
             if launcher:
-                try:
-                    os.unlink(proxy)
-                    self.say(f"command  removed {providers.shown(proxy, self.machine)}")
-                    self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": proxy,
-                                         "ok": True, "at": providers.stamp()})
-                except OSError as error:
-                    failed = True
-                    self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+                failed = self._remove_command(proxy) or failed
             if whole:
                 failed = self._stop() or failed
                 failed = self._remove_releases() or failed
@@ -972,6 +986,26 @@ class Installer:
             self._purge(state, cache)
         restart = self._restart(apps, changed)
         return self._result(steps, extra, None, restart, 1 if failed else 0)
+
+    def _remove_command(self, proxy: str) -> bool:
+        """The cad command removed, with its Python on Windows (``installations.remove_proxy``): True when it
+        could not be. A ``cad.exe`` that runs this uninstall is set aside, no command any more, and said."""
+        from cad_server._internal import installations
+
+        providers = self.providers
+        try:
+            removed, left = installations.remove_proxy()
+        except OSError as error:
+            self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+            return True
+        for path in removed:
+            self.say(f"command  removed {providers.shown(path, self.machine)}")
+            self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": path, "ok": True,
+                                 "at": providers.stamp()})
+        for path in left:
+            self.say(f"command  {providers.shown(path, self.machine)} runs this uninstall: set aside, delete it "
+                     "once this ends")
+        return False
 
     def _remove_plugin(self) -> bool:
         """The plugin folder removed, after every app's copy of it: True when it could not be removed whole."""
