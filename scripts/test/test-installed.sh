@@ -296,8 +296,8 @@ echo "   built an xbf and the STEP and STL it declares"
 # The script above wrote the files the model DECLARES. This is the other half: an export of
 # the document to a destination the command names.
 step "Export the document"
-"$PROXY" export models/XBF/probe.xbf models/exported.step models/exported.stl \
-  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND export"; }
+"$PROXY" xbf export models/XBF/probe.xbf models/exported.step models/exported.stl \
+  >"$WORK/export.log" 2>&1 || { cat "$WORK/export.log" >&2; fail "$COMMAND xbf export"; }
 for written in exported.step exported.stl; do
   [ -s "$EMPTY/models/$written" ] || { cat "$WORK/export.log" >&2; fail "export wrote no models/$written"; }
 done
