@@ -87,6 +87,7 @@ class Headless(unittest.TestCase):
 
     def test_drc_runs_kicad_cli_headless_in_a_private_settings_folder(self) -> None:
         seen = {}
+        fake_cli = Path("/opt/kicad/bin/kicad-cli")
 
         def run(command, *, env, **_options):
             seen.update(command=command, env=env)
@@ -95,8 +96,9 @@ class Headless(unittest.TestCase):
 
         with mock.patch.dict(os.environ, {"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0"}), \
                 mock.patch.object(cli.subprocess, "run", run):
-            self.assertEqual(cli.run_drc(Path("/opt/kicad/bin/kicad-cli"), Path("/boards/a.kicad_pcb")), [])
-        self.assertEqual(seen["command"][:3], ["/opt/kicad/bin/kicad-cli", "pcb", "drc"])
+            self.assertEqual(cli.run_drc(fake_cli, Path("/boards/a.kicad_pcb")), [])
+        # The command carries str(Path): backslashes on Windows, so compare against the Path, not a literal.
+        self.assertEqual(seen["command"][:3], [str(fake_cli), "pcb", "drc"])
         self.assertNotIn("DISPLAY", seen["env"])
         self.assertNotIn("WAYLAND_DISPLAY", seen["env"])
         settings = Path(seen["env"]["KICAD_CONFIG_HOME"])
