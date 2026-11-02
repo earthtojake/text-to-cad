@@ -295,6 +295,14 @@ is now: a hole's name can pass to a flat side of the cut that replaced it. Each 
 of itself alone and says nothing of the last, so after an edit that changes how a face
 is made, read the served PMI's nominals and statuses, and point a ref at the face meant.
 
+A tool that reads only the STEP (an interview that asks for tolerances, an inspection
+plan) keeps its answers on faces by their names. Assign the features PMI stands on:
+`bore = bd.Cylinder(5, 10)` makes the face `bore.1`, which no other feature's insertion
+renames, while a cylinder made on the way in `body = stock - bd.Cylinder(5, 10)` is
+counted within its statement (`body_make_cylinder1`) and renumbered by a cylinder put
+before it. A face whose name grows past the fold is spelled out in the STEP (`'folded
+element names'`), so such a tool can follow it from the feature that made it.
+
 ## Coverage
 
 Every face of a part is to have a requirement. After each run of a part with PMI,

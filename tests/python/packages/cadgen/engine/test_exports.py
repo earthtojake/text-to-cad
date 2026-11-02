@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import struct
 import tempfile
@@ -890,6 +891,67 @@ def _usages(doc) -> dict[tuple, dict]:
     XCAFDoc_DocumentTool.ShapeTool_s(doc.Main()).GetFreeShapes(free)
     visit(free.Value(1), None, document._identity(), ())
     return found
+
+
+# A plate cut twice: its top and bottom faces' derivations grow past the fold, and the cylinders,
+# made before each cut, keep short names; the pin is cut by nothing.
+FOLDED = """
+import build123d as bd
+from cadgen.engine import step, xbf
+
+
+@xbf("XBF/plate.xbf")
+@step("plate.step")
+def plate():
+    body = bd.Box(100, 60, 10) - bd.Cylinder(5, 10) - bd.Pos(-30, 0, 0) * bd.Cylinder(3, 10)
+    body.label = "plate"
+    pin = bd.Pos(0, 0, 20) * bd.Cylinder(2, 10)
+    pin.label = "pin"
+    return bd.Compound(children=[body, pin], label="kit")
+"""
+
+
+class StepFoldedNamesTest(unittest.TestCase):
+    """A folded element name (``kernel.trace``) is spelled out in its part's STEP: a property
+    'folded element names' of the part's shape, an item per folded atom its names reach, so a
+    reader of the file alone follows a face from where it was made. A part none of whose names
+    fold has none, and a STEP of the xbf read cold states the same."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.folder = Path(tempfile.mkdtemp(prefix="engine-step-folded-")).resolve()
+        cls.script = cls.folder / "plate.py"
+        cls.script.write_text(textwrap.dedent(FOLDED), encoding="utf-8")
+        (report,) = engine_build.build(cls.script, ["plate"], cwd=cls.folder)
+        assert report["ok"], report
+        cls.step, cls.xbf = cls.folder / "plate.step", cls.folder / "XBF/plate.xbf"
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        shutil.rmtree(cls.folder, ignore_errors=True)
+
+    def test_each_folded_face_name_is_spelled_out_in_its_parts_step(self) -> None:
+        from cadgen.engine.export import ap242
+
+        text = self.step.read_text(encoding="utf-8")
+        found = ap242.report(self.step)
+        self.assertEqual(found["problems"], [])
+        self.assertEqual(set(found["foldedNames"]), {"plate"}, "the pin's names fold nothing")
+        table = found["foldedNames"]["plate"]
+        folded = sorted({name for name in re.findall(r"ADVANCED_FACE\('([^']*)'", text) if "~" in name})
+        self.assertTrue(folded)
+        for name in folded:
+            atom = name.split(":", 1)[1]
+            self.assertIn(atom, table, name)
+        spelled = [engine_build._spelled(name, table) for name in folded]
+        # Where each face was made stays legible: the box's faces, cut twice.
+        self.assertTrue(all(";M:" in derivation and "make_box1." in derivation for derivation in spelled), spelled)
+
+    def test_a_step_of_the_xbf_read_cold_states_the_same(self) -> None:
+        out = self.folder / "cold.step"
+        translate(self.xbf, None, out)
+        self.assertEqual(out.read_bytes(), self.step.read_bytes())
+        self.assertEqual(document.folded_names(document.read_bytes(self.xbf.read_bytes()))[0][0], "plate")
 
 
 class StepUsagesTest(unittest.TestCase):
