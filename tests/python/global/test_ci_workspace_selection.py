@@ -237,7 +237,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
         # The engine is no leaf: every build, export, snapshot and served document is its.
-        for path in ("packages/cad/src/cad/geometry.py", "packages/cad/src/cad/engine/api.py",
+        for path in ("packages/cad/src/cad/registry.py", "packages/cad/src/cad/engine/api.py",
                      "packages/cad/src/cad/engine/serve.py",
                      "packages/cad-server/src/cad_server/engine/daemon.py",
                      "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
@@ -320,7 +320,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # models/: the planetary model and the engine code that exports it select no docs job.
         # The committed GLB selects the docs job.
         for path in ("models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py",
-                     "packages/cad/src/cad/gltf.py",
+                     "packages/cad/src/cad/build123d/__init__.py",
                      "packages/cad/src/cad/engine/animations.py"):
             with self.subTest(path=path):
                 self.assertEqual(route(path)["docs"], "false")
