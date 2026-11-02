@@ -195,13 +195,14 @@ class BaseTest(unittest.TestCase):
 
 
 class RunTest(unittest.TestCase):
-    """``cad run``: the arguments run by the base's Python, in the caller's folder, the program's own folder last
-    on its path (the library's runner, ``cad._internal.program``)."""
+    """``cad run``: a script whose imports use the build123d integration alone run by the base's Python, in
+    the caller's folder, the program's own folder last on its path (the library's runner,
+    ``cad._internal.program``)."""
 
     def test_the_script_runs_with_the_bases_python(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             script = Path(folder) / "model.py"
-            script.write_text("", encoding="utf-8")
+            script.write_text("import build123d\n", encoding="utf-8")
             with mock.patch.object(run.os, "execv") as execv, mock.patch("subprocess.call", return_value=0) as call:
                 self.assertEqual(run.main([str(script), "--size", "2"]), 1 if os.name != "nt" else 0)
         found = base.ensure(make=False)
@@ -215,8 +216,10 @@ class RunTest(unittest.TestCase):
         err = io.StringIO()
         with mock.patch.object(base, "ensure", side_effect=base.Refused("the CAD kernel environment needs the network "
                                                                         "once: dns error")), \
-                mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err):
-            self.assertEqual(run.main(["model.py"]), 1)
+                mock.patch.object(run.os, "execv") as execv, contextlib.redirect_stderr(err), \
+                tempfile.TemporaryDirectory() as folder:
+            (Path(folder) / "model.py").write_text("import build123d\n", encoding="utf-8")
+            self.assertEqual(run.main([str(Path(folder) / "model.py")]), 1)
         execv.assert_not_called()
         self.assertEqual(err.getvalue(), "cad run: the CAD kernel environment needs the network once: dns error\n")
 

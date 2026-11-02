@@ -47,7 +47,7 @@ import subprocess
 import sys
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
@@ -122,14 +122,16 @@ class Installation:
                 pass
         return _own()
 
-    def requirement(self) -> list[str]:
-        """What installs this installation's library with its kernel: the library's source tree editable,
-        the wheel it was installed from, or its release."""
+    def requirement(self, extras: tuple[str, ...] | list[str] = (EXTRA,)) -> list[str]:
+        """What installs this installation's library with ``extras`` (its integrations: by default its
+        kernel's), exactly its own: the library's source tree editable, the wheel it was installed from, or
+        its release, pinned (``cad[build123d]==0.10.0``; with no extras, ``cad==0.10.0``)."""
+        named = f"[{','.join(extras)}]" if extras else ""
         if self.source is None:
-            return [f"{LIBRARY}[{EXTRA}]=={self.release}"]
+            return [f"{LIBRARY}{named}=={self.release}"]
         if os.path.isdir(self.source):
-            return ["-e", f"{self.source}[{EXTRA}]"]
-        return [f"{LIBRARY}[{EXTRA}] @ {self.source}"]
+            return ["-e", f"{self.source}{named}"]
+        return [f"{LIBRARY}{named} @ {self.source}"]
 
 
 @functools.cache
@@ -434,6 +436,13 @@ class Recipe:
     # Said, before uv's reason, of requirements uv finds unsatisfiable together (a model's own packages
     # beside the kernel's pins: ``cad_server._internal.extras``); None: uv's words alone.
     unsatisfiable: str | None = None
+    # uv's own options, handed to ``uv pip install`` as given (an index, find-links, resolution settings:
+    # ``cad run``'s), and to ``uv venv`` (the Python's: ``--managed-python``).
+    options: tuple[str, ...] = ()
+    venv_options: tuple[str, ...] = ()
+    # Asked once uv has installed it, before its marker: a requirement to install again and the line said of
+    # it, or None (``cad_server._internal.extras``: an integration a resolution pulled in).
+    revise: Callable[[Path], tuple[tuple[str, ...], str] | None] | None = field(default=None, compare=False)
 
 
 def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
@@ -442,8 +451,11 @@ def commands(uv: str, env: Path, recipe: Recipe) -> list[list[str]]:
     beside the index (``FIND_LINKS_ENV``)."""
     found = os.environ.get(FIND_LINKS_ENV, "").strip()
     links = ["--find-links", found] if found else []
-    return [[uv, "venv", "--no-project", "--python", recipe.python, str(env)],
-            [uv, "pip", "install", "--python", str(interpreter(env)), "--link-mode", LINK, *links, *recipe.requirement]]
+    link = [] if any(option == "--link-mode" or option.startswith("--link-mode=") for option in recipe.options) \
+        else ["--link-mode", LINK]
+    return [[uv, "venv", "--no-project", "--python", recipe.python, *recipe.venv_options, str(env)],
+            [uv, "pip", "install", "--python", str(interpreter(env)), *link, *links, *recipe.options,
+             *recipe.requirement]]
 
 
 def recipe(installation: Installation) -> Recipe:
@@ -504,17 +516,16 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
         venv, install = steps
         result = _uv(venv, env.parent)
         if result.returncode == 0:
-            result = _uv([*install, "--offline"], env.parent)
-            if result.returncode != 0:
-                # uv's cache did not hold all of it: from the network, once.
-                told(recipe.downloading)
-                result = _uv(install, env.parent)
-                if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
-                    # uv reads an index page it cached (ten minutes, PyPI's): one from before the release
-                    # was listed says there is none. Asked again, that page alone fetched anew.
-                    steps[1] = install = [*install, "--refresh-package", LIBRARY, "--refresh-package", SERVER]
-                    result = _uv(install, env.parent)
-            step = install
+            result, install = _install(install, env.parent, recipe, told)
+            steps[1] = step = install
+            if result.returncode == 0 and recipe.revise is not None:
+                again = recipe.revise(env)
+                if again is not None:
+                    requirement, said = again
+                    told(said)
+                    again_recipe = dataclasses.replace(recipe, requirement=requirement, revise=None)
+                    result, step = _install(commands(steps[0][0], env, again_recipe)[1], env.parent, again_recipe, told)
+                    steps.append(step)
         else:
             step = venv
         if result.returncode != 0:
@@ -529,20 +540,48 @@ def make(env: Path, recipe: Recipe, told: Callable[[str], None], *,
     return written
 
 
-def _path(env: Path) -> list[str]:
-    """The import path the base's Python starts with: what a process of the engine's pools, started in
-    it, imports from (``cad.engine.serve``'s spawn pools take it from the marker)."""
+def _install(install: list[str], folder: Path, recipe: Recipe,
+             told: Callable[[str], None]) -> tuple[subprocess.CompletedProcess, list[str]]:
+    """``uv pip install`` as ``install`` says it: from uv's cache first, ``--offline``, and from the network
+    only for what it does not hold, said in a line first -- unless the recipe's own options say ``--offline``.
+    Its result, and the command that gave it."""
+    if "--offline" in recipe.options:
+        return _uv(install, folder), install
+    result = _uv([*install, "--offline"], folder)
+    if result.returncode == 0:
+        return result, install
+    # uv's cache did not hold all of it: from the network, once.
+    told(recipe.downloading)
+    result = _uv(install, folder)
+    if result.returncode != 0 and recipe.source is None and _unlisted(result, recipe.release):
+        # uv reads an index page it cached (ten minutes, PyPI's): one from before the release was listed says
+        # there is none. Asked again, that page alone fetched anew.
+        install = [*install, "--refresh-package", LIBRARY, "--refresh-package", SERVER]
+        result = _uv(install, folder)
+    return result, install
+
+
+def _probe(env: Path) -> tuple[list[str], str]:
+    """The import path the environment's Python starts with -- what a process of the engine's pools,
+    started in it, imports from (``cad.engine.serve``'s spawn pools take it from the marker) -- and that
+    Python's version (``3.14.6``)."""
+    code = "import json, platform, sys; print(json.dumps([sys.path, platform.python_version()]))"
     try:
-        done = subprocess.run([str(interpreter(env)), "-I", "-c", "import json, sys; print(json.dumps(sys.path))"],
-                              stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
-                              errors="replace", timeout=120)
+        done = subprocess.run([str(interpreter(env)), "-I", "-c", code], stdin=subprocess.DEVNULL, capture_output=True,
+                              text=True, encoding="utf-8", errors="replace", timeout=120)
         found = json.loads(done.stdout.strip().splitlines()[-1]) if done.returncode == 0 else None
     except (OSError, ValueError, IndexError, subprocess.TimeoutExpired) as error:
         raise Refused(f"{WHAT} made at {env} does not run: {error}") from None
-    if not isinstance(found, list) or not all(isinstance(item, str) for item in found):
+    if (not isinstance(found, list) or len(found) != 2 or not isinstance(found[0], list)
+            or not all(isinstance(item, str) for item in found[0]) or not isinstance(found[1], str)):
         said = (done.stderr or done.stdout).strip().splitlines()
         raise Refused(f"{WHAT} made at {env} does not run: {said[-1] if said else 'it said nothing'}")
-    return found
+    return found[0], found[1]
+
+
+def _path(env: Path) -> list[str]:
+    """The import path the environment's Python starts with (``_probe``)."""
+    return _probe(env)[0]
 
 
 def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
