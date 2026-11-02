@@ -184,7 +184,8 @@ jobs:
           }
           function Fail([string]$Message) { Write-Host "::error::$Message"; throw $Message }
           function Invoke-Native {
-            $exe, $rest = $args
+            $exe = $args[0]
+            $rest = @($args | Select-Object -Skip 1)   # an array: one argument splatted as a string would be taken by its characters
             $lines = @(& $exe @rest 2>&1 | ForEach-Object { "$_" })
             $code = $LASTEXITCODE
             $text = $lines -join "`n"
