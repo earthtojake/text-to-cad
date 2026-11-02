@@ -21,8 +21,7 @@ colour per part and per painted face; a material per part and per face given one
 ``XCAFDoc_VisMaterial`` (PBR: base colour, metallic, roughness, emissive, alpha), its
 base colour the part's colour too so a reader of colours alone agrees; on each part's face and edge sub-shape labels
 the element names the memo's history gave them (``kernel.trace``), so a face's name
-survives into the file and into a STEP, and on the part what each folded atom of them stands
-for (``FOLDED_GUID``, ``folded_names``); and on each part the key of its geometry
+survives into the file and into a STEP; and on each part the key of its geometry
 (``KEY_GUID``), which a reader caches the part's tessellation by only once the part it
 read makes that key again (``Loaded``). Saved with the
 BinXCAF driver as ``.xbf``, atomically, and only when its bytes changed -- every
@@ -72,9 +71,6 @@ __all__ = ["Assembly", "Component", "Kept", "Loaded", "Part", "Tree", "collect",
 
 # The GUID of the attribute that holds a part's geometry key on its label.
 KEY_GUID = "c8f2d4a6-1b3e-4f5a-9c7d-2e8b6a4f0d13"
-# Beside it, what each folded atom of its element names stands for (``kernel.trace``'s table),
-# as JSON: a STEP of the document spells its folded names out (``folded_names``).
-FOLDED_GUID = "88bf0ada-1d59-4d49-a628-67177a65a190"
 # What wrote a document, on its main label: the engine's xbf format and cadgen's release.
 WRITER_GUID = "c49e4620-5730-422f-808f-c1e84d7bd163"
 WRITER = "cadgen.engine {format} (cadgen {release})"
@@ -801,7 +797,6 @@ class _Converter:
         self.materials = kept.materials
         self.patching = patching
         self.key_guid = Standard_GUID(KEY_GUID)
-        self.folded_guid = Standard_GUID(FOLDED_GUID)
 
     def label(self, at: int) -> Any:
         return self.shapes.Label().FindChild(at + 1, False)
@@ -833,9 +828,6 @@ class _Converter:
             materials.set(label, prototype.material, prototype.color or DEFAULT_COLOR)
         if prototype.key:
             TDataStd_AsciiString.Set_s(label, self.key_guid, TCollection_AsciiString(prototype.key))
-        table = (prototype.names or {}).get("table")
-        if table:
-            TDataStd_AsciiString.Set_s(label, self.folded_guid, TCollection_AsciiString(json.dumps(table, sort_keys=True)))
         faces = IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher()
         TopExp.MapShapes_s(shape, TopAbs_FACE, faces)
         face_names = (prototype.names or {}).get("faces") or []
@@ -1823,22 +1815,6 @@ def written_format(writer: str | None) -> str | None:
 
     found = re.match(r"cadgen\.engine (xbf/[0-9]+) \(cadgen ", writer or "")
     return found.group(1) if found else None
-
-
-def folded_names(doc: Any) -> list[tuple[str, dict[str, str]]]:
-    """Each part of a document whose element names fold part of their derivation: its name (the
-    ``PRODUCT`` the STEP writer makes of its shape label) and what each folded atom stands for, in
-    the document's order."""
-    from OCP.collections import Sequence_TDF_Label
-    from OCP.XCAFDoc import XCAFDoc_DocumentTool
-
-    labels, found = Sequence_TDF_Label(), []
-    XCAFDoc_DocumentTool.ShapeTool_s(doc.Main()).GetShapes(labels)
-    for label in (labels.Value(at) for at in range(1, labels.Length() + 1)):
-        text = _label_text(label, FOLDED_GUID)
-        if text:
-            found.append((_label_name(label), json.loads(text)))
-    return found
 
 
 def _label_text(label: Any, guid: str) -> str | None:

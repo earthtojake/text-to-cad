@@ -23,8 +23,6 @@ no code with the engine's writer or OCCT's STEP translator, and walks AP242's PM
 - a part's general tolerances: the CAx-IF PMI practice's ``PROPERTY_DEFINITION`` 'default
   tolerances' of its ``PRODUCT_DEFINITION_SHAPE``, its representation's ``DESCRIPTIVE_REPRESENTATION_ITEM``
   'tolerance class' (``ISO 2768-mK``);
-- a part's folded element names: the engine's ``PROPERTY_DEFINITION`` 'folded element names' of
-  its shape, an item per folded atom of its faces' and edges' names and what it stands for;
 - every measure's unit, from its unit entity (``SI_UNIT(.MILLI.,.METRE.)`` is mm);
 - the product each record is of: its shape aspect's ``of_shape`` (a ``PRODUCT_DEFINITION_SHAPE``,
   through its ``PRODUCT_DEFINITION`` and formation to the ``PRODUCT``'s name), its faces' (the
@@ -475,37 +473,25 @@ class Report:
                           "product": _one([self.of_shape(aspect) for aspect in aspects], features)})
         return found
 
-    def _properties(self, wanted: str):
-        """Each ``PROPERTY_DEFINITION`` named ``wanted`` of a product's shape: its number, the shape,
-        and its representations' descriptive items, (name, description) each."""
-        for number in self.of_type("PROPERTY_DEFINITION"):
-            name, _description, definition = self.part(number, "PROPERTY_DEFINITION")[:3]
-            if name != wanted or not isinstance(definition, Ref):
-                continue
-            items = []
-            for link in self.referring(number, "PROPERTY_DEFINITION_REPRESENTATION"):
-                representation = self.part(link, "PROPERTY_DEFINITION_REPRESENTATION")[1]
-                held = self.part(representation.id, "REPRESENTATION")[1] if isinstance(representation, Ref) else []
-                items += [tuple(self.part(item.id, "DESCRIPTIVE_REPRESENTATION_ITEM")[:2]) for item in held
-                          if "DESCRIPTIVE_REPRESENTATION_ITEM" in self.types(item.id)]
-            yield number, definition.id, items
-
     def general_tolerances(self) -> list[dict[str, Any]]:
         """Each part's general tolerances: a 'default tolerances' property of a product's shape, its
         'tolerance class' (the standard, ``ISO 2768-mK``) and the product it is of."""
         found = []
-        for number, shape, items in self._properties("default tolerances"):
-            classes = [said for label, said in items if label == "tolerance class"]
+        for number in self.of_type("PROPERTY_DEFINITION"):
+            name, _description, definition = self.part(number, "PROPERTY_DEFINITION")[:3]
+            if name != "default tolerances" or not isinstance(definition, Ref):
+                continue
+            classes = []
+            for link in self.referring(number, "PROPERTY_DEFINITION_REPRESENTATION"):
+                representation = self.part(link, "PROPERTY_DEFINITION_REPRESENTATION")[1]
+                items = self.part(representation.id, "REPRESENTATION")[1] if isinstance(representation, Ref) else []
+                for item in items:
+                    if "DESCRIPTIVE_REPRESENTATION_ITEM" in self.types(item.id):
+                        label, said = self.part(item.id, "DESCRIPTIVE_REPRESENTATION_ITEM")[:2]
+                        if label == "tolerance class":
+                            classes.append(said)
             found.append({"record": f"#{number}", "class": classes[0] if len(classes) == 1 else None,
-                          "product": self.product(shape)})
-        return found
-
-    def folded_names(self) -> dict[str, dict[str, str]]:
-        """What each folded atom of a product's element names stands for, by product: its 'folded
-        element names' property (``export.step``), an item per atom."""
-        found: dict[str, dict[str, str]] = {}
-        for _number, shape, items in self._properties("folded element names"):
-            found.setdefault(self.product(shape), {}).update(dict(items))
+                          "product": self.product(definition.id)})
         return found
 
     def tolerances(self) -> list[dict[str, Any]]:
@@ -571,8 +557,7 @@ def _refs(values: Any):
 def report(path: Path, data: bytes | None = None) -> dict[str, Any]:
     """What a STEP file's PMI says: its schema, its products' names (``products``, one per
     ``PRODUCT``), its dimensions, datums and tolerances (each with the ``product`` it and its faces
-    are of, or None), its general tolerances, what each product's folded element names stand for
-    (``foldedNames``), the face names each product uses more than once (``ambiguousFaceNames``, by
+    are of, or None), the face names each product uses more than once (``ambiguousFaceNames``, by
     product), and its problems. ``data`` is the file's bytes where they are read already
     (``check``)."""
     text = (path.read_bytes() if data is None else data).decode("utf-8")
@@ -584,7 +569,7 @@ def report(path: Path, data: bytes | None = None) -> dict[str, Any]:
     result = {"file": path.name, "schema": schema.group(1) if schema else None,
               "products": sorted(str(found._name(product)) for product in held),
               "dimensions": found.dimensions(), "datums": found.datums(), "tolerances": found.tolerances(),
-              "generalTolerances": found.general_tolerances(), "foldedNames": found.folded_names()}
+              "generalTolerances": found.general_tolerances()}
     # Every face of a product counts, annotated or not: one it holds twice names neither.
     by_name: dict[str | None, list[str]] = defaultdict(list)
     for product, names in held.items():

@@ -3,8 +3,7 @@
 The assembly with its instance and product names, colours per part and per painted face,
 material names and densities (the writer's material mode), approximate standard surface
 reflectance and transparency for material-bearing parts and faces, the element names on face
-and edge sub-shape labels (``write.stepcaf.subshapes.name``) and what each folded atom of them
-stands for (``_part_properties``), and the document's semantic PMI
+and edge sub-shape labels (``write.stepcaf.subshapes.name``), and the document's semantic PMI
 (``pmi``: the writer's GD&T mode; ``export.translate`` refuses a STEP that would drop the code's,
 ``pmi.refuse_dropped``). A document as built is
 written from its XCAF document itself; one held without it (a foreign STEP's), from the
@@ -85,11 +84,10 @@ def write_document(doc: Any, path: Path) -> None:
     from OCP.STEPControl import STEPControl_AsIs
 
     from cad.engine import pmi
-    from cad.engine.document import _XCAF_LOCK, folded_names
+    from cad.engine.document import _XCAF_LOCK
 
     with _XCAF_LOCK:
         stated = pmi.general_tolerances(doc)
-        folded = folded_names(doc)
         _quiet(Message)
         # The writer defines the translator's parameters: set them once it exists.
         writer = STEPCAFControl_Writer()
@@ -112,8 +110,8 @@ def write_document(doc: Any, path: Path) -> None:
         if writer.Write(str(path)) != IFSelect_RetDone:
             raise OSError(f"could not write {path}")
     _settle(Path(path), changed_styles)
-    if stated or folded:
-        _part_properties(Path(path), stated, folded)
+    if stated:
+        _default_tolerances(Path(path), stated)
 
 
 @contextmanager
@@ -467,20 +465,13 @@ def _pmi_records(data: bytes) -> bytes:
     return data[:start] + b"".join(pieces) + data[end:]
 
 
-def _part_properties(path: Path, stated: list[tuple[str, str]], folded: list[tuple[str, dict[str, str]]]) -> None:
-    """Properties of the parts OCCT's writer has no entity for, appended to the written file, each a
-    ``PROPERTY_DEFINITION`` of the part's ``PRODUCT_DEFINITION_SHAPE`` whose representation's items say it:
-
-    - each part's general tolerance (``pmi.general_tolerance``: its product's name, the standard), as
-      CAx-IF's PMI practice states a part's default tolerances: 'default tolerances', its item the
-      'tolerance class';
-    - each part's folded element names (``document.folded_names``): 'folded element names', an item
-      per folded atom, named the atom and described by what it stands for, so a reader of the file
-      alone spells a name out to where its element was made.
-
-    Numbered on from the file's last record, in the document's order, so the same document writes
-    the same bytes. A part is found by its name among the products that hold geometry; two of one
-    name refuse a general tolerance, and leave folded names unwritten (they name nothing apart)."""
+def _default_tolerances(path: Path, stated: list[tuple[str, str]]) -> None:
+    """Each part's general tolerance (``pmi.general_tolerance``: its product's name, the standard)
+    appended to the written file as CAx-IF's PMI practice states a part's default tolerances, which
+    OCCT's writer has no entity for: a ``PROPERTY_DEFINITION`` 'default tolerances' of the part's
+    ``PRODUCT_DEFINITION_SHAPE``, its representation's item the 'tolerance class'. Numbered on from
+    the file's last record, in the document's order, so the same document writes the same bytes. A
+    part is found by its name among the products that hold geometry; two of one name refuse the file."""
     from cad.engine.export import ap242
 
     data = path.read_bytes()
@@ -495,35 +486,18 @@ def _part_properties(path: Path, stated: list[tuple[str, str]], folded: list[tup
             shapes.setdefault(found.product(shape), []).append(shape)
     number = max(int(match.group(1)) for match in _RECORD.finditer(data))
     added = []
-
-    def add(shape: int, name: bytes, context: bytes, items: list[tuple[str, str]]) -> None:
-        nonlocal number
-        first = number + 2
-        records = [b"#%d = REPRESENTATION_CONTEXT('','%s');\n" % (number + 1, context)]
-        records += [b"#%d = DESCRIPTIVE_REPRESENTATION_ITEM('%s','%s');\n" % (first + at, _text(key), _text(value))
-                    for at, (key, value) in enumerate(items)]
-        number = first + len(items)
-        held = b",".join(b"#%d" % at for at in range(first, number))
-        records += [b"#%d = REPRESENTATION('%s',(%s),#%d);\n" % (number, name, held, first - 1),
-                    b"#%d = PROPERTY_DEFINITION('%s','',#%d);\n" % (number + 1, name, shape),
-                    b"#%d = PROPERTY_DEFINITION_REPRESENTATION(#%d,#%d);\n" % (number + 2, number + 1, number)]
-        number += 2
-        added.extend(records)
-
     for name, standard in stated:
         if len(shapes.get(name, ())) != 1:
             raise OSError(f"{path.name}: the general tolerance of part {name!r} has no one product of that name to "
                           "be written on: name each part apart")
-        add(shapes[name][0], b"default tolerances", b"default setting", [("tolerance class", standard)])
-    for name, table in folded:
-        if len(shapes.get(name, ())) == 1:
-            add(shapes[name][0], b"folded element names", b"", sorted(table.items()))
+        text = standard.encode("utf-8")
+        added.append(b"#%d = REPRESENTATION_CONTEXT('','default setting');\n" % (number + 1)
+                     + b"#%d = DESCRIPTIVE_REPRESENTATION_ITEM('tolerance class','%s');\n" % (number + 2, text)
+                     + b"#%d = REPRESENTATION('default tolerances',(#%d),#%d);\n" % (number + 3, number + 2, number + 1)
+                     + b"#%d = PROPERTY_DEFINITION('default tolerances','',#%d);\n" % (number + 4, shapes[name][0])
+                     + b"#%d = PROPERTY_DEFINITION_REPRESENTATION(#%d,#%d);\n" % (number + 5, number + 4, number + 3))
+        number += 5
     path.write_bytes(data[:end] + b"".join(added) + data[end:])
-
-
-def _text(value: str) -> bytes:
-    """A STEP string's contents: its quotes doubled, its text UTF-8 as the writer writes names."""
-    return value.replace("'", "''").encode("utf-8")
 
 
 def _quiet(message: Any) -> None:

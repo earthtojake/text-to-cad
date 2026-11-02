@@ -1772,7 +1772,7 @@ changed or new one fails in one line naming the folder and its mode.
   document's is.
 - **STEP** (AP242, `export/step.py`): the assembly with instance and product names, colours per
   part and per painted face, material names and densities, element names on face, edge and
-  vertex sub-shape labels, and what their folded atoms stand for (**Element names**). Read back through the engine's own reader, the instance tree, every
+  vertex sub-shape labels. Read back through the engine's own reader, the instance tree, every
   name (on the same elements: the reader numbers edges and vertices in its own order), colours
   and materials' names and densities are the xbf's. Standard STEP surface rendering records
   carry an approximate diffuse/specular finish and transparency for parts and material-painted
@@ -2913,10 +2913,7 @@ changed (`kernel/trace.py`). A name is its kind and its derivation: the atom it
 starts from, the n-th element of its kind a feature made, and a step per feature that
 made it out of another (`f:plate.body.3;M:plate.relief`: face 3 of the box, modified
 by the relief cut). A long derivation folds to its last feature and a digest
-(`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out, and so does the
-part's file: its xbf holds what each folded atom stands for, and a STEP of it writes that as the
-part's `'folded element names'` property (an item per atom, `export/step.py`), so a reader of the
-file alone follows a face back to where it was made. Every name is a
+(`f:plate.relief~5d1e0c2f9a3b`); the worker that built it spells it out. Every name is a
 reference the CAD Viewer's ref grammar parses (`cadRefs` in the bundled `@cad/core` runtime, mirrored as
 `refs.py`'s `ELEMENT_NAME`, which the naming in `kernel/trace.py` reads and which loads no kernel): a feature name has at most one dot, every segment
 is an identifier, and an atom ends in a number or a digest. A name holds no line or file (law 9): a line is
