@@ -232,20 +232,20 @@ class DoctorTests(unittest.TestCase):
         self.assertRegex(out, r"server   not running \(.+\): no engine server is running, and this shell's sandbox cannot start one")
         self.assertFalse((self.state / "engine").exists(), "nothing started")
         # Running: said. None running: started, by the client's start (a request that may start one).
-        # The workers counted as `cad status` counts them, against the cap.
+        # The workers counted as `cad status` counts them: the standby with them, against the cap.
         # And the version it runs as, so a stale engine is seen (one that says none: its release).
-        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "cap": 10,
+        answer = {"pid": 4242, "workers": [{"script": "a.py"}], "standby": {"pid": 4343}, "cap": 10,
                   "version": "0.8.0", "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", return_value=answer):
             _, out, _ = _run([])
-        self.assertRegex(out, r"server   running, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 \(.+\)\n")
+        self.assertRegex(out, r"server   running, pid 4242, text-to-cad 0\.8\.0-dev\.2, workers 2/10 with the standby \(.+\)\n")
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request",
                                                      return_value={**answer, "installation": None}):
             self.assertRegex(_run([])[1], r"server   running, pid 4242, text-to-cad 0\.8\.0, workers 2/10")
         from cad_server.engine.cli import status_text
 
-        self.assertIn(" · workers 2/10 · ", status_text({**answer, "up": 1}))
-        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "cap": 10,
+        self.assertIn(" · workers 2/10 with the standby · ", status_text({**answer, "up": 1}))
+        answer = {"pid": 4242, "workers": [{"script": "a.py"}, {"script": "b.py"}], "standby": None, "cap": 10,
                   "installation": "0.8.0-dev.2"}
         with TemporaryDirectory() as tmp, mock.patch("cad.engine.client.request", side_effect=[None, answer]) as asked:
             _, out, _ = _run([])

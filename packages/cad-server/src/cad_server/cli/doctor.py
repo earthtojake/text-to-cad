@@ -78,7 +78,8 @@ def _server(start: bool = True) -> str:
         return f"not running ({where}); a build starts it outside a sandbox; inside one, run `cad server` outside first"
     from cad_server.engine.cli import workers_text
 
-    # The version the engine runs as, and its environment; the workers as `cad status` counts them.
+    # The version the engine runs as, and its environment; the workers as `cad status` counts them:
+    # the standby with them.
     version = answer.get("installation") or answer.get("version")
     prefix = answer.get("prefix")
     return (f"{'started' if started else 'running'}, pid {answer.get('pid')}"
