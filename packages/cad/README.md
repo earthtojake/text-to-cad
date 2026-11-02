@@ -50,12 +50,16 @@ engineering drawings (`@eng_drawing`).
 Its one required dependency is numpy, the meshes' arrays: what the server imports of it -- the
 document model, the protocol a client speaks, the build's words -- imports no CAD kernel. The
 kernel (OCP, build123d, bd_materials, threejs-materials, matplotlib, shapely) is its `build123d`
-extra, which the server installs into the environment its own kernel processes and `cad run`'s models
-run in (the engine's **Running a model**). A model that needs other packages names them in its script's
-inline metadata (a `# /// script` block's `dependencies`) or with `cad run --with`, and the server makes
-an environment of them beside its own: `cad[build123d]` at its release, and those packages. A person
-who runs models with a Python of their own gives it `cad[build123d]` at the server's release: a script
-run with that Python is built by a worker of that Python, the environment's own packages importable
+extra, which the server installs, on first need, into the environment its own kernel processes run in
+(the engine's **Running a model**). `cad run` runs a program as `uv run` does, in an environment the
+server makes for it: the library pinned at the server's release with the integrations the program's
+imports use (worked out without running it, from the library's table of integrations,
+`cad._internal.integrations`; a script's header that names `cad[...]` chooses them), and the packages
+the program names itself -- its script's inline metadata (a `# /// script` block's `dependencies`),
+`cad run --with`, or its uv project's. A header or project never pins the library to another release:
+the device decides it. A person who runs models with a Python of their own gives it the library at the
+server's release (`cad requirement build123d` prints it: `cad[build123d]==<release>`): a script run
+with that Python is built by a worker of that Python, the environment's own packages importable
 there. The library's layer over that kernel -- the
 model API and the engine's `kernel/` (the memo, element naming, the determinism settings) -- is the
 build123d integration: a
@@ -107,10 +111,11 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
    restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
-   beside a library or a model; and under `base/` the environment the engine's kernel processes and
-   `cad run`'s models run in, an installation's base, `cad[build123d]` at its release, made by uv from
-   its cache, and beside it each environment a model's own packages made (`cad run --with`, a script's
-   inline metadata), regenerable as well (the engine's **Running a model**). The code stays the only source of truth: a document is what its
+   beside a library or a model; and under `base/` the environment the engine's kernel processes run in, an
+   installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
+   beside it each environment a program's run made (`cad run`: the library pinned with the integrations
+   its imports use, and the packages it names), regenerable as well, those of the release before the
+   current kept as the way back (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
    sidecar, record of a build beside a model, index, memo, mesh or parsed document, and no derived file

@@ -6,8 +6,9 @@ CAD kernel runs in; the installations and the one that is current; and the comma
 installs them all.
 
 Models are written against the library, `cad`, which the server imports without
-its CAD kernel: the kernel lives in the environment the server makes for models and its own kernel
-processes, `cad[build123d]` at the server's own release.
+its CAD kernel: the kernel lives in the environments the server makes, on first need, for models and
+its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
+`uv run` does, with cad pinned at the server's release and the integrations its imports use.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -47,8 +48,11 @@ src/cad_server/
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
   assets.py              # where the bundled runtime is
-  _internal/             # the environment models run in (base: the installation's base,
-                         #   cad[build123d], made by uv), the launch commands (launch), the
+  _internal/             # the environments models run in (base: the installation's base,
+                         #   cad[build123d], made by uv on first need; extras: the one a
+                         #   program's run asks for, cad pinned with its integrations, its
+                         #   packages and uv's options; scan: the integrations a program's
+                         #   imports use, read without running it), the launch commands (launch), the
                          #   installations' registry, which one is current, and the proxy it
                          #   writes (installations: ~/.local/bin/cad, which the skills run;
                          #   written by `cad doctor`, `cad setup` and a CAD app's first
@@ -71,17 +75,20 @@ src/cad_server/
 `cad export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
 engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them);
 `cad urdf|sdf|srdf validate` the validators; `cad doctor` the setup (the installation registered,
-the `cad` command written, the CAD kernel environment made, the engine started; the releases on
+the `cad` command written, whether the CAD kernel environment is made, the engine started; the releases on
 disk, the current one, the engine's and each app's plugin's) and what earlier releases left behind
 that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of
 an older format, the bytecode of installations no longer registered, cache folders no record names,
 the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among them;
-none written in the last seven days); `cad run` a program in the CAD kernel environment (the base:
-`_internal/base.py`), its own folder last on its path; `cad viewer` the engine page launcher;
+none written in the last seven days); `cad run` a program exactly as `uv run` runs it -- uv run's options,
+a script's `# /// script` header, a project -- with cad pinned at this release and the integrations its
+imports use (`_internal/extras.py`, `_internal/scan.py`), in an environment the engine makes, its own
+folder last on its path; `cad requirement [INTEGRATION ...]` the exact requirement a Python of a program's
+own installs this release's cad by (`cad[build123d]==<release>`); `cad viewer` the engine page launcher;
 `cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets
 up or updates text-to-cad in every agent app it finds, each by its own command
-(`_internal/providers.py`), installs its release's folder, makes the CAD kernel environment models
-run in and moves the device's engine to its release; `cad update` runs the newest release's
+(`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
+made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
 `cad setup`, as the update button does; `cad uninstall` takes text-to-cad out; `cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer.
 
