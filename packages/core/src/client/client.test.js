@@ -365,7 +365,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     if (path === '/api/v1/local/pick') return Response.json({ path: '/models/picked.step' });
     if (path === '/api/v1/local/link') return Response.json({ link: '1700000000.mac', expires: 1700000000 });
     if (path === '/api/v1/documents') return Response.json({ documents: [{ id: 'd1', path: '/models/a.step', kind: 'step', record: 'file' }] });
-    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true } });
+    if (path === '/api/v1/settings') return Response.json({ language: { locale: null }, telemetry: { share: true }, updates: { automatic: true, reason: 'default' } });
     return Response.json({ path });
   } });
   t.after(() => client.dispose());
@@ -389,6 +389,8 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   await client.language('zh-CN');
   await client.language(null);
   await client.version();
+  assert.deepEqual(await client.automaticUpdates(), { automatic: true, reason: 'default' }, 'the settings\' updates');
+  await client.automaticUpdates(false);
   await client.startUpdate();
   assert.deepEqual(await client.link(), { link: '1700000000.mac', expires: 1700000000 }, 'a fresh link for the address');
   client.reportActivity({ touched: true });
@@ -406,6 +408,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/settings', 'GET', null, null],
     ['/api/v1/settings', 'PUT', '1', { language: { locale: 'zh-CN' } }], ['/api/v1/settings', 'PUT', '1', { language: { locale: null } }],
     ['/api/v1/server', 'GET', null, null],
+    ['/api/v1/settings', 'GET', null, null], ['/api/v1/settings', 'PUT', '1', { updates: { automatic: false } }],
     ['/api/v1/local/update', 'POST', '1', null],
     ['/api/v1/local/link', 'GET', null, null],
     ['/api/v1/local/activity', 'POST', '1', { touched: true }],
