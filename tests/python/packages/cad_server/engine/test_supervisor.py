@@ -213,9 +213,9 @@ class SchedulingTest(unittest.TestCase):
             with self.subTest(change=change), self.assertRaisesRegex(ValueError, said):
                 dataclasses.replace(WORKERS, **change)
 
-    def test_a_key_leased_in_its_caller_s_python_is_a_process_of_its_own_and_never_the_standby(self) -> None:
-        own = dataclasses.replace(WORKERS, interpreter="lease")
-        supervisor = self.supervisor(4, (own, RENDERS))
+    def caller_s(self, cap: int) -> tuple[Supervisor, list]:
+        """A supervisor whose workers a lease may start in its caller's Python, and what it launched."""
+        supervisor = self.supervisor(cap, (dataclasses.replace(WORKERS, interpreter="lease"), RENDERS))
         started: list = []
 
         def launch(service, key, label, environment, cwd, standby, python=None):
@@ -223,25 +223,98 @@ class SchedulingTest(unittest.TestCase):
             return Fake(self.said, service, key, label, environment, cwd, standby)
 
         supervisor.launch = launch
+        return supervisor, started
+
+    def test_a_key_leased_in_its_caller_s_environment_is_a_process_of_its_own_and_never_the_standby(self) -> None:
+        supervisor, started = self.caller_s(4)
         spare = self.standing(supervisor)
         base = supervisor.lease("worker", "a.py", {})
         self.assertIs(base, spare, "the server's own Python: the standby, taken")
         await_(lambda: supervisor.standby("worker") is not None, "another standby")
-        theirs = supervisor.lease("worker", "a.py", {}, python="/venv/bin/python")
+        theirs = supervisor.lease("worker", "a.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
         self.assertIsNot(theirs, base)
         self.assertIsNotNone(supervisor.standby("worker"), "a lease in its caller's Python takes no standby")
-        other = supervisor.lease("worker", "a.py", {}, python="/other/bin/python")
+        other = supervisor.lease("worker", "a.py", {}, python="/other/bin/python", python_key="/other 0.10.0")
         for process in (base, theirs, other):
             supervisor.release(process)
         self.assertEqual(started[-2:], [("a.py", "/venv/bin/python"), ("a.py", "/other/bin/python")])
-        # Each Python's own, again, and never another's: one script from three Pythons is three processes.
-        self.assertIs(supervisor.lease("worker", "a.py", {}, python="/venv/bin/python"), theirs)
-        self.assertIs(supervisor.live("worker", "a.py", "/other/bin/python"), other)
+        # One environment's, whatever spelling of its Python asks: the process its first lease started.
+        self.assertIs(supervisor.lease("worker", "a.py", {}, python="/venv/bin/python3", python_key="/venv 0.10.0"),
+                      theirs)
+        self.assertEqual(len(started), 4, "no process started for another spelling of one environment's Python")
+        self.assertIs(supervisor.live("worker", "a.py", "/other 0.10.0"), other)
         self.assertIs(supervisor.live("worker", "a.py"), base)
         self.assertFalse(any(process.stopped for process in (base, theirs, other)))
-        self.assertEqual(list(supervisor.retired), [], "no Python replaced another's process")
+        self.assertEqual(list(supervisor.retired), [], "no environment replaced another's process")
         with self.assertRaisesRegex(ValueError, "a render runs its own environment's Python"):
             supervisor.lease("render", "doc", {}, python="/venv/bin/python")
+
+    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker_never_the_standby(self) -> None:
+        supervisor, started = self.caller_s(2)
+        spare = self.standing(supervisor)
+        idle, = self.used(supervisor, "worker", "a.py")  # the standby, taken
+        await_(lambda: supervisor.standby("worker") is not None, "another standby: the cap is full")
+        standby = supervisor.standby("worker")
+        self.assertIs(idle, spare)
+        theirs = supervisor.lease("worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
+        self.assertTrue(idle.stopped, "the idle worker made room")
+        self.assertIs(supervisor.standby("worker"), standby, "the standby stays for the server's own builds")
+        self.assertFalse(standby.stopped)
+        self.assertEqual([row["reason"] for row in supervisor.retired], ["LRU"])
+        supervisor.release(theirs)
+
+    def test_a_build_s_worker_is_its_environment_s_and_its_release_s_whatever_spelling_names_its_python(self) -> None:
+        from cad.engine import contract
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        folder = Path(tempfile.mkdtemp(prefix="caller-venv-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        venv, alias = folder / "venv", folder / "alias"
+        (venv / "bin").mkdir(parents=True)
+        if os.name != "nt":
+            alias.symlink_to(venv, target_is_directory=True)
+
+        def order(executable: str, prefix: Path, release: str) -> dict:
+            return {"interpreter": {"executable": executable, "prefix": str(prefix), "release": release,
+                                    "contract": dict(contract.CONTRACT)}}
+
+        python, key = engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.0"))
+        self.assertEqual(python, str(venv / "bin" / "python"), "the Python it runs: the one this build names")
+        spelled = [engine.caller(order(str(venv / "bin" / name), venv, "0.10.0"))[1] for name in ("python3", "python3.14")]
+        self.assertEqual(spelled, [key, key], "one environment, one key, whatever spelling of its Python")
+        if os.name != "nt":
+            self.assertEqual(engine.caller(order(str(alias / "bin" / "python"), alias, "0.10.0"))[1], key,
+                             "its folder as the system resolves it")
+        self.assertNotEqual(engine.caller(order(str(venv / "bin" / "python"), venv, "0.10.1"))[1], key,
+                            "another release of cad there, under one contract: a worker of its own")
+        self.assertEqual(engine.caller({}), (None, None), "an order that names no Python: the server's own")
+
+    def test_a_held_document_whose_own_python_s_worker_is_gone_is_not_held_and_asked_of_no_other(self) -> None:
+        from cad_server.engine.daemon import Daemon
+
+        engine = Daemon(cap=2)
+        self.addCleanup(engine.shutdown)
+        asked: list = []
+
+        class Worker(Fake):
+            def request(self, message, sink=None, payload=b""):
+                asked.append(message)
+                return {"done": {"files": []}}
+
+        engine.supervisor.launch = lambda service, key, label, environment, cwd, standby, **kw: Worker(
+            [], service, key, label, environment, cwd, standby)
+        base = engine.lease("/w/a.py", {})  # the script's worker in the server's own Python
+        engine.release(base)
+        ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
+        sent: list = []
+        engine.handle({"op": "export", "destinations": ["/w/a.step"], "source": {
+            "script": "/w/a.py", "function": "a", "held": ident, "via": "/w/a.py",
+            "python_key": "/venv\x000.10.0"}}, sent.append)
+        self.assertEqual(asked, [], "never asked of the server's own worker of its script")
+        self.assertEqual(sent[0]["state"], "unsaved")
+        self.assertIn(ident, sent[0]["failed"])
 
 
 # The child a protocol test starts: the frames as a service's process sends them, by request.

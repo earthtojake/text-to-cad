@@ -197,8 +197,8 @@ asks the server's watched ids; a file the build wrote is no key there) and the l
 (`models.py`); a worker keys by it what its builds named (`build._BUILT`, which `made_by` answers
 from).
 The workers alone are keyed otherwise: by the canonical path of the script a worker runs, and the
-Python a build of it named where that is not the base's (**Running a model**), a process's key, not a
-document's.
+environment and cad release of the Python a build of it named where that is not the base's (**Running a
+model**), a process's key, not a document's.
 
 The daemon maps each built document to its worker. HTTP watcher accounting has its
 own lock, independent of document reads and the supervisor's leases. A page watches a document (law 19)
@@ -406,12 +406,18 @@ names none. The engine builds such a script in a warm worker running that Python
 (`Daemon.caller`, the worker service's `interpreter="lease"`), its import path that environment's own,
 so the script's own packages import in its worker as they do in its run; one whose environment is the
 base itself (an installation that carries the kernel) is built there as any other. The worker is
-keyed by its script and that Python: the same script run from two environments is two workers, and a
-worker started in one Python never serves a build from another. It keeps its memo and the warm edits
-as any worker, and adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); it
-has no standby, so its first build loads the kernel cold. The rest of the engine's kernel processes
-stay in the base: the documents worker, the meshing and reading pools, the render processes and the
-standby.
+keyed by its script, that Python's environment as the system resolves its folder, and the release of
+cad the build names: `python`, `python3` and `python3.14` of one environment share one warm worker,
+which runs the first of them to ask; the same script run from two environments is two workers; and
+another release of cad in one environment, under the same contract, gets a fresh worker, never the warm
+one that holds the release before's code. It keeps its memo and the warm edits as any worker, and
+adopts each run's environment the same way (`worker.adopt`, `places.RESTARTS`); it has no standby, so
+its first build loads the kernel cold, and it never takes, waits for or moves the standby: at the cap,
+it makes room by retiring an idle worker, as any build does, never the standby, and with none idle it
+waits for one. The rest of the engine's kernel processes stay in the base: the documents worker, the
+meshing and reading pools, the render processes and the standby. A document such a worker holds is
+asked of it alone (`via` and its environment's key): with that worker gone, an export or a shape of the
+document is refused as not held, never asked of another worker of its script.
 
 What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
 and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that
@@ -726,8 +732,8 @@ tessellations, is under one memory budget: **Document lifetime**.)
   with no live worker takes it when the build's environment shapes the interpreter as the
   standby's does (`places.RESTARTS`), and starts a fresh worker otherwise -- after which the
   standby, of another interpreter, is replaced by one of the build's. A build in its script's own
-  Python (**Running a model**) never takes it, nor waits for it, nor moves it: the standby is the
-  base's. Taken, it is that script's
+  Python (**Running a model**) never takes it, nor waits for it, nor moves it, nor retires it for room
+  at the cap: the standby is the base's, and stays for its builds. Taken, it is that script's
   worker (the standby's adoption, `Process.adopt`): its key, the environment it was asked in and the folder a fresh worker
   of it would start in, its run's environment adopted as every run's is (`worker.adopt`). A build
   arriving while the standby starts, of its interpreter, waits for it rather than start another.

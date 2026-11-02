@@ -74,14 +74,16 @@ class OwnPythonTest(unittest.TestCase):
     def test_a_script_run_with_its_own_python_is_built_by_a_warm_worker_of_that_python(self) -> None:
         env = engine_daemon.watched({key: value for key, value in os.environ.items() if key != "PYTHONPATH"},
                                     self.addCleanup)
-        for run in ("cold", "warm"):
-            done = engine_daemon.run([self.python, "plate.py"], env=env, cwd=self.project)
+        # Another spelling of the environment's Python, where it has one (``python3``): the same worker.
+        spelled = str(Path(self.python).with_name("python3")) if os.name != "nt" else self.python
+        for python in (self.python, spelled):
+            done = engine_daemon.run([python, "plate.py"], env=env, cwd=self.project)
             self.assertEqual(done.returncode, 0, f"{done.stdout}\n{done.stderr}")
             self.assertRegex(done.stdout, r"bounds 42\D+10\D+2 mm", "the body read its environment's package")
         self.assertIn("took plate.py::plate warm", done.stdout, "the worker stays warm, its memo with it")
         [worker] = self.workers()
         self.assertEqual((Path(worker["script"]).name, worker["python"], worker["builds"]),
-                         ("plate.py", self.python, 2), "one worker, running the script's own Python")
+                         ("plate.py", self.python, 2), "one worker of the environment, running the first Python")
         self.assertNotIn("cad-server is", done.stderr, "one release: no update notice")
 
     def test_a_contract_the_server_does_not_speak_is_refused_in_one_line_before_any_worker_starts(self) -> None:

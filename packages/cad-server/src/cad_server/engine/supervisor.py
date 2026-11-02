@@ -28,9 +28,13 @@ first served. A request whose key has a live process of its binding takes it onc
 of another binding replaces it in its slot once it is free (retired ``environment``); one whose
 key's process is being started waits for that one. A lease that names its caller's Python
 (``python``, of a service whose ``interpreter`` is ``"lease"``) is of a key of its own, its key and that
-Python together: the same key leased from two Pythons is two processes, and a process started in one
-Python never serves a lease of another. It never takes its service's standby, nor waits for one, nor
-starts one: a standby runs the service's own environment. A request that needs a process of its own
+Python's own key together (``python_key``: the caller's environment and release, which the daemon
+says), so the same key leased from two environments is two processes, and a process started in one
+never serves a lease of another; the process runs the first Python its key was leased with, whatever
+spelling of that environment's interpreter a later lease names. It never takes its service's standby,
+nor waits for one, nor starts one, nor retires one to make room at the cap -- an idle process is its
+victim there, as below, else it waits: a standby runs the service's own environment, and stays for its
+leases. A request that needs a process of its own
 takes its service's standby when the binding is the standby's; waits for the standby being started,
 the first such request alone, when it is (and hears the standby's ``notice`` after its
 ``patience``); starts one at once when its service does not count; else starts one in a free slot
@@ -247,9 +251,11 @@ class Process:
         self.began: float | None = None
         self.progress: dict[str, Any] | None = None
         self.pid: int | None = None
-        # The Python a lease named for it, its caller's (``Service.interpreter``); None: its service's
-        # environment's.
+        # The Python a lease named for it, its caller's (``Service.interpreter``), as its first lease
+        # spelled it, and the key of that Python's environment it serves (``Supervisor.lease``'s
+        # ``python_key``); None: its service's environment's.
         self.python: str | None = None
+        self.python_key: str | None = None
         self.started = time.time()  # started, or adopted from the standby
         self.requests = 0
         self.rss: float | None = None
@@ -544,6 +550,7 @@ class _Ticket:
     standby: Any = None
     awaits: bool = False  # it waits for its service's standby being started
     python: str | None = None  # the caller's Python it names (``Service.interpreter``); None: the service's
+    python_key: str | None = None  # that Python's environment, as the process key has it
 
     @property
     def granted(self) -> bool:
@@ -627,11 +634,12 @@ class Supervisor:
             with self.lock:
                 self.spawning.difference_update(held)
 
-    def _key(self, service: Service, key: str, python: str | None = None) -> str:
-        """A process's key in the table: its key (a path normcased), and the Python a lease named for it,
-        its caller's (``Service.interpreter``), with it: one key from two Pythons is two processes."""
+    def _key(self, service: Service, key: str, python_key: str | None = None) -> str:
+        """A process's key in the table: its key (a path normcased), and the key of the Python a lease
+        named for it, its caller's (``Service.interpreter``), with it: one key from two environments is
+        two processes."""
         found = os.path.normcase(key) if service.key == "path" else key
-        return found if python is None else f"{found}{INTERPRETER}{os.path.normcase(python)}"
+        return found if python_key is None else f"{found}{INTERPRETER}{python_key}"
 
     @staticmethod
     def _bound(service: Service, environment: dict[str, str]) -> dict[str, str]:
@@ -642,18 +650,20 @@ class Supervisor:
 
     def lease(self, service: str, key: str, environment: dict[str, str], cwd: str | None = None,
               loading: Callable[[str], None] | None = None, label: str | None = None,
-              python: str | None = None) -> Any:
+              python: str | None = None, python_key: str | None = None) -> Any:
         """The process of ``service`` for ``key`` (a script's path, a document's id; ``label`` what it
         is said as, the key by default), for one request, waiting its turn (see the module): started
         when there is none, or the standby taken for it. ``release`` it after. ``loading`` is told the
         standby's notice, once, when the lease waits for the standby being started past its patience.
-        ``python``: the caller's Python, which the process runs (a service whose ``interpreter`` is
-        ``"lease"``): a key of its own, and no standby."""
+        ``python``: the caller's Python (a service whose ``interpreter`` is ``"lease"``), which a process
+        started for the lease runs, and ``python_key`` the key of its environment (by default the Python
+        itself): a key of its own, and no standby."""
         declared = self.services[service]
         if python is not None and declared.interpreter != "lease":
             raise ValueError(f"a {service} runs its own environment's Python: a lease names none")
-        ticket = _Ticket(declared, self._key(declared, key, python), key if label is None else label, environment, cwd,
-                         python=python)
+        python_key = (python_key or python) if python is not None else None
+        ticket = _Ticket(declared, self._key(declared, key, python_key), key if label is None else label, environment,
+                         cwd, python=python, python_key=python_key)
         told = None
         with self.lock:
             self.queue.append(ticket)
@@ -692,6 +702,8 @@ class Supervisor:
                 self._grant()
             raise
         other = None
+        if python is not None:
+            process.python_key = python_key
         with self.lock:
             self.starting.discard(place)
             process.leased, process.since = True, time.monotonic()
@@ -752,25 +764,25 @@ class Supervisor:
         process.stop()
 
     def follow(self, service: str, key: str, send: Callable[[dict[str, Any]], None], op: str,
-               python: str | None = None) -> tuple[Any, float] | None:
-        """The process of ``key`` (in the caller's ``python``, where the lease names one) while a lease
-        holds it running an ``op`` request, and when that began (``time.time()``): ``send`` follows its
-        progress frames from now on (``Process.followers``) until the follower takes it off. None when
-        none runs."""
+               python_key: str | None = None) -> tuple[Any, float] | None:
+        """The process of ``key`` (of the caller's Python's ``python_key``, where the lease names one)
+        while a lease holds it running an ``op`` request, and when that began (``time.time()``): ``send``
+        follows its progress frames from now on (``Process.followers``) until the follower takes it off.
+        None when none runs."""
         declared = self.services[service]
         with self.lock:
-            process = self.table.get((service, self._key(declared, key, python)))
+            process = self.table.get((service, self._key(declared, key, python_key)))
             if process is None or not process.leased or process.op != op or process.began is None:
                 return None
             process.followers.append(send)
             return process, process.began
 
-    def live(self, service: str, key: str, python: str | None = None) -> Any:
-        """The live process of ``service`` for ``key`` (in the caller's ``python``, where a lease named
-        one), busy or idle; None when there is none."""
+    def live(self, service: str, key: str, python_key: str | None = None) -> Any:
+        """The live process of ``service`` for ``key`` (of the caller's Python's ``python_key``, where a
+        lease named one), busy or idle; None when there is none."""
         declared = self.services[service]
         with self.lock:
-            return self.table.get((service, self._key(declared, key, python)))
+            return self.table.get((service, self._key(declared, key, python_key)))
 
     def holds(self, process: Any) -> bool:
         """Whether ``process`` is live in the supervisor: neither retired nor gone."""
@@ -1003,9 +1015,10 @@ class Supervisor:
                 self._slot(ticket, None)
                 granted = True
                 continue
-            spare = self._spare()
+            # Another binding's standby, or another service's: the first to make room, unnoted -- but for a
+            # lease in its caller's Python, which never moves a standby (the module).
+            spare = self._spare() if ticket.python is None else None
             if spare is not None:
-                # Another binding's standby, or another service's: the first to make room, unnoted.
                 self._slot(ticket, spare)
                 ticket.drains = False
                 granted = True

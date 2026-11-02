@@ -12,9 +12,10 @@ A request leases its service's process for itself, one request at a time per pro
 first served, keyed as the service declares: a worker by its script's path, a render process by its
 document's id. A build names the Python its script was run with (``contract.interpreter``): one whose
 environment is not the base the server's kernel processes run in gets a worker of that Python's own,
-keyed by its script and that Python, so the packages of the environment the script was launched from
-import in its worker (``caller``); one whose worker contract is not the server's is refused in one line
-before any worker starts, naming which side to update and to what release (``contract.refusal``). The
+keyed by its script, that environment and the release of cad it holds, so the packages of the
+environment the script was launched from import in its worker (``caller``); one whose worker contract is
+not the server's is refused in one line before any worker starts, naming which side to update and to what
+release (``contract.refusal``). The
 services that count -- the workers -- are held to ``CAD_ENGINE_WORKERS`` processes
 alive (by default, the machine's cores): a build for a script with a live worker waits for it while
 it is busy; one for a script with none starts one when fewer than the cap are alive; at the cap the
@@ -763,16 +764,20 @@ class Daemon:
         if said is not None:
             raise ValueError(said)
 
-    def caller(self, request: dict[str, Any]) -> str | None:
-        """The Python a build's script is built in: its contract checked first (``contracted``); then None
-        -- the server's own environment, the base its kernel processes run in -- for an order that names
-        no Python, or one whose environment is that base (a checkout's or an installation's own, which
-        carries the kernel); else the executable the order names, its caller's, whose worker is its own
-        (``Supervisor.lease``'s ``python``)."""
+    def caller(self, request: dict[str, Any]) -> tuple[str | None, str | None]:
+        """The Python a build's script is built in, and the key of its worker's environment: its contract
+        checked first (``contracted``); then ``(None, None)`` -- the server's own environment, the base its
+        kernel processes run in -- for an order that names no Python, or one whose environment is that base
+        (a checkout's or an installation's own, which carries the kernel); else the executable the order
+        names, its caller's, and the key ``Supervisor.lease`` keeps its worker by (``python_key``): the
+        environment, as the system resolves its folder, and the release of cad in it. So ``python``,
+        ``python3`` and ``python3.14`` of one environment share one warm worker, which runs the first of them
+        to ask; and another release of cad there, under one contract, gets a fresh one, never the warm
+        worker that holds the code of the release before."""
         self.contracted(request)
         named = request.get("interpreter")
         if named is None:
-            return None
+            return None, None
         executable, prefix = named.get("executable"), named.get("prefix")
         if not (isinstance(executable, str) and os.path.isabs(executable) and isinstance(prefix, str) and prefix):
             raise ValueError("a build names the Python it comes from by an absolute executable and its environment")
@@ -781,27 +786,30 @@ class Daemon:
         except Exception:  # noqa: BLE001 - no base to tell it from: the caller's own Python, whatever it is
             base = None
         if base is not None and base.get("prefix") and _same_place(str(base["prefix"]), prefix):
-            return None
-        return executable
+            return None, None
+        return executable, f"{os.path.normcase(os.path.realpath(prefix))}\0{named.get('release')}"
 
     def lease(self, script: str, environment: dict[str, str], cwd: str | None = None,
-              loading: Callable[[str], None] | None = None, python: str | None = None) -> Process:
-        """The warm worker of a script (by its path, and the caller's ``python`` where its build named one:
-        ``caller``) or of the documents no worker built (``documents``), for one request: waiting its turn,
-        started when none is alive (``Supervisor.lease``); ``loading`` as there. ``release`` it after."""
-        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python)
+              loading: Callable[[str], None] | None = None, python: str | None = None,
+              python_key: str | None = None) -> Process:
+        """The warm worker of a script (by its path, and the caller's ``python`` and its environment's key
+        where its build named one: ``caller``) or of the documents no worker built (``documents``), for one
+        request: waiting its turn, started when none is alive (``Supervisor.lease``); ``loading`` as there.
+        ``release`` it after."""
+        return self.supervisor.lease("worker", script, environment, cwd, loading, python=python,
+                                     python_key=python_key)
 
     def release(self, worker: Process) -> None:
         self.supervisor.release(worker)
 
     def behind(self, key: str, send: Callable[[dict[str, Any]], None],
-               python: str | None = None) -> tuple[Process, float] | None:
+               python_key: str | None = None) -> tuple[Process, float] | None:
         """A build request that will wait for the build of its script already running (a rerun
         after a client its shell's time limit killed: that build goes on): said to its client at
         once, on stderr, and the running build's progress frames sent on to it until its own turn
         (``Supervisor.follow``). The worker and how long its build had run; None when none runs.
         Nothing is cancelled."""
-        found = self.supervisor.follow("worker", key, send, "build", python)
+        found = self.supervisor.follow("worker", key, send, "build", python_key)
         if found is None:
             return None
         worker, began = found
@@ -893,7 +901,7 @@ class Daemon:
             if worker is not None and self.supervisor.holds(worker):
                 # Asked of the worker that built it (``via``: a child model's is its parent's script's).
                 return {"script": record["source"]["script"], "function": record["source"]["name"], "held": ident,
-                        "via": worker.label, **({"python": worker.python} if worker.python else {})}, b""
+                        "via": worker.label, **({"python_key": worker.python_key} if worker.python_key else {})}, b""
             held = self.held_document(ident)
             if held is not None:
                 source, data = held
@@ -935,9 +943,9 @@ class Daemon:
         return {"document": ident, "name": doc.structure.get("name") or ident}, doc.xbf
 
     def _routed(self, request: dict[str, Any]) -> tuple[str, str | None, str | None]:
-        """The worker a request goes to (its key), the folder that worker starts in, and the Python it
-        runs: the caller's one a held document's worker was started in (``via``'s ``python``), else None,
-        the server's own (a build's own is ``caller``'s)."""
+        """The worker a request goes to (its key), the folder that worker starts in, and the key of the
+        Python it runs: that of the caller's one a held document's worker was started in (``via``'s
+        ``python_key``), else None, the server's own (a build's own is ``caller``'s)."""
         source = request.get("source") or {}
         if "document" in source:
             return "documents", request.get("cwd"), None  # a held document's bytes: no worker of its script
@@ -947,9 +955,9 @@ class Daemon:
         # document is asked of the worker that built it (``via``, in the Python it runs), whatever script
         # defines its model.
         holder = source if source.get("via") else request
-        python = holder.get("python") if holder.get("via") else None
+        python_key = holder.get("python_key") if holder.get("via") else None
         return (canonical(holder.get("via") or request.get("script") or source["script"]), None,
-                python if isinstance(python, str) else None)
+                python_key if isinstance(python_key, str) else None)
 
     def _call(self, request: dict[str, Any], order: dict[str, Any], send: Callable[[dict[str, Any]], None],
               payload: bytes = b"") -> None:
@@ -958,10 +966,21 @@ class Daemon:
         with self.busy_lock:
             self.busy += 1
         try:
-            key, cwd, python = self._routed(request)
-            if python is not None and self.supervisor.live("worker", key, python) is None:
-                # Its worker is gone: only a build starts one in its caller's Python, its contract checked.
-                python = None
+            key, cwd, python_key = self._routed(request)
+            python = None
+            if python_key is not None:
+                # A document asked of the worker of the caller's Python that built it: that one alone,
+                # never another of its script (the server's own, of another Python), which holds no build
+                # of it. Gone, the document is not held there: refused as not held, and only a build
+                # starts a worker in a caller's Python.
+                owner = self.supervisor.live("worker", key, python_key)
+                if owner is None:
+                    named = (request.get("source") or {}).get("held") or request.get("held")
+                    send(refused(self.models.not_held(named)) if isinstance(named, str) else
+                         {"failed": f"the worker that built it in its own Python is gone: run {Path(key).name} "
+                                    "again"})
+                    return
+                python = owner.python
             for attempt in (1, 2):
                 worker = None
                 try:
@@ -972,7 +991,7 @@ class Daemon:
                         # Viewer exports and a document named by its id borrow the held document's
                         # worker, including its environment: another caller's environment must not
                         # evict it (a different one starts a fresh worker, which holds nothing).
-                        held = self.supervisor.live("worker", key, python)
+                        held = self.supervisor.live("worker", key, python_key)
                         environment = held.environment if held else self.environment()
                         ordered = order
                         if held is None and "script" in request["source"]:
@@ -980,7 +999,7 @@ class Daemon:
                             send(refused(self.models.not_held(named)) if isinstance(named, str) else
                                  {"failed": "The viewed model is no longer held. Reopen it before exporting."})
                             return
-                    worker = self.lease(key, environment, cwd, python=python)
+                    worker = self.lease(key, environment, cwd, python=python, python_key=python_key)
                     expected = request.get("expected") or {}
                     if "modelRevision" in expected and "document" not in request["source"]:
                         # The lease excludes a rebuild: validate the generation here. A run that
@@ -1184,7 +1203,7 @@ class Daemon:
             try:
                 # The Python the script is built in (its caller's, else the server's own), its worker
                 # contract checked before any worker starts.
-                python = self.caller(request)
+                python, python_key = self.caller(request)
             except ValueError as error:
                 send({"failed": str(error)})
                 return
@@ -1195,12 +1214,13 @@ class Daemon:
                 key, cwd, _python = self._routed(request)  # a build's Python is ``caller``'s
                 for attempt in (1, 2):
                     worker = None
-                    ahead = self.behind(key, send, python) if attempt == 1 else None
+                    ahead = self.behind(key, send, python_key) if attempt == 1 else None
                     waited = time.monotonic()
                     try:
                         try:
                             worker = self.lease(key, request.get("env") or {}, cwd,
-                                                lambda text: send({"log": text, "stream": "notice"}), python)
+                                                lambda text: send({"log": text, "stream": "notice"}), python,
+                                                python_key)
                         finally:
                             if ahead is not None and send in ahead[0].followers:
                                 ahead[0].followers.remove(send)
