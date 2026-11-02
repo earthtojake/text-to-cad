@@ -101,8 +101,10 @@ def rerun(program: str | os.PathLike) -> str:
     POSIX shell (``shlex.quote``); on Windows in the double quotes cmd.exe and PowerShell both read,
     and only where a space or a quote needs them (``subprocess.list2cmdline``) -- to cmd.exe a
     single quote is part of the path."""
+    from cad.engine.said import COMMAND
+
     text = os.fspath(program)
-    return f"cad run {subprocess.list2cmdline([text]) if WINDOWS else shlex.quote(text)}"
+    return f"{COMMAND} run {subprocess.list2cmdline([text]) if WINDOWS else shlex.quote(text)}"
 
 
 def command(registry: Any, record: dict[str, Any]) -> str | None:

@@ -37,7 +37,7 @@ SANDBOXES: tuple[tuple[str, str], ...] = (("CODEX_SANDBOX_NETWORK_DISABLED", "1"
 # status to tell it from a Python traceback.
 WORKER_STDERR = "\nWorker stderr (last 16384 characters):\n"
 SANDBOXED = ("no engine server is running, and this shell's sandbox cannot start one: open a CAD card "
-             "(the CAD plugin's server starts the engine) or run `cad server` outside the sandbox")
+             f"(the CAD plugin's server starts the engine) or run `{COMMAND} server` outside the sandbox")
 # What a client says, starting nothing, where no installation of the server is registered on the device
 # and it runs in no base an installation made (``_start``): the library is plainly here, the script
 # imported it; a registered installation of the server is not. The remedy the ``cad`` command's own line

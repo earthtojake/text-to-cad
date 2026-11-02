@@ -26,6 +26,7 @@ from typing import Any, Callable, Iterable
 
 from cad.engine.ids import canonical, derived_id, is_id, model_id
 from cad.engine.records import DOCUMENTS, RECORD, home, relative
+from cad.engine.said import COMMAND
 
 __all__ = ["claimed", "claims", "fingerprint", "handed", "migrate", "reattach", "released", "relocated", "repoint"]
 
@@ -77,7 +78,7 @@ def claimed(held: Any, source: dict[str, Any], name: str) -> None:
         return
     raise ValueError(f"name {name!r} in namespace {namespace} is claimed by {other}:{record['line']} and "
                      f"{script}:{source.get('line', '?')}; give one declaration another name, or once "
-                     f"{other.name} no longer declares it, run `cad run {other.name}` so the engine knows")
+                     f"{other.name} no longer declares it, run `{COMMAND} run {other.name}` so the engine knows")
 
 
 def released(held: Any, script: str | os.PathLike, names: Iterable[str]) -> list[str]:

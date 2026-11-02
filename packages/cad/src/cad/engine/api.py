@@ -483,7 +483,9 @@ def _source(source: Any) -> dict[str, Any]:
     path = Path(text).resolve()
     if path.suffix.lower() not in SOURCES + MESHES:
         # A script is the commonest such source: its run makes the document, and prints its id.
-        run = (f"; run `cad run {text}` first, then export its document by id"
+        from cad.engine.said import COMMAND
+
+        run = (f"; run `{COMMAND} run {text}` first, then export its document by id"
                if path.suffix.lower() == ".py" else "")
         raise ExportRefused(f"{path.name} is no document: an export reads an .xbf, a .step, a mesh "
                             f"({', '.join(MESHES)}) or a document id{run}")
@@ -864,10 +866,12 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if not path.is_file():
         raise ValueError(f"no document {named}")
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
-        said = (f"`cad inspect {path.name}` alone tells its nodes, meshes and animations, and "
-                f"`cad viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
-                f"inspect reads nothing more of it: `cad viewer {path.name}` shows it, and the document it was "
-                "exported from, inspected, tells the rest")
+        from cad.engine.said import COMMAND
+
+        said = (f"`{COMMAND} inspect {path.name}` alone tells its nodes, meshes and animations, and "
+                f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
+                f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
+                "was exported from, inspected, tells the rest")
         raise ValueError(f"{path.name} is a mesh: it has no B-rep for a ref to name and no build closure (only an "
                          f".xbf carries one); {said}")
     from cad.engine.formats.gltf import _chunks
@@ -914,8 +918,10 @@ def _placed(structure: dict[str, Any], hit: Any, boxes: dict[str, Any]) -> dict[
 def _no_closure(path: Path) -> str:
     """Why a STEP holds no build closure: the format carries none (an xbf does, law 1), whoever wrote
     it -- cadgen's own export among them -- and what to inspect instead."""
+    from cad.engine.said import COMMAND
+
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file (cad inspect {path.name} REF)")
+            f"document by its id for its closure, or name a ref in the file ({COMMAND} inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:
