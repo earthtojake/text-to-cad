@@ -102,8 +102,11 @@ which points both at the checkout.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
 - `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
+  `docs/contributing/`: [adding a document type](docs/contributing/adding-a-document-type.md) and
+  [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
-  ([0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
+  ([0.10 to next, a draft](docs/migrations/migrating-0.10-to-next.md),
+  [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
   hosts `cad_server.viewer`'s HTTP app).

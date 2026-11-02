@@ -55,7 +55,7 @@ environment's interpreter for direct CLI calls:
 
 ```bash
 scripts/bundle/bundle.sh
-./.venv/bin/python -m cad_server.cli snapshot --help
+./.venv/bin/python -m cad_server.cli xbf snapshot --help
 ./.venv/bin/python -m cad_server.cli urdf check --help
 ```
 
@@ -96,7 +96,7 @@ Use the Windows virtual-environment path for direct CLI calls, and the runner fo
 focused test, so the file builds on an engine daemon of its own:
 
 ```powershell
-.\.venv\Scripts\python.exe -m cad_server.cli snapshot --help
+.\.venv\Scripts\python.exe -m cad_server.cli xbf snapshot --help
 & $gitBash scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
 ```
 
@@ -191,10 +191,10 @@ that folder. Releases before 0.10 kept theirs in `~/.cache/cadgen`, which no bui
 (`scripts/test/unittest_files.py` does).
 
 The skills ship no launcher scripts: every operational verb is a `cad`
-subcommand (`cad <verb>`, or `python -m cad_server.cli <verb>` when the console
+subcommand (`cad <document_type> <operation>` or `cad <verb>`, or `python -m cad_server.cli ...` when the console
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
-their logic lived under `skills/`; that logic is the library's now (`cad.{urdf,sdf,srdf}_*`), run
+their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
 by `cad urdf|sdf|srdf check`, so they need the server like everything else.
 
 ## Test In Agent Apps
@@ -489,6 +489,13 @@ to that opens its PR with what it does to the faces left unmeshed and the triang
 counts across the sample corpus, `main` against the branch; the engine's mesh tests
 (`tests/python/packages/cad/engine/test_mesh.py`) assert the contract on small
 fixtures.
+
+## Document Types And Integrations
+
+A new file format is a document type, a new third-party tool our code calls is an integration; the
+words and laws are `packages/cad/README.md`'s. Follow
+[Adding a document type](docs/contributing/adding-a-document-type.md) and
+[Adding an integration](docs/contributing/adding-an-integration.md), each a checklist.
 
 ## Source Boundaries
 

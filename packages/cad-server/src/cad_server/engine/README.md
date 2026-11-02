@@ -14,7 +14,7 @@ a model like any other: its body returns 2D geometry (a sketch, a face, wires or
 declares its DXF.
 
 ```python
-from cad.engine import xbf, step
+from cad import step, xbf
 import build123d as bd
 
 @xbf("XBF/arm.xbf")                      # XBF/arm.xbf beside the script; @xbf(out="path.xbf") to choose
@@ -71,7 +71,8 @@ assembly's parts, a stage of a long derivation. It writes no file; the model tha
 it does.
 
 ```python
-from cad.engine import memo, xbf
+from cad import xbf
+from cad.build123d import memo
 
 @memo
 def wheel(radius, spokes=5):     # replayed, not run, while what it is made of is unchanged
@@ -95,20 +96,20 @@ An assembly's mechanism is build123d's joints: `RevoluteJoint`,
 `LinearJoint`, `CylindricalJoint`, `BallJoint` and `RigidJoint` on its parts, placed with
 `connect_to(..., angle=, position=, angles=)`. The values they are connected at are the
 as-built state, the pose every file of the model shows. The functions that say more are named
-after the AP242 entities they write, and are `cad.ap242`'s (the root holds none of them):
+after the AP242 entities they write, and are the build123d integration's, `cad.build123d` (the root holds none of them):
 `mechanism_state(assembly, name, **values)` names another
 state (`mechanism_state_representation`), by joint label, and never moves the build;
 `gear_pair`, `rack_and_pinion_pair` and `screw_pair(assembly, name, **joints)` constrain joints to
 move together by ratio (**Kinematics**); `configuration_sequence(assembly, name, ...)` names a
 sequence of states over time (`interpolated_configuration_sequence`, **Configuration
-sequences**), and `cad.gltf`'s `animation(assembly, name, duration=)` a GLB's own animation
+sequences**), and `cad.build123d`'s `animation(assembly, name, duration=)` a GLB's own animation
 (**Animations**). Connect parts before putting them in the compound that holds
 them; where `connect_to` cannot place them (a nested assembly), give the two joints one label
 where the parts stand.
 
 ```python
 from cad.build123d import mechanism_state
-from cad.engine import xbf
+from cad import xbf
 
 @xbf("XBF/hinge.xbf")
 def hinge():
@@ -121,7 +122,7 @@ def hinge():
 ```
 
 A posed or partial file is a function, never an option (law 22): `export` writes the document
-as its code built it. `posed(assembly, state)` (`cad.ap242`, beside `mechanism_state`) is a
+as its code built it. `posed(assembly, state)` (`cad.build123d`, beside `mechanism_state`) is a
 copy of the assembly, sharing its geometry, with every part where a mechanism state, or
 `{joint label or coupling name: value}`, puts it -- each link moved by its placement at those
 values over its placement as built, the forward kinematics the viewer and the snapshot pose
@@ -547,7 +548,7 @@ again.
 | `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
-| `cli.py` | the verbs as commands, the server's: `cad <type> export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
+| `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
 | `kernel/` | the memo (`memo.py`), maker history (`history.py`), element naming (`trace.py`), deterministic kernel settings (`determinism.py`) |
 
 ## CLI
@@ -555,29 +556,40 @@ again.
 ```
 cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
                                              in an environment of the library's, with its kernel)
-cad <type> export SRC DST [DST ...] [--json]
-                                             SRC an .xbf, a .step, a document id, or a mesh
-                                             (.glb, .stl, .3mf: to the other two mesh kinds)
-cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
+cad xbf|step export SRC DST [DST ...] [--json]
+                                             SRC an .xbf, a .step or a document id
+cad glb|stl|threemf export SRC DST [DST ...] [--json]
+                                             a mesh to the other two mesh kinds
+cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
-cad <type> snapshot --job PACKET [SRC] [the same flags, each over every job]
+cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
 cad serve DOC [--port N]
-cad xbf inspect DOC [REF] [--query Q] [--json]  what the document holds, then its build closure; with REF (**References**): an element's facts and
+cad xbf|step|glb inspect DOC [REF] [--query Q] [--json]
+                                             what the document holds, then its build closure; with REF
+                                             (**References**): an element's facts and
                                              what made it, or a part's or an assembly's volume, mass and
                                              world bounds (a part's placement too); of a GLB, its nodes,
                                              meshes and animations (an STL or a 3MF, and a ref into any
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
+cad urdf|sdf|srdf check FILE [--strict] [--json] [the type's own options]
+                                             its findings, each a severity, a code and a location
 cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
 cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
                                              file of yours
 ```
 
-`python -m cad_server.engine VERB ...` takes the same verbs, the engine's own entry.
+The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
+(`cad.registry`), one set of operation names every type shares; `TYPE` is any type with that
+operation (`cad <type> --help` lists a type's). A file of another type is refused by name before
+anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`). A document id is a
+model's document, an xbf: `cad xbf export ID ...`. The commands are the server's
+(`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.xbf export ...`);
+`python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
 Every `SRC` and `DOC` is an on-disk CAD file's path or a document's id (`ids`): a model's id is
 what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
@@ -722,6 +734,49 @@ document is served meanwhile), and one rewritten while it is served is read
 again in the background: the page keeps the old version until the new one is
 in. Its structure says how long the parse took and which process made it
 (`read`: `{seconds, process}`).
+
+## Document types and integrations
+
+The words are the library README's (**Definitions**, laws 24 to 28); this is how they work.
+
+**The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
+`DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an
+`Operation` with the integration it needs -- `decorator`, `reader` and `wire`) and `INTEGRATIONS` (each
+an `Integration`: `name`, `extra`, `process`, and for an external program its `Probe`: the program,
+the minimum version, the install hint and the variable that names it outright). `by_extension` and
+`type_of` map a file to its type. Every layer reads it: the viewer's file kinds, the content types its
+file route sends, the catalog's extensions, the snapshot packets' inputs, the routes each kind
+answers, the CAD app's list of formats, the analytics kinds, and the format tables of the @cad/core
+runtime bundled at build time, which are generated from it (`python -m cad.registry --js`) and checked
+against it. `wire` is the one other spelling, the frozen
+protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas.
+
+**A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
+(`cad._internal.document_type.bind`), the module class of every type: `__call__` is the decorator
+(`cad.engine.model`'s, for a type with one), `read` the type's reader, and `export`, `snapshot` and
+`inspect` the engine's functions (`api`) behind a check that the source is no file of another type;
+`check` is the type's own function. Each attribute is resolved on first use and kept, so `cad.step.read
+is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
+`cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
+meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
+warning once per process from the lookup, at the caller's line (`skip_file_prefixes` skips the
+library's and the import system's frames).
+
+**Producers.** A producer is `(type, matcher, writer, integration)` with what it accepts and provides
+(`cad.registry.Producer`), registered by its integration (`cad/build123d/_producers.py`) and gathered
+by `cad.registry.producers_for`. A model's result is checked against them before anything is made of
+it (`model.check_result`): for the document and each file the model declares, exactly one producer
+must take the value (`registry.producer_for`), else the build fails, naming what the type is made of
+and the integration that would take the value. Today the build123d integration's producers take a
+build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
+(`document.py`) and its translations (`export.translate`) -- make the files, as before.
+
+**The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
+`OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
+runners) for `export`, `snapshot` and `inspect`, the type's `check` for `check` (generated from the
+function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
+repeats). `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
+...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
 ## Profiling
 
@@ -1792,7 +1847,7 @@ changed or new one fails in one line naming the folder and its mode.
   error refuses the file, saying which. `export.dxf.validate_dxf_file` runs them on any DXF.
 - **No option selects a part or a state** (law 22): a file of one part is that part's own
   model (a function returning it), and a posed file a model returning the assembly posed
-  (`posed(arm(), "folded")`, `cad.ap242`). Snapshot's `--pose` is the picture's: ad
+  (`posed(arm(), "folded")`, `cad.build123d`). Snapshot's `--pose` is the picture's: ad
   hoc, never cached, never declared.
 
 **Motions in a GLB.** Each motion (**Configuration sequences**) is baked into a glTF animation of its name:
@@ -1962,7 +2017,7 @@ configuration sequence says it.
 ```python
 import build123d as bd
 from cad.build123d import configuration_sequence, gear_pair, mechanism_state, screw_pair
-from cad.engine import xbf
+from cad import xbf
 
 CURL = {"index_mcp_flexion": 90, "index_pip": 100, "index_dip": 70}  # degrees at a full curl
 BONES = {"base": 30, "proximal": 40, "middle": 25, "distal": 20}     # lengths along +X

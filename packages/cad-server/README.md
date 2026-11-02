@@ -19,8 +19,9 @@ src/cad_server/
                          #   declares (its workers, its render processes), its registry of documents,
                          #   the live models' book, the document cache, the verbs as commands
                          #   (cli), and the engine's README, the mechanisms the laws constrain
-  cli/                   # the `cad` command: a module per command, each a shell over
-                         #   the function or parser that does the work
+  cli/                   # the `cad` command: a module per command and per document type
+                         #   (`cad <type> <operation>`: document_types, from the library's
+                         #   registry), each a shell over the function or parser that does the work
   viewer/                # the engine's HTTP application (engine_app), launcher (main), routes
                          #   (http_app: /api/v1, its document kinds in kinds), files by
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
@@ -68,22 +69,28 @@ src/cad_server/
 
 ## Commands
 
-`cad <type> export`, `snapshot`, `serve`, `inspect`, `status`, `stop`, `delete` and `server` are the
-engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them);
-`cad urdf|sdf|srdf check` the validators; `cad doctor` the setup (the installation registered,
-the `cad` command written, the CAD kernel environment made, the engine started; the releases on
-disk, the current one, the engine's and each app's plugin's) and what earlier releases left behind
-that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine records of
-an older format, the bytecode of installations no longer registered, cache folders no record names,
-the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among them;
-none written in the last seven days); `cad run` a program in the CAD kernel environment (the base:
-`_internal/base.py`), its own folder last on its path; `cad viewer` the engine page launcher;
+A document type's commands are `cad <document_type> <operation> <file>`, one id per type as the
+library's registry names it (`cad.registry`): `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
+`cad urdf check`, and the rest `cad --help` lists, grouped by type. `export`, `snapshot` and `inspect`
+are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them), and
+`check` a type's checks (its findings, each a severity, a code and a location; `--json`); `cad <type>
+--help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
+type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). `cad serve`,
+`status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
+installation registered, the `cad` command written, the CAD kernel environment made, the engine started;
+the releases on disk, the current one, the engine's and each app's plugin's) and what earlier releases
+left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
+records of an older format, the bytecode of installations no longer registered, cache folders no record
+names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among
+them; none written in the last seven days); `cad run` a program in the CAD kernel environment (the
+base: `_internal/base.py`), its own folder last on its path; `cad viewer` the engine page launcher;
 `cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets
 up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder, makes the CAD kernel environment models
 run in and moves the device's engine to its release; `cad update` runs the newest release's
 `cad setup`, as the update button does; `cad uninstall` takes text-to-cad out; `cad plugin` writes
-the plugin folder and prints its path; and `cad telemetry` the person's answer.
+the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
+engine README's **CLI** and **Document types and integrations**.
 
 The plugin every agent app gets is one folder, `plugin` in the state folder, which the server writes
 from its own copy of the plugin (`_runtime/plugin`: each host's manifest, its config for the CAD app's
