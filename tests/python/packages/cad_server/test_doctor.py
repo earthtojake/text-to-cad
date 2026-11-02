@@ -158,7 +158,7 @@ class DoctorTests(unittest.TestCase):
                                "--no-server"], capture_output=True, text=True, env=environment, timeout=300)
         self.assertEqual(done.returncode, 0, done.stderr)
         lines = done.stdout.splitlines()
-        self.assertEqual(lines[0], "text-to-cad 1.2.3-dev.1")
+        self.assertEqual(lines[0], "cad-server 1.2.3-dev.1")
         record = self.state / "installations" / "1.2.3-dev.1.json"
         self.assertEqual([line.strip() for line in lines if line.strip().startswith("registry")],
                          [f"registry {record} OK"])

@@ -241,8 +241,8 @@ that is free is used, and one held is rolled from the same way. When 3245 is fre
 the engine takes it back and forgets the port it rolled to: `back on the default port 3245: links
 made on 3246 no longer work` -- the one time a link changes. Who holds a port is named as the
 system says it (`daemon.port_holder`: `lsof` on macOS, `/proc` on Linux, `netstat` on Windows), or
-`another process` where it does not say, and a server of text-to-cad's, by its command line (another
-engine folder's, 0.8's), `another text-to-cad (<name>, pid N)`.
+`another process` where it does not say, and another cad-server, by its command line (another
+engine folder's, 0.8's), `another cad-server (<name>, pid N)`.
 
 **Starting and updating.** The device runs one release's engine at a time, the current
 installation's: `<state>/installations/current` names it (`cad_server._internal.installations`). Every

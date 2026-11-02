@@ -24,11 +24,11 @@ from __future__ import annotations
 import os
 import sys
 
-from cad_server._internal.launch import LAUNCHER
+from cad_server._internal.launch import COMMAND, LAUNCHER, SERVER
 
 # The ``cad`` command's own words (``installations._SH``) when no installation is registered.
-NONE_INSTALLED = ("text-to-cad is not installed: run `" + " ".join(LAUNCHER) + " cad-server "
-                  "cad doctor` once, outside any sandbox or with its permission")
+NONE_INSTALLED = (f"{SERVER} is not installed: run `" + " ".join(LAUNCHER) + f" {SERVER} {COMMAND} doctor` once, "
+                  "outside any sandbox or with its permission")
 
 
 class Refused(Exception):

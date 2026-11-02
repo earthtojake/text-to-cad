@@ -542,8 +542,10 @@ class CadApp:
 
             code = cad_app_code()
             if code is None:
+                from cad_server.updates import command
+
                 send_json(response, 404, {"error": "this install has no CAD app build",
-                                          "hint": "run the install command again: `curl -fsSL https://texttocad.dev/install.sh | sh`"})
+                                          "hint": f"run the install command again: `{command()}`"})
             else:
                 response.send_bytes(200, code, "text/javascript; charset=utf-8")
             return
@@ -1252,8 +1254,10 @@ class CadApp:
 
         server = getattr(self, "server", None)
         if server is None or not callable(getattr(server, "retire", None)):
+            from cad_server.updates import command
+
             return 409, {"error": "no engine serves this page: nothing to update",
-                         "hint": "update with the install command: `curl -fsSL https://texttocad.dev/install.sh | sh`"}
+                         "hint": f"update with the install command: `{command()}`"}
         UPDATE.start(server)
         return 202, self._version()
 

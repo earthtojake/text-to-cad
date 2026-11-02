@@ -497,8 +497,10 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
 
     installed = getattr(cad_server, "__version__", "unknown")
     location = Path(cad_server.__file__).resolve().parent
+    from cad_server._internal.launch import SERVER
+
     # The version this installation runs as: a development install's own name, else its release.
-    sys.stdout.write(f"text-to-cad {own_version() or installed}\n")
+    sys.stdout.write(f"{SERVER} {own_version() or installed}\n")
     sys.stdout.write(f"  python   {sys.version.split()[0]} ({sys.executable})\n")
     sys.stdout.write(f"  install  {location}\n")
     # Its record and the command the skills run it by (`cad_server._internal.installations`).

@@ -333,7 +333,7 @@ class EnginePortTest(unittest.TestCase):
         (said,) = [line for line in done.stderr.splitlines() if line.startswith(f"cad: {default} is held by ")]
         self.assertTrue(said.endswith(f"; the engine serves on {port} and keeps it"), said)
         if os.name != "nt":  # the system names the holder by its command line
-            self.assertIn("another text-to-cad (", said)
+            self.assertIn("another cad-server (", said)
             self.assertIn(f"pid {theirs.pid})", said)
         self.assertIsNone(theirs.poll(), "never asked to stop: it runs on")
         self.assertTrue(listening(default))

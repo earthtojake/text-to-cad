@@ -111,7 +111,7 @@ def _sandboxed() -> bool:
 def _denied(cause: str) -> ConnectionError:
     """The engine refused by the system (a sandbox that forbids writing in the engine's folder),
     said to the agent or person who runs the command."""
-    return ConnectionError(f"the system denies text-to-cad's local engine ({cause}); a sandbox that forbids "
+    return ConnectionError(f"the system denies {SERVER}'s engine ({cause}); a sandbox that forbids "
                            "it does: run this command outside it, or with the sandbox's permission")
 
 

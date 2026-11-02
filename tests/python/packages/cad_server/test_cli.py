@@ -101,7 +101,7 @@ class Dispatch(unittest.TestCase):
         from cad_server.engine.cli import status_text
 
         text = status_text({"pid": 7, "up": 5, "workers": [], "installation": "0.8.0-dev.20261025032350"})
-        self.assertTrue(text.startswith("engine server 7 (text-to-cad 0.8.0-dev.20261025032350), up "), text)
+        self.assertTrue(text.startswith("engine server 7 (cad-server 0.8.0-dev.20261025032350), up "), text)
 
     def test_status_says_a_worker_s_retirement_by_its_script_and_a_render_process_s_by_its_document(self):
         import time

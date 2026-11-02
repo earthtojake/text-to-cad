@@ -602,7 +602,7 @@ class EngineFolderTest(unittest.TestCase):
             for verb in ("status", "stop"):
                 with mock.patch("sys.stderr", new_callable=io.StringIO) as said, mock.patch("sys.stdout"):
                     self.assertEqual(cli.run(verb, []), 1)
-                self.assertRegex(said.getvalue(), rf"^cad {verb}: the system denies text-to-cad's local engine "
+                self.assertRegex(said.getvalue(), rf"^cad {verb}: the system denies cad-server's engine "
                                  r"\(taking the lock in the engine's folder .+: Permission denied\); .+ "
                                  r"run this command outside it, or with the sandbox's permission\n$")
 

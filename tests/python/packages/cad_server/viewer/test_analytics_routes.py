@@ -217,8 +217,20 @@ class ViewerAnalyticsTest(unittest.TestCase):
             self.assertEqual((status, update), (200, {key: answer[key] for key in ("notice", "release", "instance", "update")}))
             # Only the engine's application updates: one with no engine under it says so, and starts nothing.
             status, refused = self.request("POST", "/api/v1/local/update", {})
-            self.assertEqual((status, set(refused)), (409, {"error", "hint"}))
+            from cad_server.updates import command
+
+            self.assertEqual((status, refused), (409, {"error": "no engine serves this page: nothing to update",
+                                                       "hint": f"update with the install command: `{command()}`"}))
             self.assertEqual(self.request("PUT", "/api/v1/local/update", {})[0], 405)
+
+    def test_an_install_with_no_cad_app_build_names_this_computer_s_install_command(self) -> None:
+        from cad_server.mcp import tunnel
+        from cad_server.updates import command
+
+        with mock.patch("cad_server.assets.cad_app_code", return_value=None):
+            status, answer = self.request("GET", tunnel._APP_ROUTE)
+        self.assertEqual((status, answer), (404, {"error": "this install has no CAD app build",
+                                                  "hint": f"run the install command again: `{command()}`"}))
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.

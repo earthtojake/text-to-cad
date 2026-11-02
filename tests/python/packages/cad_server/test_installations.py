@@ -273,7 +273,7 @@ class ProxyFileTests(Fixture):
         self.assertEqual((none.returncode, none.stderr.strip()), (1, proxy.NONE_INSTALLED))
         with self.assertRaises(proxy.Refused) as refused:
             proxy.choose(None, [])
-        self.assertEqual(str(refused.exception), "text-to-cad is not installed: run `uvx --no-config --managed-python "
+        self.assertEqual(str(refused.exception), "cad-server is not installed: run `uvx --no-config --managed-python "
                                                  "--python 3.14 --from cad-server cad doctor` once, outside any "
                                                  "sandbox or with its permission")
         for version in ("1.0.0", "2.0.0"):

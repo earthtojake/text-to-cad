@@ -310,7 +310,7 @@ class InstallUpdateAndUninstall(Fixture):
     def test_an_install_stops_0_8_s_server_by_its_own_stop_registers_keeps_a_receipt_and_the_next_run_changes_nothing(self) -> None:
         original = self.desktop_with({"other": {"command": "node"}})
         earlier = self.earlier_installation()
-        self.held = "another text-to-cad (python3.14, pid 4242)"  # 0.8's server on the port, as the system names it
+        self.held = "another cad-server (python3.14, pid 4242)"  # 0.8's server on the port, as the system names it
         stopped = ["/tmp/cadgen-engine/0123456789ab.door"]
         # Its own `cadgen stop` stops it: the port is free after.
         setup.stop_earlier.side_effect = lambda record: (setattr(self, "held", None), (True, stopped, ""))[1]
@@ -321,7 +321,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
         console = re.escape(providers.shown(earlier["cadgen"], self.machine))
         self.assertRegex(out, rf"\n  0\.8 +stop +text-to-cad 0\.8\.4's server, if it runs: `{console} stop`\n")
-        self.assertIn(f"port {PORT} is held by another text-to-cad (python3.14, pid 4242): if 0.8's stop above does "
+        self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if 0.8's stop above does "
                       "not free it, the engine serves on the next free port, and says so", out)
         self.assertIn("0.8      stopped text-to-cad 0.8.4's server (its own `cadgen stop`)", out)
         config = json.loads(self.desktop.read_text(encoding="utf-8"))

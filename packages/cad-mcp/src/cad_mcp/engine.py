@@ -404,7 +404,7 @@ def _port_text(path: Path) -> str:
 
 
 def _denied(cause: str) -> ConnectionError:
-    return ConnectionError(f"the system denies text-to-cad's local engine ({cause}); a sandbox that forbids "
+    return ConnectionError(f"the system denies {SERVER}'s engine ({cause}); a sandbox that forbids "
                            "it does: run this command outside it, or with the sandbox's permission")
 
 

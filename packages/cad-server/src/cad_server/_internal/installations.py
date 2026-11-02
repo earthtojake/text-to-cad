@@ -53,9 +53,10 @@ NAME_ENV = "CAD_INSTALLATION_VERSION"
 FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients read
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
-# earlier, so an older installation's server starting never undoes a newer one's proxy.
+# earlier, so an older installation's server starting never undoes a newer one's proxy. 8: its line with
+# no installation names cad-server.
 MARK = "cad proxy: "
-REVISION = 7
+REVISION = 8
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -429,8 +430,8 @@ for name in $(CDPATH= cd "$state/installations" 2>/dev/null && ls -t -- *.json 2
   # Alive as ``alive`` says it: its python and its console script (an uninstalled server leaves the python).
   [ -x "$python" ] && [ -f "$console" ] && exec "$python" -P -m cad_server._internal.proxy "$@"
 done
-echo "text-to-cad is not installed: run \\`uvx --no-config --managed-python --python {python} --from cad-server \\
-cad doctor\\` once, outside any sandbox or with its permission" >&2
+echo "{server} is not installed: run \\`uvx --no-config --managed-python --python {python} --from {server} \\
+{command} doctor\\` once, outside any sandbox or with its permission" >&2
 exit 1
 """
 
@@ -467,7 +468,7 @@ for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') 
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
-echo text-to-cad is not installed: run `uvx --no-config --managed-python --python {python} --from cad-server cad doctor` once, outside any sandbox or with its permission 1>&2\r
+echo {server} is not installed: run `uvx --no-config --managed-python --python {python} --from {server} {command} doctor` once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
 endlocal & "%python%" -P -m cad_server._internal.proxy %*\r
@@ -477,9 +478,10 @@ exit /b %errorlevel%\r
 
 def script(windows: bool = WINDOWS) -> str:
     """The proxy's text: the same from every version of this revision."""
-    from cad_server._internal.launch import PYTHON
+    from cad_server._internal.launch import COMMAND, PYTHON, SERVER
 
-    return (_CMD if windows else _SH).format(mark=MARK, revision=REVISION, python=PYTHON)
+    return (_CMD if windows else _SH).format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER,
+                                             command=COMMAND)
 
 
 def _revision(path: str) -> int | None:

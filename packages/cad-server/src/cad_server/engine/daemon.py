@@ -417,12 +417,14 @@ def _holder(port: int, source: str) -> PortHeld:
 
 
 def _who(port: int) -> str:
-    """Who holds ``port``, in words, as the system names it (``port_holder``): another text-to-cad by its
+    """Who holds ``port``, in words, as the system names it (``port_holder``): another cad-server by its
     command line (``_CADGEN``), else its name and pid, else another process."""
+    from cad_server._internal.launch import SERVER
+
     pid, name, command = port_holder(port)
     if pid is None:
         return "another process"
-    return f"another text-to-cad ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
+    return f"another {SERVER} ({name}, pid {pid})" if _CADGEN.search(command or "") else f"{name or 'a process'} (pid {pid})"
 
 
 # A command line that runs a server's engine or viewer, this release's or an earlier one's: ``-m cad_server.…``

@@ -405,10 +405,11 @@ def find_uv() -> str:
         return find_uv_bin()
     except (ImportError, FileNotFoundError):
         pass
+    from cad_server._internal.launch import SERVER
     from cad_server.updates import command
 
     raise Refused("the server makes its CAD kernel environment with uv, and finds none: it depends on the uv "
-                  f"package, which carries it; install text-to-cad again: run `{command()}`")
+                  f"package, which carries it; install {SERVER} again: run `{command()}`")
 
 
 @dataclass(frozen=True)
@@ -540,7 +541,9 @@ def _cannot(what: str, error: OSError, environment: str = WHAT) -> str:
     """That ``what`` (a file or folder of ``environment``) cannot be written, in one line: a denial as a
     sandbox's, which this once outside it, or with its permission, makes."""
     if isinstance(error, PermissionError):
-        return (f"the system denies text-to-cad {what} ({error.strerror or error}); a sandbox that forbids it does: "
+        from cad_server._internal.launch import SERVER
+
+        return (f"the system denies {SERVER} {what} ({error.strerror or error}); a sandbox that forbids it does: "
                 "run this once outside it, or with its permission")
     return f"cannot write {what}: {error.strerror or error}"
 
