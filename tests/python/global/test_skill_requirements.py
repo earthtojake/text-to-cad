@@ -26,7 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
 SETUP = """Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+project's environment puts its own `cad` first; `cad.exe` on Windows). If `cad` is not found and
 the CAD app was only just added, its server may still be starting: wait five seconds and run the
 command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
@@ -39,7 +39,7 @@ says what to do, and `cad doctor` explains the installation.
 """
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
-_INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.cmd)?\s+[a-z]", re.M)
+_INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.exe)?\s+[a-z]", re.M)
 _FENCE = re.compile(r"^ *```[^\n]*\n(.*?)^ *```", re.M | re.S)
 
 

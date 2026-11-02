@@ -29,7 +29,7 @@ the page the person has open updates. Files are exports, made when asked.
 ## Setup and paths
 
 Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+project's environment puts its own `cad` first; `cad.exe` on Windows). If `cad` is not found and
 the CAD app was only just added, its server may still be starting: wait five seconds and run the
 command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
@@ -71,9 +71,7 @@ next run installs it again after an edit). A script with no header inside a Pyth
 `uv run` does. A script that stops on an
 import says which integration brings it in one line: add what it names to the header. What cannot
 be installed beside cad is refused in one line with uv's reason: change the requirement it names,
-or, where the network is needed once, run it outside a sandbox or with its permission. In Windows
-PowerShell, put a version constraint (`>=`, `<`) in the block, not on the command line: PowerShell
-hands it to `cad.cmd` unquoted, and cmd reads `>` as a redirection.
+or, where the network is needed once, run it outside a sandbox or with its permission.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor

@@ -880,9 +880,13 @@ class Installer:
         extra: list[dict[str, Any]] = []
         proxy = installations.proxy_path()
         status = installations.proxy_status(proxy)
-        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines carry the
-        # proxy's mark. A file of that name that is not (``uv tool install``'s link) stays.
-        ours = status in (installations.OK, installations.STALE, installations.NEWER)
+        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines (on Windows,
+        # cad.exe's __main__.py's) carry the proxy's mark, or it is a cad.cmd an earlier revision wrote. A
+        # file of that name that is not (``uv tool install``'s) stays.
+        earlier = installations.earlier_command()
+        ours = status in (installations.OK, installations.STALE, installations.NEWER) or earlier is not None
+        if status == installations.MISSING and earlier is not None:
+            proxy = earlier
         whole = not self.only
         launcher = whole and ours
         if launcher:
@@ -928,14 +932,7 @@ class Installer:
                     changed.add(step.app)
                     changed.update(step.agents)
             if launcher:
-                try:
-                    os.unlink(proxy)
-                    self.say(f"command  removed {providers.shown(proxy, self.machine)}")
-                    self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": proxy,
-                                         "ok": True, "at": providers.stamp()})
-                except OSError as error:
-                    failed = True
-                    self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+                failed = self._remove_command(proxy) or failed
             if whole:
                 failed = self._stop() or failed
                 failed = self._remove_releases() or failed
@@ -954,6 +951,26 @@ class Installer:
             self._purge(state, cache)
         restart = self._restart(apps, changed)
         return self._result(steps, extra, None, restart, 1 if failed else 0)
+
+    def _remove_command(self, proxy: str) -> bool:
+        """The cad command removed, with its Python on Windows (``installations.remove_proxy``): True when it
+        could not be. A ``cad.exe`` that runs this uninstall is set aside, no command any more, and said."""
+        from cad_server._internal import installations
+
+        providers = self.providers
+        try:
+            removed, left = installations.remove_proxy()
+        except OSError as error:
+            self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+            return True
+        for path in removed:
+            self.say(f"command  removed {providers.shown(path, self.machine)}")
+            self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": path, "ok": True,
+                                 "at": providers.stamp()})
+        for path in left:
+            self.say(f"command  {providers.shown(path, self.machine)} runs this uninstall: set aside, delete it "
+                     "once this ends")
+        return False
 
     def _remove_plugin(self) -> bool:
         """The plugin folder removed, after every app's copy of it: True when it could not be removed whole."""
