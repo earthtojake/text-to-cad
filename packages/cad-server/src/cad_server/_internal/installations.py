@@ -20,7 +20,8 @@ starts fine there. So an installation registers itself, and one command runs the
   script that runs the current installation's interpreter with ``-m cad_server._internal.proxy`` (with
   no current one, the one registered last), which runs that installation's ``cad``. Every version
   writes the same file (``REVISION``), so the proxy is no installation's. On Windows it is
-  ``cad.cmd``, the same logic.
+  ``cad.exe``, the same logic in Python, run by a Python of its own beside it (``cad-launcher``): see
+  "the Windows command" below.
 
 The records and the proxy are written at install moments only: ``cad setup`` (the release it
 sets up), ``cad doctor``, the skills' one-time step, which says what it found, and the CAD app's
@@ -54,9 +55,10 @@ FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients r
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy. 8: its line with
-# no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII.
+# no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII. 10: on Windows,
+# cad.exe and a Python of its own in place of cad.cmd, a batch file (the sh is 9's).
 MARK = "cad proxy: "
-REVISION = 9
+REVISION = 10
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -78,7 +80,7 @@ def proxy_folder() -> str:
 
 
 def proxy_path(where: str | None = None, windows: bool = WINDOWS) -> str:
-    return os.path.join(where or proxy_folder(), "cad.cmd" if windows else "cad")
+    return os.path.join(where or proxy_folder(), EXE if windows else "cad")
 
 
 def state():
@@ -455,70 +457,354 @@ echo "{server} is not installed: run \\`uvx --no-config --managed-python --pytho
 exit 1
 """
 
-_CMD = """@echo off\r
-rem {mark}{revision}\r
-rem The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),\r
-rem else the one registered last.\r
-setlocal EnableDelayedExpansion\r
-rem A record is UTF-8 and may name a user folder with accents or another script: findstr reads it\r
-rem on its input, as a path argument reaches it in the ANSI code page, and for /f decodes its output\r
-rem in the console's code page, UTF-8 while the records are read, the person's own before Python runs.\r
-set "codepage="\r
-for /f "tokens=*" %%a in ('chcp') do for %%b in (%%a) do set "codepage=%%~nb"\r
-if defined codepage chcp 65001 >nul 2>&1\r
-if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cad-state")\r
-set "current="\r
-if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
-if defined current if exist "!state!\\installations\\!current!.json" (\r
-  set "python="\r
-  set "console="\r
-  for /f usebackq^ tokens^=4^ delims^=^\" %%p in (`findstr /c:"\\"python\\":" ^< "!state!\\installations\\!current!.json"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cad\\":" ^< "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
-  if defined python if defined console (\r
-    set "python=!python:\\\\=\\!"\r
-    set "console=!console:\\\\=\\!"\r
-    if exist "!python!" if exist "!console!" goto run\r
-  )\r
-)\r
-rem A record's python and cad (its console script's) lines are: space "KEY": "PATH", -- split at each\r
-rem quote, PATH is the fourth piece. Alive as alive() says it: its python and its console script (an\r
-rem uninstalled server leaves the python), else the next record.\r
-for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') do (\r
-  set "python="\r
-  set "console="\r
-  for /f usebackq^ tokens^=4^ delims^=^" %%p in (`findstr /c:"\\"python\\":" ^< "!state!\\installations\\%%n"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cad\\":" ^< "!state!\\installations\\%%n"`) do set "console=%%c"\r
-  if defined python if defined console (\r
-    set "python=!python:\\\\=\\!"\r
-    set "console=!console:\\\\=\\!"\r
-    if exist "!python!" if exist "!console!" goto run\r
-  )\r
-)\r
-if defined codepage chcp !codepage! >nul 2>&1\r
-echo {server} is not installed: run `uvx --no-config --managed-python --python {python} --from {server} {command} doctor` once, outside any sandbox or with its permission 1>&2\r
-exit /b 1\r
-:run\r
-if defined codepage chcp !codepage! >nul 2>&1\r
-endlocal & "%python%" -P -m cad_server._internal.proxy %*\r
-exit /b %errorlevel%\r
-"""
+# --- the Windows command ----------------------------------------------------------------------
+#
+# On Windows the command is ``cad.exe``, the launcher pip puts in front of every console script --
+# distlib's stub (``_stub``) -- then a shebang naming the command's own Python, then a zip whose
+# ``__main__.py`` (``_MAIN``) chooses as the sh does. The stub runs ``<python> -I <cad.exe> <the arguments
+# as given>``: they reach Python through CreateProcess, never through cmd, so ``>``, ``&``, ``^``, ``!`` and
+# ``%NAME%`` are characters, and Ctrl+C asks nothing. The shebang names its Python relative to the stub's
+# own folder (``<launcher_dir>``): ``cad-launcher`` beside it (``INTERPRETER``), a virtual environment with
+# nothing installed that uv makes once of the writing installation's interpreter. So the file is the same
+# bytes from every release and every state folder, and an update or a switch never rewrites it: only a
+# later revision does, and a Python that no longer starts (``_interpreter_ok``) is made again. A ``cad.exe`` that runs -- ``cad update``
+# runs through it -- cannot be replaced or removed, but it can be renamed: it is set aside
+# (``cad.exe.<hex>.old``) and the new one put in its place, and what was set aside goes at a later write
+# (``_sweep``). The batch file of revisions before (``EARLIER_CMD``) goes once ``cad.exe`` is in place.
+EXE = "cad.exe"
+EARLIER_CMD = "cad.cmd"
+INTERPRETER = "cad-launcher"
+_SHEBANG = f"#!<launcher_dir>\\{INTERPRETER}\\Scripts\\python.exe -I\n"
+ASIDE = ".old"
+
+_MAIN = '''# {mark}{revision}
+# The cad command on Windows (cad.exe): runs the current installation of text-to-cad's server
+# (cad_server._internal.proxy), else the one registered last. Every release writes this same file (cad
+# setup, cad doctor, the CAD app's server). The standard library alone: its Python has nothing else.
+import json
+import os
+import re
+import subprocess
+import sys
+
+
+def python_of(folder, version):
+    """The python of installation ``version``, while it and its console script are there."""
+    try:
+        with open(os.path.join(folder, version + ".json"), encoding="utf-8") as handle:
+            record = json.load(handle)
+        python, console = record["python"], record["cad"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    if isinstance(python, str) and isinstance(console, str) and os.path.isfile(python) and os.path.isfile(console):
+        return python
+    return None
+
+
+def registered(folder):
+    """Every record's version, the one registered last first."""
+    def stamp(name):
+        try:
+            return os.path.getmtime(os.path.join(folder, name))
+        except OSError:
+            return 0.0
+
+    try:
+        names = [name for name in os.listdir(folder) if name.endswith(".json")]
+    except OSError:
+        return []
+    return [name[:-5] for name in sorted(names, key=stamp, reverse=True)]
+
+
+def main():
+    state = os.environ.get("CAD_STATE_DIR") or os.path.join(
+        os.environ.get("LOCALAPPDATA") or os.path.join(os.path.expanduser("~"), "AppData", "Local"), "cad-state")
+    folder = os.path.join(state, "installations")
+    versions = []
+    try:
+        with open(os.path.join(folder, "current"), encoding="utf-8") as handle:
+            current = handle.readline().strip()
+        if re.fullmatch(r"[0-9A-Za-z.+_-]+", current):
+            versions.append(current)
+    except (OSError, ValueError):
+        pass
+    for version in versions + registered(folder):
+        python = python_of(folder, version)
+        if python:
+            break
+    else:
+        sys.stderr.write({refusal!r} + "\\n")
+        return 1
+    # The arguments as Windows gave them to this process, as a list: Python quotes them for the next.
+    child = subprocess.Popen([python, "-P", "-m", "cad_server._internal.proxy", *sys.argv[1:]])
+    while True:
+        try:
+            return child.wait()
+        except KeyboardInterrupt:  # Ctrl+C reaches the installation too: it decides, this waits for it
+            continue
+
+
+sys.exit(main())
+'''
+
+
+def _main_text() -> str:
+    """The ``__main__.py`` of ``cad.exe``: the same from every version of this revision."""
+    from cad_server._internal.proxy import NONE_INSTALLED
+
+    return _MAIN.format(mark=MARK, revision=REVISION, refusal=NONE_INSTALLED)
+
+
+def _archive() -> bytes:
+    """What follows the stub in ``cad.exe``: the shebang and the zip of ``__main__.py``, byte for byte the same
+    wherever it is made (a fixed date, a fixed system)."""
+    import io
+    import zipfile
+
+    stream = io.BytesIO()
+    entry = zipfile.ZipInfo("__main__.py", date_time=(1980, 1, 1, 0, 0, 0))
+    entry.create_system = 0
+    entry.external_attr = 0o644 << 16
+    with zipfile.ZipFile(stream, "w") as archive:
+        archive.writestr(entry, _main_text().encode("utf-8"))
+    return _SHEBANG.encode("utf-8") + stream.getvalue()
+
+
+def _stub() -> bytes:
+    """distlib's console launcher for this machine's Windows, the one pip writes for every console script:
+    ``t64-arm.exe`` on Windows on ARM, else ``t64.exe`` (``t32.exe`` for a 32-bit Python)."""
+    import struct
+    import sysconfig
+    from importlib.resources import files
+
+    if sysconfig.get_platform() == "win-arm64":
+        name = "t64-arm.exe"
+    else:
+        name = "t64.exe" if struct.calcsize("P") == 8 else "t32.exe"
+    try:
+        return files("distlib").joinpath(name).read_bytes()
+    except (ImportError, OSError) as missing:
+        raise OSError(f"distlib's launcher {name} is not installed beside cad-server ({missing})") from None
+
+
+def executable() -> bytes:
+    """The bytes of ``cad.exe``."""
+    return _stub() + _archive()
+
+
+def interpreter_folder(where: str | None = None) -> str:
+    """The cad command's Python on Windows: ``cad-launcher``, beside ``cad.exe``."""
+    return os.path.join(where or proxy_folder(), INTERPRETER)
+
+
+def _interpreter_ok(folder: str) -> bool:
+    """Whether the cad command's Python at ``folder`` starts: its ``python.exe``, and the interpreter its
+    ``pyvenv.cfg`` names as its home."""
+    if not os.path.isfile(os.path.join(folder, "Scripts", "python.exe")):
+        return False
+    try:
+        with open(os.path.join(folder, "pyvenv.cfg"), encoding="utf-8") as handle:
+            for line in handle:
+                key, _, value = line.partition("=")
+                if key.strip().lower() == "home":
+                    return os.path.isfile(os.path.join(value.strip(), "python.exe"))
+    except (OSError, ValueError):
+        pass
+    return False
+
+
+def _make_interpreter(folder: str) -> None:
+    """The cad command's Python made at ``folder``: a virtual environment of this installation's interpreter,
+    nothing installed, made by uv as every environment of the server's is (``base``), offline (the interpreter
+    is here), beside its place and then moved there. ``OSError`` when it cannot be."""
+    import shutil
+    import subprocess
+
+    from cad._internal.atomic_replace import temp_suffix
+    from cad_server._internal import base
+
+    try:
+        uv = base.find_uv()
+    except base.Refused as refused:
+        raise OSError(str(refused)) from None
+    temporary = folder + temp_suffix()
+    step = [uv, "--no-config", "--offline", "--quiet", "venv", "--no-project", "--python", sys.executable, temporary]
+    done = subprocess.run(step, cwd=os.path.dirname(folder), stdin=subprocess.DEVNULL, capture_output=True,
+                          text=True, encoding="utf-8", errors="replace")
+    if done.returncode != 0 or not _interpreter_ok(temporary):
+        shutil.rmtree(temporary, ignore_errors=True)
+        lines = [line.strip() for line in (done.stderr or done.stdout or "").splitlines() if line.strip()]
+        raise OSError(f"uv could not make the cad command's Python ({lines[-1] if lines else done.returncode})")
+    if os.path.lexists(folder):
+        _discard(_aside(folder))  # one that cannot start: nothing runs from it
+    try:
+        os.rename(temporary, folder)
+    except OSError:
+        shutil.rmtree(temporary, ignore_errors=True)
+        if not _interpreter_ok(folder):  # another process put its own there meanwhile: that one
+            raise
+
+
+def _aside(path: str) -> str:
+    """``path`` renamed beside itself out of the way (``<name>.<hex>.old``): Windows renames a program that
+    runs, and neither replaces nor removes it. The new name."""
+    aside = f"{path}.{os.urandom(4).hex()}{ASIDE}"
+    os.rename(path, aside)
+    return aside
+
+
+def _discard(path: str) -> bool:
+    """``path`` removed, a file or a folder: whether it is gone (a program that still runs stays)."""
+    import shutil
+
+    try:
+        if os.path.isdir(path) and not os.path.islink(path):
+            shutil.rmtree(path)
+        else:
+            os.remove(path)
+    except OSError:
+        return not os.path.lexists(path)
+    return True
+
+
+def _sweep(where: str) -> None:
+    """What a write or an uninstall set aside while it still ran (``_aside``), removed where it no longer does."""
+    try:
+        names = os.listdir(where)
+    except OSError:
+        return
+    for name in names:
+        if name.endswith(ASIDE) and name.startswith((f"{EXE}.", f"{INTERPRETER}.")):
+            _discard(os.path.join(where, name))
+
+
+def _write_exe(path: str, data: bytes) -> None:
+    """``data`` written to ``path`` whole: beside it, then renamed into place -- a ``cad.exe`` that runs set
+    aside first (``_aside``)."""
+    from cad._internal.atomic_replace import temp_suffix
+
+    temporary = f"{path}{temp_suffix()}"
+    try:
+        with open(temporary, "wb") as handle:
+            handle.write(data)
+        try:
+            os.replace(temporary, path)
+        except PermissionError:
+            if not os.path.isfile(path):
+                raise
+            aside = _aside(path)  # a cad.exe that runs: this very command, as `cad update` runs through it
+            try:
+                os.replace(temporary, path)
+            except OSError:
+                try:
+                    os.rename(aside, path)
+                except OSError:
+                    pass
+                raise
+            _discard(aside)
+    finally:
+        if os.path.lexists(temporary):
+            try:
+                os.unlink(temporary)
+            except OSError:
+                pass
+
+
+def _write_windows(where: str, path: str) -> None:
+    """``cad.exe`` and its Python, each written where it is not as this revision writes it."""
+    folder = interpreter_folder(where)
+    if not _interpreter_ok(folder):
+        _make_interpreter(folder)
+    data = executable()
+    try:
+        with open(path, "rb") as handle:
+            same = handle.read() == data
+    except OSError:
+        same = False
+    if not same:
+        _write_exe(path, data)
+
+
+def earlier_command(where: str | None = None) -> str | None:
+    """The Windows cad command of a revision before (``cad.cmd``, a batch file) where it is text-to-cad's."""
+    path = os.path.join(where or proxy_folder(), EARLIER_CMD)
+    return path if os.path.isfile(path) and _revision(path) is not None else None
+
+
+def _exe_status(path: str) -> str:
+    if not os.path.lexists(path):
+        return MISSING
+    if os.path.islink(path):
+        return FOREIGN
+    import zipfile
+
+    try:
+        with zipfile.ZipFile(path) as archive:
+            head = archive.read("__main__.py")[:512].decode("utf-8", "replace")
+    except (OSError, KeyError, ValueError, zipfile.BadZipFile):
+        return FOREIGN  # no zip, or one with no __main__.py of ours: uv's or pip's cad.exe, a person's own
+    revision = _revision_in(head)
+    if revision is None:
+        return FOREIGN
+    if revision > REVISION:
+        return NEWER
+    try:
+        with open(path, "rb") as handle:
+            data = handle.read()
+    except OSError:
+        return STALE
+    # The stub is whichever distlib wrote it: what follows it is this revision's, or it is stale.
+    same = data.startswith(b"MZ") and data.endswith(_archive())
+    return OK if same and _interpreter_ok(interpreter_folder(os.path.dirname(path))) else STALE
+
+
+def remove_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[list[str], list[str]]:
+    """The cad command removed (an uninstall's): ``(removed, left)``. On Windows its Python and a ``cad.cmd``
+    of a revision before go with it, and a ``cad.exe`` that runs -- the uninstall's own -- is set aside
+    (``_aside``): no command any more, removed by a later write, or by hand once it ends (``left``).
+    ``OSError`` when the command cannot be taken out of its place."""
+    where = where or proxy_folder()
+    path = proxy_path(where, windows)
+    if not windows:
+        os.unlink(path)
+        return [path], []
+    _sweep(where)
+    removed, left = [], []
+    if _exe_status(path) not in (MISSING, FOREIGN):  # a cad.exe not ours (``uv tool install``'s) stays
+        if _discard(path):
+            removed.append(path)
+        else:
+            aside = _aside(path)
+            removed.append(path)
+            if not _discard(aside):
+                left.append(aside)
+    earlier = earlier_command(where)
+    if earlier and _discard(earlier):
+        removed.append(earlier)
+    folder = interpreter_folder(where)
+    if os.path.lexists(folder):
+        if _discard(folder):
+            removed.append(folder)
+        else:
+            try:
+                left.append(_aside(folder))  # its python.exe runs this uninstall
+            except OSError:
+                left.append(folder)
+    return removed, left
 
 
 def script(windows: bool = WINDOWS) -> str:
-    """The proxy's text: the same from every version of this revision."""
+    """The proxy's text: the same from every version of this revision. On Windows, ``cad.exe``'s
+    ``__main__.py`` (the file is ``executable``)."""
+    if windows:
+        return _main_text()
     from cad_server._internal.launch import COMMAND, PYTHON, SERVER
 
-    return (_CMD if windows else _SH).format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER,
-                                             command=COMMAND)
+    return _SH.format(mark=MARK, revision=REVISION, python=PYTHON, server=SERVER, command=COMMAND)
 
 
-def _revision(path: str) -> int | None:
-    """The revision of the proxy at ``path``, or ``None`` when it is not the proxy."""
-    try:
-        with open(path, encoding="utf-8", errors="replace") as handle:
-            head = handle.read(512)
-    except (OSError, ValueError):
-        return None
+def _revision_in(head: str) -> int | None:
+    """The revision a proxy's first lines carry (``MARK``), or ``None`` when they carry none."""
     for line in head.splitlines()[:3]:
         at = line.find(MARK)
         if at >= 0:
@@ -529,8 +815,20 @@ def _revision(path: str) -> int | None:
     return None
 
 
+def _revision(path: str) -> int | None:
+    """The revision of the proxy script at ``path``, or ``None`` when it is not the proxy."""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            head = handle.read(512)
+    except (OSError, ValueError):
+        return None
+    return _revision_in(head)
+
+
 def proxy_status(path: str | None = None, windows: bool = WINDOWS) -> str:
     path = path or proxy_path(windows=windows)
+    if windows:
+        return _exe_status(path)
     if not os.path.lexists(path):
         return MISSING
     revision = None if os.path.islink(path) else _revision(path)
@@ -548,10 +846,18 @@ def proxy_status(path: str | None = None, windows: bool = WINDOWS) -> str:
 
 def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str, str, str | None]:
     """Write the proxy when it is missing or stale: ``(path, status before, error or None)``. A
-    folder it cannot write is not raised but returned as the error, for ``cad doctor`` to say."""
+    folder it cannot write is not raised but returned as the error, for ``cad doctor`` to say. On
+    Windows, what earlier writes set aside goes (``_sweep``), and so does a ``cad.cmd`` of a revision
+    before once ``cad.exe`` is in place: at the write after the one that put it there, as a ``cad.cmd``
+    that ran the write (``cad update`` through it) is a batch file cmd reads on after it."""
     where = where or proxy_folder()
     path = proxy_path(where, windows)
     status = proxy_status(path, windows)
+    if windows:
+        _sweep(where)
+        earlier = earlier_command(where)
+        if earlier and status in (OK, NEWER):
+            _discard(earlier)
     if status not in (MISSING, STALE):
         return path, status, None
     from cad._internal.atomic_replace import replace_atomic, temp_suffix
@@ -559,10 +865,13 @@ def write_proxy(where: str | None = None, windows: bool = WINDOWS) -> tuple[str,
     temporary = f"{path}{temp_suffix()}"
     try:
         os.makedirs(where, exist_ok=True)
-        with open(temporary, "w", encoding="utf-8", newline="") as handle:
-            handle.write(script(windows))
-        os.chmod(temporary, 0o755)
-        replace_atomic(temporary, path)
+        if windows:
+            _write_windows(where, path)
+        else:
+            with open(temporary, "w", encoding="utf-8", newline="") as handle:
+                handle.write(script(windows))
+            os.chmod(temporary, 0o755)
+            replace_atomic(temporary, path)
     except OSError as failure:
         try:
             os.unlink(temporary)

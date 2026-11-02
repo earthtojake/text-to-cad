@@ -3,10 +3,11 @@ name: Windows installer rehearsal
 # install.ps1 on a fresh Windows runner, the way a person runs it: Windows PowerShell 5.1, the
 # piped `irm | iex` form and the script form with options, against the wheel this tree builds.
 # uv installed by its own installer when the image has none, `cad setup` run with nothing
-# asked, the `cad` command registered, the doctor's verdict and a second run; then models built on
-# it (a box, a box with a hand-made wheel through `--with`, through a script's header, from a
-# venv of the user's own with the library installed, and the page link's token), and the uninstall;
-# then the same again into a state folder named with accents and a non-Latin script.
+# asked, the `cad` command (cad.exe) registered, the doctor's verdict and a second run; then models
+# built on it (a box, a box with a hand-made wheel through `--with`, by a version range on the command
+# line, through a script's header, from a venv of the user's own with the library installed, and the
+# page link's token), arguments cmd would have parsed, cad.exe rewritten while it runs, and the
+# uninstall; then the same again into a state folder named with accents and a non-Latin script.
 # A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
 # installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
 on:
@@ -136,8 +137,9 @@ jobs:
           if ($out -match 'cad setup exited') { throw "cad setup failed" }
           if ($out -notmatch "text-to-cad $([regex]::Escape($env:CAD_RELEASE)) for this machine") { throw "the plan does not name the release" }
           if ($out -notmatch 'Dry run: nothing was changed\.') { throw "the dry run did not end as one" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
           if (Test-Path $cmd) { throw "a dry run wrote $cmd" }
+          if (Test-Path (Join-Path $env:USERPROFILE '.local\bin\cad-launcher')) { throw "a dry run made the command's Python" }
 
       - name: Install, piped as the docs say (irm | iex, 5.1)
         shell: cmd
@@ -152,8 +154,11 @@ jobs:
           Write-Host $out
           if ($out -match 'cad setup exited') { throw "cad setup failed" }
           if ($out -notmatch "server\s+registered $([regex]::Escape($env:CAD_RELEASE))") { throw "the server did not register" }
-          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.cmd'
+          $cmd = Join-Path $env:USERPROFILE '.local\bin\cad.exe'
           if (-not (Test-Path $cmd)) { throw "the cad command was not written at $cmd" }
+          $python = Join-Path $env:USERPROFILE '.local\bin\cad-launcher\Scripts\python.exe'
+          if (-not (Test-Path $python)) { throw "the cad command's Python was not made at $python" }
+          if (Test-Path (Join-Path $env:USERPROFILE '.local\bin\cad.cmd')) { throw "a cad.cmd was written beside cad.exe" }
           "CAD_CMD=$cmd" >> $env:GITHUB_ENV
 
       - name: The registered command, the doctor and a second run
@@ -169,10 +174,6 @@ jobs:
       # What the model steps share: run a program and keep its stdout and stderr together (Windows
       # PowerShell 5.1 turns a native command's stderr lines into error records, so they are
       # stringified here, and the checks throw on their own); write a file without a byte-order mark.
-      #
-      # An argument containing > or < is never passed on a command line here: PowerShell 5.1 hands
-      # it unquoted to cad.cmd, and cmd.exe reads it as a redirection. A requirement with a version
-      # range goes through a script's `# /// script` header, as the models below do for theirs.
       - name: The helpers the model steps use
         shell: pwsh
         run: |
@@ -306,6 +307,87 @@ jobs:
           Need $again 'the second cad run --with' @('(?m)^(built|took) \S+ warm', 'bounds 33\D+20\D+4 mm')
           if ($again.Text -match '(?m)^(built|took) \S+ cold') { Fail "the second run was cold" }
 
+      # 2b. A version range on the command line: Windows PowerShell 5.1 passes `own-extra>=1.0`
+      # unquoted, as it passes any argument without a space. cad.cmd handed it to cmd, which read `>` as
+      # a redirection (it installed `own-extra` and wrote a file named `=1.0`); cad.exe hands it to
+      # Python as it is. Then arguments cmd would have parsed -- `&`, `^`, `!`, `%PATH%`, `<`, `>`, `|` --
+      # come back unchanged in cad's own error, with and without a space.
+      - name: Arguments reach cad as given (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          # The wheel beside the server's (UV_FIND_LINKS): a requirement by name and range finds it there.
+          Copy-Item -LiteralPath $env:OWN_WHEEL -Destination "$env:RUNNER_TEMP\wheel" -Force
+          $dir = Join-Path $env:RUNNER_TEMP 'models\ranged'
+          Save "$dir\strip.py" @'
+          import own_extra
+          from cad import model
+
+
+          @model
+          def ranged():
+              import build123d as bd
+
+              return bd.Box(own_extra.WIDTH, 20, 3)
+
+
+          if __name__ == "__main__":
+              ranged()
+          '@
+          Set-Location $dir
+          $r = Invoke-Cad run --with "own-extra>=1.0" strip.py
+          Need $r 'cad run --with "own-extra>=1.0"' @('(?m)^(built|took) \S+', 'bounds 33\D+20\D+3 mm')
+          if (Test-Path -LiteralPath (Join-Path $dir '=1.0')) { Fail "the requirement was redirected: a file named =1.0" }
+          foreach ($odd in @('a&b^c!d!%PATH%<e>f|g', 'x & y ^ !z! %PATH% > w')) {
+            $r = Invoke-Cad $odd
+            if ($r.Code -ne 2) { Fail "cad $odd exited $($r.Code), not 2 (an unknown command)" }
+            if ($r.Text.IndexOf("cad: unknown command '$odd'") -lt 0) { Fail "cad did not receive $odd as given" }
+          }
+          # What cmd would have made of them: files named by what followed each >.
+          foreach ($name in @('f', 'w')) {
+            if (Test-Path -LiteralPath (Join-Path $dir $name)) { Fail "an argument was redirected: a file named $name" }
+          }
+          Write-Host "every argument arrived as given; nothing was redirected"
+
+      # 2c. cad.exe rewritten while it runs, as `cad update` rewrites it through itself: a stale cad.exe
+      # (this revision's mark, another build's text) runs `cad doctor`, which cannot replace a running
+      # program, so sets it aside and writes the new one; the next run sweeps what was set aside, and
+      # the cad.cmd of a release before, ours by its mark, goes once cad.exe is in place.
+      - name: cad.exe rewritten while it runs (5.1)
+        shell: powershell
+        timeout-minutes: 10
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          $bin = Split-Path $env:CAD_CMD
+          $state = Join-Path $env:LOCALAPPDATA 'cad-state'
+          $current = ([IO.File]::ReadAllText((Join-Path $state 'installations\current'))).Trim()
+          $record = [IO.File]::ReadAllText((Join-Path $state "installations\$current.json"), [Text.Encoding]::UTF8) | ConvertFrom-Json
+          $stale = @'
+          import io, sys, zipfile
+          from cad_server._internal import installations
+          stream = io.BytesIO()
+          with zipfile.ZipFile(stream, "w") as archive:
+              archive.writestr("__main__.py", installations.script(True) + "# another build of this revision\n")
+          with open(sys.argv[1], "wb") as handle:
+              handle.write(installations._stub() + installations._SHEBANG.encode() + stream.getvalue())
+          '@
+          Save "$env:RUNNER_TEMP\stale.py" $stale
+          $r = Invoke-Native $record.python "$env:RUNNER_TEMP\stale.py" $env:CAD_CMD
+          if ($r.Code) { Fail "writing a stale cad.exe exited $($r.Code)" }
+          [IO.File]::WriteAllText((Join-Path $bin 'cad.cmd'), "@echo off`r`nrem cad proxy: 9`r`n", (New-Object System.Text.UTF8Encoding($false)))
+          $r = Invoke-Cad doctor --no-server
+          Need $r 'cad doctor through a stale cad.exe' @('(?m)^command\s+\S.*cad\.exe written \(was stale\)', 'cad\.cmd, the batch file cad\.exe replaces')
+          $aside = @(Get-ChildItem -LiteralPath $bin -Filter 'cad.exe.*.old' | ForEach-Object { $_.Name })
+          if ($aside.Count -ne 1) { Fail "the running cad.exe was not set aside: $($aside -join ', ')" }
+          Write-Host "set aside while it ran: $($aside[0])"
+          $r = Invoke-Cad doctor --no-server
+          Need $r 'cad doctor through the new cad.exe' @('(?m)^command\s+\S.*cad\.exe OK')
+          if (@(Get-ChildItem -LiteralPath $bin -Filter 'cad.exe.*.old').Count) { Fail "what was set aside was not swept" }
+          if (Test-Path -LiteralPath (Join-Path $bin 'cad.cmd')) { Fail "the cad.cmd before cad.exe was not removed" }
+          $r = Invoke-Cad --version
+          Need $r 'cad --version' @("^cad $([regex]::Escape($env:CAD_RELEASE))")
+
       # 3. The same wheel named in the script's own header: plain `cad run` builds it.
       - name: cad run, a header naming the wheel (5.1)
         shell: powershell
@@ -404,8 +486,8 @@ jobs:
             & $env:CAD_CMD doctor
           }
 
-      # The uninstall as the docs give it, through the installer: never through the proxy it removes,
-      # a batch file cmd is still reading.
+      # The uninstall as the docs give it, through the installer: never through the command it removes,
+      # whose release folder it runs from.
       - name: Uninstall, through the installer (5.1)
         shell: cmd
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall.txt" 2>&1
@@ -417,11 +499,13 @@ jobs:
           Write-Host $out
           if ($out -match 'cad uninstall exited') { throw "cad uninstall failed" }
           if (Test-Path $env:CAD_CMD) { throw "the proxy is still there after the uninstall: $env:CAD_CMD" }
-          Write-Host "the proxy is gone"
+          $python = Join-Path (Split-Path $env:CAD_CMD) 'cad-launcher'
+          if (Test-Path $python) { throw "the cad command's Python is still there after the uninstall: $python" }
+          Write-Host "the proxy and its Python are gone"
 
       # 6. A state folder named with accents and a non-Latin script, as %LOCALAPPDATA% is under a user
       # folder such as C:\Users\José: the release's Python lives there, so the installation's record
-      # names non-ASCII paths, which the cad command (cad.cmd) reads. Installed again into it, then the
+      # names non-ASCII paths, which the cad command (cad.exe's Python) reads. Installed again into it, then the
       # doctor and a model through `cad` on PATH, then uninstalled. The folder's name stays out of the
       # scripts' text: Windows PowerShell 5.1 reads a script without a byte-order mark as ANSI.
       - name: Install into an accented, non-Latin state folder (5.1)

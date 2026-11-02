@@ -4,8 +4,8 @@ command, make the CAD kernel environment, start the engine, and say what this de
 The skills' one-time step (``uvx ... --from cad-server==<version> cad doctor``), and the repair
 command. On a device where no installation is current it registers this one
 (``<state>/installations/<version>.json``) and makes it current (``cad_server._internal.installations``);
-on one where an installation is, it registers nothing. It writes the proxy, ``~/.local/bin/cad``,
-through which the skills run the server, and says what it found: each written, already right, or a
+on one where an installation is, it registers nothing. It writes the proxy, ``~/.local/bin/cad``
+(on Windows ``cad.exe``, with the Python it runs by), through which the skills run the server, and says what it found: each written, already right, or a
 folder it cannot write (a sandbox's), the records of installations whose interpreter is gone, a file in
 the proxy's place that is not text-to-cad's, another command shadowing it on PATH, and what earlier
 releases left behind that none running now needs (``cad_server._internal.leftovers``: engine records of an older
@@ -321,6 +321,9 @@ def _setup() -> list[str]:
             lines.append(f"command  {path} {said}{path_hint}")
         else:
             lines.append(f"command  {path} {said}")
+        earlier = setup.earlier_command(os.path.dirname(path)) if setup.WINDOWS else None
+        if earlier:
+            lines.append(f"command  {earlier}, the batch file cad.exe replaces, goes at the next `cad doctor`")
         for record in setup.records():
             if not setup.alive(record):
                 lines.append(f"registry {record['path']} dangling: its interpreter {record['python']} is gone "

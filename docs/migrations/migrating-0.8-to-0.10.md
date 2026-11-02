@@ -35,7 +35,7 @@ installer runs.
 
 **2. `cadgen` is `cad` in commands**, with the same verbs and options:
 `cadgen export <id> part.step` is `cad export <id> part.step`, `~/.local/bin/cadgen` is
-`~/.local/bin/cad` (on Windows `cad.cmd`), and a skill's
+`~/.local/bin/cad` (on Windows `cad.exe`; in 0.10.0 `cad.cmd`), and a skill's
 `uvx ... --from cadgen==0.8.4 cadgen doctor` is
 `uvx --no-config --managed-python --python 3.14 --from cad-server==0.10.0 cad doctor`.
 0.8's `cadgen` command still runs 0.8, beside 0.10, until `cad doctor --prune` removes it.
