@@ -55,6 +55,12 @@
  * (Inputs keep the panel's text size: the page's viewport, not a 16px font, stops a phone zooming
  * in on a focused field.) */
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-tree-row] { gap: 6px; }
+/* A phone cannot hover: a row's Hide/Reveal eye is always shown, and the name fades out under it. */
+[data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-row-actions], [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-row-actions] button { opacity: 1 !important; }
+[data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-tree-row] [class*="group-hover/row:[mask-image"] {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--row-actions) - 0.5rem), transparent calc(100% - var(--row-actions)));
+}
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-tree-row] svg { width: 16px; height: 16px; }
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-slot="tree-filter"] { height: 40px; padding: 4px; }
 [data-viewer-layout="mobile"] [data-cad-file-sidebar] [data-slot="tree-filter"] input { height: 32px; padding-left: 28px; border: 1px solid var(--input); }
