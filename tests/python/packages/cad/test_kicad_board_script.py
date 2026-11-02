@@ -102,7 +102,7 @@ class BoardScriptTest(unittest.TestCase):
                          "asked again while the server says it is not ready, then handed the board once")
         self.assertEqual(self.board, ran.board)
         (server,) = _Server.started
-        self.assertEqual(["/opt/kicad/kicad-cli", "api-server", "--socket"], server.command[:3])
+        self.assertEqual([str(Path("/opt/kicad/kicad-cli")), "api-server", "--socket"], server.command[:3])
         self.assertEqual(str(self.board), server.command[-1])
         self.assertTrue(server.stopped)
         self.assertFalse(server.socket.parent.exists(), "the private folder is removed")

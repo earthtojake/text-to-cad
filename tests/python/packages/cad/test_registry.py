@@ -9,6 +9,7 @@ from the fixed set, and exactly one producer per value per type.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import unittest
@@ -114,7 +115,7 @@ class TheTableIsTheSource(unittest.TestCase):
         code = ("import sys; import cad.registry as r; r.help_text('step'); "
                 "print(sorted(m for m in sys.modules if m.split('.')[0] in ('OCP', 'build123d', 'numpy')))")
         proc = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True,
-                              env={"PYTHONPATH": str(repo_path("packages", "cad", "src"))}, timeout=120)
+                              env={**os.environ, "PYTHONPATH": str(repo_path("packages", "cad", "src"))}, timeout=120)
         self.assertEqual(0, proc.returncode, proc.stderr)
         self.assertEqual("[]", proc.stdout.strip())
 

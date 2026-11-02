@@ -258,8 +258,9 @@ if os.path.realpath(record["prefix"]) != os.path.realpath(sys.argv[2]):
 PY
 [ -x "$PROXY" ] && grep -q "^# $COMMAND proxy: " "$PROXY" || fail "$PROXY is not the $COMMAND command"
 same() { "$VENV/bin/python" -c 'import os, sys; sys.exit(os.path.realpath(sys.argv[1]) != os.path.realpath(sys.argv[2]))' "$1" "$2"; }
-same "$("$PROXY" run -c 'import sys; print(sys.prefix)')" "$VENV" \
-  || fail "$COMMAND run does not run the installation's python"
+# cad run is uv run with cad pinned at the installation's release: the program runs on that release's library.
+[ "$("$PROXY" run -c 'import cad; print(cad.__version__)' | tail -n 1)" = "$("$VENV/bin/python" -c 'import cad; print(cad.__version__)')" ] \
+  || fail "$COMMAND run does not run the installation's release of cad"
 # The first installation on this machine is its current one, the one the command runs.
 [ "$(cat "$CAD_STATE_DIR/installations/current")" = "$VERSION_INSTALLED" ] \
   || fail "$VERSION_INSTALLED is not the current installation"
