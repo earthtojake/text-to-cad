@@ -43,9 +43,9 @@ one on demand, and this guide does not decide how one will.
       (`cad_server/cli/document_types.py`). Pin it in
       `tests/python/packages/cad_server/test_cli_commands.py`.
 - [ ] **The viewer.** A renderer for its view in `packages/ui/src/renderers/` (or an existing one's
-      registration, `packages/ui/docs/renderers.md`), its icon (`renderCapabilities.js` reads the view),
-      and, for a view the server resolves, the route its kind answers (`cad_server/viewer/http_app.py`
-      reads `_VIEW_ROUTES` by view).
+      registration), designed as [Designing its viewer](#designing-its-viewer) says; its icon
+      (`renderCapabilities.js` reads the view); and, for a view the server resolves, the route its kind
+      answers (`cad_server/viewer/http_app.py` reads `_VIEW_ROUTES` by view).
 - [ ] **The receiver.** A new kind crosses the analytics wire: add it to `apps/api/src/events.mjs`
       in a new schema version; `tests/python/global/test_telemetry_vocabulary_sync.py` holds the two
       together.
@@ -59,6 +59,47 @@ one on demand, and this guide does not decide how one will.
       package, the engine README's **CLI**, the server README's **Commands**, the skill that teaches
       the type, the README and the docs site's homepage (`apps/docs/src/lib/content.ts`) if they list
       formats, and `AGENTS.md` only if a repo-level rule changed.
+
+## Designing its viewer
+
+The rules live in the shared UI's documents; this section says which to read and in what order, and
+copies none of them:
+
+- [`settings-ui.md`](../../packages/ui/docs/settings-ui.md), BINDING for every control: the toolbar
+  button, `FloatingToolBar`, `SubToolbar`, `ToolPopover`, `FileSidebar`, `ToolStack`, `ToolPanel`, the
+  floating surface, the tokens (`tokens.css`) and the 13px UI size.
+- [`cad-renderer.md`](../../packages/ui/docs/cad-renderer.md): the renderer kit -- shell, inspector,
+  viewport, tools, camera, view settings.
+- [`renderers.md`](../../packages/ui/docs/renderers.md) and
+  [`file-viewer.md`](../../packages/ui/docs/file-viewer.md): `defineFileRenderer` and registration.
+- [`render-types.md`](../../packages/ui/docs/render-types.md): shared viewer code never asks what a
+  format is.
+- [`viewer-host.md`](../../packages/ui/docs/viewer-host.md): environmental effects come from the host.
+- [`annotation.md`](../../packages/ui/docs/annotation.md),
+  [`view-updates.md`](../../packages/ui/docs/view-updates.md),
+  [`render-mode.md`](../../packages/ui/docs/render-mode.md) and
+  [`loading.md`](../../packages/ui/docs/loading.md).
+
+The steps:
+
+1. **Pick the nearest existing view kind and compose it from the kit; never write a bespoke shell.**
+   A 3D mesh view (the `xbf`, `glb` and `mesh` renderers), a flat drawing (`dxf`), or a flat plot
+   (`kicad_pcb`, on the kit's `FlatViewFrame` and `useFlatView`).
+2. **Support every standard tool that applies to the type**: Select (its picks are the type's refs,
+   shown as chips), Measure, Annotate, Display and the view settings, and its inspector sections (a
+   tree, layers).
+3. **Keep parity with the server**: `cad <type> snapshot` draws the same view server-side, and the
+   renderer is registered for offscreen capture (`OffscreenPicture`), so the CAD app's screenshots work.
+4. **Say every string in all five locales** (`scripts/test/check-ui-strings.mjs` holds it).
+5. **Respect the kit's boundaries** (`scripts/test/check-kit-boundaries.mjs`) and the design system's
+   checks.
+6. **Test at the cheapest level**: jsdom and unit tests first; one browser spec, through the shared
+   harness, only for what needs WebGL; and the renderer in
+   `packages/ui/src/renderers/registrations.test.ts`.
+
+The worked example is the KiCad board view (`packages/ui/src/renderers/board/`): a flat view like a
+drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Board and Layers sections, a
+Display menu of its own, and its refs as chips.
 
 ## Walkthrough: a type and its integration together (KiCad)
 
