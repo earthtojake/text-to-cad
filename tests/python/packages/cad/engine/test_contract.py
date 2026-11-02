@@ -57,6 +57,25 @@ class ContractTest(unittest.TestCase):
             self.assertNotRegex(line, r"\b(pip|uv|uvx|install|text-to-cad)\b", "the packages named, no installer")
         self.assertNotIn("cad update", library, "the library's side names no command: `cad update` moves the server")
 
+    def test_one_release_of_two_contracts_is_two_builds_of_it_which_no_update_mends(self) -> None:
+        said = contract.refusal(named("0.10.2", 3), ours=OURS, server="0.10.2")
+        self.assertEqual(said, "cad here is 0.10.2, worker contract 3 (xbf/9, OCP 8.0); cad-server 0.10.2 speaks "
+                               "contract 2 (xbf/9, OCP 8.0): both are 0.10.2, but different builds of it: use one "
+                               "build of both")
+
+    def test_a_pre_release_or_development_build_is_ordered_and_named_with_no_update_that_cannot_reach_it(self) -> None:
+        # PEP 440's order: a release's development builds, its pre-releases, the release, its post-releases.
+        ordered = ["0.10.1.dev1", "0.10.1rc1.dev2", "0.10.1rc1", "0.10.1", "0.10.1.post1"]
+        self.assertEqual(sorted(reversed(ordered), key=contract._order), ordered)
+        self.assertTrue(contract.refusal(named("0.10.1rc1.dev2", 3), ours=OURS, server="0.10.0").endswith(
+            ": update cad-server to 0.10.1rc1.dev2"), "newer, and `cad update` reaches no pre-release")
+        self.assertTrue(contract.refusal(named("0.10.1rc1.dev2", 1), ours=OURS, server="0.10.1").endswith(
+            ": update the cad package in this environment to 0.10.1"), "older than the release it leads to")
+        self.assertEqual(contract.notice("0.10.0", "0.10.1rc1"), "cad here is 0.10.1rc1; cad-server is 0.10.0: "
+                                                                "update cad-server to 0.10.1rc1")
+        self.assertEqual(contract.notice("0.10.0", "0.10.1.post1"), "cad here is 0.10.1.post1; cad-server is 0.10.0: "
+                                                                   "update cad-server to 0.10.1.post1: run `cad update`")
+
     def test_the_kernel_and_the_format_are_the_contract_too(self) -> None:
         for changed in ({"kernel": "OCP 8.1"}, {"format": "xbf/10"}):
             theirs = {**named("0.11.0", 2), "contract": {**OURS, **changed}}

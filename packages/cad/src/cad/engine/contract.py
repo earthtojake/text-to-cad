@@ -87,9 +87,13 @@ def refusal(named: Any, *, ours: dict[str, Any] | None = None, server: str | Non
         return None
     here = named.get("release")
     known = isinstance(here, str) and _order(here) is not None
-    newer = (_compared(here, server) or _compared_contracts(theirs, ours)) if known else -1
     said = (f"cad here is {here if known else 'unknown'}, worker {spelled(theirs)}; {SERVER} {server} speaks "
             f"{spelled(ours)}")
+    newer = _compared(here, server) if known else -1
+    if newer == 0:
+        # One release of two contracts: a build of it changed what its worker says (a checkout that moved
+        # the protocol and kept its version). Neither update moves either one: one build of both does.
+        return f"{said}: both are {server}, but different builds of it: use one build of both"
     if newer > 0:
         return f"{said}: {_server_to(here)}"
     return f"{said}: {_library_to(server)}"
@@ -116,54 +120,62 @@ def _library_to(release: str) -> str:
 
 def _server_to(release: str) -> str:
     """The server's side updated, by its one way: installing ``cad-server`` into a project's environment
-    neither registers nor moves the device's server."""
-    return f"update {SERVER} to {release}: run `{COMMAND} update`"
+    neither registers nor moves the device's server. ``cad update`` reaches a final release alone: a
+    pre-release or a development build is named, with no way that cannot reach it."""
+    said = f"update {SERVER} to {release}"
+    return said if _preview(release) else f"{said}: run `{COMMAND} update`"
 
 
-# A release's phases in PEP 440's order: a development release first, then the pre-releases, the final
-# release (no suffix), and a post-release last.
-_PHASES = {"dev": 0, "a": 1, "alpha": 1, "b": 2, "beta": 2, "c": 3, "rc": 3, "pre": 3, "preview": 3, "post": 5}
-_FINAL = 4
-_RELEASE = re.compile(r"v?(\d+(?:\.\d+)*)(?:[-_.]?([a-z]+)[-_.]?(\d*))?(?:\+.*)?")
+# A release as PEP 440 spells one (its normal forms and their spellings): an epoch, the release, a
+# pre-release, a post-release, a development release and a local label, each but the release optional --
+# ``0.10.0``, ``0.10.1rc1.dev2``, ``0.10.0.post1``, an installation's ``0.10.0-dev.123``.
+_RELEASE = re.compile(
+    r"v?(?:(?P<epoch>\d+)!)?(?P<release>\d+(?:\.\d+)*)"
+    r"(?:[-_.]?(?P<pre>alpha|beta|preview|pre|rc|a|b|c)[-_.]?(?P<pre_n>\d+)?)?"
+    r"(?:-(?P<post_n1>\d+)|[-_.]?(?P<post>post|rev|r)[-_.]?(?P<post_n2>\d+)?)?"
+    r"(?:[-_.]?(?P<dev>dev)[-_.]?(?P<dev_n>\d+)?)?"
+    r"(?:\+[a-z0-9]+(?:[-_.][a-z0-9]+)*)?")
+# The pre-releases in PEP 440's order.
+_PRE = {"a": 0, "alpha": 0, "b": 1, "beta": 1, "c": 2, "rc": 2, "pre": 2, "preview": 2}
+_LAST, _FIRST = float("inf"), float("-inf")
 
 
-def _order(release: str) -> tuple[tuple[int, ...], int, int] | None:
-    """A release as it sorts (``0.10.0`` before ``0.10.2``, ``0.10.0rc1`` before ``0.10.0``), or None
-    for one that is no release."""
+def _parsed(release: Any) -> Any:
     found = _RELEASE.fullmatch(release.strip().lower()) if isinstance(release, str) else None
+    return found
+
+
+def _order(release: Any) -> tuple[Any, ...] | None:
+    """A release as PEP 440 sorts it (``0.10.0`` before ``0.10.2``; ``0.10.1.dev1`` before
+    ``0.10.1rc1.dev2`` before ``0.10.1rc1`` before ``0.10.1`` before ``0.10.1.post1``), or None for
+    one that is no release. A local label is not ordered."""
+    found = _parsed(release)
     if found is None:
         return None
-    numbers = [int(part) for part in found.group(1).split(".")]
+    numbers = [int(part) for part in found["release"].split(".")]
     while len(numbers) > 1 and numbers[-1] == 0:
         numbers.pop()
-    phase = _PHASES.get(found.group(2)) if found.group(2) else _FINAL
-    if phase is None:
-        return None
-    return tuple(numbers), phase, int(found.group(3) or 0)
+    post = found["post"] is not None or found["post_n1"] is not None
+    dev = found["dev"] is not None
+    if found["pre"] is not None:
+        pre: tuple[Any, ...] = (_PRE[found["pre"]], int(found["pre_n"] or 0))
+    else:
+        pre = (_FIRST,) if dev and not post else (_LAST,)  # a release's own development builds come first
+    return (int(found["epoch"] or 0), tuple(numbers), pre,
+            (int(found["post_n1"] or found["post_n2"] or 0),) if post else (_FIRST,),
+            (int(found["dev_n"] or 0),) if dev else (_LAST,))
 
 
-def _compared(one: str, other: str) -> int:
+def _preview(release: Any) -> bool:
+    """Whether ``release`` is a pre-release or a development build, which ``cad update`` does not reach."""
+    found = _parsed(release)
+    return found is not None and (found["pre"] is not None or found["dev"] is not None)
+
+
+def _compared(one: Any, other: Any) -> int:
     """1 when the release ``one`` is newer than ``other``, -1 when older, 0 when they are one release
     or either is none."""
     first, second = _order(one), _order(other)
     if first is None or second is None or first == second:
         return 0
-    return 1 if first > second else -1
-
-
-def _compared_contracts(theirs: Any, ours: dict[str, Any]) -> int:
-    """Of two releases that do not say which is newer: whose contract is, the protocol first, then the
-    format, then the kernel; a contract that is none is the older."""
-    def key(contract: Any) -> tuple[int, ...] | None:
-        if not isinstance(contract, dict):
-            return None
-        try:
-            return (int(contract["protocol"]), *(int(part) for part in re.findall(r"\d+", str(contract["format"]))),
-                    *(int(part) for part in re.findall(r"\d+", str(contract["kernel"]))))
-        except (KeyError, TypeError, ValueError):
-            return None
-
-    first, second = key(theirs), key(ours)
-    if first is None or second is None or first == second:
-        return -1 if first is None and second is not None else 0
     return 1 if first > second else -1
