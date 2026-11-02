@@ -66,7 +66,9 @@ script that pins cad to another release is refused. For a one-off, `cad run --wi
 src/plate.py` (repeat `--with`, or separate requirements with commas; a local folder or wheel works
 too, its path relative to the working directory, or in the block to the script's folder, and the
 next run installs it again after an edit). A script with no header inside a Python project (a
-`pyproject.toml`) runs with the project's dependencies, as `uv run` does. A script that stops on an
+`pyproject.toml`) runs with the project's dependencies, its `uv.lock` exactly where it has one
+(`--locked` and `--frozen` as uv reads them), and the project's uv settings (a private index), as
+`uv run` does. A script that stops on an
 import says which integration brings it in one line: add what it names to the header. What cannot
 be installed beside cad is refused in one line with uv's reason: change the requirement it names,
 or, where the network is needed once, run it outside a sandbox or with its permission. In Windows

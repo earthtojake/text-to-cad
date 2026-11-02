@@ -14,18 +14,24 @@ wheel, as the base installs it (``base.Installation.requirement``) -- and beside
   ``--project``), that project's: the project itself, editable, when it is packaged, else its
   dependencies (``-r pyproject.toml``); and on top, in either case, ``--with``, ``--with-editable`` and
   ``--with-requirements``;
+- a project's lock: where the project has a ``uv.lock``, exactly its locked set, exported by uv (``uv export
+  --format requirements-txt``, the project's extras and groups as given; ``--locked`` and ``--frozen`` with
+  uv's meaning), in place of a resolution of its ``pyproject.toml``, cad's own line taken out for the pin;
 - the options of uv's it was given (``options``: indexes, find-links, resolution, build settings -- handed
-  to uv as given, so ``cad run`` never drifts from uv), and the Python it is made on (``--python``, as uv
+  to uv as given, so ``cad run`` never drifts from uv), uv's settings in the caller's environment
+  (``environment``: ``base.UV_SETTINGS``, an allowlist of how uv resolves), the uv configuration it reads
+  (``config``: the project's ``[tool.uv]``, or a ``uv.toml``, found as uv finds one -- uv runs in the
+  project's folder, so a project's private index works), and the Python it is made on (``--python``, as uv
   reads it; by default the engine's own).
 
-A header or a project that pins cad to another release than the device's is refused in one line, before
-anything is made (``pinned``); the device's release is fine, and an unpinned ``cad`` is given it. So PyPI's
+A header, a project or a project's lock that pins cad to another release than the device's is refused in
+one line, before anything is made (``pinned``, ``locked_cad``); the device's release is fine, and an unpinned ``cad`` is given it. So PyPI's
 unrelated ``cad`` 1.x is never resolved.
 
 **The key** digests the installation's base's inputs (the release among them), the spec, and what each
 local package, editable folder and requirements file is now (``fingerprints``): an edit to a local package
 is another environment, said in the line that makes it; an editable folder is keyed by its metadata alone,
-its code read as it is. ``places.RUN_WITH`` tells the program how it was named, which a document it
+its code read as it is; a lock, a project's ``pyproject.toml`` and a uv configuration by their contents. ``places.RUN_WITH`` tells the program how it was named, which a document it
 builds says builds it again.
 
 **Making one** (``ensure``): by the device's engine when one runs -- outside any sandbox, its lines
@@ -68,8 +74,11 @@ from typing import Any, Callable, Iterable
 from cad_server._internal import base
 
 __all__ = ["SKIPPED", "Making", "Project", "Refused", "Spec", "admits", "ensure", "fingerprint", "fingerprints",
-           "header", "integrations", "key", "kept", "local_package", "making", "normalized", "pinned",
-           "project", "refusal", "split", "tell", "where"]
+           "header", "integrations", "key", "kept", "local_package", "locked_cad", "making", "normalized",
+           "pinned", "project", "refusal", "split", "tell", "uv_config", "uv_settings", "where"]
+# uv's settings that say how it reaches an index, never what it resolves: a run that differs from the base's
+# only by them still runs in the base, made with the engine's own.
+HOW = frozenset({"UV_NATIVE_TLS", "UV_SYSTEM_CERTS", "UV_HTTP_TIMEOUT", "UV_KEYRING_PROVIDER", "UV_INSECURE_HOST"})
 
 Refused = base.Refused
 WINDOWS = os.name == "nt"
@@ -457,10 +466,13 @@ class Spec:
     """What one environment holds (see the module), normalized: cad's ``integrations`` (its extras, sorted),
     the ``requirements`` beside it (sorted, each once), the folders installed editable (``editable``: an
     editable folder with its extras, ``/w/project[x]``), the requirements files (``files``), the options of
-    uv's it is made with (``options``, as given, in order), the Python it is made on (``python``: uv's
-    request; None, the engine's) and the options uv's ``venv`` takes for it (``python_options``). And what
-    only its making reads, which no key holds (``transient``: ``--upgrade``, ``--refresh``, ``--offline``,
-    the verbosity)."""
+    uv's it is made with (``options``, as given, in order), uv's settings from the caller's environment
+    (``environment``: ``NAME=value``, sorted), the uv configuration files it reads (``config``), a project's
+    lock (``lock``: its ``uv.lock``) and the options its export takes (``lock_options``: ``--frozen``,
+    ``--locked``, the extras and groups), the Python it is made on (``python``: uv's request; None, the
+    engine's) and the options uv's ``venv`` takes for it (``python_options``). And what only its making
+    reads, which no key holds: ``transient`` (``--upgrade``, ``--refresh``, ``--offline``, the verbosity),
+    and the folder uv runs in (``folder``: the project's, or the run's)."""
 
     integrations: tuple[str, ...] = (base.EXTRA,)
     requirements: tuple[str, ...] = ()
@@ -469,20 +481,32 @@ class Spec:
     options: tuple[str, ...] = ()
     python: str | None = None
     python_options: tuple[str, ...] = ()
+    environment: tuple[str, ...] = ()
+    config: tuple[str, ...] = ()
+    lock: str | None = None
+    lock_options: tuple[str, ...] = ()
     transient: tuple[str, ...] = field(default=(), compare=False)
+    folder: str | None = field(default=None, compare=False)
 
     def default(self) -> bool:
-        """Whether it is the installation's base: the build123d integration alone, on the engine's Python."""
-        return self == Spec()
+        """Whether it is the installation's base: the build123d integration alone, on the engine's Python, with
+        no setting of uv's but those that say how it reaches an index (``HOW``)."""
+        what = tuple(item for item in self.environment if item.partition("=")[0] not in HOW)
+        return dataclasses.replace(self, environment=what) == Spec()
 
     def keyed(self) -> dict[str, Any]:
         """What its key and its marker hold of it: all but what only its making reads."""
         found = dataclasses.asdict(self)
         found.pop("transient")
+        found.pop("folder")
         return {name: list(value) if isinstance(value, tuple) else value for name, value in found.items()}
 
     def as_dict(self) -> dict[str, Any]:
-        return {**self.keyed(), "transient": list(self.transient)}
+        return {**self.keyed(), "transient": list(self.transient), "folder": self.folder}
+
+    def settings(self) -> tuple[tuple[str, str], ...]:
+        """uv's settings from the caller's environment, as ``base.make`` runs uv with them."""
+        return tuple((name, value) for name, _eq, value in (item.partition("=") for item in self.environment))
 
     @classmethod
     def from_dict(cls, given: Any) -> "Spec":
@@ -495,9 +519,9 @@ class Spec:
             if item.name not in given:
                 continue
             value = given[item.name]
-            if item.name == "python":
+            if item.name in ("python", "lock", "folder"):
                 if value is not None and not isinstance(value, str):
-                    raise Refused("no environment's spec: python is a string")
+                    raise Refused(f"no environment's spec: {item.name} is a string")
                 values[item.name] = value
                 continue
             if not isinstance(value, list) or not all(isinstance(each, str) for each in value):
@@ -508,32 +532,101 @@ class Spec:
             refused = refusal(requirement)
             if refused is not None:
                 raise Refused(refused)
-        for option in (*found.options, *found.python_options, *found.transient):
+        for option in (*found.options, *found.python_options, *found.transient, *found.lock_options):
             if not option.startswith("-"):
                 raise Refused(f"{option} is no option of uv's")
+        for setting in found.environment:
+            if setting.partition("=")[0] not in base.UV_SETTINGS:
+                raise Refused(f"{setting.partition('=')[0]} is no setting of uv's cad run hands on")
         return found
 
 
-def _locals(spec: Spec) -> dict[str, tuple[str, bool]]:
-    """Each local thing a spec installs, by its path: whether it is keyed by its metadata alone."""
-    found: dict[str, tuple[str, bool]] = {}
+def _locals(spec: Spec) -> dict[str, tuple[str, str]]:
+    """Each local thing a spec reads, by its path, and how it is keyed: ``tree`` (its files' sizes and times),
+    ``metadata`` (an editable folder's metadata files), ``content`` (a lock, a project's metadata, a uv
+    configuration: its bytes)."""
+    found: dict[str, tuple[str, str]] = {}
     for requirement in spec.requirements:
         path = local_package(requirement)
         if path is not None:
-            found[path] = (path, False)
+            found[path] = (path, "tree")
     for folder in spec.editable:
         path = re.sub(r"\[[^\]]*\]$", "", folder)
-        found[path] = (path, True)
+        found[path] = (path, "metadata")
     for path in spec.files:
-        found[path] = (path, False)
+        found[path] = (path, "tree")
+    for path in spec.config:
+        found[path] = (path, "content")
+    if spec.lock:
+        found[spec.lock] = (spec.lock, "content")
+        project = str(Path(spec.lock).parent / "pyproject.toml")
+        found[project] = (project, "content")
     return found
 
 
+def _content(path: str) -> str:
+    """A file's bytes, digested; ``missing`` where there is none."""
+    try:
+        return hashlib.sha256(Path(path).read_bytes()).hexdigest()[:16]
+    except OSError:
+        return "missing"
+
+
 def fingerprints(spec: Spec | list[str]) -> dict[str, str]:
-    """Each local package's, editable folder's and requirements file's fingerprint (``fingerprint``), by
-    its path; a list of requirements is a spec of them."""
+    """Each local package's, editable folder's, requirements file's, lock's and uv configuration's
+    fingerprint (``fingerprint``, ``_content``), by its path; a list of requirements is a spec of them."""
     spec = spec if isinstance(spec, Spec) else Spec(requirements=tuple(spec))
-    return {path: fingerprint(where, metadata) for path, (where, metadata) in _locals(spec).items()}
+    return {path: _content(where) if mode == "content" else fingerprint(where, mode == "metadata")
+            for path, (where, mode) in _locals(spec).items()}
+
+
+def uv_settings(environ: dict[str, str] | None = None) -> tuple[str, ...]:
+    """uv's resolution settings in an environment (``base.UV_SETTINGS``), as ``NAME=value``, sorted: those
+    ``cad run`` hands the making from its caller's."""
+    environ = os.environ if environ is None else environ
+    return tuple(sorted(f"{name}={value}" for name, value in environ.items() if name in base.UV_SETTINGS))
+
+
+def uv_config(folder: str | os.PathLike, environ: dict[str, str] | None = None) -> tuple[str, ...]:
+    """The uv configuration a run in ``folder`` reads, as uv finds it: the file ``UV_CONFIG_FILE`` names, and
+    the nearest folder from ``folder`` up holding a ``uv.toml`` (which wins) or a ``pyproject.toml`` with a
+    ``[tool.uv]`` table -- none with ``UV_NO_CONFIG``. The user's own configuration is the engine's."""
+    environ = os.environ if environ is None else environ
+    if environ.get("UV_NO_CONFIG", "").strip() not in ("", "0", "false"):
+        return ()
+    found: list[str] = []
+    named = environ.get("UV_CONFIG_FILE", "").strip()
+    if named:
+        found.append(os.path.abspath(named))
+    start = Path(folder).resolve()
+    for each in (start, *start.parents):
+        if (each / "uv.toml").is_file():
+            found.append(str(each / "uv.toml"))
+            break
+        project = each / "pyproject.toml"
+        if project.is_file():
+            try:
+                table = tomllib.loads(project.read_text(encoding="utf-8")).get("tool", {})
+            except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError):
+                table = {}
+            if isinstance(table, dict) and isinstance(table.get("uv"), dict):
+                found.append(str(project))
+                break
+    return tuple(dict.fromkeys(found))
+
+
+def locked_cad(lock: str | os.PathLike, release: str) -> None:
+    """A project's lock that pins cad to another release than the device's, refused in one line, as a header
+    is (``pinned``); one of the device's release, or none, passes."""
+    try:
+        data = tomllib.loads(Path(lock).read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as error:
+        raise Refused(f"{lock} is no lock uv reads: {error}") from None
+    for package in data.get("package") or []:
+        if isinstance(package, dict) and _name(str(package.get("name") or "")) == base.LIBRARY:
+            version = str(package.get("version") or "")
+            if version:
+                pinned(f"{base.LIBRARY}=={version}", release, str(lock))
 
 
 def key(installation: base.Installation, spec: Spec | list[str], prints: dict[str, str] | None = None) -> str:
@@ -639,7 +732,8 @@ def _options(spec: Spec, extras: Iterable[str]) -> tuple[str, ...]:
 
 def _named(spec: Spec) -> str:
     """The spec's own packages in words, for the lines said of its making."""
-    every = [*spec.requirements, *(f"-e {each}" for each in spec.editable), *(f"-r {each}" for each in spec.files)]
+    every = [*spec.requirements, *(f"-e {each}" for each in spec.editable), *(f"-r {each}" for each in spec.files),
+             *([f"the locked set of {spec.lock}"] if spec.lock else [])]
     return ", ".join(every) or "nothing more"
 
 
@@ -701,7 +795,45 @@ def recipe(installation: base.Installation, spec: Spec | list[str], changed: lis
                        requirement=(*_cad(installation, spec.integrations), *rest), release=installation.release,
                        source=installation.source, making=making, downloading=f"downloading what {named} needs, once",
                        unsatisfiable=f"{named} cannot be resolved beside {kernel}",
-                       options=_options(spec, spec.integrations), venv_options=spec.python_options, revise=revise)
+                       options=_options(spec, spec.integrations), venv_options=spec.python_options, revise=revise,
+                       environment=spec.settings(), folder=spec.folder,
+                       before=(lambda env: _export(env, spec, installation.release)) if spec.lock else None)
+
+
+# The file a project's lock is exported to, in the environment it makes.
+EXPORTED = "cad-lock-requirements.txt"
+
+
+def _export(env: Path, spec: Spec, release: str) -> tuple[str, ...]:
+    """A project's lock exported by uv as requirements (``uv export --format requirements-txt``, no hashes:
+    cad's pin has none), in the project's folder with the caller's uv settings, the options it was given
+    (``--frozen``: the lock as it is; ``--locked``: refused when it is out of date; neither: as ``uv run``
+    takes it, made current first where it is not) -- from uv's cache first, then the network --; cad's own
+    line taken out for the pin, after it is checked to be the device's release. What ``uv pip install`` is
+    handed for it: ``-r`` and the file, in the environment. ``Refused`` in one line, with uv's reason."""
+    assert spec.lock is not None
+    root = Path(spec.lock).parent
+    command = [base.find_uv(), "export", "--project", str(root), "--format", "requirements-txt", "--no-hashes",
+               "--no-header", "--no-annotate", *spec.lock_options]
+    settings = spec.settings()
+    frozen = "--frozen" in spec.lock_options
+    result = base._uv(command if frozen else [*command, "--offline"], root, settings)
+    if result.returncode != 0 and not frozen:
+        result = base._uv(command, root, settings)
+    if result.returncode != 0:
+        raise Refused(f"uv could not export {spec.lock}: {base._last(result.stderr or result.stdout)}")
+    kept = []
+    for line in result.stdout.splitlines():
+        if _name(line.strip()) == base.LIBRARY:
+            pinned(line.strip().split(";", 1)[0], release, spec.lock)
+            continue
+        kept.append(line)
+    path = env / EXPORTED
+    try:
+        path.write_text("\n".join(kept) + "\n", encoding="utf-8")
+    except OSError as error:
+        raise Refused(f"cannot write {path}: {error.strerror or error}") from None
+    return ("-r", str(path))
 
 
 def _make(env: Path, installation: base.Installation, spec: Spec, prints: dict[str, str],
