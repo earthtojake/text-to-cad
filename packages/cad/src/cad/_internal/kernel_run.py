@@ -3,19 +3,20 @@ environment.
 
 A server command whose own environment has no CAD kernel runs its verb here (``cad_server._internal.kernel_verb``).
 The verb's keyword arguments come in on stdin as one JSON object; its outcome goes out on stdout as one JSON line,
-``{"returned": <the result>}`` or, when the verb raises, ``{"raised": {"module": ..., "type": ..., "message": ...}}``,
-so the command reports it as it reports a call in its own process. What the verb prints goes to stderr, with its
-progress: stdout is the answer. :func:`encode` and :func:`decode` are both ends of the JSON: a dataclass as its
+``{"returned": <the result>}`` or, when the verb raises, ``{"raised": ...}`` (:func:`told`), so the command reports
+it as it reports a call in its own process. What the verb prints goes to stderr, with its progress, even from the
+kernel's C++: stdout is the answer. :func:`encode` and :func:`decode` are both ends of the JSON: a dataclass as its
 fields, and back as the type its annotation names, its paths ``Path`` and its tuples tuples again.
 """
 
 from __future__ import annotations
 
-import contextlib
 import dataclasses
 import importlib
 import json
+import os
 import sys
+import traceback
 import types
 import typing
 from pathlib import Path
@@ -69,14 +70,35 @@ def main(argv: list[str] | None = None) -> int:
     verb = getattr(importlib.import_module(args[0]), args[1])
     hints = typing.get_type_hints(verb)
     keywords = {name: decode(hints.get(name), value) for name, value in json.loads(sys.stdin.read() or "{}").items()}
-    with contextlib.redirect_stdout(sys.stderr):
-        try:
-            outcome: dict[str, Any] = {"returned": encode(verb(**keywords))}
-        except Exception as error:  # noqa: BLE001 -- handed to the command, which reports it
-            kind = type(error)
-            outcome = {"raised": {"module": kind.__module__, "type": kind.__qualname__, "message": str(error)}}
-    sys.stdout.write(json.dumps(outcome, default=str, separators=(",", ":")) + "\n")
+    # The answer keeps stdout; everything else written to it goes to stderr, at the descriptor, so what the
+    # kernel's C++ prints (OCCT's reader messages) and what a child process inherits cannot take its place.
+    sys.stdout.flush()
+    answer = os.fdopen(os.dup(1), "w", encoding="utf-8")
+    os.dup2(2, 1)
+    try:
+        outcome: dict[str, Any] = {"returned": encode(verb(**keywords))}
+    except Exception as error:  # noqa: BLE001 -- handed to the command, which reports it
+        outcome = {"raised": told(error)}
+    sys.stdout.flush()
+    answer.write(json.dumps(outcome, default=str, separators=(",", ":")) + "\n")
+    answer.close()
     return 0
+
+
+def told(error: Exception) -> dict[str, Any]:
+    """``error`` as the command remakes and reports it: its type and module, its arguments where JSON carries them
+    (an ``OSError``'s errno and file), its message, its frames innermost last (``cad_server.analytics``'s told
+    form, ``{file, function, line}``) and its traceback as Python prints it."""
+    kind = type(error)
+    frames = [{"file": frame.f_code.co_filename, "function": frame.f_code.co_qualname, "line": int(line or 0)}
+              for frame, line in traceback.walk_tb(error.__traceback__)]
+    found: dict[str, Any] = {"module": kind.__module__, "type": kind.__qualname__, "message": str(error),
+                             "frames": frames, "traceback": "".join(traceback.format_exception(error))}
+    try:
+        found["args"] = json.loads(json.dumps(encode(list(error.args))))
+    except (TypeError, ValueError):
+        pass
+    return found
 
 
 if __name__ == "__main__":
