@@ -491,6 +491,19 @@ class LeftoversTest(PrivateFolders):
         self.file(f"cache/documents/{fresh}/document.xbf", old=False)
         self.file("cache/documents/not-a-document/notes.txt")
         stamp = self.file("state/telemetry-sender", "")  # an earlier 0.8 build's sender's start
+        # Environments ``cad run`` made: of models' packages, one unused for a month and one used this week (each
+        # use marks its marker), and a base, its release's to remove.
+        from cad_server._internal import base
+
+        def environment(name: str, given: list | None, old: bool) -> Path:
+            env = self.cache / "base" / name
+            self.file(base.interpreter(env).relative_to(self.root).as_posix())
+            marker = {"schema": base.SCHEMA, "key": name, **({} if given is None else {"with": given})}
+            self.file(f"cache/base/{name}/{base.MARKER}", json.dumps(marker), old=old)
+            return env
+
+        unused = environment("unusedunused0000", ["pandas"], True)
+        used, kernel = environment("usedusedused0000", ["scipy"], False), environment("basebasebase0000", None, True)
         before = self.tree()
 
         with mock.patch.object(installations, "targets", return_value=None):
@@ -498,7 +511,8 @@ class LeftoversTest(PrivateFolders):
         self.assertEqual(code, 0)
         self.assertIn("  leftover 2 engine records of an older format, 1 bytecode folder of installations no longer "
                       "registered (2.0 KB), 1 cache folder with no record (4.0 KB), 1 file an earlier 0.8 build kept "
-                      "(telemetry-sender): cad doctor --prune removes them\n", out)
+                      "(telemetry-sender), 1 environment of a model's packages unused for 7 days: cad doctor --prune "
+                      "removes them\n", out)
         self.assertEqual(self.tree(), before, "nothing is removed without --prune")
         self.assertIn(f"  cache    {self.cache}: 1 document · 1 B, kept until deleted\n", out,
                       "the documents the cache keeps, each a record names, with no cap")
@@ -510,7 +524,9 @@ class LeftoversTest(PrivateFolders):
                               "removed the page token 1 engine record still carried (the port each rolled to is kept)\n"
                               "removed 1 bytecode folder of installations no longer registered (2.0 KB)\n"
                               "removed 1 cache folder with no record (4.0 KB)\n"
-                              f"removed {stamp}, a file an earlier 0.8 build kept\n")
+                              f"removed {stamp}, a file an earlier 0.8 build kept\n"
+                              "removed 1 environment of a model's packages unused for 7 days\n")
+        self.assertEqual((unused.exists(), used.exists(), kernel.exists()), (False, True, True))
         self.assertFalse((self.state / "engines" / "aaaaaaaa.json").exists())
         self.assertEqual(json.loads(trimmed.read_text(encoding="utf-8")), {"port": 3246, "schema": 3})
         for kept in (current, recent_record, token, registered, live, recent_bytecode,

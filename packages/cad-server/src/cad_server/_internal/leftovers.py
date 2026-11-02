@@ -1,7 +1,7 @@
 """What text-to-cad leaves behind that no release running now needs, which ``cad doctor`` reports and
 ``cad doctor --prune`` removes. Nothing here removes anything by itself.
 
-Five classes, each found by what it is, never by a guess:
+Six classes, each found by what it is, never by a guess:
 
 - **Engine records of an older format**: ``<state>/engines/<installation>.json`` that the engine
   does not read (``registry.Registry.engine``: another ``schema``, or not a record), removed; one
@@ -15,6 +15,11 @@ Five classes, each found by what it is, never by a guess:
 - **Cache folders with no record**: ``<cache>/documents/<id>/`` whose document has no record
   (``<state>/documents/<id>/document.json``): a document the registry forgot.
 - **Files of an earlier 0.8 build** that no cadgen writes now (``EARLIER``).
+- **Environments of models' packages unused for a week**: ``<cache>/base/<key>/`` that ``cad run`` made
+  for the packages a model named (its marker names them, ``with``: ``cad_server._internal.extras``),
+  one per set, kept through one release: none used since ``QUIET_DAYS`` days (each use marks its
+  marker), and none a process runs from. The next run that names the packages makes it again, from uv's
+  cache.
 - **cadgen 0.7's leftovers**: its store in the cache folder (``objects/``, ``index/``, each of the
   store's own shape) and the files of the state folder only 0.7 writes (``SEVEN_STATE``). 0.8
   never reads them; a 0.7 still installed (a plugin not yet updated) does, and nothing tells from
@@ -235,6 +240,42 @@ def bytecode_folders(cache: Path, prefixes: list[str], engines: Path, now: float
             continue
         found.paths.append(folder)
         found.bytes += size
+    return found
+
+
+# --- environments of models' packages -------------------------------------------------------------
+
+
+def package_environments(cache: Path, now: float | None = None) -> Found:
+    """The environments ``cad run`` made for models' packages (``<cache>/base/<key>``, whose marker names
+    them, ``with``) used last over ``QUIET_DAYS`` days ago -- when their marker was last marked
+    (``extras._used``) -- and that no process runs from (``releases.running``). A base, of no model's
+    packages, is its release's to remove. Their size is not counted: their files are links into uv's
+    cache, which removing them does not free."""
+    from cad_server._internal import base
+    from cad_server._internal.releases import running
+
+    now = time.time() if now is None else now
+    found = Found()
+    try:
+        names = sorted(os.listdir(cache / base.BASE))
+    except OSError:
+        return found
+    for name in names:
+        env = cache / base.BASE / name
+        if env.is_symlink() or not env.is_dir():
+            continue
+        marker = base.complete(env)
+        if marker is None or not isinstance(marker.get("with"), list):
+            continue
+        try:
+            used = os.stat(env / base.MARKER).st_mtime
+        except OSError:
+            continue
+        if not _quiet(used, now) or running(env):
+            found.recent.append(env)
+            continue
+        found.paths.append(env)
     return found
 
 

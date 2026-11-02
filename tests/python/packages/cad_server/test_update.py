@@ -8,6 +8,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -185,6 +186,16 @@ class ReleaseFoldersTest(Fixture):
             self.addCleanup(process.wait)
             self.addCleanup(process.kill)
             self.assertTrue(releases.running(folder))
+            # Named by a link to it -- a worker started by an alias of an environment's Python -- it is the same.
+            other = releases.where("1.1.0")
+            alias = Path(tempfile.mkdtemp(prefix="alias-")) / "release"
+            self.addCleanup(shutil.rmtree, alias.parent, True)
+            alias.symlink_to(other, target_is_directory=True)
+            self.assertFalse(releases.running(other))
+            aliased = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)", str(alias / "bin" / "python")])
+            self.addCleanup(aliased.wait)
+            self.addCleanup(aliased.kill)
+            self.assertTrue(releases.running(other))
 
 
 class DrainTest(unittest.TestCase):

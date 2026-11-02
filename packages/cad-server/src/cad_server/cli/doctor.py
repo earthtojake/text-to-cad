@@ -9,7 +9,8 @@ through which the skills run the server, and says what it found: each written, a
 folder it cannot write (a sandbox's), the records of installations whose interpreter is gone, a file in
 the proxy's place that is not text-to-cad's, another command shadowing it on PATH, and what earlier
 releases left behind that none running now needs (``cad_server._internal.leftovers``: engine records of an older
-format, the bytecode of installations no longer registered, cache folders no record names), and
+format, the bytecode of installations no longer registered, cache folders no record names, environments
+of models' packages unused for a week), and
 cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``
 removes those records, the launchers earlier releases published beside the proxy (0.8's ``cadgen``
 proxy, ``cadgen-<version>``, ``cadgen-python-<version>``: ``installations.prune_legacy``) and those leftovers, but
@@ -370,10 +371,17 @@ def _leftovers():
     prefixes = [record["prefix"] for record in installations.records()]
     return (state, cache, leftovers.engine_records(state),
             leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
-            leftovers.earlier(before), leftovers.seven(before, before_cache))
+            leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache))
 
 
-def _leftover_words(records, bytecode, cached, earlier) -> list[str]:
+def _environments(number: int) -> str:
+    from cad_server._internal.leftovers import QUIET_DAYS, count
+
+    return (count(number, "environment of a model's packages", "environments of models' packages")
+            + f" unused for {QUIET_DAYS} days")
+
+
+def _leftover_words(records, bytecode, cached, earlier, packages) -> list[str]:
     """Each class of leftovers that may go, in words: ``3 engine records of an older format``."""
     from cad_server._internal.leftovers import count, size
 
@@ -389,6 +397,8 @@ def _leftover_words(records, bytecode, cached, earlier) -> list[str]:
     if earlier.paths:
         said.append(count(len(earlier.paths), "file", "files") + " an earlier 0.8 build kept "
                     f"({', '.join(path.name for path in earlier.paths)})")
+    if packages.paths:
+        said.append(_environments(len(packages.paths)))
     return said
 
 
@@ -398,10 +408,10 @@ def _report_leftovers() -> list[str]:
     from cad_server._internal import leftovers
 
     try:
-        _state, _cache, records, bytecode, cached, earlier, seven = _leftovers()
+        _state, _cache, records, bytecode, cached, earlier, packages, seven = _leftovers()
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [f"leftover unknown ({type(error).__name__}: {error})"]
-    said = _leftover_words(records, bytecode, cached, earlier)
+    said = _leftover_words(records, bytecode, cached, earlier, packages)
     lines = [f"leftover {', '.join(said)}: cad doctor --prune removes them"] if said else []
     if seven.paths:
         when = ("cad doctor --prune removes it" if leftovers.quiet(seven) else
@@ -417,7 +427,7 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
     from cad_server._internal import leftovers
     from cad_server._internal.leftovers import count, size
 
-    state, _cache, records, bytecode, cached, earlier, seven = _leftovers()
+    state, _cache, records, bytecode, cached, earlier, packages, seven = _leftovers()
     lines = []
     removed, trimmed = leftovers.remove_engine_records(state, records)
     if removed:
@@ -435,6 +445,9 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
     for path in earlier.paths:
         if leftovers.remove([path]):
             lines.append(f"removed {path}, a file an earlier 0.8 build kept")
+    gone = leftovers.remove(packages.paths)
+    if gone:
+        lines.append(f"removed {_environments(gone)}")
     if seven.paths and (all_versions or leftovers.quiet(seven)):
         left = [path for path in seven.paths if leftovers.remove([path]) == 0]
         lines.append(f"removed {leftovers.seven_text(seven)}" + "".join(f"; could not remove {path}" for path in left))
@@ -457,7 +470,8 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
         help="Remove the record of every registered installation whose interpreter is gone, the "
              "per-version launchers earlier builds published beside the cad command, engine records of an "
              "older format, the bytecode folders of installations no longer registered, cache folders with "
-             "no record and cadgen 0.7's store and state files (none written in the last 7 days), and exit.",
+             "no record, environments of models' packages and cadgen 0.7's store and state files (none written "
+             "or used in the last 7 days), and exit.",
     )
     parser.add_argument(
         "--all-versions",

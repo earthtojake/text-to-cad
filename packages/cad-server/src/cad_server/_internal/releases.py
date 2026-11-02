@@ -129,8 +129,10 @@ def listing() -> list[dict[str, Any]]:
 
 def running(folder: Path | str) -> bool:
     """Whether a process runs from ``folder``: one started by its Python or its command names it on its
-    command line (``ps``). True when that cannot be asked: a folder is kept rather than taken from
-    under a process. On Windows a file a process runs is never removed anyway (``collect``)."""
+    command line (``ps``), as written or by a link to it -- each path on the line read with its folder
+    resolved, as ``folder`` is, so a worker started by an alias of an environment's Python counts. True when
+    that cannot be asked: a folder is kept rather than taken from under a process. On Windows a file a
+    process runs is never removed anyway (``collect``)."""
     if os.name == "nt":
         return False
     named = os.path.realpath(folder).rstrip(os.sep) + os.sep
@@ -142,7 +144,17 @@ def running(folder: Path | str) -> bool:
         return True
     if listed.returncode != 0:
         return True
-    return any(named in line or plain in line for line in listed.stdout.splitlines())
+    resolved: dict[str, str] = {}
+
+    def within(word: str) -> bool:
+        # Its folder resolved, not the word itself: a venv's python is a link out of its environment.
+        head, tail = os.path.split(word)
+        if head not in resolved:
+            resolved[head] = os.path.realpath(head)
+        return (os.path.join(resolved[head], tail) + os.sep).startswith(named)
+
+    return any(named in line or plain in line or any(word.startswith(os.sep) and within(word) for word in line.split())
+               for line in listed.stdout.splitlines())
 
 
 def collect(keep: Iterable[str]) -> list[str]:
