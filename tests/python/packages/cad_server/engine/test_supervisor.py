@@ -23,15 +23,14 @@ from tests.python.support.paths import add_sources
 add_sources()  # the three packages' sources, as PYTHONPATH names them
 
 from cad_server.engine import supervisor as supervised  # noqa: E402
-from cad_server.engine.supervisor import Gone, Process, Service, Standby, Supervisor, Words  # noqa: E402
+from cad_server.engine.supervisor import Gone, Process, Service, Supervisor, Words  # noqa: E402
 
 _PIDS = itertools.count(1)
 WORDS = Words("the {label} did not start", "the {name} exited ({code})", "{error}")
-# Today's two kinds, as far as scheduling is concerned: a counted, watched, drained one with a standby,
-# and one that does not count.
+# Today's two kinds, as far as scheduling is concerned: a counted, watched, drained one, and one that does
+# not count.
 WORKERS = Service("worker", ("{python}",), "kernel", "lease", WORDS, binding=("PYTHONPATH",), rank=2,
-                  watched_rank=3, noted=("script", "builds"), drain=True,
-                  standby=Standby(("--standby",), "adopt", notice="the kernel loads", patience=0.01))
+                  watched_rank=3, noted=("script", "builds"), drain=True)
 RENDERS = Service("render", ("{python}",), "kernel", "daemon", WORDS, key="id", counted=False, rank=1)
 
 
@@ -47,9 +46,9 @@ class Fake:
     """A process as the supervisor sees one, its life recorded in ``said``."""
 
     def __init__(self, said: list, service: Service, key: str, label: str, environment: dict, cwd: str | None,
-                 standby: bool, rss: float | None = 100.0) -> None:
+                 rss: float | None = 100.0) -> None:
         self.said, self.service, self.key, self.label, self.environment = said, service, key, label, environment
-        self.cwd, self.standby = cwd, standby
+        self.cwd = cwd
         self.pid, self.requests, self.rss, self.started = next(_PIDS), 0, rss, time.time()
         self.leased, self.since, self.used, self.retired, self.stopped = False, 0.0, time.monotonic(), False, False
         said.append(("launch", label))
@@ -61,20 +60,15 @@ class Fake:
         self.said.append(("stop", self.label))
         self.stopped = True
 
-    def adopt(self, key: str, label: str, environment: dict, cwd: str | None) -> None:
-        self.key, self.label, self.environment, self.cwd = key, label, environment, cwd
-
 
 class SchedulingTest(unittest.TestCase):
     def supervisor(self, cap: int, services=(WORKERS, RENDERS), memory: float | None = None,
-                   watched: set | None = None, gate: threading.Event | None = None) -> Supervisor:
+                   watched: set | None = None) -> Supervisor:
         self.said: list = []
         watched = set() if watched is None else watched
 
-        def launch(service, key, label, environment, cwd, standby):
-            if standby and gate is not None:
-                gate.wait(30)
-            return Fake(self.said, service, key, label, environment, cwd, standby)
+        def launch(service, key, label, environment, cwd):
+            return Fake(self.said, service, key, label, environment, cwd)
 
         def drain(process) -> None:
             self.said.append(("drain", process.label, process.alive(),
@@ -110,12 +104,6 @@ class SchedulingTest(unittest.TestCase):
         finally:
             supervisor.lock.wait = wait
 
-    def standing(self, supervisor: Supervisor) -> Fake:
-        supervisor.enable_standby("worker")
-        supervisor.stand("worker", {})
-        await_(lambda: supervisor.standby("worker") is not None, "the standby")
-        return supervisor.standby("worker")
-
     def test_a_service_that_does_not_count_is_never_held_by_the_cap_nor_costs_a_counted_process(self) -> None:
         supervisor = self.supervisor(1)
         busy = supervisor.lease("worker", "a.py", {})
@@ -132,54 +120,38 @@ class SchedulingTest(unittest.TestCase):
         self.assertEqual([process.label for process in supervisor.processes("worker")], ["b.py"])
         self.assertEqual([row["reason"] for row in supervisor.retired], ["LRU"])
 
-    def test_a_standby_being_started_holds_its_slot_and_then_makes_room(self) -> None:
-        gate = threading.Event()
-        supervisor = self.supervisor(1, gate=gate)
-        supervisor.enable_standby("worker")
-        supervisor.stand("worker", {})
-        got: list = []
-        other = threading.Thread(target=lambda: got.append(supervisor.lease("worker", "a.py", {"PYTHONPATH": "/x"})),
-                                 daemon=True)
-        other.start()
-        await_(lambda: supervisor.waiting("worker") == 1, "a lease of another binding to wait: the slot is held")
-        gate.set()
-        other.join(5)
-        self.assertEqual(got[0].label, "a.py")
-        self.assertEqual([said for said in self.said if said[1] == "standby"], [("launch", "standby"), ("stop", "standby")])
-        self.assertEqual(list(supervisor.retired), [], "a standby that makes room is no retirement")
-
     def shed_in_order(self, services) -> list[str]:
-        """A standby, two render processes, two workers no page watches and one a page watches, each
-        of 100 MB, under a cap of 250 MB: what goes, in order."""
-        supervisor = self.supervisor(8, services, memory=250.0, watched={"watched.py"})
+        """Two render processes, two workers no page watches and one a page watches, each of 100 MB, under a
+        cap of 150 MB: what goes, in order."""
+        supervisor = self.supervisor(8, services, memory=150.0, watched={"watched.py"})
         supervisor.memory = lambda: None  # held off while they are made
         self.used(supervisor, "worker", "watched.py")
         self.used(supervisor, "render", "old-doc", "new-doc")
         self.used(supervisor, "worker", "old.py", "new.py")
-        self.standing(supervisor)
-        supervisor.memory = lambda: 250.0
+        supervisor.memory = lambda: 150.0
         return [process.label for process in supervisor.shed()]
 
     def test_memory_is_shed_by_declared_rank_and_least_recently_used_within_one(self) -> None:
         from cad_server.engine.services import RENDER, WORKER
 
-        self.assertEqual(self.shed_in_order((WORKER, RENDER)), ["standby", "old-doc", "new-doc", "old.py"],
-                         "the daemon's: the standby, render processes, then workers no page watches")
+        self.assertEqual(self.shed_in_order((WORKER, RENDER)), ["old-doc", "new-doc", "old.py", "new.py"],
+                         "the daemon's: render processes, then workers no page watches")
         swapped = (dataclasses.replace(WORKER, rank=1), dataclasses.replace(RENDER, rank=2))
-        self.assertEqual(self.shed_in_order(swapped), ["standby", "old.py", "new.py", "old-doc"],
+        self.assertEqual(self.shed_in_order(swapped), ["old.py", "new.py", "old-doc", "new-doc"],
                          "the order is the declarations'")
 
-    def test_shedding_skips_the_busy_and_the_unmeasured_and_pressure_takes_the_standby_at_once(self) -> None:
+    def test_shedding_skips_the_busy_and_the_unmeasured_and_pressure_sheds_to_its_share(self) -> None:
         supervisor = self.supervisor(8, memory=None)
         unmeasured, measured, busy = self.used(supervisor, "worker", "unmeasured.py", "measured.py", "busy.py")
         unmeasured.rss = None
         busy = supervisor.lease("worker", "busy.py", {})
-        spare = self.standing(supervisor)
-        self.assertEqual(supervisor.shed(pressure=True), [spare], "no cap: under pressure the standby alone goes")
+        self.assertEqual(supervisor.shed(pressure=True), [], "no cap: nothing to shed to")
         supervisor.memory = lambda: 150.0
         self.assertEqual(supervisor.shed(), [measured], "the unmeasured one frees nothing countable; the busy one stays")
         self.assertFalse(busy.stopped or unmeasured.stopped)
-        self.assertEqual([row["reason"] for row in supervisor.retired], ["RSS", "pressure"])
+        supervisor.memory = lambda: 300.0
+        self.assertEqual(supervisor.shed(pressure=True), [], "the busy one alone is left, and is never taken")
+        self.assertEqual([row["reason"] for row in supervisor.retired], ["RSS"])
 
     def test_a_count_cap_victim_is_the_lowest_ranked_idle_process(self) -> None:
         kept = Service("kept", ("{python}",), "kernel", "lease", WORDS, rank=4, noted=("script", "builds"))
@@ -234,22 +206,18 @@ class SchedulingTest(unittest.TestCase):
         supervisor = self.supervisor(cap, (dataclasses.replace(WORKERS, interpreter="lease"), RENDERS))
         started: list = []
 
-        def launch(service, key, label, environment, cwd, standby, python=None):
+        def launch(service, key, label, environment, cwd, python=None):
             started.append((label, python))
-            return Fake(self.said, service, key, label, environment, cwd, standby)
+            return Fake(self.said, service, key, label, environment, cwd)
 
         supervisor.launch = launch
         return supervisor, started
 
-    def test_a_key_leased_in_its_caller_s_environment_is_a_process_of_its_own_and_never_the_standby(self) -> None:
+    def test_a_key_leased_in_its_caller_s_environment_is_a_process_of_its_own(self) -> None:
         supervisor, started = self.caller_s(4)
-        spare = self.standing(supervisor)
         base = supervisor.lease("worker", "a.py", {})
-        self.assertIs(base, spare, "the server's own Python: the standby, taken")
-        await_(lambda: supervisor.standby("worker") is not None, "another standby")
         theirs = supervisor.lease("worker", "a.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
         self.assertIsNot(theirs, base)
-        self.assertIsNotNone(supervisor.standby("worker"), "a lease in its caller's Python takes no standby")
         other = supervisor.lease("worker", "a.py", {}, python="/other/bin/python", python_key="/other 0.10.0")
         for process in (base, theirs, other):
             supervisor.release(process)
@@ -257,7 +225,7 @@ class SchedulingTest(unittest.TestCase):
         # One environment's, whatever spelling of its Python asks: the process its first lease started.
         self.assertIs(supervisor.lease("worker", "a.py", {}, python="/venv/bin/python3", python_key="/venv 0.10.0"),
                       theirs)
-        self.assertEqual(len(started), 4, "no process started for another spelling of one environment's Python")
+        self.assertEqual(len(started), 3, "no process started for another spelling of one environment's Python")
         self.assertIs(supervisor.live("worker", "a.py", "/other 0.10.0"), other)
         self.assertIs(supervisor.live("worker", "a.py"), base)
         self.assertFalse(any(process.stopped for process in (base, theirs, other)))
@@ -265,75 +233,14 @@ class SchedulingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "a render runs its own environment's Python"):
             supervisor.lease("render", "doc", {}, python="/venv/bin/python")
 
-    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker_before_the_standby(self) -> None:
-        supervisor, started = self.caller_s(2)
-        spare = self.standing(supervisor)
-        idle, = self.used(supervisor, "worker", "a.py")  # the standby, taken
-        await_(lambda: supervisor.standby("worker") is not None, "another standby: the cap is full")
-        standby = supervisor.standby("worker")
-        self.assertIs(idle, spare)
+    def test_a_lease_in_its_caller_s_python_makes_room_at_the_cap_with_an_idle_worker(self) -> None:
+        supervisor, started = self.caller_s(1)
+        idle, = self.used(supervisor, "worker", "a.py")
         theirs = supervisor.lease("worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
         self.assertTrue(idle.stopped, "the idle worker made room")
-        self.assertIs(supervisor.standby("worker"), standby, "the standby stays for the server's own builds")
-        self.assertFalse(standby.stopped)
-        self.assertEqual([row["reason"] for row in supervisor.retired], ["LRU"])
+        self.assertEqual((started[-1], [row["reason"] for row in supervisor.retired]),
+                         (("b.py", "/venv/bin/python"), ["LRU"]))
         supervisor.release(theirs)
-
-    def test_waiting_at_the_cap_a_lease_in_its_caller_s_python_holds_up_no_build_in_the_server_s_own(self) -> None:
-        supervisor, _started = self.caller_s(2)
-        busy = supervisor.lease("worker", "a.py", {})
-        self.standing(supervisor)
-        standby = supervisor.standby("worker")
-        got: list = []
-        theirs = threading.Thread(target=lambda: got.append(supervisor.lease(
-            "worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")), daemon=True)
-        theirs.start()
-        await_(lambda: supervisor.waiting("worker") == 1, "the caller's lease to wait for the busy worker")
-        self.assertFalse(standby.stopped, "a busy worker will be free: the standby stays")
-        # A build in the server's own Python behind it takes the standby the waiting one cannot.
-        self.assertIs(self.at_once(supervisor, lambda: supervisor.lease("worker", "c.py", {})), standby)
-        supervisor.release(busy)
-        theirs.join(5)
-        self.assertTrue(got and busy.stopped, "the caller's lease took the slot of the worker once it was free")
-
-    def test_at_a_cap_of_one_a_lease_in_its_caller_s_python_takes_the_standby_s_slot_and_it_stands_again(self) -> None:
-        # The standby is all that holds the cap: the slot is the lease's, never a wait on nothing.
-        supervisor, started = self.caller_s(1)
-        spare = self.standing(supervisor)
-        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
-                                                                   python_key="/venv 0.10.0"))
-        self.assertTrue(spare.stopped, "the standby retired for its slot")
-        self.assertEqual((started[-1], list(supervisor.retired)), (("b.py", "/venv/bin/python"), []), "unnoted")
-        # A build in the server's own Python behind it waits for that worker to be free, then takes its slot.
-        got: list = []
-        behind = threading.Thread(target=lambda: got.append(supervisor.lease("worker", "a.py", {})), daemon=True)
-        behind.start()
-        await_(lambda: supervisor.waiting("worker") == 1, "the build behind it to wait for the slot")
-        supervisor.release(theirs)
-        behind.join(5)
-        self.assertTrue(got and theirs.stopped, "the idle worker made room")
-        self.assertIsNone(supervisor.standby("worker"), "no room for the standby while a worker holds the slot")
-        # The slot free again (the worker over its memory cap): the standby owed stands again.
-        got[0].retired = True
-        supervisor.release(got[0])
-        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
-
-    def test_the_standby_owed_stands_again_in_the_latest_binding_a_build_asked_for(self) -> None:
-        supervisor, _started = self.caller_s(1)
-        supervisor.enable_standby("worker")
-        supervisor.stand("worker", {"PYTHONPATH": "/old"})
-        await_(lambda: supervisor.standby("worker") is not None, "the standby")
-        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
-                                                                   python_key="/venv 0.10.0"))
-        supervisor.release(theirs)
-        # A build of another binding takes the slot; the standby it would stand finds none, and stays owed.
-        build = self.at_once(supervisor, lambda: supervisor.lease("worker", "a.py", {"PYTHONPATH": "/new"}))
-        self.assertIsNone(supervisor.standby("worker"))
-        build.retired = True
-        supervisor.release(build)
-        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
-        self.assertEqual(supervisor.standby("worker").environment, {"PYTHONPATH": "/new"},
-                         "the binding the latest build asked for, never the one it was retired in")
 
     def test_a_build_s_worker_is_its_environment_s_and_its_release_s_whatever_spelling_names_its_python(self) -> None:
         from cad.engine import contract
@@ -375,8 +282,8 @@ class SchedulingTest(unittest.TestCase):
                 asked.append(message)
                 return {"done": {"files": []}}
 
-        engine.supervisor.launch = lambda service, key, label, environment, cwd, standby, **kw: Worker(
-            [], service, key, label, environment, cwd, standby)
+        engine.supervisor.launch = lambda service, key, label, environment, cwd, **kw: Worker(
+            [], service, key, label, environment, cwd)
         base = engine.lease("/w/a.py", {})  # the script's worker in the server's own Python
         engine.release(base)
         ident = "6f1c2a4e-1b2c-5d3e-8f4a-0123456789ab"
@@ -565,19 +472,6 @@ class ProtocolTest(unittest.TestCase):
         self.assertIsNotNone(started[0].poll(), "killed")
         self.assertEqual(supervisor.starting, set(), "its slot given back")
 
-    def test_a_standby_that_never_says_ready_is_no_standby_and_the_log_says_so_once(self) -> None:
-        service, _folder = self.silent()
-        service = dataclasses.replace(service, standby=Standby((), "adopt", ready_seconds=0.5))
-        supervisor = Supervisor(1, (service,))
-        self.addCleanup(supervisor.stop)
-        supervisor.enable_standby("child")
-        with mock.patch("sys.stderr", new_callable=io.StringIO) as log:
-            supervisor.stand("child", {})
-            await_(lambda: supervisor.readying("child") is None, "the standby's start to be given up")
-        self.assertIsNone(supervisor.standby("child"))
-        self.assertEqual(log.getvalue(), "cad: no child standby: the child standby did not start: "
-                                         "it never said it was ready in 0.5 s\n")
-
     def test_a_build_whose_worker_never_said_ready_is_refused_in_that_line_and_not_asked_again(self) -> None:
         from cad_server.engine.daemon import Daemon
 
@@ -585,7 +479,7 @@ class ProtocolTest(unittest.TestCase):
         self.addCleanup(engine.shutdown)
         launched: list = []
 
-        def launch(service, key, label, environment, cwd, standby):
+        def launch(service, key, label, environment, cwd):
             launched.append(Path(label).name)
             raise Gone("the worker for a.py did not start: it never said it was ready in 300 s", unready=True)
 
@@ -628,28 +522,32 @@ class ProtocolTest(unittest.TestCase):
         second.join(30)
         self.assertEqual(len(failed), 2)
 
-    def test_the_supervisor_s_stop_takes_a_standby_still_starting(self) -> None:
-        # A standby reads nothing until it is ready, after its kernel loads (40 s on a fresh installation):
-        # the daemon's stop takes it then too, never leaving it loading on its own after `cad stop`.
+    def test_the_supervisor_s_stop_takes_a_child_still_starting(self) -> None:
+        # A child reads nothing until it is ready (a worker's start, a kernel environment being made): the
+        # daemon's stop takes it then too, never leaving it starting on its own after `cad stop`.
         service, folder = self.silent()
-        service = dataclasses.replace(service, standby=Standby((), "adopt"))
         supervisor = Supervisor(1, (service,))
-        started, popen = [], subprocess.Popen
+        started, popen, failed = [], subprocess.Popen, []
 
         def recorded(*args, **kwargs):
             started.append(popen(*args, **kwargs))
             self.addCleanup(started[-1].kill)
             return started[-1]
 
+        def lease() -> None:
+            try:
+                supervisor.lease("child", "doc", {})
+            except Gone as error:
+                failed.append(error)
+
         with mock.patch.object(supervised.subprocess, "Popen", side_effect=recorded):
-            supervisor.enable_standby("child")
-            supervisor.stand("child", {})
-            await_(lambda: any(folder.iterdir()), "the standby to be started")
+            waiting = threading.Thread(target=lease, daemon=True)
+            waiting.start()
+            await_(lambda: any(folder.iterdir()), "the child to be started")
             supervisor.stop()
-            await_(lambda: started[0].poll() is not None, "the standby still starting to be gone")
-            await_(lambda: supervisor.readying("child") is None, "its start to be given up")
-        self.assertIsNone(supervisor.standby("child"))
-        self.assertEqual(supervisor.spawning, set())
+            await_(lambda: started[0].poll() is not None, "the child still starting to be gone")
+            waiting.join(30)
+        self.assertEqual((len(failed), supervisor.spawning), (1, set()))
 
     def test_a_stopped_child_ends_with_its_stdin_and_one_that_will_not_is_killed(self) -> None:
         process = self.start(self.service())
