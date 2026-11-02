@@ -91,14 +91,3 @@ export function renderFormatFromExtension(extension) {
 export function renderFormatFromPath(value, options = {}) {
   return renderFormatFromExtension(fileExtensionFromPath(value, options));
 }
-
-// The document type of a file by its extension (`cad.registry`'s id: `threemf` for a .3mf), the word
-// a `cad <type> <operation>` command starts with; a path of no type (a model's document has none of
-// its own: it is the engine's, an xbf) answers `fallback`.
-const TYPE_BY_EXTENSION = Object.freeze(Object.fromEntries(
-  DOCUMENT_TYPE_REGISTRY.documentTypes.flatMap((type) => type.extensions.map((extension) => [extension, type.id]))
-));
-
-export function documentTypeFromPath(value, { fallback = "xbf" } = {}) {
-  return TYPE_BY_EXTENSION[fileExtensionFromPath(value)] || fallback;
-}

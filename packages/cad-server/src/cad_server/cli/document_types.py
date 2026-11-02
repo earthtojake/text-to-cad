@@ -156,9 +156,12 @@ def type_main(document_type: str, argv: Sequence[str] | None = None, prog: str |
     """``cad <type> <operation> ...``: one operation of one type."""
     argv = list(sys.argv[1:] if argv is None else argv)
     prog = prog or f"cad {document_type}"
-    if not argv or argv[0] in {"-h", "--help", "help"}:
+    if argv[:1] and argv[0] in {"-h", "--help", "help"}:
         sys.stdout.write(type_usage(document_type))
         return 0
+    if not argv:
+        sys.stderr.write(f"{prog}: cad {document_type} needs an operation\n\n" + type_usage(document_type))
+        return 2
     operation, rest = argv[0], argv[1:]
     run = OPERATIONS.get((document_type, operation))
     if run is None:

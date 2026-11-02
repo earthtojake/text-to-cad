@@ -9,7 +9,13 @@ import unittest
 from unittest import mock
 
 
-from cad_server.cli import sdf_validate as cli
+from cad_server.cli import sdf as _command
+
+
+class cli:  # noqa: N801 - ``cad sdf check``, as the old module's ``main`` was called
+    @staticmethod
+    def main(argv):
+        return _command.main(["check", *argv])
 
 
 VALID_MODEL_SDF = """\
@@ -180,16 +186,16 @@ class SdfValidateCliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {"PATH": str(self.temp_root)}):
             for mode in ("auto", "required"):
                 with self.subTest(mode=mode):
-                    result = sdf.validate(sdf_path, gz_check=mode)
+                    result = sdf.check(sdf_path, gz_check=mode)
                     self.assertFalse(result.ok)
-                    self.assertIn("gz_check_failed", {issue.code for issue in result.issues})
+                    self.assertIn("gz_check_failed", {issue.code for issue in result.findings})
                     self.assertEqual([sdf_path], list(self.temp_root.glob("*.sdf")))
 
             # The same native executable is usable once its interpreter exists.
             launcher.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-            result = sdf.validate(sdf_path, gz_check="required")
+            result = sdf.check(sdf_path, gz_check="required")
             self.assertTrue(result.ok)
-            self.assertIn("gz_check_passed", {issue.code for issue in result.issues})
+            self.assertIn("gz_check_passed", {issue.code for issue in result.findings})
             self.assertEqual([sdf_path], list(self.temp_root.glob("*.sdf")))
 
     @unittest.skipUnless(os.name == "posix", "native POSIX interpreter lookup")
@@ -204,9 +210,9 @@ class SdfValidateCliTests(unittest.TestCase):
         path = os.pathsep.join([str(self.temp_root), "/bin", "/usr/bin"])
         with mock.patch.dict(os.environ, {"PATH": path}), \
                 mock.patch.object(sdf_external, "GZ_CHECK_TIMEOUT", 0.5):
-            result = sdf.validate(sdf_path, gz_check="required")
+            result = sdf.check(sdf_path, gz_check="required")
         self.assertFalse(result.ok)
-        failed = [i for i in result.issues if i.code == "gz_check_failed"]
+        failed = [i for i in result.findings if i.code == "gz_check_failed"]
         self.assertTrue(failed)
         self.assertIn("did not finish", failed[0].message)
         self.assertEqual([sdf_path], list(self.temp_root.glob("*.sdf")))  # the scratch copy is removed
@@ -225,20 +231,20 @@ class SdfValidateCliTests(unittest.TestCase):
         sdf_path = self._write("world.sdf", remote)
         path = os.pathsep.join([str(self.temp_root), "/bin", "/usr/bin"])
         with mock.patch.dict(os.environ, {"PATH": path}):
-            result = sdf.validate(sdf_path, gz_check="auto")
-            notes = [issue for issue in result.issues if issue.code == "gz_check_remote"]
+            result = sdf.check(sdf_path, gz_check="auto")
+            notes = [issue for issue in result.findings if issue.code == "gz_check_remote"]
             self.assertTrue(notes)
             self.assertEqual(notes[0].severity, "info")
             self.assertIn("https://models.example/box", notes[0].message)
             self.assertFalse(ran.exists())
 
-            result = sdf.validate(sdf_path, gz_check="required")
+            result = sdf.check(sdf_path, gz_check="required")
             self.assertFalse(result.ok)
-            self.assertIn("gz_check_remote", {issue.code for issue in result.issues if issue.severity == "error"})
+            self.assertIn("gz_check_remote", {issue.code for issue in result.findings if issue.severity == "error"})
             self.assertFalse(ran.exists())
 
-            result = sdf.validate(sdf_path, gz_check="required", gz_remote=True)
-            self.assertIn("gz_check_passed", {issue.code for issue in result.issues})
+            result = sdf.check(sdf_path, gz_check="required", gz_remote=True)
+            self.assertIn("gz_check_passed", {issue.code for issue in result.findings})
             self.assertTrue(ran.exists())
 
     def test_automatic_inertia_can_omit_computed_values(self) -> None:
@@ -252,13 +258,13 @@ class SdfValidateCliTests(unittest.TestCase):
                       <collision name="box"><geometry><box><size>1 1 1</size></box></geometry></collision>
                     </link></model></sdf>
                 """)
-                result = sdf.validate(sdf_path, strict=True, gz_check="never")
-                self.assertTrue(result.ok, result.issues)
+                result = sdf.check(sdf_path, strict=True, gz_check="never")
+                self.assertTrue(result.ok, result.findings)
 
         sdf_path = self._write("manual.sdf", '<sdf version="1.12"><model name="manual"><link name="base"><inertial auto="false"/></link></model></sdf>')
-        result = sdf.validate(sdf_path, gz_check="never")
+        result = sdf.check(sdf_path, gz_check="never")
         self.assertFalse(result.ok)
-        self.assertIn("missing_number", {issue.code for issue in result.issues})
+        self.assertIn("missing_number", {issue.code for issue in result.findings})
 
     def test_automatic_inertia_still_checks_explicit_input(self) -> None:
         from cad import sdf
@@ -275,9 +281,9 @@ class SdfValidateCliTests(unittest.TestCase):
                       <inertial auto="{automatic}"><mass>{mass}</mass></inertial>
                     </link></model></sdf>
                 """)
-                result = sdf.validate(sdf_path, gz_check="never")
+                result = sdf.check(sdf_path, gz_check="never")
                 self.assertFalse(result.ok)
-                self.assertIn(code, {issue.code for issue in result.issues})
+                self.assertIn(code, {issue.code for issue in result.findings})
 
     def test_missing_file_fails(self) -> None:
         exit_code, output = self._run(str(self.temp_root / "absent.sdf"), "--gz-check", "never")

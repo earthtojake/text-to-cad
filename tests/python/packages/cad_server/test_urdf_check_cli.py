@@ -7,7 +7,13 @@ import tempfile
 import unittest
 
 
-from cad_server.cli import urdf_validate as cli
+from cad_server.cli import urdf as _command
+
+
+class cli:  # noqa: N801 - ``cad urdf check``, as the old module's ``main`` was called
+    @staticmethod
+    def main(argv):
+        return _command.main(["check", *argv])
 
 
 VALID_URDF = """\

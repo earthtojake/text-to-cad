@@ -1710,7 +1710,7 @@ if __name__ == '__main__':
         self.assertEqual(get(f"{api}/parts/{keys(after)['block']}", token)[:4], b"XBM2")
 
     def where(self, ref: str, doc: str = "XBF/block.xbf") -> dict:
-        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "inspect", doc, ref], cwd=self.folder,
+        found = engine_daemon.run([sys.executable, "-m", "cad_server.cli", "xbf", "inspect", doc, ref], cwd=self.folder,
                                   env=self.env)
         self.assertEqual(found.returncode, 0, found.stderr)
         return json.loads(found.stdout)

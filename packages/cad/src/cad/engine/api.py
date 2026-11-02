@@ -868,7 +868,7 @@ def _mesh(path: Path, named: str, query: str) -> Facts:
     if query not in ("summary", "structure") or path.suffix.lower() != ".glb":
         from cad.engine.said import COMMAND
 
-        said = (f"`{COMMAND} inspect {path.name}` alone tells its nodes, meshes and animations, and "
+        said = (f"`{COMMAND} glb inspect {path.name}` alone tells its nodes, meshes and animations, and "
                 f"`{COMMAND} viewer {path.name}` shows it" if path.suffix.lower() == ".glb" else
                 f"inspect reads nothing more of it: `{COMMAND} viewer {path.name}` shows it, and the document it "
                 "was exported from, inspected, tells the rest")
@@ -921,7 +921,7 @@ def _no_closure(path: Path) -> str:
     from cad.engine.said import COMMAND
 
     return (f"{path.name} holds no build closure: a STEP file carries none, only an .xbf does; inspect the model's "
-            f"document by its id for its closure, or name a ref in the file ({COMMAND} inspect {path.name} REF)")
+            f"document by its id for its closure, or name a ref in the file ({COMMAND} step inspect {path.name} REF)")
 
 
 def couplings_of(kinematics: dict[str, Any]) -> list[dict[str, Any]]:

@@ -233,7 +233,8 @@ class CacheTest(unittest.TestCase):
         self.assertEqual((meta["revision"], meta["bytes"]), (record["revision"], self.file(ident).stat().st_size))
         self.assertEqual(sorted(os.listdir(self.state / "documents" / ident)), ["document.json"],
                          "the bytes are the cache folder's, never the state folder's")
-        compiled = list((self.cache / "pycache").glob("*/**/build123d/__init__.*.pyc"))  # the prefix mirrors its path
+        compiled = [path for path in (self.cache / "pycache").glob("*/**/build123d/__init__.*.pyc")  # the prefix mirrors its path
+                    if path.parent.parent.name != "cad"]  # build123d's own, not the library's integration of it
         self.assertEqual(len(compiled), 1, "the worker's libraries' bytecode, in the engine's folder")
         self.assertEqual(list(self.project.rglob("*.pyc")), [], "none beside the model")
         self.assertEqual(self.ask({"op": "status"})["cache"]["written"], written + 1)

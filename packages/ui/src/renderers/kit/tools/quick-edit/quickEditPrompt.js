@@ -1,11 +1,18 @@
-import { documentTypeFromPath } from "@cad/core/lib/fileFormats.js";
+import { DOCUMENT_TYPE_REGISTRY } from "@cad/core/lib/documentTypes.generated.js";
 import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const pathOf = resource => resource.kind === "url" ? new URL(resource.url).pathname : resource.path;
 const stemOf = resource => stem(pathOf(resource));
-// The command that draws the packet again: the file's document type's snapshot (`cad <type> snapshot`).
-const snapshotCommand = resource => `cad ${documentTypeFromPath(pathOf(resource))} snapshot --annotation`;
+// The command that draws the packet again: the file's document type's snapshot (`cad <type> snapshot`),
+// the type read off the registry by the file's extension; a model's document, which has no file of its
+// own, is the engine's.
+const typeOf = path => {
+  const name = String(path || "").split("/").pop().toLowerCase();
+  const found = DOCUMENT_TYPE_REGISTRY.documentTypes.find(type => type.extensions.some(extension => name.endsWith(extension)));
+  return found ? found.id : "xbf";
+};
+const snapshotCommand = resource => `cad ${typeOf(pathOf(resource))} snapshot --annotation`;
 // Awaited the first time something reads it: a file is fetched only by a host that carries its bytes.
 const lazy = start => {
   let started = null;
