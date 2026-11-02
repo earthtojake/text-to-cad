@@ -502,6 +502,36 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual([(action["app"], action["ok"]) for action in self.receipt()["actions"]],
                          [("plugin", True), ("claude-desktop", True), ("gemini", False)])
 
+    def test_a_step_that_did_its_work_and_exited_non_zero_is_said_as_done_with_the_warning_quoted(self) -> None:
+        # Gemini CLI links the extension, then exits 1 when its integrity store cannot be verified.
+        command(self.bin, "gemini", """import os, pathlib
+if args[:2] == ["extensions", "link"]:
+    folder = pathlib.Path(os.environ["USERPROFILE"]) / ".gemini" / "extensions" / "text-to-cad"
+    folder.mkdir(parents=True)
+    (folder / ".gemini-extension-install.json").write_text(json.dumps({"source": args[2], "type": "link"}))
+    print('Extension "text-to-cad" linked successfully and enabled.')
+    print("Extension integrity store cannot be verified", file=sys.stderr)
+    sys.exit(1)
+sys.exit(0)
+""")
+        code, out, _err = self.run_setup("--only", "gemini")
+        self.assertEqual(code, 0, out)
+        linked = f"text-to-cad {RELEASE}, linked to {providers.shown(plugin.folder(), self.machine)}"
+        self.assertIn(f'  done all the same: {linked} (gemini exited 1, saying "Extension "text-to-cad" linked '
+                      'successfully and enabled. Extension integrity store cannot be verified")\n', out)
+        self.assertNotIn("failed", out)
+        self.assertNotIn("Some steps failed", out)
+        self.assertIn(f"verify   Gemini CLI: {linked}\n", out)
+        (action,) = [action for action in self.receipt()["actions"] if action["app"] == "gemini"]
+        self.assertEqual((action["ok"], action["code"]), (True, 1))
+        self.assertIn("Extension integrity store cannot be verified", action["warning"])
+        # A command that fails and leaves nothing behind is still a failure.
+        command(self.bin, "gemini", "sys.exit(1 if args[:2] == ['extensions', 'link'] else 0)\n")
+        shutil.rmtree(self.home / ".gemini")
+        code, out, _err = self.run_setup("--only", "gemini")
+        self.assertEqual(code, 1, out)
+        self.assertIn("  failed: exit status 1", out)
+
     def test_the_plugin_folder_is_written_before_an_app_is_pointed_at_it_and_goes_with_an_uninstall(self) -> None:
         command(self.bin, "claude", CLAUDE_EMPTY)
         folder = plugin.folder()
