@@ -32,6 +32,7 @@ TYPES = {
     "urdf": ("snapshot", "check"),
     "srdf": ("snapshot", "check"),
     "sdf": ("snapshot", "check"),
+    "kicad_pcb": ("export", "snapshot", "inspect", "check"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "doctor", "setup", "update", "uninstall", "plugin",
             "viewer", "telemetry")

@@ -2,8 +2,8 @@
 
 ``export(board, to, out_dir)`` runs ``kicad-cli pcb export <to>`` for one of a fixed list --
 ``gerbers``, ``drill`` (Excellon, mm), ``pos`` (placement as CSV, mm) and ``step`` (3D models
-substituted) -- with the finder and the private environment DRC uses (``install.find_kicad_cli``,
-``install.private_run``), and returns the files it wrote. The board is read, never rewritten.
+substituted) -- with the finder and the private environment DRC uses (``_program.find_kicad_cli``,
+``_program.private_run``), and returns the files it wrote. The board is read, never rewritten.
 """
 
 from __future__ import annotations
@@ -12,8 +12,8 @@ import os
 import subprocess
 from pathlib import Path
 
-from .cli import KicadRunError, _quiet
-from .install import check_version, find_kicad_cli, kicad_version, private_run
+from ._program import KicadRunError, check_version, find_kicad_cli, kicad_version, private_run
+from ._program import quiet as _quiet
 
 __all__ = ["EXPORTS", "commands", "export"]
 
@@ -60,7 +60,7 @@ def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None,
            timeout: float = _TIMEOUT_SECONDS) -> list[Path]:
     """Export the saved ``board`` as ``to`` (one of :data:`EXPORTS`) into ``out_dir``, made if missing,
     and return the files the run wrote or changed there, sorted. ``cli`` defaults to the ``kicad-cli``
-    that :func:`~cad_server.kicad.install.find_kicad_cli` finds. Raises :class:`KicadRunError` when
+    that :func:`~cad.kicad._program.find_kicad_cli` finds. Raises :class:`KicadRunError` when
     ``kicad-cli`` cannot run or refuses the board, and :class:`KicadMissingError` when there is none."""
     if to not in EXPORTS:
         raise ValueError(f"cannot export {to!r}: choose one of {', '.join(EXPORTS)}")

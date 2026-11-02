@@ -3,7 +3,7 @@ integration's. The .kicad_pcb is the source of truth.
 
 Reading a board is the document type's (:func:`cad.kicad_pcb.read_board`, which a script run with ``cad
 run`` imports); drawing one is ``cad kicad_pcb snapshot``'s. DRC runs KiCad's own command line, a program
-the server finds but never installs (:mod:`cad_server.kicad.install`), so it is a command, and the
+the server finds but never installs (:mod:`cad.kicad._program`), so it is a command, and the
 server's.
 """
 
@@ -28,7 +28,7 @@ def check(board: Path) -> CheckResult:
     """
     from cad._internal.validation_door import display_path, failed, resolved_target
     from cad_server.kicad.cli import KicadRunError, issues, run_drc
-    from cad_server.kicad.install import KicadMissingError, check_version, find_kicad_cli, kicad_version
+    from cad.kicad._program import KicadMissingError, check_version, find_kicad_cli, kicad_version
 
     target = resolved_target(board, label="kicad_pcb")
     if target.suffix.lower() != ".kicad_pcb":

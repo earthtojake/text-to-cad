@@ -39,6 +39,8 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf check": ("cad.sdf", "check"),
     "srdf check": ("cad.srdf", "check"),
+    # KiCad's design rule check of a saved board: the kicad integration's, the server's, since it runs kicad-cli.
+    "kicad_pcb check": ("cad_server.kicad.check", "check"),
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -58,7 +60,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
        for document_type in ("xbf", "step", "stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")},
+       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")},
+    # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
+    "kicad_pcb export": frozenset({"board", "to", "out"}),
+    "kicad_pcb inspect": frozenset({"board"}),
     **{f"{document_type} inspect": frozenset({"document", "ref", "query", "json"})
        for document_type in ("xbf", "step", "glb")},
     "serve": frozenset({"document", "port"}),
@@ -144,7 +149,7 @@ class Manifest(unittest.TestCase):
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "mcp", "export", "snapshot", "inspect",
-                        "urdf check", "sdf check", "srdf check"):
+                        "urdf validate", "sdf validate", "srdf validate", "pcb drc"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",

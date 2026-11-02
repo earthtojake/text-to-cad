@@ -1,4 +1,4 @@
-"""``cad_server.kicad.export``: the exports of a saved board by kicad-cli, headless, in private homes.
+"""``cad.kicad._export``: the exports of a saved board by kicad-cli, headless, in private homes.
 
 The command each export builds, the files it reports and what it refuses. No KiCad: ``subprocess.run``
 is replaced by a function that writes what kicad-cli would. (The real runs are
@@ -13,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cad_server.kicad import export
+from cad.kicad import _export as export
 from cad_server.kicad.cli import KicadRunError
 
 CLI = Path("/opt/kicad/bin/kicad-cli")

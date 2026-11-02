@@ -2,7 +2,8 @@
 requires no KiCad installation.
 
 The ``kicad`` integration's probe (``cad.registry.INTEGRATIONS["kicad"]``), run by the server's one
-helper for the external programs our code runs (``cad_server._internal.programs``). The server never
+helper for the external programs our code runs (``cad._internal.programs``), the standard library
+alone, so the library's ``@kicad_pcb`` and the server's commands find and run it the same way. The server never
 starts KiCad itself: what this finds is always an executable named exactly ``kicad-cli``
 (``kicad-cli.exe`` on Windows) -- ``CAD_KICAD_CLI``, refused unless it names one, then ``kicad-cli`` on
 PATH, then the command line inside the usual macOS or Windows installation -- never ``kicad``, a
@@ -20,11 +21,23 @@ from pathlib import Path
 
 from cad.registry import INTEGRATIONS
 
-from cad_server._internal import programs
-from cad_server._internal.programs import version_tuple
+from cad._internal import programs
+from cad._internal.programs import version_tuple
 
-__all__ = ["CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "check_version", "find_kicad_cli",
-           "headless_env", "install_hint", "kicad_version", "private_run"]
+__all__ = ["CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError", "check_version",
+           "find_kicad_cli", "headless_env", "install_hint", "kicad_version", "private_run", "quiet"]
+
+# What kicad-cli says on stderr that says nothing about the board.
+_NOISE = ("Fontconfig error",)
+
+
+class KicadRunError(RuntimeError):
+    """``kicad-cli`` failed; the message carries what it said."""
+
+
+def quiet(text: str) -> str:
+    """What kicad-cli said, without its noise."""
+    return "\n".join(line for line in (text or "").splitlines() if line.strip() and not line.startswith(_NOISE))
 
 _PROBE = INTEGRATIONS["kicad"].probe
 assert _PROBE is not None
@@ -59,7 +72,8 @@ def _installed() -> list[Path]:
 
 
 #: ``kicad-cli`` as the helper runs it.
-KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: _installed(), homes=_HOMES)
+KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: _installed(), homes=_HOMES,
+                                     title="KiCad 9")
 KICAD_MINIMUM = KICAD.minimum
 
 

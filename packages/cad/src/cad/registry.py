@@ -27,7 +27,7 @@ from types import MappingProxyType
 from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
-           "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "producer_for", "producers_for",
+           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "help_text", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a fixed set shared by every type; each type implements those that make sense for it.
@@ -74,8 +74,14 @@ class Integration:
 @dataclass(frozen=True)
 class Producer:
     """Code that makes ``document_type`` from a value ``matcher`` accepts: the integration it belongs to,
-    the values it takes (``accepts``, in words), the engine code that writes the file (``writer``), and
-    the parts of the type's content it provides."""
+    the values it takes (``accepts``, in words), the code that writes the file (``writer``), and the parts
+    of the type's content it provides.
+
+    A producer that also DECLARES says what the type's decorator does with what it is stacked on
+    (``declare``: the dotted name of ``(type, out, name) -> apply``), for the targets ``decorates`` takes
+    (None: every target of a type that has no other declarer). Without one, a decorator is the engine's
+    (``cad.engine.model``): the function is a model, and its result is checked against the matchers when
+    it is built."""
 
     document_type: str
     integration: str
@@ -83,6 +89,8 @@ class Producer:
     matcher: Callable[[Any], bool] = field(compare=False, repr=False)
     writer: str
     provides: tuple[str, ...]
+    declare: str = ""
+    decorates: Callable[[Any], bool] | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)
@@ -192,7 +200,7 @@ _TYPES = (
          Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-                   "kicad"))),
+                   "kicad")), decorator=True),
 )
 
 #: Every document type, by id, in the table's order.
@@ -205,7 +213,8 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process"),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
-                 "and its fabrication exports", extra=None, process="separate",
+                 "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
+        process="separate",
         probe=Probe("kicad-cli", "9.0", "install KiCad 9 or newer from https://www.kicad.org/download/, or set "
                                         "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI")),
 })
@@ -231,8 +240,9 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
+    from cad.kicad._producers import PRODUCERS as kicad
 
-    return (*build123d,)
+    return (*build123d, *kicad)
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -263,6 +273,16 @@ def producer_for(document_type: str, value: Any, *, where: str = "a model") -> P
                     f"({more})")
 
 
+def declarer_for(document_type: str, target: Any) -> Producer | None:
+    """The producer that declares what ``@<type>`` does with ``target`` (``Producer.declare``), or None when
+    the decorator is the engine's. Two that take one target is the registry's error."""
+    found = [producer for producer in producers_for(document_type) if producer.declare
+             and (producer.decorates is None or producer.decorates(target))]
+    if len(found) > 1:
+        raise RuntimeError(f"@{document_type}: {len(found)} producers declare {type(target).__name__}: exactly one may")
+    return found[0] if found else None
+
+
 def help_text(document_type: str) -> str:
     """A type's help, worked out from this table: what it is, the content it carries, its operations and
     what writes it."""
@@ -280,7 +300,7 @@ def help_text(document_type: str) -> str:
     if producers:
         lines.append("written by:")
         for producer in producers:
-            lines.append(f"  @{entry.id}(\"out{entry.suffix}\") on a model returning {producer.accepts} "
+            lines.append(f"  @{entry.id}(\"out{entry.suffix}\") of {producer.accepts} "
                          f"({producer.integration}: {', '.join(producer.provides)})")
     else:
         lines.append("written by: no producer; a file of it is authored")

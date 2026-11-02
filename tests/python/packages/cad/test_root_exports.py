@@ -21,7 +21,7 @@ HEAVY = ("OCP", "build123d")
 ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
 # The root: the model, the version, the deprecation's class, and the document types.
-TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")
+TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
 ROOT = ("model", "__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
@@ -106,9 +106,10 @@ class RootExports(unittest.TestCase):
         self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
             ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
             ("animations", inspect.Parameter.KEYWORD_ONLY)])
-        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
+        for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf", "kicad_pcb"):
             with self.subTest(kind=kind):
-                self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters), ["out", "name"])
+                if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's
+                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters), ["out", "name"])
                 self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name"])
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):

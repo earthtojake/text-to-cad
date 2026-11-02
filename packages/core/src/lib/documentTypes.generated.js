@@ -169,7 +169,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "inspect",
         "check"
       ],
-      "decorator": false
+      "decorator": true
     }
   ]
 });

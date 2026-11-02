@@ -51,9 +51,32 @@ class DocumentType(types.ModuleType):
         if not entry.decorator:
             raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model "
                             f"(its operations: {', '.join(entry.operation_names)})")
-        from cad.engine import model
+        # The engine's decorator, its path checked now, where a model is what the function is; else the
+        # producer that declares what the decorator does (``cad.registry.declarer_for``), by its target.
+        engine = None
+        if any(not producer.declare for producer in _producers(entry.id)):
+            from cad.engine import model
 
-        return getattr(model, entry.id)(out, name=name)
+            engine = getattr(model, entry.id)(out, name=name)
+
+        # A type whose own producer declares every target (``decorates`` None) checks its path now too.
+        own = next((producer for producer in _producers(entry.id) if producer.declare and producer.decorates is None),
+                   None)
+        prepared = _resolve(own.declare)(entry.id, out, name) if own is not None else None
+
+        def apply(target: Any) -> Any:
+            from cad.registry import declarer_for
+
+            declarer = declarer_for(entry.id, target)
+            if declarer is own and prepared is not None:
+                return prepared(target)
+            if declarer is not None:
+                return _resolve(declarer.declare)(entry.id, out, name)(target)
+            if engine is None:
+                raise TypeError(f"@{entry.id} takes no {type(target).__name__}")
+            return engine(target)
+
+        return apply
 
     def __getattr__(self, name: str) -> Any:
         entry = self.entry
@@ -95,6 +118,12 @@ class DocumentType(types.ModuleType):
         entry = self.entry
         if found is not None and found.id != entry.id:
             raise ValueError(f"{os.fspath(source)} is a {found.id}, not a {entry.id}: use cad.{found.id}")
+
+
+def _producers(document_type: str) -> tuple[Any, ...]:
+    from cad.registry import producers_for
+
+    return producers_for(document_type)
 
 
 def _operation(owner: DocumentType, name: str) -> Any:

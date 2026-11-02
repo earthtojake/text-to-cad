@@ -769,7 +769,12 @@ it (`model.check_result`): for the document and each file the model declares, ex
 must take the value (`registry.producer_for`), else the build fails, naming what the type is made of
 and the integration that would take the value. Today the build123d integration's producers take a
 build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
-(`document.py`) and its translations (`export.translate`) -- make the files, as before.
+(`document.py`) and its translations (`export.translate`) -- make the files, as before. A producer that
+declares (`Producer.declare`) decides what its type's decorator does with what it decorates, found by
+`registry.declarer_for`: the kicad integration's `@kicad_pcb` makes a board script, which runs in the
+caller's process through KiCad's headless `api-server` and kipy (`cad.kicad._session`), never in a
+worker, and a `@step` stacked on one is written from the saved board by `kicad-cli`. Every other
+decorated function is the engine's model.
 
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and

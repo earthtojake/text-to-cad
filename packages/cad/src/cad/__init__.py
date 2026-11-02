@@ -50,7 +50,7 @@ del _install_font_guard
 _TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d",)
+_INTEGRATIONS = ("build123d", "kicad")
 
 __all__ = [
     "__version__",

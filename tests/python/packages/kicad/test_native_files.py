@@ -30,7 +30,7 @@ class NativeFiles(unittest.TestCase):
             board.write_text(BOARD, encoding="utf-8")
             from cad.kicad_pcb import read_board
             from cad_server.kicad.check import check as drc
-            from cad_server.kicad.install import check_version, find_kicad_cli, headless_env, kicad_version
+            from cad.kicad._program import check_version, find_kicad_cli, headless_env, kicad_version
             from cad.engine.api import export
             import build123d as bd
             cli = find_kicad_cli()

@@ -36,7 +36,7 @@ when they are available; the checklists here also work with KiCad's own reports 
 3. **The checklist.** What no command measures: the fab's limits beyond the
    board's own rules, panel and edge details, polarity marks, placement
    rotations. Use the references below and a picture of the board, from
-   $pcb's snapshot: `cad <type> snapshot board.kicad_pcb tmp/board.png`.
+   $pcb's snapshot: `cad kicad_pcb snapshot board.kicad_pcb tmp/board.png`.
 
 Each finding names its parts by board reference (`U2`, `C8`, `#net:VBUS`);
 in a script $pcb runs with `cad run`, `read_board(path).resolve(ref)` answers where one is.

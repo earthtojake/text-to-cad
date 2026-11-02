@@ -13,7 +13,7 @@ that names it outright. This module is the one way the server finds and runs suc
   window nor touches the person's settings, data, cache, documents or locks.
 * **Missing**: one result, ``ProgramMissing``, whose words end in the probe's install hint.
 
-KiCad's ``kicad-cli`` is its first user (``cad_server.kicad.install``).
+KiCad's ``kicad-cli`` is its first user (``cad.kicad._program``).
 """
 
 from __future__ import annotations
@@ -54,6 +54,8 @@ class Program:
     installed: Callable[[], list[Path]] = field(default=lambda: [], compare=False)
     homes: Mapping[str, str] = field(default_factory=dict)
     version_args: tuple[str, ...] = ("version",)
+    #: What the program is called where a person reads its minimum ("KiCad 9"); its name and minimum without it.
+    title: str = ""
 
     @classmethod
     def from_probe(cls, probe, **options) -> "Program":
@@ -152,6 +154,5 @@ def check_version(program: Program, path: Path, found: str | None) -> str:
     """``found`` when it is at least the program's minimum; else ``ProgramMissing``, saying both."""
     if found is not None and version_tuple(found)[:len(program.minimum)] >= program.minimum:
         return found
-    minimum = ".".join(str(part) for part in program.minimum)
-    raise ProgramMissing(f"{path} reports {found or 'no version'}; cad needs {program.name} {minimum} or newer: "
-                         f"{program.install_hint}")
+    named = program.title or f"{program.name} {'.'.join(str(part) for part in program.minimum)}"
+    raise ProgramMissing(f"{path} reports {found or 'no version'}; cad needs {named} or newer: {program.install_hint}")

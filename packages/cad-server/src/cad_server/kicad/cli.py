@@ -1,7 +1,7 @@
 """Run KiCad's DRC against the saved board and sibling project, headless, in private homes.
 
 ``kicad-cli`` runs with no display to reach and every KiCad home (settings, documents, cache, temp)
-in a temporary folder of its own (``install.private_run``): it opens no window and never reads,
+in a temporary folder of its own (``cad.kicad._program.private_run``): it opens no window and never reads,
 writes or locks anything of the person's KiCad.
 The JSON report is temporary; the board source is not rewritten and no report is cached.
 """
@@ -15,16 +15,13 @@ from pathlib import Path
 
 from cad.results import CheckFinding
 
-from .install import private_run
+from cad.kicad._program import KicadRunError, private_run
+from cad.kicad._program import quiet as _quiet
 
 __all__ = ["Finding", "KicadRunError", "issues", "run_drc"]
 
 _TIMEOUT_SECONDS = 600
-_NOISE = ("Fontconfig error",)
 
-
-class KicadRunError(RuntimeError):
-    """``kicad-cli`` failed; the message carries what it said."""
 
 
 @dataclass(frozen=True)
@@ -54,10 +51,6 @@ def issues(findings) -> tuple[CheckFinding, ...]:
         )
         for finding in order
     )
-
-
-def _quiet(text: str) -> str:
-    return "\n".join(line for line in (text or "").splitlines() if line.strip() and not line.startswith(_NOISE))
 
 
 def _findings(report: dict) -> list[Finding]:

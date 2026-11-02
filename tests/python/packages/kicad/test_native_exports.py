@@ -27,8 +27,8 @@ BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
 
 class NativeExports(unittest.TestCase):
     def test_gerbers_drill_pos_and_step_of_a_saved_board(self):
-        from cad_server.kicad.export import EXPORTS, export
-        from cad_server.kicad.install import check_version, find_kicad_cli, kicad_version
+        from cad.kicad._export import EXPORTS, export
+        from cad.kicad._program import check_version, find_kicad_cli, kicad_version
 
         cli = find_kicad_cli()
         check_version(cli, kicad_version(cli))
@@ -67,8 +67,8 @@ class SharedTestBoard(unittest.TestCase):
     """The test board the reader, plot and command suites share is in the nightly's format (20260901)."""
 
     def test_a_nightly_checks_and_exports_it(self):
-        from cad_server.kicad.export import export
-        from cad_server.kicad.install import find_kicad_cli, kicad_version, version_tuple
+        from cad.kicad._export import export
+        from cad.kicad._program import find_kicad_cli, kicad_version, version_tuple
         from cad_server.kicad.check import check as drc
         from tests.python.support.kicad_board import write_board
 

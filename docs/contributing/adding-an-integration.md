@@ -50,11 +50,14 @@ an integration.
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
-      accepts and which parts of the type's content it provides. A matcher reads type names and
+      accepts and which parts of the type's content it provides. A producer whose decorator does more
+      than the engine's model declares it (`declare`, for the targets `decorates` takes): KiCad's
+      `@kicad_pcb` board script, and the `@step` stacked on one. A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).
-- [ ] **An external program's probe and headless rules**: found through the server's one helper
-      (`cad_server/_internal/programs.py`) -- the override, then `PATH`, then the places the tool
+- [ ] **An external program's probe and headless rules**: found through the library's one helper
+      (`packages/cad/src/cad/_internal/programs.py`, the standard library alone, which the server's
+      commands import too) -- the override, then `PATH`, then the places the tool
       installs itself; the minimum version checked; run headless with a private home and no display;
       one missing-tool result saying the install hint. Only the program itself is ever run, never a
       desktop app or a wrapper that starts one; test each rule.

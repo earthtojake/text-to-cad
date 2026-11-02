@@ -25,7 +25,7 @@ def is_shape(value: Any) -> bool:
                for cls in type(value).__mro__)
 
 
-_ACCEPTS = "a build123d Shape"
+_ACCEPTS = "a build123d Shape a model returns"
 _DOCUMENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
              "configuration sequences")
 _TRANSLATE = "cad.engine.export.translate"
@@ -39,6 +39,6 @@ PRODUCERS: tuple[Producer, ...] = (
     Producer("stl", "build123d", _ACCEPTS, is_shape, _TRANSLATE, ("triangles",)),
     Producer("threemf", "build123d", _ACCEPTS, is_shape, _TRANSLATE,
              ("triangles", "assembly", "names", "colours", "materials")),
-    Producer("dxf", "build123d", "a planar build123d Shape (a sketch, a face, wires or edges)", is_shape, _TRANSLATE,
+    Producer("dxf", "build123d", "a planar build123d Shape a model returns (a sketch, a face, wires or edges)", is_shape, _TRANSLATE,
              ("2D geometry", "layers")),
 )

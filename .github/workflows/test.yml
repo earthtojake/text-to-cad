@@ -373,6 +373,10 @@ jobs:
           playwright: "false"
           npm: none
 
+      - name: Install the kicad extra
+        # The board script round trip's IPC client (kipy), the library's kicad extra: a few seconds.
+        run: uv pip install --system --python python --editable "./packages/cad[kicad]"
+
       - name: Run the KiCad suite
         run: scripts/test/test-kicad.sh
 

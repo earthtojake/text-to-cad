@@ -437,7 +437,9 @@ document types', the integrations' and the CLI's.
     it and its integration -- decide which makes the file of the returned value. A matcher reads the
     value's type names and modules, never importing a library to ask. Exactly one producer per return
     type per document type; a return none takes fails loudly, naming the types the document is made of and
-    the integration that would add more.
+    the integration that would add more. A producer may also declare what its decorator does with the
+    function it is given (a KiCad board script, `@kicad_pcb`, run through KiCad's IPC API; the `@step`
+    stacked on one, written by `kicad-cli`); which one is the registry's, by what is decorated.
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** One set of operation names, shared by every
     type; each type implements those that make sense. A new operation must be code-free, frequently
@@ -515,7 +517,11 @@ src/cad/
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read_board, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
-                         #   still engine/render/board.py); check and export are the server's
+                         #   still engine/render/board.py); check and export are the server's;
+                         #   @kicad_pcb is the kicad integration's board script
+  kicad/                 # the kicad integration: kicad-cli found and run (_program, on
+                         #   _internal/programs), a board script through its headless api-server
+                         #   and kipy (_session), its exports (_export) and producers
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -529,6 +535,7 @@ src/cad/
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
   _internal/             # DocumentType (document_type), the earlier spellings (aliases), the
+                         #   external programs our code runs, found and run headless (programs), the
                          #   runner `cad run` starts a program by (program: the program's
                          #   folder last on its path), the lazy kernel (lazy_kernel: `import
                          #   build123d` binds, the kernel loads on first use;

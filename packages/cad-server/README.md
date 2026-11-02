@@ -41,7 +41,7 @@ src/cad_server/
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   kicad/                 # the kicad integration: the installed kicad-cli found and checked
                          #   (install, on the one helper for external programs,
-                         #   _internal/programs), KiCad's design rule check (`cad kicad_pcb
+                         #   the library's cad._internal.programs), KiCad's design rule check (`cad kicad_pcb
                          #   check`: check, cli) and its fabrication exports (`cad kicad_pcb
                          #   export`: export), each run headless in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
@@ -85,7 +85,7 @@ type is refused by name (`cli/document_types.py`, each type's module `cli/<type>
 (it fails on errors or unconnected items, says the warnings, and answers `kicad_failed` when KiCad refuses
 the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|step -o DIR` its fabrication outputs,
 each by the installed `kicad-cli`, found by the one helper for the external programs our code runs
-(`_internal/programs.py`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
+(the library's `cad._internal.programs`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
 PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
 headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
 `.kicad_*` file, and viewing a board needs no KiCad. `cad serve`,

@@ -36,7 +36,7 @@ class NativeBoardCommands(unittest.TestCase):
         from cad_server.mcp.operations import Operations
 
         png = self.root / "cli.png"
-        done = subprocess.run([*CLI, "snapshot", str(self.board), str(png), "--width", "320", "--height", "240", "--json"],
+        done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(png), "--width", "320", "--height", "240", "--json"],
                               env=dict(os.environ), capture_output=True, text=True, timeout=120)
         self.assertEqual(done.returncode, 0, done.stderr)
         json.loads(done.stdout)
@@ -55,7 +55,7 @@ class NativeBoardCommands(unittest.TestCase):
         self.assertNotEqual(png.read_bytes(), first)
 
     def test_a_board_display_takes_board_modes_alone(self) -> None:
-        done = subprocess.run([*CLI, "snapshot", str(self.board), str(self.root / "x.png"), "--display", "wireframe"],
+        done = subprocess.run([*CLI, "kicad_pcb", "snapshot", str(self.board), str(self.root / "x.png"), "--display", "wireframe"],
                               env=dict(os.environ), capture_output=True, text=True, timeout=120)
         self.assertNotEqual(done.returncode, 0)
         self.assertIn("a board's modes are board, copper, assembly, placement", done.stderr)
@@ -67,7 +67,7 @@ class NativeBoardCommands(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stderr)
         result = json.loads(done.stdout)
         self.assertFalse(result["ok"])
-        [issue] = result["issues"]
+        [issue] = result["findings"]
         self.assertEqual(issue["code"], "kicad_missing")
         self.assertIn("CAD_KICAD_CLI names", issue["message"])
         self.assertIn("kicad.org/download", issue["message"])

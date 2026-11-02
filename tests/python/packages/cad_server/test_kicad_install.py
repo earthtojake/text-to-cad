@@ -18,7 +18,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cad_server.kicad import cli, install
+from cad.kicad import _program as install
+from cad_server.kicad import cli
 
 EXE = ".exe" if sys.platform.startswith("win") else ""
 

@@ -37,9 +37,28 @@ then reports `kicad_failed`); viewing and snapshots still work.
 
 Edit the `.kicad_pcb` itself, preserving its companion `.kicad_pro`, `.kicad_dru`, libraries and
 schematic when present. Reading or displaying a board never writes it. There is no text-to-cad PCB
-model, decorator, build step, or generated-board ownership marker. A helper script may make a
-requested edit, but reread the current file before editing and preserve unknown records and UUIDs.
-Do not regenerate an existing project from an incomplete description.
+model, build step, or generated-board ownership marker. A helper script may make a requested edit,
+but reread the current file before editing and preserve unknown records and UUIDs. Do not regenerate
+an existing project from an incomplete description.
+
+A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` hands the function
+the open board (kipy's `Board`), saves it when the function returns and saves nothing when it raises.
+It needs a KiCad nightly's `kicad-cli` (its headless `api-server`) and the `kicad` extra
+(`cad[kicad]`, kipy) in the environment the script runs in. A `@step` stacked on it writes the saved
+board's STEP (`kicad-cli pcb export step --subst-models`):
+
+```python
+from cad import kicad_pcb, step
+
+@step("STEP/board.step")
+@kicad_pcb("board.kicad_pcb")          # the board file is the source; the function edits it
+def board(b):
+    for footprint in b.get_footprints():
+        ...
+
+if __name__ == "__main__":
+    board()
+```
 
 For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). KiCad's file coordinates are millimetres, **y down**;
@@ -58,7 +77,7 @@ connector mating side; a plausible-looking layout does not establish electrical 
 3. Run `cad kicad_pcb check board.kicad_pcb` (or `--json`). It checks the saved board against its rules
    and exits 1 on error-severity violations or unconnected items. Review warnings too. Resolve
    the cause instead of weakening rules to obtain a clean report.
-4. Inspect placement and routing visually: `cad <type> snapshot board.kicad_pcb tmp/board.png`.
+4. Inspect placement and routing visually: `cad kicad_pcb snapshot board.kicad_pcb tmp/board.png`.
    Measure constraints DRC cannot establish, such as decoupling placement and connector access.
 5. Show the result and explain remaining findings. Export only the requested deliverables from
    that same saved revision; see [manufacturing and STEP](references/manufacturing.md).
@@ -97,13 +116,13 @@ own work; review with `cad <type> snapshot`.
 
 The board view supports parts, pads, nets, layers, selection, Measure, annotations and Quick Edit.
 
-Snapshots use `cad <type> snapshot`, including `--job` packets saved by Quick Edit. Display modes are
+Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:
 
 ```bash
-cad <type> snapshot board.kicad_pcb tmp/copper.png --display copper
-cad <type> snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
-cad <type> snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
+cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan

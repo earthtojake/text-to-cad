@@ -32,7 +32,7 @@ and its operations -- and our helpers that take build123d's objects are `cad.bui
 | `cad.urdf.validate`, `cad.sdf.validate`, `cad.srdf.validate` | `cad.urdf.check`, `cad.sdf.check`, `cad.srdf.check` |
 | `cad.results.ValidationResult`, `ValidationIssue` | `cad.results.CheckResult`, `CheckFinding` (`.findings`, each with `.location`) |
 | `cad.findings`, `cad.xml_common`, `cad.check_fonts`, `cad.urdf_source`, `cad.sdf_source`, `cad.sdf_validation`, `cad.sdf_external`, `cad.srdf_source`, `cad.srdf_validation` | private now (`cad._internal.*`, `cad.<type>._*`): the aliases keep working, and nothing of a model's needs them |
-| `from cad import pcb` / `cad.pcb.read_board`, `inside` (the KiCad pull request's) | `from cad import kicad_pcb` / `kicad_pcb.read_board`, `inside` |
+| `cad.pcb` (the KiCad pull request's, never released) | `cad.kicad_pcb`: `read_board`, `inside`, `inspect` (was `inspect_board`); no alias, as it never shipped |
 | `cad.eng_drawing` | unchanged |
 
 `import build123d as bd` is unchanged: `cad.build123d` holds only our helpers, never build123d's own

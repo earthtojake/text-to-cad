@@ -60,13 +60,24 @@ class TheTableIsTheSource(unittest.TestCase):
         class Box(Shape):
             pass
 
+        from cad.kicad._session import BoardScript
+
+        script = BoardScript(lambda board: None, __import__("pathlib").Path("board.kicad_pcb"))
         for entry in registry.DOCUMENT_TYPES.values():
             with self.subTest(type=entry.id):
                 producers = registry.producers_for(entry.id)
                 self.assertEqual(entry.decorator, bool(producers))
-                if producers:
+                for producer in producers:
+                    self.assertTrue(set(producer.provides) <= set(entry.content), "a producer provides the type's content")
+                    self.assertIn(producer.integration, registry.INTEGRATIONS)
+                if any(producer.integration == "build123d" for producer in producers):
                     self.assertEqual("build123d", registry.producer_for(entry.id, Box()).integration)
-                    self.assertTrue(set(producers[0].provides) <= set(entry.content), "a producer provides the type's content")
+        # A board script's step is the kicad integration's, a shape's the build123d one's: one producer each,
+        # and @step declared on a board script by the kicad producer (``declarer_for``).
+        self.assertEqual("kicad", registry.producer_for("step", script).integration)
+        self.assertEqual("kicad", registry.declarer_for("step", script).integration)
+        self.assertIsNone(registry.declarer_for("step", lambda: None), "a function under @step is the engine's model")
+        self.assertEqual("kicad", registry.declarer_for("kicad_pcb", lambda board: None).integration)
 
     def test_an_unsupported_return_names_what_the_type_takes_and_the_integration(self) -> None:
         class Frame:

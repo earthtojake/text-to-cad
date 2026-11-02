@@ -69,6 +69,15 @@ build123d = [
   "ezdxf",
   "pillow",
 ]
+# The kicad integration's extra: KiCad's IPC API client (kipy, MIT), which a @kicad_pcb board script's
+# function is handed the open board of. kicad-cli itself is the person's KiCad, found by the library's
+# finder (cad.kicad._program), never a dependency. Pinned exactly: 0.8.0 targets KiCad 10.0 and reads and
+# edits the nightly's boards, though its check_version() calls a nightly server a future version (never
+# called). The pin moves to a build matched to the kicad-cli we ship, on our own package index, once that
+# package (kicad-cli-bin) exists.
+kicad = [
+  "kicad-python==0.8.0",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

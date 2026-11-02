@@ -113,7 +113,7 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
     parser.add_argument("board", metavar="BOARD", type=Path, help="the .kicad_pcb (its .kicad_pro beside it)")
     if operation == "export":
-        from cad_server.kicad.export import EXPORTS
+        from cad.kicad._export import EXPORTS
 
         parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
         parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
@@ -158,8 +158,8 @@ def _board_export(argv: list[str], prog: str) -> int:
     args = _board_parser(prog, "export").parse_args(argv)
     _refuse_other_type("kicad_pcb", "export", str(args.board))
     as_json = bool(getattr(args, JSON_FLAG_DEST))
-    from cad_server.kicad.export import export
-    from cad_server.kicad.install import KicadMissingError
+    from cad.kicad._export import export
+    from cad.kicad._program import KicadMissingError
     from cad_server.kicad.cli import KicadRunError
 
     try:
