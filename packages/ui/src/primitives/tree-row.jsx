@@ -60,14 +60,14 @@ export function TreeRowGuides({ depth, inset = 0, column = 12 }) {
  * names it finds written whole.
  */
 export const ROW_NAME_UNDER_ACTIONS = {
-  hover: 'group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] group-focus-within/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
+  hover: 'group-hover/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] group-focus-within/row:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))] [@media(hover:none)]:[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
   shown: '[mask-image:linear-gradient(to_right,#000_calc(100%-var(--row-actions)-0.5rem),transparent_calc(100%-var(--row-actions)))]',
 };
 
-/** The actions' box over the row's right end: shown on hover or keyboard focus, and kept while one is on (`persistent`). */
+/** The actions' box over the row's right end: shown on hover or keyboard focus (always on touch screens, which cannot hover), and kept while one is on (`persistent`). */
 export function treeRowActionsClass(persistent) {
   return cn('absolute inset-y-0 right-0 flex items-center pl-0.5 pr-[3px] transition-opacity',
-    persistent ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100');
+    persistent ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100');
 }
 
 export function TreeRowLabel({ children, className }) {
