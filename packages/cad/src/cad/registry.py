@@ -72,6 +72,12 @@ class Integration:
     probe: Probe | None = None
     modules: tuple[str, ...] = ()
     distributions: tuple[str, ...] = ()
+    #: The distributions that ARE it (its own and the other builds of its modules), of which one a resolution
+    #: pulls in through another package means the program uses it; and the package indexes and wheel folders
+    #: its packages come from beside the default index (none today: a hook for packaged binaries).
+    identity: tuple[str, ...] = ()
+    indexes: tuple[str, ...] = ()
+    find_links: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -221,14 +227,15 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process",
         modules=("build123d", "OCP"),
         distributions=("build123d", "cadquery-ocp-novtk", "bd_materials", "threejs-materials", "matplotlib", "shapely",
-                       "ezdxf", "pillow")),
+                       "ezdxf", "pillow"),
+        identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
                  "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
         process="separate",
         probe=Probe("kicad-cli", "9.0", "install KiCad 9 or newer from https://www.kicad.org/download/, or set "
                                         "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI"),
-        modules=("kipy",), distributions=("kicad-python",)),
+        modules=("kipy",), distributions=("kicad-python",), identity=("kicad-python",)),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

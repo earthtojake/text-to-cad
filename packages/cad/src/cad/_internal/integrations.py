@@ -1,11 +1,10 @@
-"""cad's integrations: the third-party technologies the library's extras carry, each named for its
-technology as its extra is (``cad[build123d]``), and what tells a program needs one.
+"""cad's integrations as ``cad run`` reads them: what tells a program needs one, worked out from the registry.
 
-This table is the one place each integration's modules, distributions and decorators are listed: the
-server's ``cad run`` reads it to work out a script's integrations from its imports (a static scan, no
-code run), to add one a resolution pulled in through another package, and to give a requirement its
-indexes; a program run with one missing says, in one line, which extra brings it (``missing``). It is a
-seam: a registry of integrations may own these lists, and the rest reads them through ``INTEGRATIONS``.
+The registry (``cad.registry.INTEGRATIONS``) is the one place each integration's modules, distributions and
+extra are listed, and its document types say which decorators need which integration. This module is the
+view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
+scan, no code run), to add one a resolution pulled in through another package, and to give a requirement
+its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
 
 The standard library alone: the server's command and a model's process both read it, and neither loads
 any integration to do so.
@@ -20,12 +19,12 @@ __all__ = ["INTEGRATIONS", "Integration", "decorated", "for_distribution", "for_
 
 @dataclass(frozen=True)
 class Integration:
-    """One integration: its extra's name (``cad[<extra>]``), the top-level modules a program imports of it
-    (``modules``), the distributions that are it, which a resolution may pull in through another package
-    (``distributions``, as PEP 503 normalizes their names), the names of cad's decorators that need it
-    (``decorators``: ``@cad.<name>`` or a ``<name>`` imported from cad), and the package indexes and
-    folders of wheels its packages come from beside the default index (``indexes``, ``find_links``: none
-    today, a hook for packaged binaries)."""
+    """One integration, as ``cad run`` reads it: its extra's name (``cad[<extra>]``), the top-level modules a
+    program imports of it (``modules``), the distributions that are it, which a resolution may pull in
+    through another package (``distributions``, as PEP 503 normalizes their names), the names of cad's
+    decorators that need it (``decorators``: ``@cad.<name>`` or a ``<name>`` imported from cad), and the
+    package indexes and folders of wheels its packages come from beside the default index (``indexes``,
+    ``find_links``: none today, a hook for packaged binaries)."""
 
     extra: str
     modules: tuple[str, ...]
@@ -35,20 +34,34 @@ class Integration:
     find_links: tuple[str, ...] = ()
 
 
+def _normal(name: str) -> str:
+    import re
+
+    return re.sub(r"[-_.]+", "-", name).lower()
+
+
+def _from_registry() -> dict[str, Integration]:
+    """Every integration with an extra, from the registry: its modules; the distributions that are it
+    (``identity``: its own and the other builds of its modules, not every package its extra installs); the decorators its own
+    producers declare for every target (``Producer.declare``, ``decorates`` None: ``@kicad_pcb``) -- a
+    decorator the engine makes a model of is no sign of an integration a program chose."""
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED, producers_for
+
+    found: dict[str, Integration] = {}
+    for name, integration in REGISTERED.items():
+        if not integration.extra:
+            continue
+        decorators = tuple(entry.id for entry in DOCUMENT_TYPES.values() if entry.decorator_integration == name
+                           and any(producer.integration == name and producer.declare and producer.decorates is None
+                                   for producer in producers_for(entry.id)))
+        distributions = tuple(dict.fromkeys(_normal(item) for item in integration.identity))
+        found[integration.extra] = Integration(integration.extra, integration.modules, distributions, decorators,
+                                               integration.indexes, integration.find_links)
+    return found
+
+
 # Every integration, by its extra's name.
-INTEGRATIONS: dict[str, Integration] = {
-    "build123d": Integration(
-        extra="build123d",
-        modules=("build123d", "OCP"),
-        distributions=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy"),
-    ),
-    "kicad": Integration(
-        extra="kicad",
-        modules=("kipy",),
-        distributions=("kicad-python",),
-        decorators=("kicad_pcb",),
-    ),
-}
+INTEGRATIONS: dict[str, Integration] = _from_registry()
 
 
 def for_module(name: str) -> str | None:
@@ -59,9 +72,7 @@ def for_module(name: str) -> str | None:
 
 def for_distribution(name: str) -> str | None:
     """The integration a distribution (any spelling of its name) is part of, or None."""
-    import re
-
-    normal = re.sub(r"[-_.]+", "-", name).lower()
+    normal = _normal(name)
     return next((key for key, found in INTEGRATIONS.items() if normal in found.distributions), None)
 
 

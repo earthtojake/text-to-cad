@@ -57,6 +57,14 @@ class TheTableIsTheSource(unittest.TestCase):
         self.assertEqual("kicad", registry.DOCUMENT_TYPES["kicad_pcb"].decorator_integration)
         self.assertEqual("build123d", registry.DOCUMENT_TYPES["step"].decorator_integration)
         self.assertIsNone(registry.DOCUMENT_TYPES["urdf"].decorator_integration)
+        # What cad run reads of the integrations is the registry's view, not a table of its own.
+        from cad._internal import integrations
+
+        self.assertEqual(sorted(integrations.INTEGRATIONS), sorted(i.extra for i in registry.INTEGRATIONS.values() if i.extra))
+        self.assertEqual(("kicad_pcb",), integrations.INTEGRATIONS["kicad"].decorators)
+        self.assertEqual((), integrations.INTEGRATIONS["build123d"].decorators, "the engine's models need no choice")
+        self.assertEqual(registry.INTEGRATIONS["build123d"].modules, integrations.INTEGRATIONS["build123d"].modules)
+        self.assertIsNone(integrations.for_distribution("pillow"), "a package an extra installs is not the integration")
 
     def test_a_decorator_has_exactly_one_producer_per_value(self) -> None:
         class Shape:  # a build123d Shape, by its ancestry's names alone
