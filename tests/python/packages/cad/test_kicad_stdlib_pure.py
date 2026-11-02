@@ -1,0 +1,42 @@
+"""The KiCad board reader and ``cad.pcb`` import the standard library and each other alone.
+
+A check script reads a board under ``cad run`` and the server plots one in its own process, where
+the CAD kernel is not installed; KiCad is never required to read a board. Static, over the AST, so
+a lazy or function-local import counts too. (Drawing a board, ``render/board.py``, is Pillow's and
+outside this family.)
+"""
+
+from __future__ import annotations
+
+import ast
+import sys
+import unittest
+
+from tests.python.support.paths import LIBRARY
+
+SOURCE = LIBRARY / "src" / "cad"
+FAMILY = sorted((SOURCE / "engine" / "formats" / "kicad").glob("*.py")) + [SOURCE / "pcb.py"]
+OWN = "cad.engine.formats.kicad"
+
+
+def imported(path) -> set[str]:
+    found: set[str] = set()
+    for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+        if isinstance(node, ast.Import):
+            found.update(alias.name for alias in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            found.add(OWN if node.level else node.module or "")
+    return found
+
+
+class KicadReaderIsStdlibPure(unittest.TestCase):
+    def test_the_family_imports_the_standard_library_and_itself_alone(self) -> None:
+        self.assertGreater(len(FAMILY), 8)
+        offenders = sorted(f"{path.relative_to(SOURCE)}: {name}" for path in FAMILY for name in imported(path)
+                           if name != "__future__" and name.partition(".")[0] not in sys.stdlib_module_names
+                           and name != OWN and not name.startswith(OWN + "."))
+        self.assertEqual(offenders, [])
+
+
+if __name__ == "__main__":
+    unittest.main()

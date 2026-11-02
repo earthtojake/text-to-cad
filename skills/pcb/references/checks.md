@@ -21,6 +21,9 @@ revision: parts, pads, tracks, vias, zones, holes, nets and outline, in board mi
 y down. It does not launch KiCad, validate electrical design, or serve as a file serializer.
 Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
+`from cad.pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
+outline) by the even-odd rule, in the same millimetres. DRC is not a Python name: run
+`cad pcb drc`, which finds and runs `kicad-cli`.
 
 References name parts (`#U1`), pads (`#U1.3`), nets (`#net:GND`) and positions
 (`#net:GND@x12y8`). The viewer uses the same references for selection and Quick Edit. Quote a

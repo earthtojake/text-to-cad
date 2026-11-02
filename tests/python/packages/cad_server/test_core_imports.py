@@ -39,7 +39,7 @@ MODEL_ENTRY_POINTS = ("cadgen", "cad", "cad.engine", "cad.engine.api", "cad.engi
                       "cad.engine.worker", "cad.engine.client", "cad.engine.serve", "cad.engine.reader",
                       "cad.engine.render.service", "cad.engine.snapshot", "cad.ap242", "cad.gltf",
                       "cad.geometry", "cad.flatten", "cad.eng_drawing", "cad.urdf", "cad.sdf",
-                      "cad.srdf")
+                      "cad.srdf", "cad.pcb")
 
 
 def module_name(source: Path, path: Path) -> str:

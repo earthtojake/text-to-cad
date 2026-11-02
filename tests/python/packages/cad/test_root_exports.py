@@ -28,6 +28,8 @@ NAMESPACES = {
     "cad.ap242": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
                      "posed"),
     "cad.gltf": ("animation",),
+    # A saved KiCad board, read for a check script (`cad run`): the server's DRC is a command, not a name here.
+    "cad.pcb": ("read_board", "inside"),
 }
 
 
@@ -74,10 +76,11 @@ class RootExports(unittest.TestCase):
         import importlib
 
         from cad.engine import mechanism, model
+        from cad.engine.formats.kicad import board_index, geometry
 
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model,
                    "gear_pair": mechanism, "rack_and_pinion_pair": mechanism, "screw_pair": mechanism,
-                   "posed": mechanism}
+                   "posed": mechanism, "read_board": board_index, "inside": geometry}
         for namespace, names in NAMESPACES.items():
             module = importlib.import_module(namespace)
             self.assertEqual(sorted(names), sorted(module.__all__))
