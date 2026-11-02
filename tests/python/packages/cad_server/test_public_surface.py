@@ -71,12 +71,14 @@ ADAPTERS: dict[str, frozenset[str]] = {
     "uninstall": frozenset({"dry_run", "only", "purge", "json"}),
     # The plugin folder written from the current installation, and the apps' copies of it with --refresh.
     "plugin": frozenset({"refresh", "json"}),
+    # The exact cad requirement for a Python of a program's own: its integrations, and --json.
+    "requirement": frozenset({"integrations", "json"}),
 }
 
 # Commands that own their parser outright and mirror no function.
 UNCLASSIFIED = {
     "doctor",
-    # python with the arguments, whatever they are, in the project's environment: no parser of its own.
+    # uv run's options and a program's arguments, whatever they are: no parser of its own (uv judges them).
     "run",
     # The viewer launcher owns its parser: the launch contract (reuse, replace or start on its
     # one port, the --json announce line) is not a function signature to mirror.

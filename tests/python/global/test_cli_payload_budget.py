@@ -23,6 +23,8 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cad-server/src/cad_server/cli/setup.py",
         # `cad plugin --json`: the plugin folder written, and the apps' copies brought along.
         "packages/cad-server/src/cad_server/cli/plugin.py",
+        # `cad requirement --json`: the requirement, its indexes and find-links.
+        "packages/cad-server/src/cad_server/cli/requirement.py",
         # The validators' Result dataclasses.
         "packages/cad/src/cad/results.py",
         # Every GENERATED CLI (`cadgen <format> <verb>`) serializes its Result
