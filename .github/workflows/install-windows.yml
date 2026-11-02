@@ -349,6 +349,7 @@ jobs:
             if (Test-Path -LiteralPath (Join-Path $dir $name)) { Fail "an argument was redirected: a file named $name" }
           }
           Write-Host "every argument arrived as given; nothing was redirected"
+          exit 0  # the runner exits with the last native exit status: here cad's 2, which the checks expected
 
       # 2c. cad.exe rewritten while it runs, as `cad update` rewrites it through itself: a stale cad.exe
       # (this revision's mark, another build's text) runs `cad doctor`, which cannot replace a running
