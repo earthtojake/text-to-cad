@@ -176,7 +176,9 @@ def _start() -> subprocess.Popen:
     found = places.engine()
     home = places.HOME
     if found is None and home is None:
-        raise ConnectionError(NOT_INSTALLED)
+        from cad.engine import said
+
+        raise ConnectionError(said.UNREGISTERED() if said.UNREGISTERED is not None else NOT_INSTALLED)
     env = {name: value for name, value in environment().items() if name not in _PER_PROCESS_TELEMETRY}
     # This process's own installation: the one whose base it runs in, else its own environment.
     python, root, prefix = ((home["executable"], home["root"], home["prefix"]) if home

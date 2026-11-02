@@ -988,23 +988,59 @@ class DaemonEnvironmentTest(unittest.TestCase):
     def test_with_no_installation_a_client_starts_nothing_and_says_so_in_one_line(self) -> None:
         from unittest import mock
 
-        from cad.engine import client, places
+        from cad.engine import client, places, said
+        from cad_server._internal import installations
 
         state = tempfile.mkdtemp(prefix="no-installation-")
         self.addCleanup(shutil.rmtree, state, True)
-        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", None), \
-                mock.patch.object(client.subprocess, "Popen", side_effect=AssertionError("a daemon was started")):
-            with self.assertRaises(ConnectionError) as caught:
-                client._start()
-        self.assertEqual(str(caught.exception),
-                         "cad-server is not installed on this computer: install cad-server and run `cad doctor` once, "
-                         "then run this again")
+
+        def refused(words) -> str:
+            with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", None), \
+                    mock.patch.object(said, "UNREGISTERED", words), \
+                    mock.patch.object(client.subprocess, "Popen", side_effect=AssertionError("a daemon was started")):
+                with self.assertRaises(ConnectionError) as caught:
+                    client._start()
+            return str(caught.exception)
+
+        # A model's process, the library alone: the server is what is missing.
+        self.assertEqual(refused(None), "cad-server is not installed on this computer: install cad-server and run "
+                                        "`cad doctor` once, then run this again")
+        # A process of cad-server's own: never that cad-server is not installed, but what is true of it.
+        self.assertEqual(said.UNREGISTERED.__module__, "cad_server", "importing the server says its own words")
+        with mock.patch.object(installations, "here", return_value=None), \
+                mock.patch.object(installations, "own_version", return_value="0.10.0"):
+            self.assertEqual(refused(said.UNREGISTERED), "this cad-server is not registered on this computer: run "
+                                                         "`cad doctor` once, which registers it, then run this again")
+        from cad.engine.previous import version
+
+        with mock.patch.object(installations, "here", return_value=None), \
+                mock.patch.object(installations, "own_version", return_value=None):
+            self.assertEqual(refused(said.UNREGISTERED), "this cad-server is a source tree, which registers only as a "
+                                                         "version it is named: run `cad doctor` once with "
+                                                         f"CAD_INSTALLATION_VERSION={version()}-dev.0 set, then run this "
+                                                         "again")
+        with mock.patch.object(installations, "here", return_value={"version": "0.10.0"}):
+            self.assertEqual(refused(said.UNREGISTERED), "no cad-server is current on this computer: run `cad doctor` "
+                                                         "once, which makes this one current, then run this again")
         # A base an installation made (``cad run``'s) starts its installation's engine, current or not.
         base = {"executable": sys.executable, "prefix": sys.prefix, "root": str(Path(state, "server"))}
         with mock.patch.dict(os.environ, {"CAD_STATE_DIR": state}), mock.patch.object(places, "HOME", base), \
                 mock.patch.object(client.subprocess, "Popen") as started:
             client._start()
         self.assertEqual(started.call_args.args[0][0], sys.executable)
+
+    def test_an_interpreter_with_no_console_script_registers_with_one_beside_its_record(self) -> None:
+        # A test's interpreter that reads the packages from PYTHONPATH: never left unregistered.
+        from cad.engine import places
+
+        state, bare = (Path(tempfile.mkdtemp(prefix=prefix)) for prefix in ("state-", "bare-env-"))
+        for folder in (state, bare):
+            self.addCleanup(shutil.rmtree, folder, True)
+        self.assertTrue(engine_daemon.register(state, sys.executable, str(bare)))
+        current = places.current(state)
+        self.assertEqual((current["python"], current["prefix"]), (sys.executable, str(bare)))
+        self.assertEqual(Path(current["cad"]).parent, state / "installations", "its console script, beside it")
+        self.assertIn("-m cad_server.cli", Path(current["cad"]).read_text(encoding="utf-8"))
 
     def test_the_started_daemon_does_not_inherit_the_telemetry_switches(self) -> None:
         from unittest import mock

@@ -10,10 +10,24 @@ model's own process, where the server is not installed, counts nothing.
 
 from functools import cache as _cache
 
+from cad.engine import said as _said
 from cad_server._internal import engine_telemetry as _engine_telemetry
 
 _engine_telemetry.install()
 del _engine_telemetry
+
+
+def _unregistered() -> str:
+    """What a client in a process of cad-server's own says where no installation is registered: not the
+    library's line, which would tell a running cad-server that cad-server is not installed, but this one's
+    (``cad_server._internal.installations.unregistered``)."""
+    from cad_server._internal.installations import unregistered
+
+    return unregistered()
+
+
+_said.UNREGISTERED = _unregistered
+del _said
 
 __all__ = ["__version__"]
 

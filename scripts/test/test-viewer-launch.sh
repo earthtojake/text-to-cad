@@ -81,7 +81,7 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
     # registers itself: the engine the launch starts is this one's (with none, a client starts none).
     sys.path.append(sys.argv[1])
     from tests.python.support.engine_daemon import register
-    assert register(env["CAD_STATE_DIR"]), "this interpreter has no cad console script to register"
+    register(env["CAD_STATE_DIR"])  # raises where it cannot: the launch never runs unregistered
     def launch(*options):
         result = subprocess.run([sys.executable, "-m", "cad_server.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)

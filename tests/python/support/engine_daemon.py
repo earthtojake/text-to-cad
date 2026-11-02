@@ -47,23 +47,31 @@ def register(state: str | os.PathLike, python: str | None = None, prefix: str | 
     (``cad_server._internal.installations``): its record (``installations/<version>.json``: its Python,
     its ``cad`` console script and its environment) and ``installations/current``. A client of a test
     then starts the engine of the test's own interpreter, where with no installation registered it
-    starts none (``cad.engine.client._start``). The standard library alone: the runner registers each
-    file's state folder before the file imports anything (``scripts/test/unittest_files.py``). False,
-    and nothing written, for an environment with no ``cad`` console script, which no record can name."""
-    python = python or sys.executable
-    prefix = prefix or sys.prefix
+    starts none (``cad.engine.client._start``). An environment with no ``cad`` console script -- an
+    interpreter that reads the packages from ``PYTHONPATH`` -- gets one beside the record, which runs the
+    server's command with that interpreter. The standard library alone: the runner registers each file's
+    state folder before the file imports anything (``scripts/test/unittest_files.py``). True; raises
+    where it cannot, so nothing goes on unregistered."""
+    python = os.path.abspath(python or sys.executable)
+    prefix = os.path.abspath(prefix or sys.prefix)
+    if not os.path.isfile(python):
+        raise FileNotFoundError(f"no interpreter to register: {python}")
     windows = os.name == "nt"
-    if prefix == sys.prefix and sys.prefix == sys.base_prefix:
+    if prefix == os.path.abspath(sys.prefix) and sys.prefix == sys.base_prefix:
         scripts = sysconfig.get_path("scripts")  # not a virtual environment: the interpreter's own folder
     else:
         scripts = os.path.join(prefix, "Scripts" if windows else "bin")
-    console = os.path.join(scripts, "cad.exe" if windows else "cad")
-    if not (os.path.isfile(python) and os.path.isfile(console)):
-        return False
     folder = Path(state) / "installations"
     folder.mkdir(parents=True, exist_ok=True)
-    record = {"version": TEST_INSTALLATION, "python": os.path.abspath(python), "cad": os.path.abspath(console),
-              "prefix": os.path.abspath(prefix), "registered": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    console = os.path.join(scripts, "cad.exe" if windows else "cad")
+    if not os.path.isfile(console):
+        stub = folder / (f"{TEST_INSTALLATION}-cad.cmd" if windows else f"{TEST_INSTALLATION}-cad")
+        stub.write_text(f'@"{python}" -m cad_server.cli %*\r\n' if windows else
+                        f'#!/bin/sh\nexec "{python}" -m cad_server.cli "$@"\n', encoding="utf-8")
+        stub.chmod(0o755)
+        console = str(stub)
+    record = {"version": TEST_INSTALLATION, "python": python, "cad": os.path.abspath(console), "prefix": prefix,
+              "registered": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
     # One key a line, as an installation writes it: the ``cad`` command's sh reads the python's line.
     (folder / f"{TEST_INSTALLATION}.json").write_text(json.dumps(record, indent=1, sort_keys=True) + "\n",
                                                       encoding="utf-8")

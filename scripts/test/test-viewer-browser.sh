@@ -59,8 +59,7 @@ viewer_pidfile="$project/viewer.pid"
 # command starts there is this checkout's (a client with no installation starts none).
 export CAD_STATE_DIR="$project/state"
 "$PYTHON" -c 'import sys; sys.path.append(sys.argv[1]); from tests.python.support.engine_daemon import register
-sys.exit(0 if register(sys.argv[2]) else "FAIL: this interpreter has no cad console script to register")' \
-  "$REPO_ROOT" "$CAD_STATE_DIR"
+register(sys.argv[2])' "$REPO_ROOT" "$CAD_STATE_DIR"
 # The engine that builds the fixtures and serves the STEP and .xbf ones to the page: this
 # test's own daemon, one part meshed at a time, stopped on the way out.
 export CAD_ENGINE_DIR="$project/engine" CAD_ENGINE_MESH=inline CAD_CACHE_DIR="$project/no-0.7-store"

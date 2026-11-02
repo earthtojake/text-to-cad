@@ -386,6 +386,26 @@ def point(version: str, folder=None) -> None:
     folder.write(CURRENT, version.encode("utf-8"))
 
 
+def unregistered() -> str:
+    """Why a client of this installation's starts no engine -- no installation is current, and it runs in
+    no base an installation made (``cad.engine.client._start``) -- in the words a process of cad-server's
+    own says it in (``cad.engine.said.UNREGISTERED``): what is true of this installation, and the command
+    that registers it, ``cad doctor``. One its records name but none is current is made current by it; a
+    source tree registers only as a version it is named (``NAME_ENV``)."""
+    from cad_server._internal.launch import COMMAND, SERVER
+
+    if here() is not None:
+        return (f"no {SERVER} is current on this computer: run `{COMMAND} doctor` once, which makes this one "
+                "current, then run this again")
+    if own_version() is None:
+        from cad.engine.previous import version
+
+        return (f"this {SERVER} is a source tree, which registers only as a version it is named: run "
+                f"`{COMMAND} doctor` once with {NAME_ENV}={version()}-dev.0 set, then run this again")
+    return (f"this {SERVER} is not registered on this computer: run `{COMMAND} doctor` once, which registers it, "
+            "then run this again")
+
+
 def mine(record: dict | None) -> bool:
     """Whether ``record`` names this process's own installation (its environment, as it registers it)."""
     if record is None:
