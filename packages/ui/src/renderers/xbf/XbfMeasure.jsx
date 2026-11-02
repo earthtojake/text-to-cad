@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import { fetchXbfElementFacts } from "@text-to-cad/core/lib/xbf/xbfDocument.js";
+import { fetchXbfElementFacts } from "@cad/core/lib/xbf/xbfDocument.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
@@ -7,7 +7,7 @@ import { xbfMeasurePick } from "./xbfMeasurePick.js";
 
 // An engine document's Measure, as a STEP's: a press takes a vertex, an edge or a face whole, as
 // its menu chooses (`xbfMeasurePick.js`), and a pair reads what the two make
-// (`@text-to-cad/core/lib/viewer/measureEntities.js`): parallel faces square across, holes by their
+// (`@cad/core/lib/viewer/measureEntities.js`): parallel faces square across, holes by their
 // centres, faces or edges at an angle by the angle. The entity under the resting pointer is lit, a
 // vertex by its marker alone, with what it is worth on its own beside it; an edge's length along a
 // curve and a face's area are the engine's facts of it (`fetchXbfElementFacts`), read when the

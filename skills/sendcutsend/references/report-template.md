@@ -15,7 +15,7 @@ List official SendCutSend URLs used for the checks as Markdown links. Include on
 
 ## Geometry Facts
 
-Summarize facts from `$cad` inspection when available and targeted `build123d`/`ezdxf` inspection code: file type, units, extents/bounding box, entity/body counts, layers, unsupported entities, obvious open/duplicate geometry, and parsing limitations.
+Summarize facts from text-to-cad inspection when available and targeted `build123d`/`ezdxf` inspection code: file type, units, extents/bounding box, entity/body counts, layers, unsupported entities, obvious open/duplicate geometry, and parsing limitations.
 
 For bent 2D files, include bend geometry facts from the exported file: bend-line count and layers, individual bend line lengths, nearest non-bend cut geometry for each bend line, local flange depths, bend-line span coverage, bend-adjacent cut geometry, insufficient contact/support observations, and any split/interrupted/common-axis bend observations. Use those facts for comparison against the current material/thickness service page.
 

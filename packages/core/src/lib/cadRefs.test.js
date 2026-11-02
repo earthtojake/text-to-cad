@@ -16,7 +16,7 @@ import {
 } from "./cadRefs.js";
 
 // The same fixture the Python suites read. It is the only thing keeping the engine grammar's two
-// parsers -- this module and cadgen/engine/refs.py -- from drifting, which the grammars had
+// parsers -- this module and cad/engine/refs.py -- from drifting, which the grammars had
 // already done four copies deep before it existed.
 const FIXTURE = JSON.parse(
   readFileSync(fileURLToPath(new URL("./cadRefs.parity.json", import.meta.url)), "utf8")
@@ -79,7 +79,7 @@ const engineShape = ({ owner, element }) => ({
   element: element === null || typeof element === "string" ? element : `${element.kind} ${element.ordinal}`
 });
 
-test("an .xbf's refs parse as cadgen.engine.refs parses them, case for case", () => {
+test("an .xbf's refs parse as cad.engine.refs parses them, case for case", () => {
   assert.ok(FIXTURE.refCases.length);
   for (const testCase of FIXTURE.refCases) {
     const parsed = parseEngineRef(testCase.ref);
@@ -94,7 +94,7 @@ test("an .xbf's refs parse as cadgen.engine.refs parses them, case for case", ()
   }
 });
 
-test("an .xbf's occurrences and elements are spelled as cadgen inspect answers them", () => {
+test("an .xbf's occurrences and elements are spelled as cad inspect answers them", () => {
   assert.ok(FIXTURE.spellingCases.length);
   for (const { structure, occurrences, elements, why } of FIXTURE.spellingCases) {
     const spell = spellEngineRefs(structure.tree);

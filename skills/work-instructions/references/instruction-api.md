@@ -1,7 +1,7 @@
-# `cadgen.work_instruction` reference
+# `cad.work_instruction` reference
 
 ```python
-from cadgen.work_instruction import (
+from cad.work_instruction import (
     work_instruction, Instruction, Format, Spec, Drawing, Datasheet, Stated,
     Cited, Unspecified, Torque, Material, Adhesive, Cure,
 )
@@ -17,7 +17,7 @@ is left out, and prints NOT STATED.
 
 ```python
 from bracket_assembly import bracket_assembly  # the assembly's model, beside this script
-from cadgen.work_instruction import (
+from cad.work_instruction import (
     Adhesive, Cited, Cure, Datasheet, Drawing, Instruction, Material, Spec,
     work_instruction,
 )
@@ -125,7 +125,7 @@ assembly. A step that installs nothing (a cure, an inspection) still has a
 figure of what is installed so far, and none while nothing is.
 
 `wi.tree()` returns every part and subassembly, indented, by its ref (the
-grammar `cadgen inspect` and the viewer use: a label, numbered among siblings
+grammar `cad inspect` and the viewer use: a label, numbered among siblings
 that share it, `pin.2`, or a path where the label alone names several,
 `arm/pin`): what `install=` takes, beside a part's label. Print it before writing the steps.
 
@@ -180,7 +180,7 @@ Each returns the step, so they chain, and prints in the order called.
 `bond` and `cure` take `None` for a record nobody has stated yet; it prints
 NOT STATED. `surfaces` (on `bond`, `apply` and `fasten`, where it marks the
 faces hardware the model does not carry goes into) are face refs (`bracket/face 3`, or the `bracket/f:...` ref the viewer
-copies; `cadgen inspect "$ID" "bracket/face 3"` says which face it is), each resolved
+copies; `cad inspect "$ID" "bracket/face 3"` says which face it is), each resolved
 to exactly one face when the step names it and drawn on the step's figure;
 each must be on a part installed by that step or before.
 

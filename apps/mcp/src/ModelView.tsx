@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createHttpPromptFiles, type CadClient } from '@text-to-cad/core/client';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
-import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@text-to-cad/ui/cad-viewer';
-import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@text-to-cad/ui/file-viewer';
-import type { ViewerHost, ViewerLinks } from '@text-to-cad/ui/host';
-import type { ModelLibrarySource } from '@text-to-cad/ui/library';
-import type { TabStore } from '@text-to-cad/ui/tab-store';
+import { createHttpPromptFiles, libraryRow, type CadClient } from '@cad/core/client';
+import { unavailablePromptContext } from '@cad/core/prompt';
+import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@cad/ui/cad-viewer';
+import type { AppSetting, ColorSchemeSetting, LanguageSetting } from '@cad/ui/file-viewer';
+import type { ViewerHost, ViewerLinks } from '@cad/ui/host';
+import type { ModelLibrarySource } from '@cad/ui/library';
+import type { TabStore } from '@cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
 import type { LiveRegistry } from './host/live';
 import { createChatPromptContext, type ChatReach } from './host/prompt';
-import { translator } from '@text-to-cad/ui/i18n';
+import { translator } from '@cad/ui/i18n';
 import type { Launch } from './host/server';
 import { CardCorner } from './CardCorner';
 import type { ViewSync } from './host/sync';
@@ -27,17 +27,17 @@ export interface ViewReporter {
 /**
  * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
  * or with none, the home (the library, and Open) — under the navbar (`chrome: "page"`): its logo and
- * app menu, Back and Forward, the file's name and menus, and the host's update, Full size and Open in
- * browser. A view browses from its model's folder, shows what is opened in place, and adds what it
+ * app menu, Back and Forward, the file's name and menus (its ⋯: Copy path, and Open in › Browser and
+ * the file manager), and at the right the host's update and Full size. A view browses from its model's folder, shows what is opened in place, and adds what it
  * shows to the library. Everything differs by data — what a Quick Edit can do in the chat, whether
  * the view has a home — never by where the view is.
  *
  * Codex's file handler (`surface: file`, `alone`) shows its file alone (`chrome: "bare"`): the host's
- * own file tree is its navigation, so it has no navbar, no home and no Open in browser; what the
+ * own file tree is its navigation, so it has no navbar, no home and no file menu (no Open in › Browser); what the
  * navbar would carry that it still has (the update notice, Full size where the host offers it) is its
  * corner (`CardCorner`) at the viewport's top-right.
  */
-export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser }: {
+export default function ModelView({ launch, sequence, alone = false, bridge, client, tunnel, tabStore, live, links, colorScheme, theme, locale, language, platform, reporter, sync, chat, appSettings, update, fullSize, openInBrowser, engineOrigin }: {
   launch: Launch; sequence: number; bridge: Bridge; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   /**
    * The view shows the one file its host opened, and nothing else (Codex's file handler): no home,
@@ -62,14 +62,22 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   /** This app's on/off settings, in the app menu: analytics. */
   appSettings?: readonly AppSetting[];
   /**
-   * While this install is behind: the navbar's update button, first among its controls, over a file
+   * While this install is behind: the navbar's update button, last among its controls (after Full size), over a file
    * and on the home; in the file handler, the corner's notice under Full size.
    */
   update?: ReactNode;
-  /** Inline, the card's way to full size, where the host can show it so: in the navbar before the host's other actions; the corner's first in the file handler. */
+  /** Inline, the card's way to full size, where the host can show it so: in the navbar just before the update button; the corner's first in the file handler. */
   fullSize?: ReactNode;
-  /** The view's page in the person's browser, where a launch carried one: last in the navbar. Never in the file handler. */
-  openInBrowser?: ReactNode;
+  /**
+   * Open a document's page (a file's path, a model's id) in the person's browser, where a launch carried
+   * a page: the file menu's Open in › Browser (`fileActions.perform.browser`). Never in the file handler.
+   */
+  openInBrowser?: (document: string) => void;
+  /**
+   * The engine's own HTTP origin (the launch's `engine`), where a launch named one: Copy link's
+   * address, `<origin>/<id>?token=<fresh link>`, the link asked for through the tunnel. Never the tunnel's.
+   */
+  engineOrigin?: string;
 }) {
   // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
   // has neither the home nor the explorer (a source that cannot list or search offers none).
@@ -105,8 +113,14 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
     [chat.queue, chat.send, bridge]);
   useEffect(() => () => chatContext?.dispose(), [chatContext]);
   const promptContext = chatContext ?? unavailablePromptContext;
-  // The file menu: its path, and Reveal in the desktop's file manager (the server is on this machine).
-  const fileActions = useMemo(() => createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path) }), [platform, client]);
+  // The file menu: its path, Reveal in the desktop's file manager (the server is on this machine),
+  // and, in a view with a home, the document's page in the browser (Open in › Browser).
+  const fileActions = useMemo(() => {
+    // Open in's apps too, through the tunnel as Reveal is: the server opens them on this computer.
+    const actions = createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => client.reveal(path), openIn: client,
+      ...(engineOrigin ? { link: { origin: engineOrigin, client } } : {}) });
+    return homed && openInBrowser ? { ...actions, perform: { ...actions.perform, browser: (entry: { path: string }) => openInBrowser(entry.path) } } : actions;
+  }, [platform, client, homed, openInBrowser, engineOrigin]);
 
   // The agent's show of a file is a step in the view's history, as a person's is.
   useEffect(() => { navigate(launched()); }, [launch, sequence]);
@@ -118,16 +132,17 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
 
   // Every other view has the home: the models opened before, from every view and the web viewer.
   // What it opens is shown in place.
-  // The home's first list came with its launch: the cards draw at once, and later reads ask.
+  // The home's first list came with its launch, its rows as `GET /api/v1/documents` lists them: the
+  // cards draw at once, each its picture read by its document's id, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
     list: () => {
       const first = seeded.current;
       seeded.current = null;
-      return first ? Promise.resolve(first) : client.recents();
+      return first ? Promise.resolve(first.map(libraryRow)) : client.recents();
     },
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: name => client.thumbnail(name),
+    thumbnail: model => client.thumbnail(model),
     open: async entry => { navigate(normalizePath(entry.path)); },
     // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
     ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),
@@ -151,6 +166,6 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={navigate} chrome={homed ? 'page' : 'bare'}
     onShown={path => { if (path) void client.changeRecents({ action: 'open', path }).catch(() => {}); }}
     library={library} appSettings={appSettings} colorScheme={theme} language={language} history={viewerHistory}
-    {...homed ? { update, fullSize, openInBrowser } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
+    {...homed ? { update, fullSize } : { notice: <CardCorner fullSize={fullSize} update={update} /> }}
     onThumbnail={(png, pictured) => client.keepThumbnail(png, pictured)} />;
 }

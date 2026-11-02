@@ -54,8 +54,8 @@ test("a robot's signature is its description's, and an SRDF's its URDF's too", (
 test("a DXF entry's render asset is its own file", () => {
   // Nothing bakes a drawing: the entry's url IS the asset, and no glb relation
   // exists for it. What the DXF pane draws is the server's flattened payload for
-  // that same file (GET /__cad/drawing).
-  const dxf = { file: "parts/bracket.dxf", kind: "dxf", url: "/__cad/asset?file=%2Fx%2Fbracket.dxf&v=1", hash: "h1" };
+  // that same file (GET /api/v1/documents/dxf/<id>/drawing).
+  const dxf = { file: "parts/bracket.dxf", kind: "dxf", url: "/api/v1/local/files?path=%2Fx%2Fbracket.dxf&v=1", hash: "h1" };
   assert.equal(entryMeshAssetUrl(dxf), dxf.url);
   assert.equal(entryMeshAssetHash(dxf), "h1");
   // An unbuilt generated drawing has no asset yet.

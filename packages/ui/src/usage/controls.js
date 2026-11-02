@@ -21,7 +21,7 @@ import { createContext, createElement, useContext, useEffect, useRef, useState }
  *
  * The page reports at most every minute it has something to say, as it is hidden, and as the view goes;
  * the host's server adds the reports up into its own batch, and sends nothing without the person's yes.
- * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cadgen/analytics.py`:
+ * The same names are the receiver's and cadgen's (`apps/api/src/events.mjs`, `cad_server/analytics.py`:
  * `CONTROLS`), which refuse any other.
  */
 export const CONTROLS = Object.freeze(/** @type {const} */ ([
@@ -66,13 +66,13 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'quick_edit_copy', 'quick_edit_queue', 'quick_edit_send',
   // The navbar, its file menu and its name menu's Models and Files (the explorer), and the app menu.
   'navbar_back', 'navbar_forward', 'models', 'models_open', 'models_filter',
-  'explorer', 'explorer_filter', 'file_copy_path', 'file_reveal', 'home',
+  'explorer', 'explorer_filter', 'file_copy_path', 'file_copy_link', 'file_reveal', 'file_open_app', 'home',
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
   // The home.
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
-  'home_open', 'home_pick', 'home_copy_path', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
+  'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',
 ]));
 
 /**

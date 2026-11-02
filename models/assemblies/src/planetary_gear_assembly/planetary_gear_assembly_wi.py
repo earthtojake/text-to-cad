@@ -6,7 +6,7 @@ states no torque, adhesive or cure value either. It calls the assembly's
 model, which the engine replays when it already holds it.
 """
 
-from cadgen.work_instruction import Instruction, work_instruction
+from cad.work_instruction import Instruction, work_instruction
 from planetary_gear_assembly import planetary_gear_assembly
 
 

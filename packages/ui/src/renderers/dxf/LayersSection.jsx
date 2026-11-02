@@ -1,16 +1,16 @@
 import { useMemo, useState } from "react";
 import { Box, Eye, EyeOff } from "lucide-react";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { Button } from "@cad/ui/primitives/button";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
   ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TreeRowChevron, TreeRowGuides, TreeRowLabel,
   TreeRowSurface, treeRowActionsClass
-} from "@text-to-cad/ui/primitives/tree-row";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/tree-row";
+import { cn } from "@cad/ui/utils";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { drawingReferenceId, layerRows } from "./drawingReferences.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // The room the eye takes at a row's right end: the row's `--row-actions`.
 const ROW_ACTIONS_WIDTH = "1.5rem";
@@ -47,7 +47,7 @@ function LayerEye({ name, hidden, onToggle }) {
  * and nothing on it is picked or snapped to) — and under a layer, the block references placed on
  * it, each a row of its block's name that selects it as a click on the drawing does (Shift adds).
  *
- * @param {{ drawing: import("@text-to-cad/core/lib/drawing2d/drawing.js").PreparedDrawing,
+ * @param {{ drawing: import("@cad/core/lib/drawing2d/drawing.js").PreparedDrawing,
  *   hiddenLayers: ReadonlySet<string>, onToggleLayer(name: string): void,
  *   selection: ReturnType<typeof import("../kit/tools/select/useSceneSelection.js").useSceneSelection> }} props
  */

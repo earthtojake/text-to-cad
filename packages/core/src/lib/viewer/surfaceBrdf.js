@@ -5,7 +5,7 @@
 // edited, so a program that names no model is three's own.
 //
 // `occt` is OCCT 7.9's PBR raster program (`occt_phong-pbr`), which the engine's look of the
-// regular modes is defined by (`cadgen/engine/render/look.py`). Where three's physical model
+// regular modes is defined by (`cad/engine/render/look.py`). Where three's physical model
 // differs from it, the model draws OCCT's:
 //   - the roughness as given (at least 0.01), with no floor of 0.0525 and no roughness added for a
 //     curved surface's screen-space normal change;

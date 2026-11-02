@@ -2,19 +2,18 @@
 name: work-instructions
 description: Write the work instructions a technician follows to build one specific assembly, as a PDF - front pages (documents, parts, materials, equipment, approvals) and a procedure table of one-action steps, each with its torque, bonding or cure values cited to the user's process specs and a figure of the assembly at that step. Use when the user asks for work instructions, assembly instructions, a build procedure, a traveler or operation sheet, or how a technician puts an assembly together.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # Work instructions
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth.
-
-A work instruction is the HOW of one build. `$engineering-drawing` documents
+A work instruction is the HOW of one build. An engineering drawing documents
 the finished state; a process spec states the company's rules for a kind of
 work (fastening, bonding, curing) across every part it makes.
 The work instruction applies those rules to ONE assembly, so the technician
 holds exactly the steps for this build instead of a hundred pages of spec.
-`cadgen.work_instruction` reads the assembly's document, checks every step
+`cad.work_instruction` reads the assembly's document, checks every step
 against it, and writes one PDF. There is no CLI: the script is the interface.
 
 **Never invent a torque, adhesive, prep, mix ratio, pot life or cure
@@ -28,19 +27,17 @@ placeholders, never defaults.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: wait five seconds and run the
+command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.3` (`~/.local/bin/cadgen +0.8.3` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.3 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-If `cadgen` is not on your PATH, or it says 0.8.3 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
 ## Workflow
 
@@ -70,12 +67,12 @@ outside the sandbox once.
    - **Its identity:** the instruction's own number and revision, and the
      assembly's part number. Never make these up.
 2. **Get the assembly.** Call its model: `bracket_assembly()`, imported from
-   the model's script, is built by cadgen's engine (a replay when the engine
+   the model's script, is built by text-to-cad's server (a replay when the server
    already holds it), and `Instruction` takes the document it returns (build
-   or fix the model with `$cad`). For an assembly with no model, give its
+   or fix the model first). For an assembly with no model, give its
    `.xbf` or `.step` path, anchored on `Path(__file__).parent`.
    `Instruction(...).tree()` prints every part and subassembly by its ref
-   (`bracket`, `pin.2`, `arm/pin`: the refs `cadgen inspect` and the viewer
+   (`bracket`, `pin.2`, `arm/pin`: the refs `cad inspect` and the viewer
    use); those, and a part's label, are what a step installs. Install a subassembly
    the model builds as one piece (a coilover, a wheel) by its ref or name: it
    is one line in the parts list, not its modelling fragments. Copies of one
@@ -122,11 +119,16 @@ outside the sandbox once.
    item; something the user says does not exist ("no torque, snug them up")
    is `Unspecified("Snug; no torque is specified", per=Stated(...))`, which
    prints as said and is not.
-6. **Run `python <name>_wi.py`.** It prints every open item, then the PDF it
-   wrote. Each open item is a question for the user: a value not stated, a
-   value in free text with no source, an inspection with no source, or a part
-   no step installs. Ask them together,
-   in one message, and rerun with the answers.
+6. **Run it.**
+
+   ```bash
+   cad run <name>_wi.py
+   ```
+
+   It prints every open item, then the PDF it wrote. Each open item is a
+   question for the user: a value not stated, a value in free text with no
+   source, an inspection with no source, or a part no step installs. Ask them
+   together, in one message, and rerun with the answers.
 7. **Read the PDF.** Check each figure shows what its step does (the parts the
    step installs are filled blue over line art; a surface it names is
    purple). Each figure is framed on its step's parts (`frame="assembly"` shows

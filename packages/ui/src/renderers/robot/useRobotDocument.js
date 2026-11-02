@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { english } from "../../i18n/core.js";
-import { entryUrdfAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
-import { isAbortError, loadRenderRobot, peekRenderRobot } from "@text-to-cad/core/lib/renderAssetClient.js";
-import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@text-to-cad/core/lib/urdf/loadRobot.js";
+import { entryUrdfAssetHash } from "@cad/core/lib/entryAssets.js";
+import { isAbortError, loadRenderRobot, peekRenderRobot } from "@cad/core/lib/renderAssetClient.js";
+import { loadRobotMeshes, peekRobotMeshes, robotMeshUrls, robotModel } from "@cad/core/lib/urdf/loadRobot.js";
 
 // Link meshes are fetched and parsed off the main thread where a worker exists, so the
 // cap only bounds sockets and the worker's queue; it is tied to cores because the
@@ -56,7 +56,7 @@ function peekRobot(entry, resources) {
 }
 
 /**
- * A robot as cadgen resolved it (`GET /__cad/robot`: the articulation to play, the visuals
+ * A robot as cadgen resolved it (`GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure`: the articulation to play, the visuals
  * to draw and the facts a person reads back) and every mesh its visuals name, as the
  * once-built part list a scene is made from. URDF, SRDF (its paired URDF, with the SRDF's
  * semantics on it) and SDF are one payload: nothing here asks which it was. The robot is

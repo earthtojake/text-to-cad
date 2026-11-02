@@ -5,7 +5,7 @@ Positioned in the WATCH frame (`lib/spec.py`): dial top at S.DIAL_Z, +Z up,
 12 o'clock at +Y. Unbranded — numerals and scale markings only.
 """
 
-from cadgen import model
+from cad import model
 
 from lib import watch
 

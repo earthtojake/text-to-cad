@@ -1,12 +1,12 @@
 # FileViewer
 
-`@text-to-cad/ui/file-viewer` exports the complete file view: one file by its
+`@cad/ui/file-viewer` exports the complete file view: one file by its
 absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu its name opens
 (Models and Files), renderer loading, and the loading and error pages.
 It imports no concrete renderer. Applications compose registrations from the
-separate `@text-to-cad/ui/renderers/*` entry points and their own
+separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@text-to-cad/ui/cad-viewer`), which is this component with the five
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the five
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx
@@ -27,7 +27,7 @@ path is absolute and `/`-separated (`/a/b.step`, `C:/a/b.step`); containment and
 authorization remain in the host service. The host controls navigation
 (`navigation.openFile(path)` where the view can show another file, and `home()` where it
 has a home; a view that shows one file alone has neither, and no name menu) and keeps
-`FileViewerState` in its tab store (`@text-to-cad/ui/tab-store`; `useTabViewerState`
+`FileViewerState` in its tab store (`@cad/ui/tab-store`; `useTabViewerState`
 derives it): `renderers`, under encoded `[file path, renderer ID]` keys, each the
 file's view.
 
@@ -98,16 +98,21 @@ bar in its place and gives it back as it closes. Over a file, left to right:
 - the open file's name, alone (no glyph; its chevron where it opens the name menu): a
   button that opens the name menu where the view can show another document, and plain text
   otherwise;
-- the ⋯ file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
-  manager, each only where the host's `fileActions` can do it, and no ⋯ where it can do
-  none.
+- the ⋯ file menu: Copy path; Open in, a submenu of Browser (`fileActions.perform.browser`)
+  and the file manager by its name (Finder, File Explorer, File manager: `reveal`); then the
+  host's own items (`fileMenuItems`: the CAD viewer's Export submenu). Each only where the
+  host's `fileActions` can do it (Copy path and the file manager need a file on disk: a
+  model's act on its script, `sourceFile`, and it has neither where none is named; a source moved
+  or deleted, `sourceMissing`, draws what opens it disabled with its reason), and no ⋯
+  where there is nothing. The menu and its submenus are shadcn's own width.
 
 The logo, Back and Forward, the name (where it opens the name menu) and the ⋯ are one kind of control: transparent
 at rest, the same accent background while the pointer is on it and while its menu is open, a
 pointer cursor, and no tooltip.
 
-At the right, only what a host or a file adds: the host's update button, a renderer's
-actions, and last the host's own (`navbarActions`: the web viewer's Export). A renderer's own
+At the right, only what a host or a file adds: a renderer's actions, the host's own
+(`navbarActions`: the CAD app's Full size, inline), and last, outermost, the host's update
+button. Back and Forward are a desktop row's alone: a phone's has no room for them. A renderer's own
 view controls are never here: a 3D view's Projection, Display and Preview end its tool strip,
 and Preview's settings and Exit preview are Preview's bar's.
 
@@ -141,7 +146,7 @@ in through `source.search`: the client waits 150 ms after the last keystroke and
 aborts the search before it, and each match shows its path below the folder, the
 subfolders muted before the name. An answer that is `truncated` adds "Stopped early.
 Keep typing to narrow the search." The viewer server bounds both reads
-(`GET /__cad/folder`, `/__cad/search`): hidden and build folders are left out of each,
+(`GET /api/v1/local/folder`, with `q` a search): hidden and build folders are left out of each,
 and a search stops at 200 results, about 1.5 s or depth 24, walking a folder it reaches
 twice once. A pick opens the file through `navigation.openFile` and closes the popover.
 Up and Down move between the filter and the rows; Escape closes it like any popover.

@@ -1,16 +1,16 @@
 import { ListVideo, Pause, Play } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { ToolbarButton, TOOLBAR_ICON_BUTTON_CLASS } from "@text-to-cad/ui/primitives/toolbar-button";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { Button } from "@cad/ui/primitives/button";
+import { ToolbarButton, TOOLBAR_ICON_BUTTON_CLASS } from "@cad/ui/primitives/toolbar-button";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { PREVIEW_FADE_CLASS, usePreviewShown } from "../PreviewChrome.jsx";
 import PlaybackMenu from "../PlaybackMenu.jsx";
 import { AnimationTimeControl, animationControlsHaveContent, formatSeconds, playbarWords } from "./AnimationTimeControl.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const ROUTINES_TRIGGER_CLASS = cn(TOOLBAR_ICON_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
 

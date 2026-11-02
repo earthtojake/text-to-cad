@@ -11,7 +11,7 @@ The original played them as JavaScript that translated parts by label. Their dat
 - `exploded-running`, the layout `lib/explodedrun.py` made: the running cycle with each
   group of parts at a constant offset (`offsets`, `groups`), some parts hidden.
 
-Here both are GLB animations (`cadgen.gltf`), the plan's moves exactly: each unit's
+Here both are GLB animations (`cad.gltf`), the plan's moves exactly: each unit's
 translation, its track (its host's and its own) sampled every `KEY_STEP` as LINEAR keys,
 after the pose; `exploded-running` poses the running cycle at every key, holds each group
 at its offset, and hides the parts the original hid (a GLB has no visibility channel:
@@ -24,7 +24,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from cadgen.gltf import animation
+from cad.gltf import animation
 
 PLAN = Path(__file__).with_name("explode_plan.json")
 KEY_STEP = 0.05    # s between an explode track's sampled keys

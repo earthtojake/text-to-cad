@@ -1,5 +1,5 @@
-import { spellEngineRefs } from "@text-to-cad/core/lib/cadRefs.js";
-import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
+import { spellEngineRefs } from "@cad/core/lib/cadRefs.js";
+import { xbfElementId } from "@cad/core/lib/xbf/xbfScene.js";
 
 // An engine document's tree as a STEP's model tree presented an assembly: its
 // assemblies over their children and each placed part a leaf, its faces and edges never rows
@@ -13,7 +13,7 @@ import { xbfElementId } from "@text-to-cad/core/lib/xbf/xbfScene.js";
 // name's stem fold into one row carrying the count, as a STEP's repeated components do.
 //
 // Each node, and each element of a part, is also a ref into the document as the engine spells it
-// (`spellEngineRefs`, `cadgen.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
+// (`spellEngineRefs`, `cad.engine.refs`): `refOf` and `elementRefOf`, over the engine's tree
 // itself, never the rows a fold made.
 
 /**

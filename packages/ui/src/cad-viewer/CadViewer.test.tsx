@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
-import { unavailablePromptContext } from '@text-to-cad/core/prompt';
+import { unavailablePromptContext } from '@cad/core/prompt';
 import type { FileViewerProps } from '../file-viewer/types.js';
 // The built package: its renderers' modules are JSX in `.js`, which only the build compiles.
 import { CadViewer, createCadFileSource } from '../../dist/cad-viewer/index.js';
@@ -240,16 +240,17 @@ test('a document named by its id is its row, joined by id: the host hears its fi
   expect(detached.getByText('This model’s script is gone')).toBeTruthy();
 });
 
-test("the host's Full size and Open in browser are the navbar's host actions, Full size first and Open in browser last, around a host's Export", () => {
+test("the host's Full size is the navbar's one host action: Export is the file menu's, never the navbar's", () => {
   const client = cadClient();
   const view = (extra: object) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file=""
     library={library} onShow={() => {}} {...extra} />;
-  const { rerender } = render(view({ fullSize: <b data-full="" />, openInBrowser: <i data-open="" /> }));
+  const { rerender } = render(view({ fullSize: <b data-full="" /> }));
   const { container } = render(<>{props().navbarActions}</>);
-  expect([...container.querySelectorAll('[data-full], [data-open]')].map(node => node.tagName)).toEqual(['B', 'I']);
-  // A host that hands neither: the navbar's actions are the Export controls' alone (none without downloads).
+  expect([...container.querySelectorAll('[data-full]')].map(node => node.tagName)).toEqual(['B']);
+  expect(container.querySelector('[data-export-menu]')).toBeNull();
+  // A host that hands none: the navbar has no host action, and the file menu no Export without downloads.
   rerender(view({}));
-  expect(props().navbarActions ?? null).toBeNull();
+  expect([props().navbarActions ?? null, props().fileMenuItems ?? null]).toEqual([null, null]);
 });
 
 test("a model's Files starts where the explorer was last this tab, else the person's home folder, never the script's", async () => {

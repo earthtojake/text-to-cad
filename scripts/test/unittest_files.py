@@ -18,10 +18,12 @@ which `-m unittest` would run silently.
 when a run is slow.
 
 Each FILE runs in its own interpreter, ``--jobs`` at a time (default one), with an engine
-directory of its own (``CADGEN_ENGINE_DIR``): a build it asks for without naming one runs on
+directory of its own (``CAD_ENGINE_DIR``): a build it asks for without naming one runs on
 an engine daemon of that file's alone, never on a developer's own, and a daemon the file left
-running there is stopped once it ends (``stop_engine``). Its ``CADGEN_CACHE_DIR``,
-``CADGEN_STATE_DIR`` and ``CADGEN_LAUNCHER_DIR`` are folders of its own that do not exist yet, so
+running there is stopped once it ends (``stop_engine``). Its ``CAD_CACHE_DIR``,
+``CAD_STATE_DIR`` and ``CAD_LAUNCHER_DIR`` are folders of its own, the state folder holding nothing but
+this run's interpreter registered as its current installation (``engine_daemon.register``: the
+installation whose engine a client starts, where with none it starts none), so
 nothing a test starts reaches a developer's cadgen 0.7 store, their registry of documents, their
 installations or their ``cadgen`` command; a record that this run's cadgen writes in the
 developer's own state folder anyway, or that command written, fails the run, named with the test
@@ -55,7 +57,7 @@ import unittest
 # hang runs out the CI job's timeout and says nothing about where it is.
 FILE_HANG_SECONDS = 15 * 60
 # A file's engine daemon goes when the file ends (``stop_engine``): an engine never stops on a
-# timer, so one a killed run leaves behind runs until it is stopped (``cadgen stop`` with its
+# timer, so one a killed run leaves behind runs until it is stopped (``cad stop`` with its
 # folder) or its folder is removed (an engine whose door is gone stops).
 
 # Stopping a file's daemon waits for its workers to exit.
@@ -121,8 +123,8 @@ def load_file(loader: unittest.TestLoader, path: str, top: str) -> unittest.Test
     return loader.loadTestsFromModule(module)
 
 
-# What a person's cadgen registers in its state folder (``cadgen.engine.registry``,
-# ``cadgen._internal.installations``): documents' records, engines' records and the page token,
+# What a person's cadgen registers in its state folder (``cad_server.engine.registry``,
+# ``cad_server._internal.installations``): documents' records, engines' records and the page token,
 # installations' records. A name ending ``.tmp`` is a write in flight (``registry.Folder``).
 REGISTERED = ("documents", "engines", "installations")
 # A file's line naming what appeared in the developer's own places while one of its tests ran.
@@ -217,6 +219,18 @@ def _counts(output: str) -> dict[str, int]:
     return counts
 
 
+# The three packages' source trees under the checkout, the library's first (common.sh's
+# PACKAGE_SOURCES): what the run's own helpers import.
+SOURCES = (("packages", "cad", "src"), ("packages", "cad-server", "src"),
+           ("packages", "cad-mcp", "src"))
+
+
+def _source_path(top: str) -> str:
+    """``PYTHONPATH`` naming the checkout's packages, then whatever this run's already names."""
+    return os.pathsep.join(filter(None, [*(os.path.join(top, *source) for source in SOURCES),
+                                         os.environ.get("PYTHONPATH", "")]))
+
+
 def stop_engine(top: str, engine_dir: str) -> None:
     """Stop the engine daemon a file left running in its own engine directory, if it left one."""
     try:
@@ -225,29 +239,26 @@ def stop_engine(top: str, engine_dir: str) -> None:
         return
     if not any(name.endswith((".door", ".port")) for name in names):
         return
-    env = {**os.environ, "CADGEN_ENGINE_DIR": engine_dir,
-           "PYTHONPATH": os.pathsep.join(filter(None, [os.path.join(top, "packages", "cadgen", "src"),
-                                                       os.environ.get("PYTHONPATH", "")]))}
-    stopped = subprocess.run([sys.executable, "-P", "-c", "from cadgen.engine import api; api.stop()"],
+    env = {**os.environ, "CAD_ENGINE_DIR": engine_dir, "PYTHONPATH": _source_path(top)}
+    stopped = subprocess.run([sys.executable, "-P", "-c", "from cad.engine import api; api.stop()"],
                              env=env, capture_output=True, text=True, timeout=ENGINE_STOP_SECONDS)
     if stopped.returncode:
         raise RuntimeError(f"the test engine daemon in {engine_dir} did not stop: {stopped.stdout}{stopped.stderr}")
 
 
 def _engine_python(top: str, code: str, **env: str) -> subprocess.CompletedProcess:
-    """``code`` run against this checkout's cadgen, the environment as this run's but ``env``."""
-    given = {key: value for key, value in os.environ.items() if key != "CADGEN_ENGINE_DIR"}
-    given["PYTHONPATH"] = os.pathsep.join(filter(None, [os.path.join(top, "packages", "cadgen", "src"),
-                                                        os.environ.get("PYTHONPATH", "")]))
+    """``code`` run against this checkout's packages, the environment as this run's but ``env``."""
+    given = {key: value for key, value in os.environ.items() if key != "CAD_ENGINE_DIR"}
+    given["PYTHONPATH"] = _source_path(top)
     return subprocess.run([sys.executable, "-P", "-c", code], env={**given, **env}, capture_output=True, text=True,
                           timeout=ENGINE_STOP_SECONDS)
 
 
 def default_engine_door(top: str) -> str | None:
-    """Where this installation's engine has its door when nothing names its folder
-    (``daemon.default_state_dir``): the developer's own engine's place. None where it cannot be said."""
-    found = _engine_python(top, "import os; from cadgen.engine import daemon; "
-                                "print(os.path.join(daemon.default_state_dir(), daemon._tag() + "
+    """Where the device's engine has its door when nothing names its folder
+    (``places.default_engine_dir``): the developer's own engine's place. None where it cannot be said."""
+    found = _engine_python(top, "import os; from cad.engine import places; "
+                                "print(os.path.join(places.default_engine_dir(), places.NAME + "
                                 "('.port' if os.name == 'nt' else '.door')))")
     return (found.stdout.strip() or None) if found.returncode == 0 else None
 
@@ -256,27 +267,27 @@ def engine_answers(top: str, door: str) -> bool:
     """Whether an engine answers at ``door``'s folder (its file alone may be a dead engine's)."""
     if not os.path.exists(door):
         return False
-    found = _engine_python(top, "from cadgen.engine.client import request; "
+    found = _engine_python(top, "from cad.engine.client import request; "
                                 "print('yes' if request({'op': 'pid'}, start=False) else 'no')",
-                           CADGEN_ENGINE_DIR=os.path.dirname(door))
+                           CAD_ENGINE_DIR=os.path.dirname(door))
     return found.stdout.strip() == "yes"
 
 
 # Where the developer keeps what their own cadgen registers, which no test may write (every file has
-# folders of its own): the state folder (``cadgen.viewer.recents.state_dir``) and the ``cadgen``
-# command (``cadgen._internal.installations.proxy_path``), as this run's environment names them and
+# folders of its own): the state folder (``cad_server.viewer.recents.state_dir``) and the ``cadgen``
+# command (``cad_server._internal.installations.proxy_path``), as this run's environment names them and
 # as the platform does where nothing names them; and the name this run's engines give their records
-# there (``daemon._tag``: this interpreter's environment and this checkout's engine).
+# there (``places.NAME``: one engine a device, so one record).
 _PERSON_PLACES = (
     "import json, os\n"
-    "from cadgen._internal.installations import proxy_path\n"
-    "from cadgen.engine import daemon\n"
-    "from cadgen.viewer.recents import state_dir\n"
+    "from cad_server._internal.installations import proxy_path\n"
+    "from cad.engine import places as engine\n"
+    "from cad_server.viewer.recents import state_dir\n"
     "places = [(str(state_dir()), proxy_path())]\n"
-    "os.environ.pop('CADGEN_STATE_DIR', None)\n"
-    "os.environ.pop('CADGEN_LAUNCHER_DIR', None)\n"
+    "os.environ.pop('CAD_STATE_DIR', None)\n"
+    "os.environ.pop('CAD_LAUNCHER_DIR', None)\n"
     "places.append((str(state_dir()), proxy_path()))\n"
-    "print(json.dumps({'places': places, 'engine': daemon._tag(versioned=False)}))\n"
+    "print(json.dumps({'places': places, 'engine': engine.NAME}))\n"
 )
 
 
@@ -328,7 +339,7 @@ def _run_one_file(path: str, top: str, verbose: bool, env: dict[str, str],
     try:
         return _run_file(path, top, verbose, env, started, places)
     finally:
-        stop_engine(top, env["CADGEN_ENGINE_DIR"])
+        stop_engine(top, env["CAD_ENGINE_DIR"])
 
 
 def _run_file(path: str, top: str, verbose: bool, env: dict[str, str], started: float,
@@ -394,17 +405,22 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
             return _run_one_file(path, top, verbose, env, places=places)
         finally:
             running.discard(path)
+    from tests.python.support.engine_daemon import register
+
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = []
             for index, path in enumerate(files):
                 # A state folder and a command folder of its own too: the engine's registry of
                 # documents (and Recents), the installations and the ``cadgen`` command are the
-                # developer's, never a test's.
-                env = {**os.environ, **shared, "CADGEN_ENGINE_DIR": os.path.join(engines, f"e{index}"),
-                       "CADGEN_STATE_DIR": os.path.join(engines, f"s{index}"),
-                       "CADGEN_CACHE_DIR": os.path.join(engines, f"c{index}"),
-                       "CADGEN_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                # developer's, never a test's. Its state folder registers the file's interpreter as its
+                # current installation, as an installation registers itself: a client starts no engine
+                # with none.
+                env = {**os.environ, **shared, "CAD_ENGINE_DIR": os.path.join(engines, f"e{index}"),
+                       "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
+                       "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
+                       "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                register(env["CAD_STATE_DIR"])
                 futures.append(pool.submit(run_one, path, env))
             for future in concurrent.futures.as_completed(futures):
                 path, code, output, seconds = future.result()
@@ -412,7 +428,7 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 if door is not None and not developers and engine_answers(top, door):
                     beside = ", ".join(sorted(running)) or "none"
                     leaked.append(f"{door}, after {path} (running beside it: {beside})")
-                    _engine_python(top, "from cadgen.engine import api; api.stop()", CADGEN_ENGINE_DIR=os.path.dirname(door))
+                    _engine_python(top, "from cad.engine import api; api.stop()", CAD_ENGINE_DIR=os.path.dirname(door))
                 for where, test in _OUTSIDE.findall(output):
                     seen_in.setdefault(where, []).append(f"{test} ({path})")
                 output = _OUTSIDE.sub("", output)

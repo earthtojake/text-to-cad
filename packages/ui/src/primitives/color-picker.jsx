@@ -1,17 +1,17 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import * as React from "react"
 import { Pipette } from "lucide-react"
 
-import { useI18n } from "@text-to-cad/ui/i18n"
-import { cn } from "@text-to-cad/ui/utils"
+import { useI18n } from "@cad/ui/i18n"
+import { cn } from "@cad/ui/utils"
 import { capturePointer } from "../lib/pointerCapture.js"
-import { Button } from "@text-to-cad/ui/primitives/button"
-import { Input } from "@text-to-cad/ui/primitives/input"
+import { Button } from "@cad/ui/primitives/button"
+import { Input } from "@cad/ui/primitives/input"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@text-to-cad/ui/primitives/popover"
+} from "@cad/ui/primitives/popover"
 
 const HEX_COLOR_PATTERN = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const FORMAT_OPTIONS = ["hex", "rgb", "hsl"]

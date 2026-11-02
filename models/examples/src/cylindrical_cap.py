@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Cylindrical cap with hollow interior, top boss, and rounded external edges.
 
 from lib.simple_model_library import make_cylindrical_cap
