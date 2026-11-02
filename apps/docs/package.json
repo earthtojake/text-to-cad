@@ -1,6 +1,6 @@
 {
   "name": "cad-skills-docs",
-  "version": "0.8.3",
+  "version": "0.10.0",
   "license": "MIT",
   "private": true,
   "scripts": {
@@ -9,13 +9,14 @@
     "start": "next start",
     "lint": "eslint",
     "check": "npm run lint && npm run build && npm run icon:verify",
-    "predev": "npm run icon:generate",
-    "prebuild": "npm run icon:generate",
+    "predev": "npm run installer:copy && npm run icon:generate",
+    "prebuild": "npm run installer:copy && npm run icon:generate",
     "icon:generate": "node scripts/icon/export.mjs",
-    "icon:verify": "node scripts/icon/verify.mjs"
+    "icon:verify": "node scripts/icon/verify.mjs",
+    "installer:copy": "node scripts/install-scripts.mjs"
   },
   "dependencies": {
-    "@text-to-cad/core": "*",
+    "@cad/core": "*",
     "@vercel/analytics": "^2.0.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

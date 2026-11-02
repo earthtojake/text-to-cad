@@ -43,7 +43,7 @@ good answer from a bad one. The keys are in [study-file.md](study-file.md).
 
 1. Prefer references the user selected in the Viewer: they arrive as `/work/bracket.step#bracket/face 17` and are
    exact.
-2. Otherwise run `cadgen fea faces part.step` and match by the hint (`plane, normal -Z, largest`),
+2. Otherwise run `cad fea faces part.step` and match by the hint (`plane, normal -Z, largest`),
    the centre, and the area. "The base", "the mounting face" and "the bottom" usually mean the
    largest planar face with a downward normal; "the top of the upright" is a small planar face at
    the highest Z. A hole is a `cylinder`.
@@ -139,13 +139,13 @@ in g (1 g = 9.81 m/s²).
 ## The solver
 
 - Every study is solved by CalculiX (`ccx`), 2.20 or newer, which the person installs: `conda
-  install -c conda-forge calculix`, or the `calculix-ccx` package on Debian and Ubuntu. cadgen runs
-  `CADGEN_CCX` when it is set, else `ccx` on PATH. cadgen meshes with netgen, writes CalculiX's
+  install -c conda-forge calculix`, or the `calculix-ccx` package on Debian and Ubuntu. text-to-cad runs
+  `CAD_CCX` when it is set, else `ccx` on PATH. It meshes with netgen, writes CalculiX's
   input (each part its own element set and material, a roller on a sloped or curved face in its own
   frame), runs it, and reads the displacements, the reactions and the stress at each element's
   integration points back.
 - A missing `ccx`, or one older than 2.20, stops the solve before meshing with an error naming how
-  to install it. cadgen downloads nothing and has no fallback solver.
+  to install it. text-to-cad downloads nothing and has no fallback solver.
 - The result names the version that ran: `mesh.solver` in the result (`calculix 2.23 (C3D10)`),
   also at the end of the first line the command prints. A solve that runs past an hour is stopped
   and says so.

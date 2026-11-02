@@ -1,5 +1,5 @@
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { FEA_BOTTOM_LINE } from "./feaChrome.js";
 import { fieldWord } from "./fea/fields.js";

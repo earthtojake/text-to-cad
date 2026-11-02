@@ -4,8 +4,8 @@ Isotropic, linear, room temperature. A static study reads E, ν and yield, and d
 `gravity` or `acceleration` load.
 
 **The model's own material is the default.** A part solved from its `.xbf` with no `material` in
-the study takes the material its model set (`part.material = bd_materials.metals.aluminum()`, as
-`$cad` sets it). bd_materials gives each mechanical property as a range, and a study reads:
+the study takes the material its model set (`part.material = bd_materials.metals.aluminum()`).
+bd_materials gives each mechanical property as a range, and a study reads:
 
 - **yield**: the range's low end, so the safety factor is against the weakest the material may be;
 - **E and ν**: the middle of their ranges (they set the displacement, not whether the part holds);

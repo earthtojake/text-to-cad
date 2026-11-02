@@ -1,5 +1,5 @@
-import { cn } from "@text-to-cad/ui/utils";
-import { TREE_GLYPH_STROKE } from "@text-to-cad/ui/primitives/tree-row";
+import { cn } from "@cad/ui/utils";
+import { TREE_GLYPH_STROKE } from "@cad/ui/primitives/tree-row";
 
 /**
  * Study's setup glyphs, drawn as the model draws its markers (`feaMarkers.js`), in lucide's 24px

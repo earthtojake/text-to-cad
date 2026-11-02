@@ -1,13 +1,13 @@
 import { ChevronDown, RotateCcw } from "lucide-react";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS, ToolPanelHeadAction } from "../tools/ToolPanel.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 export const NO_PRESET_VALUE = "__none__";
 export const DEFAULT_POSE_VALUE = "__default__";

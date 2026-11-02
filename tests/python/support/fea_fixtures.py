@@ -1,7 +1,7 @@
-"""Shared fixtures for the FEA suites (``tests/python/packages/cadgen/test_fea*.py``).
+"""Shared fixtures for the FEA suites (``tests/python/packages/cad/test_fea*.py``).
 
-Importing this puts cadgen's source on ``sys.path`` and says whether CalculiX, which
-every solve needs, is installed; the heavy imports (build123d, numpy, cadgen.fea)
+Importing this puts the packages' sources on ``sys.path`` and says whether CalculiX, which
+every solve needs, is installed; the heavy imports (build123d, numpy, cad.fea)
 stay inside the helpers, so a suite's parse tests run without it.
 """
 
@@ -17,11 +17,11 @@ import unittest
 from contextlib import contextmanager, redirect_stderr
 from pathlib import Path
 
-from tests.python.support.paths import REPO_ROOT, add_repo_path
+from tests.python.support.paths import REPO_ROOT, add_sources
 
-add_repo_path("packages/cadgen/src")
+add_sources()
 
-from cadgen._internal.fea.mesh import require_fea_stack  # noqa: E402
+from cad._internal.fea.mesh import require_fea_stack  # noqa: E402
 
 try:
     require_fea_stack()
@@ -50,8 +50,8 @@ def quiet():
 
 
 def solve(step: Path, out: Path, study: dict, **options):
-    """``cadgen.fea.solve`` with its progress lines silenced."""
-    from cadgen import fea
+    """``cad.fea.solve`` with its progress lines silenced."""
+    from cad import fea
 
     with quiet():
         return fea.solve(step, out, study=study, **options)
@@ -59,7 +59,7 @@ def solve(step: Path, out: Path, study: dict, **options):
 
 def reported(result) -> dict:
     """The result as ``--json`` prints it: everything a solve says, the GLB aside."""
-    from cadgen._internal.cli_from_function import result_payload
+    from cad_server._internal.cli_from_function import result_payload
 
     return result_payload(result)
 
@@ -73,7 +73,7 @@ def class_directory(cls) -> Path:
 
 def heavy_at_import(*modules: str) -> str:
     """The heavy modules importing ``modules`` pulls into a fresh interpreter: "" when they are stdlib-only at import."""
-    code = (f"import sys; sys.path.insert(0, 'packages/cadgen/src'); import {', '.join(modules)};"
+    code = (f"import sys; sys.path.insert(0, 'packages/cad/src'); import {', '.join(modules)};"
             "print(','.join(m for m in ('numpy', 'scipy', 'netgen', 'OCP') if m in sys.modules))")
     return subprocess.run([sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.strip()
 
@@ -108,7 +108,7 @@ def box_step(directory: Path, name: str, size: tuple[float, float, float], align
 
 def _listing(step_or_listing):
     if isinstance(step_or_listing, (str, Path)):
-        from cadgen import fea
+        from cad import fea
 
         return fea.faces(step_or_listing)
     return step_or_listing

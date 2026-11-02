@@ -1,10 +1,10 @@
 /**
- * The FEA result viewer GlbRenderer loads only for a GLB that carries a result (`cadgen fea solve`): one module, so the
+ * The FEA result viewer GlbRenderer loads only for a GLB that carries a result (`cad fea solve`): one module, so the
  * bundler makes it a chunk of its own and a plain GLB never fetches it. Everything GlbRenderer uses of the FEA viewer
  * is here, by name.
  */
 import { useLayoutEffect } from "react";
-import { clamp } from "@text-to-cad/core/common/numbers.js";
+import { clamp } from "@cad/core/common/numbers.js";
 import { framingInset } from "./feaChrome.js";
 
 export { default as FeaSurface } from "./FeaSurface.jsx";

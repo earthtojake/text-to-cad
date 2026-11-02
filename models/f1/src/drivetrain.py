@@ -4,7 +4,7 @@ Built in car coordinates by `lib/drivetrain.py`; `f1.py` calls it in the car's b
 a `@memo` stage of its own.
 """
 
-from cadgen import memo
+from cad import memo
 
 from drivetrain_ancillaries import drivetrain_ancillaries
 from gearbox_casing import gearbox_casing

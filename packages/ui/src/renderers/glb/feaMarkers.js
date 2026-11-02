@@ -14,7 +14,7 @@
  * model hides it (the x-ray look), so a fixture under the part reads as under it, never as standing
  * on the face in front. Never picked, and disposed with the markers.
  */
-import { clamp } from "@text-to-cad/core/common/numbers.js";
+import { clamp } from "@cad/core/common/numbers.js";
 import { forceDirection } from "./fea/setup.js";
 import { filePositions } from "./feaResult.js";
 

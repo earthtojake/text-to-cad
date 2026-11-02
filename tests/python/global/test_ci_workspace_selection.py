@@ -28,6 +28,7 @@ _spec.loader.exec_module(selector)
 GATED = set(JOBS) - {"changes", "version"}
 TRACKED = subprocess.run(["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.split()
 CADGEN, POLICY, SKILLS = selector.CADGEN_SUITE, selector.POLICY_SUITE, selector.SKILL_SUITES
+LIBRARY, SERVER, SHIM = f"{CADGEN}/cad", f"{CADGEN}/cad_server", f"{CADGEN}/cad_mcp"
 
 
 def route(*paths: str) -> dict[str, str]:
@@ -68,7 +69,7 @@ class EveryTestRunsInCI(unittest.TestCase):
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^apps/api/src/[^/]*\.test\.mjs$",                   # test-api.sh (node --test)
             r"^scripts/test/check-(dependencies|kit-boundaries|ui-strings)\.test\.mjs$",  # test-js.sh
-            r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
+            r"^tests/python/packages/cad(_server|_mcp)?/(.*/)?test_[^/]*\.py$",  # test-python.sh cadgen
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
@@ -90,7 +91,7 @@ class EveryTestRunsInCI(unittest.TestCase):
         self.assertEqual(suites, {f"{SKILLS}/{path.name}" for path in (REPO_ROOT / SKILLS).iterdir() if path.is_dir()})
 
     def test_the_light_contracts_run_on_every_change_and_install_nothing(self):
-        for path in ("models/examples/src/part.py", "README.md", "packages/cadgen/src/cadgen/engine/api.py"):
+        for path in ("models/examples/src/part.py", "README.md", "packages/cad/src/cad/engine/api.py"):
             with self.subTest(path=path):
                 selected = route(path)
                 self.assertEqual(selected["skills"], "true")
@@ -225,19 +226,25 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("skills/gcode/scripts/orca_presets.py"), {"skills"})
 
     def test_a_test_file_runs_itself(self):
-        self.assertEqual(tests_for(f"{CADGEN}/test_settings.py")["cadgen_tests"], [f"{CADGEN}/test_settings.py"])
-        self.assertEqual(jobs_for(f"{CADGEN}/test_settings.py"), {"cadgen-linux", "cadgen-windows", "skills"})
+        self.assertEqual(tests_for(f"{SERVER}/test_settings.py")["cadgen_tests"], [f"{SERVER}/test_settings.py"])
+        self.assertEqual(jobs_for(f"{SERVER}/test_settings.py"), {"cadgen-linux", "cadgen-windows", "skills"})
+        self.assertEqual(tests_for(f"{SHIM}/test_protocol.py")["cadgen_tests"], [f"{SHIM}/test_protocol.py"])
         self.assertEqual(tests_for(f"{POLICY}/test_cli_stream_contract.py")["skills_policy"],
                          [f"{POLICY}/test_cli_stream_contract.py"])
         self.assertEqual(tests_for(f"{SKILLS}/dfm/test_mold_tool.py")["skills_tests"], [f"{SKILLS}/dfm/test_mold_tool.py"])
-        self.assertEqual(tests_for(f"{CADGEN}/engine/formats_golden/stl.png")["cadgen_tests"], [CADGEN])
+        self.assertEqual(tests_for(f"{LIBRARY}/engine/formats_golden/stl.png")["cadgen_tests"], [CADGEN])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):
         # The engine is no leaf: every build, export, snapshot and served document is its.
-        for path in ("packages/cadgen/src/cadgen/geometry.py", "packages/cadgen/src/cadgen/engine/api.py",
-                     "packages/cadgen/src/cadgen/engine/page/viewer.js"):
+        for path in ("packages/cad/src/cad/geometry.py", "packages/cad/src/cad/engine/api.py",
+                     "packages/cad/src/cad/engine/serve.py",
+                     "packages/cad-server/src/cad_server/engine/daemon.py",
+                     "packages/cad-server/src/cad_server/cli/setup.py", "packages/cad/pyproject.toml",
+                     "packages/aliases/cadgen/pyproject.toml"):
             with self.subTest(path=path):
-                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"})
+                # The library's pyproject also pins the mesher's floor (its build123d extra): the solves run too.
+                solves = {"fea"} if path == "packages/cad/pyproject.toml" else set()
+                self.assertEqual(jobs_for(path), GATED - {"core-js", "web", "mcp", "api", "docs", "fea"} | solves)
                 chosen = tests_for(path)
                 self.assertEqual(chosen["cadgen_tests"], [CADGEN])
                 self.assertEqual(chosen["skills_tests"], [])
@@ -246,59 +253,68 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_the_solver_runs_its_own_job_with_calculix_installed(self):
         self.assertIn("calculix-ccx", JOBS["fea"])
-        self.assertNotIn("cadgen[fea]", JOBS["fea"])              # netgen comes with cadgen: no second install
+        self.assertNotIn("cad[fea]", JOBS["fea"])                 # netgen comes with the kernel: no second install
         # The accuracy tests' margins were measured with this mesher; pyproject only sets a floor.
         self.assertIn('"netgen-mesher==6.2.2608"', JOBS["fea"])
         # One glob runs every FEA suite, so a new test_fea_<name>.py needs no workflow edit.
-        self.assertIn(f"{CADGEN}/test_fea*.py", JOBS["fea"])
+        self.assertIn(f"{LIBRARY}/test_fea*.py", JOBS["fea"])
         self.assertIn("timeout-minutes: 15", JOBS["fea"])
         # Every FEA suite on disk is one the glob runs, and a change to it selects the job.
-        on_disk = sorted(path.name for path in (REPO_ROOT / CADGEN).glob("test_fea*.py"))
+        on_disk = sorted(path.name for path in (REPO_ROOT / LIBRARY).glob("test_fea*.py"))
         self.assertLessEqual({"test_fea.py", "test_fea_assembly.py", "test_fea_checks.py"}, set(on_disk))
         for name in on_disk:
             with self.subTest(name=name):
-                self.assertIn("fea", jobs_for(f"{CADGEN}/{name}"))
+                self.assertIn("fea", jobs_for(f"{LIBRARY}/{name}"))
         # The engine and shared modules FEA reads and writes through run its solves too; the rest of the engine doesn't.
-        for path in ("packages/cadgen/src/cadgen/engine/refs.py", "packages/cadgen/src/cadgen/engine/executables.py",
-                     "packages/cadgen/src/cadgen/_internal/atomic_replace.py"):
+        for path in ("packages/cad/src/cad/engine/refs.py", "packages/cad/src/cad/engine/executables.py",
+                     "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/_internal/atomic_replace.py",
+                     "packages/cad-server/src/cad_server/_internal/cli_from_function.py"):
             with self.subTest(path=path):
                 self.assertIn("fea", jobs_for(path))
-        self.assertNotIn("fea", jobs_for("packages/cadgen/src/cadgen/engine/api.py"))
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/engine/api.py"))
         for path in (
-            "packages/cadgen/src/cadgen/_internal/fea/solve.py",
-            "packages/cadgen/src/cadgen/fea.py",
-            "packages/cadgen/src/cadgen/cli/fea_solve.py",
-            "packages/cadgen/src/cadgen/results.py",
+            "packages/cad/src/cad/_internal/fea/solve.py",
+            "packages/cad/src/cad/fea.py",
+            "packages/cad-server/src/cad_server/cli/fea_solve.py",
+            "packages/cad/src/cad/results.py",
         ):
             with self.subTest(path=path):
                 self.assertIn("fea", jobs_for(path))
         # The skill's pages are its own suite's, which reads them against the code they document; no solve reads them.
         self.assertEqual(jobs_for("skills/fea/SKILL.md"), {"skills"})
         self.assertEqual(tests_for("skills/fea/references/study-file.md")["skills_tests"], [f"{SKILLS}/fea"])
-        self.assertEqual(tests_for("packages/cadgen/src/cadgen/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
-        self.assertEqual(jobs_for(f"{CADGEN}/test_fea.py"), {"cadgen-linux", "cadgen-windows", "fea", "skills"})
-        self.assertNotIn("fea", jobs_for("packages/cadgen/src/cadgen/geometry.py"))
+        self.assertEqual(tests_for("packages/cad/src/cad/_internal/fea/study.py")["skills_tests"], [f"{SKILLS}/fea"])
+        self.assertEqual(jobs_for(f"{LIBRARY}/test_fea.py"), {"cadgen-linux", "cadgen-windows", "fea", "skills"})
+        self.assertNotIn("fea", jobs_for("packages/cad/src/cad/geometry.py"))
 
     def test_the_viewer_and_the_mcp_server_reach_only_what_reaches_them(self):
-        viewer = tests_for("packages/cadgen/src/cadgen/viewer/scanner.py")
-        self.assertIn(f"{CADGEN}/viewer/test_launcher.py", viewer["cadgen_tests"])
-        self.assertIn(f"{CADGEN}/mcp/test_server.py", viewer["cadgen_tests"])
-        self.assertNotIn(f"{CADGEN}/test_flatten.py", viewer["cadgen_tests"])
-        self.assertNotIn(f"{CADGEN}/engine/test_memo.py", viewer["cadgen_tests"])
-        self.assertIn(f"{CADGEN}/test_cli_from_function.py", viewer["cadgen_tests"])  # imports every command
-        self.assertIn(f"{CADGEN}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
+        viewer = tests_for("packages/cad-server/src/cad_server/viewer/scanner.py")
+        self.assertIn(f"{SERVER}/viewer/test_launcher.py", viewer["cadgen_tests"])
+        self.assertIn(f"{SERVER}/mcp/test_server.py", viewer["cadgen_tests"])
+        self.assertNotIn(f"{LIBRARY}/test_flatten.py", viewer["cadgen_tests"])
+        self.assertNotIn(f"{LIBRARY}/engine/test_memo.py", viewer["cadgen_tests"])
+        self.assertIn(f"{SERVER}/test_cli_from_function.py", viewer["cadgen_tests"])  # imports every command
+        self.assertIn(f"{LIBRARY}/test_atomic_replace.py", viewer["cadgen_tests"])  # reads every source
         self.assertEqual(viewer["skills_tests"], [])
-        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/viewer/scanner.py"),
+        self.assertEqual(jobs_for("packages/cad-server/src/cad_server/viewer/scanner.py"),
                          {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
         # ...and drives the bundled viewer, which packaging builds.
-        self.assertEqual(route("packages/cadgen/src/cadgen/viewer/scanner.py")["web_viewer"], "true")
-        mcp = tests_for("packages/cadgen/src/cadgen/mcp/server.py")
-        self.assertIn(f"{CADGEN}/mcp/test_server.py", mcp["cadgen_tests"])
-        self.assertNotIn(f"{CADGEN}/viewer/test_launcher.py", mcp["cadgen_tests"])
-        self.assertEqual(jobs_for("packages/cadgen/src/cadgen/mcp/server.py"),
+        self.assertEqual(route("packages/cad-server/src/cad_server/viewer/scanner.py")["web_viewer"], "true")
+        mcp = tests_for("packages/cad-server/src/cad_server/mcp/server.py")
+        self.assertIn(f"{SERVER}/mcp/test_server.py", mcp["cadgen_tests"])
+        self.assertNotIn(f"{SERVER}/viewer/test_launcher.py", mcp["cadgen_tests"])
+        self.assertEqual(jobs_for("packages/cad-server/src/cad_server/mcp/server.py"),
                          {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
-        # The state directory's one definition is shared with the rest of cadgen.
-        self.assertEqual(tests_for("packages/cadgen/src/cadgen/viewer/recents.py")["cadgen_tests"], [CADGEN])
+        # The state directory's one definition is shared with the rest of the server.
+        self.assertEqual(tests_for("packages/cad-server/src/cad_server/viewer/recents.py")["cadgen_tests"], [CADGEN])
+        # The shim is a leaf too: its own suite and the tests that name it, and the wheels.
+        shim = tests_for("packages/cad-mcp/src/cad_mcp/shim.py")
+        self.assertIn(f"{SHIM}/test_shim_engine.py", shim["cadgen_tests"])
+        self.assertIn(f"{SERVER}/test_core_imports.py", shim["cadgen_tests"])
+        self.assertNotIn(f"{SERVER}/viewer/test_launcher.py", shim["cadgen_tests"])
+        self.assertNotIn(f"{LIBRARY}/engine/test_memo.py", shim["cadgen_tests"])
+        self.assertEqual(jobs_for("packages/cad-mcp/src/cad_mcp/shim.py"),
+                         {"cadgen-linux", "cadgen-windows", "skills", "packaging"})
 
     def test_ui_reaches_both_hosts_and_the_wheel_not_the_engine(self):
         self.assertEqual(jobs_for("packages/ui/src/index.ts"), {"web", "mcp", "skills", "packaging"})
@@ -307,7 +323,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("packages/ui/src/renderers/dxf/DxfRenderer.js"), {"web", "mcp", "skills", "packaging"})
         # ...but the robot payload suite holds the robot renderer's browser fixtures (cadgen's payloads) current.
         self.assertEqual(tests_for("packages/ui/src/renderers/robot/__fixtures__/arm.urdf")["cadgen_tests"],
-                         [f"{CADGEN}/test_robot_payload.py"])
+                         [f"{SERVER}/test_robot_payload.py"])
 
     def test_each_app_runs_its_own_job(self):
         self.assertEqual(jobs_for("apps/web/src/main.tsx"), {"web", "skills", "packaging"})
@@ -328,8 +344,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # models/: the planetary model and the engine code that exports it select no docs job.
         # The committed GLB selects the docs job.
         for path in ("models/assemblies/src/planetary_gear_assembly/planetary_gear_assembly.py",
-                     "packages/cadgen/src/cadgen/gltf.py",
-                     "packages/cadgen/src/cadgen/engine/animations.py"):
+                     "packages/cad/src/cad/gltf.py",
+                     "packages/cad/src/cad/engine/animations.py"):
             with self.subTest(path=path):
                 self.assertEqual(route(path)["docs"], "false")
         for path in ("apps/docs/public/hero/planetary.glb",):

@@ -1,14 +1,12 @@
 ---
 name: fea
-description: Run a linear elastic stress study on a STEP part or an assembly of bonded parts with cadgen, meshed by netgen and solved by CalculiX, reporting peak stress, safety factor and displacement as a colour map. Use when the user asks whether a part is strong enough, how much it bends, where it is most stressed, or asks for FEA or a stress simulation of a part.
+description: Run a linear elastic stress study on a STEP part or an assembly of bonded parts with text-to-cad, meshed by netgen and solved by CalculiX, reporting peak stress, safety factor and displacement as a colour map. Use when the user asks whether a part is strong enough, how much it bends, where it is most stressed, or asks for FEA or a stress simulation of a part.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # FEA: simulate a part or an assembly
-
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the repository link is only for
-provenance and release review.
 
 Use this skill to answer "will it hold, and how far does it move" for one part, or an assembly of
 parts bonded where they touch, by simulation. It meshes the saved STEP with netgen, has CalculiX
@@ -57,45 +55,42 @@ Vibration, buckling, heat, flow, fatigue, impact, contact and the rest are not i
 | Task | First action | Reference |
 | --- | --- | --- |
 | **Check a part under a load** | List its faces, write the study, solve, report. The workflow below. | [Linear static checklist](references/linear-static.md) |
-| **Check an assembly** | `cadgen fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
+| **Check an assembly** | `cad fea parts` first, then write the study with a material per part, solve, read the findings by part. | [Assemblies](#assemblies) |
 | **Compare variants of a design** | Get the study right on one variant, then map its faces onto each other variant and solve each. | [Compare variants](#compare-variants) |
 | **Pick the faces to fix and load** | Prefer face references the user selected in the Viewer (`/work/bracket.step#bracket/face 17`). Otherwise list faces and match by description. | [Face selection](references/linear-static.md#choosing-faces) |
 | **Write or edit a study** | One JSON object: material, fixtures, loads, mesh; for an assembly also parts and connections. | [Study file](references/study-file.md) |
 | **Choose a material** | The model's own (solve its `.xbf`), or E, ν and yield the user gives. | [Materials](references/materials.md) |
 | **Judge the answer** | Compare with a hand estimate, read the peak away from the fixture, refine if it matters. | [Validation](references/linear-static.md#judging-the-answer) |
 
-Modelling the part itself is `$cad`; this skill only reads a saved `.step` or `.xbf` (a model's
-`@step` or `@xbf` output, or `cadgen export <id> part.step`). Show the result GLB with
-`$cad` (its Show the model step), beside the STEP, so the user sees the colour map.
+This skill studies a part, it does not model one: build or fix the model first. It reads a saved
+`.step` or `.xbf` (a model's `@step` or `@xbf` output, or `cad export <id> part.step`). Open the
+result GLB in the CAD Viewer beside the STEP, so the user sees the colour map.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, as the `$cad` skill does:
-`cadgen fea faces`, `parts` and `solve` share one installation with it and with the CAD app's
-server:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: wait five seconds and run the
+command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.3` (`~/.local/bin/cadgen +0.8.3` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.3 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-If `cadgen` is not on your PATH, or it says 0.8.3 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
-Solving needs one thing `fea faces` and `fea parts` do not; netgen, which meshes, comes with cadgen
+Solving needs one thing `fea faces` and `fea parts` do not; netgen, which meshes, comes with text-to-cad
 on macOS, Linux x86_64 and Windows x86_64, where netgen publishes wheels (anywhere else, Linux on ARM
 among them, `fea solve` refuses, naming the platform). A solve reads the document in its own
 process, so it needs no engine running:
 
 - **The solver.** CalculiX (`ccx`) 2.20 or newer, installed by the person: `conda install -c
   conda-forge calculix`, the `calculix-ccx` package on Debian and Ubuntu, or FreeCAD 1.0 or newer
-  on macOS or Windows, which carries one. cadgen runs `CADGEN_CCX` when it is set
-  (`CADGEN_CCX=/path/to/ccx`), else the first `ccx` (or `ccx_2.2x`) on PATH, else the one inside
+  on macOS or Windows, which carries one. text-to-cad runs `CAD_CCX` when it is set
+  (`CAD_CCX=/path/to/ccx`), else the first `ccx` (or `ccx_2.2x`) on PATH, else the one inside
   FreeCAD where its installer puts it. A missing
-  or older one stops the solve with an error that says how to install it. cadgen downloads nothing
+  or older one stops the solve with an error that says how to install it. text-to-cad downloads nothing
   and has no other solver: ask the user to install CalculiX, or install it yourself with their
   permission, then run the study again. Every result names the CalculiX version that solved it.
 
@@ -108,13 +103,13 @@ you write it down ([study-file.md](references/study-file.md#units)).
 1. **List the faces.** Every study names faces by the engine's refs, the ones the Viewer copies.
 
    ```bash
-   cadgen fea faces part.step
+   cad fea faces part.step
    ```
 
    Each line is one face: ref, area, centre, surface type and a hint such as `plane, normal -Z,
    largest`. Use the hint and the centre to match the user's words ("the mounting face", "the top of
    the upright") to a ref. A document with several parts refuses with the parts it holds;
-   pass the one to list, `cadgen fea faces assembly.step --occurrence post`, or for a whole assembly
+   pass the one to list, `cad fea faces assembly.step --occurrence post`, or for a whole assembly
    follow [Assemblies](#assemblies). When two faces fit equally, ask, quoting both refs. A face
    the user selected in the Viewer arrives as `/work/bracket.step#bracket/face 17` and needs no lookup.
 
@@ -146,7 +141,7 @@ you write it down ([study-file.md](references/study-file.md#units)).
 3. **Solve.**
 
    ```bash
-   cadgen fea solve part.step FEA/part.bracket-load.glb --study study.json --json
+   cad fea solve part.step FEA/part.bracket-load.glb --study study.json --json
    ```
 
    This writes the GLB it names (the colour map on the deformed shape), and nothing else: one per
@@ -194,7 +189,7 @@ fixed. The keys are in [study-file.md](references/study-file.md#assemblies).
 1. **List the parts and joints first.**
 
    ```bash
-   cadgen fea parts assembly.step
+   cad fea parts assembly.step
    ```
 
    It prints each part (ref, name, volume), then each touching pair with its contact area and gap
@@ -246,21 +241,21 @@ refused too.
 ## Compare variants
 
 When the user wants one question answered for several versions of a design (a thicker wall, a
-longer arm, another material), each version is its own STEP, as `$cad` builds them: one model per
+longer arm, another material), each version is its own STEP: one model per
 configuration. Run the same study on each, with the faces mapped, and compare.
 
 1. **Get the study right on one variant first** (the baseline): the full [Workflow](#workflow),
    solved and checked.
 2. **Map its faces onto every other variant.** Face numbers are not stable between versions: an
    edit renumbers faces, and a ref reused unchecked can land on a different face with no
-   error. Run `cadgen fea faces variant.step` and match each face the study names by what it is,
+   error. Run `cad fea faces variant.step` and match each face the study names by what it is,
    never by its number: the same surface type and normal, a centre where the edit would move it,
    an area that changed only as the edit explains. When two faces fit equally, or the edit removed
    the face, ask, quoting the candidates. Write one study per variant (`study.<variant>.json`):
    the mapped refs, everything else identical.
 3. **Hold the mesh still.** Accuracy follows the mesh, so a difference between variants is only
    the design's when they are meshed alike: give every study the baseline's `mesh.size_mm`.
-4. **Solve each to its own result:** `cadgen fea solve variant.step FEA/variant.fea.glb --study
+4. **Solve each to its own result:** `cad fea solve variant.step FEA/variant.fea.glb --study
    study.<variant>.json`.
 5. **Report one table**, a row per variant: max von Mises and where, safety factor, max
    displacement, whether a finer re-solve ran, and the face mapping used (`baseline bracket/face 17

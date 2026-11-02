@@ -114,11 +114,11 @@ moment with a pair of opposite forces on two faces.
 
 ## Faces
 
-Face references are the engine's refs, the ones the Viewer copies and `cadgen inspect` reads:
+Face references are the engine's refs, the ones the Viewer copies and `cad inspect` reads:
 `bracket/face 17` is face 17 of the part `bracket` (`face 17` alone in a one-part document), and a
 face the document names is named by its name (`bracket/f:plate.relief.3`). A reference the user
 selected arrives after its document's path (`/work/bracket.step#bracket/face 17`); both forms are
-accepted, and the path must name the document being solved. `cadgen fea faces part.step` prints every face
+accepted, and the path must name the document being solved. `cad fea faces part.step` prints every face
 with its area, centre, surface type and a hint. In a one-part study every face must belong to the
 same part occurrence (an assembly's may be on any part).
 
@@ -128,7 +128,7 @@ face's number can change (a face the document names keeps its name while its fea
 ## Assemblies
 
 A document of several parts is solved as an assembly, bonded where parts touch. Run
-`cadgen fea parts assembly.step` first to see the parts and the pairs.
+`cad fea parts assembly.step` first to see the parts and the pairs.
 
 ```json
 {
@@ -153,7 +153,7 @@ A document of several parts is solved as an assembly, bonded where parts touch. 
   and slide, and bolts, are not in this version.
 - `contact_tolerance_mm`: default 0.1. Faces this close are touching; a gap within it is closed to
   bond the pair, and so is an overlap no thicker than it (an interference; a `gap_closed` finding
-  says which). A thicker overlap is never bonded. It is set here alone: `cadgen fea parts` lists
+  says which). A thicker overlap is never bonded. It is set here alone: `cad fea parts` lists
   against the 0.1 mm default and prints each near miss's gap, which is what to set it from.
 - Faces: `post/face 23` is face 23 of the part `post`; faces may be on any part. A face that
   another part only partly covers (a plate's top with a post standing on it) holds or loads its
@@ -198,7 +198,7 @@ when the user says the load is known exactly.
 ## `checks`
 
 What the result is judged by; pick them from what the user asked. Optional; left out, the stress
-check alone. cadgen evaluates every check on the written solve and writes each result (`kind`,
+check alone. text-to-cad evaluates every check on the written solve and writes each result (`kind`,
 `label`, `value`, `limit`, `unit`, `ratio` = value over limit, `close_at`, `status` of `fails`,
 `close` or `passes`, and `where`, the face and point of the worst value) into the summary
 (`summary.checks`), the GLB (`extras.checks`) and the CLI lines. The Viewer's verdict says how many
@@ -219,7 +219,7 @@ or key. A failing displacement check is an error finding ("'Tip sag' moves 2.1 m
 
 ## What comes out
 
-`cadgen fea solve part.step OUT` writes the GLB `OUT` names (which must end in `.glb`), and nothing
+`cad fea solve part.step OUT` writes the GLB `OUT` names (which must end in `.glb`), and nothing
 else unless asked:
 
 - `OUT`: the boundary surface, deformed and coloured by von Mises (blue low, red high); the value

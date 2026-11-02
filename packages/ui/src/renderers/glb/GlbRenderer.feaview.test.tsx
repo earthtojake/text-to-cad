@@ -38,7 +38,7 @@ beforeEach(() => {
 });
 afterEach(() => { vi.restoreAllMocks(); cleanup(); vi.unstubAllGlobals(); document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()); });
 
-// A result, as `cadgen fea solve` writes it: the file draws its displacement ×10.
+// A result, as `cad fea solve` writes it: the file draws its displacement ×10.
 const STATIC = {
   generator: 'cadgen fea', name: 'bracket von Mises', deformation_scale: 10, safety_factor: 5.83, document: 'part.step', occurrence: 'bracket',
   ramp: [[0, [0.05, 0.10, 0.90]], [0.25, [0.05, 0.85, 0.95]], [0.5, [0.10, 0.85, 0.15]], [0.75, [0.98, 0.90, 0.10]], [1, [0.90, 0.08, 0.05]]],

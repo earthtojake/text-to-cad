@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Shaft collar with a central bore, radial set-screw hole, and chamfered faces.
 
 from lib.simple_model_library import make_shaft_collar

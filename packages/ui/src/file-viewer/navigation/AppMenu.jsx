@@ -5,9 +5,9 @@ import { DropdownMenu as MenuPrimitive } from "radix-ui";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { LOCALES, useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { LOCALES, useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 import { TooltipHint } from "../../primitives/tooltip.jsx";
 
 import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";

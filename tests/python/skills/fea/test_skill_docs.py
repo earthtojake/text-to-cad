@@ -8,7 +8,7 @@ import unittest
 
 from tests.python.support.paths import add_repo_path, repo_path
 
-add_repo_path("packages/cadgen/src")
+add_repo_path("packages/cad/src")
 
 SKILL = repo_path("skills", "fea")
 
@@ -19,7 +19,7 @@ def _pages() -> list:
 
 class SkillDocs(unittest.TestCase):
     def test_the_study_keys_and_the_check_kinds_are_the_parsers(self):
-        from cadgen._internal.fea.study import CHECK_KEYS, STUDY_KEYS
+        from cad._internal.fea.study import CHECK_KEYS, STUDY_KEYS
 
         text = (SKILL / "references" / "study-file.md").read_text(encoding="utf-8")
         keys = text.split("## Keys", 1)[1].split("\n## ", 1)[0]
@@ -29,7 +29,7 @@ class SkillDocs(unittest.TestCase):
         self.assertEqual(re.findall(r"^\| `([a-z_]+)` \|", checks, re.M)[1:], list(CHECK_KEYS))  # past the header
 
     def test_the_setup_names_the_mesher_and_the_installed_solver(self):
-        from cadgen._internal.fea.calculix import CCX_ENV, MINIMUM, install_hint
+        from cad._internal.fea.calculix import CCX_ENV, MINIMUM, install_hint
 
         text = " ".join((SKILL / "SKILL.md").read_text(encoding="utf-8").split())
         setup = text.split("## Setup", 1)[1].split("## Workflow", 1)[0]

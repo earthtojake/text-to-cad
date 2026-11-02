@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
@@ -16,7 +16,7 @@ import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);
@@ -24,7 +24,7 @@ const EXPLODE_OFF = Object.freeze({ exploded: { enabled: false, amount: 0 } });
 const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: false } });
 
 /**
- * Whether a loaded scene carries an FEA result: a mesh `cadgen fea solve` wrote. Its generator alone says so; what
+ * Whether a loaded scene carries an FEA result: a mesh `cad fea solve` wrote. Its generator alone says so; what
  * else the result holds is `feaResult.js`'s to read, and one that does not read is the load's alert, never a plain GLB.
  */
 function carriesFeaResult(root) {

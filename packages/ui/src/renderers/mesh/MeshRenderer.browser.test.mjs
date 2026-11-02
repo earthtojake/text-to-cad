@@ -66,11 +66,11 @@ before(async () => {
     const name = url.pathname.split('/').pop();
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
+    else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: Object.entries(FILES).map(([file, data]) => (
-        { kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.end(JSON.stringify({ documents: (Object.entries(FILES).map(([file, data]) => (
+        { kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length }))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }

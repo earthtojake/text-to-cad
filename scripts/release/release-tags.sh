@@ -63,3 +63,34 @@ version_greater() {
   fi
   [ "$((10#$left_patch))" -gt "$((10#$right_patch))" ]
 }
+
+# A version PyPI will never take: the PyPI project `cad` published it before it was transferred to this
+# project (scripts/release/unavailable-versions.txt). A trailing `.0` is insignificant to PyPI, so the
+# comparison drops trailing `.0` parts from both sides (`1.0.0` is the listed `1.0`).
+#   refuse_unavailable_version 0.9.0  -> prints the refusal on stderr and fails; succeeds otherwise
+UNAVAILABLE_VERSIONS_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/unavailable-versions.txt"
+
+_release_without_trailing_zeros() {
+  local version="$1"
+  while [[ "$version" == *.0 ]]; do version="${version%.0}"; done
+  printf '%s\n' "$version"
+}
+
+refuse_unavailable_version() {
+  local version="$1" want listed
+  [ -f "$UNAVAILABLE_VERSIONS_FILE" ] || {
+    echo "missing scripts/release/unavailable-versions.txt" >&2
+    return 1
+  }
+  want="$(_release_without_trailing_zeros "$version")"
+  while IFS= read -r listed; do
+    listed="${listed%%#*}"
+    listed="${listed//[[:space:]]/}"
+    [ -n "$listed" ] || continue
+    if [ "$(_release_without_trailing_zeros "$listed")" = "$want" ]; then
+      echo "$version is not available: the PyPI project cad published it before the transfer (scripts/release/unavailable-versions.txt)" >&2
+      return 1
+    fi
+  done < "$UNAVAILABLE_VERSIONS_FILE"
+  return 0
+}

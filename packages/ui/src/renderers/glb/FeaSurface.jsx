@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { MousePointer2 } from "lucide-react";
-import { clamp, finiteOr } from "@text-to-cad/core/common/numbers.js";
-import { buildCadRefToken } from "@text-to-cad/core/lib/cadRefs.js";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { clamp, finiteOr } from "@cad/core/common/numbers.js";
+import { buildCadRefToken } from "@cad/core/lib/cadRefs.js";
+import { formatPromptReference } from "@cad/core/prompt";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
@@ -16,7 +16,7 @@ import { useDeclinedSelectReference, workspaceLoadAlert } from "../workspace/use
 import { useViewerHost } from "../../host/context.js";
 import { useExportView } from "../../export/context.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 
@@ -35,7 +35,7 @@ const EXPLODE_OFF = Object.freeze({ exploded: { enabled: false, amount: 0 } });
 const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: false } });
 
 /**
- * A GLB that carries an FEA result (`cadgen fea solve`), drawn on the same shell as any GLB (`GlbRenderer.jsx`) and with
+ * A GLB that carries an FEA result (`cad fea solve`), drawn on the same shell as any GLB (`GlbRenderer.jsx`) and with
  * its tools (Select, Annotate, Measure, Clip): the field in colour on the deformed shape, Study and an assembly's Parts
  * in the file sidebar, a face picked under Select as Quick Edit's chip (a reference into the STEP it was solved from),
  * where the study holds and loads it on the model, and its Load ramp in the sidebar's Animation and in Preview.
@@ -46,7 +46,7 @@ export default function FeaSurface({ view, document, loaded, fv }) {
   const host = useViewerHost();
   const scene = loaded.scene;
 
-  // An FEA result (cadgen fea solve) carries its fields and true displacement in the file; what is
+  // An FEA result (cad fea solve) carries its fields and true displacement in the file; what is
   // shown of it is chosen in Study's What you see (`feaControls`: the field, the deformation and the load),
   // per tab. That choice is this renderer's one slice of the file's view (`kit/shell/fileView.js`), written
   // against the result's own fields and scale: a re-solved result opens at its own defaults. A result that

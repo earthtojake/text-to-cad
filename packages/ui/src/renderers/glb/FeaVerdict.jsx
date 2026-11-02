@@ -1,6 +1,6 @@
 import { CircleCheck, CircleMinus, CircleX, TriangleAlert } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 
 // Each status in the theme's own status tones, the findings card's and its alert icon's: red to
 // fix, amber to watch, green for a pass, and no tone where there is nothing to judge.

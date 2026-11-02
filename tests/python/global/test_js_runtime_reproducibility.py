@@ -37,10 +37,10 @@ TEST_RUNNERS = (
 
 
 def _cadgen_js_node_floor() -> str:
-    """The single declared Node major the @text-to-cad/core suite refuses to start below."""
+    """The single declared Node major the @cad/core suite refuses to start below."""
     floors = set(re.findall(r"nodeMajor < (\d+)", CADJS_RUNNER.read_text(encoding="utf-8")))
     if len(floors) != 1:
-        raise AssertionError(f"the @text-to-cad/core runner states {len(floors)} Node floors")
+        raise AssertionError(f"the @cad/core runner states {len(floors)} Node floors")
     return floors.pop()
 
 
@@ -144,7 +144,7 @@ class StaleRuntimeEntriesArePrunedTest(unittest.TestCase):
         self.assertIsNotNone(prune, "prune_stale_runtime is gone from the runtime bundler")
         with tempfile.TemporaryDirectory() as temp_dir:
             runtime = Path(temp_dir) / "_runtime"
-            for kept in ("viewer/index.html", "mcp/index.html"):
+            for kept in ("viewer/index.html", "mcp/shell.html"):
                 (runtime / kept).parent.mkdir(parents=True, exist_ok=True)
                 (runtime / kept).write_text("built", encoding="utf-8")
             (runtime / "browser").mkdir()
@@ -180,7 +180,7 @@ class TestRunnersStartOnCurrentNodeTest(unittest.TestCase):
         # a hand-copied second number in the message is how the two drift.
         runner = CADJS_RUNNER.read_text(encoding="utf-8")
         floors = set(re.findall(r"nodeMajor < (\d+)", runner))
-        self.assertEqual(1, len(floors), f"the @text-to-cad/core runner states {len(floors)} Node floors")
+        self.assertEqual(1, len(floors), f"the @cad/core runner states {len(floors)} Node floors")
         declared = floors.pop()
         self.assertIn(f"Node {declared} or newer", runner)
 
@@ -193,7 +193,7 @@ class TestRunnersStartOnCurrentNodeTest(unittest.TestCase):
             self.assertGreaterEqual(
                 version,
                 declared,
-                "CI runs a Node the @text-to-cad/core suite refuses to start on",
+                "CI runs a Node the @cad/core suite refuses to start on",
             )
 
     def test_viewer_declares_the_module_type_its_tests_rely_on(self) -> None:

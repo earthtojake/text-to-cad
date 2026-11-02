@@ -1,7 +1,7 @@
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { Slider } from "@cad/ui/primitives/slider";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
 import { english } from "../../../i18n/core.js";
 import {
   FILE_SHEET_PRECISION_SLIDER_CLASSES,

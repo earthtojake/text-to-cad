@@ -17,12 +17,12 @@ let builds = 0;
 
 /** The version this Viewer's app menu shows when Vite builds it with `env`: its config's `define`, through the page's links. */
 async function shownVersion(env) {
-  const saved = process.env.TEXT_TO_CAD_RELEASE;
-  if (env.TEXT_TO_CAD_RELEASE === undefined) delete process.env.TEXT_TO_CAD_RELEASE;
-  else process.env.TEXT_TO_CAD_RELEASE = env.TEXT_TO_CAD_RELEASE;
+  const saved = process.env.CAD_RELEASE;
+  if (env.CAD_RELEASE === undefined) delete process.env.CAD_RELEASE;
+  else process.env.CAD_RELEASE = env.CAD_RELEASE;
   let config;
   try { config = await viteConfig({ command: 'build', mode: 'production' }); }
-  finally { if (saved === undefined) delete process.env.TEXT_TO_CAD_RELEASE; else process.env.TEXT_TO_CAD_RELEASE = saved; }
+  finally { if (saved === undefined) delete process.env.CAD_RELEASE; else process.env.CAD_RELEASE = saved; }
   const output = join(temporary, `links-${builds += 1}.mjs`);
   await build({
     stdin: { contents: `export {useViewerLinks} from './viewerLinks.js'; export {createElement} from 'react'; export {renderToString} from 'react-dom/server';`,
@@ -39,6 +39,6 @@ async function shownVersion(env) {
 test('the Viewer shows the version it is: as it is for the release\'s own build, with its checkout\'s commit for any other', async () => {
   const checkout = fileURLToPath(new URL('../..', import.meta.url));
   const commit = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).trim();
-  assert.equal(await shownVersion({ TEXT_TO_CAD_RELEASE: version }), version);
+  assert.equal(await shownVersion({ CAD_RELEASE: version }), version);
   assert.match(await shownVersion({}), new RegExp(`^${version.replaceAll('.', '\\.')}-dev\\.${commit}(?:-dirty)?$`, 'u'));
 });

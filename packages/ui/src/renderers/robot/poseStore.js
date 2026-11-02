@@ -1,6 +1,6 @@
 import {
   articulationControls, clampControlValue, openingControlValues
-} from "@text-to-cad/core/common/articulation.js";
+} from "@cad/core/common/articulation.js";
 import { cloneJointValueMap, findBestMatchingJointValueState, JOINT_VALUE_EPSILON } from "./robotMotion.js";
 
 // A robot's pose: the value of every control of its articulation (degrees, or metres for
@@ -9,7 +9,7 @@ import { cloneJointValueMap, findBestMatchingJointValueState, JOINT_VALUE_EPSILO
 // Reset alike. Listeners hear about a write synchronously: the scene poses itself on it,
 // and only what draws control VALUES (the Position section) subscribes a component.
 //
-// Everything here is read off the articulation cadgen resolved (`cadgen.robot_payload`):
+// Everything here is read off the articulation cadgen resolved (`cad_server.robot_payload`):
 // the controls and their limits, the opening pose (every control at rest, then an SRDF's
 // `home` state) and the named poses (an SRDF's group states). Nothing is decided here.
 

@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@text-to-cad/ui/primitives/tree-row";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { Checkbox } from "@text-to-cad/ui/primitives/checkbox";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
+import { TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface } from "@cad/ui/primitives/tree-row";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { Checkbox } from "@cad/ui/primitives/checkbox";
 import { InfoRow } from "../kit/inspector/referenceRows.jsx";
 import { controlRow } from "./fea/controlRow.jsx";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";

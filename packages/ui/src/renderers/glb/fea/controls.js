@@ -1,8 +1,8 @@
 /**
  * What you see's controls, the same for every result. Each is a generic parameter
- * (`@text-to-cad/core/common/parameters.js`) with `drives`, what it moves.
+ * (`@cad/core/common/parameters.js`) with `drives`, what it moves.
  */
-import { clamp } from "@text-to-cad/core/common/numbers.js";
+import { clamp } from "@cad/core/common/numbers.js";
 import { fieldWord } from "./fields.js";
 import { english } from "../../../i18n/core.js";
 
