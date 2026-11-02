@@ -54,9 +54,9 @@ FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients r
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy. 8: its line with
-# no installation names cad-server.
+# no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII.
 MARK = "cad proxy: "
-REVISION = 8
+REVISION = 9
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -460,14 +460,20 @@ rem {mark}{revision}\r
 rem The cad command: runs the current installation of text-to-cad's server (cad_server._internal.proxy),\r
 rem else the one registered last.\r
 setlocal EnableDelayedExpansion\r
+rem A record is UTF-8 and may name a user folder with accents or another script: findstr reads it\r
+rem on its input, as a path argument reaches it in the ANSI code page, and for /f decodes its output\r
+rem in the console's code page, UTF-8 while the records are read, the person's own before Python runs.\r
+set "codepage="\r
+for /f "tokens=*" %%a in ('chcp') do for %%b in (%%a) do set "codepage=%%~nb"\r
+if defined codepage chcp 65001 >nul 2>&1\r
 if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cad-state")\r
 set "current="\r
 if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
 if defined current if exist "!state!\\installations\\!current!.json" (\r
   set "python="\r
   set "console="\r
-  for /f usebackq^ tokens^=4^ delims^=^\" %%p in (`findstr /c:"\\"python\\":" "!state!\\installations\\!current!.json"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cad\\":" "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
+  for /f usebackq^ tokens^=4^ delims^=^\" %%p in (`findstr /c:"\\"python\\":" ^< "!state!\\installations\\!current!.json"`) do set "python=%%p"\r
+  for /f usebackq^ tokens^=4^ delims^=^\" %%c in (`findstr /c:"\\"cad\\":" ^< "!state!\\installations\\!current!.json"`) do set "console=%%c"\r
   if defined python if defined console (\r
     set "python=!python:\\\\=\\!"\r
     set "console=!console:\\\\=\\!"\r
@@ -480,17 +486,19 @@ rem uninstalled server leaves the python), else the next record.\r
 for /f "delims=" %%n in ('dir /b /o-d "!state!\\installations\\*.json" 2^>nul') do (\r
   set "python="\r
   set "console="\r
-  for /f usebackq^ tokens^=4^ delims^=^" %%p in (`findstr /c:"\\"python\\":" "!state!\\installations\\%%n"`) do set "python=%%p"\r
-  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cad\\":" "!state!\\installations\\%%n"`) do set "console=%%c"\r
+  for /f usebackq^ tokens^=4^ delims^=^" %%p in (`findstr /c:"\\"python\\":" ^< "!state!\\installations\\%%n"`) do set "python=%%p"\r
+  for /f usebackq^ tokens^=4^ delims^=^" %%c in (`findstr /c:"\\"cad\\":" ^< "!state!\\installations\\%%n"`) do set "console=%%c"\r
   if defined python if defined console (\r
     set "python=!python:\\\\=\\!"\r
     set "console=!console:\\\\=\\!"\r
     if exist "!python!" if exist "!console!" goto run\r
   )\r
 )\r
+if defined codepage chcp !codepage! >nul 2>&1\r
 echo {server} is not installed: run `uvx --no-config --managed-python --python {python} --from {server} {command} doctor` once, outside any sandbox or with its permission 1>&2\r
 exit /b 1\r
 :run\r
+if defined codepage chcp !codepage! >nul 2>&1\r
 endlocal & "%python%" -P -m cad_server._internal.proxy %*\r
 exit /b %errorlevel%\r
 """

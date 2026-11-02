@@ -301,7 +301,7 @@ class ProxyFileTests(Fixture):
         lines = Path(record["path"]).read_text(encoding="utf-8").splitlines()
         text = installations.script(True)
         for named in ("!current!.json", "%%n"):
-            reads = re.findall(r'tokens\^=(\d+)\^ delims\^=\^" %%(\w) in \(`findstr /c:"\\"(\w+)\\":" '
+            reads = re.findall(r'tokens\^=(\d+)\^ delims\^=\^" %%(\w) in \(`findstr /c:"\\"(\w+)\\":" \^< '
                                r'"!state!\\installations\\' + re.escape(named) + r'"`\) do set "(\w+)=%%\2"', text)
             self.assertEqual(sorted((key, name) for _taken, _letter, key, name in reads),
                              [("cad", "console"), ("python", "python")], named)
@@ -312,6 +312,26 @@ class ProxyFileTests(Fixture):
         self.assertIn('set /p current=<"!state!\\installations\\current"', text)
         # Alive as alive() says it, as the sh does: an uninstalled server leaves its python.
         self.assertEqual(text.count('if exist "!python!" if exist "!console!" goto run'), 2)
+
+    def test_the_cmd_reads_a_record_whose_paths_are_not_ascii(self) -> None:
+        # A record is UTF-8 (a user folder named with accents or another script), and for /f decodes
+        # findstr's output in the console's code page: the cmd switches to UTF-8 before its first read and
+        # back before it runs or says anything, and stays ASCII itself, as cmd parses it in that code page.
+        text = installations.script(True)
+        self.assertTrue(text.isascii())
+        switch = text.index("chcp 65001 >nul 2>&1")
+        self.assertLess(text.index('for /f "tokens=*" %%a in (\'chcp\') do for %%b in (%%a) do set "codepage=%%~nb"'),
+                        switch)
+        self.assertLess(switch, text.index("set /p current="))
+        self.assertLess(switch, text.index("findstr /c:"))
+        # findstr opens no path itself: one outside the ANSI code page (a CJK name on a Western system)
+        # reaches a program as question marks. cmd opens the record, through Windows' Unicode API.
+        self.assertEqual(text.count("findstr /c:"), 4)
+        self.assertEqual(text.count('":" ^< "!state!\\installations\\'), 4)
+        restore = "if defined codepage chcp !codepage! >nul 2>&1\r\n"
+        self.assertEqual(text.count(restore), 2)
+        self.assertIn(restore + "echo ", text)
+        self.assertIn(":run\r\n" + restore + "endlocal & ", text)
 
     @POSIX
     def test_the_sh_passes_over_an_installation_whose_console_script_is_gone(self) -> None:
