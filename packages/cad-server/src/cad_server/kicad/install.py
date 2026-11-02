@@ -5,7 +5,7 @@ The server never starts KiCad itself: what this finds is always an executable na
 ``kicad-cli`` (``kicad-cli.exe`` on Windows) -- ``CAD_KICAD_CLI``, refused unless it names one, then
 ``kicad-cli`` on PATH, then the command line inside the usual macOS or Windows installation -- never
 ``kicad``, a wrapper (``kicad-cli-nightly``) or a desktop launcher. Every run of it is headless and
-reads no settings of the person's (``headless_env``).
+reads, writes or locks nothing of the person's: it gets homes of its own (``headless_env``).
 """
 
 from __future__ import annotations
@@ -16,10 +16,12 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 __all__ = ["CLI_NAMES", "KICAD_MINIMUM", "KicadMissingError", "check_version", "find_kicad_cli", "headless_env",
-           "install_hint", "kicad_version"]
+           "install_hint", "kicad_version", "private_run"]
 
 KICAD_MINIMUM = (9, 0)
 # The one program the server runs of KiCad's, by its file name on each platform.
@@ -75,13 +77,55 @@ def _installed() -> list[Path]:
     return []
 
 
-def headless_env(settings: str | os.PathLike) -> dict[str, str]:
+def _windows() -> bool:
+    return sys.platform.startswith("win")
+
+
+def headless_env(root: str | os.PathLike) -> dict[str, str]:
     """The environment every ``kicad-cli`` run gets: this process's, with no display to reach
-    (``DISPLAY``, ``WAYLAND_DISPLAY`` removed) and KiCad's settings in ``settings``, a private folder
-    the caller made, so a run neither opens a window nor reads or writes the person's KiCad settings."""
+    (``DISPLAY``, ``WAYLAND_DISPLAY`` removed) and every home KiCad reads or writes inside ``root``,
+    a private folder the caller removes afterwards, so a run neither opens a window nor touches the
+    person's KiCad settings, data, cache, documents or instance lock. The folders are made here.
+
+    - ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``:
+      KiCad's own overrides, on every OS. Without the last two KiCad 10 still writes
+      ``~/.local/share/kicad/<ver>`` and ``~/.cache/kicad/<ver>``.
+    - ``HOME``: never empty (kicad-cli exits 255 then), and where macOS keeps its ``~/Library``
+      folders, so it covers them. ``TMPDIR`` holds KiCad's instance lock (``$TMPDIR/org.kicad.kicad``).
+    - Linux and other POSIX: ``XDG_CONFIG_HOME``, ``XDG_DATA_HOME``, ``XDG_CACHE_HOME`` and
+      ``XDG_STATE_HOME``, which wxWidgets reads before ``HOME``.
+    - Windows: ``USERPROFILE``, ``APPDATA``, ``LOCALAPPDATA`` and ``TEMP`` / ``TMP``.
+
+    ``KICAD_STOCK_DATA_HOME`` is left alone: a user's KiCad finds its stock libraries and schemas by
+    it, and only a packaged kicad-cli would need it set."""
+    root = Path(root)
+    home = root / "home"
+    tmp = root / "tmp"
+    folders = [home, tmp, root / "settings", root / "documents", root / "cache"]
     env = {key: value for key, value in os.environ.items() if key not in _DISPLAY}
-    env["KICAD_CONFIG_HOME"] = os.fspath(settings)
+    env.update(HOME=os.fspath(home), TMPDIR=os.fspath(tmp), KICAD_CONFIG_HOME=os.fspath(root / "settings"),
+               KICAD_DOCUMENTS_HOME=os.fspath(root / "documents"), KICAD_CACHE_HOME=os.fspath(root / "cache"))
+    if _windows():
+        roaming, local = home / "AppData" / "Roaming", home / "AppData" / "Local"
+        folders += [roaming, local]
+        env.update(USERPROFILE=os.fspath(home), APPDATA=os.fspath(roaming), LOCALAPPDATA=os.fspath(local),
+                   TEMP=os.fspath(tmp), TMP=os.fspath(tmp))
+    elif sys.platform != "darwin":
+        xdg = {"XDG_CONFIG_HOME": home / ".config", "XDG_DATA_HOME": home / ".local" / "share",
+               "XDG_CACHE_HOME": home / ".cache", "XDG_STATE_HOME": home / ".local" / "state"}
+        folders += list(xdg.values())
+        env.update({name: os.fspath(path) for name, path in xdg.items()})
+    for folder in folders:
+        folder.mkdir(parents=True, exist_ok=True)
     return env
+
+
+@contextmanager
+def private_run(prefix: str = "cad-kicad-") -> Iterator[tuple[Path, dict[str, str]]]:
+    """A private folder and the headless environment inside it, for one ``kicad-cli`` run; the folder
+    (with whatever KiCad left in it) is removed afterwards. Yields ``(folder, env)``."""
+    with tempfile.TemporaryDirectory(prefix=prefix, ignore_cleanup_errors=True) as scratch:
+        yield Path(scratch), headless_env(scratch)
 
 
 def version_tuple(version: str) -> tuple[int, ...]:
@@ -91,10 +135,10 @@ def version_tuple(version: str) -> tuple[int, ...]:
 
 def kicad_version(cli: Path) -> str | None:
     """What ``kicad-cli version`` says it is (``9.0.1``), run headless; None when it does not run."""
-    with tempfile.TemporaryDirectory(prefix="cad-kicad-") as settings:
+    with private_run() as (_scratch, env):
         try:
-            done = subprocess.run([str(cli), "version"], env=headless_env(settings), capture_output=True, text=True,
-                                  timeout=60, check=False)
+            done = subprocess.run([str(cli), "version"], env=env, capture_output=True, text=True, timeout=60,
+                                  check=False)
         except (OSError, subprocess.SubprocessError):
             return None
     if done.returncode != 0:

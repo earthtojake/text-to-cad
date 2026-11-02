@@ -41,8 +41,7 @@ class NativeFiles(unittest.TestCase):
             self.assertEqual(board.read_bytes(), original)
             self.assertEqual(read_board(board).part("H1").at, (17, 29))
             step = root / "board.step"
-            (root / "settings").mkdir()
-            env = headless_env(root / "settings")  # no display, no settings of the person's
+            env = headless_env(root / "kicad")  # no display, no homes of the person's
             def exported():
                 subprocess.run([str(cli), "pcb", "export", "step", "--force", "--board-only",
                     "--user-origin", "10x20mm", "-o", str(step), str(board)], env=env,

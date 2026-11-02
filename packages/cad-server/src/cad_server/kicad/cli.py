@@ -1,7 +1,8 @@
-"""Run KiCad's DRC against the saved board and sibling project, headless, in a private settings folder.
+"""Run KiCad's DRC against the saved board and sibling project, headless, in private homes.
 
-``kicad-cli`` runs with no display to reach and KiCad's settings in a temporary folder of its own
-(``install.headless_env``): it opens no window and never reads or writes the person's KiCad settings.
+``kicad-cli`` runs with no display to reach and every KiCad home (settings, documents, cache, temp)
+in a temporary folder of its own (``install.private_run``): it opens no window and never reads,
+writes or locks anything of the person's KiCad.
 The JSON report is temporary; the board source is not rewritten and no report is cached.
 """
 
@@ -9,13 +10,12 @@ from __future__ import annotations
 
 import json
 import subprocess
-import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 from cad.results import ValidationIssue
 
-from .install import headless_env
+from .install import private_run
 
 __all__ = ["Finding", "KicadRunError", "issues", "run_drc"]
 
@@ -84,11 +84,8 @@ def _findings(report: dict) -> list[Finding]:
 def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> list[Finding]:
     """KiCad's DRC of ``board``, every severity included. Raises :class:`KicadRunError`
     when ``kicad-cli`` cannot run or refuses the board."""
-    with tempfile.TemporaryDirectory(prefix="cad-drc-") as scratch:
-        report = Path(scratch) / "drc.json"
-        settings = Path(scratch) / "settings"
-        settings.mkdir()
-        env = headless_env(settings)
+    with private_run("cad-drc-") as (scratch, env):
+        report = scratch / "drc.json"
         command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "-o", str(report), str(board)]
         try:
             completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout, check=False)

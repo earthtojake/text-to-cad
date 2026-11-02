@@ -2,8 +2,9 @@
 
 Where ``kicad-cli`` is looked for and what is refused: only a file named exactly ``kicad-cli``
 (``kicad-cli.exe``) is ever returned -- never ``kicad``, a ``kicad-cli-nightly`` wrapper or a
-launcher. Every run is headless (no ``DISPLAY``, no ``WAYLAND_DISPLAY``) with KiCad's settings in a
-private folder. No KiCad: the candidates are small scripts on a fake PATH.
+launcher. Every run is headless (no ``DISPLAY``, no ``WAYLAND_DISPLAY``) with every KiCad home
+(settings, documents, cache, data, temp, ``HOME``) in a private folder that is removed after the run.
+No KiCad: the candidates are small scripts on a fake PATH.
 """
 
 from __future__ import annotations
@@ -77,20 +78,51 @@ class Discovery(unittest.TestCase):
 
 
 class Headless(unittest.TestCase):
-    def test_a_run_has_no_display_and_settings_of_its_own(self) -> None:
-        with mock.patch.dict(os.environ, {"DISPLAY": ":0", "WAYLAND_DISPLAY": "wayland-0",
-                                          "KICAD_CONFIG_HOME": "/home/someone/.config/kicad"}):
-            env = install.headless_env("/tmp/private")
-        self.assertNotIn("DISPLAY", env)
-        self.assertNotIn("WAYLAND_DISPLAY", env)
-        self.assertEqual(env["KICAD_CONFIG_HOME"], "/tmp/private")
+    # What each OS reads KiCad's settings, data, cache and temp files from: all must end up in the private folder.
+    HOMES = {
+        "linux": ("HOME", "TMPDIR", "KICAD_CONFIG_HOME", "KICAD_DOCUMENTS_HOME", "KICAD_CACHE_HOME",
+                  "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"),
+        "darwin": ("HOME", "TMPDIR", "KICAD_CONFIG_HOME", "KICAD_DOCUMENTS_HOME", "KICAD_CACHE_HOME"),
+        "win32": ("HOME", "TMPDIR", "KICAD_CONFIG_HOME", "KICAD_DOCUMENTS_HOME", "KICAD_CACHE_HOME",
+                  "USERPROFILE", "APPDATA", "LOCALAPPDATA", "TEMP", "TMP"),
+    }
 
-    def test_drc_runs_kicad_cli_headless_in_a_private_settings_folder(self) -> None:
+    def test_a_run_has_no_display_and_homes_of_its_own(self) -> None:
+        person = {name: str(Path("someone") / name) for names in self.HOMES.values() for name in names}
+        person.update(DISPLAY=":0", WAYLAND_DISPLAY="wayland-0", KICAD_STOCK_DATA_HOME="stock")
+        for platform, names in self.HOMES.items():
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory(prefix="tmp-kicad-env-") as folder, \
+                    mock.patch.object(install.sys, "platform", platform), \
+                    mock.patch.dict(os.environ, person):
+                root = Path(folder)
+                env = install.headless_env(root)
+                self.assertNotIn("DISPLAY", env)
+                self.assertNotIn("WAYLAND_DISPLAY", env)
+                for name in names:
+                    path = Path(env[name])
+                    self.assertTrue(path.is_relative_to(root), f"{name}={path} is outside {root}")
+                    self.assertTrue(path.is_dir(), f"{name}={path} was not made")
+                self.assertEqual(Path(env["KICAD_CONFIG_HOME"]), root / "settings")
+                # A user's KiCad finds its stock data by this; only a packaged kicad-cli needs it set.
+                self.assertEqual(env["KICAD_STOCK_DATA_HOME"], "stock")
+                # Everything else is this process's own, untouched.
+                for name in env.keys() - set(names):
+                    self.assertEqual(env[name], os.environ[name], name)
+
+    def test_a_private_run_removes_what_kicad_left_in_its_homes(self) -> None:
+        with install.private_run("tmp-kicad-run-") as (scratch, env):
+            lock = Path(env["TMPDIR"]) / "org.kicad.kicad"
+            lock.write_text("", encoding="utf-8")
+            (Path(env["KICAD_CACHE_HOME"]) / "kicad").mkdir()
+            self.assertTrue(scratch.name.startswith("tmp-kicad-run-"))
+        self.assertFalse(scratch.exists())
+
+    def test_drc_runs_kicad_cli_headless_in_private_homes(self) -> None:
         seen = {}
         fake_cli = Path("/opt/kicad/bin/kicad-cli")
 
         def run(command, *, env, **_options):
-            seen.update(command=command, env=env)
+            seen.update(command=command, env=env, scratch=Path(env["HOME"]).parent)
             Path(command[command.index("-o") + 1]).write_text(json.dumps({"violations": []}), encoding="utf-8")
             return mock.Mock(returncode=0, stdout="", stderr="")
 
@@ -104,6 +136,8 @@ class Headless(unittest.TestCase):
         settings = Path(seen["env"]["KICAD_CONFIG_HOME"])
         self.assertTrue(settings.name == "settings" and settings.parent.name.startswith("cad-drc-"), settings)
         self.assertFalse(settings.exists(), "the private settings folder is removed after the run")
+        self.assertEqual(seen["scratch"], settings.parent)
+        self.assertFalse(seen["scratch"].exists(), "every private home is removed after the run")
 
 
 class Version(unittest.TestCase):
