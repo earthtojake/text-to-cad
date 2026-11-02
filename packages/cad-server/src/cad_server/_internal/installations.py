@@ -678,36 +678,42 @@ def _sweep(where: str) -> None:
             _discard(os.path.join(where, name))
 
 
-def _write_exe(path: str, data: bytes) -> None:
-    """``data`` written to ``path`` whole: beside it, then renamed into place -- a ``cad.exe`` that runs set
-    aside first (``_aside``)."""
-    from cad._internal.atomic_replace import temp_suffix
+def _put(path: str, data: bytes) -> None:
+    """``data`` written beside ``path``, then renamed onto it (``replace_atomic``)."""
+    from cad._internal.atomic_replace import replace_atomic, temp_suffix
 
     temporary = f"{path}{temp_suffix()}"
     try:
         with open(temporary, "wb") as handle:
             handle.write(data)
-        try:
-            os.replace(temporary, path)
-        except PermissionError:
-            if not os.path.isfile(path):
-                raise
-            aside = _aside(path)  # a cad.exe that runs: this very command, as `cad update` runs through it
-            try:
-                os.replace(temporary, path)
-            except OSError:
-                try:
-                    os.rename(aside, path)
-                except OSError:
-                    pass
-                raise
-            _discard(aside)
+        replace_atomic(temporary, path)
     finally:
         if os.path.lexists(temporary):
             try:
                 os.unlink(temporary)
             except OSError:
                 pass
+
+
+def _write_exe(path: str, data: bytes) -> None:
+    """``data`` written to ``path`` whole, a ``cad.exe`` that runs set aside first (``_aside``): Windows
+    refuses to replace it -- this very command, as `cad update` runs through it -- but renames it."""
+    try:
+        _put(path, data)
+        return
+    except PermissionError:
+        if not os.path.isfile(path):
+            raise
+    aside = _aside(path)
+    try:
+        _put(path, data)
+    except OSError:
+        try:
+            os.rename(aside, path)
+        except OSError:
+            pass
+        raise
+    _discard(aside)
 
 
 def _write_windows(where: str, path: str) -> None:
