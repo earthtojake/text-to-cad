@@ -5,12 +5,13 @@ processes run in, the installations and the one that is current, and telemetry.
 It imports the library's (``cad``) kernel-free modules and never the CAD kernel: the kernel lives in the
 environment models run in (``_internal/base.py``). Importing it installs what the server attaches to the
 library: the engine's verbs a server process runs are counted (``_internal/engine_telemetry.py``); a
-model's own process, where the server is not installed, counts nothing.
+model's own process, where the server is not installed, counts nothing. Each is attached as the engine's
+module is imported, never sooner (``_internal/attach.py``): importing the server imports no engine.
 """
 
 from functools import cache as _cache
 
-from cad.engine import said as _said
+from cad_server._internal import attach as _attach
 from cad_server._internal import engine_telemetry as _engine_telemetry
 
 _engine_telemetry.install()
@@ -26,8 +27,12 @@ def _unregistered() -> str:
     return unregistered()
 
 
-_said.UNREGISTERED = _unregistered
-del _said
+def _say_unregistered(said) -> None:
+    said.UNREGISTERED = _unregistered
+
+
+_attach.when("cad.engine.said", _say_unregistered)
+del _attach
 
 __all__ = ["__version__"]
 

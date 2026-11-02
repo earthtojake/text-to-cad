@@ -71,56 +71,19 @@ class _Analytics:
 
 def install() -> None:
     """``observe`` among the engine's observers: now, when its verbs are imported already, else as they are
-    (``_Attach``); and the server's telemetry told what the library counts (``cad._internal.counts``).
+    (``attach.when``); and the server's telemetry told what the library counts (``cad._internal.counts``).
     Idempotent."""
     from cad._internal import counts
+    from cad_server._internal import attach
 
     counts.TELEMETRY = _Analytics
-    module = sys.modules.get(API)
-    if module is not None:
-        _attach(module)
-    elif not any(isinstance(finder, _Attach) for finder in sys.meta_path):
-        sys.meta_path.insert(0, _Attach())
+    attach.when(API, _attach)
 
 
 def _attach(module: Any) -> None:
     observers = getattr(module, "observers", None)
     if isinstance(observers, list) and observe not in observers:
         observers.append(observe)
-
-
-class _Attach:
-    """A ``sys.meta_path`` finder for the engine's verbs alone: found where Python finds them, by the path
-    finder (asked itself, never the rest of ``sys.meta_path``, so no two finders hand one lookup back and
-    forth), and ``observe`` appended to them once their module has run (``_Then``) -- a reload's too. Every
-    other import passes it by at one comparison."""
-
-    def find_spec(self, fullname: str, path: Any = None, target: Any = None) -> Any:
-        if fullname != API:
-            return None
-        from importlib.machinery import PathFinder
-
-        spec = PathFinder.find_spec(fullname, path, target)
-        if spec is not None and spec.loader is not None and hasattr(spec.loader, "exec_module"):
-            spec.loader = _Then(spec.loader)
-        return spec
-
-
-class _Then:
-    """A module's own loader, then ``observe`` attached to the module it ran."""
-
-    def __init__(self, loader: Any) -> None:
-        self._loader = loader
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._loader, name)
-
-    def create_module(self, spec: Any) -> Any:
-        return self._loader.create_module(spec)
-
-    def exec_module(self, module: Any) -> None:
-        self._loader.exec_module(module)
-        _attach(module)
 
 
 def observe(facts: dict[str, Any]) -> None:
