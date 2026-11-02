@@ -268,6 +268,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # The engine and shared modules FEA reads and writes through run its solves too; the rest of the engine doesn't.
         for path in ("packages/cad/src/cad/engine/refs.py", "packages/cad/src/cad/engine/executables.py",
                      "packages/cad/src/cad/engine/export/glb.py", "packages/cad/src/cad/_internal/atomic_replace.py",
+                     "packages/cad/src/cad/_internal/kernel_run.py",
                      "packages/cad-server/src/cad_server/_internal/cli_from_function.py"):
             with self.subTest(path=path):
                 self.assertIn("fea", jobs_for(path))
@@ -276,6 +277,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
             "packages/cad/src/cad/_internal/fea/solve.py",
             "packages/cad/src/cad/fea.py",
             "packages/cad-server/src/cad_server/cli/fea_solve.py",
+            "packages/cad-server/src/cad_server/_internal/kernel_verb.py",
             "packages/cad/src/cad/results.py",
         ):
             with self.subTest(path=path):

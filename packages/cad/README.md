@@ -454,7 +454,8 @@ src/cad/
                          #   build123d` binds, the kernel loads on first use;
                          #   cad-lazy-kernel.pth, at the root of site-packages, installs it
                          #   at interpreter start), the font guard (font_scan), what the library
-                         #   counts (counts), atomic replace, the validators' door, the version,
+                         #   counts (counts), atomic replace, the validators' door, a verb run for
+                         #   a server command in the kernel's environment (kernel_run), the version,
                          #   the stress solver behind `cad.fea` (fea)
 src/cadgen/              # the earlier import name: every name and every module of it is cad's
                          #   own (law 15's earlier name)
