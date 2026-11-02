@@ -8,7 +8,8 @@ daemon that builds, keeps and serves the documents, with the CAD Viewer, the CAD
 and the command that runs them all; and the shim, `cad-mcp` (`cad_mcp`), the stdio transport
 an agent app starts. The server ships what is not Python: the CAD Viewer's client and the CAD app
 page, which it serves, built from their JavaScript packages and bundled in at build time (the JS
-*source* never ships). Snapshots are drawn by OCCT, never in a browser. This file holds the laws of
+*source* never ships). Snapshots are drawn by OCCT (a KiCad board's flat, with Pillow), never in a
+browser. This file holds the laws of
 all three.
 
 A **document** is what a person reviews: one instance of a **document type** (below), either a file read on
@@ -538,3 +539,14 @@ src/cadgen/              # the earlier import name: every name and every module 
 
 The server, `cad-server`, and the shim, `cad-mcp`, say their own shapes and commands in
 their own READMEs.
+
+## Native KiCad files
+
+A `.kicad_pcb` is source, edited in KiCad or as text and read directly for each plot or snapshot:
+the library never builds, caches or writes back an XCAF model of a board. The parser and read-only
+board index live under `src/cad/engine/formats/kicad/`, the standard library alone, so the server
+and a script run with `cad run` import them without the CAD kernel; the flat renderer is
+`src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.pcb.read_board`
+exposes the inspection index. KiCad owns authoring, DRC (`cad pcb drc`, the server's) and
+mechanical and fabrication exports; an exported STEP enters the ordinary foreign-file path. No KiCad
+IPC client is bundled.

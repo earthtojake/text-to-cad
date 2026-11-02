@@ -1,0 +1,114 @@
+---
+name: pcb
+description: Create, edit and review native KiCad circuit boards (.kicad_pcb), inspect parts and nets, run DRC, and export fabrication files or STEP for enclosure design. Shows boards in the CAD Viewer.
+license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
+---
+
+# PCB design
+
+## Setup
+
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: wait five seconds and run the
+command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
+
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
+
+Viewing, inspecting and taking snapshots need no KiCad installation. DRC and fabrication/STEP
+exports use a user-installed [KiCad 9 or newer](https://www.kicad.org/download/).
+`CAD_KICAD_CLI` can name its `kicad-cli` (the command line itself, named `kicad-cli`); otherwise
+`cad pcb drc` uses `kicad-cli` on PATH, then the one inside the usual macOS or Windows installation.
+It runs `kicad-cli` headless, with private settings, and never opens KiCad. For the direct export
+examples below, `kicad-cli` means that same executable; never open a board in KiCad's app to check it.
+
+Native boards here use KiCad's nightly format, so they open only in a nightly KiCad app, and DRC and
+exports need a nightly `kicad-cli` for now. A stable KiCad refuses a board saved by the nightly (DRC
+then reports `kicad_failed`); viewing and snapshots still work.
+
+## Native files are the source
+
+Edit the `.kicad_pcb` itself, preserving its companion `.kicad_pro`, `.kicad_dru`, libraries and
+schematic when present. Reading or displaying a board never writes it. There is no text-to-cad PCB
+model, decorator, build step, or generated-board ownership marker. A helper script may make a
+requested edit, but reread the current file before editing and preserve unknown records and UUIDs.
+Do not regenerate an existing project from an incomplete description.
+
+For creation or structured edits read [native files](references/board-api.md). For parts and
+footprints read [parts](references/parts.md). KiCad's file coordinates are millimetres, **y down**;
+footprint-local positions and rotations must be transformed into the board frame. Use a net's
+actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
+connector mating side; a plausible-looking layout does not establish electrical correctness.
+
+## Edit and check
+
+1. Inspect the saved board with `from cad.pcb import read_board` in a script run with
+   `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
+   changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
+2. Edit the native files. Keep net assignments, layer stack, track widths, clearances and custom
+   rules consistent with the chosen fab and electrical requirements. Refill changed copper zones
+   with KiCad before relying on their saved fill; the viewer displays the fill stored in the file.
+3. Run `cad pcb drc board.kicad_pcb` (or `--json`). It checks the saved board against its rules
+   and exits 1 on error-severity violations or unconnected items. Review warnings too. Resolve
+   the cause instead of weakening rules to obtain a clean report.
+4. Inspect placement and routing visually: `cad snapshot board.kicad_pcb tmp/board.png`.
+   Measure constraints DRC cannot establish, such as decoupling placement and connector access.
+5. Show the result and explain remaining findings. Export only the requested deliverables from
+   that same saved revision; see [manufacturing and STEP](references/manufacturing.md).
+
+## Show the model
+
+Show the user each model you create or change, and any model or file they ask to see.
+A file you export is a download: give its path, do not open it.
+Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
+own work; review with `cad snapshot`.
+
+- If your tools include `cad_show` (your host may prefix it), call it with the model's id
+  or the file's absolute path, and follow its description for when to call it again.
+  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
+  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
+  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
+  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
+  nothing: its `cad_show` opens the model's page in the user's browser and answers with
+  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
+  `cad_export` are on every host. Call only the tools you have, and never say a card
+  shows a model when your host drew none.
+- Otherwise give the user the page's link once: a model's page is the `view:` line its
+  run prints. For a file, run the CAD Viewer, from any folder:
+
+  ```bash
+  cad viewer --json FILE [FILE ...]
+  ```
+
+  The command ensures this installation's server, registers each file and prints
+  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
+  JSON line (never guess the port); the URL carries its token query. A page follows
+  every later run of its model and every rewrite of its file, so share it once.
+  Return that link to the user. If it fails to launch, say so.
+
+## Board views
+
+The board view supports parts, pads, nets, layers, selection, Measure, annotations and Quick Edit.
+
+Snapshots use `cad snapshot`, including `--job` packets saved by Quick Edit. Display modes are
+`board`, `copper`, `assembly`, and `placement`:
+
+```bash
+cad snapshot board.kicad_pcb tmp/copper.png --display copper
+cad snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
+cad snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+```
+
+Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
+camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
+The viewer and snapshots approximate mask/paste openings and use stroke lettering; dimensions,
+text boxes, embedded images and keepout hatching are not drawn. KiCad's DRC and manufacturing
+exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
+solid inferred from the 2D plot.

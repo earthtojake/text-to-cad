@@ -27,6 +27,7 @@ import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
 export const ENTRY_ICON_KIND = Object.freeze({
   LOADING: "loading",
   DXF: "dxf",
+  KICAD_PCB: "kicad_pcb",
   ROBOT: "robot",
   STEP: "step",
   STL_MESH: "stl-mesh",

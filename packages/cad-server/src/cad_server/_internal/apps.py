@@ -34,8 +34,8 @@ from collections.abc import Callable, Iterable, Mapping
 
 from cad.engine import executables
 
-__all__ = ["APPS", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "apps_for", "detect", "file_manager",
-           "linux", "mac", "open_file", "windows"]
+__all__ = ["APPS", "DETECTED", "KINDS", "REFRESH_SECONDS", "Detected", "NEVER_OPENED", "apps_for", "detect", "file_manager",
+           "linux", "mac", "open_file", "opens", "windows"]
 
 # Every app Open in offers: its id and the name the menu shows.
 APPS = {"vscode": "Visual Studio Code", "cursor": "Cursor", "zed": "Zed", "pycharm": "PyCharm",
@@ -47,6 +47,11 @@ _MESHES = ("bambu", "orca", "prusa", "freecad", "blender")
 KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
          "step": ("fusion", "freecad", "bambu", "orca", "prusa"),
          "stl": _MESHES, "3mf": _MESHES, "glb": ("blender",)}
+
+# Files no app is started on, the operating system's default handler included: a KiCad file's handler is
+# KiCad, and the server never launches KiCad (it runs its command line alone, headless:
+# ``cad_server.kicad``). The file manager still reveals such a file's folder.
+NEVER_OPENED = (".kicad_",)
 
 REFRESH_SECONDS = 300.0
 SPOTLIGHT_SECONDS = 2.0
@@ -297,11 +302,19 @@ DETECTED = Detected()
 # --- opening -----------------------------------------------------------------------------------
 
 
+def opens(path: str | None) -> bool:
+    """Whether an app may be started on the file at ``path`` (``NEVER_OPENED``)."""
+    return not os.path.splitext(str(path or ""))[1].lower().startswith(NEVER_OPENED)
+
+
 def open_file(path: str, app: str | None = None, *, platform: str = sys.platform,
               spawn: Callable[..., object] = subprocess.Popen, startfile: Callable[[str], None] | None = None) -> None:
     """Start ``app`` (a path ``detect`` found) on the file at ``path``, or, with none, the operating
     system's own handler for it. Detached and never waited on; never through a shell. Raises
-    ``FileNotFoundError`` when Linux has no ``xdg-open`` for the default."""
+    ``FileNotFoundError`` when Linux has no ``xdg-open`` for the default, and ``PermissionError`` for
+    a file no app is started on (``opens``)."""
+    if not opens(path):
+        raise PermissionError(f"{os.path.basename(path)} is never opened in an app from here")
     quiet = {"stdin": subprocess.DEVNULL, "stdout": subprocess.DEVNULL, "stderr": subprocess.DEVNULL, "close_fds": True}
     if platform == "darwin":
         spawn(["/usr/bin/open", *(["-a", app] if app else []), path], start_new_session=True, **quiet)

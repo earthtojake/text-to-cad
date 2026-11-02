@@ -247,6 +247,33 @@ test('a drawing is its document opened once, then one plain GET of its drawing',
   client.dispose();
 });
 
+test('a plot is its board opened once, then one plain GET of its plot, and a refusal is the server’s own sentence', async () => {
+  const calls = [];
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
+    calls.push({ url, options });
+    if (options.method === 'POST') return opened('kicad_pcb');
+    if (calls.length > 2) {
+      return { ok: false, status: 400, statusText: 'Bad Request', json: async () => ({ error: 'broken.kicad_pcb is not a KiCad board' }) };
+    }
+    return json({ schemaVersion: 3, kind: 'board', unrouted: 0, sheets: [] });
+  } });
+  const payload = await client.plotPayload('/boards/blinky.kicad_pcb');
+  assert.equal(payload.kind, 'board');
+  assert.deepEqual([new URL(calls[0].url).pathname, JSON.parse(calls[0].options.body)], ['/api/v1/documents', { path: '/boards/blinky.kicad_pcb' }]);
+  assert.equal(new URL(calls[1].url).pathname, '/api/v1/documents/kicad_pcb/d1/plot');
+  assert.equal(calls[1].options.method, 'GET');
+  assert.equal(calls[1].options.headers['x-cad-viewer'], undefined);
+  await assert.rejects(client.plotPayload('/boards/blinky.kicad_pcb'), (error) => {
+    assert.equal(error.failure.kind, 'http');
+    assert.equal(error.failure.status, 400);
+    assert.equal(error.failure.operation, 'plotting');
+    assert.equal(error.failure.detail, 'broken.kicad_pcb is not a KiCad board');
+    return true;
+  });
+  await assert.rejects(client.plotPayload(''), /Missing file/);
+  client.dispose();
+});
+
 test('a drawing still rendering is asked for again after the server\'s retryMs, until its payload comes back', async () => {
   const replies = [{ state: 'drawing', retryMs: 0 }, { state: 'drawing', retryMs: 0 }, { schemaVersion: 2, primitives: [] }];
   let asked = 0;

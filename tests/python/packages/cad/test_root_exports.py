@@ -81,6 +81,7 @@ class RootExports(unittest.TestCase):
 
         from cad.build123d import _flatten, _geometry
         from cad.engine import mechanism, model
+        from cad.engine.formats.kicad import board_index, geometry, summary
 
         defined = {"mechanism_state": model, "configuration_sequence": model, "animation": model, "memo": model,
                    "paint": model, "gear_pair": mechanism, "rack_and_pinion_pair": mechanism,

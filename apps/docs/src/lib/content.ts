@@ -121,6 +121,18 @@ export const skillGroups = [
       "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
   },
   {
+    name: "PCB",
+    path: "skills/pcb",
+    summary:
+      "Edits native KiCad circuit boards, inspects parts and nets, runs DRC, and exports fabrication files or STEP for mechanical design.",
+  },
+  {
+    name: "PCB DFM",
+    path: "skills/pcb-dfm",
+    summary:
+      "Reviews a KiCad board before ordering: KiCad's DRC, decoupling, track width for current, sourcing and the fab's limits.",
+  },
+  {
     name: "URDF",
     path: "skills/urdf",
     summary:

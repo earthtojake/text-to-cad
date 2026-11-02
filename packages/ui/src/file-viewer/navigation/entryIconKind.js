@@ -19,6 +19,7 @@ const ROBOT_KINDS = new Set(
 // as data instead of re-deriving it from eight format comparisons.
 const ICON_KIND_PRECEDENCE = [
   ENTRY_ICON_KIND.DXF,
+  ENTRY_ICON_KIND.KICAD_PCB,
   ENTRY_ICON_KIND.ROBOT,
   ENTRY_ICON_KIND.STL_MESH,
   ENTRY_ICON_KIND.THREE_MF_MESH,

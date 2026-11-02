@@ -33,6 +33,11 @@ const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
   ["gltf", TYPES.glb.wire]
 ]));
 
+// Formats the viewer shows as a PLOT: a KiCad board drawn from its file, as geometry per layer,
+// by its document's `plot` (`GET /api/v1/documents/kicad_pcb/<id>/plot`). Like a DXF, the render asset is the file itself; nothing bakes a mesh
+// for it.
+export const PLOT_RENDER_FORMATS = Object.freeze([RENDER_FORMAT.KICAD_PCB]);
+
 export function normalizeFormat(value) {
   return String(value || "").trim().toLowerCase();
 }
@@ -52,11 +57,16 @@ export function isMeshRenderFormat(format) {
   return MESH_RENDER_FORMATS.includes(normalizeFormat(format));
 }
 
+export function isPlotRenderFormat(format) {
+  return PLOT_RENDER_FORMATS.includes(normalizeFormat(format));
+}
+
 export function meshAssetKeyForFormat(format) {
   const normalized = normalizeFormat(format);
   // A DXF's render asset is its own file (the server flattens it to a 2D payload;
-  // nothing bakes a mesh for it), so its key is itself, never a baked GLB relation.
-  return isMeshRenderFormat(normalized) || normalized === RENDER_FORMAT.DXF
+  // nothing bakes a mesh for it), and so is a plot's (the server draws the board from it),
+  // so their key is themselves, never a baked GLB relation.
+  return isMeshRenderFormat(normalized) || normalized === RENDER_FORMAT.DXF || isPlotRenderFormat(normalized)
     ? normalized
     : RENDER_FORMAT.GLB;
 }

@@ -390,6 +390,14 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl(`${API}/local/activity`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },
+    async plotPayload(file, { signal } = {}) {
+      // A `.kicad_pcb` drawn from its file on the SERVER, as geometry per layer and the board's
+      // index: a plain GET of the document's `plot`. The server reads the file on every request
+      // and keeps no board, so a saved edit is the next read's; the client only paints.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'plotting' });
+      return request(`${api}/plot`, { signal, timeoutMs: 180_000, operation: 'plotting' });
+    },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
       // reading, the client only paints. A plain GET of the document's `drawing`, derived data

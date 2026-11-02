@@ -27,8 +27,8 @@ src/cad_server/
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a robot's (robots), Quick Edit's packets
-                         #   (prompt_files)
+                         #   payload (drawings), a KiCad board's plot (plots), a robot's
+                         #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
                          #   engine sessions (http), tools and launches (server), the agent
                          #   operations (operations), how a host presents CAD (host), open
@@ -39,6 +39,7 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
+  pcb.py, kicad/         # `cad pcb drc`: KiCad's design rule check, by the installed kicad-cli
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once

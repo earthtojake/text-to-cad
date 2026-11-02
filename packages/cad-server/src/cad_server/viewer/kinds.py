@@ -10,6 +10,7 @@ a document of that kind, and the same id under another kind is a 404 that names 
   part's ``faces``/``edges``/``vertices/<ordinal>``, ``groups``, ``volume``), ``measure``,
   ``kinematics``, ``POST pose``, ``POST mesh``; a file's also its ``source``.
 * ``dxf``: ``drawing`` (the 2D payload), ``source``.
+* ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``source``.
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.
@@ -35,7 +36,7 @@ ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
-           "dxf": [], "urdf": [], "srdf": [], "sdf": []}
+           "dxf": [], "urdf": [], "srdf": [], "sdf": [], "kicad_pcb": []}
 
 
 def file_kind(path) -> str | None:
