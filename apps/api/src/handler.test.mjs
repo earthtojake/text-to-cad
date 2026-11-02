@@ -437,8 +437,8 @@ test('a refused request is logged by the rule it broke and the release that sent
     await send(store, 'POST', '/v1/events', BATCH); // taken: nothing to say
   });
   assert.deepEqual(lines.warn, [
-    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, cadgen 0.8.0)',
-    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, cadgen 0.9.1)',
+    'telemetry /v1/events refused 400: events[1].calls counts nothing (schema 3, release 0.8.0)',
+    'telemetry /v1/events refused 400: unknown field next_thing (schema 3, release 0.9.1)',
     'telemetry /v1/events refused 400: the body is not JSON',
     'telemetry /v1/forget refused 400: not an install id',
     'telemetry /v1/events refused 403: not from a browser',

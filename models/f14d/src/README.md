@@ -13,8 +13,8 @@ Build from this folder: `python f14d.py`.
 
 ```
 python f14d.py                                # prints the aircraft's id: and view:
-cadgen snapshot "$ID" f14d.png
-cadgen export "$ID" GLB/f14d.glb              # bakes the two animations into clips
+cad snapshot "$ID" f14d.png
+cad export "$ID" GLB/f14d.glb              # bakes the two animations into clips
 ```
 
 ## How it is built
@@ -61,7 +61,7 @@ diverter slots and the cockpit opening; the 41 cosmetic panel recesses stay drop
 ## The staged teardown
 
 Nothing about the aircraft articulates, so it has no mechanism. The old `teardown` and
-`explodedHold` clips are GLB animations (`cadgen.gltf`) with their names and durations
+`explodedHold` clips are GLB animations (`cad.gltf`) with their names and durations
 (60 s, 24 s), each out and back to the built aircraft so a player repeats it seamlessly
 (the old `loop: true`; an animation carries no loop). Both walk one master ramp, 0 built
 to 1 apart, sampled every 0.1 s:
@@ -91,7 +91,7 @@ each group's count against the old lists.
 `teardown` walks the ramp out and back on a raised cosine (`0.5 - 0.5 cos(2 pi t /
 60)`), so the loop point is the built aircraft; `explodedHold` opens over the first
 third, holds fully apart, and closes over the last (the old 0.33/0.67 trapezoid,
-smoothstepped). `cadgen export "$ID" GLB/f14d.glb` bakes both into clips. One
+smoothstepped). `cad export "$ID" GLB/f14d.glb` bakes both into clips. One
 deliberate difference: the old clips faded the airframe skin to 0.22 opacity over the
 first 0.45 of the ramp so the internals read while it cleared them; a GLB has no
 opacity channel, so the skin stays opaque as it travels its 5.4 m.
@@ -106,7 +106,7 @@ On 2026-10-22, one machine (10 cores), its load 25-70 from other work:
 | no-op | 0.9-1.5 s | 10 bodies replayed; the xbf kept |
 | edit: `lib/empennage.py` `RUDDER_GAP` 16 -> 18 | 3.8 s | `empennage` and the aircraft's body (3,034 kernel calls, 45 misses), 8 stages replayed |
 | revert | 3.0 s | the same, every call a hit |
-| edit: the teardown's joints and motions in `f14d.py` (2026-10-22, load ~200) | 3.6 s | the aircraft's body alone, 9 stages replayed; `cadgen export` to a GLB with both clips: 98 s, 70.7 MB |
+| edit: the teardown's joints and motions in `f14d.py` (2026-10-22, load ~200) | 3.6 s | the aircraft's body alone, 9 stages replayed; `cad export` to a GLB with both clips: 98 s, 70.7 MB |
 
 The reverted xbf holds the cold build's structure, names, colours and geometry
 keys, part for part, and is the cold file's size; 639 bytes of its BRep data

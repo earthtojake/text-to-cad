@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef } from "react";
 import { MousePointer2 } from "lucide-react";
-import { scenePartCount, viewFeaturesForKind } from "@text-to-cad/core/common/viewSettings.js";
+import { scenePartCount, viewFeaturesForKind } from "@cad/core/common/viewSettings.js";
 import { useExportView } from "../../export/context.js";
 import { useViewerHost } from "../../host/context.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
@@ -17,7 +17,7 @@ import { GLB_DECLINED_LIVE_COMMANDS, GLB_TOOL, GLB_TOOL_MODES } from "./tools.js
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 const NO_REFERENCES = Object.freeze([]);
@@ -28,7 +28,7 @@ function GlbSurface({ view, data }) {
   const { t } = useI18n();
   const document = useWorkspaceDocument({ view, data });
   const loaded = useGlbScene({ entry: document.entry, resources: document.client.resources });
-  // A CAM result (cadgen cam plan) has a viewer of its own (`cam/useCamResult.jsx`), loaded as its own chunk; it waits
+  // A CAM result (cad cam plan) has a viewer of its own (`cam/useCamResult.jsx`), loaded as its own chunk; it waits
   // for it as the file loading, so it is framed once, as the viewer draws it. A chunk that fails, or a job that is
   // damaged, is the file failing: drawn as a plain GLB, a result would hide its verdict.
   const { kit: cv, cam: job, pending, failed: camFailed } = useCamView(loaded.scene?.document?.scene);

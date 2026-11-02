@@ -1,11 +1,11 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { readFileView } from "../../kit/shell/fileView.js";
 import { ViewerHostContext } from "../../../host/context.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { carriesCamJob } from "./detect.js";
 
 /**
- * What GlbRenderer needs to show a CAM result (`cadgen cam plan`): the result's own viewer, loaded as its own chunk
+ * What GlbRenderer needs to show a CAM result (`cad cam plan`): the result's own viewer, loaded as its own chunk
  * (`camView.jsx`), the job read from the file, what the view shows of its paths, stock and tool, the
  * routines that run the cut, and Job, a section of the file sidebar whose rows are Quick Edit's chips. A GLB that is
  * not a result gets nulls throughout.
@@ -27,7 +27,7 @@ export const loadCamView = () => import("../camView.jsx").then((module) => { cam
 /**
  * The CAM result viewer for a scene that carries a job (`kit`), loaded the first time one does, and the job read from
  * the scene (`cam`); `pending` while it loads. A plain GLB's `kit` and `cam` are null. Should the chunk fail to load,
- * or the job be damaged (`CamResultError`: something cadgen always writes is missing), `failed` is the error: the
+ * or the job be damaged (`CamResultError`: something cad cam always writes is missing), `failed` is the error: the
  * result is not drawn as a plain GLB, which would hide its verdict, but refused as a file that failed to load.
  */
 export function useCamView(root) {

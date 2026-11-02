@@ -4,7 +4,7 @@ import test from "node:test";
 import { fixturePayload } from "./__tests__/robotFixtures.js";
 import { buildRobotTree, robotJointSummary, robotLinkFacts, robotTreeAncestorIds } from "./robotTree.js";
 
-// Payload-shaped robots (`cadgen.robot_payload`: `links`, `joints` with `parent`/`child`, `root`),
+// Payload-shaped robots (`cad_server.robot_payload`: `links`, `joints` with `parent`/`child`, `root`),
 // hand-built where a shape cadgen would refuse (a cycle, a second parent) is the point.
 const joint = (name, type, parent, child, extra = {}) => ({ name, type, parent, child, axis: null, origin: null, limit: null, mimic: null, ...extra });
 const arm = () => ({

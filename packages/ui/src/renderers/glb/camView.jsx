@@ -1,15 +1,15 @@
 /**
- * The CAM result viewer GlbRenderer loads only for a GLB that carries a job (`cadgen cam plan`): one module,
+ * The CAM result viewer GlbRenderer loads only for a GLB that carries a job (`cad cam plan`): one module,
  * so the bundler makes it a chunk of its own and a plain GLB never fetches it. Everything GlbRenderer uses of
  * the CAM viewer is here, by name.
  */
 import { useLayoutEffect, useRef } from "react";
 import * as THREE from "three";
-import { formatPromptReference } from "@text-to-cad/core/prompt";
-import { cn } from "@text-to-cad/ui/utils";
+import { formatPromptReference } from "@cad/core/prompt";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../lib/floatingSurface.js";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { InfoRow } from "../kit/inspector/referenceRows.jsx";
 import { camToolpathObjects, createCamPaths } from "./cam/lines.js";
 import { camSceneMeshes, showCamMeshes } from "./cam/playback.js";

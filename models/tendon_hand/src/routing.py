@@ -6,7 +6,7 @@ their atlas. Each model was its own script in `models/tendon_hand/src/`; they sh
 nothing expensive, so none is a `@memo` and no model calls another.
 """
 
-from cadgen import model
+from cad import model
 
 import build123d as bd
 

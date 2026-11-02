@@ -5,7 +5,7 @@ Run it after changing a link, before loading the URDF; the URDF scales each mesh
 """
 from pathlib import Path
 
-from cadgen import export
+from cad import export
 
 from juno import (
     ankle_link_left,

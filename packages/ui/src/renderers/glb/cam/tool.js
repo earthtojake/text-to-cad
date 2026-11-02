@@ -3,7 +3,7 @@
  * scale of the part, built once per shape and swapped as the program changes tools: a cylinder (a ball on a
  * cylinder for a ball end mill) under a wider holder, sized from the operation's tool (`toolDiameterMm`), standing
  * along its setup's axis (the direction its tool comes from, +Z or -Z). A path naming an operation or a setup the job
- * does not list is no result cadgen wrote: refused (`CamResultError`), never drawn as some other tool.
+ * does not list is no result cad cam wrote: refused (`CamResultError`), never drawn as some other tool.
  */
 
 import { CamResultError } from "./extras.js";

@@ -1,4 +1,4 @@
-import { getThemePresetById } from "@text-to-cad/core/common/themeSettings.js";
+import { getThemePresetById } from "@cad/core/common/themeSettings.js";
 
 /**
  * What a CAM result's toolpaths are drawn in. Each operation's feed moves take a hue of the viewer's

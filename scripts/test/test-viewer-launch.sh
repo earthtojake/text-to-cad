@@ -7,10 +7,10 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 HOST="127.0.0.1"
 # VIEWER_RUNTIME_DIR points the smoke test at a client bundled somewhere else
-# (CADGEN_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
-RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cadgen/src/cadgen/_runtime/viewer}"
+# (CAD_RUNTIME_CHECK_DIR-style scratch builds). CI uses the default.
+RUNTIME="${VIEWER_RUNTIME_DIR:-$REPO_ROOT/packages/cad-server/src/cad_server/_runtime/viewer}"
 
-echo "==> CAD Viewer launch smoke test (\$PYTHON -m cadgen.viewer)"
+echo "==> CAD Viewer launch smoke test (\$PYTHON -m cad_server.viewer)"
 
 # The built client has to be IN the wheel's runtime: its absence is the exact regression
 # this guards, and it surfaces as a served page that is 404 rather than as a bad server.
@@ -19,7 +19,7 @@ if [ ! -f "$RUNTIME/index.html" ]; then
   echo "      Run scripts/bundle/bundle.sh first (test.yml bundles before this step)." >&2
   exit 1
 fi
-export CADGEN_VIEWER_DIST="$RUNTIME"
+export CAD_VIEWER_DIST="$RUNTIME"
 
 pick_interpreter() {
   local candidates=()
@@ -40,7 +40,7 @@ pick_interpreter() {
     resolved="$(command -v "$candidate" 2>/dev/null || true)"
     [ -n "$resolved" ] && [ -x "$resolved" ] || continue
     [ -n "$FOUND_INTERPRETER" ] || FOUND_INTERPRETER="$resolved"
-    if "$resolved" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("cadgen") else 1)' \
+    if "$resolved" -c 'import importlib.util, sys; sys.exit(0 if importlib.util.find_spec("cad_server") else 1)' \
         >/dev/null 2>&1; then
       PYTHON="$resolved"
       return 0
@@ -51,20 +51,20 @@ pick_interpreter() {
 
 if ! pick_interpreter; then
   if [ -n "${VIEWER_PYTHON:-}" ]; then
-    echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import cadgen." >&2
+    echo "FAIL: VIEWER_PYTHON=$VIEWER_PYTHON cannot run, or cannot import the server (cad_server)." >&2
   elif [ -z "$FOUND_INTERPRETER" ]; then
     echo "FAIL: no Python interpreter found (tried the repo venv, python3, and python)." >&2
     echo "      Set VIEWER_PYTHON to the one that installed requirements-dev.txt." >&2
     exit 1
   else
-    echo "FAIL: cadgen is not importable from $FOUND_INTERPRETER." >&2
+    echo "FAIL: the server (cad_server) is not importable from $FOUND_INTERPRETER." >&2
   fi
   echo "      This test imports a real STEP end to end, so the launching interpreter" >&2
-  echo "      needs cadgen: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
+  echo "      needs the packages: pip install -r requirements-dev.txt, or set VIEWER_PYTHON." >&2
   exit 1
 fi
 export VIEWER_RUNTIME_DIR="$RUNTIME"
-"$PYTHON" - <<'PYTHON'
+"$PYTHON" - "$REPO_ROOT" <<'PYTHON'
 import json, os, subprocess, sys, tempfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -73,12 +73,17 @@ from playwright.sync_api import sync_playwright
 
 with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
     root = Path(temporary)
-    env = {**os.environ, "CADGEN_ENGINE_DIR": str(root / "engine"),
-           "CADGEN_STATE_DIR": str(root / "state"), "CADGEN_ENGINE_MESH": "inline",
-           "CADGEN_CACHE_DIR": str(root / "no-0.7-store"), "CADGEN_ENGINE_PORT": "0",
-           "CADGEN_ENGINE_STANDBY": "0"}
+    env = {**os.environ, "CAD_ENGINE_DIR": str(root / "engine"),
+           "CAD_STATE_DIR": str(root / "state"), "CAD_ENGINE_MESH": "inline",
+           "CAD_CACHE_DIR": str(root / "no-0.7-store"), "CAD_ENGINE_PORT": "0",
+           "CAD_ENGINE_STANDBY": "0"}
+    # The state folder registers this interpreter as its current installation, as an installation
+    # registers itself: the engine the launch starts is this one's (with none, a client starts none).
+    sys.path.append(sys.argv[1])
+    from tests.python.support.engine_daemon import register
+    register(env["CAD_STATE_DIR"])  # raises where it cannot: the launch never runs unregistered
     def launch(*options):
-        result = subprocess.run([sys.executable, "-m", "cadgen.viewer", "--json", *options],
+        result = subprocess.run([sys.executable, "-m", "cad_server.viewer", "--json", *options],
                                 cwd=root, env=env, capture_output=True, text=True, timeout=120)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
@@ -86,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
         first = launch()
         again = launch()
         assert first["pid"] == again["pid"] and first["port"] == again["port"]
-        with urlopen(Request(first["apiUrl"]+"/__cad/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
+        with urlopen(Request(first["apiUrl"]+"/api/v1/server", headers={"Authorization": "Bearer "+first["token"]})) as response:
             assert json.load(response)["pid"] == first["pid"]
         # The STEP the page imports: one cylinder, written by build123d's own STEP export, so that no
         # CAD file is committed.
@@ -106,16 +111,17 @@ with tempfile.TemporaryDirectory(prefix="cv-") as temporary:
                 page = browser.new_page(viewport={"width": 1000, "height": 720})
                 errors = []
                 page.on("pageerror", lambda error: errors.append(str(error)))
-                with page.expect_response(lambda response: "/__cad/api/doc/" in response.url and "/part/" in response.url and response.ok, timeout=120000):
+                with page.expect_response(lambda response: "/api/v1/documents/step/" in response.url and "/parts/" in response.url and response.ok, timeout=120000):
                     page.goto(opened["url"])
                 page.locator(".cad-loading-overlay").wait_for(state="hidden", timeout=120000)
                 assert page.locator("canvas").first.is_visible()
                 assert not errors, errors
-                assert "token=" not in page.url
+                # The address keeps a working link, so the same page opens in another browser on this machine.
+                assert "token=" in page.url, page.url
                 assert urlsplit(page.url).path == page_path, page.url
                 print("Bundled viewer rendered a STEP on the engine at /<id>; launch reuse and authentication passed.")
             finally:
                 browser.close()
     finally:
-        subprocess.run([sys.executable, "-m", "cadgen.engine", "stop"], env=env, capture_output=True, timeout=120)
+        subprocess.run([sys.executable, "-m", "cad_server.engine", "stop"], env=env, capture_output=True, timeout=120)
 PYTHON

@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { expect, it } from 'vitest';
-import { buildGlbDocumentFromBuffer } from '@text-to-cad/core/lib/render/glbMeshData.js';
-import { createGlbScene } from '@text-to-cad/core/lib/render/glbScene.js';
+import { buildGlbDocumentFromBuffer } from '@cad/core/lib/render/glbMeshData.js';
+import { createGlbScene } from '@cad/core/lib/render/glbScene.js';
 import { carriesCamJob } from '../../../dist/renderers/glb/cam/detect.js';
 import { readCamJob } from '../../../dist/renderers/glb/cam/extras.js';
 import { cadFrame, camToolpathObjects, readCamSegments, toolPositionAt } from '../../../dist/renderers/glb/cam/lines.js';

@@ -1,7 +1,7 @@
 /**
- * A CAM job's result as `cadgen cam plan` writes it into `<stem>.cam.glb`: the scene's extras carry
- * `generator: "cadgen cam"` and `cam` (schema 1), which this reads into the one shape the viewer
- * draws (`detect.js` says whether a scene is one). What cadgen always writes is required: a result
+ * A CAM job's result as `cad cam plan` writes it into `<stem>.cam.glb`: the scene's extras carry
+ * `generator: "cad cam"` and `cam` (schema 1), which this reads into the one shape the viewer
+ * draws (`detect.js` says whether a scene is one). What cad cam always writes is required: a result
  * missing one, or holding the wrong kind of value, is refused (`CamResultError`, naming where),
  * never drawn with a default in its place. Pure: no three.js, no React.
  */
@@ -11,7 +11,7 @@ import { camExtras, carriesCamJob } from "./detect.js";
 
 export { carriesCamJob };
 
-/** A CAM result that is not as `cadgen cam plan` writes one; its message names the value, as `cam.setups[0].id`. */
+/** A CAM result that is not as `cad cam plan` writes one; its message names the value, as `cam.setups[0].id`. */
 export class CamResultError extends Error {
   constructor(where, what) {
     super(`This CAM result is damaged: ${where} ${what}. Plan the job again to write it anew.`);
@@ -42,7 +42,7 @@ function text(raw, key, where) {
   if (typeof raw[key] !== "string") throw new CamResultError(`${where}.${key}`, "is not text");
   return raw[key];
 }
-/** Text cadgen writes only where there is some (an operation's name, the verdict's G-code line): "" where it is not. */
+/** Text cad cam writes only where there is some (an operation's name, the verdict's G-code line): "" where it is not. */
 function optionalText(raw, key, where) {
   return raw[key] === undefined || raw[key] === null ? "" : text(raw, key, where);
 }
@@ -101,7 +101,7 @@ function setupAxis(rawSetup, where) {
 }
 
 /**
- * A finding as the viewer shows it, from cadgen's `{ check, severity, summary, items: [{ operation, at, ... }] }`:
+ * A finding as the viewer shows it, from cad cam's `{ check, severity, summary, items: [{ operation, at, ... }] }`:
  * `operation` is the first operation it names, `operations` every one, `at` the first place. An item names an
  * operation and a place only where it has one.
  */
@@ -118,7 +118,7 @@ function readFinding(raw, where) {
 }
 
 /**
- * The job a CAM result carries, or null for any other GLB. A result missing what cadgen always writes throws
+ * The job a CAM result carries, or null for any other GLB. A result missing what cad cam always writes throws
  * `CamResultError`.
  *
  * @returns {null | { verdict: { status: "ready" | "fix", headline: string, errors: number, warnings: number, gcode: string },
@@ -204,7 +204,7 @@ function valueWords(value) {
   return String(value);
 }
 
-/** What the plan assumed, as cadgen writes it (`{ key, value, why }`), the value in words. */
+/** What the plan assumed, as cad cam writes it (`{ key, value, why }`), the value in words. */
 function readAssumed(raw, where) {
   object(raw, where);
   if (raw.value === undefined || raw.value === null) throw new CamResultError(`${where}.value`, "is missing");

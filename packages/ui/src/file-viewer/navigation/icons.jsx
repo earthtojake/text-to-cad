@@ -9,7 +9,7 @@
  * The nine formats the CAD Viewer renders are the exception, and they are not
  * an exception to that rule: they go through the viewer's own `EntryIcon`, one
  * plain lucide `File` for every one of them (the name says which kind),
- * everywhere either app lists files. `@text-to-cad/core`'s `fileFormats` decides
+ * everywhere either app lists files. `@cad/core`'s `fileFormats` decides
  * which nine those are — one authority, reachable from both apps.
  */
 import {
@@ -28,7 +28,7 @@ import {
   Table
 } from "lucide-react";
 import { createElement } from "react";
-import { RENDER_FORMAT, fileExtensionFromPath, renderFormatFromPath } from "@text-to-cad/core/lib/fileFormats.js";
+import { RENDER_FORMAT, fileExtensionFromPath, renderFormatFromPath } from "@cad/core/lib/fileFormats.js";
 
 import EntryIcon from "./EntryIcon.jsx";
 

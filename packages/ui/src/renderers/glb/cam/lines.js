@@ -1,4 +1,4 @@
-import { createScreenSpaceLineSegments, syncLineMaterialOpacity, topologyLineDepthBiasForWidth } from "@text-to-cad/core/common/renderEdges.js";
+import { createScreenSpaceLineSegments, syncLineMaterialOpacity, topologyLineDepthBiasForWidth } from "@cad/core/common/renderEdges.js";
 import { RAPID_COLOURS, camOpColours } from "./colours.js";
 
 /**

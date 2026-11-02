@@ -1,5 +1,5 @@
-import { normalizePreviewSettings, normalizeViewSettings } from "@text-to-cad/core/common/viewSettings.js";
-import { resolveViewSceneSettings } from "@text-to-cad/core/common/sceneSettings.js";
+import { normalizePreviewSettings, normalizeViewSettings } from "@cad/core/common/viewSettings.js";
+import { resolveViewSceneSettings } from "@cad/core/common/sceneSettings.js";
 import { mergePreviewSettings, mergeViewerDisplaySettings } from "./viewerDisplaySettings.js";
 import { shareSettingsValue } from "./shareSettingsValue.js";
 

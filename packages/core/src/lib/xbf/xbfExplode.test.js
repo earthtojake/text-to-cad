@@ -1,7 +1,7 @@
 // Explode of an engine document, pinned to one layout for the viewer and cadgen's stills.
 //
 // `__fixtures__/explode.json` holds, for two documents the engine served -- the material fixture
-// (`tests/python/packages/cadgen/engine/test_materials.py`'s bench) and the corpus's motorbike --
+// (`tests/python/packages/cad/engine/test_materials.py`'s bench) and the corpus's motorbike --
 // what this scene explodes: the document's tree, each instance's prototype and matrix, and each
 // prototype's box (every node, edge point and vertex of its mesh, which is all of a part the layout
 // measures); and where each instance's carrier stood at each amount when the fixture was made, by
@@ -9,8 +9,8 @@
 // the box the scene measures, so the carriers stand where they stood over the real meshes. It holds
 // too the layout's nested branch, which an xbf scene does not reach (it hands the layout no
 // hierarchy), over a set of records with one. cadgen's stills port the layout to Python
-// (`cadgen/engine/render/explode.py`) and are held to this same file
-// (`tests/python/packages/cadgen/engine/test_render_explode.py`), so the two explode alike: a
+// (`cad/engine/render/explode.py`) and are held to this same file
+// (`tests/python/packages/cad/engine/test_render_explode.py`), so the two explode alike: a
 // deliberate change to the layout changes the fixture's offsets, and the port follows it.
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -31,7 +31,7 @@ const LOOK = fs.readFileSync(path.join(FIXTURES, "look.json"), "utf8");
 // Its environment image: 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128).
 const ENVIRONMENT = new Uint8Array([...new TextEncoder().encode("#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n"),
   255, 255, 255, 128]).buffer;
-const URL_BASE = "http://127.0.0.1:9/api/doc/explode";
+const URL_BASE = "http://127.0.0.1:9/api/v1/documents/xbf/explode";
 const TOLERANCE = 1e-6;
 
 /** An XBM2 part buffer of two nodes, a box's corners; none for a part that draws nothing. */
@@ -57,11 +57,11 @@ async function sceneOf(fixture) {
     tree: fixture.tree
   };
   const fetch = async (url) => {
-    if (url.endsWith("/api/look")) return new Response(LOOK);
-    if (url.endsWith("/api/look/environment")) return new Response(ENVIRONMENT);
+    if (url.endsWith("/api/v1/look")) return new Response(LOOK);
+    if (url.endsWith("/api/v1/look/environment")) return new Response(ENVIRONMENT);
     const rest = url.slice(URL_BASE.length);
-    if (rest === "") return new Response(JSON.stringify(structure));
-    const part = /^\/part\/p(\d+)$/.exec(rest);
+    if (rest === "/structure") return new Response(JSON.stringify(structure));
+    const part = /^\/parts\/p(\d+)$/.exec(rest);
     if (part) return new Response(boxPart(fixture.boxes[Number(part[1])]));
     return new Response(JSON.stringify({ error: "not found" }), { status: 404 });
   };

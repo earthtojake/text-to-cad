@@ -1,10 +1,10 @@
 import { CircleCheck, CircleX, Eye, EyeOff } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { ROW_NAME_UNDER_ACTIONS, TREE_INDENT_PX, TreeRowGuides, TreeRowLabel, TreeRowSurface, treeRowActionsClass } from "@text-to-cad/ui/primitives/tree-row";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { Button } from "@cad/ui/primitives/button";
+import { ROW_NAME_UNDER_ACTIONS, TREE_INDENT_PX, TreeRowGuides, TreeRowLabel, TreeRowSurface, treeRowActionsClass } from "@cad/ui/primitives/tree-row";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import { english } from "../../i18n/core.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { assumedWords, formatDuration, jobSummary, operationDetail, toolSpeeds } from "./cam/extras.js";
 

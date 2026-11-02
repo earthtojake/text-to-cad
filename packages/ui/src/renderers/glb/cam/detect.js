@@ -1,10 +1,10 @@
 /**
- * Whether a loaded glTF scene is a CAM result (`cadgen cam plan`): cadgen cam wrote it (`generator` in the
+ * Whether a loaded glTF scene is a CAM result (`cad cam plan`): cad cam wrote it (`generator` in the
  * extras of the scene or a node) and it carries the job's extras (`cam`). Its own small module, free of the CAM
  * viewer, so GlbRenderer can ask before that viewer's chunk is fetched.
  */
 
-export const CAM_GENERATOR = "cadgen cam";
+export const CAM_GENERATOR = "cad cam";
 
 const plainObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 

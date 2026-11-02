@@ -1,12 +1,15 @@
 // Resolving a file's relative reference (a GLB's texture or buffer) against the URL the file
 // came from.
 //
-// The Viewer serves a file as `/__cad/asset?file=<absolute path>`, so the file the reference is
-// relative to lives in the QUERY, not the path. Resolving `textures/skin.png` against that URL
-// the ordinary way gives `/__cad/textures/skin.png`, which the backend does not serve. The
-// reference has to be resolved against the `file` parameter and written back into a fresh
-// `/__cad/asset` URL. (A robot's link meshes are named by the URLs cadgen minted for them and
+// The Viewer serves a file as `/api/v1/local/files?path=<absolute path>`, so the file the reference
+// is relative to lives in the QUERY, not the path. Resolving `textures/skin.png` against that URL
+// the ordinary way gives `/api/v1/local/textures/skin.png`, which the backend does not serve. The
+// reference has to be resolved against the `path` parameter and written back into a fresh
+// `/api/v1/local/files` URL. (A robot's link meshes are named by the URLs cadgen minted for them and
 // never resolved here.)
+
+/** Where the viewer's engine serves a CAD file by its absolute path (`?path=`). */
+export const FILES_ROUTE = "/api/v1/local/files";
 
 function normalizeAbsoluteUrl(url) {
   if (url instanceof URL) {
@@ -99,14 +102,14 @@ export function resolveLocalAssetFileRef(sourceFileRef, reference) {
   return normalizeFileRefSegments(`${dirnameFileRef(sourceFileRef)}${rawReference}`);
 }
 
-/** The `/__cad/asset` URL for a file named relative to one served from that route, or "" when
+/** The files route's URL (`FILES_ROUTE`) for a file named relative to one served from it, or "" when
  * the source did not come from it (a plain static host, a test fixture). */
 export function resolveCadAssetMeshUrl(reference, sourceUrl) {
   const source = new URL(normalizeAbsoluteUrl(sourceUrl));
-  if (source.pathname !== "/__cad/asset") {
+  if (source.pathname !== FILES_ROUTE) {
     return "";
   }
-  const sourceFileRef = source.searchParams.get("file") || "";
+  const sourceFileRef = source.searchParams.get("path") || "";
   const meshFileRef = resolveLocalAssetFileRef(sourceFileRef, reference);
   const rawReference = String(reference || "").trim();
   if (!meshFileRef && /^package:\/\//i.test(rawReference)) {
@@ -119,11 +122,11 @@ export function resolveCadAssetMeshUrl(reference, sourceUrl) {
   if (!meshFileRef) {
     return "";
   }
-  const resolved = new URL("/__cad/asset", source);
-  resolved.searchParams.set("file", meshFileRef);
+  const resolved = new URL(FILES_ROUTE, source);
+  resolved.searchParams.set("path", meshFileRef);
   // Carry the cache-busting `v` (and anything else) so a mesh is versioned with its robot.
   for (const [key, value] of source.searchParams.entries()) {
-    if (key !== "file") {
+    if (key !== "path") {
       resolved.searchParams.set(key, value);
     }
   }

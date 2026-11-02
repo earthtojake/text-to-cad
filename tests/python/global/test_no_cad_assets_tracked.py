@@ -24,7 +24,7 @@ TINY = 64 * KIB
 # (path, `*` standing for any run of characters but `/`; most bytes; why it is committed). An entry that
 # matches no tracked file fails, so the list never outlives what it excuses.
 ALLOWED: tuple[tuple[str, int, str], ...] = (
-    ("tests/python/packages/cadgen/engine/fixtures/xbf8_materials.xbf", TINY,
+    ("tests/python/packages/cad/engine/fixtures/xbf8_materials.xbf", TINY,
      "the 15.9 KiB document written by published cadgen 0.8.0/OCP 7.9; migration tests must read real "
      "old BinXCAF bytes, which the current engine/kernel cannot regenerate"),
     ("apps/docs/public/hero/planetary.glb", 256 * KIB,
@@ -44,10 +44,10 @@ ALLOWED: tuple[tuple[str, int, str], ...] = (
      "make_fixtures.py writes them and test_robot_payload.py holds them current, for JS tests that cannot "
      "run the engine"),
     ("packages/ui/src/renderers/glb/__tests__/ready.cam.glb", 64 * KIB,
-     "a real `cadgen cam plan` result, ready to cut (the part, the stock and two tools' toolpaths), the CAM "
+     "a real `cad cam plan` result, ready to cut (the part, the stock and two tools' toolpaths), the CAM "
      "viewer's JS tests read; a JS test cannot run FreeCAD"),
     ("packages/ui/src/renderers/glb/__tests__/fix.cam.glb", 16 * KIB,
-     "a real `cadgen cam plan` result refused by a reach check, the CAM viewer's JS tests read; a JS test cannot run "
+     "a real `cad cam plan` result refused by a reach check, the CAM viewer's JS tests read; a JS test cannot run "
      "FreeCAD"),
     ("packages/ui/src/renderers/dxf/__fixtures__/*.dxf", TINY,
      "the DXF renderer's test drawings; make_fixture.py writes them, and the JS tests that open them "

@@ -1,22 +1,20 @@
 ---
 name: cam
-description: Turn a saved STEP or xbf part into 3-axis CNC toolpaths and G-code with cadgen, planned and posted by the user's own FreeCAD (1.1 or newer, headless), then checked against the part for reach, gouges and rapids into the stock. Facing, profiling, pocketing, adaptive clearing and drilling on a CNC mill or router, posted for GRBL, LinuxCNC, Mach3/Mach4, Fanuc, Centroid, UCCNC or Smoothieware. Use when the user asks to mill, drill or rout a part, for CAM, toolpaths, feeds and speeds, or G-code for a CNC mill or router. Never sends G-code to a machine.
+description: Turn a saved STEP or xbf part into 3-axis CNC toolpaths and G-code, planned and posted by the user's own FreeCAD (1.1 or newer, headless), then checked against the part for reach, gouges and rapids into the stock. Facing, profiling, pocketing, adaptive clearing and drilling on a CNC mill or router, posted for GRBL, LinuxCNC, Mach3/Mach4, Fanuc, Centroid, UCCNC or Smoothieware. Use when the user asks to mill, drill or rout a part, for CAM, toolpaths, feeds and speeds, or G-code for a CNC mill or router. Never sends G-code to a machine.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # CAM: toolpaths and G-code from a saved part
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the repository link is only for
-provenance and release review.
-
-You write a small job file (machine, material, stock, tools, setups and their operations). `cadgen
+You write a small job file (machine, material, stock, tools, setups and their operations). `cad
 cam plan` has the user's FreeCAD plan each setup's toolpaths and post them for the named
 controller, checks every move against the part, and writes `<part>.cam.glb` (the part, the stock
 and the toolpaths, with the verdict) and, when nothing is an error, the G-code beside the part.
 
-Modelling the part is `$cad`; this skill reads a saved `.step`, `.stp` or `.xbf`. Reviewing whether
-a design can be machined well is `$dfm`. 3D printing is `$gcode`.
+This skill reads a saved `.step`, `.stp` or `.xbf`: build or fix the model first. It plans how a
+part is cut, not whether the design machines well, and it does not slice for a 3D printer.
 
 ## What it does not do
 
@@ -29,38 +27,36 @@ operation below in for it without saying what it leaves uncut.
 
 ## Setup
 
-Run cadgen through the `cadgen` command its installation writes, so this skill's commands
-share one installation, and its engine server, with the CAD app's:
+Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
+project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
+the CAD app was only just added, its server may still be starting: wait five seconds and run the
+command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
 
-- `cadgen` below means `cadgen +0.8.3` (`~/.local/bin/cadgen +0.8.3` where `~/.local/bin` is not on your PATH)
-- `python` below means `cadgen +0.8.3 run`
+```bash
+curl -fsSL https://texttocad.dev/install.sh | sh
+```
 
-If `cadgen` is not on your PATH, or it says 0.8.3 is not installed, run
-`uvx --no-config --managed-python --python 3.13 --from cadgen==0.8.3 cadgen doctor` once,
-outside any sandbox or with its permission: it installs cadgen, registers it, writes the
-`cadgen` command and starts the engine. With the CAD app's server running, nothing else
-needs the sandbox's permission: it starts the engine and holds it. Without it, a sandboxed
-shell cannot start the engine; when a command says no engine is running, run `cadgen server`
-outside the sandbox once.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
+says what to do, and `cad doctor` explains the installation.
 
-`cadgen cam` reads its part from the file itself and needs no engine of its own.
+`cad cam` reads its part from the file itself, never through the engine.
 
 ### Install FreeCAD
 
-`cadgen cam plan` needs FreeCAD 1.1 or newer, installed by the person; `cadgen cam features` does
-not. cadgen downloads nothing and plans with nothing else. Get it from
+`cad cam plan` needs FreeCAD 1.1 or newer, installed by the person; `cad cam features` does
+not. It downloads nothing and plans with nothing else. Get it from
 https://www.freecad.org/downloads.php:
 
-- macOS: drag the `.dmg`'s FreeCAD into Applications (or `~/Applications`). cadgen finds
+- macOS: drag the `.dmg`'s FreeCAD into Applications (or `~/Applications`). `cad cam` finds
   `FreeCAD.app/Contents/Resources/bin/freecadcmd` there.
-- Windows: run the installer. cadgen finds `bin\freecadcmd.exe` in the newest `FreeCAD *` folder
+- Windows: run the installer. `cad cam` finds `bin\freecadcmd.exe` in the newest `FreeCAD *` folder
   under Program Files, or under `%LOCALAPPDATA%\Programs` for a one-user install.
 - Linux: a distribution or snap package (`/usr/bin/freecadcmd`, `/usr/local/bin/freecadcmd`,
   `/snap/bin/freecad.cmd`), or the AppImage unpacked with `--appimage-extract` and
-  `CADGEN_FREECAD` set to its `squashfs-root/usr/bin/freecadcmd`.
+  `CAD_FREECAD` set to its `squashfs-root/usr/bin/freecadcmd`.
 
-Anywhere else, set `CADGEN_FREECAD` to the `freecadcmd` program
-(`CADGEN_FREECAD=/opt/freecad/bin/freecadcmd`). cadgen tries `CADGEN_FREECAD`, then `freecadcmd`
+Anywhere else, set `CAD_FREECAD` to the `freecadcmd` program
+(`CAD_FREECAD=/opt/freecad/bin/freecadcmd`). `cad cam` tries `CAD_FREECAD`, then `freecadcmd`
 or `FreeCADCmd` on PATH, then the places above. A missing or older FreeCAD stops the plan with an
 error that says how to install it, and nothing is written: ask the user to install it, or install
 it yourself with their permission, then plan again. Every result names the FreeCAD version that
@@ -76,7 +72,7 @@ mm/min).
 1. **Read the part.** Every job names faces by their refs.
 
    ```bash
-   cadgen cam features part.step
+   cad cam features part.step
    ```
 
    It prints the part's size, one line per face and one per hole:
@@ -90,7 +86,7 @@ mm/min).
    For an assembly pass the part, `--occurrence kit/arm` (`pin.2` for the second `pin`), here and to `plan`. A job takes a ref
    as `block/face 15`, as `face 15` on a one-part document, or as the Viewer copies it
    (`/work/part.step#block/face 15`). A model's part is its `@xbf` or `@step` output, or the file
-   `cadgen export <id> part.step` writes.
+   `cad export <id> part.step` writes.
 
 2. **Ask what you cannot see.** Once, in one message, for what the user has not said:
    - **The controller.** `machine.post` is required and has no default: a dialect read by the
@@ -149,7 +145,7 @@ mm/min).
 4. **Plan.**
 
    ```bash
-   cadgen cam plan part.step --job part.cam.json
+   cad cam plan part.step --job part.cam.json
    ```
 
    It prints the headline (`Ready to cut · 42 min · 3 tools` or `2 to fix · ...`), one line per
@@ -166,8 +162,9 @@ mm/min).
    Fix each error in the job ([The checks](#the-checks)), never by changing the part unless the
    user asks, and plan again until it is ready. Then read the warnings.
 
-6. **Show it** with `$cad` (its Show the model step): `part.cam.glb` shows the part, the stock
-   and every setup's feeds and rapids.
+6. **Show it.** `part.cam.glb` shows the part, the stock and every setup's feeds and rapids. If
+   your tools include `cad_show`, call it with the GLB's absolute path; otherwise run
+   `cad viewer --json part.cam.glb` and give the user the `url` it prints for the file, once.
 
 7. **Hand over the G-code** ([Report](#report)).
 
@@ -212,7 +209,7 @@ of the tool's diameter; `stepdown_mm` defaults to a fraction of the diameter set
 
 ## The checks
 
-FreeCAD plans what it is asked to and checks nothing against the part, so cadgen checks every
+FreeCAD plans what it is asked to and checks nothing against the part, so `cad cam` checks every
 plan, before FreeCAD runs and after. An operation with a reach error is not given to FreeCAD.
 
 | Finding | Severity | Means | Fix it in the job |
@@ -227,12 +224,12 @@ plan, before FreeCAD runs and after. An operation with a reach error is not give
 | `empty_operation` | error | FreeCAD planned no cut for an operation | Check its faces, that the tool fits them, and for `face` that the stock has a top margin |
 | `uncut` | error | No cutting move reaches a face or hole the operation names at its depth, a floor's moves cover only part of what the tool fits on it (its sharp inside corners are the tool's to leave; a ball's ridges between passes, its scallop, are not), or a `face` leaves part of the face: FreeCAD left it out | Cut it in its own operation with a tool that fits it, or leave it out; for a ridge, a smaller `stepover` or a flat end mill |
 | `travel` | error | The setup's moves span more than `machine.travel_mm` | The part does not fit this machine in this setup |
-| `overridden` | error | FreeCAD, recomputed, holds a spindle speed, feed, step down, peck or final depth other than the one cadgen set, so its paths and G-code follow FreeCAD's | A cadgen bug with this FreeCAD: report it, with the job; nothing is posted |
-| `posted` | error | The posted program says a spindle speed (S), feed (F) or peck (Q) cadgen set for none of its operations, or moves in a work offset other than the job's: every program is read back | A cadgen bug with this FreeCAD and post: report it, with the job; nothing is posted |
+| `overridden` | error | FreeCAD, recomputed, holds a spindle speed, feed, step down, peck or final depth other than the one `cad cam` set, so its paths and G-code follow FreeCAD's | A bug in the CAD server with this FreeCAD: report it, with the job; nothing is posted |
+| `posted` | error | The posted program says a spindle speed (S), feed (F) or peck (Q) `cad cam` set for none of its operations, or moves in a work offset other than the job's: every program is read back | A bug in the CAD server with this FreeCAD and post: report it, with the job; nothing is posted |
 | `clamped` | warning | A tool's spindle speed or feed was held to `max_rpm`, raised to `min_rpm`, or held to `max_feed_mm_min`: one warning a tool | Fine as a starting point; say so. A drill the machine would turn far too fast is refused: pocket the hole with an end mill, or give the operation's `speed` |
 
 `job`, `freecad` and `internal_error` are the one finding of a plan that did not run: the job was
-refused, FreeCAD is missing or failed, or cadgen hit a bug (report it with the part).
+refused, FreeCAD is missing or failed, or `cad cam` hit a bug (report it with the part).
 
 The gouge check sees the part from above, so it is exact for a part cut from one side and
 conservative under an overhang. It knows the part, the stock box and the tools, nothing else: a
@@ -258,7 +255,7 @@ a setup with several tools posts one file per run of one tool, `part.top.1-T1.nc
 before each. Each tool posts as its T number (its `number`), and two tools with one T number are
 refused; the
 work offset is `machine.work_offset` (`G54`). Every posted file opens with two comment lines
-cadgen adds: what it is (the part, the setup, the FreeCAD version and the post) and that it is not
+`cad cam` adds: what it is (the part, the setup, the FreeCAD version and the post) and that it is not
 proven on a machine and must be air-cut or run single block first.
 
 ## Report

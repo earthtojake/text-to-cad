@@ -1,7 +1,7 @@
 import { Checkbox as CheckboxPrimitive } from "radix-ui"
 import { Check } from "lucide-react"
 
-import { cn } from "@text-to-cad/ui/utils"
+import { cn } from "@cad/ui/utils"
 
 /** shadcn's checkbox at the chrome's scale: a 14px box, filled with the primary colour when ticked. */
 function Checkbox({ className, ...props }) {

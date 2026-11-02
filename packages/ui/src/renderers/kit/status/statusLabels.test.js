@@ -20,7 +20,7 @@ test("every loading step the screen can show, and every update line, is said in 
 });
 
 test("every stage of the engine's progress event is said in every language, by its key", () => {
-  // The vocabulary is the engine's (`cadgen/engine/progress.py`: `STAGES`), keyed `progress.<kind>.<stage>`
+  // The vocabulary is the engine's (`cad/engine/progress.py`: `STAGES`), keyed `progress.<kind>.<stage>`
   // in the locales; a policy test holds the two to each other. Here: each key reads as words in every
   // language, never as the key or as English, and an update line carries the count in flight.
   const keys = Object.keys(en).filter(key => key.startsWith("progress."));

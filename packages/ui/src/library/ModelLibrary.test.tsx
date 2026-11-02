@@ -173,8 +173,9 @@ it('lists rows under a Name, Updated and Created header: each its glyph and name
 
 it('gives each card one menu: Open, a file\'s Copy path and Reveal where the host can, Pin, then Delete; a model has no path to offer', async () => {
   const id = '8c1f5a0e-1d3b-5d6e-9a7f-2b4c6d8e0f12';
-  const copied: string[] = [], revealed: string[] = [];
-  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': ({ path }: { path: string }) => { copied.push(path); }, reveal: ({ path }: { path: string }) => { revealed.push(path); } } };
+  const copied: string[] = [], revealed: string[] = [], linked: unknown[] = [];
+  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': ({ path }: { path: string }) => { copied.push(path); },
+    'copy-link': (entry: unknown) => { linked.push(entry); }, reveal: ({ path }: { path: string }) => { revealed.push(path); } } };
   const source = library([model('bracket.step'), model('arm', { path: id, kind: 'model', script: '/work/parts/arm.py' })]);
   const shown = async (name: string) => {
     cleanup();
@@ -183,14 +184,18 @@ it('gives each card one menu: Open, a file\'s Copy path and Reveal where the hos
     return menu(name);
   };
   let open = await shown('bracket.step');
-  expect(items(open)).toEqual(['Open', 'Copy path', 'Reveal in Finder', 'Pin', 'Delete']);
+  expect(items(open)).toEqual(['Open', 'Copy path', 'Copy link', 'Reveal in Finder', 'Pin', 'Delete']);
   // Delete is the last, after a rule, and destructive.
   expect(open.querySelector('[role=separator]')?.nextElementSibling?.textContent).toBe('Delete');
   expect(within(open).getByRole('menuitem', { name: 'Delete' }).getAttribute('data-variant')).toBe('destructive');
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Copy path' })); });
   expect(copied).toEqual(['/work/parts/bracket.step']);
-  // A model is no file: it is not tied to the script it was built from.
-  expect(items(await shown('arm'))).toEqual(['Open', 'Pin', 'Delete']);
+  // A model is no file: it is not tied to the script it was built from. Its page is: Copy link,
+  // by its document's id.
+  open = await shown('arm');
+  expect(items(open)).toEqual(['Open', 'Copy link', 'Pin', 'Delete']);
+  await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Copy link' })); });
+  expect(linked).toEqual([expect.objectContaining({ path: id, kind: 'file' })]);
   open = await shown('bracket.step');
   await act(async () => { fireEvent.click(within(open).getByRole('menuitem', { name: 'Reveal in Finder' })); });
   expect(revealed).toEqual(['/work/parts/bracket.step']);
@@ -462,9 +467,9 @@ it("counts what a person does on the home by name: a type chosen, a search begun
   expect(reports.flat()).toEqual([{ control: 'home_delete', count: 1, seconds: 0 }]);
 });
 
-it('counts the pin, from its button or the menu, the grid/list switch, and Copy path and Reveal', async () => {
+it('counts the pin, from its button or the menu, the grid/list switch, and Copy path, Copy link and Reveal', async () => {
   const reports: { control: string; count: number; seconds: number }[][] = [];
-  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, reveal: () => {} } };
+  const fileActions = { platform: 'darwin' as const, perform: { 'copy-path': () => {}, 'copy-link': () => {}, reveal: () => {} } };
   const source = library([model('bracket.step'), model('plate.step', { pinned: true })]);
   const home = () => render(<ControlUsageProvider report={counts => reports.push(counts)}>
     <ModelLibrary library={source} fileActions={fileActions} onLayoutChange={() => {}} /></ControlUsageProvider>);
@@ -478,7 +483,7 @@ it('counts the pin, from its button or the menu, the grid/list switch, and Copy 
   view.unmount();
   cleanup();
   // A menu each render (jsdom): Reveal, then Unpin from the menu.
-  for (const item of ['Reveal in Finder', 'Unpin']) {
+  for (const item of ['Copy link', 'Reveal in Finder', 'Unpin']) {
     view = home();
     await screen.findByRole('button', { name: 'Open plate.step' });
     await act(async () => { fireEvent.click(within(await menu('plate.step')).getByRole('menuitem', { name: item })); });
@@ -486,7 +491,7 @@ it('counts the pin, from its button or the menu, the grid/list switch, and Copy 
     cleanup();
   }
   const said = Object.fromEntries(reports.flat().map(({ control, count }) => [control, count]));
-  expect(said).toEqual({ home_pin: 1, home_layout_list: 1, home_layout_grid: 1, home_copy_path: 1, home_reveal: 1, home_unpin: 1 });
+  expect(said).toEqual({ home_pin: 1, home_layout_list: 1, home_layout_grid: 1, home_copy_path: 1, home_copy_link: 1, home_reveal: 1, home_unpin: 1 });
 });
 
 it("marks a drawing's picture, which a dark card turns light, and no other", async () => {

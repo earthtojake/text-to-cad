@@ -1,9 +1,9 @@
 import { PositionIcon } from '../kit/tools/ChangedDot.jsx';
 import { CONNECTED_SELECTION, SELECT_GEOMETRY, connectedSelectionApplies } from './xbfSelectionFilter.js';
-import { DropdownMenuCheckboxItem } from '@text-to-cad/ui/primitives/dropdown-menu';
+import { DropdownMenuCheckboxItem } from '@cad/ui/primitives/dropdown-menu';
 import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 import { ModeGlyph, ToolModeIcon, modeGlyphIcon } from "../kit/tools/select/modeGlyphs.jsx";
 
 // Select's button, Measure's and Select's menu, which read on an engine document as the STEP

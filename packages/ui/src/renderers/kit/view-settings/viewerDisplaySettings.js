@@ -1,6 +1,6 @@
-import { normalizePreviewSettings, normalizeViewSettings, resolveViewSettings } from "@text-to-cad/core/common/viewSettings.js";
+import { normalizePreviewSettings, normalizeViewSettings, resolveViewSettings } from "@cad/core/common/viewSettings.js";
 
-import { buildStepClipPatch } from "@text-to-cad/core/lib/viewer/clipPlane.js";
+import { buildStepClipPatch } from "@cad/core/lib/viewer/clipPlane.js";
 
 // A patch merges into what is there, in the same shape: `mode` picks the mode and `grid` switches
 // the grid; the shared groups merge field by field.

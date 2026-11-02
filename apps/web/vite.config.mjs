@@ -4,10 +4,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { buildId } from "@text-to-cad/ui/build-id";
-import { stampDebugId } from "@text-to-cad/core/chunk-ids";
-import { packageSourceMaps } from "@text-to-cad/core/source-maps";
-import { thirdPartyLicenses } from "@text-to-cad/core/third-party-licenses";
+import { buildId } from "@cad/ui/build-id";
+import { stampDebugId } from "@cad/core/chunk-ids";
+import { packageSourceMaps } from "@cad/core/source-maps";
+import { thirdPartyLicenses } from "@cad/core/third-party-licenses";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
@@ -52,7 +52,7 @@ function resolveDirectoryRoot() {
 }
 
 // Vite obtains the API endpoint of this installation's engine (its one page's), then
-// proxies /__cad with its token. Closing Vite leaves the engine and its other clients alive.
+// proxies the engine's API, /api, with its token. Closing Vite leaves the engine and its other clients alive.
 // VIEWER_PYTHON names the editable installation's interpreter. An explicit
 // VIEWER_BACKEND_URL (the launcher's apiUrl) also needs CAD_ENGINE_TOKEN: the token is
 // named outside the client's envPrefix (VIEWER_), which Vite hands to the page.
@@ -85,7 +85,7 @@ async function startDevBackend() {
     python,
     [
       "-m",
-      "cadgen.viewer",
+      "cad_server.viewer",
       "--host",
       "127.0.0.1",
       "--api-only",
@@ -156,11 +156,11 @@ function serverLifetimePlugin() {
 }
 
 // Each chunk's debug id, by file name, in the page before anything runs (`__cadChunkIds`): a crash
-// report names the chunk each of its frames ran in by it (@text-to-cad/core's crash reporter), and
+// report names the chunk each of its frames ran in by it (@cad/core's crash reporter), and
 // the release uploads every chunk with its source map (scripts/release/sourcemaps.py) for PostHog to
 // show the source -- the shared packages' own source, whose maps the build chains
-// (@text-to-cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
-// map decide (@text-to-cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
+// (@cad/core/source-maps), not their compiled dist. Each chunk goes by an id its text and its
+// map decide (@cad/core/chunk-ids), never rolldown's, which names the code alone. The maps stay
 // in dist, which the wheel leaves out (scripts/bundle).
 function chunkIdsPlugin() {
   return {
@@ -189,7 +189,7 @@ function chunkIdsPlugin() {
 }
 
 // The third-party notice beside index.html, of every package the client and its workers inline:
-// it ships with the client (@text-to-cad/core/third-party-licenses).
+// it ships with the client (@cad/core/third-party-licenses).
 const licenses = thirdPartyLicenses();
 
 export default defineConfig(async ({ command }) => (refuseClientTokens(), {
@@ -197,12 +197,12 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
   base: "./",
   envPrefix: ENV_PREFIX,
   // Which build this is, for the version the app menu shows (src/host/viewerLinks.js): none for
-  // the release's own, this checkout's commit for any other (@text-to-cad/ui/build-id).
-  define: { __TEXT_TO_CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
+  // the release's own, this checkout's commit for any other (@cad/ui/build-id).
+  define: { __CAD_BUILD__: JSON.stringify(buildId({ version: viewerVersion(), cwd: viewerAppRoot })) },
   plugins: [
     react(),
     serverLifetimePlugin(),
-    packageSourceMaps(["@text-to-cad/core", "@text-to-cad/ui"]),
+    packageSourceMaps(["@cad/core", "@cad/ui"]),
     chunkIdsPlugin(),
     licenses.plugin(),
   ],
@@ -230,13 +230,13 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
     // reuses or replaces; dev stays out of that.)
     strictPort: true,
     allowedHosts: viewerAllowedHosts,
-    // No CORS: the client is this origin's own, and the /__cad proxy below adds the engine's
+    // No CORS: the client is this origin's own, and the /api proxy below adds the engine's
     // token to what it forwards, so no other origin (another localhost port among them) may
     // read what it answers. Vite's default lets every localhost origin.
     cors: false,
-    // The two API prefixes go to the Python backend; everything else is the
-    // client, served by Vite with HMR. Neither prefix collides with Vite's own
-    // reserved /@vite/, /@fs/ or /@id/.
+    // The API (/api: every route the page calls, /api/v1/...) goes to the Python backend;
+    // everything else is the client, served by Vite with HMR. The prefix collides with none
+    // of Vite's own reserved /@vite/, /@fs/ or /@id/.
     //
     // changeOrigin: false is MANDATORY. The backend keeps its DNS-rebinding
     // Host check, which is active whenever the bound host is loopback. With
@@ -250,12 +250,12 @@ export default defineConfig(async ({ command }) => (refuseClientTokens(), {
         ? await (async () => {
             const { target, token } = await startDevBackend();
             return {
-              "/__cad": { target, changeOrigin: false, headers: token ? { Authorization: `Bearer ${token}` } : {} },
+              "/api": { target, changeOrigin: false, headers: token ? { Authorization: `Bearer ${token}` } : {} },
             };
           })()
         : undefined,
     fs: {
-      // @text-to-cad/core lives outside the app root, so it must be allowed explicitly;
+      // @cad/core lives outside the app root, so it must be allowed explicitly;
       // real paths too, in case a checkout reaches it through a link. See
       // scripts/serverFsAllow.mjs.
       allow: resolveServerFsAllow([repoRoot], {
