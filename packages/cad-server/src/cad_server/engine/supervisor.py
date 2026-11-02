@@ -36,9 +36,9 @@ nor waits for one, nor starts one: a standby runs the service's own environment.
 with an idle process, as below, never the standby while another process is busy or being started: it
 waits for that one to be free, and holds up no lease in the service's own environment meanwhile, which may
 take the standby it cannot. Where the standby is all that holds the cap (a cap of one), the slot is the
-lease's: the standby retired, unnoted, and owed -- it stands again, in the environment it stood in, at the
-first slot free (``_restand``). So no cap leaves a lease waiting on what never frees. A request that needs
-a process of its own
+lease's: the standby retired, unnoted, and owed -- it stands again at the first slot free (``_restand``), in
+the environment it stood in, or the latest a ``stand`` refused for want of room named. So no cap leaves a
+lease waiting on what never frees. A request that needs a process of its own
 takes its service's standby when the binding is the standby's; waits for the standby being started,
 the first such request alone, when it is (and hears the standby's ``notice`` after its
 ``patience``); starts one at once when its service does not count; else starts one in a free slot
@@ -573,8 +573,9 @@ class _Standing:
     readying: dict[str, str] | None = None
     size: float | None = None
     follow: dict[str, str] | None = None
-    # The environment of the standby a lease in its caller's Python retired for its slot at the cap: owed,
-    # it stands again there at the first slot free (``Supervisor._restand``).
+    # The environment of the standby a lease in its caller's Python retired for its slot at the cap, or the
+    # latest a ``stand`` refused for want of room named since: owed, it stands again there at the first slot
+    # free (``Supervisor._restand``).
     owed: dict[str, str] | None = None
 
 
@@ -765,7 +766,7 @@ class Supervisor:
 
     def _restand(self) -> None:
         """Each standby owed -- retired for the slot of a lease in its caller's Python (``_Standing.owed``) --
-        stood again in the environment it stood in, where there is room for it now (``stand`` says)."""
+        stood again in the environment it is owed in, where there is room for it now (``stand`` says)."""
         with self.lock:
             owed = [(name, slot.owed) for name, slot in self.standbys.items() if slot.owed is not None]
         for name, environment in owed:
@@ -859,9 +860,10 @@ class Supervisor:
         with self.lock:
             if self.stopped or slot.ready is not None or slot.readying is not None:
                 return
-            if declared.counted and self._occupied() >= self.cap:
-                return
-            if cap is not None and self._resident() + (slot.size or 0.0) > cap:
+            if ((declared.counted and self._occupied() >= self.cap)
+                    or (cap is not None and self._resident() + (slot.size or 0.0) > cap)):
+                if slot.owed is not None:
+                    slot.owed = dict(environment)  # owed still, in the latest binding asked for
                 return
             slot.readying, slot.owed = dict(environment), None
         threading.Thread(target=self._stood, args=(declared, slot, dict(environment), os.getcwd()),

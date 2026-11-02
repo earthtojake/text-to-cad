@@ -94,6 +94,22 @@ class SchedulingTest(unittest.TestCase):
             found.append(process)
         return found
 
+    def at_once(self, supervisor: Supervisor, lease):
+        """What ``lease()`` is granted, at once: on this thread a lease that would wait fails the test
+        rather than hang it (the grant decided as it was asked)."""
+        this, wait = threading.current_thread(), supervisor.lock.wait
+
+        def refused(*args, **kwargs):
+            if threading.current_thread() is this:
+                raise AssertionError("the lease waits: it was not granted at once")
+            return wait(*args, **kwargs)
+
+        supervisor.lock.wait = refused
+        try:
+            return lease()
+        finally:
+            supervisor.lock.wait = wait
+
     def standing(self, supervisor: Supervisor) -> Fake:
         supervisor.enable_standby("worker")
         supervisor.stand("worker", {})
@@ -275,7 +291,7 @@ class SchedulingTest(unittest.TestCase):
         await_(lambda: supervisor.waiting("worker") == 1, "the caller's lease to wait for the busy worker")
         self.assertFalse(standby.stopped, "a busy worker will be free: the standby stays")
         # A build in the server's own Python behind it takes the standby the waiting one cannot.
-        self.assertIs(supervisor.lease("worker", "c.py", {}), standby)
+        self.assertIs(self.at_once(supervisor, lambda: supervisor.lease("worker", "c.py", {})), standby)
         supervisor.release(busy)
         theirs.join(5)
         self.assertTrue(got and busy.stopped, "the caller's lease took the slot of the worker once it was free")
@@ -284,7 +300,8 @@ class SchedulingTest(unittest.TestCase):
         # The standby is all that holds the cap: the slot is the lease's, never a wait on nothing.
         supervisor, started = self.caller_s(1)
         spare = self.standing(supervisor)
-        theirs = supervisor.lease("worker", "b.py", {}, python="/venv/bin/python", python_key="/venv 0.10.0")
+        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
+                                                                   python_key="/venv 0.10.0"))
         self.assertTrue(spare.stopped, "the standby retired for its slot")
         self.assertEqual((started[-1], list(supervisor.retired)), (("b.py", "/venv/bin/python"), []), "unnoted")
         # A build in the server's own Python behind it waits for that worker to be free, then takes its slot.
@@ -300,6 +317,23 @@ class SchedulingTest(unittest.TestCase):
         got[0].retired = True
         supervisor.release(got[0])
         await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
+
+    def test_the_standby_owed_stands_again_in_the_latest_binding_a_build_asked_for(self) -> None:
+        supervisor, _started = self.caller_s(1)
+        supervisor.enable_standby("worker")
+        supervisor.stand("worker", {"PYTHONPATH": "/old"})
+        await_(lambda: supervisor.standby("worker") is not None, "the standby")
+        theirs = self.at_once(supervisor, lambda: supervisor.lease("worker", "b.py", {}, python="/venv/bin/python",
+                                                                   python_key="/venv 0.10.0"))
+        supervisor.release(theirs)
+        # A build of another binding takes the slot; the standby it would stand finds none, and stays owed.
+        build = self.at_once(supervisor, lambda: supervisor.lease("worker", "a.py", {"PYTHONPATH": "/new"}))
+        self.assertIsNone(supervisor.standby("worker"))
+        build.retired = True
+        supervisor.release(build)
+        await_(lambda: supervisor.standby("worker") is not None, "the standby owed, standing again")
+        self.assertEqual(supervisor.standby("worker").environment, {"PYTHONPATH": "/new"},
+                         "the binding the latest build asked for, never the one it was retired in")
 
     def test_a_build_s_worker_is_its_environment_s_and_its_release_s_whatever_spelling_names_its_python(self) -> None:
         from cad.engine import contract
