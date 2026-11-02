@@ -683,10 +683,8 @@ def cache_text(root: Any, documents: Any, size: Any) -> str:
 
 
 def workers_text(answer: dict[str, Any]) -> str:
-    """The workers against their count cap, as ``cad status`` (and ``cad doctor``) says them:
-    the standby holds a slot of the cap, counted with the workers, never one of them."""
-    counted = len(answer.get("workers") or []) + (1 if answer.get("standby") else 0)
-    return f"workers {counted}/{answer.get('cap')}" + (" with the standby" if answer.get("standby") else "")
+    """The workers against their count cap, as ``cad status`` (and ``cad doctor``) says them."""
+    return f"workers {len(answer.get('workers') or [])}/{answer.get('cap')}"
 
 
 def status_text(answer: dict[str, Any]) -> str:
@@ -694,14 +692,12 @@ def status_text(answer: dict[str, Any]) -> str:
     their memory against its cap -- a line per worker -- busy or idle, its script, process, builds
     and memory after its last build, where a busy one's build is (its last progress frame), how long
     it has been busy or idle, and the Python it runs where that is its script's own, not the server's --
-    the standby's line (its process and memory: no script), the making of
-    the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
+    the making of the CAD kernel environment while the engine makes it, the builds waiting for a worker, the last
     retirements, what it serves and holds under its memory budget,
     and each model document's state, with the command that builds again one not held."""
     import time
 
     workers = answer.get("workers") or []
-    standby = answer.get("standby")
     cap = answer.get("rssCapMb")
     resident = answer.get("rssMb")
     memory = (f"RSS {_gb(resident)} of {_gb(cap)}" if resident is not None else f"RSS cap {_gb(cap)}") if cap \
@@ -731,14 +727,9 @@ def status_text(answer: dict[str, Any]) -> str:
         python = f" · {worker['python']}" if worker.get("python") else ""
         lines.append(f"  {'busy' if worker.get('busy') else 'idle'}  {name:<{width}}  {str(worker.get('pid')):>6}  "
                      f"{builds:>10}  {_gb(worker.get('rssMb')):>7}  {doing}{python}")
-    if standby:
-        # The kernel loaded and no script: the next new script's worker.
-        lines.append(f"  standby  {'':<{width}}  {str(standby.get('pid') or ''):>6}  {'':>10}  "
-                     f"{_gb(standby.get('rssMb')):>7}  "
-                     + ("starting" if standby.get("starting") else f"kernel loaded · {_span(standby.get('seconds'))}"))
     made = answer.get("base") or {}
     if made.get("state") == "making":
-        # The engine making its kernel environment (``base.Making``): the standby, and the builds, wait for it.
+        # The engine making its kernel environment on first need (``base.Making``): what needs it waits.
         lines.append(f"  base     making the CAD kernel environment · {made.get('line') or ''} · {_span(made.get('seconds'))}")
     elif made.get("state") == "failed":
         lines.append(f"  base     the CAD kernel environment was not made: {made.get('error')}")

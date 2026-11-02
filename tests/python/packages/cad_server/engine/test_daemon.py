@@ -834,7 +834,7 @@ class NoTimerTest(unittest.TestCase):
 
         engine = daemon.Daemon(cap=1)
         stopped: list[str] = []
-        engine.supervisor.launch = lambda service, key, label, environment, cwd, standby: types.SimpleNamespace(
+        engine.supervisor.launch = lambda service, key, label, environment, cwd: types.SimpleNamespace(
             service=service, key=key, label=label, environment=environment, pid=1, leased=False, retired=False,
             rss=100.0, used=time.monotonic(), alive=lambda: True, stop=lambda: stopped.append("worker"))
         worker = engine.lease("/w/block.py", {})
@@ -902,36 +902,19 @@ class BusyTest(unittest.TestCase):
         self.assertEqual(engine.status()["busy"], 0)
 
 
-class StandbyStartTest(unittest.TestCase):
-    def test_the_daemon_s_start_stands_one_by_in_its_starter_s_environment(self) -> None:
-        from unittest import mock
+class FirstNeedTest(unittest.TestCase):
+    """The base, the default environment the engine's kernel processes run in, is made on first need:
+    never at the daemon's start, and by the first kernel process's start, which waits on its making."""
 
-        from cad_server.engine import daemon
-        from cad.engine import places
-
-        engine = daemon.Daemon()
-        self.addCleanup(engine.supervisor.stop)
-        asked: list[dict] = []
-        root = places.engine_root()
-        with mock.patch.object(engine.supervisor, "stand", side_effect=lambda *args: asked.append(args)), \
-                mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join((root, "/mine")),
-                                             "CAD_ENGINE_STANDBY": "1"}):
-            engine.stand()
-        self.assertTrue(engine.supervisor.standbys["worker"].enabled)
-        self.assertEqual([service for service, _environment in asked], ["worker"])
-        self.assertEqual(asked[0][1]["PYTHONPATH"], "/mine", "without the engine's folder its starter put first")
-
-    def test_an_engine_with_no_base_makes_it_at_its_start_and_stands_its_standby_once_made(self) -> None:
-        # The plugin's server alone, as a host's CAD app installs it: the engine it starts, outside any sandbox,
-        # makes the base at its start in the background (an agent's sandboxed command cannot), and its standby
-        # stands once the base is made.
+    def core(self):
+        """An installation whose own environment has no kernel (the plugin's server alone), its cache a
+        scratch folder, and a fake making gated by the event returned."""
         import contextlib
         import dataclasses
         import io
         import threading
 
         from cad_server._internal import base
-        from cad_server.engine import daemon
 
         scratch = Path(tempfile.mkdtemp(prefix="engine-base-"))
         self.addCleanup(shutil.rmtree, scratch, True)
@@ -947,37 +930,48 @@ class StandbyStartTest(unittest.TestCase):
             (env / marker).write_text(json.dumps(written), encoding="utf-8")
             return written
 
-        engine = daemon.Daemon()
-        self.addCleanup(engine.supervisor.stop)
-        stood: list[bool] = []  # whether the base was there each time a standby was asked to stand
-        with mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(scratch), "CAD_ENGINE_STANDBY": "1"}), \
-                mock.patch.object(base, "MAKING", base.Making()), mock.patch.object(base, "make", side_effect=make) as made, \
-                mock.patch.object(base.Installation, "here", return_value=core), contextlib.redirect_stderr(io.StringIO()), \
-                mock.patch.object(engine.supervisor, "stand",
-                                  side_effect=lambda _service, _env: stood.append(base.complete(base.where(core)) is not None)):
-            engine.stand()
-            self.assertEqual((engine.status()["base"]["state"], stood), ("making", [False]))
-            go.set()
-            deadline = time.monotonic() + 30
-            while len(stood) < 2 and time.monotonic() < deadline:
-                time.sleep(0.01)
-            self.assertEqual(engine.status()["base"]["state"], "made")
-        made.assert_called_once()
-        self.assertEqual(stood, [False, True], "none to stand in at the start; the standby once the base is made")
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        stack.enter_context(mock.patch.dict(os.environ, {"CAD_CACHE_DIR": str(scratch)}))
+        stack.enter_context(mock.patch.object(base, "MAKING", base.Making()))
+        made = stack.enter_context(mock.patch.object(base, "make", side_effect=make))
+        stack.enter_context(mock.patch.object(base.Installation, "here", return_value=core))
+        stack.enter_context(contextlib.redirect_stderr(io.StringIO()))
+        return core, go, made
 
-    def test_with_the_switch_off_none_stands_by_and_none_replaces_one(self) -> None:
-        from unittest import mock
-
+    def test_the_daemon_s_start_makes_nothing(self) -> None:
         from cad_server.engine import daemon
 
+        _core, go, made = self.core()
+        go.set()
         engine = daemon.Daemon()
         self.addCleanup(engine.supervisor.stop)
-        with mock.patch.object(engine.supervisor, "stand") as stand, \
-                mock.patch.dict(os.environ, {"CAD_ENGINE_STANDBY": "0"}):
-            engine.stand()
-        stand.assert_not_called()
-        self.assertFalse(engine.supervisor.standbys["worker"].enabled,
-                         "no standby to start after an adoption or a fresh worker either")
+        engine.begin()
+        made.assert_not_called()
+        self.assertIsNone(engine.status()["base"], "nothing made, nothing being made")
+
+    def test_a_kernel_process_s_start_makes_the_base_and_waits_on_its_making(self) -> None:
+        import threading
+
+        from cad_server._internal import base
+        from cad_server.engine import daemon
+
+        core, go, made = self.core()
+        engine = daemon.Daemon()
+        self.addCleanup(engine.supervisor.stop)
+        found: list = []
+        asking = threading.Thread(target=lambda: found.append(daemon._places.kernel(make=True)), daemon=True)
+        asking.start()
+        deadline = time.monotonic() + 30
+        while (engine.status()["base"] or {}).get("state") != "making" and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertEqual((engine.status()["base"]["state"], found), ("making", []), "the start waits on its making")
+        self.assertIsNone(daemon._places.kernel(make=False), "not made yet: nothing to start in")
+        go.set()
+        asking.join(30)
+        self.assertEqual(found[0]["python"], str(base.interpreter(base.where(core))))
+        self.assertEqual(engine.status()["base"]["state"], "made")
+        made.assert_called_once()
 
 
 class DaemonEnvironmentTest(unittest.TestCase):
@@ -1172,8 +1166,8 @@ class OwnFilesTest(unittest.TestCase):
         own = Path(tempfile.mkdtemp(prefix="own-"))
         self.addCleanup(shutil.rmtree, own, True)
         self.env = engine_daemon.watched({**os.environ, "PYTHONPATH": str(SRC), "CAD_ENGINE_DIR": str(self.state),
-                                          "CAD_STATE_DIR": str(own / "state"), "CAD_CACHE_DIR": str(own / "cache"),
-                                          "CAD_ENGINE_STANDBY": "0"}, self.addCleanup)
+                                          "CAD_STATE_DIR": str(own / "state"), "CAD_CACHE_DIR": str(own / "cache")},
+                                         self.addCleanup)
         patch = mock.patch.dict(os.environ, {"CAD_ENGINE_DIR": str(self.state)})
         patch.start()
         self.addCleanup(patch.stop)
@@ -1345,8 +1339,7 @@ class ListenTest(unittest.TestCase):
 
 
 class DaemonTest(unittest.TestCase):
-    """Through the daemon. The class shares one engine, so a test's first build takes the standby the
-    one before left, with the kernel loaded; each test builds scripts of a folder of its own, and
+    """Through the daemon. The class shares one engine; each test builds scripts of a folder of its own, and
     reads the workers of its own scripts (``mine``). A test whose subject is the engine's start, its
     environment or all it holds starts an engine of its own (``own``)."""
 
@@ -1955,11 +1948,9 @@ if __name__ == '__main__':
 
     def test_a_build_with_no_page_starts_no_meshing_process(self) -> None:
         """``python model.py`` serves its document, so the daemon starts its server; the meshing
-        pool waits for a page, a view or a mesh: the daemon's only child is the worker (with no
-        standby, ``CAD_ENGINE_STANDBY=0``)."""
+        pool waits for a page, a view or a mesh: the daemon's only child is the worker."""
         self.own()
         env = {name: value for name, value in self.env.items() if name != "CAD_ENGINE_MESH"}
-        env["CAD_ENGINE_STANDBY"] = "0"
         self.script.write_text(textwrap.dedent(MODEL.format(size=3)), encoding="utf-8")
         done = self.run_script("block.py", env=env)
         self.assertEqual(done.returncode, 0, done.stderr)
@@ -1972,7 +1963,6 @@ if __name__ == '__main__':
             if pid.isdigit() and f"parent={status['pid']} " in first and engine_daemon._alive(int(pid)):
                 children.append((role, int(pid)))
         self.assertEqual(children, [("worker", status["workers"][0]["pid"])])
-        self.assertIsNone(status["standby"])
 
     def test_warming_starts_the_server_before_any_document(self) -> None:
         """What the viewer asks at its launch (``{"op": "warm"}``): the daemon, its server and the
