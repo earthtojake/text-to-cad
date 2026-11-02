@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
-import { cn } from "@text-to-cad/ui/utils";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@cad/ui/primitives/select";
+import { cn } from "@cad/ui/utils";
+import { useI18n } from "@cad/ui/i18n";
 import { FILE_SIDEBAR_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { FILE_SHEET_SELECT_TRIGGER_CLASSES, FileSheetSettingRow, FileSheetSettingsSection } from "../inspector/FileSheet.js";
 import { ORBIT_SPEEDS } from "../tools/PlaybackMenu.jsx";

@@ -1,0 +1,31 @@
+# Versions no release of text-to-cad can carry.
+#
+# The PyPI project `cad` (the library's distribution) was transferred to this project on
+# 2026-10-31. Before the transfer its previous owner published the versions below. PyPI never
+# accepts a filename twice (yanking or deleting a release frees nothing), so a release of any of
+# them could not upload the library, and every distribution shares one VERSION.
+#
+# check-version.sh and bump-version.sh refuse a VERSION on this list (a trailing `.0` is
+# insignificant to PyPI, so `1.0` is 1.0.0 too). CONTRIBUTING.md lists the same versions; a test
+# keeps the two identical. One version per line; `#` starts a comment.
+0.8.0
+0.8.1
+0.8.2
+0.8.3
+0.8.4
+0.8.5
+0.9.0
+0.9.1
+0.9.5
+0.9.6
+0.9.7
+0.9.8
+0.9.9.1
+0.9.9.3
+1.0
+1.0.1
+1.0.2
+1.0.3
+1.0.4
+1.1.1
+1.1.2

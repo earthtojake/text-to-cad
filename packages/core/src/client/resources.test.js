@@ -47,7 +47,7 @@ test('workspace disposal rejects borrowed provider late replies and does not sha
 
 test('observed backend restart retires resource generation and aborts old reads', async () => {
   let epoch = 'one', finish;
-  const client = createCadClient({fetch: async url => url.includes('/__cad/server')
+  const client = createCadClient({fetch: async url => url.includes('/api/v1/server')
     ? Response.json({identityToken:epoch})
     : new Promise(resolve => {finish=resolve;})});
   await client.serverInfo();
@@ -63,22 +63,22 @@ test('observed backend restart retires resource generation and aborts old reads'
 
 test('HTTP dependency resolution preserves catalog query versions', () => {
   const resources = createHttpCadResourceProvider({origin:'https://cad.test'});
-  const asset = resources.resolveDependency('/__cad/asset?file=/models/model.gltf&v=abc', '../mesh.bin');
-  assert.equal(new URL(asset).searchParams.get('file'), '/mesh.bin');
+  const asset = resources.resolveDependency('/api/v1/local/files?path=/models/model.gltf&v=abc', '../mesh.bin');
+  assert.equal(new URL(asset).searchParams.get('path'), '/mesh.bin');
   assert.equal(new URL(asset).searchParams.get('v'), 'abc');
 });
 
 test('a model dependency resolves only to a file beside it, never a remote or foreign origin', () => {
   const resources = createHttpCadResourceProvider({origin:'https://cad.test'});
-  const source = '/__cad/asset?file=/models/model.gltf&v=abc';
-  // A relative reference stays a same-origin /__cad/asset URL; a data: URI passes through.
-  assert.equal(new URL(resources.resolveDependency(source, 'textures/skin.png')).searchParams.get('file'), '/models/textures/skin.png');
+  const source = '/api/v1/local/files?path=/models/model.gltf&v=abc';
+  // A relative reference stays a same-origin /api/v1/local/files URL; a data: URI passes through.
+  assert.equal(new URL(resources.resolveDependency(source, 'textures/skin.png')).searchParams.get('path'), '/models/textures/skin.png');
   assert.equal(resources.resolveDependency(source, 'data:application/octet-stream;base64,AAAA'), 'data:application/octet-stream;base64,AAAA');
   // An explicit http(s) scheme (a cross-origin fetch) is refused rather than fetched.
   for (const remote of ['https://attacker.example/beacon.bin', 'http://127.0.0.1:9/x']) {
     assert.throws(() => resources.resolveDependency(source, remote), /only a file beside it/);
   }
-  // A //host or file:// reference is rebased to a same-origin /__cad/asset path, not a remote
+  // A //host or file:// reference is rebased to a same-origin /api/v1/local/files path, not a remote
   // fetch; the backend's CAD-extension gate is what bounds those local paths.
   assert.equal(new URL(resources.resolveDependency(source, '//attacker.example/x')).origin, 'https://cad.test');
   assert.equal(new URL(resources.resolveDependency(source, 'file:///etc/hosts')).origin, 'https://cad.test');
@@ -158,7 +158,7 @@ test('an issued URL worker ticket cannot publish after its resource generation r
 test('a failed read carries the viewer\'s own reason, with its status', async () => {
   const provider = createHttpCadResourceProvider({ fetch: async () => Response.json(
     { error: 'artifact request failed: The geometry service failed (exit 1).' }, { status: 400 }) });
-  await assert.rejects(provider.readJson('/__cad/store?file=a'), error =>
+  await assert.rejects(provider.readJson('/api/v1/store?file=a'), error =>
     error.message === 'artifact request failed: The geometry service failed (exit 1).' && error.status === 400);
   const plain = createHttpCadResourceProvider({ fetch: async () => new Response('nope', { status: 404, statusText: 'Not Found' }) });
   await assert.rejects(plain.readJson('/missing'), error => /404 Not Found/.test(error.message) && error.status === 404);

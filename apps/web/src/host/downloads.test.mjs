@@ -23,8 +23,8 @@ function page() {
 test('a ready file is one plain same-origin download link, clicked once and removed', () => {
   const { clicked, body, document } = page();
   const port = createBrowserDownloads({ document, storage, key: 'test' });
-  port.save('http://127.0.0.1:4178/s/session/__cad/exports/job/file', 'bracket.step');
-  assert.deepEqual(clicked, [{ href: 'http://127.0.0.1:4178/s/session/__cad/exports/job/file', download: 'bracket.step', rel: 'noopener', attached: true }]);
+  port.save('http://127.0.0.1:4178/s/session/api/v1/exports/job/file', 'bracket.step');
+  assert.deepEqual(clicked, [{ href: 'http://127.0.0.1:4178/s/session/api/v1/exports/job/file', download: 'bracket.step', rel: 'noopener', attached: true }]);
   assert.equal(body.size, 0);
   assert.doesNotMatch(clicked[0].href, /token/);
 });

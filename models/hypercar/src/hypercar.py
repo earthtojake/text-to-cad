@@ -24,7 +24,7 @@ The assembly tree is grouped BY SYSTEM -- thirteen sibling stages under
 
 The car is one model, ``hypercar``, holding the doors' motion, ``doors``, and two
 GLB animations, the ``showcase`` tour and the ``explode``. Its GLB, whose clips they
-are, is exported on demand (``cadgen export <id> GLB/hypercar.glb``, the id its run
+are, is exported on demand (``cad export <id> GLB/hypercar.glb``, the id its run
 prints).
 """
 
@@ -32,9 +32,9 @@ from __future__ import annotations
 
 import math
 
-from cadgen import model
-from cadgen.ap242 import configuration_sequence, mechanism_state
-from cadgen.gltf import animation
+from cad import model
+from cad.ap242 import configuration_sequence, mechanism_state
+from cad.gltf import animation
 
 import build123d as bd
 
@@ -195,7 +195,7 @@ def _door_joints(car):
 #   lateral  straight out in +/-Y by the side its centre sits on: [0, +-gain, 0]
 #   fixed    along one declared vector
 #
-# so each group is a translation of a GLB animation (``cadgen.gltf``) along its
+# so each group is a translation of a GLB animation (``cad.gltf``) along its
 # vector, at ``k`` times its length; the chassis appears in no group and holds
 # still. Where a group is a whole sub-assembly (a corner, the powertrain, the
 # interior), the sub-assembly itself moves.

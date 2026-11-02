@@ -18,6 +18,7 @@ import { ExportControls } from '../../dist/export/ExportControls.js';
 import { useExportView } from '../../dist/export/context.js';
 import { I18nProvider } from '../../dist/i18n/index.js';
 import { ViewerElementContext, ViewerHostContext } from '../../dist/host/context.js';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '../../dist/primitives/dropdown-menu.js';
 const view = { doc: 'doc', revision: 'v1', file: '/probe_couple.xbf', name: 'probe_couple.xbf' };
 function Document() { useExportView(view); return null; }
 const finish = [];
@@ -31,10 +32,13 @@ const service = {
 const downloads = { save() {} };
 function App() {
   const viewer = useRef(null);
-  return <I18nProvider locale="en"><ExportControls service={service} downloads={downloads} file={view.file}>{({ navbar, overlay }) =>
+  return <I18nProvider locale="en"><ExportControls service={service} downloads={downloads} file={view.file}>{({ menu, overlay }) =>
     <ViewerHostContext.Provider value={{ environment: { colorScheme: 'light' } }}><ViewerElementContext.Provider value={viewer}>
       <div ref={viewer} className="text-ui" style={{ height: '100vh' }}>
-        <header data-viewer-navbar="" style={{ height: 40, display: 'flex', justifyContent: 'flex-end' }}>{navbar}</header>
+        <header data-viewer-navbar="" style={{ height: 40, display: 'flex', justifyContent: 'flex-start' }}>
+          <DropdownMenu modal={false}><DropdownMenuTrigger asChild><button type="button" aria-label="File actions">⋯</button></DropdownMenuTrigger>
+            <DropdownMenuContent>{menu}</DropdownMenuContent></DropdownMenu>
+        </header>
         <Document />{overlay}
       </div>
     </ViewerElementContext.Provider></ViewerHostContext.Provider>}</ExportControls></I18nProvider>;
@@ -57,7 +61,8 @@ createRoot(document.getElementById('root')).render(<App/>);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    await page.getByRole('button', { name: 'Export', exact: true }).click();
+    await page.getByRole('button', { name: 'File actions' }).click();
+    await page.getByRole('menuitem', { name: 'Export' }).click();
     const menuFont = await page.getByRole('menuitem', { name: 'STEP' }).evaluate(item => getComputedStyle(item).fontSize);
     await page.getByRole('menuitem', { name: 'STEP' }).click();
     for (const [type, title] of [['loading', 'Preparing probe_couple.step…']]) {

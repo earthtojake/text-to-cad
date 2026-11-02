@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import model
+from cad import model
 # Prompt: Keyed shaft hub with central bore, keyway slot, and bolt-hole pattern.
 
 from lib.simple_model_library import make_keyed_shaft_hub

@@ -5,5 +5,5 @@ no doc names it, so the port to cadgen's engine left it out (`../README.md`, "No
 ported"). It is kept as it was. The engine's snapshot draws it as it is:
 
 ```bash
-cadgen snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png
+cad snapshot models/tests/unported/joint_playground/joint_playground.urdf out.png
 ```

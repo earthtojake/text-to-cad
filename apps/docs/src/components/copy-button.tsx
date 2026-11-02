@@ -14,8 +14,8 @@ type CopyButtonProps = {
 
 type CopyStatus = "idle" | "copied" | "error";
 
-/** Copies `text`: a square icon button, the size of the app buttons beside the install message, that
- * shows a check once copied and a cross if the clipboard refused, its tooltip saying the same. */
+/** Copies `text`: a square icon button beside an install command, that shows a check once copied
+ * and a cross if the clipboard refused, its tooltip saying the same. */
 export function CopyButton({ text, label = "Copy command", className }: CopyButtonProps) {
   const [status, setStatus] = useState<CopyStatus>("idle");
 

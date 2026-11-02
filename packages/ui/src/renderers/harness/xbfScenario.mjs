@@ -7,19 +7,20 @@ import { harnessBundle } from './bundle.mjs';
 import { chromium } from 'playwright';
 
 // An engine document the harness can open: core's bracket (`lib/xbf/__fixtures__/bracket`, a
-// served document's structure and its two part buffers, as `cadgen serve` answers them: a
-// filleted plate and two instances of one peg), relayed as the viewer relays its engine
-// (`cadgen/viewer/xbf.py`): `GET /__cad/xbf?file=` answers where the page reads the document, and
-// `/__cad/xbf/api/...` answers the engine's reads -- the structure, a buffer per part, the version a
-// page waits on, and the look (`look.json`) with an environment image of one texel.
-const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
+// served document's structure and its two part buffers, as `cad serve` answers them: a
+// filleted plate and two instances of one peg), served as the engine's API serves it under each
+// pane's origin (`cad_server/viewer/http_app.py`): `GET /api/v1/documents?path=` its envelope, `POST
+// /api/v1/documents` where the page reads the document, and its kind's reads under
+// `/api/v1/documents/xbf/bracket` -- the structure, a buffer per part -- with the version a page waits
+// on, and the look (`look.json`) with an environment image of one texel.
+const FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/xbf/xbfDocument.js')), '__fixtures__');
 const STRUCTURE = readFileSync(join(FIXTURES, 'bracket', 'structure.json'));
 const VERSION = JSON.parse(STRUCTURE).version;
 const LOOK = readFileSync(join(FIXTURES, 'look.json'));
 // 1 x 1, radiance 1 (RGBE 255, 255, 255, e 128), as `xbf.test.js` serves it.
 const ENVIRONMENT = Buffer.concat([Buffer.from('#?RADIANCE\nFORMAT=32-bit_rle_rgbe\n\n-Y 1 +X 1\n'), Buffer.from([255, 255, 255, 128])]);
 const FILE = 'bracket.xbf';
-const DOC = '/__cad/xbf/api/doc/bracket';
+const DOC = '/api/v1/documents/xbf/bracket';
 
 /**
  * The page a spec opens, and so the viewer: it fills the page. Small, because a software renderer
@@ -57,34 +58,48 @@ export async function serveXbfHarness(t, { transmission = false } = {}) {
     if (path === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); return; }
     if (path === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); return; }
     if (path === '/harness.css') { response.setHeader('Content-Type', 'text/css'); response.end(bundledCss); return; }
-    // The catalog's row for the file, by its absolute path under the `/models` the harness opens a bare `?file=` in.
-    if (path.endsWith('/__cad/catalog')) { json(response, { entries: [{ file: `/models/${FILE}`, kind: 'xbf', hash: VERSION, bytes: STRUCTURE.length }], revision: VERSION }); return; }
-    if (path.endsWith('/__cad/server')) { json(response, { backend: 'cadgen' }); return; }
-    if (path.endsWith('/__cad/xbf')) {
-      if (url.searchParams.get('file') !== `/models/${FILE}`) { notFound(response); return; }
-      json(response, url.searchParams.get('held') ? { held: true } : { doc: 'bracket', url: DOC });
-      return;
-    }
-    const relayed = path.indexOf('/__cad/xbf/api/');
-    if (relayed >= 0) {
-      const rest = path.slice(relayed);
-      if (rest === '/__cad/xbf/api/look') { json(response, LOOK); return; }
-      if (rest === '/__cad/xbf/api/look/environment') { binary(response, ENVIRONMENT); return; }
-      if (rest === DOC) { json(response, served.structure); return; }
+    // The API under each pane's origin (`/one/api/v1/...`).
+    const at = path.indexOf('/api/v1/');
+    if (at >= 0) {
+      const rest = path.slice(at);
+      // The file's envelope, by its absolute path under the `/models` the harness opens a bare `?file=` in.
+      const envelope = { id: 'bracket', kind: 'xbf', api: DOC, held: true, revision: VERSION,
+        entry: { file: `/models/${FILE}`, kind: 'xbf', hash: VERSION, bytes: STRUCTURE.length } };
+      if (rest === '/api/v1/documents' && request.method === 'GET') {
+        json(response, { documents: url.searchParams.get('path') === `/models/${FILE}` ? [envelope] : [] });
+        return;
+      }
+      if (rest === '/api/v1/documents' && request.method === 'POST') {
+        let body = '';
+        request.on('data', chunk => { body += chunk; });
+        request.on('end', () => {
+          if (JSON.parse(body || '{}').path !== `/models/${FILE}`) { notFound(response); return; }
+          response.statusCode = 201;
+          json(response, { id: 'bracket', kind: 'xbf', api: DOC });
+        });
+        return;
+      }
+      if (rest === '/api/v1/server') { json(response, { app: 'cad-viewer' }); return; }
+      if (rest === '/api/v1/look') { json(response, LOOK); return; }
+      if (rest === '/api/v1/look/environment') { binary(response, ENVIRONMENT); return; }
+      if (rest === `${DOC}/structure`) { json(response, served.structure); return; }
       // The engine answers a version wait at once with the version it holds: the page paces its next ask.
-      if (rest === `${DOC}/version`) { json(response, { version: served.version, patch: null }); return; }
-      const part = /^\/part\/([0-9a-f]+)$/.exec(rest.slice(DOC.length));
-      if (part) {
+      if (rest === '/api/v1/documents/bracket/version') { json(response, { version: served.version, patch: null }); return; }
+      const part = /^\/parts\/([0-9a-f]+)$/.exec(rest.slice(DOC.length));
+      if (rest.startsWith(DOC) && part) {
         try { binary(response, readFileSync(join(FIXTURES, 'bracket', `${part[1]}.xbm`))); } catch { notFound(response); }
         return;
       }
-      if (/^\/part\/[0-9a-f]+\/groups$/.test(rest.slice(DOC.length))) { json(response, { faces: {}, edges: {} }); return; }
-      const fact = /^\/part\/[0-9a-f]+\/(face|edge|vertex)\/(\d+)$/.exec(rest.slice(DOC.length));
-      if (fact) { json(response, { kind: fact[1], ordinal: Number(fact[2]) }); return; }
+      if (rest.startsWith(DOC) && /^\/parts\/[0-9a-f]+\/groups$/.test(rest.slice(DOC.length))) { json(response, { faces: {}, edges: {} }); return; }
+      const fact = /^\/parts\/[0-9a-f]+\/(faces|edges|vertices)\/(\d+)$/.exec(rest.slice(DOC.length));
+      if (rest.startsWith(DOC) && fact) {
+        json(response, { kind: { faces: 'face', edges: 'edge', vertices: 'vertex' }[fact[1]], ordinal: Number(fact[2]) });
+        return;
+      }
       notFound(response);
       return;
     }
-    if (path.includes('/__cad/') || /\.(woff2|ttf)$/.test(path)) { notFound(response); return; }
+    if (/\.(woff2|ttf)$/.test(path)) { notFound(response); return; }
     response.setHeader('Content-Type', 'text/html');
     response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"><style>body { margin: 0 } #root > div { width: 100vw !important; height: 100vh !important }</style></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>');
   });

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui, the web app and the CAD app.
+# Shared JavaScript suites: @cad/core, @cad/ui, the web app and the CAD app.
 # --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all
@@ -19,7 +19,7 @@ case "$SELECT" in
 esac
 cd "$REPO_ROOT"
 if [ "$SELECT" = core ]; then
-  npm run build --workspace @text-to-cad/core
+  npm run build --workspace @cad/core
 else
   npm run build:packages
 fi
@@ -28,20 +28,20 @@ node scripts/test/check-dependencies.mjs
 node --test scripts/test/check-kit-boundaries.test.mjs
 node scripts/test/check-kit-boundaries.mjs
 # Every string the viewer and the CAD app show reads through the locale files. It reads the UI and the
-# two apps and parses with @text-to-cad/ui's Babel, so it runs where those are installed: every group
+# two apps and parses with @cad/ui's Babel, so it runs where those are installed: every group
 # but core (whose job installs packages/core alone).
 if [ "$SELECT" != core ]; then
   node --test scripts/test/check-ui-strings.test.mjs
   node scripts/test/check-ui-strings.mjs
 fi
 if [ "$SELECT" = core ] || [ "$SELECT" = all ]; then
-  section "@text-to-cad/core tests"
+  section "@cad/core tests"
   npm --prefix packages/core test
 fi
 # Each selected workspace is type-checked (tsc) before its suite runs: the apps' Vite builds and
 # the Node test runners check no types, so this is where a type error in them fails.
 if [ "$SELECT" = ui ] || [ "$SELECT" = all ]; then
-  section "@text-to-cad/ui tests"
+  section "@cad/ui tests"
   npm --prefix packages/ui run typecheck
   npm --prefix packages/ui test
 fi

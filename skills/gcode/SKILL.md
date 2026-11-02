@@ -2,18 +2,16 @@
 name: gcode
 description: Slice 3D models into printer-ready G-code with OrcaSlicer, the open-source slicer with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron and more). Use when the user wants an `.stl`, `.3mf` or `.obj` model sliced for their printer, as a sliced `.gcode.3mf` or plain `.gcode`, headless with OrcaSlicer's command line or by opening the model in OrcaSlicer. Never contacts a printer.
 license: MIT
+metadata:
+  repository: earthtojake/text-to-cad
 ---
 
 # G-code
 
-Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad).
-Use the installed local skill files as the runtime source of truth; the
-repository link is only for provenance and release review.
-
 Slice with OrcaSlicer, headless (below) or by opening the model in the
 OrcaSlicer app for the user. The agent never contacts a printer: for a Bambu
-Lab printer, hand the result to `$bambu-labs`; for any other printer, give the
-user the `.gcode`.
+Lab printer, the result is sent through Bambu Connect; for any other printer,
+give the user the `.gcode`.
 
 ## Install OrcaSlicer
 
@@ -64,7 +62,7 @@ built-in profiles.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF with `$cad` first (`cadgen export <id> part.3mf` from a model, or `cadgen export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad export <id> part.3mf`, or `cad export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 
@@ -88,6 +86,6 @@ be found, open the model in the app: `open -a OrcaSlicer model.stl` on macOS,
 
 ## Hand off
 
-- A Bambu Lab printer: `$bambu-labs`, with the `.gcode.3mf`.
+- A Bambu Lab printer: Bambu Connect, with the `.gcode.3mf`.
 - Any other printer: the user prints the `.gcode` from their printer's app, its
   web interface (PrusaLink, OctoPrint, Mainsail, Fluidd) or an SD card.

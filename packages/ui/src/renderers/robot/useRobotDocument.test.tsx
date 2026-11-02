@@ -1,10 +1,10 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createHttpCadResourceProvider } from '@text-to-cad/core/client';
+import { createHttpCadResourceProvider } from '@cad/core/client';
 import { useRobotDocument } from '../../../dist/renderers/robot/useRobotDocument.js';
 import { fixtureGlb as glb, fixturePayload, fixtureRefusal } from './__tests__/robotFixtures.js';
 
-// The hook over cadgen's answer for a description (`GET /__cad/robot`, here a client whose `robot`
+// The hook over cadgen's answer for a description (its document's `structure`, here a client whose `robot`
 // is a stub) and the meshes that answer names, fetched as the page fetches them.
 const entry = (name: string, extra = {}) => ({ file: `/models/${name}`, kind: name.split('.').pop(), hash: name, url: `https://robot-assets.test/${name}`, ...extra });
 const client = (answer: (file: string) => unknown) => ({ robot: vi.fn(async (file: string) => answer(file)) });
@@ -73,7 +73,7 @@ it('a mesh that cannot be fetched fails the robot, and an SRDF cadgen could not 
   expect(String(gone.result.current.error.message)).toMatch(/absent\.glb.*404/);
   gone.unmount();
 
-  // cadgen refuses a description at the door (`GET /__cad/robot` is a 400 with its sentence): the
+  // cadgen refuses a description at the door (its `structure` is a 400 with its sentence): the
   // sentence is the error a person reads, about the file, not a request that failed.
   const refused = fixtureRefusal('gone.urdf');
   const door = client(() => { throw Object.assign(new Error(refused), { failure: { kind: 'http', status: 400, detail: refused, operation: 'robot' } }); });

@@ -9,7 +9,7 @@ reflection is new geometry, so the right side is its own function from the same
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from lib import spec as S
 from lib import trim as T

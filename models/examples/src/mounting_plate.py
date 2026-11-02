@@ -3,7 +3,7 @@ from __future__ import annotations
 from bd_materials import FinishedMaterial, metals
 from threejs_materials import PbrProperties
 
-from cadgen import glb, stl, threemf
+from cad import glb, stl, threemf
 # Prompt: Mounting plate with central circular cutout, elongated side slot, four corner holes, and rounded edges.
 
 from lib.simple_model_library import make_mounting_plate
