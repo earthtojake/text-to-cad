@@ -31,7 +31,7 @@
   "dependencies": {
     "meshoptimizer": "^1.3.0",
     "three": "0.186.1",
-    "three-mesh-bvh": "0.9.16"
+    "three-mesh-bvh": "0.9.17"
   },
   "devDependencies": {
     "@types/node": "22.20.5",
