@@ -100,11 +100,121 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
     return run
 
 
+# --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
+
+
+def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    descriptions = {
+        "export": "Write a saved KiCad board's fabrication outputs with KiCad's kicad-cli, headless, into a folder.",
+        "inspect": "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
+    }
+    parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
+    parser.add_argument("board", metavar="BOARD", type=Path, help="the .kicad_pcb (its .kicad_pro beside it)")
+    if operation == "export":
+        from cad_server.kicad.export import EXPORTS
+
+        parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
+        parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
+                            help="the folder to write into, made when missing")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="print the answer as one JSON line on stdout")
+    return parser
+
+
+def _board_check(argv: list[str], prog: str) -> int:
+    from cad_server._internal.cli_from_function import generated_main
+
+    first = next((token for token in argv if not token.startswith("-")), None)
+    if first is not None:
+        _refuse_other_type("kicad_pcb", "check", first)
+    return generated_main(("cad_server.kicad.check", "check"), argv, prog=prog)
+
+
+def _answer(as_json: bool, payload: dict, lines: list[str]) -> int:
+    import json
+
+    if as_json:
+        print(json.dumps(payload, separators=(",", ":")))
+    else:
+        print("\n".join(lines))
+    return 0
+
+
+def _failed(as_json: bool, prog: str, words: str, status: int = 1) -> int:
+    import json
+
+    if as_json:
+        print(json.dumps({"ok": False, "error": words}, separators=(",", ":")))
+        return 1
+    sys.stderr.write(f"{prog}: {words}\n")
+    return status
+
+
+def _board_export(argv: list[str], prog: str) -> int:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    args = _board_parser(prog, "export").parse_args(argv)
+    _refuse_other_type("kicad_pcb", "export", str(args.board))
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    from cad_server.kicad.export import export
+    from cad_server.kicad.install import KicadMissingError
+    from cad_server.kicad.cli import KicadRunError
+
+    try:
+        written = export(args.board, args.to, args.out)
+    except (KicadMissingError, KicadRunError) as error:
+        return _failed(as_json, prog, str(error))
+    return _answer(as_json, {"ok": True, "written": [str(path) for path in written]},
+                   [f"wrote {path}" for path in written])
+
+
+def _board_inspect(argv: list[str], prog: str) -> int:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    args = _board_parser(prog, "inspect").parse_args(argv)
+    _refuse_other_type("kicad_pcb", "inspect", str(args.board))
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    if not args.board.is_file():
+        return _failed(as_json, prog, f"no board {args.board}", 2)
+    from cad.kicad_pcb import inspect
+
+    try:
+        board = inspect(args.board)
+    except (OSError, ValueError) as error:
+        return _failed(as_json, prog, f"{type(error).__name__}: {error}")
+    size = board.get("size")
+    counts = board.get("counts") or {}
+    lines = [f"{board['file']}: KiCad {board['format'].get('generator_version') or board['format'].get('version')}"
+             + (f", {size[0]:g} x {size[1]:g} mm" if size else "")
+             + (f", {board['thickness']:g} mm thick" if board.get("thickness") else ""),
+             "counts: " + ", ".join(f"{name} {value}" for name, value in counts.items()),
+             "copper: " + ", ".join(board["layers"].get("copper") or [])]
+    lines.append("parts:")
+    lines += [f"  {part['ref']:<8} {part['value']}  {part['side']}  at {part['at'][0]:g}, {part['at'][1]:g}"
+              for part in board.get("parts") or []]
+    lines.append("nets:")
+    lines += [f"  {net['name']:<12} {net['pads']} pads, {net['tracks']} tracks, {net['vias']} vias, {net['zones']} zones"
+              for net in board.get("nets") or []]
+    return _answer(as_json, board, lines)
+
+
+# A type's operations its own code runs, in place of the engine's verb of that name.
+_OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
+    ("kicad_pcb", "check"): _board_check,
+    ("kicad_pcb", "export"): _board_export,
+    ("kicad_pcb", "inspect"): _board_inspect,
+}
+
+
 #: ``(type, operation) -> run(argv, prog)``: what each type implements, its registry entry's operations.
 OPERATIONS: dict[tuple[str, str], Callable[[list[str], str], int]] = {}
 for _entry in DOCUMENT_TYPES.values():
     for _name in _entry.operation_names:
-        if _name in _ENGINE_SOURCES:
+        if (_entry.id, _name) in _OWN:
+            OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
+        elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
         elif _name == "check":
             OPERATIONS[(_entry.id, _name)] = _urdf_check if _entry.id == "urdf" else _generated_check(_entry.id)
@@ -116,6 +226,12 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
     prog = prog or f"cad {document_type} {operation}"
     if (document_type, operation) not in OPERATIONS:
         raise KeyError(f"cad {document_type} has no operation {operation!r}")
+    if (document_type, operation) == ("kicad_pcb", "check"):
+        from cad_server._internal.cli_from_function import generated_parser
+
+        return generated_parser(("cad_server.kicad.check", "check"), prog=prog)
+    if document_type == "kicad_pcb" and operation in ("export", "inspect"):
+        return _board_parser(prog, operation)
     if operation in _ENGINE_SOURCES:
         from cad_server.engine.cli import parser_for
 

@@ -1,4 +1,4 @@
-"""`pcb.inspect_board`: a saved board in one look (format, layers, parts, nets), as plain data, without KiCad."""
+"""`cad.kicad_pcb.inspect`: a saved board in one look (format, layers, parts, nets), as plain data, without KiCad."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
-from cad.pcb import inspect_board  # noqa: E402
+from cad.kicad_pcb import inspect as inspect_board  # noqa: E402
 
 # A KiCad 9 board: numbered nets, a footprint turned over to the back, a DNP part left out of the BOM.
 OLDER = '''(kicad_pcb (version 20241229) (generator "pcbnew") (generator_version "9.0")

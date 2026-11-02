@@ -35,7 +35,7 @@ function LayerEye({ id, hidden, onToggle }) {
  * — each with its colour, its name, how many things it draws, and an eye that hides or shows it in
  * the view. A layer has nothing under it, so its one glyph is its colour (KiCad's, `plot2d/theme.js`),
  * on the section title's line with the groups' labels (`kit/inspector/layerRows.jsx`). A layer hidden or shown is the board's Display (`plot2d/boardDisplay.js`'s `layers`), the
- * one object `cad snapshot --display` draws, so the view and a snapshot never disagree; a set
+ * one object `cad <type> snapshot --display` draws, so the view and a snapshot never disagree; a set
  * the mode does not draw reads as Custom in Display.
  *
  * @param {{ sheet: { layers: { id: string, kind: string, side: string, items: unknown[] }[] },

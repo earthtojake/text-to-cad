@@ -48,7 +48,9 @@ const VIEW_CAPABILITIES = Object.freeze({
   // An engine document (`packages/ui/src/renderers/xbf`), which a STEP opens as: one icon.
   document: DEFAULT_CAPABILITIES,
   drawing: Object.freeze({ iconKind: ENTRY_ICON_KIND.DXF }),
-  robot: ROBOT_CAPABILITIES
+  robot: ROBOT_CAPABILITIES,
+  // A KiCad board, the one plot (`packages/ui/src/renderers/board`).
+  plot: Object.freeze({ iconKind: ENTRY_ICON_KIND.KICAD_PCB })
 });
 
 export const RENDER_CAPABILITIES = Object.freeze(Object.fromEntries(

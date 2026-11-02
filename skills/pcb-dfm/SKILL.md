@@ -19,7 +19,7 @@ when they are available; the checklists here also work with KiCad's own reports 
 
 ## Evidence, in this order
 
-1. **KiCad's DRC.** With $pcb: `cad pcb drc board.kicad_pcb` runs KiCad's
+1. **KiCad's DRC.** With $pcb: `cad kicad_pcb check board.kicad_pcb` runs KiCad's
    design rule check on the saved board and prints every violation of the
    board's rules and custom rules and every unconnected item; it exits 1 on any
    error. Every
@@ -36,7 +36,7 @@ when they are available; the checklists here also work with KiCad's own reports 
 3. **The checklist.** What no command measures: the fab's limits beyond the
    board's own rules, panel and edge details, polarity marks, placement
    rotations. Use the references below and a picture of the board, from
-   $pcb's snapshot: `cad snapshot board.kicad_pcb tmp/board.png`.
+   $pcb's snapshot: `cad <type> snapshot board.kicad_pcb tmp/board.png`.
 
 Each finding names its parts by board reference (`U2`, `C8`, `#net:VBUS`);
 in a script $pcb runs with `cad run`, `read_board(path).resolve(ref)` answers where one is.

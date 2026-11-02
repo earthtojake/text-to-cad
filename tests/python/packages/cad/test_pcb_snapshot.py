@@ -1,4 +1,4 @@
-"""`cad snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
+"""`cad <type> snapshot --job` replays a board view as a Quick Edit saved it: its window, its Display, its ink.
 
 A Quick Edit on a board writes a job packet (`cad_server.viewer.prompt_files`): each view a plan-view
 camera (the window the board view showed, in the plot's plan frame, y up) and the board's Display,

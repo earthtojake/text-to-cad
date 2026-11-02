@@ -1,4 +1,4 @@
-"""The plot payload: a KiCad board as the picture the viewer and `cad snapshot` draw, from the file.
+"""The plot payload: a KiCad board as the picture the viewer and `cad <type> snapshot` draw, from the file.
 
 Built from the test board (`tests/python/support/kicad_board.py`, in the format KiCad 11's
 headless API saves) without KiCad: the sheet and its layers in KiCad's stacking order, pads

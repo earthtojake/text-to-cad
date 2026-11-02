@@ -1,5 +1,5 @@
-"""A saved KiCad board through the commands: ``cad snapshot`` and the CAD app's ``cad_snapshot`` draw the
-file as it is now, and ``cad pcb drc`` on a machine without KiCad says how to get it.
+"""A saved KiCad board through the commands: ``cad <type> snapshot`` and the CAD app's ``cad_snapshot`` draw the
+file as it is now, and ``cad kicad_pcb check`` on a machine without KiCad says how to get it.
 
 The board is the test board (``tests/python/support/kicad_board.py``), written fresh: no corpus model.
 DRC with a real KiCad is the KiCad suite's (``tests/python/packages/kicad``).
@@ -62,7 +62,7 @@ class NativeBoardCommands(unittest.TestCase):
 
     def test_drc_without_kicad_fails_saying_how_to_install_it(self) -> None:
         env = {**os.environ, "CAD_KICAD_CLI": str(self.root / "no-kicad-cli")}
-        done = subprocess.run([*CLI, "pcb", "drc", str(self.board), "--json"], env=env, capture_output=True, text=True,
+        done = subprocess.run([*CLI, "kicad_pcb", "check", str(self.board), "--json"], env=env, capture_output=True, text=True,
                               timeout=60)
         self.assertEqual(done.returncode, 1, done.stderr)
         result = json.loads(done.stdout)

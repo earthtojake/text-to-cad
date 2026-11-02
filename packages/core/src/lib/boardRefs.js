@@ -1,5 +1,5 @@
 // The board-reference language of KiCad boards (.kicad_pcb): what a person picks on a board and
-// hands to the agent, which `cad.pcb.read_board(path).resolve(ref)` reads.
+// hands to the agent, which `cad.kicad_pcb.read_board(path).resolve(ref)` reads.
 // Mirrors cad/engine/formats/kicad/refs.py; both assert boardRefs.parity.json.
 //
 //   #U3                 a part: a footprint, by reference designator (letters, digits, _ + -)

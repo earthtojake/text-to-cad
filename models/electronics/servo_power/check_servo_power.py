@@ -9,7 +9,7 @@ import math
 import sys
 from pathlib import Path
 
-from cad.pcb import inside, read_board
+from cad.kicad_pcb import inside, read_board
 
 board = read_board(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).with_name("servo_power.kicad_pcb"))
 POWER = {"+5V", "+3V3"}  # U1's input and output

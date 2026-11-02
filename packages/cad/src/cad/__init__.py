@@ -47,7 +47,7 @@ del _install_font_guard
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf")
+_TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d",)

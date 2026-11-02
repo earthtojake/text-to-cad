@@ -28,8 +28,8 @@ class NativeFiles(unittest.TestCase):
             root = Path(folder)
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
-            from cad.pcb import read_board
-            from cad_server.pcb import drc
+            from cad.kicad_pcb import read_board
+            from cad_server.kicad.check import check as drc
             from cad_server.kicad.install import check_version, find_kicad_cli, headless_env, kicad_version
             from cad.engine.api import export
             import build123d as bd

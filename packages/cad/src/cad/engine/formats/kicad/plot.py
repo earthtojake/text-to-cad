@@ -1,4 +1,4 @@
-"""A KiCad board as the picture the CAD Viewer and ``cad snapshot`` draw: geometry per layer.
+"""A KiCad board as the picture the CAD Viewer and ``cad <type> snapshot`` draw: geometry per layer.
 
 The payload (``cad.engine.formats.kicad.PLOT_SCHEMA_VERSION`` 3; its contract is the core
 package's ``docs/plot-payload.md``) is built from the ``.kicad_pcb`` alone: no

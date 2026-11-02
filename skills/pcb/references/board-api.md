@@ -1,6 +1,6 @@
 # Native KiCad files
 
-The saved `.kicad_pcb` is the editable source. `cad.pcb` reads it; it does not create a
+The saved `.kicad_pcb` is the editable source. `cad.kicad_pcb` reads it; it does not create a
 second live document or write it back. For file syntax use KiCad's
 [board format](https://dev-docs.kicad.org/en/file-formats/sexpr-pcb/) and
 [common syntax](https://dev-docs.kicad.org/en/file-formats/sexpr-intro/).

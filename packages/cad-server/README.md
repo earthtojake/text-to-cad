@@ -39,7 +39,11 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
-  pcb.py, kicad/         # `cad pcb drc`: KiCad's design rule check, by the installed kicad-cli
+  kicad/                 # the kicad integration: the installed kicad-cli found and checked
+                         #   (install, on the one helper for external programs,
+                         #   _internal/programs), KiCad's design rule check (`cad kicad_pcb
+                         #   check`: check, cli) and its fabrication exports (`cad kicad_pcb
+                         #   export`: export), each run headless in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
@@ -76,7 +80,15 @@ library's registry names it (`cad.registry`): `cad xbf export`, `cad step snapsh
 are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them), and
 `check` a type's checks (its findings, each a severity, a code and a location; `--json`); `cad <type>
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
-type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). `cad serve`,
+type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
+`check` and `export` are the `kicad` integration's: `cad kicad_pcb check` is KiCad's design rule check
+(it fails on errors or unconnected items, says the warnings, and answers `kicad_failed` when KiCad refuses
+the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|step -o DIR` its fabrication outputs,
+each by the installed `kicad-cli`, found by the one helper for the external programs our code runs
+(`_internal/programs.py`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
+PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
+headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
+`.kicad_*` file, and viewing a board needs no KiCad. `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, the CAD kernel environment made, the engine started;
 the releases on disk, the current one, the engine's and each app's plugin's) and what earlier releases

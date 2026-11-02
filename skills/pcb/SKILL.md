@@ -25,7 +25,7 @@ says what to do, and `cad doctor` explains the installation.
 Viewing, inspecting and taking snapshots need no KiCad installation. DRC and fabrication/STEP
 exports use a user-installed [KiCad 9 or newer](https://www.kicad.org/download/).
 `CAD_KICAD_CLI` can name its `kicad-cli` (the command line itself, named `kicad-cli`); otherwise
-`cad pcb drc` uses `kicad-cli` on PATH, then the one inside the usual macOS or Windows installation.
+`cad kicad_pcb check` uses `kicad-cli` on PATH, then the one inside the usual macOS or Windows installation.
 It runs `kicad-cli` headless, with private settings, and never opens KiCad. For the direct export
 examples below, `kicad-cli` means that same executable; never open a board in KiCad's app to check it.
 
@@ -49,16 +49,16 @@ connector mating side; a plausible-looking layout does not establish electrical 
 
 ## Edit and check
 
-1. Inspect the saved board with `from cad.pcb import read_board` in a script run with
+1. Inspect the saved board with `from cad.kicad_pcb import read_board` in a script run with
    `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
 2. Edit the native files. Keep net assignments, layer stack, track widths, clearances and custom
    rules consistent with the chosen fab and electrical requirements. Refill changed copper zones
    with KiCad before relying on their saved fill; the viewer displays the fill stored in the file.
-3. Run `cad pcb drc board.kicad_pcb` (or `--json`). It checks the saved board against its rules
+3. Run `cad kicad_pcb check board.kicad_pcb` (or `--json`). It checks the saved board against its rules
    and exits 1 on error-severity violations or unconnected items. Review warnings too. Resolve
    the cause instead of weakening rules to obtain a clean report.
-4. Inspect placement and routing visually: `cad snapshot board.kicad_pcb tmp/board.png`.
+4. Inspect placement and routing visually: `cad <type> snapshot board.kicad_pcb tmp/board.png`.
    Measure constraints DRC cannot establish, such as decoupling placement and connector access.
 5. Show the result and explain remaining findings. Export only the requested deliverables from
    that same saved revision; see [manufacturing and STEP](references/manufacturing.md).
@@ -68,7 +68,7 @@ connector mating side; a plausible-looking layout does not establish electrical 
 Show the user each model you create or change, and any model or file they ask to see.
 A file you export is a download: give its path, do not open it.
 Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad snapshot`.
+own work; review with `cad <type> snapshot`.
 
 - If your tools include `cad_show` (your host may prefix it), call it with the model's id
   or the file's absolute path, and follow its description for when to call it again.
@@ -97,13 +97,13 @@ own work; review with `cad snapshot`.
 
 The board view supports parts, pads, nets, layers, selection, Measure, annotations and Quick Edit.
 
-Snapshots use `cad snapshot`, including `--job` packets saved by Quick Edit. Display modes are
+Snapshots use `cad <type> snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:
 
 ```bash
-cad snapshot board.kicad_pcb tmp/copper.png --display copper
-cad snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
-cad snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+cad <type> snapshot board.kicad_pcb tmp/copper.png --display copper
+cad <type> snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
+cad <type> snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan

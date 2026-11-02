@@ -9,7 +9,7 @@ import math
 import sys
 from pathlib import Path
 
-from cad.pcb import read_board
+from cad.kicad_pcb import read_board
 
 board = read_board(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).with_name("usb_uart.kicad_pcb"))
 # Supply pins: the bridge's VIO (1), VDD5 (3) and V3 (6), the ESD diode's VBUS (5). The bridge's

@@ -1,6 +1,6 @@
 # The plot payload (schema 3)
 
-`GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad snapshot` draw a KiCad board from
+`GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad <type> snapshot` draw a KiCad board from
 one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` alone (no KiCad process) and
 drawn by `@cad/core/lib/plot2d` on a 2D canvas. The payload is geometry per layer; what
 colour a layer is drawn in is the renderer's (`plot2d/theme.js`, KiCad's default theme). It is a
@@ -51,7 +51,7 @@ A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: withou
 as it is made is every layer but the `courtyard`, `mask` and `paste` kinds; seen from below, the
 stack reverses and the `outline`, `via`, `ratsnest` and `drill` kinds stay on top, each layer
 mirrored about the sheet's vertical centre line. The board's Display (`plot2d/boardDisplay.js`:
-`{ mode, side, poured, layers }`, the viewer's and `cad snapshot --display`'s one contract)
+`{ mode, side, poured, layers }`, the viewer's and `cad <type> snapshot --display`'s one contract)
 is a view over these ids: a mode is a set of layer kinds, `layers` an explicit set of ids (one
 that differs from its mode's reads as Custom), `poured` and `side` switches of their own. What is
 drawn ON the board — an annotation's ink, Measure's ends — is kept in sheet millimetres, so it

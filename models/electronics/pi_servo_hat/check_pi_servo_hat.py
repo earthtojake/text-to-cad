@@ -11,7 +11,7 @@ import math
 import sys
 from pathlib import Path
 
-from cad.pcb import read_board
+from cad.kicad_pcb import read_board
 
 board = read_board(sys.argv[1] if len(sys.argv) > 1 else Path(__file__).with_name("pi_servo_hat.kicad_pcb"))
 SUPPLIES = {"+3V3"}  # the buffers' VCC

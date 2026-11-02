@@ -1,6 +1,6 @@
 """A saved KiCad board in one look: what file it is, its layers, its parts and its nets.
 
-:func:`inspect_board` (``pcb.inspect_board``) reads the ``.kicad_pcb`` with the standard library alone,
+:func:`inspect_board` (``cad.kicad_pcb.inspect``) reads the ``.kicad_pcb`` with the standard library alone,
 as :func:`~cad.engine.formats.kicad.board_index.read_board` does: no KiCad runs, none need be
 installed. Its answer is plain data (dicts, lists, numbers, strings) so a command can print it as JSON.
 Every length is in millimetres in KiCad's frame (y down), the frame ``read_board`` answers in.

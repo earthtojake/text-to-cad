@@ -17,7 +17,8 @@ export const RENDER_FORMAT = Object.freeze({
   SRDF: TYPES.srdf.wire,
   SDF: TYPES.sdf.wire,
   // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
-  XBF: TYPES.xbf.wire
+  XBF: TYPES.xbf.wire,
+  KICAD_PCB: TYPES.kicad_pcb.wire
 });
 
 export const MESH_RENDER_FORMATS = Object.freeze(
@@ -36,7 +37,9 @@ const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
 // Formats the viewer shows as a PLOT: a KiCad board drawn from its file, as geometry per layer,
 // by its document's `plot` (`GET /api/v1/documents/kicad_pcb/<id>/plot`). Like a DXF, the render asset is the file itself; nothing bakes a mesh
 // for it.
-export const PLOT_RENDER_FORMATS = Object.freeze([RENDER_FORMAT.KICAD_PCB]);
+export const PLOT_RENDER_FORMATS = Object.freeze(
+  DOCUMENT_TYPE_REGISTRY.documentTypes.filter((type) => type.view === "plot").map((type) => type.wire)
+);
 
 export function normalizeFormat(value) {
   return String(value || "").trim().toLowerCase();

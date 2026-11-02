@@ -48,9 +48,9 @@ import { useBoardView } from "./useBoardView.js";
  * the board, and Measure, between points snapped to pad, via and hole centres, track ends and
  * outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`), whose views are the window on screen as a plan-view
- * camera with the board's Display, which `cad snapshot --job` draws again. Its sidebar is the
+ * camera with the board's Display, which `cad <type> snapshot --job` draws again. Its sidebar is the
  * Board (parts and nets) and its Layers; its one view control is its Display (the modes, the pours,
- * the side), the contract `cad snapshot --display` shares. A payload without its index
+ * the side), the contract `cad <type> snapshot --display` shares. A payload without its index
  * (an older server's) is the picture alone: no tools, no Board, no Quick Edit.
  */
 

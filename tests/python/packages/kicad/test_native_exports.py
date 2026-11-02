@@ -69,7 +69,7 @@ class SharedTestBoard(unittest.TestCase):
     def test_a_nightly_checks_and_exports_it(self):
         from cad_server.kicad.export import export
         from cad_server.kicad.install import find_kicad_cli, kicad_version, version_tuple
-        from cad_server.pcb import drc
+        from cad_server.kicad.check import check as drc
         from tests.python.support.kicad_board import write_board
 
         cli = find_kicad_cli()

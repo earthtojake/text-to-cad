@@ -48,10 +48,11 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `step`, `glb`,
-  `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`. 3MF's id is `threemf` because an id must be a valid
+  `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`. 3MF's id is `threemf` because an id must be a valid
   Python name. The registry (`cad.registry`) maps file extensions to ids (`.step` and `.stp` are `step`).
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
-- **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`),
+- **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
+  `kicad`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -512,6 +513,9 @@ src/cad/
   glb/, threemf/, dxf/   #   its reader and its operations
   urdf/, sdf/, srdf/     # the robot descriptions' types: `check` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
+  kicad_pcb/             # a saved KiCad board: read_board, inside and inspect (the reader is
+                         #   engine/formats/kicad, the standard library alone, and its flat
+                         #   still engine/render/board.py); check and export are the server's
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -546,7 +550,10 @@ A `.kicad_pcb` is source, edited in KiCad or as text and read directly for each 
 the library never builds, caches or writes back an XCAF model of a board. The parser and read-only
 board index live under `src/cad/engine/formats/kicad/`, the standard library alone, so the server
 and a script run with `cad run` import them without the CAD kernel; the flat renderer is
-`src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.pcb.read_board`
-exposes the inspection index. KiCad owns authoring, DRC (`cad pcb drc`, the server's) and
-mechanical and fabrication exports; an exported STEP enters the ordinary foreign-file path. No KiCad
-IPC client is bundled.
+`src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.kicad_pcb` is
+the document type: `read_board` exposes the inspection index, `inside` the even-odd test a check measures
+with, and `inspect` the board in one look. KiCad owns authoring, DRC (`cad kicad_pcb check`, the
+server's, the `kicad` integration's) and mechanical and fabrication exports (`cad kicad_pcb export
+--to gerbers|drill|pos|step -o DIR`); an exported STEP enters the ordinary foreign-file path. As
+functions, `cad.kicad_pcb.check` and `export` say to run those commands: they run `kicad-cli`, which
+the server runs and a model's process never does. No KiCad IPC client is bundled.

@@ -122,7 +122,7 @@ class PromptFilesRouteTest(unittest.TestCase):
 
     def test_a_boards_view_is_its_plan_view_with_its_display_and_its_job_carries_the_ink(self) -> None:
         """A board's Quick Edit, as a drawing's: the window as a plan-view camera, the board's Display,
-        the ink on the sheet, in a job `cad snapshot` takes."""
+        the ink on the sheet, in a job `cad <type> snapshot` takes."""
         board = self.tmp / "blinky.kicad_pcb"
         board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
         plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}

@@ -1,7 +1,7 @@
 /**
  * A board as the kit's selection hook reads a scene (`kit/tools/select/useSceneSelection.js`): its
  * picks by board reference (`#R1`, `#R1.2`, `#net:VBUS`, `#net:VBUS@x10y5`, `#@x10y5`: what Quick
- * Edit names and `cad.pcb.read_board(path).resolve(ref)` reads), each described
+ * Edit names and `cad.kicad_pcb.read_board(path).resolve(ref)` reads), each described
  * (`boardFacts.js`), and its highlight, which `onHighlight` paints — what is hovered and selected,
  * resolved on this board.
  *

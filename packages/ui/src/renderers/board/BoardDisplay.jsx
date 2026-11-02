@@ -24,7 +24,7 @@ import { AssemblyModeIcon, BoardModeIcon, CopperModeIcon, PlacementModeIcon } fr
  * layers on top). Choosing a mode closes the menu; ticking leaves it open. A phone's More submenu
  * is the same two groups.
  *
- * The contract — `{ mode, side, poured, layers }` — is core's, shared with `cad snapshot
+ * The contract — `{ mode, side, poured, layers }` — is core's, shared with `cad <type> snapshot
  * --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };

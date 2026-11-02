@@ -4,7 +4,7 @@ Use the chosen manufacturer's current capability page for the specific layer cou
 weight, finish and assembly service. Compare those limits with `.kicad_pro` and `.kicad_dru`;
 DRC checks the project's rules, not a manufacturer's catalog. Record unresolved findings.
 
-Run `cad pcb drc board.kicad_pcb --json` after saving and refilling zones. DRC reports include
+Run `cad kicad_pcb check board.kicad_pcb --json` after saving and refilling zones. DRC reports include
 violations and unconnected items, with severity and board positions. No report is cached and
 the board source is not rewritten. KiCad may create a local `.kicad_prl` during file commands. An exit code of zero does not establish circuit correctness.
 
@@ -30,7 +30,7 @@ exported outline, holes and thickness and a known connector location before desi
 it. Use `--board-only` only for a deliberately bare-board export and state that limitation.
 
 The STEP is an ordinary foreign CAD file; it is not the PCB's source. View it with `cad_show`
-or `cad viewer`, and use `cad export mechanical/board.step mechanical/board.glb` (or STL,
+or `cad viewer`, and use `cad step export mechanical/board.step mechanical/board.glb` (or STL,
 3MF) for requested meshes. A text-to-cad model can use `read_step` to fit an enclosure around it.
 Check geometry and millimetre scale after conversion. Re-export after native board edits;
 do not copy STEP changes back into the PCB by guessing at their meaning.

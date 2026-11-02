@@ -2,7 +2,7 @@
  * A board's Display: which of a plot's layers are drawn, with or without the pours, from which
  * side. One object serves the viewer's Display and Layers (`@cad/ui`'s
  * `renderers/board/BoardDisplay.jsx`, `LayersSection.jsx`), the file view it is kept in, the views a
- * Quick Edit carries, and `cad snapshot --display`, so a headless picture is exactly what the
+ * Quick Edit carries, and `cad <type> snapshot --display`, so a headless picture is exactly what the
  * Display shows.
  *
  * ```jsonc

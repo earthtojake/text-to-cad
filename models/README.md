@@ -10,7 +10,7 @@ Each project has one layout, the cad skill's: its sources in `src/` (shared modu
 `src/lib/`), each model a `@model` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cad export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad xbf export <id> STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -40,7 +40,7 @@ project delivers them and because something outside the model reads them:
 
 | Project | Files | How | Why |
 | --- | --- | --- | --- |
-| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
+| `assemblies` (`planetary_gear_assembly`) | `apps/docs/public/hero/planetary.glb` | `cad <type> export` of its document, by hand (`apps/docs/README.md`) | the docs site's hero plays its `meshCycle` clip; a hand step, its clip's playback checked before the GLB is committed (no CI job reads the model) |
 | `examples` (`mounting_plate`, `spur_gear_blank`) | `STL/`, `3MF/`, `GLB/<name>.*` | `@stl`, `@threemf`, `@glb` on the model | the example of declared files: a print part whose files every run writes |
 | `branding` (the three logos) | `STEP/logo_*.step` | `src/exports.py` | the STEP deliverable, kept current by an `exports.py` |
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
@@ -55,8 +55,8 @@ From a model's `src/` folder, with the engine's environment (the library on the 
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cad snapshot "$ID" OUT.png            # drawn by OCCT
-cad export "$ID" GLB/NAME.glb         # a file of it, on request
+cad xbf snapshot "$ID" OUT.png            # drawn by OCCT
+cad xbf export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each

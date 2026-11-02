@@ -153,6 +153,23 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "check"
       ],
       "decorator": false
+    },
+    {
+      "id": "kicad_pcb",
+      "title": "KiCad PCB",
+      "wire": "kicad_pcb",
+      "extensions": [
+        ".kicad_pcb"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "plot",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "check"
+      ],
+      "decorator": false
     }
   ]
 });

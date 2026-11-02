@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from cad.results import ValidationIssue
+from cad.results import CheckFinding
 
 from .install import private_run
 
@@ -41,16 +41,16 @@ class Finding:
     at: tuple[float, float] | None
 
 
-def issues(findings) -> tuple[ValidationIssue, ...]:
+def issues(findings) -> tuple[CheckFinding, ...]:
     """Every finding as the line protocol's issue, errors first, then by check and rule:
-    the one text a finding is printed as, by the build and by ``cad pcb drc``."""
+    the one text a finding is printed as, by the build and by ``cad kicad_pcb check``."""
     order = sorted(findings, key=lambda finding: (finding.severity != "error", finding.check, finding.type))
     return tuple(
-        ValidationIssue(
+        CheckFinding(
             severity=finding.severity,
-            message=finding.description + (": " + "; ".join(finding.items) if finding.items else ""),
-            element=f"({finding.at[0]:g}, {finding.at[1]:g}) mm" if finding.at else None,
             code=finding.type,
+            message=finding.description + (": " + "; ".join(finding.items) if finding.items else ""),
+            location=f"({finding.at[0]:g}, {finding.at[1]:g}) mm" if finding.at else None,
         )
         for finding in order
     )
@@ -86,7 +86,7 @@ def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> lis
     when ``kicad-cli`` cannot run or refuses the board."""
     with private_run("cad-drc-") as (scratch, env):
         report = scratch / "drc.json"
-        command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "-o", str(report), str(board)]
+        command = [str(cli), "kicad_pcb", "check", "--format", "json", "--severity-all", "-o", str(report), str(board)]
         try:
             completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout, check=False)
         except subprocess.TimeoutExpired:

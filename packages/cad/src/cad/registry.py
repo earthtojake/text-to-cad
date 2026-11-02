@@ -178,11 +178,21 @@ _TYPES = (
         "srdf", "SRDF", "a MoveIt semantic robot description, read against its URDF", (".srdf",),
         "application/xml; charset=utf-8", "robot",
         ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
-        (Operation("check", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),    DocumentTypeEntry(
+        (Operation("check", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
+    DocumentTypeEntry(
         "sdf", "SDF", "an SDFormat world or model (Gazebo's Simulation Description Format)", (".sdf",),
         "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
         (Operation("check", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
-
+    DocumentTypeEntry(
+        "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
+        "text/plain; charset=utf-8", "plot",
+        ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
+        (Operation("export", "write its fabrication outputs with KiCad: gerbers, drill, pos or step, into a folder",
+                   "kicad"),
+         Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
+         Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
+         Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
+                   "kicad"))),
 )
 
 #: Every document type, by id, in the table's order.
@@ -193,6 +203,11 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
     "build123d": Integration(
         "build123d", "build123d and the OCCT kernel under it (OCP): model code builds with it, and the engine "
                      "makes, reads, writes and draws documents with it", extra="build123d", process="in-process"),
+    "kicad": Integration(
+        "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
+                 "and its fabrication exports", extra=None, process="separate",
+        probe=Probe("kicad-cli", "9.0", "install KiCad 9 or newer from https://www.kicad.org/download/, or set "
+                                        "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI")),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

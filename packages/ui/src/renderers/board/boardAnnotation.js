@@ -7,7 +7,7 @@
  * down, the payload's page space: `@cad/core`'s `plot2d/boardView.js`) under the view as it
  * stood — through the mirror while the board is seen from below — on no part, so it pans and zooms
  * with the board, stays on what it marks when the side changes, and the annotation file a prompt
- * carries is in the sheet's own coordinates, what `cad snapshot` draws it over.
+ * carries is in the sheet's own coordinates, what `cad <type> snapshot` draws it over.
  *
  * Importing this module has no environmental effects.
  */

@@ -1,4 +1,4 @@
-"""The KiCad board reader and ``cad.pcb`` import the standard library and each other alone.
+"""The KiCad board reader and ``cad.kicad_pcb`` import the standard library and each other alone.
 
 A check script reads a board under ``cad run`` and the server plots one in its own process, where
 the CAD kernel is not installed; KiCad is never required to read a board. Static, over the AST, so
@@ -15,7 +15,7 @@ import unittest
 from tests.python.support.paths import LIBRARY
 
 SOURCE = LIBRARY / "src" / "cad"
-FAMILY = sorted((SOURCE / "engine" / "formats" / "kicad").glob("*.py")) + [SOURCE / "pcb.py"]
+FAMILY = sorted((SOURCE / "engine" / "formats" / "kicad").glob("*.py")) + [SOURCE / "kicad_pcb" / "__init__.py"]
 OWN = "cad.engine.formats.kicad"
 
 
@@ -34,7 +34,8 @@ class KicadReaderIsStdlibPure(unittest.TestCase):
         self.assertGreater(len(FAMILY), 8)
         offenders = sorted(f"{path.relative_to(SOURCE)}: {name}" for path in FAMILY for name in imported(path)
                            if name != "__future__" and name.partition(".")[0] not in sys.stdlib_module_names
-                           and name != OWN and not name.startswith(OWN + "."))
+                           and name != OWN and not name.startswith(OWN + ".")
+                           and name != "cad._internal.document_type")  # cad.kicad_pcb is a DocumentType
         self.assertEqual(offenders, [])
 
 
