@@ -39,6 +39,7 @@ def in_kernel(target: tuple[str, str], *, prog: str) -> Callable[..., Any]:
         if env.own:
             return verb(*args, **kwargs)
         keywords = inspect.signature(verb).bind(*args, **kwargs).arguments
+        returns = typing.get_type_hints(verb).get("return")  # before it runs: by its answer, its files are written
         sys.stdout.flush()
         done = subprocess.run([env.python, "-P", "-m", RUNNER, module_name, attribute],
                               input=json.dumps(encode(keywords), default=str),
@@ -52,22 +53,45 @@ def in_kernel(target: tuple[str, str], *, prog: str) -> Callable[..., Any]:
             raise RuntimeError(f"the CAD kernel's environment ({env.python}) did not run {module_name}.{attribute} "
                                f"(exit code {done.returncode})")
         if "raised" in answer:
+            _report_crash(answer["raised"])
             raise raised(answer["raised"])
-        return decode(typing.get_type_hints(verb).get("return"), answer["returned"])
+        return decode(returns, answer["returned"])
 
     return call
 
 
 def raised(error: dict[str, Any]) -> Exception:
-    """The verb's error, from the runner's account of it: its own type when that is an exception this process can
-    import and make from its message, else a ``RuntimeError`` naming it."""
+    """The verb's error, from the runner's account of it (``cad._internal.kernel_run.told``): its own type when that
+    is an exception this process can import and make again from its arguments (or else its message), else a
+    ``RuntimeError`` naming it; with the traceback it had in the kernel's environment as a note, which
+    ``--verbose`` prints."""
     module_name, qualname, message = (str(error.get(key, "")) for key in ("module", "type", "message"))
+    made: Exception | None = None
     try:
         kind: Any = importlib.import_module(module_name)
         for part in qualname.split("."):
             kind = getattr(kind, part)
         if isinstance(kind, type) and issubclass(kind, Exception):
-            return kind(message)
+            arguments = error.get("args")
+            made = kind(*arguments) if isinstance(arguments, list) else kind(message)
     except Exception:  # noqa: BLE001 -- a type this process lacks or cannot make: named in the RuntimeError
+        made = None
+    if made is None:
+        made = RuntimeError(f"{qualname or 'error'}: {message}" if message else qualname or "error")
+    if error.get("traceback"):
+        made.add_note(f"raised in the CAD kernel's environment:\n{str(error['traceback']).rstrip()}")
+    return made
+
+
+def _report_crash(error: dict[str, Any]) -> None:
+    """A verb's error that is a mistake in the library's code, reported as the engine's workers' are
+    (``analytics.told_signature``): raised here again, its frames would be this module's ``raise``, never a bug."""
+    try:
+        from cad_server import analytics
+
+        name = error.get("type") if error.get("module") == "builtins" else f"{error.get('module')}.{error.get('type')}"
+        crash = analytics.told_signature({"type": name, "frames": error.get("frames") or []}, "command")
+        if crash is not None:
+            analytics.hand_over({"crashes": [crash]})
+    except Exception:  # noqa: BLE001 - a crash report never fails a command's own report
         pass
-    return RuntimeError(f"{qualname or 'error'}: {message}" if message else qualname or "error")
