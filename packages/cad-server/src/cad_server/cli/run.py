@@ -298,7 +298,10 @@ def prepare(plan: Plan, release: str) -> Prepared:
             options += ["--all-extras"] if plan.all_extras else []
 
     def scanned() -> set[str]:
+        # The import roots beside the program's own: its project's, and what ``PYTHONPATH`` names (as the
+        # program's run reads it, against the working folder).
         roots = [project.root, str(Path(project.root) / "src")] if project is not None else []
+        roots += [extras.absolute(item, here) for item in os.environ.get("PYTHONPATH", "").split(os.pathsep) if item]
         if plan.kind == "script":
             return scan.scan(script=script, roots=roots)
         if plan.kind == "module":
@@ -313,7 +316,8 @@ def prepare(plan: Plan, release: str) -> Prepared:
                                                                         *(project.dependencies if project else ())]),
         requirements=tuple(sorted(set(with_ + declared))), editable=tuple(dict.fromkeys(editable)),
         files=tuple(dict.fromkeys(files)), options=tuple(options),
-        python=extras.absolute(plan.python, here) if plan.python and os.sep in plan.python else plan.python,
+        python=(extras.absolute(plan.python, here) if plan.python and ("/" in plan.python or os.sep in plan.python)
+                else plan.python),
         python_options=tuple(plan.python_options), transient=_words(plan.transient, here))
     # What builds a document of its run again, from any folder: its command line's options, one word each, and
     # its requirements (``extras.tell``).
