@@ -5,7 +5,8 @@ name: Windows installer rehearsal
 # uv installed by its own installer when the image has none, `cad setup` run with nothing
 # asked, the `cad` command registered, the doctor's verdict and a second run; then models built on
 # it (a box, a box with a hand-made wheel through `--with`, through a script's header, from a
-# venv of the user's own with the library installed, and the page link's token), and the uninstall.
+# venv of the user's own with the library installed, and the page link's token), and the uninstall;
+# then the same again into a state folder named with accents and a non-Latin script.
 # A rehearsal, not a release gate: dispatched by hand, or by a push to main that changes the
 # installer or what it runs. No test.yml job runs it (scripts/github-workflows/select_checks.py).
 on:
@@ -417,3 +418,60 @@ jobs:
           if ($out -match 'cad uninstall exited') { throw "cad uninstall failed" }
           if (Test-Path $env:CAD_CMD) { throw "the proxy is still there after the uninstall: $env:CAD_CMD" }
           Write-Host "the proxy is gone"
+
+      # 6. A state folder named with accents and a non-Latin script, as %LOCALAPPDATA% is under a user
+      # folder such as C:\Users\José: the release's Python lives there, so the installation's record
+      # names non-ASCII paths, which the cad command (cad.cmd) reads. Installed again into it, then the
+      # doctor and a model through `cad` on PATH, then uninstalled. The folder's name stays out of the
+      # scripts' text: Windows PowerShell 5.1 reads a script without a byte-order mark as ANSI.
+      - name: Install into an accented, non-Latin state folder (5.1)
+        shell: cmd
+        env:
+          CAD_INSTALL_FROM: ${{ env.CAD_WHEEL }}
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-Content -Raw scripts\install\install.ps1 | Invoke-Expression" > "%RUNNER_TEMP%\install-accented.txt" 2>&1
+
+      - name: cad doctor and cad run, with that state folder (5.1)
+        shell: powershell
+        timeout-minutes: 20
+        env:
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: |
+          . "$env:RUNNER_TEMP\e2e.ps1"
+          Write-Host (Get-Content "$env:RUNNER_TEMP\install-accented.txt" -Raw)
+          if (-not (Test-Path $env:CAD_CMD)) { Fail "the cad command was not written at $env:CAD_CMD" }
+          $records = @(Get-ChildItem -LiteralPath (Join-Path $env:CAD_STATE_DIR 'installations') -Filter *.json)
+          if (-not $records) { Fail "no installation is recorded in the accented state folder" }
+          $record = [IO.File]::ReadAllText($records[0].FullName, [Text.Encoding]::UTF8) | ConvertFrom-Json
+          Write-Host "the record's python: $($record.python)"
+          if (-not $record.python.StartsWith($env:CAD_STATE_DIR, [StringComparison]::OrdinalIgnoreCase)) {
+            Fail "the record's python is not in the accented state folder: $($record.python)"
+          }
+          $env:Path = "$(Split-Path $env:CAD_CMD);$env:Path"
+          $doctor = Invoke-Native cad doctor
+          if ($doctor.Code) { Fail "cad doctor exited $($doctor.Code) with the accented state folder" }
+          $dir = Join-Path $env:RUNNER_TEMP 'models\accented'
+          Save "$dir\box.py" @'
+          from cad import model
+
+
+          @model
+          def box():
+              import build123d as bd
+
+              return bd.Box(40, 20, 6)
+
+
+          if __name__ == "__main__":
+              box()
+          '@
+          Set-Location $dir
+          $r = Invoke-Native cad run box.py
+          Need $r 'cad run box.py, accented state folder' @('(?m)^built \S+', 'bounds 40\D+20\D+6 mm')
+
+      - name: Uninstall the accented state folder's installation (5.1)
+        if: always()
+        shell: cmd
+        env:
+          CAD_STATE_DIR: ${{ runner.temp }}\état-José-日本
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts\install\install.ps1 --from "%CAD_WHEEL%" --uninstall > "%RUNNER_TEMP%\uninstall-accented.txt" 2>&1 & type "%RUNNER_TEMP%\uninstall-accented.txt"
