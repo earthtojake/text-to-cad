@@ -472,6 +472,11 @@ _RAISED = re.compile(r"(?:^|:)\s*raise\b")
 # receiver drops it from the releases already out (``NEVER_OURS`` in the API's ``noise.mjs``), so it stops costing
 # anything at once.
 _THEIR_CYCLE = frozenset({"cad/engine/model.py"})
+# cadgen's wrappers of build123d's calls (the memo's and the history's): a frame of one that called on into
+# another library passes the model's call on, so it is no code of cadgen's deciding whose the error is -- a
+# ``TypeError`` build123d raised for what a model gave it is the model's. An error raised in one itself is
+# cadgen's, as any other of its frames.
+_PASSING = frozenset({"cad/engine/kernel/memo.py", "cad/engine/kernel/history.py"})
 # The packages whose code is ours, each frame of theirs named by the package: ``cad/<path>``, ``cad_server/<path>``.
 OUR_PACKAGES = ("cad", "cad_server")
 
@@ -1002,9 +1007,10 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
     its file as named (``None``: the person's), as Python has it, and its line."""
     frames: list[dict[str, Any]] = []
     decisive = None
-    for filename, function, line in raw:
+    for index, (filename, function, line) in enumerate(raw):
         file = _file_of(filename)
-        if file is None or _is_ours(file):
+        passing = file in _PASSING and _passed_on(raw[index + 1:])
+        if (file is None or _is_ours(file)) and not passing:
             decisive = (file, filename, line)
         if file is None:
             if not frames or frames[-1]["file"] != USER:
@@ -1012,6 +1018,17 @@ def _named_frames(raw: list[tuple[str, str, int]]) -> tuple[list[dict[str, Any]]
             continue
         frames.append({"file": file, "function": function if _FUNCTION.fullmatch(function) else "<?>", "line": line})
     return frames, decisive
+
+
+def _passed_on(below: list[tuple[str, str, int]]) -> bool:
+    """Whether the frames below one of cadgen's wrappers (``_PASSING``) go on, past any more of the wrappers', into
+    another library's code: the wrapper passed the call on. One of cadgen's other frames, or of the person's own
+    code, or none, is not."""
+    for filename, _function, _line in below:
+        file = _file_of(filename)
+        if file not in _PASSING:
+            return file is not None and not _is_ours(file)
+    return False
 
 
 def _their_cycle(frames: list[dict[str, Any]]) -> bool:
@@ -1127,12 +1144,12 @@ def _named(error: BaseException, vocabulary: frozenset[str]) -> str | None:
 def _whose(error: BaseException) -> tuple[str | None, tuple[str, str, int] | None]:
     """Whose code ``error`` came from: where its innermost frame lives (``ours``, ``site``, ``stdlib``, or
     ``user``: the person's), and its innermost frame of cadgen's or the person's -- whose, its file, its line."""
-    innermost, decisive = None, None
-    for frame, line in traceback.walk_tb(error.__traceback__):
-        found = _located(frame.f_code.co_filename)
-        innermost = found[0] if found else "user"
-        if innermost in ("ours", "user"):
-            decisive = (innermost, frame.f_code.co_filename, int(line or 0))
+    raw = [(frame.f_code.co_filename, frame.f_code.co_qualname, int(line or 0))
+           for frame, line in traceback.walk_tb(error.__traceback__)]
+    found = _located(raw[-1][0]) if raw else None
+    innermost = (found[0] if found else "user") if raw else None
+    _frames, named = _named_frames(raw)  # whose: as a crash finds it, past cadgen's wrappers that passed a call on
+    decisive = None if named is None else ("user" if named[0] is None else "ours", named[1], named[2])
     return innermost, decisive
 
 

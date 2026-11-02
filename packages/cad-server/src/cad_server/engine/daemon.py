@@ -546,6 +546,22 @@ def rotate_token() -> str | None:
     return token
 
 
+def _reportable(report: dict[str, Any]) -> bool:
+    """Whether a failed build's error is a mistake in cadgen's own code, for its page to offer to report:
+    what telemetry counts as a crash of a build (``analytics.told_signature`` of the report's error as the
+    verbs tell it, ``api.told_error``). The model's own error -- its code, a library it called, the kernel
+    refusing a call, cadgen refusing what it was given -- is the model's to correct, and is not. One rule
+    for both, so the tracker hears of what telemetry would. Never raises: a failure it cannot tell is
+    reported."""
+    try:
+        from cad.engine.api import told_error
+        from cad_server import analytics
+
+        return analytics.told_signature(told_error(report), "build") is not None
+    except Exception:  # noqa: BLE001 - a failure that cannot be told is offered to report, as every one was
+        return True
+
+
 class Daemon:
     def __init__(self, cap: int | None = None, port: int | None = None) -> None:
         self.port = port  # ``cad server --port``: the HTTP port this engine must take, or None
@@ -753,7 +769,7 @@ class Daemon:
         for report in reports if isinstance(reports, list) else []:
             frame = report.get("progress") or {}
             failed = None if report.get("ok") else {"model": report.get("model"), "error": report.get("error"),
-                                                    "progress": frame}
+                                                    "reportable": _reportable(report), "progress": frame}
             for ident in self.models.paths(worker, report.get("model")):
                 outcomes[ident] = failed
             # Each child model the run built is a document of its own, built as its own row says: its
@@ -761,10 +777,13 @@ class Daemon:
             for identity, child in (report.get("child_models") or {}).items():
                 if child.get("id"):
                     outcomes[child["id"]] = None if child.get("ok") else {
-                        "model": identity, "error": child.get("error"), "progress": frame}
+                        "model": identity, "error": child.get("error"), "reportable": _reportable(child),
+                        "progress": frame}
         if "failed" in answer:
             frame = worker.progress or {}
-            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "progress": frame}
+            # The worker itself failed -- it died, or answered no report: cadgen's to fix, to report.
+            outcomes = {path: {"model": frame.get("job"), "error": answer["failed"], "reportable": True,
+                               "progress": frame}
                         for path in [*outcomes, *self.models.paths(worker, frame.get("job"))]}
         if outcomes:
             server.built(outcomes)

@@ -775,7 +775,16 @@ Nor does the day: the creation date the BinXCAF driver writes in the file's
 header is always `01/01/2000` (`document.WRITTEN_DATE`, put over the driver's in
 place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
-previous files stay: the program's own call prints those frames once on stderr, then `failed
+previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
+`build._raised`: its type and every frame, the library's included), and the daemon decides
+from them whether the failure is a mistake in cadgen's own code (`reportable`,
+`daemon._reportable`) by the rule telemetry counts a build's crash by
+(`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
+raised in cadgen's code at a line that is no `raise`, past the memo's and the history's wrappers
+of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
+cadgen refusing what it was given are the model's to correct. The page's record of the failed
+build carries `reportable`, and the card offers Report Issue only where it is not `false`; a
+worker that died under the build is reportable. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
 it, and left uncaught it ends the program with status 1 without its traceback again
 (`model._told`). A call the engine never served -- none runs and this shell's sandbox cannot

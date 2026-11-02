@@ -69,8 +69,11 @@ class ObserversTest(unittest.TestCase):
         self.assertEqual(built["worker"], {"fresh": None, "retired": False, "died": None})  # built here, no worker
         error = built["error"]
         self.assertEqual((error["type"], error["engine"], error["refused"], error["here"]), ("ValueError", False, False, False))
-        self.assertEqual([(Path(frame["file"]).name, frame["function"]) for frame in error["frames"]],
-                         [("secret.py", "secret_broken")], "the model's frames, its file as Python has it")
+        # The whole traceback, innermost last, each file as Python has it: cadgen's frames too, so telemetry
+        # (and a page's Report Issue) can tell a mistake of cadgen's from the model's own (``build._raised``).
+        named = [(Path(frame["file"]).name, frame["function"]) for frame in error["frames"]]
+        self.assertEqual(named[-1], ("secret.py", "secret_broken"), "the model's frame, innermost")
+        self.assertIn(("build.py", "_build"), named, "cadgen's frames as well")
         self.assertEqual((exported["verb"], exported["ok"], exported["source"]), ("export", True, "xbf"))
         self.assertNotIn("pose", exported, "an export has no pose to tell")
         self.assertEqual([output["kind"] for output in exported["outputs"]], ["step", "threemf"])
