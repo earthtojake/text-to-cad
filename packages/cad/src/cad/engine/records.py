@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import shlex
 import subprocess
 from pathlib import Path
@@ -106,8 +105,9 @@ def rerun(program: str | os.PathLike, python: str | os.PathLike | None = None,
     (``given``: its record's ``with``), ``cad run --with`` each of them and the program; a program a run in
     a Python of its own built (``python``: a venv's, with packages the base lacks), that Python and the
     program, which ``cad run`` could not build. Each word is quoted for a POSIX shell (``shlex.quote``);
-    on Windows in the double quotes cmd.exe and PowerShell both read, and only where a space, a quote or
-    an operator of cmd.exe's needs them (``_windows``) -- to cmd.exe a single quote is part of the path."""
+    on Windows in the double quotes cmd.exe and PowerShell both read, and only where a space, a quote, an
+    operator of cmd.exe's or a ``%`` needs them (``_windows``) -- to cmd.exe a single quote is part of the
+    path."""
     from cad.engine.said import COMMAND
 
     def said(words: list[str]) -> str:
@@ -122,12 +122,29 @@ def rerun(program: str | os.PathLike, python: str | os.PathLike | None = None,
 def _windows(word: str) -> str:
     """One word as cmd.exe and PowerShell pass it on to a program: the C runtime's quoting
     (``subprocess.list2cmdline``: double quotes around a word holding a space), and the double quotes too
-    around a word holding an operator of cmd.exe's (``_OPERATORS``), the backslashes that end it doubled
-    before the quote that closes it."""
+    around a word holding an operator of cmd.exe's (``_OPERATORS``). A word holding a ``%`` is quoted
+    between each, ``"C:\\my"%"20dir"``: cmd.exe expands a ``%NAME%`` inside double quotes too, and what lies
+    between two ``%`` is then a name with quotes in it, which no variable has; PowerShell, like the C runtime,
+    reads the parts as one word."""
+    if "%" in word:
+        return "%".join(_quoted(part) for part in word.split("%"))
     said = subprocess.list2cmdline([word])
     if said.startswith('"') or not _OPERATORS.intersection(word):
         return said
-    return '"' + re.sub(r"(\\+)$", r"\1\1", said) + '"'
+    return _quoted(word)
+
+
+def _quoted(word: str) -> str:
+    """``word`` in double quotes as the C runtime reads them: a quote in it escaped, and the backslashes
+    before that quote, and those before the quote that closes it, doubled."""
+    said, slashes = ['"'], 0
+    for char in word:
+        if char == "\\":
+            slashes += 1
+            continue
+        said.append("\\" * (slashes * 2 + 1) + '"' if char == '"' else "\\" * slashes + char)
+        slashes = 0
+    return "".join(said) + "\\" * (slashes * 2) + '"'
 
 
 def command(registry: Any, record: dict[str, Any]) -> str | None:

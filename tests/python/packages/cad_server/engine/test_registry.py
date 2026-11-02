@@ -81,6 +81,9 @@ class RegistryTest(unittest.TestCase):
                   "cad run --with '/w/my pkg' --with 'pandas>=2' '/my models/caller.py'"),
                  (True, "C:\\my models\\caller.py", None, ["C:\\w\\my pkg", "pandas>=2", "scipy"],
                   'cad run --with "C:\\w\\my pkg" --with "pandas>=2" --with scipy "C:\\my models\\caller.py"'),
+                 # cmd.exe expands a %NAME% inside double quotes too: each % between quoted parts.
+                 (True, "C:\\my%20dir\\caller.py", None, ["C:\\w\\100%pure\\"],
+                  'cad run --with "C:\\w\\100"%"pure\\\\" "C:\\my"%"20dir\\caller.py"'),
                  # Built by a Python of its own (a venv's): that Python runs it again, as its run did.
                  (False, "/my models/caller.py", "/w/.venv/bin/python", None,
                   "/w/.venv/bin/python '/my models/caller.py'"),
