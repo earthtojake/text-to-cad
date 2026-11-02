@@ -264,6 +264,7 @@ RULES: tuple[Rule, ...] = (
         f"{LIBRARY_SRC}/engine/refs.py", f"{LIBRARY_SRC}/engine/kernel/imported.py",
         f"{LIBRARY_SRC}/engine/kernel/memo.py", f"{LIBRARY_SRC}/engine/executables.py",
         f"{LIBRARY_SRC}/engine/export/glb.py", f"{LIBRARY_SRC}/_internal/atomic_replace.py",
+        f"{LIBRARY_SRC}/_internal/kernel_run.py",
         f"{LIBRARY_SRC}/results.py", f"{SERVER_SRC}/_internal/cli_from_function.py",
         f"{SERVER_SRC}/_internal/base.py",
     ), select(flags=["cam"])),
