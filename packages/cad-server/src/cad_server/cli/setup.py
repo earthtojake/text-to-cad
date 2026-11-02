@@ -593,6 +593,23 @@ class Installer:
                 "record_written": recorded == installations.REGISTERED,
                 "launcher": {"path": proxy, "status": before, "written": wrote, "error": proxy_error}}
 
+    def _done(self, step: Any) -> str | None:
+        """What the app ``step`` installs this release in has of it now, read again, when a command of the step
+        failed (``providers.apply``): this release's copy, ours, in words -- a tool that exits non-zero after
+        doing its work (``gemini extensions link`` once its integrity store warns) did it -- else None."""
+        providers = self.providers
+        if step.action not in ("install", "update") or step.app not in providers.APPS:
+            return None
+        try:
+            app = providers.detect(self.machine, [step.app], folder=self.folder)[step.app]
+        except Exception:  # noqa: BLE001 - a check that cannot read the app finds nothing: the failure stands
+            return None
+        ours = app.ours()
+        if ours is None or ours.version != self.release:
+            return None
+        origin = ours.origin(self.machine)
+        return ours.words(self.machine) + (f", {origin}" if origin else "")
+
     # --- the report ---------------------------------------------------------------------------
 
     def _verify(self) -> dict[str, Any]:
@@ -837,7 +854,7 @@ class Installer:
             for step in work:
                 self.say(f"{step.label}: {step.action} {step.subject}")
                 ok, records = providers.apply(step, self.machine, say=lambda line: self.say(f"  {line}"),
-                                              aside=aside, backed_up=backed_up)
+                                              aside=aside, backed_up=backed_up, done=self._done)
                 self.actions += records
                 failed = failed or not ok
                 # A plugin installed or updated loads in the app's next session; a config, as the app opens.

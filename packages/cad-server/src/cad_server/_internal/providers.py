@@ -1944,10 +1944,14 @@ def stamp() -> str:
 
 
 def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str], None] = lambda _line: None,
-          aside: Optional[Path] = None, backed_up: Optional[set] = None) -> Tuple[bool, List[Dict[str, Any]]]:
+          aside: Optional[Path] = None, backed_up: Optional[set] = None,
+          done: Optional[Callable[[Step], Optional[str]]] = None) -> Tuple[bool, List[Dict[str, Any]]]:
     """Run ``step``: each command, said before it runs, stopping at the first that fails (its output
     said), then its file edit. ``(ok, records)``, a record per thing done, for the receipt. ``aside``
-    is where loose skills go; ``backed_up``, the files this run already kept a ``.bak`` of."""
+    is where loose skills go; ``backed_up``, the files this run already kept a ``.bak`` of. ``done``
+    reads the app again when a command fails: what it finds, the step's work there all the same, makes
+    the failure a warning, quoted beside it (``gemini extensions link`` links the extension, then exits
+    1 when its integrity store cannot be verified), and the step goes on; None, a failure."""
     machine = _machine(machine)
     records: List[Dict[str, Any]] = []
     base = {"app": step.app, "action": step.action, **({"store": step.store} if step.store else {})}
@@ -1955,6 +1959,14 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
         say(f"$ {command_text(argv, machine)}")
         ran = machine.run(argv)
         record = {**base, "kind": "command", "command": list(argv), "code": ran.code, "ok": ran.ok, "at": stamp()}
+        found = done(step) if not ran.ok and done is not None else None
+        if found:
+            warning = " ".join(line.strip() for line in ran.said(600).splitlines() if line.strip())
+            record.update({"ok": True, "warning": ran.said()})
+            said = f"exited {ran.code}" + (f', saying "{warning}"' if warning else "")
+            say(f"done all the same: {found} ({os.path.splitext(os.path.basename(str(argv[0])))[0]} {said})")
+            records.append(record)
+            continue
         if not ran.ok:
             record["output"] = ran.said()
             for line in (ran.said() or f"exit status {ran.code}").splitlines():
