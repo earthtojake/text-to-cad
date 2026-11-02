@@ -83,10 +83,13 @@ where those files ship, so these scripts are what produces them.
   suite, narrowed to PATHs as `test-python.sh` is.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
   marks' tests. Called by `test.yml`.
-- `test-kicad.sh` — native board DRC and STEP/mesh export through an installed KiCad 9+
-  (`CAD_KICAD_CLI`, else `kicad-cli` on PATH): `tests/python/packages/kicad`, each file with
-  private engine, state and cache folders. Called by `test.yml`'s KiCad job, which installs
-  stable KiCad; no footprint library, IPC server or browser is needed.
+- `test-kicad.sh` — native board DRC, the exports (gerbers, drill, pos, STEP) and a STEP/mesh round
+  trip through an installed KiCad 9+ (`CAD_KICAD_CLI`, else `kicad-cli` on PATH):
+  `tests/python/packages/kicad`, each file with private engine, state and cache folders. Called by
+  `test.yml`'s KiCad job, which installs the KiCad nightly (`ppa:kicad/kicad-dev-nightly`) and points
+  `CAD_KICAD_CLI` at the real `kicad-cli` binary behind its `kicad-cli-nightly` wrapper (cad refuses
+  a wrapper); no footprint library, IPC server or browser is needed. A test that needs the nightly's
+  board format skips on an older KiCad.
 - `test-api.sh` — `npm --prefix apps/api test`: the version feed's and the
   telemetry receiver's tests, which need no install. Called by `test.yml` and
   `deploy-api.yml`.

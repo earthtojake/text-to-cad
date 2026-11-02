@@ -29,6 +29,10 @@ exports use a user-installed [KiCad 9 or newer](https://www.kicad.org/download/)
 It runs `kicad-cli` headless, with private settings, and never opens KiCad. For the direct export
 examples below, `kicad-cli` means that same executable; never open a board in KiCad's app to check it.
 
+Native boards here use KiCad's nightly format, so they open only in a nightly KiCad app, and DRC and
+exports need a nightly `kicad-cli` for now. A stable KiCad refuses a board saved by the nightly (DRC
+then reports `kicad_failed`); viewing and snapshots still work.
+
 ## Native files are the source
 
 Edit the `.kicad_pcb` itself, preserving its companion `.kicad_pro`, `.kicad_dru`, libraries and

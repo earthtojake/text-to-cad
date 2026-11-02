@@ -63,5 +63,27 @@ class NativeExports(unittest.TestCase):
             self.assertTrue(step.read_text(encoding="utf-8", errors="replace").startswith("ISO-10303-21"))
 
 
+class SharedTestBoard(unittest.TestCase):
+    """The test board the reader, plot and command suites share is in the nightly's format (20260901)."""
+
+    def test_a_nightly_checks_and_exports_it(self):
+        from cad_server.kicad.export import export
+        from cad_server.kicad.install import find_kicad_cli, kicad_version, version_tuple
+        from cad_server.pcb import drc
+        from tests.python.support.kicad_board import write_board
+
+        cli = find_kicad_cli()
+        if version_tuple(kicad_version(cli) or "0")[:2] < (10, 99):
+            self.skipTest("the shared test board is in the format of a KiCad nightly (10.99)")
+        with tempfile.TemporaryDirectory(prefix="kicad-shared-") as folder:
+            board = write_board(Path(folder))
+            result = drc(board)
+            # KiCad read it (a refusal is one issue, `kicad_failed`) and found the unrouted LED net's ratsnest line.
+            codes = {issue.code for issue in result.issues}
+            self.assertNotIn("kicad_failed", codes, result)
+            self.assertIn("unconnected_items", codes, result)
+            self.assertTrue(export(board, "step", Path(folder) / "fab")[0].is_file())
+
+
 if __name__ == "__main__":
     unittest.main()

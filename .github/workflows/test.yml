@@ -325,9 +325,11 @@ jobs:
       - name: Run the CAD app tests and build it
         run: scripts/test/test-js.sh --select mcp
 
-  # Native KiCad boards through a stable KiCad: DRC, and a STEP and mesh round trip of a saved
-  # board. Only KiCad's code, its suite and its runner select it (and a full run): viewing and
-  # drawing a board need no KiCad and are the package suites'.
+  # Native KiCad boards through the KiCad nightly (10.99, the format boards are saved in): DRC, the
+  # exports, and a STEP and mesh round trip of a saved board. Only KiCad's code, its suite and its
+  # runner select it (and a full run): viewing and drawing a board need no KiCad and are the package
+  # suites'. The PPA's package is the program and its libraries; the symbols, footprints and 3D models
+  # (over a gigabyte) are not needed, as the test boards carry their own footprints.
   kicad:
     name: KiCad boards
     needs: changes
@@ -341,12 +343,29 @@ jobs:
         with:
           ref: ${{ inputs.ref }}
 
-      - name: Install KiCad
+      - name: Install the KiCad nightly
+        # Launchpad answers 503 now and then mid-download (a 69 MB package): apt retries it.
         run: |
-          sudo add-apt-repository --yes ppa:kicad/kicad-9.0-releases
-          sudo apt-get update
-          sudo apt-get install --yes --no-install-recommends kicad
-          kicad-cli version
+          sudo add-apt-repository --yes ppa:kicad/kicad-dev-nightly
+          sudo apt-get -o Acquire::Retries=5 update
+          sudo apt-get -o Acquire::Retries=5 install --yes --no-install-recommends kicad-nightly
+
+      - name: Point cad at the nightly's kicad-cli
+        # The package's command is kicad-cli-nightly, a shell wrapper that sources
+        # /usr/share/kicad-nightly/kicad-nightly.env and runs the real binary; cad refuses a wrapper
+        # by design (it runs only a file named kicad-cli). So CAD_KICAD_CLI names the binary the
+        # package installs, and what the wrapper's env file sets is set here: its library folders
+        # through ldconfig (not LD_LIBRARY_PATH, which would reach every later process), its data
+        # folder as KICAD_PATH.
+        run: |
+          cli="$(dpkg -L kicad-nightly | grep -E '/bin/kicad-cli$')"
+          test -x "$cli"
+          . /usr/share/kicad-nightly/kicad-nightly.env
+          printf '%s\n' "${LD_LIBRARY_PATH//:/$'\n'}" | sudo tee /etc/ld.so.conf.d/kicad-nightly.conf
+          sudo ldconfig
+          echo "CAD_KICAD_CLI=$cli" >> "$GITHUB_ENV"
+          echo "KICAD_PATH=$KICAD_PATH" >> "$GITHUB_ENV"
+          "$cli" version
 
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
