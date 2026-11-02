@@ -33,11 +33,12 @@ PROGRAM = "cad._internal.program"
 USAGE = "usage: cad run [--with REQ]... SCRIPT.py [ARGS...] | -m MODULE [ARGS...] | -c CODE\n"
 
 
-def requirements(given: list[str], rest: list[str]) -> tuple[list[str], list[str]]:
+def requirements(given: list[str], rest: list[str]) -> tuple[list[str], list[str], str | None, list[str]]:
     """The packages a run names, normalized (``extras.normalized``): ``--with``'s, against the working folder,
-    and the script's header's, against its folder; each once, sorted -- and ``--with``'s alone, which a
-    document it builds names to build it again. ``extras.Refused`` in one line for a header that does not
-    read, or a ``requires-python`` the server's Python does not meet."""
+    and the script's header's, against its folder; each once, sorted -- then ``--with``'s alone, the script
+    (absolute) and its header's alone, which a document it builds names to build it again (``extras.tell``).
+    ``extras.Refused`` in one line for a header that does not read, or a ``requires-python`` the server's
+    Python does not meet."""
     from cad_server._internal import extras
 
     named = [extras.normalized(item, os.getcwd()) for item in given]
@@ -52,8 +53,9 @@ def requirements(given: list[str], rest: list[str]) -> tuple[list[str], list[str
             raise extras.Refused(f"{script.name} requires Python {wanted}, and the server's is "
                                  f"{platform.python_version()}")
     folder = str(script.resolve().parent) if script is not None else os.getcwd()
-    every = named + [extras.normalized(item, folder) for item in found.get("dependencies") or []]
-    return sorted(set(every)), sorted(set(named))
+    declared = [extras.normalized(item, folder) for item in found.get("dependencies") or []]
+    return (sorted(set(named + declared)), sorted(set(named)), str(script.resolve()) if declared else None,
+            sorted(set(declared)))
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -74,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
         if not rest:
             sys.stderr.write(f"{PROG}: name a script, -m MODULE or -c CODE\n{USAGE}")
             return 2
-        every, named = requirements(given, rest)
+        every, named, script, declared = requirements(given, rest)
         if every:
             env = extras.ensure(base.Installation.here(), every, told=said, engine=True)
         else:
@@ -83,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         said(str(refused))
         return 1
     assert env is not None  # made, or refused
-    extras.tell(named)  # what a document the program builds says builds it again
+    extras.tell(named, script, declared)  # what a document the program builds says builds it again
     # The program's folder last on its path (``-P``, then the library's runner), never first.
     command = [env.python, "-P", "-m", PROGRAM, *rest]
     sys.stdout.flush()

@@ -78,6 +78,21 @@ def delete(held: Any, ident: str, book: "Models | None" = None) -> dict[str, Any
     return None
 
 
+def _given(given: list[str], header: dict[str, Any], script: Any) -> list[str]:
+    """The requirements a model's record says ``cad run --with`` again (its ``with``): those ``--with`` gave
+    its run, and those the inline metadata of the script ``cad run`` ran named (``header``) but where that
+    script is the model's own, whose header ``cad run`` reads again -- a check script's are not."""
+    named = [item for item in header.get("with") or [] if isinstance(item, str)]
+    theirs = header.get("script")
+    if not named or not isinstance(theirs, str) or not isinstance(script, str):
+        return list(given)
+
+    def same(path: str) -> str:
+        return os.path.normcase(os.path.realpath(path))
+
+    return list(given) if same(theirs) == same(script) else sorted(set(given) | set(named))
+
+
 def revision(report: dict[str, Any]) -> str:
     """A model document's recorded revision: its closure's key (the same code, the same revision, in
     any process), else a token of this build's own."""
@@ -102,10 +117,11 @@ class Models:
             return
         program = answer.get("program")
         # How its run was made, which builds its documents again: the Python a run in its own builds with
-        # (``Daemon.caller``), or the requirements ``cad run --with`` was given; neither, the base's, which
-        # ``cad run`` reaches (a script's header names its own packages again).
+        # (``Daemon.caller``), or how ``cad run`` named its packages (``given``, ``_given``); neither, the
+        # base's, which ``cad run`` reaches.
         python = answer.get("python") if isinstance(answer.get("python"), str) else None
         given = [item for item in answer.get("with") or [] if isinstance(item, str)]
+        header = answer.get("header") if isinstance(answer.get("header"), dict) else {}
         # Per script of the run: the explicit names it declares now, and those its models' records
         # say it declared before (None: no record says), to give up what it declares no more.
         declared: dict[str, tuple[list[str], set[str] | None]] = {}
@@ -125,7 +141,8 @@ class Models:
                         held = self.registry()
                         if held is not None:
                             claimed(held, source, source["explicit_name"])
-                    had = self.record(report, recorded, facts, python, given)
+                    mine = _given(given, header, source.get("script"))
+                    had = self.record(report, recorded, facts, python, mine)
                     if isinstance(source.get("declares"), list):
                         _now, was = declared.get(source["script"], (source["declares"], None))
                         if isinstance(had.get("declares"), list):
@@ -148,7 +165,7 @@ class Models:
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],
-                                           "kind": "model", "python": python, "with": given,
+                                           "kind": "model", "python": python, "with": mine,
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts}

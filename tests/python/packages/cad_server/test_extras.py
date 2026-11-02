@@ -59,7 +59,9 @@ class NamingTest(unittest.TestCase):
 
     def test_requires_python_reads_as_pep_440_does(self) -> None:
         for spec, admitted in ((">=3.11,<3.15", True), (">=3.15", False), ("~=3.14", True), ("~=3.13.1", False),
-                               ("==3.14.*", True), ("!=3.14.*", False), ("==3.14", False), ("junk", None)):
+                               ("==3.14.*", True), ("!=3.14.*", False), ("==3.14", False), ("junk", None),
+                               (">=3.11.0rc1", True), ("<3.14.0rc1", False), (">=3.15.0a1", False),
+                               ("~=3.14.0rc1", True), ("<=3.14.6.dev1", False), ("==3.14.0rc1.*", None)):
             with self.subTest(spec=spec):
                 self.assertEqual(extras.admits(spec, "3.14.6"), admitted)
 
@@ -75,11 +77,61 @@ class NamingTest(unittest.TestCase):
             self.assertEqual([extras.normalized(item, "C:\\w\\project") for item in
                               (".\\pkg", "..\\x.whl", "D:\\abs\\y.whl", "\\\\server\\share\\z.whl")],
                              ["C:\\w\\project\\pkg", "C:\\w\\x.whl", "D:\\abs\\y.whl", "\\\\server\\share\\z.whl"])
+        # A local direct reference, or a file: URL, absolute -- the same key from any folder; a URL as written.
+        with mock.patch.object(extras, "WINDOWS", False):
+            self.assertEqual([extras.normalized(item, "/w/project") for item in
+                              ("Gears @ ./vendor/gears", 'gears @ file:./vendor/gears ; python_version > "3"',
+                               "file:../x.whl", "gears @ file:///abs/my%20dir/gears", "https://e.com/a-1.0.whl",
+                               "gears @ https://e.com/gears.zip")],
+                             ["gears @ /w/project/vendor/gears", 'gears @ /w/project/vendor/gears ; python_version > "3"',
+                              "/w/x.whl", "gears @ /abs/my dir/gears", "https://e.com/a-1.0.whl",
+                              "gears @ https://e.com/gears.zip"])
+            self.assertEqual([extras.local_package(item) for item in
+                              ("/w/x.whl", "gears @ /abs/gears", "gears @ https://e.com/gears.zip", "pandas>=2")],
+                             ["/w/x.whl", "/abs/gears", None, None])
+        with mock.patch.object(extras, "WINDOWS", True):
+            self.assertEqual([extras.normalized(item, "C:\\w\\project") for item in
+                              ("gears @ .\\vendor\\gears", "gears @ file:///D:/my%20dir/gears")],
+                             ["gears @ C:\\w\\project\\vendor\\gears", "gears @ D:\\my dir\\gears"])
         installation = base.Installation.here()
         same = extras.key(installation, ["numpy", "pandas>=2"])
         self.assertEqual(extras.key(installation, ["pandas>=2", "numpy", "numpy"]), same, "each once, in any order")
         self.assertNotEqual(extras.key(installation, ["pandas>=2"]), same)
         self.assertEqual(extras.where(installation, ["numpy"]).parent.name, base.BASE, "beside the base")
+
+    def test_a_local_package_is_keyed_by_what_it_is_now_passing_over_what_no_build_reads(self) -> None:
+        folder = Path(tempfile.mkdtemp(prefix="extras-local-")).resolve()
+        self.addCleanup(shutil.rmtree, folder, True)
+        package = folder / "gears"
+        (package / "gears").mkdir(parents=True)
+        source = package / "gears" / "__init__.py"
+        source.write_text("TEETH = 1\n", encoding="utf-8")
+        installation, requirements = base.Installation.here(), [str(package), "pandas>=2"]
+        before, key = extras.fingerprints(requirements), extras.key(installation, requirements)
+        self.assertEqual(list(before), [str(package)], "only the local one")
+        for skipped in ("__pycache__/x.pyc", ".git/index", "build/lib/x.py", "gears.egg-info/PKG-INFO"):
+            (package / skipped).parent.mkdir(parents=True, exist_ok=True)
+            (package / skipped).write_text("x", encoding="utf-8")
+        self.assertEqual(extras.key(installation, requirements), key, "what no build reads changes nothing")
+        source.write_text("TEETH = 22\n", encoding="utf-8")
+        self.assertNotEqual(extras.key(installation, requirements), key, "an edit is another environment")
+        wheel = _wheel(folder)
+        was = extras.fingerprint(str(wheel))
+        os.utime(wheel, ns=(wheel.stat().st_atime_ns, wheel.stat().st_mtime_ns + 10**9))
+        self.assertNotEqual(extras.fingerprint(str(wheel)), was, "a wheel built again at its name")
+        self.assertEqual(extras.fingerprint(str(folder / "gone")), "missing")
+
+    def test_the_engine_hands_uv_no_option_of_its_own_as_a_requirement(self) -> None:
+        from cad_server.engine.daemon import Daemon
+
+        with self.assertRaisesRegex(extras.Refused, "^--index-url=https://x is no requirement"):
+            extras.making(["pandas", "--index-url=https://x"])
+        engine = Daemon(cap=1)
+        self.addCleanup(engine.shutdown)
+        sent: list = []
+        engine.base({"op": "base", "key": "k", "with": ["--index-url=https://x"]}, sent.append)
+        self.assertEqual(sent, [{"failed": "--index-url=https://x is no requirement: name a package, a pin, extras, "
+                                           "or a local path or wheel", "base": True}])
 
     def test_uv_s_refusals_are_one_line_with_its_reason_or_the_package_its_cache_lacks(self) -> None:
         recipe = extras.recipe(base.Installation.here(), ["build123d<0.1"])
@@ -105,29 +157,37 @@ class NamingTest(unittest.TestCase):
         folder = Path(tempfile.mkdtemp(prefix="extras-collect-"))
         self.addCleanup(shutil.rmtree, folder, True)
 
-        def made(name: str, release: str, given: list[str] | None) -> Path:
+        def made(name: str, release: str, given: list[str] | None, local: dict | None = None) -> Path:
             env = folder / name
             base.interpreter(env).parent.mkdir(parents=True)
             base.interpreter(env).write_bytes(b"")
             marker = {"schema": base.SCHEMA, "key": name, "inputs": {"release": release}}
-            (env / base.MARKER).write_text(json.dumps(marker if given is None else {**marker, "with": given}),
-                                           encoding="utf-8")
+            if given is not None:
+                marker.update({"with": given, "local": local or {}})
+            (env / base.MARKER).write_text(json.dumps(marker), encoding="utf-8")
             return env
 
         old = made("old", "0.9.0", ["pandas"])
+        superseded = made("edited", "0.10.0", ["/w/gears"], {"/w/gears": "before"})
+        now = made("now", "0.10.0", ["/w/gears"], {"/w/gears": "after"})
         for name, release, given in (("held", "0.9.0", ["scipy"]), ("same", "0.10.0", ["pandas"]),
                                      ("base", "0.9.0", None)):
             made(name, release, given)
         with mock.patch("cad_server._internal.releases.running", side_effect=lambda env: Path(env).name == "held"):
-            self.assertEqual(extras._collect(folder, "0.10.0"), [str(old)])
-        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "held", "same"],
-                         "a base is its release's to remove; one a process runs from goes at a later making")
+            self.assertEqual(sorted(extras._collect(folder, "0.10.0", made=now, requirements=["/w/gears"],
+                                                    inputs={"release": "0.10.0"})), sorted([str(superseded), str(old)]))
+        self.assertEqual(sorted(path.name for path in folder.iterdir()), ["base", "held", "now", "same"],
+                         "a base is its release's to remove; one a process runs from goes at a later making; the "
+                         "environments of other packages stay")
+        self.assertEqual(extras._changed(folder, {"release": "0.10.0"}, ["/w/gears"], {"/w/gears": "later"}),
+                         ["/w/gears"], "the line that makes it again names the local package edited")
 
 
-def _wheel(folder: Path) -> Path:
-    """A tiny pure-Python package as a wheel uv installs with no build and no network: ``localpkg``."""
+def _wheel(folder: Path, width: int = 42) -> Path:
+    """A tiny pure-Python package as a wheel uv installs with no build and no network: ``localpkg``, its
+    ``WIDTH`` the one given."""
     path = folder / "localpkg-0.1-py3-none-any.whl"
-    files = {"localpkg/__init__.py": b"WIDTH = 42\n",
+    files = {"localpkg/__init__.py": f"WIDTH = {width}\n".encode(),
              "localpkg-0.1.dist-info/METADATA": b"Metadata-Version: 2.1\nName: localpkg\nVersion: 0.1\n",
              "localpkg-0.1.dist-info/WHEEL": b"Wheel-Version: 1.0\nGenerator: test\nRoot-Is-Purelib: true\n"
                                               b"Tag: py3-none-any\n"}
@@ -202,8 +262,42 @@ class RunWithTest(unittest.TestCase):
         self.assertEqual(headed.returncode, 0, headed.stdout + headed.stderr)
         self.assertNotIn("making", headed.stderr)
         self.assertEqual(self.rebuild(headed), rerun(self.project / "headed.py"))
-        self.assertEqual(len([path for path in (Path(os.environ["CAD_CACHE_DIR"]) / base.BASE).iterdir()
-                              if path.is_dir()]), 1, "one environment")
+        made = [path for path in (Path(os.environ["CAD_CACHE_DIR"]) / base.BASE).iterdir()
+                if (base.complete(path) or {}).get("with") == [str(self.wheel)]]
+        self.assertEqual(len(made), 1, "one environment")
+
+    def test_a_program_s_header_names_the_packages_a_model_it_calls_is_built_again_with(self) -> None:
+        # The header is the check script's; the model is model_part.py's, whose own script names no package.
+        from cad.engine import records
+        from cad.engine.ids import model_id
+
+        (self.project / "model_part.py").write_text(PLATE.format(header=""), encoding="utf-8")
+        (self.project / "check.py").write_text(f"# /// script\n# dependencies = ['{self.wheel}']\n# ///\n"
+                                               "import model_part\n\nmodel_part.plate()\n", encoding="utf-8")
+        done = self.run_("check.py")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        held = records.current().get(model_id(self.project / "model_part.py", "plate"))
+        self.assertEqual(records.command(records.current(), held),
+                         records.rerun(self.project / "model_part.py", given=[str(self.wheel)]),
+                         "cad run --with the program's packages and the model's own script")
+
+    def test_an_edited_local_package_makes_its_environment_again_and_says_so(self) -> None:
+        folder = self.project / "edited"
+        folder.mkdir()
+        wheel = _wheel(folder)
+        said = "import localpkg; print(localpkg.WIDTH)"
+        first = self.run_("--with", str(wheel), "-c", said)
+        self.assertEqual((first.returncode, first.stdout.strip()), (0, "42"), first.stderr)
+        _wheel(folder, width=142)  # built again at its name, as a build tool does
+        stamp = wheel.stat()
+        os.utime(wheel, ns=(stamp.st_atime_ns, stamp.st_mtime_ns + 10**9))
+        again = self.run_("--with", str(wheel), "-c", said)
+        self.assertEqual((again.returncode, again.stdout.strip()), (0, "142"), again.stderr)
+        self.assertIn(f"cad run: making the environment of the model's packages again, as {wheel} changed: ",
+                      again.stderr)
+        warm = self.run_("--with", str(wheel), "-c", said)
+        self.assertEqual((warm.returncode, warm.stdout.strip()), (0, "142"), warm.stderr)
+        self.assertNotIn("making", warm.stderr, "unchanged: the environment used again")
 
     def test_what_uv_cannot_do_is_said_in_one_line(self) -> None:
         (self.project / "plain.py").write_text("print('ran')\n", encoding="utf-8")

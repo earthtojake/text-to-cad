@@ -92,10 +92,12 @@ class ContractTest(unittest.TestCase):
             self.assertIsNone(contract.interpreter(), "cad run's script is built in the server's own environment")
         # An environment of a model's own packages (``cad run --with``, a script's header): its Python, and
         # the requirements ``cad run --with`` handed the program, which build its documents again.
-        with mock.patch.object(places, "HOME", base), mock.patch.object(places, "EXTRAS", ("pandas",)), \
-                mock.patch.dict(os.environ, {places.RUN_WITH: '["pandas"]'}):
+        named = '{"with": ["pandas"], "script": "/w/check.py", "header": ["scipy"]}'
+        with mock.patch.object(places, "HOME", base), mock.patch.object(places, "EXTRAS", ("pandas", "scipy")), \
+                mock.patch.dict(os.environ, {places.RUN_WITH: named}):
             here = contract.interpreter()
-        self.assertEqual((here["executable"], here["with"]), (sys.executable, ["pandas"]))
+        self.assertEqual((here["executable"], here["with"], here["header"]),
+                         (sys.executable, ["pandas"], {"script": "/w/check.py", "with": ["scipy"]}))
 
 
 @model

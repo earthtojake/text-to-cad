@@ -410,18 +410,27 @@ HOME: dict[str, Any] | None = home()
 # The packages this process's environment holds beside the base's, where ``cad run`` made it for a model's
 # own (``extras``): its scripts name their Python, which the engine builds them in (``contract.interpreter``).
 EXTRAS: tuple[str, ...] = extras()
-# The requirements ``cad run --with`` was given, normalized, which it hands the program it runs as JSON: what
-# a document's record says builds it again (``contract.interpreter``'s ``with``). A header's are its script's.
+# How ``cad run`` named the packages of the environment it runs a program in, which it hands the program as
+# JSON (``run_with``): what a document's record says builds it again (``contract.interpreter``).
 RUN_WITH = "CAD_RUN_WITH"
 
 
-def run_with() -> list[str]:
-    """The requirements ``cad run --with`` gave this process (``RUN_WITH``); ``[]`` with none."""
+def run_with() -> dict[str, Any]:
+    """How ``cad run`` named this process's packages (``RUN_WITH``): the requirements its ``--with`` was given
+    (``with``), and the script whose inline metadata named the rest (``script``) with them (``header``),
+    normalized; each empty with none."""
     try:
-        found = json.loads(os.environ.get(RUN_WITH) or "[]")
+        found = json.loads(os.environ.get(RUN_WITH) or "{}")
     except ValueError:
-        return []
-    return [item for item in found if isinstance(item, str)] if isinstance(found, list) else []
+        found = {}
+    found = found if isinstance(found, dict) else {}
+
+    def strings(value: Any) -> list[str]:
+        return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
+
+    script = found.get("script")
+    return {"with": strings(found.get("with")), "script": script if isinstance(script, str) else None,
+            "header": strings(found.get("header"))}
 
 
 def installation_record(data: bytes | None) -> dict[str, Any] | None:

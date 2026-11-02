@@ -634,7 +634,11 @@ class Daemon:
         if isinstance(named, list) and named and all(isinstance(item, str) for item in named):
             from cad_server._internal import extras
 
-            making = extras.making(named)
+            try:
+                making = extras.making(named)
+            except extras.Refused as refused:  # an option of uv's handed as a requirement: uv never sees it
+                send({"failed": str(refused), "base": True})
+                return
         else:
             making = _making()
         if request.get("key") != making.key():
@@ -1245,14 +1249,18 @@ class Daemon:
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
                         # when it is another (``contract.notice``); and how that run was made, which the
-                        # documents' records say to build them again by (``models.Models.register``): the
-                        # requirements ``cad run --with`` was given, in an environment it made for the
-                        # model's own packages; else that Python.
+                        # documents' records say to build them again by (``models.Models.register``): in an
+                        # environment ``cad run`` made for the model's own packages, how it named them (the
+                        # requirements its ``--with`` was given, and a script's header's with the script);
+                        # else that Python.
                         answer["release"] = version()
                         if python is not None:
-                            given = (request.get("interpreter") or {}).get("with")
+                            interpreter = request.get("interpreter") or {}
+                            given = interpreter.get("with")
                             if isinstance(given, list):
                                 answer["with"] = [item for item in given if isinstance(item, str)]
+                                if isinstance(interpreter.get("header"), dict):
+                                    answer["header"] = interpreter["header"]
                             else:
                                 answer["python"] = python
                         if ahead is not None:
