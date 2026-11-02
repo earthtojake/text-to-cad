@@ -49,6 +49,7 @@ class _Server:
 
 class _Board:
     saved = 0
+    loading = 0
 
     def save(self):
         _Board.saved += 1
@@ -63,6 +64,9 @@ def _kipy() -> types.ModuleType:
             self.socket_path = socket_path
 
         def get_board(self):
+            if _Board.loading:  # the server opens its socket before it has loaded the board
+                _Board.loading -= 1
+                raise RuntimeError("KiCad returned error: KiCad is not ready to reply")
             return _Board()
 
         def check_version(self):  # the PyPI client calls a nightly a future version: never asked
@@ -79,7 +83,7 @@ class BoardScriptTest(unittest.TestCase):
         self.board = self.folder / "board.kicad_pcb"
         self.board.write_text("(kicad_pcb)\n", encoding="utf-8")
         _Server.started.clear()
-        _Board.saved = 0
+        _Board.saved, _Board.loading = 0, 2
         patches = [mock.patch.object(_session.subprocess, "Popen", _Server), mock.patch.dict(sys.modules, {"kipy": _kipy()})]
         for patch in patches:
             patch.start()
@@ -94,7 +98,8 @@ class BoardScriptTest(unittest.TestCase):
     def test_the_board_is_saved_when_the_function_returns(self) -> None:
         handed = []
         ran = _session.run(self.script(handed.append), cli=Path("/opt/kicad/kicad-cli"))
-        self.assertEqual((1, 1), (len(handed), _Board.saved))
+        self.assertEqual((1, 1, 0), (len(handed), _Board.saved, _Board.loading),
+                         "asked again while the server says it is not ready, then handed the board once")
         self.assertEqual(self.board, ran.board)
         (server,) = _Server.started
         self.assertEqual(["/opt/kicad/kicad-cli", "api-server", "--socket"], server.command[:3])

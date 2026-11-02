@@ -142,6 +142,21 @@ def _client(socket: Path) -> Any:
     return KiCad(socket_path=f"ipc://{socket}", client_name="cad", timeout_ms=60000)
 
 
+def _board(kicad: Any, server: subprocess.Popen) -> Any:
+    """The open board, once the server answers for it: it opens its socket before it has loaded the board,
+    and says it is not ready to reply until then. Any other refusal, or a server that exits, is a failure."""
+    deadline = time.monotonic() + START_SECONDS
+    while True:
+        try:
+            return kicad.get_board()
+        except Exception as error:  # noqa: BLE001 - kipy's ApiError, by its words: the one it says while loading
+            if "not ready" not in str(error).lower() or server.poll() is not None:
+                raise
+            if time.monotonic() > deadline:
+                raise KicadRunError(f"kicad-cli api-server did not load the board within {START_SECONDS:g} s") from None
+        time.sleep(_POLL)
+
+
 def run(script: BoardScript, *, cli: Path | None = None) -> BoardRun:
     """Run ``script`` on its board: saved when the function returns, untouched when it raises."""
     board = script.board
@@ -157,8 +172,7 @@ def run(script: BoardScript, *, cli: Path | None = None) -> BoardRun:
                                       stdin=subprocess.DEVNULL, stdout=said, stderr=subprocess.STDOUT)
             try:
                 _wait_for(server, socket, log)
-                kicad = _client(socket)
-                opened = kicad.get_board()
+                opened = _board(_client(socket), server)
                 script.function(opened)  # a raise leaves the board as it was: nothing is saved
                 opened.save()
             finally:
