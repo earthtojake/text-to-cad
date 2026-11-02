@@ -1,4 +1,4 @@
-export { createCadClient, cadApiUrl, isMissingFileError } from "./client.js";
+export { createCadClient, cadApiUrl, isMissingFileError, libraryRow } from "./client.js";
 export { createHttpPromptFiles } from "./promptFiles.js";
 export { encodeBase64 } from "./base64.js";
 export { crashOf, createCrashReporter, scriptFileOf } from "./crash.js";

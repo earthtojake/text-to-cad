@@ -13,7 +13,7 @@ import { PNG } from 'pngjs';
 // Fixtures, served from memory: cadgen's exports of two boxes with authored colours (core's
 // `lib/render/fixtures`), static and with the clip that slides one of them from its rest pose,
 // and bytes that are not a GLB at all.
-const CORE_FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@text-to-cad/core/lib/render/glbMeshData.js')), 'fixtures');
+const CORE_FIXTURES = join(dirname(createRequire(import.meta.url).resolve('@cad/core/lib/render/glbMeshData.js')), 'fixtures');
 const FILES = {
   'static.glb': readFileSync(join(CORE_FIXTURES, 'pair.glb')),
   'animated.glb': readFileSync(join(CORE_FIXTURES, 'pair.slide.glb')),
@@ -36,11 +36,11 @@ before(async () => {
     const name = url.pathname.split('/').pop();
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/__cad/catalog')) {
+    else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ entries: Object.entries(FILES).map(([file, data]) => (
-        { kind: 'glb', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
-    } else if (url.pathname.endsWith('/__cad/server')) {
+      response.end(JSON.stringify({ documents: (Object.entries(FILES).map(([file, data]) => (
+        { kind: 'glb', file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length }))).map(entry => ({ entry, revision: entry.hash })) }));
+    } else if (url.pathname.endsWith('/api/v1/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'model/gltf-binary'); response.end(FILES[name]); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }

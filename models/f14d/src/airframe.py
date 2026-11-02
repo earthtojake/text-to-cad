@@ -19,7 +19,7 @@ function, so an edit that does not reach its code replays it from the worker's
 memory instead of running it.
 """
 
-from cadgen import memo
+from cad import memo
 
 from lib import airframe as airframe_lib
 from lib import cockpit, inlets

@@ -1,10 +1,10 @@
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup,
   DropdownMenuRadioItem, DropdownMenuSeparator, DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 import { GridIcon } from "../view-settings/DisplayModeOptions.js";

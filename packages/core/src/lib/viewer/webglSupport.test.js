@@ -41,13 +41,18 @@ test("isSoftwareWebGlRenderer recognizes common software rasterizers", () => {
   assert.equal(isSoftwareWebGlRenderer(null), false);
 });
 
-test("buildRuntimeInitializationAlert reports WebGL as a blocking browser capability issue", () => {
+// The card (`ViewerAlertCard`) shows `recovery`, and a report carries `details` (#734: the card showed
+// neither, so the person had no next step and the report no diagnostic).
+test("buildRuntimeInitializationAlert reports WebGL as a blocking capability issue, with a next step and details", () => {
   const alert = buildRuntimeInitializationAlert(new Error("Error creating WebGL context."));
 
   assert.equal(alert.blocking, true);
   assert.equal(alert.summary, "WebGL unavailable");
-  assert.match(alert.message, /browser WebGL/);
-  assert.match(alert.resolution, /chrome:\/\/gpu/);
+  assert.match(alert.message, /WebGL context/);
+  assert.match(alert.recovery, /^Quit and reopen the browser or app/);
+  assert.match(alert.recovery, /chrome:\/\/gpu/);
+  assert.equal(alert.resolution, undefined);
+  assert.match(alert.details, /^Error creating WebGL context\.(\nUser agent: .+)?$/);
 });
 
 test("buildRuntimeInitializationAlert falls back to a generic startup alert", () => {
@@ -56,6 +61,8 @@ test("buildRuntimeInitializationAlert falls back to a generic startup alert", ()
   assert.equal(alert.blocking, true);
   assert.equal(alert.summary, "CAD Viewer startup failed");
   assert.equal(alert.message, "Unexpected renderer failure");
+  assert.match(alert.recovery, /^Reload or reopen CAD Viewer/);
+  assert.match(alert.details, /^Unexpected renderer failure/);
 });
 
 test("runtimeErrorMessage normalizes unknown thrown values", () => {

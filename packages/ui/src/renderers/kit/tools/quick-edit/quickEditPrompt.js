@@ -1,4 +1,4 @@
-import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@text-to-cad/core/prompt";
+import { createPromptContext, formatPromptReference, parsePromptReference, referencePart, resolvePromptMessage, textPart } from "@cad/core/prompt";
 
 const stem = path => String(path || "").split("/").pop().replace(/\.[^.]+$/, "") || "view";
 const stemOf = resource => stem(resource.kind === "url" ? new URL(resource.url).pathname : resource.path);
@@ -17,7 +17,7 @@ const lazy = start => {
  * what it copied, to the chip — an annotation's file path) is `{ chip, token }`.
  *
  * @param {string} pasted
- * @returns {Array<string | import("@text-to-cad/core/prompt").PromptReference | { annotation: object }>}
+ * @returns {Array<string | import("@cad/core/prompt").PromptReference | { annotation: object }>}
  */
 export function pastedLines(pasted, copied = null) {
   const text = String(pasted || "");
@@ -62,8 +62,8 @@ export function createQuickEditContext({ resource, references = [], text, views 
     const made = pick => { const path = files.then(pick); path.catch(() => {}); return path; };
     const path = made(result => result.snapshot || "");
     const inlineText = made(result => typeof result.inline === "string"
-      ? `Snapshot JSON (cadgen snapshot --annotation):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
-    parts.push({ id: "snapshot", kind: "attachment", label: "Snapshot (cadgen snapshot --annotation)",
+      ? `Snapshot JSON (cad snapshot --annotation):\n\`\`\`json\n${result.inline}\n\`\`\`` : null);
+    parts.push({ id: "snapshot", kind: "attachment", label: "Snapshot (cad snapshot --annotation)",
       name: `${name}.snapshot.json`, mimeType: "application/json", path, inlineText,
       content: lazy(() => files.then(result => typeof result.inline === "string"
         ? new Blob([result.inline], { type: "application/json" }) : read(result.snapshot))), about: ["file"] });

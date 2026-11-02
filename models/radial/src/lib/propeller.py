@@ -39,7 +39,7 @@ import math
 import numpy as np
 import build123d as bd
 
-from cadgen import memo
+from cad import memo
 
 from lib import castings as C
 from lib import fasteners as F

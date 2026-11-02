@@ -148,8 +148,9 @@ jobs:
       - name: Check the tracked tree
         run: scripts/github-workflows/check-builds.sh --tree-only
 
-  # The cadgen package suite, the engine's and the CAD Viewer backend's included, on both
-  # platforms -- or the files of it a change selected (a test edited, a document a test reads).
+  # The packages' suites -- the library's, the server's (the engine's and the CAD Viewer backend's
+  # included) and the shim's -- on both platforms, or the files of them a change selected (a test
+  # edited, a document a test reads).
   cadgen-linux:
     name: cadgen (Linux)
     needs: changes
@@ -158,7 +159,7 @@ jobs:
     timeout-minutes: 40
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
@@ -180,8 +181,11 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y xvfb libgl1-mesa-dri fonts-dejavu-core
 
-      - name: Check cadgen types (basic)
-        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
+      - name: Check the packages' types (basic)
+        run: |
+          for project in cad cad-server cad-mcp; do
+            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
+          done
 
       - name: Run the cadgen package suite
         env:
@@ -205,7 +209,7 @@ jobs:
     env:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
       # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Check out repository
@@ -219,8 +223,12 @@ jobs:
           playwright: "false"
           npm: packages/core
 
-      - name: Check cadgen types (basic)
-        run: python -m pyrefly check --config packages/cadgen/pyproject.toml --output-format full-text-with-github
+      - name: Check the packages' types (basic)
+        run: |
+          for project in cad cad-server cad-mcp; do
+            python -m pyrefly check --config "packages/$project/pyproject.toml" --output-format full-text-with-github
+          done
+        shell: bash
 
       # --keep-going: report every failing suite in one round trip rather than one per
       # run; the Linux job keeps the fail-fast default.
@@ -356,7 +364,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      CADGEN_TEST_JOBS: "4"
+      CAD_TEST_JOBS: "4"
 
     steps:
       - name: Stop when the selection did not run
@@ -373,7 +381,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version: "3.14"
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -470,26 +478,23 @@ jobs:
       - name: Check production bundle layout
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
-      # cadgen ships the JS it executes as package data. A package-data glob that stops
+      # The server ships the JS it executes as package data. A package-data glob that stops
       # matching produces a wheel that imports fine and fails on a user's machine, so the
-      # wheel is built and inspected here rather than trusted.
-      - name: Check cadgen wheel contents
+      # wheels (the library's, the server's and the shim's) are built and inspected here rather
+      # than trusted.
+      - name: Check the wheels' contents
         env:
-          CADGEN_KEEP_WHEEL: "1"
-          CADGEN_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
+          CAD_KEEP_WHEEL: "1"
+          CAD_WHEEL_OUT_DIR: ${{ runner.temp }}/cadgen-wheel-check
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
-      # The CLIs the way a user gets them -- pip-installed, from a directory that is not
-      # this repo -- which is the only place a missing package-data glob or an accidental
-      # repo-relative path shows up.
-      - name: Run installed-mode checks against the verified wheel
-        run: |
-          shopt -s nullglob
-          wheels=("$RUNNER_TEMP/cadgen-wheel-check/"*.whl)
-          [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
-          scripts/test/test-installed.sh --wheel "${wheels[0]}"
+      # The CLIs the way a user gets them -- the three wheels pip-installed together, from a
+      # directory that is not this repo -- which is the only place a missing package-data glob or
+      # an accidental repo-relative path shows up.
+      - name: Run installed-mode checks against the verified wheels
+        run: scripts/test/test-installed.sh --wheels "$RUNNER_TEMP/cadgen-wheel-check"
 
       # The client the wheel ships, served by the backend from the bundle built above. After
       # the wheel steps, so what they inspect is the tree as the bundle left it.

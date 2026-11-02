@@ -1,13 +1,13 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { cn } from "@text-to-cad/ui/utils";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
+import { Slider } from "@cad/ui/primitives/slider";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
   FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
 import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import { useControlUsage } from "../../usage/controls.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 const CONTROL_SYNC_EPSILON = 0.001;
 const CONTROL_LOCAL_OVERRIDE_MS = 3500;

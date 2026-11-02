@@ -1,7 +1,7 @@
 import { useAnimationClockValue } from "./animationClock.js";
-import { Slider } from "@text-to-cad/ui/primitives/slider";
+import { Slider } from "@cad/ui/primitives/slider";
 import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * The words a routine runtime's controls say, in `t`'s language, by its `noun`: "Animation" (the

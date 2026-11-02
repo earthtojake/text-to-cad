@@ -2,7 +2,7 @@ import React from 'react';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { STEP_PART_VIEW_FEATURES, viewFeaturesForKind } from '@text-to-cad/core/common/viewSettings.js';
+import { STEP_PART_VIEW_FEATURES, viewFeaturesForKind } from '@cad/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
 import DisplayPopover from '../../../../dist/renderers/kit/shell/DisplayPopover.js';
 import { DISPLAY_MODE_OPTIONS } from '../../../../dist/renderers/kit/view-settings/DisplayModeOptions.js';

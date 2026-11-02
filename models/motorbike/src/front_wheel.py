@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import build123d as bd
-from cadgen import model
+from cad import model
 
 from lib import wheels as W
 

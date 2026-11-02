@@ -1,10 +1,10 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
-import { entityAt, drawEntityHighlights, snapAt } from "@text-to-cad/core/lib/drawing2d/entities.js";
-import { drawAnnotationMarks } from "@text-to-cad/core/lib/drawing2d/marks.js";
-import { planCamera, planProjection } from "@text-to-cad/core/lib/drawing2d/planView.js";
-import { screenToModel } from "@text-to-cad/core/lib/drawing2d/index.js";
+import { cn } from "@cad/ui/utils";
+import { entityAt, drawEntityHighlights, snapAt } from "@cad/core/lib/drawing2d/entities.js";
+import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
+import { planCamera, planProjection } from "@cad/core/lib/drawing2d/planView.js";
+import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import { usePromptDestination, useViewerHost, ViewerElementContext } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
 import { hasOpenPopup } from "../../lib/popups.js";
@@ -46,7 +46,7 @@ import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAn
 import LayersSection from "./LayersSection.jsx";
 import { DXF_DECLINED_LIVE_COMMANDS, DXF_NO_CAMERA, DXF_NO_DISPLAY, DXF_TOOL, DXF_TOOL_MODES } from "./tools.js";
 import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS, pressToolKey } from "../kit/tools/toolShortcuts.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * A `.dxf` is drawn as a drawing: on a canvas, head on, in the pens it declares. No 3D, no fold
@@ -59,12 +59,12 @@ import { useI18n } from "@text-to-cad/ui/i18n";
  * pinch zooms, a double-click fits; Annotate, which draws on the sheet; and Measure, between points
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
- * on screen as a plan-view camera, which `cadgen snapshot --annotation PACKET --camera authored` draws again. A drawing with
+ * on screen as a plan-view camera, which `cad snapshot --annotation PACKET --camera authored` draws again. A drawing with
  * layers and blocks to read has a Layers section in the file sidebar (`layersSectionShown`). The
  * chrome is every view's — the strip at the top centre, the tool's row under it, the sidebar at the
  * top-left, Quick Edit at the top-right — drawn from the kit's parts around the 2D canvas.
  *
- * The picture comes from the BACKEND (`GET /__cad/drawing`), which runs ezdxf over the file and
+ * The picture comes from the BACKEND (`GET /api/v1/documents/dxf/<id>/drawing`), which runs ezdxf over the file and
  * returns flat primitives, each naming its entity. This renderer never parses DXF.
  */
 
@@ -359,7 +359,7 @@ function DxfSurface({ view, data }) {
 
   // ---- Quick Edit ------------------------------------------------------------
   // A note carries the views with annotation ink as JSON files — a plan-view job
-  // `cadgen snapshot --annotation PACKET --camera authored` draws, the annotation on the sheet.
+  // `cad snapshot --annotation PACKET --camera authored` draws, the annotation on the sheet.
   const promptFile = useCallback(() => (resourceRef.current?.kind === "workspace-file" ? resourceRef.current.path : null), []);
   const annotationNow = useCallback(() => drawingAnnotationDocument(annotationRef.current.items, unitsRef.current.unit), []);
   const quickEditPrompt = useMemo(() => ({

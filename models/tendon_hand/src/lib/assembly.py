@@ -46,7 +46,7 @@ def integration_bodies(palm_baseline=False):
     bodies=[]
     def add(shape,frame,system,kind): bodies.append(Body(shape,frame,system,kind))
     if palm_baseline:
-        from cadgen import read_step
+        from cad import read_step
         from pathlib import Path
         source=Path(__file__).resolve().parents[2]/'STEP/palm_frame_review.step'
         def leaves(node):
@@ -57,7 +57,7 @@ def integration_bodies(palm_baseline=False):
     for part in main_parts:
         kind='fastener' if 'screw' in part.label or 'washer' in part.label else 'frame'
         add(part,'wrist_flexion','palm',kind)
-    from cadgen import read_step
+    from cad import read_step
     from pathlib import Path
     little_source=Path(__file__).resolve().parents[2]/'STEP/palm_little_review.step'
     little_parts=list(read_step(little_source).children)
@@ -120,7 +120,7 @@ def integration_bodies(palm_baseline=False):
     for body in bodies:
         if body.system in fan_locations:body.shape=fan_locations[body.system]*body.shape
     # These mount factories already return assembled, fanned geometry.
-    from cadgen import read_step
+    from cad import read_step
     from pathlib import Path
     guide_source=Path(__file__).resolve().parents[2]/'STEP/phalanx_guide_mounts_review.step'
     def guide_leaves(node):

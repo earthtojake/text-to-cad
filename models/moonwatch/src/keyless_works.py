@@ -8,7 +8,7 @@ around the stem axis at 3 o'clock.
 """
 
 import build123d as bd
-from cadgen import memo
+from cad import memo
 
 from lib import materials
 from lib import mvt_keyless as K

@@ -1,14 +1,14 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { cn } from "@text-to-cad/ui/utils";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { cn } from "@cad/ui/utils";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * How the panels open together share a stack too short for all of them at their height
