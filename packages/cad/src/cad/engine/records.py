@@ -94,24 +94,31 @@ def program(registry: Any, record: dict[str, Any]) -> Path | None:
     return Path(os.path.normpath(registry.root(record) / given)) if given else None
 
 
-def rerun(program: str | os.PathLike) -> str:
+def rerun(program: str | os.PathLike, python: str | os.PathLike | None = None) -> str:
     """The command that runs ``program`` again, as a person pastes it into this platform's shell:
     ``cad run`` and the program, absolute. The engine that says it is the one ``cad run``
-    reaches, and its python has the kernel a bare ``python`` may not. The program is quoted for a
+    reaches, and its python has the kernel a bare ``python`` may not. A program a run in a Python of
+    its own built (its record's ``python``: a venv's, with packages the base lacks) is run again by
+    that Python, which ``cad run`` is not: that Python and the program. Each word is quoted for a
     POSIX shell (``shlex.quote``); on Windows in the double quotes cmd.exe and PowerShell both read,
     and only where a space or a quote needs them (``subprocess.list2cmdline``) -- to cmd.exe a
     single quote is part of the path."""
     from cad.engine.said import COMMAND
 
-    text = os.fspath(program)
-    return f"{COMMAND} run {subprocess.list2cmdline([text]) if WINDOWS else shlex.quote(text)}"
+    words = [os.fspath(python), os.fspath(program)] if python else [os.fspath(program)]
+    said = subprocess.list2cmdline(words) if WINDOWS else " ".join(shlex.quote(word) for word in words)
+    return said if python else f"{COMMAND} run {said}"
 
 
 def command(registry: Any, record: dict[str, Any]) -> str | None:
     """The command that builds a model's document again (``rerun``): ``cad run`` of its home, the
-    script that defines it, never a program that imported it and called it (a check script). None
-    for a shape handed over, which no run built, and for a file's. The engine never runs it."""
-    return rerun(home(registry, record)) if record.get("kind") == "model" else None
+    script that defines it, never a program that imported it and called it (a check script) -- or the
+    Python of its own its last run built it with (its record's ``python``) and its home. None for a
+    shape handed over, which no run built, and for a file's. The engine never runs it."""
+    if record.get("kind") != "model":
+        return None
+    python = record.get("python")
+    return rerun(home(registry, record), python if isinstance(python, str) else None)
 
 
 def detached(registry: Any, record: dict[str, Any]) -> bool:

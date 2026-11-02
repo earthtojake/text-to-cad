@@ -101,6 +101,9 @@ class Models:
         if not isinstance(reports, list):
             return
         program = answer.get("program")
+        # The Python a run in its own builds with (``Daemon.caller``), which builds its documents again;
+        # None: the base's, which ``cad run`` reaches.
+        python = answer.get("python") if isinstance(answer.get("python"), str) else None
         # Per script of the run: the explicit names it declares now, and those its models' records
         # say it declared before (None: no record says), to give up what it declares no more.
         declared: dict[str, tuple[list[str], set[str] | None]] = {}
@@ -120,7 +123,7 @@ class Models:
                         held = self.registry()
                         if held is not None:
                             claimed(held, source, source["explicit_name"])
-                    had = self.record(report, recorded, facts)
+                    had = self.record(report, recorded, facts, python)
                     if isinstance(source.get("declares"), list):
                         _now, was = declared.get(source["script"], (source["declares"], None))
                         if isinstance(had.get("declares"), list):
@@ -143,7 +146,7 @@ class Models:
                     version = old["version"] if same else secrets.token_hex(8)
                     self.records[ident] = {"id": ident, "source": source, "worker": worker,
                                            "program": program or (old or {}).get("program") or source["script"],
-                                           "kind": "model",
+                                           "kind": "model", "python": python,
                                            "builtAt": time.time(), "version": version,
                                            "files": list(report.get("files") or {}), "revision": recorded,
                                            "facts": facts}
@@ -228,9 +231,11 @@ class Models:
 
         return registry.current()
 
-    def record(self, report: dict[str, Any], recorded: str, facts: dict[str, Any] | None = None) -> dict[str, Any]:
+    def record(self, report: dict[str, Any], recorded: str, facts: dict[str, Any] | None = None,
+               python: str | None = None) -> dict[str, Any]:
         """The registry's record of a document a build made (``registry``), written when it changed;
-        the record it had (``{}``: none). Nothing with no registry."""
+        the record it had (``{}``: none). ``python``: the Python a run in its own built it with, which
+        its record names (``python``: absent, the base's); nothing with no registry."""
         from cad_server.engine import registry as registering
 
         held = self.registry()
@@ -242,7 +247,8 @@ class Models:
         root = str(script.parent)
         # What a restart needs of it and no more: what it is (``id``, ``kind``, ``key``), where its
         # code is (``root``, ``home``, ``entry``: the command that builds it again is ``cad run``
-        # of its home, always), the revision the cache and the delta compare, when it was built (the
+        # of its home -- or, built in a Python of its own, that Python of its home: ``python``), the
+        # revision the cache and the delta compare, when it was built (the
         # home's order) and when it was first built (``created``, the home's Created: kept from the
         # record it had; a record from before the time was kept stays without one). The closure is
         # its document's own (``previous``); which files it declared is no one's: they are exports.
@@ -255,6 +261,8 @@ class Models:
             found["created"] = found["built"]
         elif "created" in old:
             found["created"] = old["created"]
+        if python is not None:
+            found["python"] = python  # absent: built in the base, which ``cad run`` reaches
         if source.get("explicit_name") is not None:
             found["line"] = source["line"]  # its claim of the name in its folder (``identity.claimed``)
         if isinstance(source.get("declares"), list):
@@ -417,8 +425,9 @@ class Models:
 
     def command(self, ident: str) -> str | None:
         """The command that builds model document ``ident`` again: ``cad run`` and the script that
-        defines its model -- never a program that imported it and called it -- from this process's
-        book or the registry's record. None for an id the engine never built."""
+        defines its model -- never a program that imported it and called it -- or, for one its last run
+        built in a Python of its own, that Python and the script; from this process's book or the
+        registry's record. None for an id the engine never built."""
         with self.lock:
             found = self.records.get(ident)
         if found is None:
@@ -428,7 +437,7 @@ class Models:
             return None  # handed over by a program the engine did not run: nothing builds it again
         from cad_server.engine.registry import rerun
 
-        return rerun(found["source"]["script"])
+        return rerun(found["source"]["script"], found.get("python"))
 
     def recorded(self, ident: str) -> dict[str, Any] | None:
         """What the registry knows of a model document this process never built (one built before a

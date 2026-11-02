@@ -1098,7 +1098,7 @@ class Daemon:
                 send(refused(self.models.not_held(ident)))
             else:
                 model = {key: record.get(key) for key in ("id", "source", "program", "builtAt", "version", "files",
-                                                          "kind")}
+                                                          "kind", "python")}
                 model["state"] = self.models.state(ident)
                 # On disk in the engine's cache, at its revision: a restart reopens it as last built.
                 model["cached"] = (self.models.where(ident) or "").endswith("disk")
@@ -1236,8 +1236,11 @@ class Daemon:
                         answer = worker.request(order, send)
                         answer["worker"] = {"pid": worker.pid, "fresh": fresh}
                         # This server's release, which a script run in its own Python says once a run
-                        # when it is another (``contract.notice``).
+                        # when it is another (``contract.notice``); and that Python, which the documents'
+                        # records name as the one that builds them again (``models.Models.register``).
                         answer["release"] = version()
+                        if python is not None:
+                            answer["python"] = python
                         if ahead is not None:
                             # The build it waited for, the one its own replays: began how long before it asked.
                             for report in answer.get("done") or []:

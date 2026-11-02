@@ -85,6 +85,14 @@ class OwnPythonTest(unittest.TestCase):
         self.assertEqual((Path(worker["script"]).name, worker["python"], worker["builds"]),
                          ("plate.py", self.python, 2), "one worker of the environment, running the first Python")
         self.assertNotIn("cad-server is", done.stderr, "one release: no update notice")
+        # Its record names the Python that built it, which builds it again: `cad run` could not.
+        from cad.engine import records
+
+        ident = re.search(r"id: ([0-9a-f-]{36})", done.stdout).group(1)
+        found = records.current().get(ident)
+        self.assertEqual(found["python"], spelled, "the Python its last run named")
+        self.assertEqual(records.command(records.current(), found), records.rerun(self.project / "plate.py", spelled))
+        self.assertFalse(records.command(records.current(), found).startswith("cad run"))
 
     def test_a_contract_the_server_does_not_speak_is_refused_in_one_line_before_any_worker_starts(self) -> None:
         forged = {"executable": self.python, "prefix": str(self.folder / "venv"), "release": "0.0.1",

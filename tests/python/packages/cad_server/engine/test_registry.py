@@ -71,13 +71,22 @@ class RegistryTest(unittest.TestCase):
     def test_the_rebuild_command_pastes_into_the_platform_s_shell(self) -> None:
         # Printed for a person to paste: quoted for a POSIX shell there; on Windows as cmd.exe and
         # PowerShell both read it, where a single quote would be part of the path.
-        cases = ((False, "/m/caller.py", "cad run /m/caller.py"),
-                 (False, "/my models/caller.py", "cad run '/my models/caller.py'"),
-                 (True, "C:\\m\\caller.py", "cad run C:\\m\\caller.py"),
-                 (True, "C:\\my models\\caller.py", 'cad run "C:\\my models\\caller.py"'))
-        for windows, program, pasted in cases:
-            with self.subTest(program=program), mock.patch.object(records, "WINDOWS", windows):
-                self.assertEqual(records.rerun(program), pasted)
+        cases = ((False, "/m/caller.py", None, "cad run /m/caller.py"),
+                 (False, "/my models/caller.py", None, "cad run '/my models/caller.py'"),
+                 (True, "C:\\m\\caller.py", None, "cad run C:\\m\\caller.py"),
+                 (True, "C:\\my models\\caller.py", None, 'cad run "C:\\my models\\caller.py"'),
+                 # Built by a Python of its own (a venv's): that Python runs it again, as its run did.
+                 (False, "/my models/caller.py", "/w/.venv/bin/python", "/w/.venv/bin/python '/my models/caller.py'"),
+                 (True, "C:\\my models\\caller.py", "C:\\w\\.venv\\Scripts\\python.exe",
+                  'C:\\w\\.venv\\Scripts\\python.exe "C:\\my models\\caller.py"'))
+        for windows, program, python, pasted in cases:
+            with self.subTest(program=program, python=python), mock.patch.object(records, "WINDOWS", windows):
+                self.assertEqual(records.rerun(program, python), pasted)
+        # The record names that Python (``python``: absent, the base's, which ``cad run`` reaches).
+        self.registry.put({**_record(self.ident, self.state), "python": "/w/.venv/bin/python"})
+        with mock.patch.object(records, "WINDOWS", False):
+            self.assertEqual(registry.command(self.registry, self.registry.get(self.ident)),
+                             f"/w/.venv/bin/python {self.state / 'parts.py'}")
 
     def test_a_record_is_relocated_by_its_root_alone_and_a_shape_s_is_never_detached(self) -> None:
         moved = self.state / "elsewhere"

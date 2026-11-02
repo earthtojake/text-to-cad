@@ -417,7 +417,9 @@ it makes room by retiring an idle worker, as any build does, never the standby, 
 waits for one. The rest of the engine's kernel processes stay in the base: the documents worker, the
 meshing and reading pools, the render processes and the standby. A document such a worker holds is
 asked of it alone (`via` and its environment's key): with that worker gone, an export or a shape of the
-document is refused as not held, never asked of another worker of its script.
+document is refused as not held, never asked of another worker of its script. Its record names that
+Python (`python`), and the command that builds it again is that Python and the script (**The rebuild
+command**).
 
 What the two meet by is **the worker contract** (`cad.engine.contract.CONTRACT`), which the library
 and the server both state: the worker protocol's number (`PROTOCOL`, bumped by any release that
@@ -1051,9 +1053,10 @@ one id is one document.
 distribution names the folder, `places.state_dir`): it points; a document's bytes
 are the cache's, in the cache folder (**The cache**).
 Every record has one shape, `{schema, id, kind, root, home, entry, namespace, name, fingerprint?, module?, line?, declares?, relocated?, revision, built, created?, facts?,
-program?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart needs
+program?, python?, cache?{revision, bytes}, opened?, pinned?, preview?}`, and holds what a restart needs
 and no more. `kind` says what it is: `model` (`home` and `entry`, its script and function; the
-command that builds it again is always `cad run` of its home), `shape` (a shape handed over:
+command that builds it again is `cad run` of its home, or, where its last run was in a Python of its
+own, `python`, that Python and its home), `shape` (a shape handed over:
 `program`, where there was one, names the program that showed it, and nothing builds it again) or
 `file` (a CAD file a page opened: its path, `opened` and `pinned`, never a revision or bytes). A
 model's and a shape's hold their revision and when they were built, their name and a build's facts
@@ -1259,8 +1262,10 @@ Where none can be read, the budget alone applies. `Pressure.simulate` is the tes
 **The rebuild command.** A document that is not held -- `unsaved` -- names the exact
 command that builds it again: `cad run` and the script that defines its model -- never a
 program that imported it and called it, a check script, whose next run may do something else -- the engine that says it is the one `cad run` reaches, and its
-python has the kernel a bare `python` may lack -- from the daemon's record of it, or after a
-restart the registry's. The program is quoted for the shell a person pastes it into (`records.rerun`):
+python has the kernel a bare `python` may lack; for one its last run built in a Python of its own (its
+record's `python`: a venv's, with packages the base lacks), that Python and the script, which `cad run`
+could not build -- from the daemon's record of it, or after a
+restart the registry's. Each word is quoted for the shell a person pastes it into (`records.rerun`):
 `shlex.quote` on POSIX; on Windows the double quotes cmd.exe and PowerShell both read, only where a
 space or a quote needs them (`subprocess.list2cmdline`), since to cmd.exe a single quote is part of
 the path. A shape handed over has none: its words say that a program the engine did
