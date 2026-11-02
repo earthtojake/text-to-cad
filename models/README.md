@@ -25,9 +25,11 @@ and clearance studies on frozen STEP snapshots, not the hand: dropped, in Git hi
 `examples/src/` (a `@model`), an assembly gets a group in `assemblies/`
 (`src/<group>/`), and a 2D drawing a script in `drawings/src/`, its DXF added to
 `drawings/src/exports.py`. A model that needs helper modules, several scripts or notes
-of its own gets a project of its own here.
+of its own gets a project of its own here. A KiCad board is no model: its native files
+(`.kicad_pcb`, `.kicad_pro`, `.kicad_dru`, `fp-lib-table`) are the source, one folder each in
+`electronics/`, with the pcb skill's checks of it as a script (`cad run check_<board>.py`).
 
-Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, docs); never what a run
+Commit sources (`*.py`, `*.urdf`, `*.srdf`, the JSON a body reads, KiCad's board files, docs); never what a run
 or an export writes (Git holds code, never CAD or mesh files: no STEP, STL, GLB, 3MF, DXF or
 XBF), review media (`.gitignore` keeps images and video out of this tree) or runtime debris.
 

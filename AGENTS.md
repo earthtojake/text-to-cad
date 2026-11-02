@@ -178,8 +178,8 @@ which points both at the checkout.
   parser and behaviour live in `cad_server.cli`. The server draws every snapshot with
   OCCT, so no skill has a browser step. The server carries the JavaScript it serves too
   (the CAD Viewer client, the CAD app page), so a skill ships no runtime of its own. Not every
-  skill needs the server (bambu-labs, dfam-check, dfm, gcode, sendcutsend and
-  step-parts never run it); do not add the dependency to a skill that never invokes it.
+  skill needs the server (bambu-labs, dfam-check, dfm, gcode, pcb-dfm, sendcutsend
+  and step-parts never run it); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:
   generate small fixtures in fresh temporary directories or use tiny test-owned

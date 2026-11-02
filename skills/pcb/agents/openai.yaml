@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCB"
+  short_description: "Edit and check native KiCad circuit boards."
+  default_prompt: "Use $pcb to edit a native KiCad board, check its saved geometry and DRC, show the result, and export the requested fabrication or mechanical files."

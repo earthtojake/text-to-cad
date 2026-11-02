@@ -12,7 +12,7 @@ release that is not the one running.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
 command in a code block) or what its own Python imports. Skills that never touch it (bambu-labs,
-dfam-check, dfm, gcode, sendcutsend, step-parts) carry no setup block; a `cad export` such a skill
+dfam-check, dfm, gcode, pcb-dfm, sendcutsend, step-parts) carry no setup block; a `cad export` such a skill
 mentions in its prose is how a text-to-cad model's file was made, not a command it runs.
 """
 
