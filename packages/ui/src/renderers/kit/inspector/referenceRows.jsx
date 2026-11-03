@@ -1,9 +1,9 @@
 import { useRef } from "react";
 import { Check } from "lucide-react";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
 import { useCopyFlash } from "./copyFlash.js";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 // Onshape-style axis colour coding for coordinate triples.
 const AXES = Object.freeze([

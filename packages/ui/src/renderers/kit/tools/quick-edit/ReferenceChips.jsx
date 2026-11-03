@@ -1,15 +1,15 @@
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Check, Copy, X } from "lucide-react";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { ScrollArea } from "@cad/ui/primitives/scroll-area";
+import { TooltipHint } from "@cad/ui/primitives/tooltip";
+import { cn } from "@cad/ui/utils";
 import { useViewerMobile } from "../../../../file-viewer/responsive.js";
 import { FLOATING_SURFACE_CLASS } from "../../../../lib/floatingSurface.js";
 import { useCopyFlash } from "../../inspector/copyFlash.js";
 import { InfoRow } from "../../inspector/referenceRows.jsx";
 import { PickGlyph, compactSuffix, hasPickGlyph } from "../../inspector/pickGlyph.jsx";
-import { useI18n } from "@text-to-cad/ui/i18n";
+import { useI18n } from "@cad/ui/i18n";
 
 /**
  * One chip: what a renderer says a piece of its selection is. Several picks of one kind on one part

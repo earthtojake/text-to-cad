@@ -5,8 +5,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger
-} from "@text-to-cad/ui/primitives/dropdown-menu";
-import { cn } from "@text-to-cad/ui/utils";
+} from "@cad/ui/primitives/dropdown-menu";
+import { cn } from "@cad/ui/utils";
 import { prefersCoarsePointer } from "../viewport/dom.js";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 

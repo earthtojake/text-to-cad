@@ -6,7 +6,7 @@ colored body; rows articulate about shared pin axes with 0.06 radial
 clearance.
 """
 
-from cadgen import model
+from cad import model
 
 from lib import watch
 

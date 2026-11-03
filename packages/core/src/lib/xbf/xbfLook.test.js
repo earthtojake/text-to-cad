@@ -1,5 +1,5 @@
 // The engine's look (`xbfLook.js`) as the engine serves it: `__fixtures__/look.json` is
-// `GET /api/look`'s answer, which cadgen's tests hold to `render/look.py`. What it says, the image
+// `GET /api/v1/look`'s answer, which cadgen's tests hold to `render/look.py`. What it says, the image
 // its environment is, the rig it lights an engine document with, what a surface wears by it (X-ray's
 // colour-only model apart), and that what it says of edges, the palette and the modes is what the
 // viewer's own modes draw.
@@ -34,7 +34,7 @@ test("the look as served: every field read, frozen; another version or a missing
   assert.equal(Object.isFrozen(look), true);
   assert.deepEqual([look.backdrop, look.colourPower, look.brdf, look.tone, look.exposure], ["#f0f4f9", 2, "occt", "clamp", 0]);
   assert.deepEqual(look.lights.map(light => [light.name, light.direction, light.intensity]), [["key", [-0.35, 0.55, -1], 4]]);
-  assert.deepEqual(look.environment, { url: "/api/look/environment", intensity: 0.5 });
+  assert.deepEqual(look.environment, { url: "/api/v1/look/environment", intensity: 0.5 });
   assert.deepEqual(look.plain, { metallic: 0, roughness: 0.5, ior: 1.5 });
   assert.deepEqual(look.modes.xray, { faces: "lit", edges: "all", opacity: 0.22, palette: false });
   assert.deepEqual([look.xray.ambient, look.xray.specular, look.xray.shininess], [0.5, 0.08, 0.35]);
@@ -56,12 +56,12 @@ test("the environment's image: RGBE decoded as the engine decodes it, the bottom
   const asked = [];
   const fetch = async (url) => {
     asked.push(url);
-    return url.endsWith("/api/look") ? new Response(JSON.stringify(SERVED)) : new Response(tinyRadiance());
+    return url.endsWith("/api/v1/look") ? new Response(JSON.stringify(SERVED)) : new Response(tinyRadiance());
   };
   const look = await fetchXbfLook("http://127.0.0.1:9", { fetch });
-  assert.deepEqual(asked, ["http://127.0.0.1:9/api/look", "http://127.0.0.1:9/api/look/environment"]);
+  assert.deepEqual(asked, ["http://127.0.0.1:9/api/v1/look", "http://127.0.0.1:9/api/v1/look/environment"]);
   assert.equal(look.environment.image.width, 2);
-  const missing = async url => (url.endsWith("/api/look") ? new Response(JSON.stringify(SERVED)) : new Response("", { status: 404 }));
+  const missing = async url => (url.endsWith("/api/v1/look") ? new Response(JSON.stringify(SERVED)) : new Response("", { status: 404 }));
   await assert.rejects(fetchXbfLook("http://127.0.0.1:9", { fetch: missing }), /environment: the engine answered 404/);
 });
 

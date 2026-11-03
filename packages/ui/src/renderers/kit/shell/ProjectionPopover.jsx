@@ -1,10 +1,10 @@
 import { useState } from "react";
 import { Check } from "lucide-react";
 import { RadioGroup } from "radix-ui";
-import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { useI18n } from "@text-to-cad/ui/i18n";
-import { cn } from "@text-to-cad/ui/utils";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { useI18n } from "@cad/ui/i18n";
+import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";

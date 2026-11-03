@@ -3,7 +3,7 @@
 
 A manual measurement, never run in CI; what it writes goes under an ignored folder
 (``tmp/bench/occt-parity`` by default). Each document is drawn in every mode and camera
-asked for, twice: by OCCT's raster (``python -m cadgen.engine.render.occt``'s ``Scene``, the
+asked for, twice: by OCCT's raster (``python -m cad.engine.render.occt``'s ``Scene``, the
 reference: ``engine/render/look.py`` is its look) and by the snapshot page the viewer's
 code draws (the snapshot page, the xbf family of ``headlessScene.js``, built and driven here), both from
 the engine daemon's meshes, at one size. Per picture pair it reports:
@@ -30,13 +30,13 @@ picture differs from its own studio drawn without the model (``preview-<camera>-
 It writes each picture, ``metrics.json`` (``hue`` beside the rows) and a contact sheet per document
 (Chromium, OCCT and the ΔE map side by side, at most 1800 px wide), and prints both tables.
 
-    PYTHONPATH=packages/cadgen/src .venv/bin/python scripts/bench/occt_parity.py \\
+    PYTHONPATH=packages/cad/src .venv/bin/python scripts/bench/occt_parity.py \\
         --doc fixture=path/to/bench.xbf --doc motorbike=models/motorbike/XBF/motorbike.xbf \\
         --out tmp/bench/occt-parity/after
 
 ``--only chromium`` keeps the OCCT pictures already in ``--out`` (the reference does not move
 while the viewer is tuned); ``--modes`` and ``--cameras`` narrow the set. The daemon serves and
-meshes each document (``CADGEN_ENGINE_DIR`` chooses which daemon); macOS only, as the
+meshes each document (``CAD_ENGINE_DIR`` chooses which daemon); macOS only, as the
 prototype's GL context is.
 """
 
@@ -135,7 +135,7 @@ def metal_tops(structure: dict, buffers: dict, scene, limit: int = 48) -> list[d
     reads them: each the centroid of a face's largest up-facing triangle, placed and projected
     through ``scene`` (the OCCT prototype's, framed), visible when no placed triangle covers it
     nearer the camera."""
-    from cadgen.engine.mesh import Mesh
+    from cad.engine.mesh import Mesh
 
     prototypes, camera = structure["prototypes"], scene.camera
     toward, right, up = (np.asarray(camera[key], float) for key in ("direction", "right", "up"))
@@ -205,8 +205,8 @@ def delta_map(left: np.ndarray, right: np.ndarray, scale: float = 20.0) -> np.nd
 
 def draw_occt(doc: Path, folder: Path, modes: list[str], cameras: list[str], size: tuple[int, int],
               preview: bool = False) -> None:
-    from cadgen.engine.render.meshes import from_daemon
-    from cadgen.engine.render.occt import Scene
+    from cad.engine.render.meshes import from_daemon
+    from cad.engine.render.occt import Scene
 
     structure, buffers, _ = from_daemon(doc)
     scene = Scene(doc, buffers, size=size, structure=structure)
@@ -222,8 +222,8 @@ def draw_occt(doc: Path, folder: Path, modes: list[str], cameras: list[str], siz
         return
     from PIL import Image
 
-    from cadgen.engine.render.service import Held
-    from cadgen.engine.snapshot import Still
+    from cad.engine.render.service import Held
+    from cad.engine.snapshot import Still
 
     held = Held(doc)
     try:
@@ -244,7 +244,7 @@ def draw_occt(doc: Path, folder: Path, modes: list[str], cameras: list[str], siz
 # the ignored tmp/bench/snapshot-page, once per run, so it is always the checkout's own scene code;
 # it is read as files and routed to the page's origin, and it reads the document from the engine
 # daemon that serves it: those requests are fetched for the page with the user's token, which the
-# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cadgen snapshot`` drew mesh files this way before OCCT drew every kind;
+# page has no way to send, and answered with the page's origin allowed (the engine sends no CORS). ``cad snapshot`` drew mesh files this way before OCCT drew every kind;
 # nothing cadgen ships carries the page now, and this bench builds it for the viewer's side alone.
 
 PAGE_ORIGIN = "http://localhost"
@@ -272,14 +272,15 @@ def _served(doc: Path) -> tuple[str, str]:
     from urllib.parse import urlparse
     from urllib.request import Request, urlopen
 
-    from cadgen.engine.client import request
+    from cad.engine.client import request
 
     answer = request({"op": "serve", "path": str(doc)})
     if not answer or "failed" in answer:
         raise RuntimeError(f"the engine would not serve {doc.name}: {(answer or {}).get('failed', 'no daemon')}")
     parsed = urlparse(answer["url"])
-    url = f"{parsed.scheme}://{parsed.netloc}/api/doc/{answer['doc']}"
-    headers = {"Authorization": f"Bearer {answer['token']}", "x-cadgen-viewer": "1"}
+    kind = "step" if doc.suffix.lower() in (".step", ".stp") else "xbf"
+    url = f"{parsed.scheme}://{parsed.netloc}/api/v1/documents/{kind}/{answer['doc']}"
+    headers = {"Authorization": f"Bearer {answer['token']}", "x-cad-viewer": "1"}
     with urlopen(Request(f"{url}/mesh", data=b"", method="POST", headers=headers), timeout=900) as done:  # noqa: S310 - the engine, on loopback
         done.read()
     return url, answer["token"]
@@ -383,7 +384,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--preview", action="store_true", help="Preview at each camera too")
     args = parser.parse_args(argv)
     try:
-        from cadgen.engine.render.look import LOOK
+        from cad.engine.render.look import LOOK
 
         backdrop = tuple(int(LOOK.backdrop[i:i + 2], 16) for i in (1, 3, 5))
     except ImportError:  # a cadgen from before the look (a before-and-after measurement)

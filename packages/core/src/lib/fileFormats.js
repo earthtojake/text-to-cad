@@ -7,7 +7,7 @@ export const RENDER_FORMAT = Object.freeze({
   URDF: "urdf",
   SRDF: "srdf",
   SDF: "sdf",
-  // A cadgen engine document (`cadgen.engine`): served by the engine, drawn by its own renderer.
+  // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
   XBF: "xbf"
 });
 

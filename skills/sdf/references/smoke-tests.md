@@ -7,15 +7,15 @@ Use smoke tests after the SDF passes bundled validation. The goal is to catch si
 ### Bundled validation
 
 ```bash
-cadgen sdf validate path/to/model.sdf
-cadgen sdf validate path/to/model.sdf --strict
+cad sdf validate path/to/model.sdf
+cad sdf validate path/to/model.sdf --strict
 ```
 
 Use `--strict` when warnings should block handoff. It is safe on any machine: the default `--gz-check auto` notes a missing `gz` as `info` rather than a finding against the file, so `--strict` fails only on the document's own warnings.
 
 ### SDFormat parser check
 
-`cadgen sdf validate` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
+`cad sdf validate` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
 
 ```bash
 gz sdf --check path/to/model.sdf
@@ -24,7 +24,7 @@ gz sdf --check path/to/model.sdf
 or make it mandatory, so a missing `gz` is an error instead of a note:
 
 ```bash
-cadgen sdf validate path/to/model.sdf --gz-check required
+cad sdf validate path/to/model.sdf --gz-check required
 ```
 
 Use the exact simulator environment that will consume the file when possible.

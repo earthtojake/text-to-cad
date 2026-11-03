@@ -14,18 +14,18 @@ function fixture(files, run) {
   for(const [name,code] of Object.entries({...base,...files})) { const file=path.join(root,name);fs.mkdirSync(path.dirname(file),{recursive:true});fs.writeFileSync(file,code); }
   try { run(checkDependencies(root)); } finally { fs.rmSync(root,{recursive:true,force:true}); }
 }
-test('accepts an app consuming compiled public UI exports',()=>fixture({'apps/web/src/App.tsx':"import { FileViewer } from '@text-to-cad/ui/file-viewer';"},result=>assert.deepEqual(result.errors,[])));
+test('accepts an app consuming compiled public UI exports',()=>fixture({'apps/web/src/App.tsx':"import { FileViewer } from '@cad/ui/file-viewer';"},result=>assert.deepEqual(result.errors,[])));
 test('resolves aliases and extensionless transitive reexports',()=>fixture({
   'apps/docs/src/page.ts':"import '@/bridge';",
   'apps/docs/src/bridge.ts':"export * from '../../web/src/private';",
   'apps/web/src/private.ts':'export const secret = 1;',
 },result=>assert.ok(result.errors.some(error=>error.includes('app-to-app')))));
 test('rejects app imports from packages and undeclared exports',()=>fixture({
-  'packages/ui/src/file-viewer/index.ts':"export * from '../../../../apps/web/src/private'; import '@text-to-cad/core/private';",
+  'packages/ui/src/file-viewer/index.ts':"export * from '../../../../apps/web/src/private'; import '@cad/core/private';",
   'apps/web/src/private.ts':'export const value = 1;',
 },result=>{assert.ok(result.errors.some(error=>error.includes('depends on app')));assert.ok(result.errors.some(error=>error.includes('missing package export')));}));
 test('rejects Node builtins reached through a dynamic core import',()=>fixture({
-  'apps/web/src/App.ts':"const read = () => import('@text-to-cad/core/lib/node.js');",
+  'apps/web/src/App.ts':"const read = () => import('@cad/core/lib/node.js');",
   'packages/core/src/lib/node.js':"import fs from 'fs'; export const read = fs.readFileSync;",
 },result=>assert.ok(result.errors.some(error=>error.includes('reaches Node-only')))));
 test('keeps concrete renderers out of the FileViewer import graph',()=>fixture({

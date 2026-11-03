@@ -11,8 +11,8 @@ place `continuous_supports()`, a `@memo` stage (about 20 s of kernel work), clip
 
 import copy
 
-from cadgen import memo, model
-from cadgen.ap242 import gear_pair, mechanism_state
+from cad import memo, model
+from cad.ap242 import gear_pair, mechanism_state
 
 import build123d as bd
 

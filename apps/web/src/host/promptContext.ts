@@ -1,7 +1,7 @@
-import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
-import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@text-to-cad/core/prompt';
+import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@cad/core/prompt';
+import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@cad/core/prompt';
 import type { WebClipboard } from './clipboard';
-import { english } from '@text-to-cad/ui/i18n';
+import { english } from '@cad/ui/i18n';
 
 /**
  * Prepare portable clipboard content without claiming an external composer pasted it. What it says
