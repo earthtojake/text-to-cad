@@ -975,8 +975,12 @@ engine's folder is, FIFOs among them. Windows keeps its loopback port and port f
 shown first, in the same hello (`daemon._admitted`, **The door's protocol** below). The engine's
 folder (law 2; `places.default_engine_dir`) is one only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
 the one the system names, `/var/folders/...`, whatever `$TMPDIR` a sandbox sets, so a sandboxed client
-finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows, in the
-temporary folder. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
+finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows
+`~\.local\state\cad-engine`, beside the state folder: the temporary folder is in the local application
+data, which Windows virtualizes for every process an app package starts (the Claude desktop app's CAD
+server, and the engine it starts), so a port file written there would reach no other app. 0.10.0's was
+there, and for one release the engine writes its port file there too (`daemon._mirror`), for a 0.10.0
+CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
 other's door.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
@@ -1187,8 +1191,8 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 **The cache.** For every model and shape document -- never a file's, which is its own
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
 ([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
-`$XDG_CACHE_HOME/cad` or `%LOCALAPPDATA%\cad`, else `~/.cache/cad`; releases before
-0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
+`$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
+`%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's

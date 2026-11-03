@@ -2,7 +2,7 @@
   "name": "@cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.10.0",
+  "version": "0.10.2",
   "scripts": {
     "build": "vite build && vite build --config vite.shell.config.mjs",
     "test": "node scripts/run-tests.mjs",
@@ -15,7 +15,7 @@
     "meshoptimizer": "^1.3.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "three": "0.186.1"
+    "three": "0.187.0"
   },
   "devDependencies": {
     "@jridgewell/remapping": "^2.3.5",

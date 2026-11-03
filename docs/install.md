@@ -9,7 +9,12 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. It names
 `www.texttocad.dev` because `texttocad.dev` redirects there with a 308, which Windows
-PowerShell 5.1's `irm` does not follow.
+PowerShell 5.1's `irm` does not follow. Run it the first time in a terminal of
+its own (Windows Terminal or PowerShell), not in a Windows Store app's shell such
+as the Claude desktop app's: Windows keeps what such an app's commands write under
+`AppData` inside that app, uv's Python among it, where no terminal and no other
+agent app finds it, so a first install there installs nothing and says so. Once
+installed, updating from any app works.
 
 This page is the long way round: what that command does, step by step, each agent
 app's own commands to install, update or reinstall text-to-cad one app at a time,
@@ -24,7 +29,7 @@ checksum. It:
 1. Finds [uv](https://docs.astral.sh/uv/), or installs it with uv's own installer.
 2. Runs `cad setup` from the latest release, pinned, through uvx; for this
    release that is
-   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.10.0 cad setup`.
+   `uvx --no-config --managed-python --python 3.14 --refresh-package cad-server --refresh-package cad --from cad-server==0.10.2 cad setup`.
    Its first run downloads the release, and Python 3.14 for it.
 3. Installs the release in a folder of its own in text-to-cad's state folder
    (`releases/<release>`), from uv's cache where it has it, and runs the rest from
@@ -105,8 +110,8 @@ with the same options.
 The install command gives every app the same plugin, from one folder on your computer
 that the release writes: `plugin` in text-to-cad's state folder
 (`~/Library/Application Support/cad/plugin` on macOS,
-`~/.local/state/cad/plugin` on Linux, `%LOCALAPPDATA%\cad-state\plugin` on
-Windows); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
+`~/.local/state/cad/plugin` on Linux and on Windows, where it is
+`%USERPROFILE%\.local\state\cad\plugin`); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
 -- each app's manifest, its config for CAD's server, and the skills -- at the release
 your computer runs, and is written again in place when an update moves your computer to
 another release. Each app takes it the way it takes a local plugin:
@@ -203,7 +208,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.10.0", "cad-mcp"],
+      "args": ["--no-config", "--managed-python", "--python", "3.14", "--from", "cad-mcp==0.10.2", "cad-mcp"],
       "env": {"CAD_INSTALL_CHANNEL": "claude-desktop"}
     }
   }
@@ -456,7 +461,7 @@ week.
 
 To run models with a Python of your own instead, with the packages of your project's
 environment, install the library with its kernel into it, at the server's release:
-`pip install 'cad[build123d]==0.10.0'` (`pip install cad==0.10.0` is the library alone,
+`pip install 'cad[build123d]==0.10.2'` (`pip install cad==0.10.2` is the library alone,
 and `import build123d` fails there). A script run with that Python (`python model.py`,
 `uv run model.py`) is then built by a warm worker running that same Python: the model imports
 your environment's packages, and an edit rebuilds only what it changed, as under `cad run`.
