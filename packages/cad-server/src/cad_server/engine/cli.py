@@ -122,7 +122,7 @@ def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes appearance alone: light or dark, as the word "
                                           "or as {\"appearance\": ...}; a KiCad board a board mode (board, copper, assembly, "
-                                          "placement) or {mode, side, poured, layers, appearance}")
+                                          "placement) or {mode, side, poured, layers, active, dim, zones, tracks, appearance}")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "

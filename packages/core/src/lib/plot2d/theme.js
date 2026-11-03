@@ -27,13 +27,13 @@ const LAYERS = Object.freeze({
   "User.6": "#5994DC", "User.7": "#B4DBD2", "User.8": "#D8C852", "User.9": "#E8B2A7",
   // What goes through the board, by the colour of what it draws most: a via's hole, the ratsnest, a pad's hole wall.
   vias: "#E3B72E", ratsnest: "rgba(0, 248, 255, 0.35)", drills: "#E3B72E",
-  // The drawing sheet (KiCad's LAYER_DRAWINGSHEET), the board area's shadow, and a through-hole pad's names.
-  sheet: "#C872AB", area: "rgba(100, 100, 100, 0.35)", names: "rgba(255, 255, 255, 0.9)"
+  // The board area's shadow, and a through-hole pad's names.
+  area: "rgba(100, 100, 100, 0.35)", names: "rgba(255, 255, 255, 0.9)"
 });
 /** KiCad's zone opacity: a pour's fill is drawn at this share of its layer's colour. */
 export const ZONE_OPACITY = 0.6;
-/** The page's own edge around the drawing sheet (KiCad's LAYER_PAGE_LIMITS). */
-export const PAGE_LIMITS_COLOR = "#848484";
+/** KiCad's "Inactive layers: Dim": every layer but the active one is drawn at this share. */
+export const DIM_OPACITY = 0.3;
 /**
  * A hole's fill and its plated wall, by what was drilled: a pad's hole is the board's background
  * (`null`: seen through) in a golden wall, a via's golden in a white one, an unplated hole cyan.
@@ -68,9 +68,8 @@ export function netnameColor(id) {
   return r * 0.299 + g * 0.587 + b * 0.117 > 0.5 ? DARK_NAME : LIGHT_NAME;
 }
 
-/** The colour one item is drawn in: its layer's, unless it is a label, a hole or the page's edge. */
+/** The colour one item is drawn in: its layer's, unless it is a label. */
 export function itemColor(layerId, item) {
   if (item.t === "label") return layerId === "names" ? NAME_COLORS[item.kind] || NAME_COLORS.pad : netnameColor(layerId);
-  if (item.page) return PAGE_LIMITS_COLOR;
   return layerColor(layerId);
 }

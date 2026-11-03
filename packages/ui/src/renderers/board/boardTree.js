@@ -1,10 +1,12 @@
 import { english } from "@cad/ui/i18n";
 const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transistors", "Diodes": "board.text.diodes", "Resistors": "board.text.resistors", "Capacitors": "board.text.capacitors", "Inductors": "board.text.inductors", "Ferrite beads": "board.text.ferrite_beads", "Connectors": "board.text.connectors", "Jumpers": "board.text.jumpers", "Switches": "board.text.switches", "Crystals": "board.text.crystals", "Fuses": "board.text.fuses", "Relays": "board.text.relays", "Transformers": "board.text.transformers", "Batteries": "board.text.batteries", "Test points": "board.text.test_points", "Holes": "board.text.holes", "Fiducials": "board.text.fiducials", "Motors": "board.text.motors", "Buzzers": "board.text.buzzers", "Speakers": "board.text.speakers", "Other": "board.text.other"};
 /**
- * A board's Select tree: its parts, by kind, each with its pads, and its nets, each with the pads
- * on it. Nodes are what the kit's tree search
- * reads (`id`, `label`, `children`, `selectionId` — the reference a pasted `#U3.9` finds — and
- * `searchAliases`), plus the selector the row selects (`selector`) and a muted `detail`.
+ * A board's Circuit tree: its parts in blocks — the schematic sheets their footprints record
+ * (`(sheetname ...)`, the payload's `parts[].sheet`), else, on a board that records none, their
+ * kinds (ICs, Resistors, ...) — each part with its pads, then its nets, each with the pads on it.
+ * Nodes are what the kit's tree search reads (`id`, `label`, `children`, `selectionId` — the
+ * reference a pasted `#U3.9` finds — and `searchAliases`: a part's value, footprint name and MPN),
+ * plus what the row selects (`selector`; a block's `selectors`, every part in it) and a muted `detail`.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
 
@@ -48,9 +50,13 @@ function padNode(pad, { underNet = false } = {}) {
  * @param {ReturnType<typeof import("@cad/core/lib/board2d/boardIndex.js").createBoardIndex>} index
  */
 export function buildBoardTree(index, t = english) {
+  const sorted = [...index.parts.values()].sort((a, b) => naturalCompare(a.ref, b.ref));
+  // The schematic's blocks when the footprints record them (a part that records none goes under Other), else the kinds.
+  const bySheet = sorted.some((part) => part.sheet);
+  const blockOf = (part) => (bySheet ? part.sheet || "" : partKind(part.ref));
   const byKind = new Map();
-  for (const part of [...index.parts.values()].sort((a, b) => naturalCompare(a.ref, b.ref))) {
-    const kind = partKind(part.ref);
+  for (const part of sorted) {
+    const kind = blockOf(part);
     if (!byKind.has(kind)) byKind.set(kind, []);
     // A pin's pads under one number are one row, as they are one pin.
     const seen = new Set();
@@ -61,9 +67,14 @@ export function buildBoardTree(index, t = english) {
       children: pads.map((pad) => padNode(index.pads.get(`${pad.ref}.${pad.number}`) || pad)),
     });
   }
-  const parts = KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => ({
-    id: `kind:${kind}`, kind: "group", label: t(GROUP_KEYS[kind]), detail: String(byKind.get(kind).length), children: byKind.get(kind),
-  }));
+  const block = (key, label) => ({
+    id: `${bySheet ? "sheet" : "kind"}:${key}`, kind: "block", label, detail: String(byKind.get(key).length), children: byKind.get(key),
+    selectors: byKind.get(key).map((node) => node.selector),
+  });
+  const parts = bySheet
+    ? [...byKind.keys()].filter(Boolean).sort(naturalCompare).map((sheet) => block(sheet, sheet))
+      .concat(byKind.has("") ? [block("", t("board.text.other"))] : [])
+    : KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => block(kind, t(GROUP_KEYS[kind])));
   const listed = [...index.nets.values()]
     .filter((net) => net.pads.length || net.tracks.length)
     .sort((a, b) => naturalCompare(a.name, b.name));
@@ -79,10 +90,8 @@ export function buildBoardTree(index, t = english) {
   if (loose.length) {
     nets.push({ id: "group:unconnected", kind: "group", label: t("board.text.unconnected_pins"), detail: String(loose.length), children: loose });
   }
-  const roots = [
-    { id: "group:parts", kind: "group", label: t("board.text.parts"), detail: String(index.parts.size), children: parts },
-    { id: "group:nets", kind: "group", label: t("board.text.nets"), detail: String(listed.length), children: nets },
-  ];
+  // The blocks at the top, then the nets.
+  const roots = [...parts, { id: "group:nets", kind: "group", label: t("board.text.nets"), detail: String(listed.length), children: nets }];
   const nodesById = new Map();
   const parents = new Map();
   const visit = (nodes, parent) => {
