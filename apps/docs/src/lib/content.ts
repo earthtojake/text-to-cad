@@ -103,12 +103,6 @@ export const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports.",
   },
   {
-    name: "step.parts",
-    path: "skills/step-parts",
-    summary:
-      "Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.",
-  },
-  {
     name: "Engineering Drawing",
     path: "skills/engineering-drawing",
     summary:

@@ -71,7 +71,6 @@ robot description files, simulation, and local review.
 | Skill        | Summary                                                                                                                                            | Source                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
 | CAD          | Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports. | [skills/cad](skills/cad/SKILL.md)                   |
-| step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
 | Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
 | PCB          | Edits native KiCad circuit boards, inspects parts and nets, runs DRC, and exports fabrication files or STEP for mechanical design. | [skills/pcb](skills/pcb/SKILL.md)                   |

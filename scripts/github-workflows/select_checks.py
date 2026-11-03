@@ -110,7 +110,6 @@ HEAVY_POLICY = {
 LIGHT_SKILL_TESTS = (
     f"{SKILL_SUITES}/gcode",
     f"{SKILL_SUITES}/sendcutsend",
-    f"{SKILL_SUITES}/step-parts",
 )
 
 # Whatever runs the packages: their suites on both platforms (the engine's, the viewer backend's

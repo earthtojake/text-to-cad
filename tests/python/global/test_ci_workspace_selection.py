@@ -213,7 +213,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "LICENSE", ".claude-plugin/plugin.json",
                      "claude.mcp.json", "skills.sh.json", "skills/urdf/SKILL.md", "skills/urdf/references/joints.md",
                      "skills/cad/SKILL.md", "skills/cad/references/snapshot-review.md", "skills/dxf/SKILL.md",
-                     "skills/step-parts/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
+                     "skills/gcode/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",
                      ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
                      "scripts/release/bump-version.sh", "scripts/release/plugin_branch.py"):

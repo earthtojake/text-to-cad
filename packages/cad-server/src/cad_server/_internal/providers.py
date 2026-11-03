@@ -109,7 +109,10 @@ COPY_MARK = ".text-to-cad-copy"
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
 SKILLS = ("bambu-labs", "cad", "dfam-check", "dfm", "dxf", "engineering-drawing", "gcode", "pcb", "pcb-dfm", "sdf",
-          "sendcutsend", "srdf", "step-parts", "urdf")
+          "sendcutsend", "srdf", "urdf")
+# The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
+# written; a loose copy (the Skills CLI's, which adds skills and never removes one) is moved aside.
+RETIRED_SKILLS = ("step-parts",)
 # Claude Desktop's server key, and the variable its server is told its install channel by.
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.
@@ -623,9 +626,9 @@ def _skill_name(text: str) -> Optional[str]:
     return None
 
 
-def loose_skills(folders: Iterable[Path]) -> List[Path]:
+def loose_skills(folders: Iterable[Path], names: Sequence[str] = SKILLS) -> List[Path]:
     """This repository's skills installed loose in ``folders`` (by the Skills CLI, or copied or linked
-    by hand): a ``SKILL.md`` naming one of ``SKILLS`` and this repository."""
+    by hand): a ``SKILL.md`` naming one of ``names`` (``SKILLS``) and this repository."""
     found = []
     for folder in folders:
         for skill in sorted(Path(folder).glob("*/SKILL.md")) if Path(folder).is_dir() else []:
@@ -633,7 +636,7 @@ def loose_skills(folders: Iterable[Path]) -> List[Path]:
                 text = skill.read_text(encoding="utf-8", errors="replace")
             except OSError:
                 continue
-            if PROVENANCE in text and _skill_name(text) in SKILLS:
+            if PROVENANCE in text and _skill_name(text) in names:
                 found.append(skill.parent)
     return found
 
@@ -775,7 +778,8 @@ class App:
 
 @dataclass
 class Step:
-    """One thing the plan does for an app: ``install``, ``update``, ``remove duplicate`` or ``leave``
+    """One thing the plan does for an app: ``install``, ``update``, ``remove duplicate``, ``remove retired``
+    or ``leave``
     (``remove`` and the rest when uninstalling), with the commands it runs and the file it edits."""
 
     app: str
@@ -805,7 +809,8 @@ class Step:
 
 def _loose(app: App, machine: Machine) -> None:
     claimed = _claimed(machine)
-    for skill in loose_skills(folder for folder in _own_skill_folders(app.id, machine) if str(folder) not in claimed):
+    for skill in loose_skills((folder for folder in _own_skill_folders(app.id, machine) if str(folder) not in claimed),
+                              SKILLS + RETIRED_SKILLS):
         app.copies.append(Copy(app.id, "skills", str(skill), path=str(skill), detail="installed loose"))
 
 
@@ -1485,6 +1490,9 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str], record: 
             continue
         folder = found[agent]
         where, have = shown(folder, machine), ours_in(folder)
+        for skill in loose_skills([folder], RETIRED_SKILLS):
+            steps.append(Step(agent, "remove retired", f"{skill.name} in {where}: text-to-cad {release} no longer ships it",
+                              edit={"op": "move", "path": str(skill)}))
         had = record.get(agent) if isinstance(record.get(agent), dict) else {}
         before = had.get("release")
         # Up to date: this release's, and every skill the CLI said it installed still there. A skill
@@ -1654,13 +1662,14 @@ def _unskill(agents: Sequence[str], machine: Machine, npx: Optional[str]) -> Lis
     claimed: set = set()
     for agent in agents:
         folder = skills_folder(agent, machine)
-        have = [] if str(folder) in claimed else ours_in(folder)
+        have = [] if str(folder) in claimed else ours_in(folder) + loose_skills([folder], RETIRED_SKILLS)
         claimed.add(str(folder))
         if have:
             steps.append(Step(agent, "remove", f"the skills in {shown(folder, machine)}",
                               edit={"op": "remove", "paths": [str(path) for path in have]}))
     if npx and steps:
-        names = sorted({Path(path).name for step in steps for path in step.edit["paths"]})
+        # A retired skill is not the folder's to name: it is removed directly, below the command.
+        names = sorted({Path(path).name for step in steps for path in step.edit["paths"]} & set(SKILLS))
         argv = [npx, *SKILLS_CLI[1:], "remove", "-g"]
         for step in steps:
             argv += ["-a", step.app]

@@ -806,6 +806,30 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
     def test_the_skills_are_this_repository_s(self) -> None:
         self.assertEqual(list(providers.SKILLS),
                          sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md")))
+        self.assertFalse(set(providers.RETIRED_SKILLS) & set(providers.SKILLS))
+
+    def test_a_retired_skill_of_ours_is_moved_aside_and_an_uninstall_removes_one_a_later_install_left(self) -> None:
+        # The Skills CLI adds skills and never removes one: what an earlier release shipped stays loaded.
+        home = self.make(("npx",))
+        self.agents(home, "windsurf")
+        folder = home.home / ".codeium" / "windsurf" / "skills"
+        retired = home.skill(folder, providers.RETIRED_SKILLS[0])
+        where = providers.shown(folder, home.machine)
+        steps = home.plan()
+        self.assertIn(("remove retired", f"{retired.name} in {where}: text-to-cad {RELEASE} no longer ships it"),
+                      [(step.action, step.subject) for step in steps])
+        home.apply([step for step in steps if step.action == "remove retired"])
+        self.assertFalse(retired.exists())
+        # Another's skill by that name is not ours to move.
+        home.skill(folder, providers.RETIRED_SKILLS[0], ours=False)
+        self.assertNotIn("remove retired", [step.action for step in home.plan()])
+        providers.remove_path(folder / providers.RETIRED_SKILLS[0])
+        # An uninstall takes one out directly; the Skills CLI's command names only the skills it ships.
+        retired = home.skill(folder, providers.RETIRED_SKILLS[0])
+        home.skill(folder, "cad")
+        (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": {"windsurf": {}}}, machine=home.machine)
+        self.assertEqual(step.commands[0][-3:], ["-s", "cad", "-y"])
+        self.assertIn(str(retired), step.edit["paths"])
 
     def test_installed_agents_get_the_folder_s_skills_in_one_command_and_the_plugin_apps_never(self) -> None:
         home = self.make(("claude", "codex", "npx"))
@@ -855,7 +879,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         home = self.make(("npx",))
         self.agents(home, "windsurf")
         # The CLI skips a skill (one its YAML parser refused): what it says it installed is recorded.
-        skipped = [name for name in providers.SKILLS if name != "step-parts"]
+        skipped = [name for name in providers.SKILLS if name != "bambu-labs"]
         home.set(skills=skipped)
         (added,) = home.apply(home.plan())
         self.assertEqual(added["skills"], skipped)
