@@ -23,8 +23,8 @@ const HELD_KEYS = [["pads", "board.text.pads"], ["tracks", "board.text.tracks"],
  * script line that placed it, when the index has them); a pad's its net, number, pin name, type and
  * position; a net's its class and how many pads are on it; a piece of copper its net, what it is
  * and where it was picked; a track its net, layer, width and length; a via its net, size, drill, the
- * layers it joins and its type; a zone its net, layers, priority and the copper it was filled with; a
- * text its words, layer, size (and part); a dimension its value and layer; a graphic its shape, layer
+ * layers it joins and its type; a zone its net, layers, priority and the copper it was filled with (a
+ * rule area its layers); a text its words, layer, size (and part); a dimension its value and layer; a graphic its shape, layer
  * and width (and part); a point its position and layer; an area its box, size, layer, the parts that
  * lie inside it and how much else does.
  */
@@ -122,6 +122,12 @@ export function describeBoardReference(resolved, index, t = english) {
       name: `${netName(item.net)} · ${t("board.text.via")}`, glyph: "edge", icon: "via",
       facts: [row("Net", netName(item.net)), row("Diameter", mm(item.diameter)), row("Drill", mm(item.drill)), row("Layers", ends),
         row("Type", VIA_KEYS[item.type] ? t(VIA_KEYS[item.type]) : item.type)]
+    };
+  }
+  if (resolved.kind === "zone" && item.rule) {
+    return {
+      name: item.name || t("board.text.rule_area"), glyph: "edge", icon: "ruleArea",
+      facts: [row("Layers", (item.layers || [item.layer]).join(", "))]
     };
   }
   if (resolved.kind === "zone") {

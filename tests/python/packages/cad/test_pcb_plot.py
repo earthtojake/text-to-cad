@@ -5,7 +5,7 @@ headless API saves) without KiCad: the sheet and its layers in the order KiCad's
 them (the front copper active), pads on every copper layer they flash on with their numbers and
 nets, tracks, the via's rings and the holes, the pour's saved fill and border hatch, text in the
 permissive stroke font, mask and paste derived from the pads, the outline, the board's area, the
-drawing sheet, and the ratsnest from the engine's own connectivity. The payload is a function of
+ratsnest from the engine's own connectivity (no drawing sheet). The payload is a function of
 the file's bytes, and the store caches it by them. The JavaScript renderer's fixture
 (`packages/ui/src/renderers/board/__fixtures__/board.plot.json`) is this same board's payload.
 """
@@ -59,13 +59,11 @@ class PlotPayloadTest(unittest.TestCase):
         # side, the user layers and the outline, the front side up to its copper, what goes through on top.
         self.assertEqual(
             [(layer["id"], layer["kind"], layer["side"]) for layer in self.sheet["layers"]],
-            [("sheet", "sheet", "both"), ("area", "area", "both"), ("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"),
+            [("area", "area", "both"), ("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"),
              ("Edge.Cuts", "outline", "both"), ("F.Fab", "fab", "front"), ("F.CrtYd", "courtyard", "front"), ("F.Paste", "paste", "front"),
              ("F.SilkS", "silk", "front"), ("F.Mask", "mask", "front"), ("F.Cu", "copper", "front"),
              ("drills", "drill", "both"), ("vias", "via", "both"), ("ratsnest", "ratsnest", "both"), ("names", "names", "both")],
         )
-        # The board's paper, A4, its corner on KiCad's origin, which is the board's corner here.
-        self.assertEqual(self.sheet["page"], [0.0, 0.0, 297.0, 210.0])
         # The board's index rides beside the picture, in sheet millimetres; KiCad's origin is the sheet's corner here.
         self.assertEqual(self.payload["board"]["origin"], [0.0, 0.0])
         self.assertEqual([part["ref"] for part in self.payload["board"]["parts"]], ["D1", "J1", "R1"])
@@ -131,19 +129,10 @@ class PlotPayloadTest(unittest.TestCase):
         self.assertEqual({item.get("clearance") for item in self.items("F.Cu", t="poly")}, {0.2})
         self.assertFalse(any("clearance" in item for item in self.items("B.Cu", t="poly")))
 
-    def test_the_board_is_drawn_on_kicads_default_drawing_sheet(self) -> None:
-        items = self.layers["sheet"]["items"]
-        texts = [item["text"] for item in items if item["t"] == "text"]
-        # The grid's references along each side, every 50 mm in from the 10 mm frame, and the title block.
-        self.assertEqual(texts[:20], [*"123456123456", *"ABCDABCD"])
-        self.assertIn("Size: A4", texts)
-        self.assertIn("File: blinky.kicad_pcb", texts)
-        self.assertIn("KiCad E.D.A. 10.99", texts)
-        # The page's edge is grey, its own line; the frames are 0.15 mm lines.
-        page = [item for item in items if item.get("page")]
-        self.assertEqual(len(page), 4)
-        self.assertEqual(sorted({tuple(point) for item in page for point in item["pts"]}), [(0.0, 0.0), (0.0, 210.0), (297.0, 0.0), (297.0, 210.0)])
-        self.assertTrue(all(item["w"] == 0.15 for item in items if item["t"] == "path" and not item.get("page")))
+    def test_no_drawing_sheet_is_drawn_the_board_is_the_board_alone(self) -> None:
+        # KiCad's page border and title block are not drawn: no sheet layer, and no page to frame.
+        self.assertNotIn("sheet", self.layers)
+        self.assertNotIn("page", self.sheet)
 
     def test_mask_and_paste_are_derived_from_the_pads(self) -> None:
         self.assertEqual(sorted(item["ref"] for item in self.layers["F.Mask"]["items"]), ["#D1.1", "#D1.2", "#J1.1", "#J1.2", "#R1.1", "#R1.2"])
@@ -468,6 +457,41 @@ class KiCadDrawingTest(unittest.TestCase):
         self.assertGreater(max(xs), max(stroke_xs))
         self.assertLess(min(ys), 14.5)
         self.assertGreater(max(ys), 15.5)
+
+    def test_the_index_carries_rule_areas_apart_and_what_kicad_saved_locked(self) -> None:
+        from cad.engine.formats.kicad.board_index import BoardView, read_index
+        board = _board(
+            '(zone (net 0) (net_name "") (layers "F.Cu" "B.Cu") (uuid "0a000000-0000-4000-8000-000000000001") (name "keep")'
+            ' (hatch edge 0.5) (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour not_allowed) (footprints allowed))'
+            ' (polygon (pts (xy 2 2) (xy 8 2) (xy 8 8) (xy 2 8))))\n'
+            '(segment (start 1 1) (end 9 1) (width 0.25) (layer "F.Cu") (net 1) (locked yes) (uuid "0a000000-0000-4000-8000-000000000002"))\n'
+            '(gr_line (start 1 3) (end 9 3) (stroke (width 0.1) (type solid)) (layer "F.SilkS") (locked yes) (uuid "0a000000-0000-4000-8000-000000000003"))\n'
+            + _pad("U1", "15 10", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(layer "F.Cu")', '(locked yes) (layer "F.Cu")', 1),
+            layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (5 "F.SilkS" user)')
+        payload = self.plot(board)
+        zones = payload["board"]["zones"]
+        # A rule area is no pour: one entry per layer it keeps out of, marked, with no net and no fill.
+        self.assertEqual([(zone["layer"], zone.get("rule"), zone["net"]) for zone in zones], [("F.Cu", True, None), ("B.Cu", True, None)])
+        self.assertEqual([part.get("locked") for part in payload["board"]["parts"]], [True])
+        self.assertEqual([track.get("locked") for track in payload["board"]["tracks"]], [True])
+        [line] = [item for item in self.layers(payload)["F.SilkS"]["items"] if item.get("id") == "0a000000-0000-4000-8000-000000000003"]
+        self.assertTrue(line["locked"])
+        view = BoardView(Path("rules.kicad_pcb"), read_index(board))
+        self.assertEqual(view.zones, ())
+        area = view.resolve("#zone:0a000000-0000-4000-8000-000000000001")
+        self.assertTrue(area.rule)
+        self.assertEqual((area.name, area.layers), ("keep", ("F.Cu", "B.Cu")))
+
+    def test_a_part_carries_the_schematic_sheet_that_placed_it(self) -> None:
+        from cad.engine.formats.kicad.board_index import read_index
+        board = _board(
+            _pad("U1", "5 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 5 5)', '(at 5 5) (sheetname "/power/") (sheetfile "power.kicad_sch")', 1)
+            + _pad("U2", "10 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 10 5)', '(at 10 5) (sheetname "buspci.sch")', 1)
+            + _pad("U3", "15 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 15 5)', '(at 15 5) (sheetname "/power/ldo/")', 1)
+            + _pad("U4", "20 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))'))
+        self.assertEqual({part.ref: part.sheet for part in read_index(board).parts}, {"U1": "power", "U2": "buspci", "U3": "power/ldo", "U4": None})
+        parts = {part["ref"]: part for part in self.plot(board)["board"]["parts"]}
+        self.assertEqual((parts["U1"]["sheet"], "sheet" in parts["U4"]), ("power", False))
 
     def test_footprint_text_reads_upright_unless_unlocked(self) -> None:
         def strokes(angle: str, unlocked: str = "") -> list:

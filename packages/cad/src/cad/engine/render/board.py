@@ -17,13 +17,15 @@ from pathlib import Path
 from typing import Any
 
 MODES = {
-    "board": {"sheet", "area", "copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "via", "drill",
+    "board": {"area", "copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "via", "drill",
               "outline", "ratsnest", "names"},
-    "copper": {"sheet", "area", "copper", "via", "drill", "outline", "ratsnest", "names"},
-    "assembly": {"sheet", "area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"},
-    "placement": {"sheet", "area", "fab", "courtyard", "outline"},
+    "copper": {"area", "copper", "via", "drill", "outline", "ratsnest", "names"},
+    "assembly": {"area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"},
+    "placement": {"area", "fab", "courtyard", "outline"},
 }
-DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance"}
+DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance", "active", "dim", "zones", "tracks"}
+# What a set saved when a board had a drawing sheet may still name: no layer now, left out.
+GONE = {"sheet"}
 # Mirrors core/lib/plot2d/theme.js; snapshot pixel tests check the layer colours.
 INNER = ["#7FC87F", "#CE7D2C", "#4FCBCB", "#DB628B", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#8DCB81", "#ED7C33",
          "#5BC3EB", "#F76F8E", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#ED7C33", "#5BC3EB", "#F76F8E", "#A7A5C6",
@@ -38,14 +40,17 @@ COLORS = {
     "User.1": "#C2C2C2", "User.2": "#5994DC", "User.3": "#B4DBD2", "User.4": "#D8C852", "User.5": "#C2C2C2",
     "User.6": "#5994DC", "User.7": "#B4DBD2", "User.8": "#D8C852", "User.9": "#E8B2A7",
     "vias": "#E3B72E", "ratsnest": (0, 248, 255, 0.35), "drills": "#E3B72E",
-    "sheet": "#C872AB", "area": (100, 100, 100, 0.35), "names": (255, 255, 255, 0.9),
+    "area": (100, 100, 100, 0.35), "names": (255, 255, 255, 0.9),
 }
 ZONE_OPACITY = 0.6
-PAGE_LIMITS = "#848484"
+# KiCad's "Inactive layers: Dim": every layer but the active one at this share (plot2d's DIM_OPACITY).
+DIM_OPACITY = 0.3
+# What may be the active layer: a board layer, not the area or what goes through the board.
+ACTIVE_KINDS = {"copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "outline"}
 # A hole's fill and its plated wall (None: the board's background, seen through).
 HOLES = {"pad": (None, "#E3B72E"), "via": ("#E3B72E", "#ECECEC"), "npth": ("#1AC4D2", None)}
 NAMES = {"pad": (255, 255, 255, 0.9), "via": (50, 50, 50, 0.9)}
-UNDERLAYS = {"sheet", "area"}
+UNDERLAYS = {"area"}
 OVERLAYS = {"drill", "via", "ratsnest", "names"}
 
 
@@ -58,16 +63,24 @@ def display_options(value: Any, grid: bool = False) -> dict:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
         raise SnapshotRefused(f"a board's display takes {', '.join(sorted(DISPLAY_KEYS))}")
-    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "appearance": "light", **value}
+    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "appearance": "light", "active": None, "dim": False,
+               "zones": ZONE_OPACITY, "tracks": 1.0, **value}
     if display["mode"] not in MODES:
         raise SnapshotRefused(f"a board's modes are {', '.join(MODES)}")
     if display["side"] not in ("top", "bottom") or type(display["poured"]) is not bool:
         raise SnapshotRefused("board side is top or bottom and poured is true or false")
     if display["appearance"] not in ("light", "dark"):
         raise SnapshotRefused("board appearance is light or dark")
+    if display["active"] is not None and (not isinstance(display["active"], str) or not display["active"]) or type(display["dim"]) is not bool:
+        raise SnapshotRefused("board active is a layer id or null, and dim is true or false")
+    for key in ("zones", "tracks"):
+        if isinstance(display[key], bool) or not isinstance(display[key], (int, float)) or not 0 <= display[key] <= 1:
+            raise SnapshotRefused(f"board {key} is an opacity from 0 to 1")
     layers = display["layers"]
     if layers is not None and (not isinstance(layers, list) or not all(isinstance(x, str) and x for x in layers)):
         raise SnapshotRefused("board layers is a list of layer ids")
+    if layers is not None:
+        display["layers"] = [layer for layer in layers if layer not in GONE]
     return display
 
 
@@ -106,8 +119,6 @@ def netname_color(layer: str):
 def item_color(layer: str, item: dict):
     if item["t"] == "label":
         return NAMES.get(item.get("kind"), NAMES["pad"]) if layer == "names" else netname_color(layer)
-    if item.get("page"):
-        return PAGE_LIMITS
     return layer_color(layer)
 
 
@@ -150,10 +161,21 @@ def viewed_layers(layers: list[dict], display: dict) -> list[dict]:
         kept = [layer for layer in layers if layer["id"] in display["layers"]]
     else:
         kept = [layer for layer in layers if layer["kind"] in MODES[display["mode"]]]
-    if display["side"] != "bottom":
-        return kept
     stack = [x for x in kept if x["kind"] not in OVERLAYS and x["kind"] not in UNDERLAYS]
-    return [x for x in kept if x["kind"] in UNDERLAYS] + list(reversed(stack)) + [x for x in kept if x["kind"] in OVERLAYS]
+    if display["side"] == "bottom":
+        stack.reverse()
+    # The active layer tops the board's stack, as plot2d draws it.
+    stack.sort(key=lambda x: x["id"] == display.get("active"))
+    return [x for x in kept if x["kind"] in UNDERLAYS] + stack + [x for x in kept if x["kind"] in OVERLAYS]
+
+
+def active_layer(layers: list[dict], display: dict) -> str | None:
+    """plot2d's ``boardActiveLayer``: the one chosen, while the board has it, else the copper facing the eye."""
+    ids = {layer["id"]: layer["kind"] for layer in layers}
+    if display.get("active") and ids.get(display["active"]) in ACTIVE_KINDS:
+        return display["active"]
+    facing = "B.Cu" if display["side"] == "bottom" else "F.Cu"
+    return facing if facing in ids else None
 
 
 class _Painter:
@@ -281,7 +303,8 @@ class _Painter:
             self.line(item["pts"], wall, item["w"] * 2, closed=True)
         self.polygon(item["pts"], fill)
 
-    def layer(self, layer: dict, *, poured: bool, vias: bool, names: bool, mirrored: bool, viewport: tuple[float, float]):
+    def layer(self, layer: dict, *, poured: bool, vias: bool, names: bool, mirrored: bool, viewport: tuple[float, float],
+              zones: float = ZONE_OPACITY, tracks: float = 1.0):
         from cad.engine.formats.kicad.labels import is_track, track_labels, track_name_detail
         from cad.engine.formats.kicad.stroke_font import text_strokes
 
@@ -307,13 +330,13 @@ class _Painter:
                 for stroke in strokes:
                     self.line(stroke, item_color(layer["id"], item), item.get("w", 0), minimum=False)
                 continue
-            paint = item_color(layer["id"], item) if item.get("page") else color
+            paint = color
             if item.get("knockout"):
                 self.knockout(item, paint)
                 continue
             if item.get("clearance", 0) > 0:
                 self.line(grown_outline(item["pts"], item["clearance"]), paint, 0, closed=True)
-            opacity = ZONE_OPACITY if item.get("pour") and not item.get("teardrop") else 1.0
+            opacity = zones if item.get("pour") and not item.get("teardrop") else tracks if copper and is_track(item) else 1.0
             wide = item.get("w", 0)
             if kind == "poly":
                 outline = max(wide, self.ss / self.scale) if copper and item.get("ref") else wide
@@ -390,22 +413,21 @@ class Held:
             x = sheet["width"] - point[0] if bottom else point[0]
             return ((x - cx) * scale + width / 2, (point[1] + cy) * scale + height / 2)
 
-        # From below the drawing sheet's page is moved where the mirrored board lies, and reads as it is.
-        page = sheet.get("page") or [0, 0, sheet["width"], sheet["height"]]
-        shift = sheet["width"] - (page[0] + page[2]) if bottom else 0.0
-
-        def place_page(point):
-            return ((point[0] + shift - cx) * scale + width / 2, (point[1] + cy) * scale + height / 2)
-
         # KiCad's canvas: the board's background, everywhere.
         image = Image.new("RGB", (width, height), sheet["background"])
         named = set(display["layers"]) if display["layers"] is not None else None
         vias, names = named is None or "vias" in named, named is None or "names" in named
         viewport = (width / scale, height / scale)  # the millimetres the still shows, for where a track's names fall
+        # Dim: every layer but the active one and the board's area is blended over what lies under it at DIM_OPACITY.
+        kept = active_layer(sheet["layers"], display) if display["dim"] else None
         for layer in layers:
-            flat = layer["kind"] == "sheet" and bottom
-            _Painter(image, place_page if flat else place, scale, ss, sheet["background"]).layer(
-                layer, poured=display["poured"], vias=vias, names=names, mirrored=bottom, viewport=viewport)
+            faded = kept is not None and layer["id"] != kept and layer["kind"] not in UNDERLAYS
+            under = image.copy() if faded else None
+            _Painter(image, place, scale, ss, sheet["background"]).layer(
+                layer, poured=display["poured"], vias=vias, names=names, mirrored=bottom, viewport=viewport,
+                zones=display["zones"], tracks=display["tracks"])
+            if faded:
+                image = Image.blend(under, image, DIM_OPACITY)
         if display["mode"] == "placement":
             from PIL import ImageDraw
 

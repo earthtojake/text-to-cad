@@ -21,22 +21,25 @@ import { boxOf, createSpatialGrid, nearBox } from "./spatialGrid.js";
 
 
 /**
- * What a pick may take, by kind: `pads`, `tracks`, `vias`, `zones`, `texts`, `dimensions`, `shapes`
- * (graphics) and `parts`; `copper` is `tracks` and `vias` both. `nets` takes whole nets instead —
- * any copper under the pointer, a pad's or a pour's too, picks its net. Two flags say how far a kind
- * reaches: `footprintShapes`, a footprint's own graphics (without it they are their part's, as
- * KiCad picks them), and `zoneFill`, a zone anywhere inside its outline (without it, by its outline
- * alone: a press on bare board inside a ground pour, as most of a board is, takes nothing). The
- * named sets are the Select filter's modes.
+ * What a pick may take, by kind: `pads`, `tracks`, `vias`, `zones` (the pours), `ruleAreas` (KiCad's
+ * keepout zones), `texts`, `dimensions`, `shapes` (graphics) and `parts`; `copper` is `tracks` and
+ * `vias` both. `nets` takes whole nets instead — any copper under the pointer, a pad's or a pour's
+ * too, picks its net. Two flags say how far a kind reaches: `footprintShapes`, a footprint's own
+ * graphics (without it they are their part's, as KiCad picks them), and `zoneFill`, a zone anywhere
+ * inside its outline (without it, by its outline alone: a press on bare board inside a ground pour,
+ * as most of a board is, takes nothing). `locked: false` leaves what KiCad saved locked — a part, and
+ * what it holds, a track, a via, a zone, a text, a dimension, a graphic — untaken, but for a pad,
+ * which KiCad lets a single click take whatever its part. The named sets are picks' presets.
  */
 export const BOARD_PICK_KINDS = Object.freeze({
-  all: Object.freeze({ pads: true, tracks: true, vias: true, zones: true, texts: true, dimensions: true, shapes: true, parts: true, nets: false }),
+  all: Object.freeze({ pads: true, tracks: true, vias: true, zones: true, ruleAreas: true, texts: true, dimensions: true, shapes: true, parts: true, nets: false }),
   parts: Object.freeze({ parts: true }),
   pads: Object.freeze({ pads: true }),
   nets: Object.freeze({ pads: true, tracks: true, vias: true, zones: true, zoneFill: true, nets: true }),
   tracks: Object.freeze({ tracks: true }),
   vias: Object.freeze({ vias: true }),
   zones: Object.freeze({ zones: true, zoneFill: true }),
+  ruleAreas: Object.freeze({ ruleAreas: true, zoneFill: true }),
   texts: Object.freeze({ texts: true }),
   dimensions: Object.freeze({ dimensions: true }),
   shapes: Object.freeze({ shapes: true, footprintShapes: true }),
@@ -117,7 +120,7 @@ export function createBoardIndex(board, sheet = {}) {
       kind: "part", ref, value: String(entry.value ?? ""), footprint: String(entry.footprint ?? ""),
       side: entry.side === "bottom" ? "bottom" : "top", at: page(entry.at) || [sheetX, sheetY], rotation: Number(entry.rotation) || 0,
       fields: entry.fields && typeof entry.fields === "object" ? { ...entry.fields } : {},
-      dnp: Boolean(entry.dnp), script: typeof entry.script === "string" ? entry.script : "",
+      dnp: Boolean(entry.dnp), locked: entry.locked === true, sheet: typeof entry.sheet === "string" ? entry.sheet : "", script: typeof entry.script === "string" ? entry.script : "",
       outline, area: outline.length > 2 ? polygonArea(outline) : Infinity, box: outline.length > 2 ? boxOf(outline) : null, pads: []
     });
   }
@@ -147,10 +150,12 @@ export function createBoardIndex(board, sheet = {}) {
   }
 
   const idOf = (entry) => (typeof entry?.id === "string" && entry.id ? entry.id.toLowerCase() : "");
+  // Locked as KiCad saved it, or with the part that holds it.
+  const lockedOf = (entry, part = "") => entry?.locked === true || Boolean(part && parts.get(part)?.locked);
   const tracks = (board?.tracks || EMPTY).map((entry) => {
     const width = Number(entry?.width) || 0;
     const points = pageList(entry?.points);
-    return { kind: "track", id: idOf(entry), net: String(entry?.net ?? ""), layer: String(entry?.layer ?? ""), width, arc: entry?.arc === true,
+    return { kind: "track", id: idOf(entry), net: String(entry?.net ?? ""), layer: String(entry?.layer ?? ""), width, arc: entry?.arc === true, locked: lockedOf(entry),
       points, box: boxOf(points, width / 2) };
   }).filter((track) => track.points.length > 1);
   const vias = (board?.vias || EMPTY).map((entry) => {
@@ -158,12 +163,13 @@ export function createBoardIndex(board, sheet = {}) {
     const diameter = Number(entry?.diameter) || 0;
     const layers = Array.isArray(entry?.layers) ? entry.layers.map(String) : ["F.Cu", "B.Cu"];
     return { kind: "via", id: idOf(entry), net: String(entry?.net ?? ""), at, diameter, drill: Number(entry?.drill) || 0, layers,
-      type: String(entry?.type || "through"), box: at ? boxOf([at], diameter / 2) : null };
+      type: String(entry?.type || "through"), locked: lockedOf(entry), box: at ? boxOf([at], diameter / 2) : null };
   }).filter((via) => via.at);
   const zones = (board?.zones || EMPTY).map((entry) => {
     const outline = pageList(entry?.outline);
     return { kind: "zone", id: idOf(entry), net: String(entry?.net ?? ""), layer: String(entry?.layer ?? ""), name: String(entry?.name ?? ""),
       priority: Number(entry?.priority) || 0, filled: Number.isFinite(Number(entry?.filled)) && entry?.filled !== undefined ? Number(entry.filled) : null,
+      rule: entry?.rule === true, locked: lockedOf(entry),
       outline, area: outline.length > 2 ? polygonArea(outline) : Infinity, box: boxOf(outline) };
   }).filter((zone) => zone.outline.length > 2);
   for (const track of tracks) netNamed(track.net)?.tracks.push(track);
@@ -178,14 +184,14 @@ export function createBoardIndex(board, sheet = {}) {
   const texts = (board?.texts || EMPTY).map((entry) => {
     const polygon = pageList(entry?.polygon);
     return { kind: "text", id: idOf(entry), text: String(entry?.text ?? ""), layer: String(entry?.layer ?? ""), at: page(entry?.at),
-      angle: Number(entry?.angle) || 0, size: Number(entry?.size) || 0, part: String(entry?.part ?? ""), polygon,
+      angle: Number(entry?.angle) || 0, size: Number(entry?.size) || 0, part: String(entry?.part ?? ""), polygon, locked: lockedOf(entry, String(entry?.part ?? "")),
       area: polygon.length > 2 ? polygonArea(polygon) : 0, box: boxOf(polygon) };
   }).filter((text) => text.id && text.polygon.length > 2);
   const dimensions = (board?.dimensions || EMPTY).map((entry) => {
     const lines = (Array.isArray(entry?.lines) ? entry.lines : EMPTY).map(pageList).filter((line) => line.length > 1);
     const polygon = pageList(entry?.polygon);
     return { kind: "dimension", id: idOf(entry), type: String(entry?.type || "aligned"), layer: String(entry?.layer ?? ""), value: String(entry?.value ?? ""),
-      part: String(entry?.part ?? ""), lines, polygon, box: boxOf([...lines.flat(), ...polygon]) };
+      part: String(entry?.part ?? ""), lines, polygon, locked: lockedOf(entry, String(entry?.part ?? "")), box: boxOf([...lines.flat(), ...polygon]) };
   }).filter((dimension) => dimension.id && dimension.box);
   // The graphics are what the plot draws of them, in sheet millimetres as the index is. A board's own
   // are read as the index is made; a footprint's — the most of a board's items, which a pick takes
@@ -198,6 +204,7 @@ export function createBoardIndex(board, sheet = {}) {
     const width = Number(item.w) || 0;
     return { kind: "shape", id: item.id.toLowerCase(), shape: String(item.shape || "line"), layer: String(layer.id), width,
       closed: item.t === "poly" || item.closed === true, filled: item.t === "poly", part: partRef(item.ref), net: String(item.net ?? ""),
+      locked: lockedOf(item, partRef(item.ref)),
       points, box: !placed && Array.isArray(item.box) ? item.box : boxOf(points, width / 2) };
   };
   const graphics = (own) => {
@@ -286,6 +293,8 @@ export function createBoardIndex(board, sheet = {}) {
     const wantTracks = Boolean(kinds.tracks || kinds.copper);
     const wantParts = Boolean(kinds.parts);
     const drawn = (layer) => !layers || layers.has(layer);
+    // Locked items are taken only when the filter takes them (a pad whatever its part, as KiCad's single click).
+    const free = kinds.locked === false ? (item) => !item.locked : () => true;
     if (wantPads) {
       padGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const shape = padShapes[order];
@@ -298,6 +307,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (wantVias && drawn("vias")) {
       viaGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const via = vias[order];
+        if (!free(via)) return;
         const distance = Math.hypot(x - via.at[0], y - via.at[1]) - via.diameter / 2;
         if (distance <= reach) candidates.push({ rank: 1, side: 0, size: via.diameter, distance: Math.max(0, distance), order, hit: { kind: "via", via, at: via.at } });
       });
@@ -305,7 +315,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (wantTracks) {
       trackGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const track = tracks[order];
-        if (!drawn(track.layer) || !nearBox(track.box, at, reach)) return;
+        if (!drawn(track.layer) || !free(track) || !nearBox(track.box, at, reach)) return;
         const nearest = nearestOnPolyline(at, track.points);
         if (nearest && nearest.distance - track.width / 2 <= reach) {
           candidates.push({ rank: 2, side: facing(layerSide(track.layer), view), size: track.width, distance: Math.max(0, nearest.distance - track.width / 2), order, hit: { kind: "track", track, at: nearest.point } });
@@ -315,7 +325,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (kinds.texts) {
       textGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const text = texts[order];
-        if (!drawn(text.layer) || !nearBox(text.box, at, reach)) return;
+        if (!drawn(text.layer) || !free(text) || !nearBox(text.box, at, reach)) return;
         const distance = polygonReach(at, text.polygon);
         if (distance <= reach) candidates.push({ rank: 3, side: facing(layerSide(text.layer), view), size: text.area, distance, order, hit: { kind: "text", text } });
       });
@@ -323,7 +333,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (kinds.dimensions) {
       dimensionGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const dimension = dimensions[order];
-        if (!drawn(dimension.layer) || !nearBox(dimension.box, at, reach)) return;
+        if (!drawn(dimension.layer) || !free(dimension) || !nearBox(dimension.box, at, reach)) return;
         const distance = dimensionReach(at, dimension);
         if (distance <= reach) candidates.push({ rank: 4, side: facing(layerSide(dimension.layer), view), size: 0, distance, order, hit: { kind: "dimension", dimension } });
       });
@@ -331,7 +341,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (kinds.shapes) {
       const take = (list, base) => (order) => {
         const shape = list[order];
-        if (!drawn(shape.layer) || !nearBox(shape.box, at, reach)) return;
+        if (!drawn(shape.layer) || !free(shape) || !nearBox(shape.box, at, reach)) return;
         const distance = shapeReach(at, shape);
         if (distance <= reach) candidates.push({ rank: 5, side: facing(layerSide(shape.layer), view), size: shape.width, distance, order: base + order, hit: { kind: "shape", shape } });
       };
@@ -341,11 +351,12 @@ export function createBoardIndex(board, sheet = {}) {
     }
     // A pour is taken by its outline, or, for its net or with the zones alone, anywhere inside it:
     // under All, a press on bare board (inside a ground pour, as most of a board is) clears the
-    // selection rather than taking the pour.
-    if (kinds.zones) {
+    // selection rather than taking the pour. A rule area is a zone the same way, as `ruleAreas` takes it.
+    if (kinds.zones || kinds.ruleAreas) {
       const inside = Boolean(kinds.zoneFill || wholeNets);
       zoneGrid.visit(x - reach, y - reach, x + reach, y + reach, (order) => {
         const zone = zones[order];
+        if (!(zone.rule ? kinds.ruleAreas && !wholeNets : kinds.zones) || !free(zone)) return;
         if (!drawn(zone.layer) || !nearBox(zone.box, at, reach)) return;
         const within = pointInPolygon(at, zone.outline);
         const edge = nearestOnPolyline(at, closedLine(zone.outline))?.distance ?? Infinity;
@@ -357,7 +368,7 @@ export function createBoardIndex(board, sheet = {}) {
     if (wantParts) {
       partGrid.visit(x, y, x, y, (order) => {
         const part = parted[order];
-        if (nearBox(part.box, at, 0) && pointInPolygon(at, part.outline)) {
+        if (free(part) && nearBox(part.box, at, 0) && pointInPolygon(at, part.outline)) {
           candidates.push({ rank: 7, side: facing(part.side, view), size: part.area, distance: 0, order, hit: { kind: "part", part } });
         }
       });
@@ -425,15 +436,15 @@ export function createBoardIndex(board, sheet = {}) {
   }
 
   /**
-   * The board reference of page point `at` (Select's Point or area, a press on bare board), to the
-   * hundredth of a millimetre, on `layer` when one is given and the language can name it.
+   * The board reference of page point `at`, to the hundredth of a millimetre, on `layer` when one is
+   * given and the language can name it (the viewer makes none: an agent may write one).
    */
   function pointSelector(at, layer = null) {
     const [x, y] = toScript(at);
     return formatBoardRefSelector({ kind: "point", at: [round2(x), round2(y)], ...(namedLayer(layer) ? { layer } : {}) });
   }
 
-  /** The board reference of the box between page points `from` and `to` (Select's Point or area dragged). */
+  /** The board reference of the box between page points `from` and `to` (a drag under Select). */
   function areaSelector(from, to, layer = null) {
     const [x0, y0] = toScript(from); const [x1, y1] = toScript(to);
     return formatBoardRefSelector({ kind: "area", at: [round2(x0), round2(y0)], to: [round2(x1), round2(y1)], ...(namedLayer(layer) ? { layer } : {}) });
@@ -483,7 +494,7 @@ export function createBoardIndex(board, sheet = {}) {
       pads: keep(padShapes, (pad) => held(pad.polygon)),
       tracks: keep(tracks, (track) => held(track.points)),
       vias: keep(vias, (via) => held([via.at], via.diameter / 2)),
-      zones: keep(zones, (zone) => held(zone.outline)),
+      zones: keep(zones, (zone) => !zone.rule && held(zone.outline)),
       texts: keep(texts, (text) => held(text.polygon)),
       dimensions: keep(dimensions, (dimension) => held([...dimension.lines.flat(), ...dimension.polygon])),
       shapes: keep([...boardShapes, ...ownShapes()], (shape) => held(shape.points)),

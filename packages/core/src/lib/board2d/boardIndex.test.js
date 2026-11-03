@@ -348,7 +348,31 @@ test("the overlay lights a text's box, a graphic's ink, an area and the box bein
   const { ctx, marks, filled } = recordingContext();
   drawBoardOverlay(ctx, index, { ...frame, selection: [index.resolve(`#text:${T(5)}`), index.resolve("#@x0y-10..x10y0")],
     hover: index.resolve(`#shape:${T(8)}`), draft: [30, 1, 35, 4] });
-  // The draft first, then the text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
-  assert.deepEqual(filled("rgba(141, 197, 255, 0.16)").map((box) => box.map((v) => Math.round(v))), [[300, 10, 350, 40], [270, 241, 330, 259], [50, 150, 150, 250]]);
+  // The draft, KiCad's window box, lighter; then the text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
+  assert.deepEqual(filled("rgba(141, 197, 255, 0.1)").map((box) => box.map((v) => Math.round(v))), [[300, 10, 350, 40]]);
+  assert.deepEqual(filled("rgba(141, 197, 255, 0.16)").map((box) => box.map((v) => Math.round(v))), [[270, 241, 330, 259], [50, 150, 150, 250]]);
   assert.ok(marks.some((mark) => mark.op === "stroke" && mark.style === "rgba(141, 197, 255, 0.55)"), "the hovered graphic's stroke");
+});
+
+test("a rule area is a zone of its own kind, and what KiCad saved locked is taken only when the pick takes locked items", () => {
+  const board = {
+    ...BOARD,
+    parts: BOARD.parts.map(part => (part.ref === "R1" ? { ...part, locked: true } : part)),
+    tracks: [{ ...BOARD.tracks[0], id: "a1", locked: true }],
+    zones: [...BOARD.zones, { net: null, layer: "F.Cu", outline: [[30, 20], [38, 20], [38, 28], [30, 28]], id: "b2", rule: true }],
+  };
+  const index = createBoardIndex(board);
+  assert.equal(index.zones.find(zone => zone.rule).net, "");
+  assert.equal(index.nets.get("GND").zones.length, 1, "a rule area is on no net");
+  // Inside the rule area: the rule area, as Rule Areas takes it; Zones alone takes the pour there.
+  assert.equal(index.pick([34, 24], { kinds: { ruleAreas: true, zoneFill: true } }).selector, "#zone:b2");
+  assert.equal(index.pick([34, 24], { kinds: { zones: true, zoneFill: true } }).selector.startsWith("#net:GND@"), true);
+  assert.deepEqual(index.within([29, 19, 39, 29]).zones, [], "an area holds no rule area among its pours");
+  // A locked part, and the locked track: left alone without Locked items, but for the part's pad.
+  const unlocked = { pads: true, tracks: true, parts: true, locked: false };
+  assert.equal(index.pick([15, 20.5], { kinds: unlocked }), null);
+  assert.equal(index.pick([14.175, 20], { kinds: unlocked }).selector, "#R1.1");
+  assert.equal(index.pick([14.175, 15], { kinds: unlocked }), null);
+  assert.equal(index.pick([14.175, 15], { kinds: { ...unlocked, locked: true } }).selector, "#track:a1");
+  assert.equal(index.pick([15, 20.5], { kinds: { ...unlocked, locked: true } }).selector, "#R1");
 });

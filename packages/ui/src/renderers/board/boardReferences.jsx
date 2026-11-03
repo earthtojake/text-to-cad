@@ -3,14 +3,15 @@ import { formatPromptReference } from "@cad/core/prompt";
 import { InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 import { boardReferenceId } from "./boardFacts.js";
 import {
-  AreaKindIcon, DimensionKindIcon, GraphicKindIcon, NetKindIcon, PadKindIcon, PartKindIcon, TextKindIcon, TrackKindIcon, ViaKindIcon, ZoneKindIcon
+  AreaKindIcon, DimensionKindIcon, GraphicKindIcon, NetKindIcon, PadKindIcon, PartKindIcon, RuleAreaKindIcon, TextKindIcon, TrackKindIcon, ViaKindIcon,
+  ZoneKindIcon
 } from "./boardIcons.jsx";
 
 const EMPTY = Object.freeze([]);
 // A chip leads with its kind's glyph, as Select's filter names the kinds: a part, a pad, a net or its
-// copper, a track, a via, a zone, a text, a dimension, a graphic, an area; a point keeps the pick's vertex.
+// copper, a track, a via, a zone, a rule area, a text, a dimension, a graphic, an area; a point keeps the pick's vertex.
 const KIND_ICONS = Object.freeze({ solid: PartKindIcon, face: PadKindIcon, edge: NetKindIcon, track: TrackKindIcon, via: ViaKindIcon,
-  zone: ZoneKindIcon, text: TextKindIcon, dimension: DimensionKindIcon, shape: GraphicKindIcon, area: AreaKindIcon });
+  zone: ZoneKindIcon, ruleArea: RuleAreaKindIcon, text: TextKindIcon, dimension: DimensionKindIcon, shape: GraphicKindIcon, area: AreaKindIcon });
 const CHIP_ICON_CLASS = "size-2.5 shrink-0 text-muted-foreground";
 const chipIcon = (glyph) => {
   const Icon = KIND_ICONS[glyph];
@@ -26,7 +27,7 @@ function BoardCard({ facts }) {
  * What is selected on a board, for Quick Edit (`useSceneSelection` over `boardScene.js`): each pick
  * as a reference into the file on screen, by its board reference, and as a chip named as the board
  * names it (`R1`, `R1.2`, `net VBUS`, `VBUS · track`, `“blinky”`, an area), led by its kind's glyph —
- * the kinds Select's filter shows (a net's copper is its net's), a point the pick's vertex — its card
+ * the kinds Select's filter shows (a net's copper is its net's), a point an agent wrote the pick's vertex — its card
  * what the board says of it, its ID the reference.
  * A click on a chip copies its reference (`<file>#R1.2`); its X drops it; resting on it lights it.
  *

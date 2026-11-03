@@ -6,9 +6,10 @@
  * Assembly, a part's body and legs in its dashed courtyard, its reference over it; Placement, two
  * parts and the straight airwire between them — and Select's kinds (a part with its legs; a pad;
  * a net, two pads and the trace between them; a track, a trace with its bend; a via, a ring round
- * its hole; a zone, a pour's outline with a corner cut, faintly filled; a text, a T; a dimension,
- * a measured span between its extension lines; a graphic, a square, a circle and a line) and its
- * Point or area, a point in a dashed box.
+ * its hole; a zone, a pour's outline with a corner cut, faintly filled; a rule area, the same
+ * outline hatched, as KiCad draws a keepout; a text, a T; a dimension, a measured span between its
+ * extension lines; a graphic, a square, a circle and a line), and an area a drag names, a point in
+ * a dashed box.
  */
 const icon = (name, children) => {
   function BoardIcon(props) {
@@ -34,6 +35,7 @@ export const NetKindIcon = icon("NetKindIcon", <><rect x="2.5" y="14.5" width="6
 export const TrackKindIcon = icon("TrackKindIcon", <path d="M3 17.5h6.5l5-11H21" strokeWidth="2.6" />);
 export const ViaKindIcon = icon("ViaKindIcon", <><circle cx="12" cy="12" r="7.5" /><circle cx="12" cy="12" r="2.75" fill="currentColor" /></>);
 export const ZoneKindIcon = icon("ZoneKindIcon", <path d="M3.5 5.5h12l5 5v8h-17Z" fill="currentColor" fillOpacity="0.3" />);
+export const RuleAreaKindIcon = icon("RuleAreaKindIcon", <><path d="M3.5 5.5h12l5 5v8h-17Z" /><path d="M3.5 11.5l6-6M3.5 17.5l12-12M9.5 18.5l11-11M15.5 18.5l5-5" strokeWidth="1.2" /></>);
 export const TextKindIcon = icon("TextKindIcon", <path d="M5.5 7.5v-2.5h13v2.5M12 5v14M9 19h6" />);
 export const DimensionKindIcon = icon("DimensionKindIcon", <path d="M3.5 6v12M20.5 6v12M3.5 12h17M7 9l-3.5 3L7 15M17 9l3.5 3-3.5 3" />);
 export const GraphicKindIcon = icon("GraphicKindIcon", <><rect x="3.5" y="3.5" width="7" height="7" rx="1" /><circle cx="16.75" cy="16.75" r="3.75" /><path d="M14 4l6.5 6.5" /></>);
