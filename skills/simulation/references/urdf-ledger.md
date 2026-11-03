@@ -2,9 +2,27 @@
 
 Use this reference before creating or editing a `.urdf`. The ledger is the written spatial model that prevents silent frame, axis, unit, and mesh-scale mistakes.
 
-The ledger's canonical home is a comment block at the top of the `.urdf` file itself (see the compact format in `references/authoring-contract.md`), optionally expanded in an adjacent README for large robots. It must be specific enough that another engineer can audit the URDF without reverse-engineering the XML, and it must be updated in the same edit that changes the modeled facts.
+The ledger's canonical home is a comment block at the top of the `.urdf` file itself (the compact form [below](#in-the-file)), optionally expanded in an adjacent README for large robots. It must be specific enough that another engineer can audit the URDF without reverse-engineering the XML, and it must be updated in the same edit that changes the modeled facts.
 
 The sections below are the checklist of what the ledger must cover. For small robots the per-link and per-joint tables can collapse into a few comment lines; the information, not the table format, is what is required.
+
+## In the File
+
+The ledger lives in the file, immediately after the XML declaration, as XML comments. Minimum content:
+
+```xml
+<?xml version="1.0"?>
+<!--
+  robot: <name> | consumers: <RViz / Gazebo / MoveIt / driver / viewer>
+  units: meters, kilograms, radians | frames: +X forward, +Y left, +Z up (REP-103)
+  root: <root_link> | source of dimensions: <CAD file / drawing / measured / assumption>
+  meshes: <dir>, exported per-link in link frame, source units <mm|m>, scale <...>
+  inertials: <CAD mass properties / primitive formulas / assumed density X kg/m^3 / omitted>
+  assumptions: <every guessed value, sign convention, or approximation, one per line>
+-->
+```
+
+Update the ledger in the same edit that changes the modeled facts. A stale ledger is worse than no ledger. The [golden skeleton](urdf-authoring.md#golden-skeleton) shows a filled one.
 
 ## Required Sections
 

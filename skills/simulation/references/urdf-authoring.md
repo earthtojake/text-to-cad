@@ -2,35 +2,29 @@
 
 Use this reference when writing or editing URDF XML directly. The `.urdf` file is the source of truth: it must carry its own documentation, and its structure must be predictable enough that any later agent or engineer can audit it without external context.
 
+## Edit Loop
+
+1. Locate the target `.urdf`. It is the source of truth; edit it directly.
+2. Identify target consumers and strictness requirements: visualization, TF tree, simulation, planning, or real robot integration.
+3. Read the design-ledger comment block at the top of the file; create it if missing (see [urdf-ledger.md](urdf-ledger.md)). Update the ledger in the same edit that changes modeled facts.
+4. If links reference meshes, prepare or verify the per-link assets first (see [meshes.md](meshes.md)).
+5. Apply URDF frame semantics exactly: joint origin in parent frame, child link frame at joint frame, joint axis in joint frame, visual/collision/inertial origins in link frame (see [urdf-frames.md](urdf-frames.md)).
+6. Author links, joints, limits, axes, origins, inertials, and geometry per this contract. Compute derived numbers — inertia tensors, unit conversions, mirrored transforms — with formulas or a helper script; never freehand them (see [inertials.md](inertials.md)).
+7. Validate with `cad urdf check <file.urdf>` and fix findings until clean.
+8. Run the rest of the verification recipe in [urdf-checks.md](urdf-checks.md): external tools when available, then a viewer sweep ([Show the model](../SKILL.md#show-the-model)) of every movable joint against the ledger's positive-motion statements.
+9. Report smoke tests run, checks skipped, remaining assumptions, and unchecked spatial data.
+
 ## File Shape
 
 Every authored `.urdf` follows this shape, in this order:
 
 1. XML declaration: `<?xml version="1.0"?>`.
-2. Design-ledger comment block (see below).
+2. Design-ledger comment block (compact form in [urdf-ledger.md](urdf-ledger.md#in-the-file)).
 3. One `<robot name="...">` root element.
 4. All `<link>` elements, root link first, then in tree order (parents before children).
 5. All `<joint>` elements, in the same tree order as the child links they create.
 
 Keep two-space indentation and one element per line. Do not interleave links and joints arbitrarily; a reader should be able to walk the kinematic tree top-to-bottom.
-
-## Design-Ledger Comment Block
-
-The ledger lives in the file, immediately after the XML declaration, as XML comments. Minimum content:
-
-```xml
-<?xml version="1.0"?>
-<!--
-  robot: <name> | consumers: <RViz / Gazebo / MoveIt / driver / viewer>
-  units: meters, kilograms, radians | frames: +X forward, +Y left, +Z up (REP-103)
-  root: <root_link> | source of dimensions: <CAD file / drawing / measured / assumption>
-  meshes: <dir>, exported per-link in link frame, source units <mm|m>, scale <...>
-  inertials: <CAD mass properties / primitive formulas / assumed density X kg/m^3 / omitted>
-  assumptions: <every guessed value, sign convention, or approximation, one per line>
--->
-```
-
-Update the ledger in the same edit that changes the modeled facts. A stale ledger is worse than no ledger. See `references/design-ledger.md` for the full ledger checklist.
 
 ## Naming
 
@@ -38,50 +32,55 @@ Update the ledger in the same edit that changes the modeled facts. A stale ledge
 - Joints: `<child-function>_joint` or `<parent>_to_<child>` (`shoulder_pan_joint`, `wrist_roll`). One convention per file.
 - Names are identifiers consumed by SRDF, controllers, and TF; never rename casually. If a rename is required, update every consumer (SRDF groups, group states, disabled collisions) in the same task.
 
-## Element Contract
+## Links
 
-For every `<link>` that represents physical geometry, author the subelements in this order: `inertial`, `visual`, `collision`. Frame-only links are empty (`<link name="tool0" />`) and must be listed as frame-only in the ledger.
+Use these tags for each link that represents physical robot geometry, in this order:
+
+- `inertial`: mass, center of mass, and inertia tensor used by simulators.
+- `visual`: display geometry and optional material.
+- `collision`: contact geometry used by physics and planning.
+
+Model them separately when the target consumer needs them. Frame-only links, such as `base_footprint`, optical frames, or tool-center marker frames, are empty (`<link name="tool0" />`), represent no physical mass or geometry, and must be listed as frame-only in the ledger.
+
+For movable physical links, avoid zero or missing mass unless the target simulator explicitly supports that modeling choice. If exact mass properties are unavailable, use a documented approximation and make the approximation easy to replace later. The inertial origin is the center of mass in the link frame — not automatically the visual mesh origin, collision origin, or link origin. All values are computed or copied from source data, never freehanded; see [inertials.md](inertials.md) for formulas, the mesh-script recipe, and sanity gates.
+
+### Collision Geometry
+
+Add collision geometry under each `<link>` that should participate in physics, contact, or collision-aware planning. Do not encode collision behavior on joints.
+
+Use one or more `<collision>` blocks per link. The `<origin>` is expressed in the link frame, just like `<visual>`, and mesh scales must match the units of the exported mesh.
+
+Prefer simplified collision geometry over detailed visual meshes, from simplest to most specific:
+
+- primitive `<box>`, `<cylinder>`, or `<sphere>` geometry when it approximates the part well;
+- a coarse, closed collision mesh exported from CAD;
+- the visual mesh as a temporary fallback for loading and smoke tests.
+
+## Joints
 
 For every `<joint>`:
 
-- Attributes: `name`, `type` (`fixed`, `revolute`, `continuous`, or `prismatic`; use `floating`/`planar` only when the consumer and validation path support them — the bundled validator rejects them).
+- Attributes: `name`, `type` (`fixed`, `revolute`, `continuous`, or `prismatic`; use `floating`/`planar` only when the consumer and validation path support them — the bundled validator rejects them). Supported joint types may vary by consumer.
 - Children in order: `<parent>`, `<child>`, `<origin>`, `<axis>` (movable joints), `<limit>` (revolute/prismatic), then optional `<dynamics>`, `<mimic>`, `<calibration>`, `<safety_controller>`.
 - `<origin>` is the parent-link-frame transform to the joint frame at zero position; the child link frame coincides with the joint frame.
 - `<axis>` is expressed in the joint (child) frame and should be a signed unit vector along a principal axis whenever the mechanism allows (`1 0 0`, `0 -1 0`, ...). A non-principal axis is a red flag: re-check the frame definitions before accepting one.
 - `<limit>` carries radians (revolute) or meters (prismatic) plus `effort` and `velocity` when the consumer needs them. `continuous` joints take no lower/upper limits.
+- Fixed joints are used for frame relationships and rigid assemblies.
+
+For every joint, confirm:
+
+- parent and child direction are correct;
+- joint origin is expressed in the parent link frame and places the child frame at zero position;
+- non-fixed joint axis is expressed in the joint frame, preferably a signed unit vector along a principal axis;
+- positive motion is stated in words in the ledger ("positive shoulder_pitch raises the arm") — the axis sign is part of the model, not a cosmetic detail;
+- revolute limits are radians, prismatic limits are meters;
+- continuous joints are not given artificial finite lower/upper limits.
+
+After authoring, the axis-sign check is non-negotiable: sweep the joint in the viewer and compare the motion with the ledger statement. Structural validation cannot catch a flipped sign.
 
 Never encode a kinematic fix by offsetting only the visual mesh; correct the joint/link frames instead, unless the mesh is genuinely offset from the link frame.
 
-### CAD Viewer nonlinear four-bar coupling
-
-Standard URDF `<mimic>` is affine and cannot close a nonlinear four-bar linkage. When exact CAD Viewer motion is required, keep the URDF link graph as a tree, expose the physical output joint as the only independent coordinate, and place this namespaced extension on the derived input joint:
-
-```xml
-<robot name="example" xmlns:tcad="https://text-to-cad.dev/urdf">
-  <!-- links and the independent output joint omitted -->
-  <joint name="input_crank_joint" type="revolute">
-    <parent link="ground_link" />
-    <child link="input_crank_link" />
-    <origin xyz="0 0 0" rpy="0 0 0" />
-    <axis xyz="0 0 1" />
-    <limit lower="-0.6" upper="0.7" />
-    <tcad:four_bar
-      driver="output_joint"
-      input_length="0.026"
-      ground_length="0.220"
-      output_length="0.026"
-      coupler_length="0.220"
-      input_zero="-1.570796326795"
-      output_zero="1.806068683023" />
-  </joint>
-</robot>
-```
-
-Lengths use metres. `input_zero` and `output_zero` are the two moving-link angles, in radians from the ground link direction, when both URDF joint values are zero. The input and driver joints must share one ground link, use coplanar pivots separated by `ground_length`, and use parallel, same-direction axes. The server selects that assembly branch and derives the input angle from `driver` over the driver's whole operating range — its `<limit>`, or one full turn for a continuous driver — when it resolves the description for the CAD Viewer or `cad urdf snapshot`; the Viewer shows no slider or handle for the dependent joint (its driver's moves it) and a snapshot's `--pose` refuses it by name. The complete driver range must remain reachable on that branch, and the dependent joint limits must contain the entire derived input range (a continuous dependent joint has none). A joint cannot declare both `<mimic>` and `<tcad:four_bar>`.
-
-`urdf check` checks the element itself: one per joint, every length positive, both zero angles, a revolute or continuous joint, and a `driver` that is a revolute or continuous joint on the same ground link, with no mimic cycle through it. It treats the derived joint as a mimic joint, so an SRDF group state cannot set it. The linkage's geometry (coplanar pivots `ground_length` apart, parallel axes, closure at the zero pose on the branch `input_zero` names and over the driver's range, the derived range within the joint's limits) is checked when the server resolves the robot: the Viewer and `cad urdf snapshot` refuse it then, naming the file, the joint, the driver angle and what to change.
-
-This is a Text-to-CAD vendor extension, not standard URDF behavior. Other consumers ignore the namespaced element; a robot state publisher or hardware driver must publish the same derived joint value to preserve loop closure outside the Viewer.
+A nonlinear four-bar linkage, which standard `<mimic>` cannot close, takes the vendor extension in [urdf-four-bar.md](urdf-four-bar.md).
 
 ## Golden Skeleton
 
