@@ -17,7 +17,10 @@ and the helpers a model calls with build123d objects:
   ``topology_errors``, ``boundary_edges``, ``self_intersections``, ``mass_properties`` and their
   result types;
 * flat patterns, exact 2D geometry from a solid's planar faces: ``flat_pattern``, ``planar_faces``,
-  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``.
+  ``flatten_face``, ``flatten_faces``, ``union_faces``, ``offset_profile``;
+* manufacturing checks of exact geometry, each a ``CheckResult`` with its findings at refs (``plate/face 7``):
+  ``cnc``, ``sheet_metal``, ``molding`` and ``printing`` -- what ``cad.step.check`` and ``cad.xbf.check`` run
+  on a file's or a document's B-rep (``_dfm_check``; the measurements ``_dfm_brep`` and ``_dfm_<process>``).
 
 Every name loads on first use: ``import cad.build123d`` imports no CAD kernel.
 """
@@ -42,6 +45,7 @@ _NAMES = {
         "is_sound", "topology_errors", "boundary_edges", "self_intersections", "mass_properties")},
     **{name: "cad.build123d._flatten" for name in (
         "flat_pattern", "planar_faces", "flatten_face", "flatten_faces", "union_faces", "offset_profile")},
+    **{name: "cad.build123d._dfm_check" for name in ("cnc", "sheet_metal", "molding", "printing")},
 }
 
 __all__ = sorted(_NAMES)
@@ -68,5 +72,6 @@ if TYPE_CHECKING:
     from cad.build123d._geometry import (ClosestPoints, GeometryError, GeometryIssue, MassProperties,
                                          boundary_edges, closest_points, is_sound, mass_properties, overlap_volume,
                                          self_intersections, topology_errors)
+    from cad.build123d._dfm_check import cnc, molding, printing, sheet_metal
     from cad.engine.mechanism import gear_pair, posed, rack_and_pinion_pair, screw_pair
     from cad.engine.model import animation, configuration_sequence, mechanism_state, memo, paint

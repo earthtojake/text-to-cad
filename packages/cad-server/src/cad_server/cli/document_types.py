@@ -128,7 +128,7 @@ def _manufacturing_check(document_type: str) -> Callable[[list[str], str], int]:
 
         argv = pull_value(argv)
         target = (f"cad.{document_type}", "check")
-        integration = "trimesh"
+        integration = DOCUMENT_TYPES[document_type].operation("check").integration
         if integration_env.carries(integration):
             return _checked(document_type, target, argv, prog)
         return _checked_elsewhere(document_type, target, integration, argv, prog)
@@ -290,7 +290,7 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
         elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
-        elif _name == "check" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
+        elif _name == "check" and getattr(_entry.operation(_name), "family", None) == "manufacturing":
             OPERATIONS[(_entry.id, _name)] = _manufacturing_check(_entry.id)
         elif _name == "check":
             OPERATIONS[(_entry.id, _name)] = _urdf_check if _entry.id == "urdf" else _generated_check(_entry.id)

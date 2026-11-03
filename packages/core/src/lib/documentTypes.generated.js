@@ -110,7 +110,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "mime": "application/dxf",
       "view": "drawing",
       "operations": [
-        "snapshot"
+        "snapshot",
+        "check"
       ],
       "decorator": true
     },

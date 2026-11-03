@@ -509,7 +509,8 @@ class CheckTest(unittest.TestCase):
         self.assertTrue(result.ok)
         report = result.measurements
         self.assertFalse(report["partial"])
-        self.assertEqual(sorted(report), ["draft", "mesh", "partial", "process", "projection", "scale", "undercuts"])
+        self.assertEqual(sorted(report), ["draft", "mesh", "partial", "process", "projection", "rules", "scale", "source",
+                                         "undercuts"])
         self.assertNotIn("wall_thickness", report, "thickness is 3D printing's measurement")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
         # A plain box's four sides have no draft: said, and the check still passes (facts, not verdicts).
