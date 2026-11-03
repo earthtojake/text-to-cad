@@ -1,5 +1,5 @@
 {
-  "about": "The board-reference language (.kicad_pcb), asserted by packages/core/src/lib/boardRefs.js and cad/engine/formats/kicad/refs.py alike. A part is its reference designator (a letter or '_', then letters, digits, '_', '+' or '-': what KiCad boards and board.part(ref=...) use), a pad follows a dot, a net is net:<name> (JSON-quoted when the name holds whitespace, a quote, a comma, '@' or '#'), and a point is @x<x>y<y> in KiCad's millimetres (y down, from the page origin): comma-free, because a token joins several selectors with commas, as STEP tokens do (split outside quotes); whitespace inside a quoted name is the name's, anywhere else it ends the token. Canonical points drop trailing zeros and a negative zero.",
+  "about": "The board-reference language (.kicad_pcb), asserted by packages/core/src/lib/boardRefs.js and cad/engine/formats/kicad/refs.py alike. A part is its reference designator (a letter or '_', then letters, digits, '_', '+' or '-': what KiCad boards and board.part(ref=...) use), a pad follows a dot, a net is net:<name> (JSON-quoted when the name holds whitespace, a quote, a comma, '@' or '#'), and a point is @x<x>y<y> in KiCad's millimetres (y down, from the page origin): comma-free, because a token joins several selectors with commas, as STEP tokens do (split outside quotes); whitespace inside a quoted name is the name's, anywhere else it ends the token. An item (a track, a via, a zone, a text, a dimension, a graphic shape) is <kind>:<uuid>, the uuid KiCad saved it with, lower case in the canonical form; one of the copies of a footprint that share their items' uuids is <kind>:<footprint uuid>/<uuid>. A point may name a layer before its @ (F.Cu@x1y2: KiCad's own layer names); an area is two corners joined by .. (@x1y2..x3y4), its canonical form low corner first. Canonical points drop trailing zeros and a negative zero.",
   "selectorCases": [
     {
       "selector": "#U3",
@@ -172,6 +172,167 @@
       "kind": "part",
       "ref": "_U1",
       "canonical": "#_U1"
+    },
+    {
+      "selector": "#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "kind": "track",
+      "id": "5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "why": "an item by the uuid KiCad saved it with"
+    },
+    {
+      "selector": "#via:5F3A1B2C-9D4E-4F60-8A7B-1C2D3E4F5A6B",
+      "kind": "via",
+      "id": "5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#via:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "why": "a uuid is lower case in the canonical form"
+    },
+    {
+      "selector": "zone:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "kind": "zone",
+      "id": "5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#zone:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+    },
+    {
+      "selector": "#text:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "kind": "text",
+      "id": "5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#text:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+    },
+    {
+      "selector": "#text:0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "kind": "text",
+      "id": "0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#text:0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "why": "one of the copies of a footprint whose items share uuids, under its footprint's uuid"
+    },
+    {
+      "selector": "#dimension:5C1F2A3B",
+      "kind": "dimension",
+      "id": "5c1f2a3b",
+      "canonical": "#dimension:5c1f2a3b",
+      "why": "an older board's tstamp is its uuid"
+    },
+    {
+      "selector": "#shape:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "kind": "shape",
+      "id": "5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "canonical": "#shape:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+    },
+    {
+      "selector": "#F.Cu@x40.1y21.6",
+      "kind": "point",
+      "layer": "F.Cu",
+      "at": [
+        40.1,
+        21.6
+      ],
+      "canonical": "#F.Cu@x40.1y21.6",
+      "why": "a point on one layer"
+    },
+    {
+      "selector": "#In2.Cu@x-3y0.5",
+      "kind": "point",
+      "layer": "In2.Cu",
+      "at": [
+        -3,
+        0.5
+      ],
+      "canonical": "#In2.Cu@x-3y0.5"
+    },
+    {
+      "selector": "#Edge.Cuts@x1y2",
+      "kind": "point",
+      "layer": "Edge.Cuts",
+      "at": [
+        1,
+        2
+      ],
+      "canonical": "#Edge.Cuts@x1y2"
+    },
+    {
+      "selector": "#Margin@x1y2",
+      "kind": "point",
+      "layer": "Margin",
+      "at": [
+        1,
+        2
+      ],
+      "canonical": "#Margin@x1y2",
+      "why": "a layer name without a dot is still a layer before an @"
+    },
+    {
+      "selector": "#User.12@x1y2",
+      "kind": "point",
+      "layer": "User.12",
+      "at": [
+        1,
+        2
+      ],
+      "canonical": "#User.12@x1y2"
+    },
+    {
+      "selector": "#@x10y5..x20y15",
+      "kind": "area",
+      "at": [
+        10,
+        5
+      ],
+      "to": [
+        20,
+        15
+      ],
+      "canonical": "#@x10y5..x20y15",
+      "why": "an area: the box between two corners"
+    },
+    {
+      "selector": "#@x20y15..x10y5",
+      "kind": "area",
+      "at": [
+        10,
+        5
+      ],
+      "to": [
+        20,
+        15
+      ],
+      "canonical": "#@x10y5..x20y15",
+      "why": "a box is the same box from either corner: low corner first"
+    },
+    {
+      "selector": "#@x20y5..x10y15",
+      "kind": "area",
+      "at": [
+        10,
+        5
+      ],
+      "to": [
+        20,
+        15
+      ],
+      "canonical": "#@x10y5..x20y15"
+    },
+    {
+      "selector": "#B.SilkS@x1.23456y-2..x0y0.5",
+      "kind": "area",
+      "layer": "B.SilkS",
+      "at": [
+        0,
+        -2
+      ],
+      "to": [
+        1.23456,
+        0.5
+      ],
+      "canonical": "#B.SilkS@x0y-2..x1.235y0.5"
+    },
+    {
+      "selector": "#F.Cu",
+      "kind": "pad",
+      "ref": "F",
+      "pad": "Cu",
+      "canonical": "#F.Cu",
+      "why": "a layer alone is no point: with no @ it reads as a pad, as it always has"
     }
   ],
   "invalidSelectors": [
@@ -194,7 +355,25 @@
     "#U3@x1y2",
     "#net:a,b",
     "#-U1",
-    "#+R1"
+    "#+R1",
+    "#track:",
+    "#track:xyz",
+    "#track:12 34",
+    "#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+    "#Track:abc",
+    "#wire:abc",
+    "#F.Cu@",
+    "#F.Cu@x1",
+    "#Q.Cu@x1y2",
+    "#In123.Cu@x1y2",
+    "#F.Cu @x1y2",
+    "#f.cu@x1y2",
+    "#@x1y2..",
+    "#@x1y2..x3",
+    "#@x1y2...x3y4",
+    "#@x1y2..x3y4..x5y6",
+    "#net:VIN@x1y2..x3y4",
+    "#U3@x1y2..x3y4"
   ],
   "formatCases": [
     {
@@ -252,6 +431,50 @@
       "kind": "net",
       "net": "a,b",
       "selector": "#net:\"a,b\""
+    },
+    {
+      "kind": "track",
+      "id": "5F3A1B2C-9D4E-4F60-8A7B-1C2D3E4F5A6B",
+      "selector": "#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+    },
+    {
+      "kind": "text",
+      "id": "0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "selector": "#text:0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+    },
+    {
+      "kind": "point",
+      "at": [
+        12.5,
+        30
+      ],
+      "layer": "F.Cu",
+      "selector": "#F.Cu@x12.5y30"
+    },
+    {
+      "kind": "area",
+      "at": [
+        20,
+        15
+      ],
+      "to": [
+        10,
+        5
+      ],
+      "selector": "#@x10y5..x20y15"
+    },
+    {
+      "kind": "area",
+      "at": [
+        0.12345,
+        7.1
+      ],
+      "to": [
+        -1,
+        2.0004
+      ],
+      "layer": "Dwgs.User",
+      "selector": "#Dwgs.User@x-1y2..x0.123y7.1"
     }
   ],
   "tokenCases": [
@@ -295,6 +518,16 @@
         "#U3"
       ],
       "why": "a hierarchical sheet's name puts a space in its nets: inside quotes it is the name's"
+    },
+    {
+      "token": "board.kicad_pcb#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b,F.Cu@x1y2..x3y4,text:0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+      "path": "board.kicad_pcb",
+      "selectors": [
+        "#track:5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b",
+        "#F.Cu@x1y2..x3y4",
+        "#text:0e9d8c7b-6a59-4847-a635-241302f1e0d9/5f3a1b2c-9d4e-4f60-8a7b-1c2d3e4f5a6b"
+      ],
+      "why": "items, an area and a footprint's text in one token"
     }
   ],
   "invalidTokens": [

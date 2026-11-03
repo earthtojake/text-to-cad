@@ -187,10 +187,13 @@ function scanPick(index, at, { mode, view, tolerance }) {
     });
   }
   if (mode === "all" || mode === "parts") [...index.parts.values()].forEach((part, order) => {
-    if (part.outline.length > 2 && pointInPolygon(at, part.outline)) found.push({ rank: mode === "parts" ? 0 : 3, side: facing(part.side), size: part.area, distance: 0, order, selector: `#${part.ref}` });
+    if (part.outline.length > 2 && pointInPolygon(at, part.outline)) found.push({ rank: mode === "parts" ? 0 : 7, side: facing(part.side), size: part.area, distance: 0, order, selector: `#${part.ref}` });
   });
-  if (mode === "nets") index.zones.forEach((zone, order) => {
-    if (pointInPolygon(at, zone.outline)) found.push({ rank: 4, side: facing(layerSide(zone.layer)), size: zone.area, distance: 0, order, net: zone.net });
+  // A pour by its outline under All; anywhere inside it for its net.
+  if (mode === "nets" || mode === "all") index.zones.forEach((zone, order) => {
+    const inside = mode === "nets" && pointInPolygon(at, zone.outline);
+    const edge = Math.min(...zone.outline.map((p, i) => nearestOnSegment(at, p, zone.outline[(i + 1) % zone.outline.length]).distance));
+    if (inside || edge <= tolerance) found.push({ rank: 6, side: facing(layerSide(zone.layer)), size: zone.area, distance: inside ? 0 : edge, order, net: zone.net });
   });
   found.sort((a, b) => a.side - b.side || a.rank - b.rank || a.distance - b.distance || a.size - b.size || a.order - b.order);
   for (const hit of found) {
@@ -256,4 +259,96 @@ test("a pick takes what its kinds tick: no pads takes the copper or the part und
   assert.equal(index.pick([14.175, 20], { kinds: { pads: false, copper: true, parts: true } }).selector, "#net:VIN@x9.18y-5");
   assert.equal(index.pick([15.825, 20], { kinds: { pads: false, copper: true, parts: true } }).selector, "#R1");
   assert.equal(index.pick([15.825, 20], { kinds: { pads: false, copper: false, parts: false } }), null);
+});
+
+// The board above as KiCad saves it today: every item by its uuid, the texts and the dimensions in
+// the index, the graphics in the plot's layers (what the viewer picks them from).
+const T = (n) => `7a1c0000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const SAVED = {
+  ...BOARD,
+  tracks: [{ ...BOARD.tracks[0], id: T(1) }],
+  vias: [{ ...BOARD.vias[0], id: T(2), layers: ["F.Cu", "B.Cu"], type: "through" }],
+  zones: [{ ...BOARD.zones[0], id: T(3), name: "GND pour", filled: 1200 }, { ...BOARD.zones[0], layer: "F.Cu", id: T(3), name: "GND pour" }],
+  texts: [
+    { id: T(4), text: "R1", layer: "F.SilkS", at: [15, 17.5], angle: 0, size: 1, part: "R1", polygon: rect(15, 17.5, 1.6, 1.2) },
+    { id: T(5), text: "blinky", layer: "F.SilkS", at: [30, 25], angle: 0, size: 1.5, polygon: rect(30, 25, 6, 1.8) },
+  ],
+  dimensions: [{ id: T(6), type: "aligned", layer: "Dwgs.User", value: "40 mm", lines: [[[0, 0], [0, -3]], [[0, -3], [40, -3]], [[40, -3], [40, 0]]], polygon: rect(20, -4, 6, 1.2) }],
+};
+const SHEET = { x: 0, y: 0, layers: [
+  { id: "F.SilkS", kind: "silk", side: "front", items: [
+    { t: "path", pts: [[13.7, 19.5], [16.3, 19.5]], w: 0.12, ref: "#R1", id: T(7) },
+    { t: "path", pts: [[25, 5], [35, 5]], w: 0.2, id: T(8) },
+  ] },
+  { id: "Edge.Cuts", kind: "outline", side: "both", items: [{ t: "path", pts: [[0, 0], [40, 0], [40, 30], [0, 30]], w: 0.1, closed: true, id: T(9), shape: "rect" }] },
+] };
+
+test("an item is picked by the uuid KiCad saved it with: a track, a via, a text, a graphic, a pour by its outline", () => {
+  const index = createBoardIndex(SAVED, SHEET);
+  assert.equal(index.pick([14.3, 16]).selector, `#track:${T(1)}`);
+  assert.equal(index.pick([20.1, 15]).selector, `#via:${T(2)}`);
+  assert.equal(index.pick([30, 25]).selector, `#text:${T(5)}`);
+  // A part's own text before the part; its own graphics are the part's, unless Graphics is the filter.
+  assert.equal(index.pick([15, 17.5], { tolerance: 0.1 }).selector, `#text:${T(4)}`);
+  assert.equal(index.pick([15, 19.5], { tolerance: 0.1 }).selector, "#R1");
+  assert.equal(index.pick([15, 19.5], { mode: "shapes", tolerance: 0.1 }).selector, `#shape:${T(7)}`);
+  assert.equal(index.pick([30, 5.05], { tolerance: 0.1 }).selector, `#shape:${T(8)}`);
+  // Under All, a pour by its outline alone: bare board inside it is nothing; Zones takes it anywhere inside.
+  assert.equal(index.pick([2, 28]), null);
+  assert.equal(index.pick([0.05, 15], { kinds: { zones: true } , tolerance: 0.1 }).selector, `#zone:${T(3)}`);
+  assert.equal(index.pick([2, 28], { mode: "zones" }).selector, `#zone:${T(3)}`);
+  assert.equal(index.pick([20, -3], { mode: "dimensions", tolerance: 0.1 }).selector, `#dimension:${T(6)}`);
+  // A layer the view does not draw is not picked from.
+  assert.equal(index.pick([30, 25], { layers: new Set(["F.Cu", "B.Cu", "vias"]) }), null);
+  assert.equal(index.pick([20.1, 15], { layers: new Set(["F.Cu"]) }), null, "no vias drawn");
+});
+
+test("an item resolves by its uuid; a point and an area keep their layer", () => {
+  const index = createBoardIndex(SAVED, SHEET);
+  const zone = index.resolve(`#zone:${T(3).toUpperCase()}`);
+  assert.deepEqual([zone.kind, zone.item.layers, zone.item.filled], ["zone", ["B.Cu", "F.Cu"], 1200]);
+  assert.equal(index.resolve(`#shape:${T(9)}`).item.shape, "rect");
+  assert.equal(index.resolve(`#text:${T(4)}`).item.part, "R1");
+  assert.equal(index.resolve(`#dimension:${T(6)}`).item.value, "40 mm");
+  assert.equal(index.resolve(`#track:${T(99)}`), null);
+  assert.deepEqual(index.resolve("#F.Cu@x1y2"), { kind: "point", at: [1, 2], layer: "F.Cu", page: [6, 27], selector: "#F.Cu@x1y2" });
+  const area = index.resolve("#B.Cu@x10y-10..x0y0");
+  assert.deepEqual([area.kind, area.layer, area.box], ["area", "B.Cu", [5, 15, 15, 25]]);
+  assert.deepEqual(index.extent(area), [5, 15, 15, 25]);
+  assert.equal(index.pointSelector([5, 25], "F.Cu"), "#F.Cu@x0y0");
+  assert.equal(index.pointSelector([5, 25], "vias"), "#@x0y0", "the plot's own layers are no layer a reference names");
+  assert.equal(index.areaSelector([25, 35], [5, 15], "F.SilkS"), "#F.SilkS@x0y-10..x20y10");
+});
+
+test("one of the copies of a footprint that share uuids is named under its footprint's uuid", () => {
+  const F = (n) => `f1000000-0000-4000-8000-00000000000${n}`;
+  const sheet = { layers: [{ id: "F.SilkS", kind: "silk", side: "front", items: [
+    { t: "path", pts: [[1, 1], [2, 1]], w: 0.1, id: `${F(1)}/${T(7)}` }, { t: "path", pts: [[5, 1], [6, 1]], w: 0.1, id: `${F(2)}/${T(7)}` }] }] };
+  const index = createBoardIndex({ ...BOARD, parts: [] }, sheet);
+  assert.equal(index.pick([5.5, 1], { mode: "shapes", tolerance: 0.1 }).selector, `#shape:${F(2)}/${T(7)}`);
+  assert.deepEqual(index.resolve(`#shape:${F(1)}/${T(7)}`).item.points[0], [1, 1]);
+  assert.equal(index.resolve(`#shape:${T(7)}`), null, "the uuid alone names two");
+});
+
+test("an area holds what lies wholly inside it, on its layer alone when it names one", () => {
+  const index = createBoardIndex(SAVED, SHEET);
+  const held = (box, layer) => Object.fromEntries(Object.entries(index.within(box, layer)).map(([key, list]) => [key, list.length]));
+  // Round R1 (13.5..16.5 x 19.3..20.7, its pads, its text above it and its silkscreen line).
+  assert.deepEqual(held([12, 16, 18, 21]), { parts: 1, pads: 2, tracks: 0, vias: 0, zones: 0, texts: 1, dimensions: 0, shapes: 1, holes: 0 });
+  assert.deepEqual(held([12, 16, 18, 21], "F.Cu"), { parts: 1, pads: 2, tracks: 0, vias: 0, zones: 0, texts: 0, dimensions: 0, shapes: 0, holes: 0 });
+  // U1 is on the bottom: the bottom's area holds it, and its pads.
+  assert.equal(index.within([27, 7, 33, 13], "B.Cu").parts[0].ref, "U1");
+  assert.equal(index.within([27, 7, 33, 13], "F.Cu").parts.length, 0);
+  assert.equal(index.within([-1, -1, 41, 31], "B.Cu").vias.length, 1, "a through via is on every copper layer");
+});
+
+test("the overlay lights a text's box, a graphic's ink, an area and the box being dragged", () => {
+  const index = createBoardIndex(SAVED, SHEET);
+  const frame = { transform: { scale: 10, offsetX: 0, offsetY: 0 }, width: 400, height: 300 };
+  const { ctx, marks, filled } = recordingContext();
+  drawBoardOverlay(ctx, index, { ...frame, selection: [index.resolve(`#text:${T(5)}`), index.resolve("#@x0y-10..x10y0")],
+    hover: index.resolve(`#shape:${T(8)}`), draft: [30, 1, 35, 4] });
+  // The draft first, then the text's box (27..33 x 24.1..25.9 mm at 10 px/mm) and the area (KiCad's 0..10 x -10..0 is page 5..15 x 15..25).
+  assert.deepEqual(filled("rgba(141, 197, 255, 0.16)").map((box) => box.map((v) => Math.round(v))), [[300, 10, 350, 40], [270, 241, 330, 259], [50, 150, 150, 250]]);
+  assert.ok(marks.some((mark) => mark.op === "stroke" && mark.style === "rgba(141, 197, 255, 0.55)"), "the hovered graphic's stroke");
 });

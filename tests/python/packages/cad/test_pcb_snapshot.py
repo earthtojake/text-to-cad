@@ -19,7 +19,7 @@ import tempfile
 from pathlib import Path
 
 from tests.python.support.engine_daemon import isolate
-from tests.python.support.kicad_board import write_board
+from tests.python.support.kicad_board import UUIDS, write_board
 from tests.python.support.paths import add_repo_path
 from PIL import Image
 
@@ -66,6 +66,9 @@ class BoardJobReplayTest(unittest.TestCase):
             job("assembly", {"mode": "assembly"}),
             job("placement", {"mode": "placement"}),
             job("outline", {"layers": ["Edge.Cuts"]}),
+            # What a prompt named, lit as the view lit it: the VBUS track, R1, an area round the text, a point.
+            {**job("lit", {"mode": "board", "side": "top", "poured": True}),
+             "references": [f"#track:{UUIDS['vbus track']}", "#R1", "#F.SilkS@x14y3..x26y7", "#@x5y25", f"#via:{UUIDS['pour']}"]},
         ]}), encoding="utf-8")
 
         from cad.engine.api import snapshot
@@ -74,11 +77,11 @@ class BoardJobReplayTest(unittest.TestCase):
         cls.images = {p.stem: Image.open(p).convert("RGB") for p in workspace.glob("*.png")}
 
     def test_each_view_is_written_at_its_size(self) -> None:
-        self.assertEqual(5, len(self.result))
+        self.assertEqual(6, len(self.result))
         # Every key the command line prints a snapshot by, as every other kind's report has it.
         for drawn in self.result:
             self.assertIs(False, drawn.report["preview"])
-        self.assertEqual(["assembly", "below", "outline", "placement", "top"], sorted(self.images))
+        self.assertEqual(["assembly", "below", "lit", "outline", "placement", "top"], sorted(self.images))
         for name, image in self.images.items():
             self.assertEqual(SIZE, (image.width, image.height), name)
 
@@ -100,6 +103,18 @@ class BoardJobReplayTest(unittest.TestCase):
         pad = on_screen(35.825, 15.3)  # off the airwire through the pin centre
         self.assertTrue(near(self.images["placement"].getpixel(pad), copper, 50))
         self.assertFalse(near(self.images["outline"].getpixel(pad), copper, 50))
+
+    def test_what_the_prompt_named_is_lit_and_what_names_nothing_said(self) -> None:
+        lit, top = self.images["lit"], self.images["top"]
+        blue = (141, 197, 255)
+        for x, y in ((20, 15), (35.825, 15)):  # the VBUS track, R1's pad 2
+            point = on_screen(x, y)
+            self.assertTrue(near(lit.getpixel(point), blue, 40), f"lit at ({x}, {y}): {lit.getpixel(point)}")
+            self.assertFalse(near(top.getpixel(point), blue, 40), f"and only where named: {top.getpixel(point)}")
+        # The area's box, an edge of it: (14, 5) on its left side.
+        self.assertTrue(near(lit.getpixel(on_screen(14, 5)), blue, 60), lit.getpixel(on_screen(14, 5)))
+        [report] = [drawn.report for drawn in self.result if Path(drawn.path).stem == "lit"]
+        self.assertTrue(any("is not lit: blinky.kicad_pcb has no via" in warning for warning in report["warnings"]), report["warnings"])
 
     def test_the_window_is_the_camera_s(self) -> None:
         top = self.images["top"]

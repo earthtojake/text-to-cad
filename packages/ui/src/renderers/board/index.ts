@@ -20,7 +20,7 @@ export type BoardLiveController = LiveViewController<BoardLiveState>;
 export interface BoardRendererOptions {
   client: WorkspaceClientOption;
   preferences?: CadPreferenceSource;
-  /** Host requests. One to select a reference selects it on a board read with its index (`#U3`, `#U3.9`, `#net:VIN`). */
+  /** Host requests. One to select a reference selects it on a board read with its index (`#U3`, `#U3.9`, `#net:VIN`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`). */
   commands?: ViewerCommandSource;
   /** The mounted view's live command surface. `select` and `clearSelection` are the board's; camera and Display commands are declined, loudly. */
   live?: LiveViewBinding<any>;
@@ -34,8 +34,9 @@ export const BOARD_FILE = /\.kicad_pcb$/i;
 
 /**
  * A `.kicad_pcb` is a flat view, as a `.dxf` is: the backend reads the board from its file, layer
- * by layer (`GET /api/v1/documents/kicad_pcb/<id>/plot`), and the client paints the layers on a canvas, with Select (its pads,
- * copper and parts), Annotate and Measure, its Board and Layers in the file sidebar, and its Display.
+ * by layer (`GET /api/v1/documents/kicad_pcb/<id>/plot`), and the client paints the layers on a canvas, with Select (its parts,
+ * pads, nets, tracks, vias, zones, texts, dimensions and graphics, or a point or an area), Annotate and Measure, its Board and
+ * Layers in the file sidebar, and its Display.
  * Registering loads no three.js, no viewport and no backend connection.
  *
  * It still opens a render session it never draws from, as a DXF does: that session is what

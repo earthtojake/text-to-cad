@@ -65,7 +65,7 @@ def inspect_board(path: Path | str) -> dict:
         raise ValueError(f"{board.name} is not a readable KiCad board: it is not UTF-8 text") from None
     try:
         tree = canonical_copper(sexpr.parse(text))
-        index = read_index(tree, project=board.with_suffix(".kicad_pro"))
+        index = read_index(tree, project=board.with_suffix(".kicad_pro"), graphics=False)  # what it says is parts and nets
     except (sexpr.SexprError, ValueError) as error:
         raise ValueError(f"{board.name} is {error}") from None
     view = BoardView(board.resolve(), index)

@@ -79,9 +79,12 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {(() => boolean) | null} [options.copySelection]  The copy key's, while no drawing tool is up.
  * @param {() => unknown} options.fit  Fits the picture to the pane: the F key's.
  * @param {string} options.captureFailed  The card's title when a capture or copy fails.
+ * @param {((references: readonly object[], file: string) => string[]) | null} [options.packetReferences]  What the
+ *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
+ *   lights as the view did), where the view's packets carry them; null for none.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -140,13 +143,16 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   const viewNow = useCallback(() => currentViewRef.current(), []);
   const quickEditPrompt = useMemo(() => ({
     views: () => (host.promptFiles && promptFile() ? promptViews(viewNow(), annotationRef.current.views, annotationRef.current.items) : []),
-    files: views => {
+    files: (views, picked = []) => {
       const input = promptFile();
       if (!host.promptFiles || !input || !views.length) return null;
-      return host.promptFiles.create({ name: input.split("/").pop(), input, views, annotation: annotationNow() });
+      // What the prompt names in this file, in the order the box holds it, as the renderer says it.
+      const named = packetReferences ? packetReferences(picked, input) : [];
+      return host.promptFiles.create({ name: input.split("/").pop(), input, views, annotation: annotationNow(),
+        ...(named.length ? { references: named } : {}) });
     },
     read: path => host.promptFiles.read(path),
-  }), [host.promptFiles, promptFile, viewNow, annotationNow]);
+  }), [host.promptFiles, promptFile, viewNow, annotationNow, packetReferences]);
   const forgetAnnotation = annotation.forget;
   const quickEditAnnotation = useMemo(() => (annotating || annotation.hasAnnotation
     ? { present: annotation.hasAnnotation, clear: forgetAnnotation } : null), [annotating, annotation.hasAnnotation, forgetAnnotation]);

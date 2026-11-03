@@ -198,9 +198,16 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
   fireEvent.keyDown(canvas, { key: 'c', metaKey: true });
   await waitFor(() => expect(copied.at(-1)).toBe(`${FILE}#R1.1,R1.2`));
-  // A press on the track takes its net's copper there, in KiCad's frame; bare board lets go.
+  // A press on the track takes the track, by the uuid KiCad saved it with; bare board lets go.
   tap(pane, [30, 15]);
-  expect(selected(controller)).toEqual(['#net:VBUS@x30y15']);
+  expect(selected(controller)).toEqual(['#track:7a1c0000-0000-4000-8000-000000000001']);
+  await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
+    .toEqual(['VBUS · track', 'Remove VBUS · track']));
+  // The text over the board, and the via in the pour; under All, bare board inside the pour is nothing.
+  tap(pane, [20, 5]);
+  expect(selected(controller)).toEqual(['#text:7a1c0000-0000-4000-8000-000000000005']);
+  tap(pane, [18, 27]);
+  expect(selected(controller)).toEqual(['#via:7a1c0000-0000-4000-8000-000000000003']);
   tap(pane, [36, 26]);
   expect(selected(controller)).toEqual([]);
   dispose();
@@ -214,7 +221,8 @@ it("Select's filter is one choice of what a press takes: Parts takes the part, o
   const controller = await controllerOf(view);
   await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
   const menu = await openMenu('Selection filter');
-  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['All', 'Parts', 'Pads', 'Nets']);
+  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent))
+    .toEqual(['All', 'Parts', 'Pads', 'Nets', 'Tracks', 'Vias', 'Zones', 'Text', 'Dimensions', 'Graphics', 'Point or area']);
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Parts' }));
   // Choosing one puts the menu away.
   await waitFor(() => expect(menuShown('Selection filter')).toBeNull());
@@ -226,6 +234,61 @@ it("Select's filter is one choice of what a press takes: Parts takes the part, o
   expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' })).toBeTruthy();
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#net:VBUS']);
+  // Zones takes the pour anywhere inside it; Graphics a part's own silkscreen line, which All leaves to its part.
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' }));
+  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Zones' }));
+  tap(pane, [10, 20]);
+  expect(selected(controller)).toEqual(['#zone:7a1c0000-0000-4000-8000-000000000004']);
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Zones' }));
+  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Graphics' }));
+  tap(pane, [5.6, 16.27]);  // J1's silkscreen line between its pins, from (3.62, 16.27) to (6.38, 16.27)
+  expect(selected(controller)).toEqual([`#shape:${(BOARD as any).sheets[0].layers.find((layer: any) => layer.id === 'F.SilkS').items
+    .find((item: any) => item.ref === '#J1' && item.pts?.every((point: number[]) => point[1] === 16.27)).id}`]);
+  dispose();
+});
+
+it("Point or area names a place: a tap a point, a drag the box between its ends, on the working layer, as the prompt's packet carries them", async () => {
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
+  const view = await open('blinky.kicad_pcb', { promptFiles });
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
+  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Point or area' }));
+  expect(pane.querySelector('[data-board-surface] canvas')!.className).toContain('cursor-crosshair');
+  // On R1.1, the place and not the pad: on F.Cu, the copper seen from the top.
+  tap(pane, [34.2, 15.3]);
+  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3']);
+  // A drag is the box between its ends, Shift adding it; it does not pan.
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  const before = { ...frames.at(-1)! };
+  const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
+  const press = { pointerId: 1, pointerType: 'mouse', button: 0 };
+  fireEvent.pointerDown(canvas, { ...press, ...at([30, 10]) });
+  fireEvent.pointerMove(canvas, { ...press, ...at([34, 14]) });
+  fireEvent.pointerMove(canvas, { ...press, ...at([40, 20]) });
+  fireEvent.pointerUp(canvas, { ...press, ...at([40, 20]), shiftKey: true });
+  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  expect(frames.at(-1)).toEqual(before);
+  // The middle button pans, as KiCad's does, and picks nothing.
+  const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
+  fireEvent.pointerDown(canvas, { ...middle, ...at([20, 15]) });
+  fireEvent.pointerMove(canvas, { ...middle, ...at([25, 15]) });
+  fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
+  await waitFor(() => expect(frames.at(-1)!.offsetX).toBeGreaterThan(before.offsetX));
+  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
+  expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
+    .toEqual(['point 34.2, 15.3', 'Remove point 34.2, 15.3', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
+  // The note's packet names them, for a snapshot to light them where the person put them.
+  const note = within(quickEdit).getByRole('textbox', { name: 'Describe your changes' });
+  note.textContent = 'Keep this clear.';
+  fireEvent.input(note);
+  fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
+  await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
+  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x30y10..x40y20`));
   dispose();
 });
 

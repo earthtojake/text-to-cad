@@ -8,7 +8,8 @@ jobs reserve output names for an agent to render later (``cad <type> snapshot --
 every one of them; ``cad <type> snapshot`` reads the packet as ``--annotation``, and ``--camera
 authored`` draws a job's view). A packet with
 ink also names the parts hidden and isolated where the ink was last drawn, which
-``--annotation`` leaves out of its stills. No PNG is produced by this route.
+``--annotation`` leaves out of its stills; a board's names what its prompt named (``references``,
+board references), which ``--job`` lights. No PNG is produced by this route.
 Guarded GET /api/v1/local/prompt-files/<name> reads only JSON from this process's
 scratch directory. Files outlive the viewer until the system clears them.
 """
@@ -34,7 +35,7 @@ MAX_BODY_BYTES = 32 * 1024 * 1024
 MAX_VIEWS = 16
 # Compact UTF-8 JSON, not whitespace or a model-specific tokenizer.
 INLINE_SNAPSHOT_BYTES = 1024
-_REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline"})
+_REQUEST_KEYS = frozenset({"name", "input", "views", "annotation", "acceptInline", "references"})
 _VIEW_KEYS = frozenset({"label", "camera", "display", "kinematics", "jointValues", "animation", "selection", "width", "height"})
 _ANNOTATION_KEYS = frozenset({"units", "parts", "marks"})
 # What ``cad <type> snapshot`` draws (``cad.engine.snapshot``): the files a packet's input may be, every
@@ -88,6 +89,7 @@ class PromptFiles:
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ValueError(f"a prompt's files are requested as JSON: {error}") from None
         name, input_path, views, annotation = _checked(request)
+        references = request.get("references")
         directory = self.directory
         with self._lock:
             self._count += 1
@@ -117,6 +119,8 @@ class PromptFiles:
             job["outputs"] = [output]
             jobs.append(job)
         packet: dict[str, object] = {"input": input_path, "jobs": jobs}
+        if references:
+            packet["references"] = references
         if annotation is not None:
             packet["annotation"] = annotation
             # What ``cad <type> snapshot --annotation`` leaves out of the stills it draws the ink on.
@@ -214,7 +218,8 @@ def _accepted(packet: dict) -> None:
     the parts it hides and isolates, by the snapshot's own parsers (``cad.engine.snapshot``).
     Their refusal is this request's 400.
     """
-    from cad.engine.snapshot import (AUTHORED, SnapshotRefused, packet_visibility, parse_annotation, parse_camera, parse_display)
+    from cad.engine.snapshot import (AUTHORED, SnapshotRefused, packet_visibility, parse_annotation, parse_camera, parse_display,
+                                     parse_references)
 
     from cad.engine.ids import is_id
 
@@ -234,5 +239,7 @@ def _accepted(packet: dict) -> None:
                 parse_display(json.dumps(job["display"]), False, board=suffix == ".kicad_pcb")
         parse_annotation(packet.get("annotation"))
         packet_visibility(packet)
+        if packet.get("references") is not None:
+            packet["references"] = parse_references(packet["references"], Path(str(packet["input"])))
     except SnapshotRefused as error:
         raise ValueError(str(error)) from None

@@ -21,13 +21,34 @@ script frame is the same x and y up), 40 x 30 mm, its outline from (0, 0):
 - the LED net is unrouted: D1.2 to R1.2 is the one ratsnest line;
 - the text ``blinky`` on the top silkscreen at (20, 5), and each part's
   reference and value.
+
+Every item carries the uuid KiCad saves it with, which board references name items by: the
+board's own (the tracks, the via, the pour, the text, the outline) are the ``UUIDS``, a
+footprint and what it holds are numbered in the order they are written (``uuid_of``).
 """
 
 from __future__ import annotations
 
+import itertools
 from pathlib import Path
 
-__all__ = ["BOARD", "write_board"]
+__all__ = ["BOARD", "UUIDS", "write_board"]
+
+#: The board's own items' uuids, by what they are.
+UUIDS = {
+    "vbus track": "7a1c0000-0000-4000-8000-000000000001",
+    "gnd track": "7a1c0000-0000-4000-8000-000000000002",
+    "via": "7a1c0000-0000-4000-8000-000000000003",
+    "pour": "7a1c0000-0000-4000-8000-000000000004",
+    "blinky": "7a1c0000-0000-4000-8000-000000000005",
+    "outline": "7a1c0000-0000-4000-8000-000000000006",
+}
+_NUMBERS = itertools.count(1)
+
+
+def uuid_of() -> str:
+    """The next footprint item's uuid: the order the board is written in numbers them."""
+    return f"f00d0000-0000-4000-8000-{next(_NUMBERS):012x}"
 
 _FONT = "(effects (font (size 1 1) (thickness 0.15)))"
 _HIDDEN = '(effects (font (size 1.27 1.27)))'
@@ -35,25 +56,32 @@ _HIDDEN = '(effects (font (size 1.27 1.27)))'
 
 def _property(name: str, value: str, at: str, layer: str, hidden: bool = False) -> str:
     hide = "(hide yes) " if hidden else ""
-    return f'(property "{name}" "{value}" (at {at}) (layer "{layer}") {hide}{_HIDDEN if hidden else _FONT})'
+    return f'(property "{name}" "{value}" (at {at}) (layer "{layer}") {hide}(uuid "{uuid_of()}") {_HIDDEN if hidden else _FONT})'
 
 
 def _line(start: str, end: str, width: float, layer: str) -> str:
-    return f'(fp_line (start {start}) (end {end}) (stroke (width {width}) (type solid)) (layer "{layer}"))'
+    return f'(fp_line (start {start}) (end {end}) (stroke (width {width}) (type solid)) (layer "{layer}") (uuid "UUID"))'
 
 
 def _rect(start: str, end: str, width: float, layer: str) -> str:
-    return f'(fp_rect (start {start}) (end {end}) (stroke (width {width}) (type solid)) (fill no) (layer "{layer}"))'
+    return f'(fp_rect (start {start}) (end {end}) (stroke (width {width}) (type solid)) (fill no) (layer "{layer}") (uuid "UUID"))'
+
+
+def _numbered(body: str) -> str:
+    """A footprint's body, each of its items given the next uuid: the bodies are shared by footprints."""
+    while '"UUID"' in body:
+        body = body.replace('"UUID"', f'"{uuid_of()}"', 1)
+    return body
 
 
 def _footprint(name: str, at: str, rotate: int, ref: str, value: str, body: str) -> str:
     return (
-        f'(footprint "{name}" (layer "F.Cu") (transform (translate {at}) (rotate {rotate}) (scale 1 1))\n'
+        f'(footprint "{name}" (layer "F.Cu") (uuid "{uuid_of()}") (transform (translate {at}) (rotate {rotate}) (scale 1 1))\n'
         f'  {_property("Reference", ref, "0 -1.43 " + str(rotate % 360), "F.SilkS")}\n'
         f'  {_property("Value", value, "0 1.43 " + str(rotate % 360), "F.Fab")}\n'
         f'  {_property("Datasheet", "", "0 0 0", "F.Fab", hidden=True)}\n'
         f'  {_property("Description", "", "0 0 0", "F.Fab", hidden=True)}\n'
-        f"{body}\n)"
+        f"{_numbered(body)}\n)"
     )
 
 
@@ -62,7 +90,7 @@ _R0603 = (
     f'  {_line("-0.237258 0.5225", "0.237258 0.5225", 0.12, "F.SilkS")}\n'
     f'  {_rect("-1.48 -0.73", "1.48 0.73", 0.05, "F.CrtYd")}\n'
     f'  {_rect("-0.8 -0.4", "0.8 0.4", 0.1, "F.Fab")}\n'
-    f'  (fp_text user "${{REFERENCE}}" (at 0 0 ROT) (layer "F.Fab") (effects (font (size 0.4 0.4) (thickness 0.06))))\n'
+    f'  (fp_text user "${{REFERENCE}}" (at 0 0 ROT) (layer "F.Fab") (uuid "UUID") (effects (font (size 0.4 0.4) (thickness 0.06))))\n'
     '  (pad "1" smd roundrect (at -0.825 0 ROT) (size 0.8 0.95) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25) (net "NET1"))\n'
     '  (pad "2" smd roundrect (at 0.825 0 ROT) (size 0.8 0.95) (layers "F.Cu" "F.Mask" "F.Paste") (roundrect_rratio 0.25) (net "NET2"))'
 )
@@ -85,8 +113,8 @@ _HEADER = (
 )
 
 
-def _segment(start: str, end: str, width: float, net: str) -> str:
-    return f'(segment (start {start}) (end {end}) (width {width}) (layer "F.Cu") (net "{net}"))'
+def _segment(start: str, end: str, width: float, net: str, uuid: str) -> str:
+    return f'(segment (start {start}) (end {end}) (width {width}) (layer "F.Cu") (net "{net}") (uuid "{uuid}"))'
 
 
 BOARD = f"""(kicad_pcb
@@ -115,12 +143,12 @@ BOARD = f"""(kicad_pcb
   {_footprint("Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical", "5 15", 0, "J1", "Conn_01x02", _HEADER)}
   {_footprint("Resistor_SMD:R_0603_1608Metric", "35 15", 0, "R1", "10k", _R0603.replace("ROT", "0").replace("NET1", "VBUS").replace("NET2", "LED"))}
   {_footprint("LED_SMD:LED_0603_1608Metric", "20 24", 90, "D1", "LED", _R0603.replace("ROT", "90").replace("NET1", "GND").replace("NET2", "LED"))}
-  (gr_rect (start 0 0) (end 40 30) (stroke (width 0.1) (type default)) (fill no) (layer "Edge.Cuts"))
-  (gr_text "blinky" (at 20 5 0) (layer "F.SilkS") (effects (font (size 1.5 1.5) (thickness 0.3))))
-  {_segment("5 15", "34.175 15", 1, "VBUS")}
-  {_segment("20 24.825", "18 27", 0.25, "GND")}
-  (via (at 18 27) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net "GND"))
-  (zone (net "GND") (layer "B.Cu") (name "GND pour") (hatch edge 0.5)
+  (gr_rect (start 0 0) (end 40 30) (stroke (width 0.1) (type default)) (fill no) (layer "Edge.Cuts") (uuid "{UUIDS['outline']}"))
+  (gr_text "blinky" (at 20 5 0) (layer "F.SilkS") (uuid "{UUIDS['blinky']}") (effects (font (size 1.5 1.5) (thickness 0.3))))
+  {_segment("5 15", "34.175 15", 1, "VBUS", UUIDS["vbus track"])}
+  {_segment("20 24.825", "18 27", 0.25, "GND", UUIDS["gnd track"])}
+  (via (at 18 27) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (net "GND") (uuid "{UUIDS['via']}"))
+  (zone (net "GND") (layer "B.Cu") (uuid "{UUIDS['pour']}") (name "GND pour") (hatch edge 0.5)
     (connect_pads (clearance 0.5))
     (min_thickness 0.25)
     (filled_areas_thickness no)

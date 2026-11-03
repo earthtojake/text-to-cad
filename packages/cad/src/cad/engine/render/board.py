@@ -175,6 +175,11 @@ class Held:
                     line(item["pts"], color, wide, item.get("closed", False))
         if display["mode"] == "placement":
             _placement(pen, payload["board"], place, scale, bottom, line)
+        warnings = list(self.warnings)
+        if still.references:  # what the prompt named, lit as the viewer lit it (`board_refs.py`)
+            from cad.engine.render.board_refs import paint_references
+
+            warnings += paint_references(pen, self.path, still.references, payload["board"]["origin"], place, scale, ss)
         frame = np.array(image)
         if still.annotation:
             paint_ink(frame, still.annotation.get("marks", []), place, height / REFERENCE_HEIGHT)
@@ -184,7 +189,7 @@ class Held:
         output = io.BytesIO(); image.save(output, format="PNG")
         return output.getvalue(), {"kind": self.kind, "renderer": "pillow", "width": still.size[0], "height": still.size[1],
             "camera": "plan" if still.camera is not None else "top", "projection": "orthographic", "displayMode": display["mode"],
-            "preview": False, "boardDisplay": display, "warnings": self.warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
+            "preview": False, "boardDisplay": display, "warnings": warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
 
 
 def _placement(pen, board, place, scale, bottom, line):

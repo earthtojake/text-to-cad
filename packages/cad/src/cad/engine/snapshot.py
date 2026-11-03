@@ -51,7 +51,8 @@ refused by name before anything renders.
 ``--job PACKET`` replays a Quick Edit packet (the ``.snapshot.json`` the viewer writes) or a job
 file in its words (``job_pictures``): every output of every job drawn, each job a view with its
 own camera, display (its hidden and isolated parts among it), pose (``jointValues``) and, a
-robot's, the visuals it hid (``selection.hide``), the packet's ink and dimensions over each, at
+robot's, the visuals it hid (``selection.hide``), a board's, what its prompt named lit
+(``references``: board references, ``render/board_refs.py``), the packet's ink and dimensions over each, at
 the output settings the job gives (``output``: ``padding``, ``tightFrame``, ``transparent``,
 ``renderScale``, ``sizeProfile``). A view's own camera with the tight frame off is drawn exactly;
 any other camera is fitted with the job's padding. Every request is checked before anything
@@ -75,7 +76,7 @@ from cad.engine.atomic_replace import replace_atomic, staging
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
            "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
-           "picture_path", "snapshot"]
+           "parse_references", "picture_path", "snapshot"]
 
 DISPLAY_MODES = ("solid", "shaded", "parts", "xray", "hidden-line", "wireframe")
 DISPLAY_KEYS = frozenset({"mode", "grid", "appearance", "camera", "clip", "exploded", "hidden", "isolated"})
@@ -110,9 +111,9 @@ DEFAULT_SIZE = SIZE_PROFILES["diagnostic"]
 MAX_SIDE = 8192
 # ``--job``: a Quick Edit packet (``cad_server.viewer``'s ``.snapshot.json``), a job, or a list of jobs; each job a
 # view, its outputs the pictures it writes, its output settings how they are framed and finished.
-PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated"})
+PACKET_KEYS = frozenset({"input", "jobs", "annotation", "measurements", "hidden", "isolated", "references"})
 JOB_KEYS = frozenset({"input", "camera", "display", "jointValues", "selection", "annotation", "measurements",
-                      "output", "outputs"})
+                      "output", "outputs", "references"})
 OUTPUT_KEYS = frozenset({"path", "width", "height", "camera", "label"})
 SETTINGS_KEYS = frozenset({"sizeProfile", "padding", "tightFrame", "transparent", "renderScale"})
 SELECTION_KEYS = {"hide": "hidden", "focus": "isolated"}  # a view's selection, as the display says it
@@ -548,24 +549,50 @@ class Still:
     tight: bool = True
     transparent: bool = False
     scale: float = 1.0
+    references: list[str] | None = None  # a board's: what its prompt named, lit (``parse_references``)
 
     def as_json(self) -> dict[str, Any]:
         return {"display": self.display, "camera": self.camera, "exact": self.exact, "preview": self.preview,
                 "size": list(self.size), "pose": self.pose, "annotation": self.annotation,
                 "measurements": self.measurements, "padding": self.padding, "tight": self.tight,
-                "transparent": self.transparent, "scale": self.scale}
+                "transparent": self.transparent, "scale": self.scale, "references": self.references}
 
     @staticmethod
     def from_json(found: dict[str, Any]) -> "Still":
         return Still(dict(found.get("display") or {}), found.get("camera"), bool(found.get("exact")),
                      bool(found.get("preview")), tuple(found.get("size") or DEFAULT_SIZE), found.get("pose"),
                      found.get("annotation"), found.get("measurements"), float(found.get("padding", PADDING)),
-                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0))
+                     bool(found.get("tight", True)), bool(found.get("transparent")), float(found.get("scale") or 1.0),
+                     found.get("references"))
 
     @property
     def drawn(self) -> tuple[int, int]:
         """The size the picture is drawn at: its size, times ``scale`` (brought down after)."""
         return (max(1, round(self.size[0] * self.scale)), max(1, round(self.size[1] * self.scale)))
+
+
+def parse_references(value: Any, document: Path) -> list[str] | None:
+    """A board's ``references`` (a packet's, or a job's): what its prompt named, each a board reference
+    (``#R1``, ``#track:<uuid>``, ``#F.Cu@x10y5..x20y15``), lit over the board; ``None`` for none. Each is
+    checked as the language says it (``cad.engine.formats.kicad.refs``) and kept canonical."""
+    if value is None:
+        return None
+    if Path(os.fspath(document)).suffix.lower() != ".kicad_pcb":
+        raise SnapshotRefused(f"references light what a board's prompt named; {Path(os.fspath(document)).name} is no board")
+    from cad.engine.formats.kicad.refs import parse_board_selector
+    from cad.engine.render.board_refs import MAX_REFERENCES
+
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise SnapshotRefused("references lists board references: #R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5..x20y15")
+    if len(value) > MAX_REFERENCES:
+        raise SnapshotRefused(f"references names at most {MAX_REFERENCES} things")
+    canonical = []
+    for item in value:
+        selector = parse_board_selector(item)
+        if selector is None:
+            raise SnapshotRefused(f"references: {item!r} is not a board reference (#R1, #R1.2, #net:GND, #track:<uuid>, #F.Cu@x10y5)")
+        canonical.append(selector.canonical)
+    return canonical
 
 
 def refusals(still: Still, structure: dict[str, Any], name: str) -> None:
@@ -959,6 +986,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         ink = ink_flag if annotation is not None else parse_annotation(view.get("annotation", shared.get("annotation")))
         dimensions = dimensions_flag if measurements is not None else parse_measurements(
             view.get("measurements", shared.get("measurements")))
+        lit = parse_references(view.get("references", shared.get("references")), document)
         posed = pose_flag if pose is not None else view.get("jointValues")
         if isinstance(posed, str):
             posed = parse_pose(posed)
@@ -989,7 +1017,7 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
                 framed, exact, _view = authored(AUTHORED, ink, given if isinstance(given, dict) else None, document)
             pictures.append((document, out, Still(shown, framed, exact, False, size,
                                                   posed, ink, dimensions, padding, tight,
-                                                  bool(settings.get("transparent")), scale)))
+                                                  bool(settings.get("transparent")), scale, lit)))
     written = [out for _document, out, _still in pictures]
     twice = sorted({str(out) for out in written if written.count(out) > 1})
     if twice:
