@@ -59,12 +59,12 @@ def kicad_cli(case: unittest.TestCase) -> Path:
     return Path(done.stdout.strip())
 
 
-def call(case: unittest.TestCase, operation: str, *args: Any) -> dict[str, Any]:
-    """``cad.kicad_pcb.<operation>(*args)`` run in the environment, as the ``cad`` command runs it: its
-    result as data (``cad_server._internal.integration_env.call``)."""
+def call(case: unittest.TestCase, operation: str, *args: Any, document_type: str = "kicad_pcb") -> dict[str, Any]:
+    """``cad.<document_type>.<operation>(*args)`` (a board's, by default) run in the environment, as the
+    ``cad`` command runs it: its result as data (``cad_server._internal.integration_env.call``)."""
     from cad_server._internal import integration_env
 
-    return integration_env.call(python(case), "kicad_pcb", operation, [str(arg) for arg in args], {})
+    return integration_env.call(python(case), document_type, operation, [str(arg) for arg in args], {})
 
 
 def environment(case: unittest.TestCase, root: Path) -> dict[str, str]:

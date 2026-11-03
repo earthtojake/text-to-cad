@@ -210,7 +210,7 @@ class TheStill(SchematicFixture):
 
 
 class TheType(SchematicFixture):
-    def test_the_type_reads_and_inspects_and_says_where_kicad_runs(self) -> None:
+    def test_the_type_reads_inspects_and_runs_kicad_where_kicode_is(self) -> None:
         import cad
         from cad._internal.document_type import DocumentType
 
@@ -219,9 +219,16 @@ class TheType(SchematicFixture):
         found = cad.kicad_sch.inspect(self.child, "#net:MID")
         self.assertEqual((found["root"], found["counts"]["sheets"], found["counts"]["parts"]), ("divider.kicad_sch", 2, 5))
         self.assertEqual(found["resolved"]["pins"], ["C1.1", "R1.2", "R2.1"])
-        for operation in ("check", "export"):
-            with self.subTest(operation=operation), self.assertRaisesRegex(RuntimeError, f"cad kicad_sch {operation}"):
-                getattr(cad.kicad_sch, operation)(self.root)
+        # KiCad's own operations run kicad-cli, the kicad integration's: without one they say how to get it.
+        import os
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"CAD_KICAD_CLI": str(Path(self.folder.name) / "no-kicad-cli")}):
+            checked = cad.kicad_sch.check(self.root)
+            self.assertEqual([finding.code for finding in checked.findings], ["kicad_missing"])
+            self.assertIn("cad[kicad]", checked.findings[0].message)
+            with self.assertRaisesRegex(RuntimeError, r"cad\[kicad\]"):
+                cad.kicad_sch.export(self.root, "netlist", Path(self.folder.name) / "out")
         with self.assertRaisesRegex(ValueError, "is a kicad_pcb, not a kicad_sch"):
             cad.kicad_sch.snapshot("board.kicad_pcb", "out.png")
 

@@ -530,11 +530,11 @@ src/cad/
   kicad_sch/             # a saved KiCad schematic: read_schematic (its hierarchy, its nets and
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
-                         #   check (ERC) and export are the server's
+                         #   check (ERC) and export, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
                          #   on _internal/programs), a board script through its headless
-                         #   api-server and KiPy (_session), DRC (_check), its exports (_export)
-                         #   and producers
+                         #   api-server and KiPy (_session), DRC (_check), its exports (_export),
+                         #   a schematic's ERC and exports (_schematic) and producers
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -595,9 +595,9 @@ resolves them -- the names `kicad-cli sch export netlist` gives, which are the b
 references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
 (`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
 board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
-the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad
-kicad_sch check`) and the exports (`cad kicad_sch export --to pdf|svg|netlist|bom -o DIR`), the
-server's; as functions, `cad.kicad_sch.check` and `export` say so.
+the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.check`, `cad
+kicad_sch check`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
+pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
 
 ## Manufacturing checks
 

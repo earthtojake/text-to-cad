@@ -1,6 +1,6 @@
 """A saved KiCad schematic through the commands: ``cad kicad_sch snapshot --sheet`` draws one sheet as it is
 now, ``cad kicad_sch inspect`` says what it holds and what a reference names, and ``cad kicad_sch check``
-on a machine without KiCad says how to get it.
+without a kicad-cli to run says how to get one.
 
 The schematic is the test project (``tests/python/support/kicad_schematic.py``), written fresh. ERC and the
 exports with a real KiCad are the KiCad suite's (``tests/python/packages/kicad``).
@@ -65,7 +65,8 @@ class SchematicCommands(unittest.TestCase):
         self.assertEqual(done.returncode, 1, done.stderr)
         [issue] = json.loads(done.stdout)["findings"]
         self.assertEqual(issue["code"], "kicad_missing")
-        self.assertIn("kicad.org/download", issue["message"])
+        self.assertIn("CAD_KICAD_CLI names", issue["message"])
+        self.assertIn("cad[kicad]", issue["message"])
 
 
 if __name__ == "__main__":

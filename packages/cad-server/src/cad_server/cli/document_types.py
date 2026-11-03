@@ -10,8 +10,9 @@ A 3D type's ``check`` (``stl``, ``threemf``, ``glb``, ``step``, ``xbf``) is the 
 trimesh integration's: ``cad stl check part.stl --process molding --pull -z``, ``cad xbf check <id>
 --process printing --candidates``. It runs here when this environment holds trimesh, else in the
 environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
-board's ``check`` and ``export`` are the kicad integration's, run the same way: here when this process
-runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the environment of ``cad[kicad]``.
+board's and a schematic's ``check`` and ``export`` are the kicad integration's, run the same way: here when
+this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the environment of
+``cad[kicad]``.
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -195,51 +196,63 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
 
 def _runs_kicad_here() -> bool:
     """Whether this process runs KiCad itself (``CAD_KICAD_CLI`` names one, or kicode is installed here);
-    else a board's check and export run in the environment of ``cad[kicad]``."""
+    else a board's or a schematic's check and export run in the environment of ``cad[kicad]``."""
     from cad.kicad._program import carried
 
     return carried()
 
 
-def _kicad_elsewhere(operation: str, args: list, kwargs: dict, prog: str) -> dict:
-    """``cad.kicad_pcb.<operation>`` run in the environment of ``cad[kicad]``, made first when it is not."""
+def _kicad_elsewhere(document_type: str, operation: str, args: list, kwargs: dict, prog: str) -> dict:
+    """``cad.<document_type>.<operation>`` run in the environment of ``cad[kicad]``, made first when it is not."""
     from cad_server._internal import integration_env
 
     def said(line: str) -> None:
         print(f"{prog}: {line}", file=sys.stderr, flush=True)
 
-    return integration_env.call(integration_env.environment("kicad", said), "kicad_pcb", operation, args, kwargs)
+    return integration_env.call(integration_env.environment("kicad", said), document_type, operation, args, kwargs)
 
 
-def _board_check(argv: list[str], prog: str) -> int:
-    target = ("cad.kicad_pcb", "check")
-    if _runs_kicad_here():
-        return _checked("kicad_pcb", target, argv, prog)
-    from cad.results import CheckFinding, CheckResult
-    from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser
+def _kicad_check(document_type: str) -> Callable[[list[str], str], int]:
+    """A KiCad file's check (a board's DRC, a schematic's ERC), the kicad integration's: run here when this
+    process runs KiCad, else in the environment of ``cad[kicad]``, its file refused here first."""
 
-    parsed = generated_parser(target, prog=prog).parse_args(argv)
-    _refuse_other_type("kicad_pcb", "check", str(parsed.board))
+    def run(argv: list[str], prog: str) -> int:
+        target = (f"cad.{document_type}", "check")
+        if _runs_kicad_here():
+            return _checked(document_type, target, argv, prog)
+        from cad.results import CheckFinding, CheckResult
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser
 
-    def checked() -> CheckResult:
-        found = _kicad_elsewhere("check", [str(Path(parsed.board).expanduser().resolve())], {}, prog)
-        return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
-                           findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
-                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+        parsed = generated_parser(target, prog=prog).parse_args(argv)
+        source = vars(parsed)[_first_parameter(target)]
+        _refuse_other_type(document_type, "check", str(source))
 
-    return emit(checked, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+        def checked() -> CheckResult:
+            found = _kicad_elsewhere(document_type, "check", [str(Path(source).expanduser().resolve())], {}, prog)
+            return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                               findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                               summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+        return emit(checked, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
+
+    return run
+
+
+def _first_parameter(target: tuple[str, str]) -> str:
+    import inspect
+
+    from cad_server._internal.cli_from_function import _verb
+
+    return next(iter(inspect.signature(_verb(target)).parameters))
 
 
 def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
     """A generated check run: its file, the function's first parameter as the parser read it (wherever it
     stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
-    import inspect
-
-    from cad_server._internal.cli_from_function import _verb, generated_main, generated_parser
+    from cad_server._internal.cli_from_function import generated_main, generated_parser
 
     parsed = generated_parser(target, prog=prog).parse_args(argv)
-    first = next(iter(inspect.signature(_verb(target)).parameters))
-    source = getattr(parsed, first, None)
+    source = getattr(parsed, _first_parameter(target), None)
     if source is not None:
         _refuse_other_type(document_type, "check", str(source))
     return generated_main(target, argv, prog=prog)
@@ -265,33 +278,42 @@ def _failed(as_json: bool, prog: str, words: str, status: int = 1) -> int:
     return status
 
 
-def _board_export(argv: list[str], prog: str) -> int:
-    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+def _kicad_export(document_type: str) -> Callable[[list[str], str], int]:
+    """A KiCad file's export (``--to KIND -o DIR``), the kicad integration's: run here when this process runs
+    KiCad, else in the environment of ``cad[kicad]``."""
 
-    args = _board_parser(prog, "export").parse_args(argv)
-    _refuse_other_type("kicad_pcb", "export", str(args.board))
-    as_json = bool(getattr(args, JSON_FLAG_DEST))
-    board, out = Path(args.board).expanduser().resolve(), Path(args.out).expanduser().resolve()
-    try:
-        if _runs_kicad_here():
-            from cad.kicad_pcb import export
+    def run(argv: list[str], prog: str) -> int:
+        from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
-            done = export(board, args.to, out)
-            written, warnings = [str(path) for path in done.written], list(done.warnings)
-        else:
-            from cad_server._internal.integration_env import Failed
+        parser = _board_parser if document_type == "kicad_pcb" else _schematic_parser
+        args = parser(prog, "export").parse_args(argv)
+        given = args.board if document_type == "kicad_pcb" else args.schematic
+        _refuse_other_type(document_type, "export", str(given))
+        as_json = bool(getattr(args, JSON_FLAG_DEST))
+        source, out = Path(given).expanduser().resolve(), Path(args.out).expanduser().resolve()
+        try:
+            if _runs_kicad_here():
+                import importlib
 
-            try:
-                found = _kicad_elsewhere("export", [str(board), args.to, str(out)], {}, prog)
-            except Failed as error:
-                raise RuntimeError(str(error)) from None
-            written, warnings = [str(path) for path in found.get("written") or ()], list(found.get("warnings") or ())
-    except (RuntimeError, OSError, ValueError) as error:
-        return _failed(as_json, prog, str(error))
-    for line in warnings:
-        print(f"{prog}: warning: {line}", file=sys.stderr)
-    return _answer(as_json, {"ok": True, "to": args.to, "written": written, "warnings": warnings},
-                   [f"wrote {path}" for path in written])
+                done = importlib.import_module(f"cad.{document_type}").export(source, args.to, out)
+                written, warnings = [str(path) for path in done.written], list(done.warnings)
+            else:
+                from cad_server._internal.integration_env import Failed
+
+                try:
+                    found = _kicad_elsewhere(document_type, "export", [str(source), args.to, str(out)], {}, prog)
+                except Failed as error:
+                    raise RuntimeError(str(error)) from None
+                written = [str(path) for path in found.get("written") or ()]
+                warnings = list(found.get("warnings") or ())
+        except (RuntimeError, OSError, ValueError) as error:
+            return _failed(as_json, prog, str(error))
+        for line in warnings:
+            print(f"{prog}: warning: {line}", file=sys.stderr)
+        return _answer(as_json, {"ok": True, "to": args.to, "written": written, "warnings": warnings},
+                       [f"wrote {path}" for path in written])
+
+    return run
 
 
 def _board_inspect(argv: list[str], prog: str) -> int:
@@ -349,7 +371,7 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     parser.add_argument("schematic", metavar="SCHEMATIC", type=Path,
                         help="the .kicad_sch (any sheet of its project: the whole hierarchy is read)")
     if operation == "export":
-        from cad_server.kicad.schematic import EXPORTS
+        from cad.kicad._schematic import EXPORTS
 
         parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
         parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
@@ -359,27 +381,6 @@ def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
                         help="print the answer as one JSON line on stdout")
     return parser
-
-
-def _schematic_check(argv: list[str], prog: str) -> int:
-    return _checked("kicad_sch", ("cad_server.kicad.schematic", "check"), argv, prog)
-
-
-def _schematic_export(argv: list[str], prog: str) -> int:
-    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
-
-    args = _schematic_parser(prog, "export").parse_args(argv)
-    _refuse_other_type("kicad_sch", "export", str(args.schematic))
-    as_json = bool(getattr(args, JSON_FLAG_DEST))
-    from cad.kicad._program import KicadMissingError, KicadRunError
-    from cad_server.kicad.schematic import export
-
-    try:
-        written = export(args.schematic, args.to, args.out)
-    except (KicadMissingError, KicadRunError) as error:
-        return _failed(as_json, prog, str(error))
-    return _answer(as_json, {"ok": True, "written": [str(path) for path in written]},
-                   [f"wrote {path}" for path in written])
 
 
 def _schematic_inspect(argv: list[str], prog: str) -> int:
@@ -442,11 +443,11 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
 
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
-    ("kicad_pcb", "check"): _board_check,
-    ("kicad_pcb", "export"): _board_export,
+    ("kicad_pcb", "check"): _kicad_check("kicad_pcb"),
+    ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
     ("kicad_pcb", "inspect"): _board_inspect,
-    ("kicad_sch", "check"): _schematic_check,
-    ("kicad_sch", "export"): _schematic_export,
+    ("kicad_sch", "check"): _kicad_check("kicad_sch"),
+    ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
 }
@@ -472,16 +473,12 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
     prog = prog or f"cad {document_type} {operation}"
     if (document_type, operation) not in OPERATIONS:
         raise KeyError(f"cad {document_type} has no operation {operation!r}")
-    if (document_type, operation) == ("kicad_pcb", "check"):
+    if document_type in ("kicad_pcb", "kicad_sch") and operation == "check":
         from cad_server._internal.cli_from_function import generated_parser
 
-        return generated_parser(("cad.kicad_pcb", "check"), prog=prog)
+        return generated_parser((f"cad.{document_type}", "check"), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
-    if (document_type, operation) == ("kicad_sch", "check"):
-        from cad_server._internal.cli_from_function import generated_parser
-
-        return generated_parser(("cad_server.kicad.schematic", "check"), prog=prog)
     if document_type == "kicad_sch":
         return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:

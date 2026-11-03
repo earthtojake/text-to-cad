@@ -13,17 +13,19 @@ and plain values, so they are the type's, not the ``kicad`` integration's (the s
 * :func:`inspect` is the schematic in one look as plain data -- its sheets, parts and nets, and what a
   reference names -- what ``cad kicad_sch inspect`` prints; ``snapshot`` draws one sheet flat, as
   ``cad kicad_sch snapshot`` does.
-* ``check`` (KiCad's electrical rules check) and ``export`` (a pdf, svgs, the netlist, a BOM) run
-  KiCad's own ``kicad-cli``, which the server finds and runs and a model's environment never does:
-  they are the commands ``cad kicad_sch check`` and ``cad kicad_sch export``, and as functions they say so.
+* :func:`check` (KiCad's electrical rules check) and :func:`export` (a pdf, svgs, the netlist, a BOM) run
+  KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``), as the board's do: they
+  are the commands ``cad kicad_sch check`` and ``cad kicad_sch export``, one to one. Where this environment
+  lacks kicode, the command runs them in the environment of ``cad[kicad]`` the engine makes on first need;
+  a function called here says to install the extra (or run the script with ``cad run``, which does).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from cad.engine.formats.kicad.schematic import read_schematic
+from cad.results import CheckResult, ExportResult
 
 __all__ = ["check", "export", "inspect", "read_schematic"]
 
@@ -37,19 +39,31 @@ def inspect(path: Path | str, ref: str | None = None) -> dict:
     return inspect_schematic(path, ref)
 
 
-def _runs_kicad(operation: str) -> RuntimeError:
-    return RuntimeError(f"cad.kicad_sch.{operation} runs KiCad's kicad-cli, which the CAD server runs, not a model's "
-                        f"process: run the command, cad kicad_sch {operation} SCHEMATIC (cad kicad_sch {operation} --help)")
+def check(schematic: Path) -> CheckResult:
+    """Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.
+
+    Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
+    severity reported, and lists each violation with its sheet and where it is (millimetres on that
+    sheet's page). The schematic fails when any error-severity violation exists; warnings are reported
+    and do not fail it.
+
+    schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
+    """
+    from cad.kicad._schematic import check as erc
+
+    return erc(Path(schematic))
 
 
-def check(path: Path | str, *args: Any, **options: Any) -> Any:
-    """KiCad's electrical rules check: the server's command, ``cad kicad_sch check SCHEMATIC``."""
-    raise _runs_kicad("check")
+def export(schematic: Path | str, to: str, out: Path | str) -> ExportResult:
+    """KiCad's ``to`` export of the saved ``schematic``'s hierarchy into the folder ``out`` (``cad kicad_sch
+    export SCHEMATIC --to KIND -o DIR``): ``to`` is one of ``pdf`` (every sheet), ``svg`` (one a sheet),
+    ``netlist`` (the one a board imports) and ``bom``. The result says the files written. ``RuntimeError``
+    in KiCad's words when it fails."""
+    from cad.kicad._schematic import export as run
 
-
-def export(path: Path | str, *args: Any, **options: Any) -> Any:
-    """KiCad's schematic outputs: the server's command, ``cad kicad_sch export SCHEMATIC --to KIND -o DIR``."""
-    raise _runs_kicad("export")
+    source = Path(schematic).expanduser()
+    written = run(source, str(to), Path(out).expanduser())
+    return ExportResult(path=source.resolve(), to=str(to), written=tuple(written), warnings=())
 
 
 from cad._internal.document_type import bind as _bind  # noqa: E402

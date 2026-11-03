@@ -1,12 +1,12 @@
-"""``cad kicad_sch check`` and ``cad kicad_sch export``: KiCad's electrical rules check of a saved
-schematic and its outputs, by KiCad's own command line, headless, in private homes -- the ``kicad``
-integration's.
+"""KiCad's electrical rules check of a saved schematic and its outputs, by KiCad's own command line,
+headless, in private homes: ``cad.kicad_sch.check`` and ``export``, and the commands ``cad kicad_sch check``
+and ``cad kicad_sch export``, which run them here or in the environment of ``cad[kicad]``.
 
 Reading a schematic is the document type's (:func:`cad.kicad_sch.read_schematic`, the standard library
-alone); drawing one is ``cad kicad_sch snapshot``'s. ``kicad-cli`` is found and run by the
-integration's one finder (:mod:`cad.kicad._program`: ``CAD_KICAD_CLI``, then PATH, then the usual
-installation), as the board's DRC and exports are: every run gets homes of its own, opens no window,
-and leaves the project's folder as it found it. The schematic is read, never rewritten.
+alone); drawing one is ``cad kicad_sch snapshot``'s. ``kicad-cli`` is kicode's, or the one
+``CAD_KICAD_CLI`` names (``_program``), found and run as the board's DRC and exports are: every run gets
+homes of its own, opens no window, and leaves the project's folder as it found it. The schematic is
+read, never rewritten.
 """
 
 from __future__ import annotations
@@ -18,6 +18,9 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from cad.results import CheckFinding, CheckResult
+
+from ._program import KicadMissingError, KicadRunError, private_run, ready
+from ._program import quiet as _quiet
 
 __all__ = ["EXPORTS", "ErcFinding", "check", "commands", "export", "run_erc"]
 
@@ -87,16 +90,14 @@ class _AsFound:
 def run_erc(cli: Path, schematic: Path, *, timeout: float = _TIMEOUT_SECONDS) -> list[ErcFinding]:
     """KiCad's ERC of ``schematic``'s hierarchy, every severity included. Raises
     :class:`~cad.kicad._program.KicadRunError` when ``kicad-cli`` cannot run or refuses the schematic."""
-    from cad.kicad._program import KicadRunError, private_run
-    from cad.kicad._program import quiet as _quiet
-
     root = _project_of(schematic)
-    with private_run("cad-erc-") as (scratch, env), _AsFound(root):
+    with private_run("cad-erc-", cli) as (scratch, env), _AsFound(root):
         report = scratch / "erc.json"
         command = [str(cli), "sch", "erc", "--format", "json", "--units", "mm", "--severity-all", "-o", str(report),
                    str(root)]
         try:
-            completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout, check=False)
+            completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                       timeout=timeout, check=False)
         except subprocess.TimeoutExpired:
             raise KicadRunError(f"kicad-cli sch erc did not finish in {timeout:g} s") from None
         except OSError as error:
@@ -148,7 +149,6 @@ def check(schematic: Path) -> CheckResult:
     schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
     """
     from cad._internal.validation_door import display_path, failed, resolved_target
-    from cad.kicad._program import KicadMissingError, KicadRunError, check_version, find_kicad_cli, kicad_version
 
     target = resolved_target(schematic, label="kicad_sch")
     if target.suffix.lower() != ".kicad_sch":
@@ -156,8 +156,7 @@ def check(schematic: Path) -> CheckResult:
     if not target.is_file():
         return failed(target, "file not found")
     try:
-        cli = find_kicad_cli()
-        check_version(cli, kicad_version(cli))
+        cli = ready()
     except KicadMissingError as error:
         return failed(target, str(error), code="kicad_missing")
     try:
@@ -208,9 +207,6 @@ def export(schematic: Path, to: str, out_dir: Path, *, cli: Path | None = None,
     made if missing, and return the files the run wrote or changed there, sorted. Raises
     :class:`~cad.kicad._program.KicadRunError` when ``kicad-cli`` cannot run or refuses the schematic,
     and :class:`~cad.kicad._program.KicadMissingError` when there is none."""
-    from cad.kicad._program import KicadRunError, check_version, find_kicad_cli, kicad_version, private_run
-    from cad.kicad._program import quiet as _quiet
-
     if to not in EXPORTS:
         raise ValueError(f"cannot export {to!r}: choose one of {', '.join(EXPORTS)}")
     schematic = Path(schematic).resolve()
@@ -219,18 +215,17 @@ def export(schematic: Path, to: str, out_dir: Path, *, cli: Path | None = None,
     root = _project_of(schematic)
     out_dir = Path(out_dir).resolve()
     if cli is None:
-        cli = find_kicad_cli()
-        check_version(cli, kicad_version(cli))
+        cli = ready()
     try:
         out_dir.mkdir(parents=True, exist_ok=True)
     except OSError as error:
         raise KicadRunError(f"cannot write the {to} into {out_dir}: {error.strerror or error}") from None
     before = _listing(out_dir)
-    with private_run("cad-sch-export-") as (_scratch, env), _AsFound(root):
+    with private_run("cad-sch-export-", cli) as (_scratch, env), _AsFound(root):
         for command in commands(cli, root, to, out_dir):
             try:
-                completed = subprocess.run(command, env=env, capture_output=True, text=True, timeout=timeout,
-                                           check=False)
+                completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,
+                                           timeout=timeout, check=False)
             except subprocess.TimeoutExpired:
                 raise KicadRunError(f"kicad-cli sch export {to} did not finish in {timeout:g} s") from None
             except OSError as error:

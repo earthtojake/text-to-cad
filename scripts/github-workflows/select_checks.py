@@ -207,7 +207,7 @@ KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/r
               f"{LIBRARY_SRC}/kicad_pcb/**", f"{LIBRARY_SRC}/kicad_sch/**", f"{LIBRARY_SRC}/kicad/**",
               f"{LIBRARY_SRC}/_internal/programs.py",
               f"{SERVER_SRC}/_internal/integration_env.py", f"{SERVER_SRC}/_internal/boards.py",
-              f"{SERVER_SRC}/kicad/**",
+              f"{SERVER_SRC}/cli/document_types.py",
               f"{SERVER_SRC}/cli/kicad_pcb.py", f"{SERVER_SRC}/cli/kicad_sch.py")
 KICAD_SUITE = "tests/python/packages/kicad"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
