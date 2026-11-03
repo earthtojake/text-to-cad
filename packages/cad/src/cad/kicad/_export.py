@@ -3,13 +3,17 @@
 ``export(board, to, out_dir)`` runs ``kicad-cli pcb export <to>`` for one of a fixed list --
 ``gerbers``, ``drill`` (Excellon, mm), ``pos`` (placement as CSV, mm) and ``step`` (3D models
 substituted) -- with the finder and the private environment DRC uses (``_program.find_kicad_cli``,
-``_program.private_run``), and returns the files it wrote. The board is read, never rewritten.
+``_program.private_run``), and returns the files it wrote. The board is read, never rewritten. A STEP
+written without some of its parts' 3D models (missing, or VRML only) is a STEP, with a warning naming
+them; kicad-cli calls it an error.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
+import sys
 from pathlib import Path
 
 from ._program import KicadRunError, check_version, find_kicad_cli, kicad_version, private_run
@@ -45,6 +49,26 @@ def commands(cli: Path, board: Path, to: str, out_dir: Path) -> list[list[str]]:
         return [[*head, "--format", "csv", "--units", "mm", "--side", "both",
                  "-o", str(out_dir / f"{board.stem}-pos.csv"), str(board)]]
     return [[*head, "--subst-models", "--force", "-o", str(out_dir / f"{board.stem}.step"), str(board)]]
+
+
+def _step_without_models(to: str, completed: subprocess.CompletedProcess, step: Path) -> str | None:
+    """A STEP kicad-cli wrote although some 3D models were missing: the warning to give, else None.
+
+    KiCad's STEP exporter reports a model it cannot add (a file not found, or one only in VRML, which a
+    STEP cannot hold) as an error, keeps going, writes the file and says ``STEP file '<path>' created.``,
+    then exits with its catch-all status 2 because an error was reported. A real failure (a write error,
+    an OpenCASCADE exception, memory) returns before that line, which is the one KiCad never translates.
+    """
+    said = f"{completed.stdout}\n{completed.stderr}"
+    if to != "step" or completed.returncode != 2 or f"STEP file '{step}' created." not in said or not step.is_file():
+        return None
+    parts = sorted(set(re.findall(r"Could not add 3D model for (\S+?)\.$", said, re.MULTILINE)),
+                   key=lambda ref: (re.sub(r"\d+", "", ref), int(re.sub(r"\D", "", ref) or 0)))
+    vrml = said.count("Cannot use VRML models when exporting to non-mesh formats.")
+    missing = (f"{len(parts)} part{'s' if len(parts) != 1 else ''} without a 3D model ({', '.join(parts[:12])}"
+               f"{', ...' if len(parts) > 12 else ''}): the model file was not found") if parts else ""
+    only_vrml = f"{vrml} model{'s' if vrml != 1 else ''} only in VRML, which a STEP cannot hold" if vrml else ""
+    return f"{step.name} is written, " + ("; ".join(filter(None, (missing, only_vrml))) or "with KiCad's warnings")
 
 
 def _listing(out_dir: Path) -> dict[Path, tuple[int, int]]:
@@ -83,8 +107,11 @@ def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None,
             except OSError as error:
                 raise KicadRunError(f"kicad-cli could not be started ({error})") from None
             if completed.returncode != 0:
-                said = _quiet(completed.stderr) or _quiet(completed.stdout) or f"exit status {completed.returncode}"
-                raise KicadRunError(f"kicad-cli pcb export {to} failed on {board}: {said}")
+                warning = _step_without_models(to, completed, out_dir / f"{board.stem}.step")
+                if warning is None:
+                    said = _quiet(completed.stderr) or _quiet(completed.stdout) or f"exit status {completed.returncode}"
+                    raise KicadRunError(f"kicad-cli pcb export {to} failed on {board}: {said}")
+                print(f"warning: {warning}", file=sys.stderr)
     after = _listing(out_dir)
     written = sorted(path for path, stamp in after.items() if before.get(path) != stamp)
     if not written:

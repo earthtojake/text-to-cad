@@ -85,5 +85,47 @@ class SharedTestBoard(unittest.TestCase):
             self.assertTrue(export(board, "step", Path(folder) / "fab")[0].is_file())
 
 
+class StepWithoutModels(unittest.TestCase):
+    """A part whose 3D model is missing, or only in VRML, leaves the STEP without that part's body: a
+    warning naming it, not a failure, although kicad-cli exits 2 for it."""
+
+    def test_missing_and_vrml_only_models_are_a_warning(self):
+        import contextlib
+        import io
+
+        from cad.kicad._export import export
+
+        with tempfile.TemporaryDirectory(prefix="kicad-step-models-") as folder:
+            root = Path(folder)
+            (root / "only.wrl").write_text("#VRML V2.0 utf8\nShape { geometry Box { size 1 1 1 } }\n", encoding="utf-8")
+            r1 = '(attr smd)\n  (pad "1"'
+            board = BOARD.replace(r1, f'(attr smd)\n  (model "{root / "gone" / "missing.step"}")\n  (pad "1"', 1)
+            board = board.replace('(attr board_only', f'(model "{root / "only.wrl"}")\n  (attr board_only', 1)
+            self.assertEqual(board.count("(model "), 2)
+            path = root / "board.kicad_pcb"
+            path.write_text(board, encoding="utf-8")
+            said = io.StringIO()
+            with contextlib.redirect_stderr(said):
+                (step,) = export(path, "step", root / "fab")
+            self.assertTrue(step.read_text(encoding="utf-8", errors="replace").startswith("ISO-10303-21"))
+            self.assertIn("board.step is written", said.getvalue())
+            self.assertIn("R1", said.getvalue())
+            self.assertIn("VRML", said.getvalue())
+
+    def test_a_failed_export_still_fails(self):
+        import subprocess
+
+        from cad.kicad._export import _step_without_models
+
+        step = Path(tempfile.mkdtemp(prefix="kicad-step-failed-")) / "board.step"
+        step.write_text("ISO-10303-21;", encoding="utf-8")
+        written = f"STEP file '{step}' created.\n"
+        aborted = "** Error exporting STEP file. Export aborted. **\n"
+        for code, out, warned in ((2, written, True), (2, aborted, False), (3, written, False), (2, "", False)):
+            completed = subprocess.CompletedProcess([], code, out, "")
+            self.assertEqual(_step_without_models("step", completed, step) is not None, warned, (code, out))
+        self.assertIsNone(_step_without_models("gerbers", subprocess.CompletedProcess([], 2, written, ""), step))
+
+
 if __name__ == "__main__":
     unittest.main()
