@@ -88,6 +88,7 @@ class FaceInfo:
     zmin: float
     zmax: float
     samples: list[brep.Sample] = field(default_factory=list)
+    box: Any = None                        # the face's box (the kernel's quick one, on its triangulation)
     coverage_deg: float = 0.0              # a cylinder's angle round its axis
     group: int | None = None               # its hole or pin
     thickness: list[tuple[float, int, int]] = field(default_factory=list)  # (mm, sample index, hit ordinal)
@@ -139,11 +140,17 @@ class Context:
         for index, part in enumerate(self.parts):
             infos = []
             for ordinal, face in enumerate(part.faces(), start=1):
-                box = face.bounding_box()
+                # the kernel's quick box (an optimal one costs seconds on a spline): a first for the
+                # sampling's deflection, then again on the triangulation the sampling made, which is tight
+                rough = face.bounding_box(optimal=False)
                 area = float(face.area)
-                info = FaceInfo(index, ordinal, face, brep.surface(face), area, float(box.min.Z), float(box.max.Z))
                 count = int(min(400, max(4, round(budget * area / total))))
-                info.samples = brep.samples(face, count) if area > 0 else []
+                deflection = max(1e-3, 0.02 * max(rough.size.X, rough.size.Y, rough.size.Z))
+                samples = brep.samples(face, count, deflection) if area > 0 else []
+                box = face.bounding_box(optimal=False)
+                info = FaceInfo(index, ordinal, face, brep.surface(face), area, float(box.min.Z), float(box.max.Z))
+                info.box = box
+                info.samples = samples
                 if info.surface.kind == "cylinder":
                     from OCP.BRepTools import BRepTools
 
@@ -395,7 +402,7 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
                 continue
             starts, ends, supported = [], [], 0
             z = info.zmax
-            box = info.face.bounding_box()
+            box = info.box
             step = max(1e-3, min(0.5, 0.01 * max(box.size.X, box.size.Y)))
             for other, shared in ctx.adjacent(part, info.ordinal).items():
                 neighbour = ctx.info(part, other)
@@ -464,7 +471,9 @@ def _walls(ctx: Context) -> dict[str, Any]:
     items, every, where = [], [], []
     for part, infos in enumerate(ctx.faces):
         for info in infos:
-            if not info.thickness:
+            pin = info.group is not None and not ctx.rounds[info.group].concave and \
+                ctx.rounds[info.group].coverage_deg >= ROUND_DEG
+            if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
                 continue
             values = np.array([t for t, _, _ in info.thickness])
             thinnest = info.thickness[int(values.argmin())]
@@ -633,7 +642,7 @@ def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:
     vertex = BRepBuilderAPI_MakeVertex(gp_Pnt(*map(float, point))).Vertex()
     best, found = math.inf, 1
     for info in ctx.faces[part]:
-        box = info.face.bounding_box()
+        box = info.box
         lower = max(0.0, box.min.X - point[0], point[0] - box.max.X, box.min.Y - point[1], point[1] - box.max.Y,
                     box.min.Z - point[2], point[2] - box.max.Z)
         if lower > best:
@@ -831,7 +840,7 @@ def _bed(ctx: Context) -> dict[str, Any]:
             n = info.surface.normal
             if info.surface.kind != "plane" or n is None or n[2] > -0.9999 or not ctx.on_plate(info.zmax):
                 continue
-            box = info.face.bounding_box()
+            box = info.box
             contact += info.area
             xs += [box.min.X, box.max.X]
             ys += [box.min.Y, box.max.Y]

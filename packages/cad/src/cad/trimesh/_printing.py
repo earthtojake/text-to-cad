@@ -79,6 +79,20 @@ def _components(mesh: trimesh.Trimesh, mask: np.ndarray) -> list[np.ndarray]:
             trimesh.graph.connected_components(pairs[keep], nodes=chosen, min_len=1)]
 
 
+def _bodies(mesh: trimesh.Trimesh) -> list[trimesh.Trimesh]:
+    """The mesh's parts: its connected bodies, but a closed one turned inside out (a void's shell, which a
+    solid's cavity is) and slivers of no area worth a thousandth of the whole."""
+    found = []
+    total = float(mesh.area) or 1.0
+    for body in mesh.split(only_watertight=False):
+        if body.is_watertight and float(body.volume) < 0:
+            continue
+        if not body.is_watertight and float(body.area) < 1e-3 * total:
+            continue
+        found.append(body)
+    return found
+
+
 def _cluster(points: np.ndarray, values: np.ndarray, cell: float) -> list[tuple[float, np.ndarray, int]]:
     """The smallest value in each cube of side ``cell`` with its point and the samples it stands for."""
     keys = np.floor(points / cell).astype(np.int64)
@@ -226,6 +240,37 @@ def _bridge_facts(overhangs: dict) -> dict:
                       "their edge descends (a wall below); span from the region's points to those edges"}
 
 
+#: Triangles a mesh has, at most, for every one to get a ray of its own (a small feature's few triangles
+#: would otherwise draw no sample of an area-weighted budget).
+COVER = 20000
+
+
+def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None) -> tuple[np.ndarray, ...]:
+    """One ray from every triangle's centre (``COVER`` of them, by area, on a larger mesh), into the material
+    (``inward``) or out of it: each ray's length to a face that looks back at it, its origin, its face's
+    normal and the triangle it landed on. Rays that meet nothing, or a face square to them, are dropped."""
+    count = len(mesh.faces)
+    if count == 0 or not float(mesh.area_faces.sum()) > 0:
+        return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    if count > COVER:
+        total = float(mesh.area_faces.sum()) or 1.0
+        faces = np.random.default_rng(3).choice(count, size=COVER, p=mesh.area_faces / total)
+    else:
+        faces = np.arange(count)
+    normals = mesh.face_normals[faces]
+    directions = -normals if inward else normals
+    origins = mesh.triangles_center[faces] + directions * 1e-4
+    locations, rays, hit = mesh.ray.intersects_location(ray_origins=origins, ray_directions=directions,
+                                                        multiple_hits=False)
+    if not len(rays):
+        return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
+    length = np.linalg.norm(np.asarray(locations).reshape(-1, 3) - origins[rays], axis=1)
+    facing = np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) > 0.5 if inward else \
+        np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -0.5
+    keep = (length > 1e-3) & facing & (length < (reach or float(np.linalg.norm(mesh.extents))))
+    return length[keep], origins[rays][keep], normals[rays][keep], faces[rays][keep], hit[keep]
+
+
 def _wall_items(thickness: np.ndarray, origins: np.ndarray, cell: float) -> list[dict]:
     """The thickness field as items: the thinnest sample in each cube of side ``cell`` (whether a mesh's
     wall is joined on two sides is not known: ``supported`` None)."""
@@ -249,9 +294,12 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     if len(bodies) <= 1:
         facts = _wall_facts_single(mesh, samples, seed)
         if "_thickness" in facts:
-            facts["items"] = _wall_items(facts["_thickness"], facts["_origins"], cell)
+            extra = _cover(mesh, inward=True)
+            t = np.concatenate([facts["_thickness"], extra[0]])
+            o = np.vstack([facts["_origins"], extra[1]])
+            facts["items"] = _wall_items(t, o, cell)
             if keep is not None:
-                keep.update(thickness=facts["_thickness"], origins=facts["_origins"], normals=facts["_normals"])
+                keep.update(thickness=t, origins=o, normals=np.vstack([facts["_normals"], extra[2]]))
         for key in [key for key in facts if key.startswith("_")]:
             facts.pop(key)
         return facts
@@ -270,6 +318,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     pooled: list = []
     pooled_origins: list = []
     pooled_normals: list = []
+    covered: list = []
     per_body: list = []
     for i, (body, frac) in enumerate(zip(bodies, share)):
         budget = max(int(round(samples * frac)), 64)
@@ -285,6 +334,8 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
             pooled.append(facts["_thickness"])
             pooled_origins.append(facts["_origins"])
             pooled_normals.append(facts["_normals"])
+            extra = _cover(body, inward=True)
+            covered.append(extra[:3])
 
     if not pooled:
         return {
@@ -295,12 +346,15 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
 
     thickness = np.concatenate(pooled)
     origins = np.concatenate(pooled_origins)
+    every_t = np.concatenate([thickness, *[c[0] for c in covered]])
+    every_o = np.vstack([origins, *[c[1] for c in covered]])
     if keep is not None:
-        keep.update(thickness=thickness, origins=origins, normals=np.concatenate(pooled_normals))
+        keep.update(thickness=every_t, origins=every_o,
+                    normals=np.vstack([np.concatenate(pooled_normals), *[c[2] for c in covered]]))
     thin_idx = np.argsort(thickness)[:8]
 
     return {
-        "items": _wall_items(thickness, origins, cell),
+        "items": _wall_items(every_t, every_o, cell),
         "body_count": len(bodies),
         "measured_per_body": True,
         "samples_valid": int(len(thickness)),
@@ -342,7 +396,7 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
     directions = -mesh.face_normals[face_idx]
     origins = origins + directions * 1e-4
 
-    locations, ray_ids, _ = mesh.ray.intersects_location(
+    locations, ray_ids, hit_tri = mesh.ray.intersects_location(
         ray_origins=origins, ray_directions=directions, multiple_hits=False)
 
     if len(ray_ids) == 0:
@@ -350,7 +404,10 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
 
     thickness = np.linalg.norm(locations - origins[ray_ids], axis=1)
     diag = float(np.linalg.norm(mesh.extents))
-    valid = (thickness > 1e-3) & (thickness < diag)
+    # a wall's two faces look away from each other; a ray that lands on a face meeting its own at a sharp
+    # edge (the far side of a knife edge, within 60 deg of square to it) measures the edge, not a wall
+    opposing = np.einsum("ij,ij->i", mesh.face_normals[hit_tri], directions[ray_ids]) > 0.5
+    valid = (thickness > 1e-3) & (thickness < diag) & opposing
     thickness = thickness[valid]
 
     if len(thickness) == 0:
@@ -437,29 +494,17 @@ def _orientation_facts(mesh: trimesh.Trimesh, angle_limit: float, technology: st
     }
 
 
-def _gap_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 7) -> dict:
-    """Rays out of the material from samples on each body to a facing wall of the same body (not a
-    neighbouring triangle): the narrow slots, per cube the narrowest."""
-    rng = np.random.default_rng(seed)
+def _gap_facts(mesh: trimesh.Trimesh, samples: int) -> dict:
+    """Rays out of the material from every triangle of each body to a wall of the same body that faces back
+    (not a triangle sharing a corner with it): the narrow slots, per cube the narrowest."""
     points, widths = [], []
-    for body in mesh.split(only_watertight=False):
-        total = float(body.area_faces.sum())
-        if not np.isfinite(total) or total <= 0:
+    for body in _bodies(mesh):
+        width, origins, _, faces, hit = _cover(body, inward=False, reach=GAP_CEILING)
+        if not len(width):
             continue
-        n = min(max(64, int(samples * total / max(float(mesh.area), 1e-12))), 4 * len(body.faces) + 64)
-        faces = rng.choice(len(body.faces), size=n, p=body.area_faces / total)
-        normals = body.face_normals[faces]
-        origins = body.triangles_center[faces] + normals * 1e-4
-        locations, rays, hit = body.ray.intersects_location(ray_origins=origins, ray_directions=normals,
-                                                            multiple_hits=False)
-        if not len(rays):
-            continue
-        width = np.linalg.norm(locations - origins[rays], axis=1)
-        shares = np.array([len(np.intersect1d(body.faces[faces[r]], body.faces[h])) > 0 for r, h in zip(rays, hit)])
-        facing = np.einsum("ij,ij->i", body.face_normals[hit], normals[rays]) < -0.5
-        keep = (width <= GAP_CEILING) & (width > 1e-3) & facing & ~shares
-        points.append(origins[rays][keep])
-        widths.append(width[keep])
+        shared = (body.faces[faces][:, :, None] == body.faces[hit][:, None, :]).any(axis=(1, 2))
+        points.append(origins[~shared])
+        widths.append(width[~shared])
     items = []
     if points and sum(len(p) for p in points):
         cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
@@ -468,13 +513,14 @@ def _gap_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 7) -> dict:
         items = [{"xyz": _p(point), "gap_mm": _r(value), "samples": count} for value, point, count in found[:CAP]]
     return {"items": items, "count": len(items), "reported_below_mm": GAP_CEILING,
             "min_mm": items[0]["gap_mm"] if items else None,
-            "method": "rays out of the material to a facing wall of the same body (holes read as gaps on a mesh)"}
+            "method": "a ray out of the material from every triangle to a facing wall of the same body (holes read "
+                      "as gaps on a mesh)"}
 
 
 def _clearance_facts(mesh: trimesh.Trimesh) -> dict:
     """The least distance between each pair of bodies (vertices and triangle centres of each to the other's
     surface, both ways), within ``CLEARANCE_REACH``."""
-    bodies = mesh.split(only_watertight=False)
+    bodies = _bodies(mesh)
     items = []
     for i in range(len(bodies)):
         for j in range(i + 1, len(bodies)):

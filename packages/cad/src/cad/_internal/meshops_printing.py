@@ -268,16 +268,26 @@ def components(mask: np.ndarray) -> np.ndarray:
 
 
 _STEPS6 = [(1, 0, 0), (-1, 0, 0), (0, 1, 0), (0, -1, 0), (0, 0, 1), (0, 0, -1)]
-_STEPS26 = [(dx, dy, dz) for dx in (-1, 0, 1) for dy in (-1, 0, 1) for dz in (-1, 0, 1) if (dx, dy, dz) != (0, 0, 0)]
+
+
+def _shift_or(mask: np.ndarray, axis: int) -> np.ndarray:
+    """``mask`` or its neighbours either way along ``axis``."""
+    out = mask.copy()
+    lead = [slice(None)] * 3
+    tail = [slice(None)] * 3
+    lead[axis], tail[axis] = slice(1, None), slice(None, -1)
+    out[tuple(lead)] |= mask[tuple(tail)]
+    out[tuple(tail)] |= mask[tuple(lead)]
+    return out
 
 
 def _near(mask: np.ndarray, full: bool) -> np.ndarray:
-    """Voxels with a 6- (or 26- where ``full``) neighbour in ``mask``."""
+    """Voxels with a 6- (or 26- where ``full``) neighbour in ``mask`` (the 26: the cube, axis by axis)."""
+    if full:
+        return _shift_or(_shift_or(_shift_or(mask, 0), 1), 2)
     out = np.zeros_like(mask)
-    padded = np.pad(mask, 1)
-    nx, ny, nz = mask.shape
-    for dx, dy, dz in (_STEPS26 if full else _STEPS6):
-        out |= padded[1 + dx:1 + dx + nx, 1 + dy:1 + dy + ny, 1 + dz:1 + dz + nz]
+    for axis in range(3):
+        out |= _shift_or(mask, axis)
     return out
 
 
@@ -587,10 +597,10 @@ def raster_pitch(size: np.ndarray) -> float:
 
 
 def field_pitch(size: np.ndarray, ball: float | None = None) -> tuple[float, float]:
-    """The voxel pitch for a part of box ``size`` (at most about 2.5 million voxels, 250 along its longest
+    """The voxel pitch for a part of box ``size`` (at most about 1.5 million voxels, 200 along its longest
     side), and the cavity probe's ball radius (a fifth of its smallest side, 3 voxels to 6 mm)."""
     size = np.maximum(np.asarray(size, dtype=float), 1e-9)
-    pitch = max(float(size.max()) / 250.0, float(np.prod(size) / 2.5e6) ** (1.0 / 3.0))
+    pitch = max(float(size.max()) / 200.0, float(np.prod(size) / 1.5e6) ** (1.0 / 3.0))
     radius = min(6.0, max(3.0 * pitch, 0.2 * float(size.min()))) if ball is None else ball
     return max(pitch, radius / 12.0), radius
 
