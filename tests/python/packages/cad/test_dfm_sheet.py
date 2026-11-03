@@ -348,6 +348,32 @@ class TypeSideTest(unittest.TestCase):
         self.assertAlmostEqual(found["scs_half_die_mm"], 0.630 * 25.4 / 2)
         self.assertEqual((found["sheet_long_mm"], found["sheet_short_mm"]), (500.0, 300.0))
 
+    def test_every_set_judges_or_names_every_rule_another_set_judges(self) -> None:
+        ids = {name: {rule.id.removeprefix("sheet.") for rule in rule_set.rules}
+               for name, rule_set in sheet_rules.RULE_SETS.items()}
+        every = set().union(*ids.values())
+        for name, rule_set in sheet_rules.RULE_SETS.items():
+            gaps = sheet_rules.NOT_JUDGED[name]
+            self.assertEqual(every - ids[name], set(gaps), name)  # no silent gap, no stale one
+            for rule in gaps:
+                self.assertIn(rule, rule_set.note, name)
+
+    def test_sendcutsend_gauges_and_their_fallbacks(self) -> None:
+        self.assertEqual(sheet_rules.scs_row("steel", 2.0)[0], 0.074)       # within 0.005 in
+        self.assertIsNone(sheet_rules.scs_row("aluminum", 3.0))            # 0.125 in is 3.175 mm
+        report = {"parts": {"items": [{"thickness_mm": 3.0}]}, "bends": {"items": [{"inside_radius_mm": 3.0}]}}
+        resolved = {"material": "5052", "rules": "sendcutsend", "thickness": None}
+        found = sheet_rules.context(report, resolved)
+        self.assertFalse(found["scs_gauge"])
+        self.assertNotIn("scs_min_flange_mm", found)
+        codes = [(f.severity, f.code) for f in sheet_rules.findings(report, resolved, False)]
+        self.assertIn(("error", "sheet.gauge_unmatched"), codes)
+        _, record = __import__("cad._internal.dfm.rules", fromlist=["evaluate"]).evaluate(
+            {**report, "flanges": {"items": [{"length_outside_half_mm": 50.0}]}},
+            sheet_rules.RULE_SETS["sendcutsend"], found)
+        flange = [o for o in record["outcomes"] if o["rule"] == "sheet.flange_length"]
+        self.assertEqual(sorted(o["status"] for o in flange), ["not_evaluated", "passed"])  # gauge's, gauge-free
+
     def test_options_and_findings(self) -> None:
         with self.assertRaisesRegex(ValueError, "--sheet-size"):
             manufacturing.options("step", "sheet", {"sheet_size": "big"})
