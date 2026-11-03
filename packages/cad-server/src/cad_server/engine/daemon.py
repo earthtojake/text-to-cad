@@ -499,8 +499,15 @@ def _proc_holder(port: int) -> tuple[int | None, str | None, str | None]:
     return None, None, None
 
 
+def _console(argv: list[str]) -> str:
+    """What a Windows console tool printed. Such tools write in the console's OEM code page, not
+    the one ``text=True`` assumes (UTF-8 under ``PYTHONUTF8=1``), and a localized header in it
+    must not end the read: ``netstat`` on a zh-TW Windows writes cp950."""
+    return subprocess.run(argv, capture_output=True, encoding="oem", errors="replace", timeout=10).stdout or ""
+
+
 def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
-    said = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10).stdout
+    said = _console(["netstat", "-ano", "-p", "TCP"])
     pid = None
     for line in said.splitlines():
         fields = line.split()
@@ -509,8 +516,7 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
             break
     if pid is None:
         return None, None, None
-    listed = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True,
-                            text=True, timeout=10).stdout.strip()
+    listed = _console(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"]).strip()
     name = listed.split('","', 1)[0].strip('"') if listed.startswith('"') else None
     return pid, name, None
 
@@ -1182,7 +1188,8 @@ class Daemon:
             order = {"id": 1, "op": "export", "source": request["source"], "destinations": request["destinations"],
                      "cwd": request.get("cwd"),
                      "draw": request.get("draw"), "draw_still": request.get("draw_still"),
-                     "expected": request.get("expected"), "original": request.get("original")}
+                     "expected": request.get("expected"), "original": request.get("original"),
+                     **({"tolerance": request["tolerance"]} if request.get("tolerance") is not None else {})}
             return self._call(request, order, send, payload)
         if op == "result" and "id" in request:
             # A handle's shape (``api.Document.shape``): the document its id names, as the engine
@@ -1660,12 +1667,56 @@ def let_go(held: Any, *, failed: bool = False) -> None:
     while it is still held, so no daemon starting meanwhile can take a lock on a file that is gone
     (``lock`` takes the one the name names); on Windows, where a file open is never removed,
     once it is let go. The door is gone already (``Door.close``)."""
+    _unmirror()
     for path in (port_path(), *(() if failed else (failure_path(),))):
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
     _drop_lock(held, lock_path())
+
+
+def _mirrored() -> Path | None:
+    """The port file 0.10.0's clients read on Windows (``places.appdata_engine_dir``), else None."""
+    from cad.engine.places import appdata_engine_dir
+
+    folder = appdata_engine_dir()
+    return folder / f"{NAME}.port" if folder is not None else None
+
+
+def _mirror(port: int, token: str) -> None:
+    """For one release, this engine's port file written where 0.10.0's clients look for it too, on
+    Windows: a CAD app's server of 0.10.0 still running in an app not restarted since the update finds
+    this engine there, and starts none of its own beside it. Never over a 0.10.0 engine's own that
+    answers. Quiet: a client of this release never reads it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        held = int(path.read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        held = None
+    if held is not None and held != port and _answers("127.0.0.1", held):
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(f"{port} {token}\n", encoding="utf-8")
+        replace_atomic(temporary, path)
+    except OSError:
+        pass
+
+
+def _unmirror() -> None:
+    """The mirrored port file removed before this engine's own (``_mirror``), when it is a copy of it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        if path.read_text(encoding="utf-8") == port_path().read_text(encoding="utf-8"):
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _drop_lock(held: Any, path: Path) -> None:
@@ -1787,6 +1838,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             temporary = port_path().with_suffix(".tmp")
             temporary.write_text(f"{port} {daemon.token}\n", encoding="utf-8")
             replace_atomic(temporary, port_path())
+            _mirror(port, daemon.token)
             daemon.reached_by(port_path())
             listener.settimeout(0.5)
             while not daemon.stopping.is_set():

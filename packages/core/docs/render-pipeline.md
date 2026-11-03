@@ -248,7 +248,9 @@ texture to `scene.environment`, and releases it through
 `disposeEnvironmentResource()`. `environmentResourceIdentity()` includes
 softbox size, fill, and PMREM resolution; it excludes rotation so rotating the
 rig is a live scene update rather than an environment rebuild. A resource also
-exposes `readPixels()` for transferring its half-float PMREM from worker WebGL.
+exposes `readPixels()` for transferring its half-float PMREM (every face of every
+level) from worker WebGL, and `environmentResourceFromPixels()` rebuilds that cube
+target on the renderer that draws it.
 The interactive UI prepares and caches these maps off the main thread; snapshot
 rendering can keep the synchronous caller-owned path.
 

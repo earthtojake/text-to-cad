@@ -118,7 +118,8 @@ class RootExports(unittest.TestCase):
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
         shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its
-        name. No ``id=``: an id is derived; no ``store=``: every document is kept alike."""
+        name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
+        ``store=``: every document is kept alike."""
         import inspect
 
         parameters = inspect.signature(cad.engine.model.model).parameters
@@ -128,8 +129,11 @@ class RootExports(unittest.TestCase):
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf", "kicad_pcb"):
             with self.subTest(kind=kind):
                 if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's
-                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters), ["out", "name"])
-                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name"])
+                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
+                                     ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
+                # The type's decorator passes an STL's or a 3MF's mesh tolerance to the engine's; any other
+                # type's engine decorator refuses it, as Python refuses an unknown keyword.
+                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name", "tolerance"])
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either

@@ -4,7 +4,8 @@
 -- its parts, their placement, colours and motion -- is what the code built, so neither the
 command, the root function nor a document's handle (`Document.export`, what a model call returns)
 takes an option that selects a part or a state. A posed or partial file is a function in the
-model's code (`cad.ap242.posed`, a part's own model). This pins the surface where such an option
+model's code (`cad.ap242.posed`, a part's own model). Its one option, an STL's or a 3MF's mesh
+tolerance, says how finely the file's triangles follow the model, never what the file holds. This pins the surface where such an option
 would come back: the parser `cad <type> export` runs and the Python signatures. The verbs moved from
 the decorated function (`Model`) to the handle deliberately: the function is the declaration and
 its id; the document a call returns is what a verb reads. Nothing here needs the CAD kernel.
@@ -35,34 +36,38 @@ from cad.engine.model import Model  # noqa: E402
 
 LAW = ("law 22 (packages/cad/README.md): \"A verb's option is about the picture or the path, never the "
        "model. `export` takes a document and destinations: what the file holds, its parts and their "
-       "placement, colours and motion, is what the code built, so no option selects a part or a state. "
-       "[...] Anything that changes what a document is, is a function in the model's code.\"")
+       "placement, colours and motion, is what the code built, so no option selects a part or a state; "
+       "its one option, an STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, "
+       "not what it holds. [...] Anything that changes what a document is, is a function in the model's code.\"")
 
 
 class ExportTakesADocumentAndDestinations(unittest.TestCase):
-    def test_the_command_takes_src_dst_and_json_alone(self) -> None:
+    def test_the_command_takes_src_dst_its_tolerance_and_json_alone(self) -> None:
         parser = build_parser()
         found = {(action.dest, tuple(action.option_strings), action.nargs) for action in parser._actions
                  if not isinstance(action, argparse._HelpAction)}
-        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("json", ("--json",), 0)},
-                         f"`cad <type> export` takes SRC DST [DST ...] [--json] alone; {LAW}")
+        self.assertEqual(found, {("source", (), None), ("destinations", (), "+"), ("tolerance", ("--tolerance",), None),
+                                 ("json", ("--json",), 0)},
+                         f"`cad <type> export` takes SRC DST [DST ...] [--tolerance MM] [--json] alone; {LAW}")
 
     def test_the_function_takes_a_source_destinations_and_its_seams_alone(self) -> None:
         parameters = inspect.signature(cad.engine.api.export).parameters.values()
         self.assertEqual([(p.name, p.kind, p.default) for p in parameters], [
             ("source", inspect.Parameter.POSITIONAL_OR_KEYWORD, inspect.Parameter.empty),
             ("destinations", inspect.Parameter.VAR_POSITIONAL, inspect.Parameter.empty),
+            ("tolerance", inspect.Parameter.KEYWORD_ONLY, None),
             ("log", inspect.Parameter.KEYWORD_ONLY, None),
             ("daemon", inspect.Parameter.KEYWORD_ONLY, True),
             ("progress", inspect.Parameter.KEYWORD_ONLY, None),
-        ], f"cad.export is (source, *destinations, log=None, daemon=True, progress=None); {LAW}")
+        ], f"cad.export is (source, *destinations, tolerance=None, log=None, daemon=True, progress=None); {LAW}")
 
     def test_a_handle_exports_its_document_to_destinations_alone(self) -> None:
         parameters = inspect.signature(Document.export).parameters.values()
         self.assertEqual([(p.name, p.kind) for p in parameters], [
             ("self", inspect.Parameter.POSITIONAL_OR_KEYWORD),
             ("destinations", inspect.Parameter.VAR_POSITIONAL),
-        ], f"Document.export is (*destinations); {LAW}")
+            ("tolerance", inspect.Parameter.KEYWORD_ONLY),
+        ], f"Document.export is (*destinations, tolerance=None); {LAW}")
         self.assertFalse(hasattr(Model, "export") or hasattr(Model, "snapshot"),
                          "the decorated function declares; the handle a call returns is what a verb reads")
 

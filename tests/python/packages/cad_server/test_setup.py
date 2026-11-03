@@ -285,6 +285,52 @@ class TheCommand(Fixture):
         self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
         setup.stop_earlier.assert_not_called()
 
+    def test_a_first_install_inside_a_windows_app_package_installs_nothing_and_says_where_to_run_it(self) -> None:
+        """An MSIX app's shell (the Claude desktop app's) has what it writes under AppData -- uv's Python, on a
+        first install -- kept inside that app's package, where no terminal or other app sees it (#759). With
+        an installation current, an update runs there as anywhere."""
+        command(self.bin, "claude", CLAUDE)
+        before = self.snapshot()
+        with mock.patch.object(installations, "packaged", return_value="Claude_1.0.0.0_x64__pzs8sxrjxfjjc"):
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 1, out)
+            self.assertTrue(out.startswith("Not installed: this shell runs inside the Windows app package "
+                                           "Claude_1.0.0.0_x64__pzs8sxrjxfjjc"), out)
+            self.assertIn(f"not from an app's: {updates.command()}", out)
+            self.assertEqual(self.snapshot(), before)
+            self.assertFalse(self.state.exists())
+            code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("Not installed: "), out)
+        self.assertEqual(out.splitlines()[-1], "Dry run: nothing was changed.")
+        with mock.patch.object(installations, "packaged", return_value="Claude_1.0.0.0_x64__pzs8sxrjxfjjc"), \
+                mock.patch.object(installations, "current", return_value={"version": "0.10.0"}):
+            code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("Not installed", out)
+
+    def test_on_windows_0_10_s_engine_is_stopped_by_its_own_cad_stop(self) -> None:
+        """0.10.0 kept its folders in the local application data (``installations.appdata``): its own ``cad
+        stop`` stops the engine it serves from there, as 0.8's own stop does 0.8's."""
+        scripts = self.root / "AppData" / "cad-state" / "releases" / "0.10.0" / "Scripts"
+        scripts.mkdir(parents=True)
+        for name in ("cad.exe", "python.exe"):
+            (scripts / name).write_text("", encoding="utf-8")
+        record = {"version": "0.10.0", "python": str(scripts / "python.exe"), "cad": str(scripts / "cad.exe"),
+                  "prefix": str(scripts.parent)}
+        with mock.patch.object(installations, "appdata", return_value=[record]):
+            code, out, _err = self.run_setup("--dry-run")
+            self.assertEqual(code, 0, out)
+            self.assertRegex(out, rf"\n  0\.10 +stop +text-to-cad 0\.10\.0's server, if it runs: "
+                                  rf"`{re.escape(providers.shown(record['cad'], self.machine))} stop`\n")
+            setup.stop_earlier.return_value = (True, ["C:/Temp/cad-engine/engine.port"], "")
+            with mock.patch.dict(os.environ, {installations.NAME_ENV: RELEASE}):
+                code, out, _err = self.run_setup()
+        self.assertEqual(code, 0, out)
+        (call,) = setup.stop_earlier.call_args_list
+        self.assertEqual(call.args[0]["cad"], record["cad"])
+        self.assertIn("0.10     stopped text-to-cad 0.10.0's server (its own `cad stop`)", out)
+
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
         code, out, err = self.run_setup("--dry-run", "--json")
@@ -321,7 +367,7 @@ class InstallUpdateAndUninstall(Fixture):
         self.assertEqual(call.args[0]["cadgen"], earlier["cadgen"], "stopped by 0.8's own cadgen stop")
         console = re.escape(providers.shown(earlier["cadgen"], self.machine))
         self.assertRegex(out, rf"\n  0\.8 +stop +text-to-cad 0\.8\.4's server, if it runs: `{console} stop`\n")
-        self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if 0.8's stop above does "
+        self.assertIn(f"port {PORT} is held by another cad-server (python3.14, pid 4242): if the stop above does "
                       "not free it, the engine serves on the next free port, and says so", out)
         self.assertIn("0.8      stopped text-to-cad 0.8.4's server (its own `cadgen stop`)", out)
         config = json.loads(self.desktop.read_text(encoding="utf-8"))
@@ -709,6 +755,12 @@ class ZeroEightsOwnStop(unittest.TestCase):
                 self.assertEqual(setup.stop_earlier(record)[:2], expected, done)
         with mock.patch.object(subprocess, "run", side_effect=FileNotFoundError(2, "No such file or directory")):
             self.assertEqual(setup.stop_earlier(record)[:2], (False, None))
+        # 0.10.0's on Windows: its console script is its record's `cad`, and its telemetry switch CAD_TELEMETRY.
+        ten = {"version": "0.10.0", "cad": "C:/s/cad.exe", "python": "C:/s/python.exe", "prefix": "C:/s"}
+        with mock.patch.object(subprocess, "run", return_value=subprocess.CompletedProcess([], 0, answer, "")) as ran:
+            setup.stop_earlier(ten)
+        self.assertEqual(ran.call_args.args[0], ["C:/s/cad.exe", "stop", "--json"])
+        self.assertEqual(ran.call_args.kwargs["env"]["CAD_TELEMETRY"], "0")
 
 
 class TheOneLineInstaller(unittest.TestCase):

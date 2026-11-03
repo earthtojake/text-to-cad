@@ -60,7 +60,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
-    **{f"{document_type} export": frozenset({"source", "destinations", "json"})
+    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "json"})
        for document_type in ("xbf", "step", "stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
        for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")},

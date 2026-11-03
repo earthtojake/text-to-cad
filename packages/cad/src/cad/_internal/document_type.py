@@ -42,7 +42,7 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any, *, name: str | None = None) -> Any:
+    def __call__(self, out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
         """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
         declare the file a model writes, of this type."""
         entry = self.entry
@@ -55,7 +55,10 @@ class DocumentType(types.ModuleType):
         if any(not producer.declare for producer in _producers(entry.id)):
             from cad.engine import model
 
-            engine = getattr(model, entry.id)(out, name=name)
+            # An STL's or a 3MF's own mesh tolerance goes to the engine's decorator, which alone takes it.
+            engine = getattr(model, entry.id)(out, name=name, **({} if tolerance is None else {"tolerance": tolerance}))
+        elif tolerance is not None:
+            raise TypeError(f"@{entry.id} takes no tolerance: only an STL's or a 3MF's file is meshed")
 
         # A type whose own producer declares every target (``decorates`` None) checks its path now too.
         own = next((producer for producer in _producers(entry.id) if producer.declare and producer.decorates is None),

@@ -91,6 +91,18 @@ class OperationsTest(unittest.TestCase):
             result = self.finish(jobs, started)
         self.assertEqual((result['state'], result['stage'], result['progress']), ('succeeded', 'Complete', write))
 
+    def test_an_export_s_tolerance_is_a_number_of_millimetres_handed_to_the_engine(self):
+        jobs = Operations()
+        args = {'requestId': 'export-tolerance-01', 'source': str(Path('/tmp/arm.xbf').resolve()),
+                'destinations': [str(Path('/tmp/arm.stl').resolve())]}
+        with patch('cad.engine.api.export', return_value=[]) as export:
+            self.finish(jobs, jobs.call('cad_export', {**args, 'tolerance': 0.01}))
+        self.assertEqual(export.call_args.kwargs['tolerance'], 0.01)
+        for tolerance in ('0.01', 0.0001, True):
+            with self.subTest(tolerance=tolerance):
+                self.assertEqual(jobs.call('cad_export', {**args, 'requestId': 'export-tolerance-02',
+                                                          'tolerance': tolerance})['status'], 400)
+
     def test_a_snapshot_and_an_inspection_hand_the_engine_their_progress_taker(self):
         from cad.engine.api import Drawn
 

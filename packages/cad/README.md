@@ -125,8 +125,9 @@ document types', the integrations' and the CLI's.
    warm process: a door (a named pipe; on Windows a port file), a lock and its connections' pipes, in
    a folder only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own
    temporary folder (on macOS the one the system names, whatever `$TMPDIR` a sandbox sets; else
-   `$TMPDIR`), else `/tmp/cad-<uid>` (0.8's was `cadgen-engine`: neither release finds the other's
-   door) -- and the server's own
+   `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows `~\.local\state\cad-engine`, out of the local
+   application data an app package virtualizes (0.8's was `cadgen-engine`: neither release finds the
+   other's door) -- and the server's own
    state in the user's state folder (`cad`): settings, Recents' small previews, and the registry of the
    documents it has built, been handed or opened, one record each that points at its script or
    file, the user's one page token, the engine's record (the port it rolled to while 3245 is another
@@ -136,7 +137,7 @@ document types', the integrations' and the CLI's.
    releases an update installed (`releases/<version>`: each one's environment, made by uv from its
    cache; the one before the current kept as the way back);
    never geometry and never source. In the
-   platform's cache folder (`~/.cache/cad`; on Windows `%LOCALAPPDATA%\cad`) it keeps, under `documents/` and
+   platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/` and
    nowhere else there, each model document's bytes as it last built them: its own file, never a
    declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
    -- and made again by a run of its script (a shape's by the program that handed it over), so a
@@ -382,7 +383,8 @@ document types', the integrations' and the CLI's.
 
 22. **A verb's option is about the picture or the path, never the model.** `export` takes a
     document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state. `snapshot`'s
+    motion, is what the code built, so no option selects a part or a state; its one option, an
+    STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, not what it holds. `snapshot`'s
     options describe the picture (the camera, the display, the size, the state the mechanism
     is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
     is, is a function in the model's code: a part's own model, or a model returning the

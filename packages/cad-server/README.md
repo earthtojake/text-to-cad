@@ -132,8 +132,13 @@ the `cad` command, which runs the current installation, else the one registered 
 (`_internal/proxy.py`). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
-The state folder is `cad` in the platform's place for state (`cad-state` on Windows),
-the cache folder `cad` in its place for caches. On a computer an earlier release (0.8, named
+The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
+place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and
+`~\.cache\cad`, never in the local application data, which Windows virtualizes for every process
+an app package (the Claude desktop app) starts. Where 0.10.0 kept them there (`cad-state` and `cad`
+in `%LOCALAPPDATA%`), the same commands move the settings, the documents' records and their bytes,
+Recents, the receipt, the page token and the port the engine remembers once, `cad setup` stops 0.10.0's
+engine by its own `cad stop`, and `cad doctor --prune` removes the rest a week after its last write. On a computer an earlier release (0.8, named
 cadgen) set up, `cad setup`, `cad doctor` and a registration move what this release keeps of the
 earlier state folder into this one, each thing once and only where this one has none of it: the
 settings, the documents' records, Recents and the setup receipt (`cad.engine.places.adopt`); the
