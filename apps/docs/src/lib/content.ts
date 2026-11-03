@@ -100,19 +100,13 @@ export const skillGroups = [
     name: "CAD",
     path: "skills/cad",
     summary:
-      "Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports.",
+      "Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF, GLB and DXF exports.",
   },
   {
     name: "Engineering Drawing",
     path: "skills/engineering-drawing",
     summary:
       "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
-  },
-  {
-    name: "DXF",
-    path: "skills/dxf",
-    summary:
-      "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
   },
   {
     name: "PCB",

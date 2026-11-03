@@ -889,9 +889,9 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
                          [("leave", f"the skills in {where}, from text-to-cad {RELEASE}: up to date")])
         # A recorded skill gone, or another release: added again, said why.
-        providers.remove_path(folder / "dxf")
+        providers.remove_path(folder / "pcb")
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record)],
-                         [("update", f"the skills in {where}: dxf missing")])
+                         [("update", f"the skills in {where}: pcb missing")])
         self.assertEqual([(step.action, step.subject) for step in home.plan(skills=record, release="1.2.4")],
                          [("update", f"the skills in {where}, from text-to-cad {RELEASE} -> 1.2.4")])
         # The switch's refresh adds them again for a release, for the agents the receipt names alone.
@@ -899,7 +899,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
                                                         machine=home.machine, skills=record)), [("windsurf", "update")])
         (step,) = providers.uninstall_plan(home.detect(), {"actions": [], "skills": record}, machine=home.machine)
         self.assertEqual(step.commands, [[home.machine.which("npx"), *NPX, "remove", "-g", "-a", "windsurf",
-                                          "-s", *sorted(name for name in skipped if name != "dxf"), "-y"]])
+                                          "-s", *sorted(name for name in skipped if name != "pcb"), "-y"]])
         home.apply([step])
         self.assertEqual(providers.ours_in(folder), [])
 

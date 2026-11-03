@@ -70,9 +70,8 @@ robot description files, simulation, and local review.
 
 | Skill        | Summary                                                                                                                                            | Source                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| CAD          | Creates and edits CAD models from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF and GLB exports. | [skills/cad](skills/cad/SKILL.md)                   |
+| CAD          | Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF, GLB and DXF exports. | [skills/cad](skills/cad/SKILL.md)                   |
 | Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
-| DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
 | PCB          | Edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP. | [skills/pcb](skills/pcb/SKILL.md)                   |
 | Simulation   | Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF. | [skills/simulation](skills/simulation/SKILL.md)     |
 | SendCutSend | Checks DXF and STEP files before upload to SendCutSend. | [skills/sendcutsend](skills/sendcutsend/SKILL.md) |

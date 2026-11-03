@@ -2,7 +2,7 @@
 
 Read this file when the user asks for STEP, STL, 3MF, GLB or xbf files, a model in
 another pose, a part on its own, a project's standing deliverables, or a vendor STEP
-converted for use in a model. A 2D DXF drawing is not covered here.
+converted for use in a model. A 2D profile's DXF is [2D profiles and DXF](2d-profiles-and-dxf.md).
 
 ## Contents
 

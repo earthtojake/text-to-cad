@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer. Covers 3D parts and assemblies, including the part a 2D drawing projects, not the 2D DXF drawing itself or the robot and world descriptions the simulation skill writes.
+description: Creates and edits parametric CAD parts, assemblies and 2D profiles as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB, DXF and xbf files on request; resolves prompt references, measures geometry, checks whether a part can be machined, cut and bent, molded or printed, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, DXF files, flat patterns, gaskets and laser or waterjet cut layouts, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF, GLB and DXF files in the CAD Viewer. Not for the robot and world descriptions the simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -18,13 +18,14 @@ the page the person has open updates. Files are exports, made when asked.
 | **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
 | **Export STEP, STL, 3MF, GLB or xbf** | `cad xbf export <id> <file>`. | [Exports](references/exports.md) |
+| **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad xbf export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
 | **Resolve a reference from a prompt** | `cad xbf inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cad xbf snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
-| **Open an existing XBF, STEP/STP, STL, 3MF or GLB** | Show it to the user. | [Show the model](#show-the-model) |
+| **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the shop's rules. | [Can it be made?](#can-it-be-made) |
 
 ## Setup and paths
@@ -185,7 +186,9 @@ A project with standing deliverables gets an `exports.py` that imports its model
 calls `export(x, path, ...)` on each (`x` a model call's handle); running it rewrites every deliverable
 ([exports](references/exports.md)). An export takes a document and its destinations,
 and nothing else: a posed file is a model that returns the posed assembly
-(`posed(arm(), "folded")`), and a part on its own is the part's own model.
+(`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a
+model that returns 2D geometry, a profile or a flat pattern, and a solid is refused
+([2D profiles and DXF](references/2d-profiles-and-dxf.md)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
@@ -256,6 +259,7 @@ that file's own terms (none is a ref `cad <type> inspect` resolves):
 | GLB | `/work/out/model.glb#n12` | the glTF node `nodes[12]` (0-based, the file's own index) |
 | 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
 | STL | the file alone, on `File:` | one mesh: nothing in it is picked |
+| DXF | `/work/DXF/panel.dxf#h2F` | the modelspace entity whose handle is `2F`; what a block reference draws is named by its INSERT |
 
 ## Check each change
 
@@ -269,6 +273,7 @@ can be checked:
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad xbf inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
+| A 2D profile or DXF | `cad xbf export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
 
 ```bash
 cad xbf snapshot "$ID" tmp/review.png

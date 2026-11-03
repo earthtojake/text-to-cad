@@ -364,7 +364,7 @@ misses new ones — which matters here, because releases do add skills.
 
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
-now covered by the CAD, DXF and robot-description skills, and the retired
+now covered by the CAD and simulation skills, and the retired
 `cad-mcp-setup` by the install command and this page. Remove old standalone
 installs with `npx skills remove cad-viewer cad-mcp-setup`.
 
@@ -474,7 +474,7 @@ once which to update for the other's fixes.
 
 ## Windows 11: Smart App Control
 
-The CAD kernel behind the `cad`, `dxf`, `urdf`, `srdf` and `sdf`
+The CAD kernel behind the `cad`, `engineering-drawing` and `simulation`
 skills is `OCP`, OpenCascade's Python binding, and its wheel ships an unsigned
 native module. Windows 11's Smart App Control blocks unsigned native code, so
 on a machine where it is on (the default on a fresh install) every `cad`

@@ -414,7 +414,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual([name for name in listed if not (SKILLS_ROOT / name / "SKILL.md").is_file()], [])
 
     def test_skill_handoffs_name_skills_that_ship(self) -> None:
-        # `$cad`, `$dxf`: one skill hands the agent to another by name (shell variables are upper case).
+        # `$cad`, `$sendcutsend`: one skill hands the agent to another by name (shell variables are upper case).
         dangling = []
         for document in sorted(SKILLS_ROOT.rglob("*.md")):
             for name in sorted(set(re.findall(r"\$([a-z][a-z0-9-]*)\b", document.read_text(encoding="utf-8")))):

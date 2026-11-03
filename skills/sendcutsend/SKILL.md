@@ -106,7 +106,11 @@ After generating an image, inspect the rendered image before delivery. If labels
 
 ## DXF Review
 
-For laser sheet cutting, start from the refreshed sources and measured DXF geometry facts.
+For laser sheet cutting, start from the refreshed sources and measured DXF geometry facts. The
+cut-file checks that hold for any shop (closed contours, units, duplicate and overlapping geometry,
+kerf, small features, open geometry on cut layers) are the cad skill's sheet-metal review, the
+"Cut files (DXF)" section of its `references/manufacturing-sheet-metal.md`: check them too, with
+SendCutSend's own numbers.
 
 Check for:
 
