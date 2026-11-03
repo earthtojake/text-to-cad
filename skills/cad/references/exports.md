@@ -12,6 +12,7 @@ converted for use in a model. A 2D DXF drawing is not covered here.
 - [Posed files and parts on their own](#posed-files-and-parts-on-their-own)
 - [The xbf is Save As](#the-xbf-is-save-as)
 - [Formats](#formats)
+- [Print tolerance](#print-tolerance)
 - [Other tools](#other-tools)
 
 ## A file is an action
@@ -43,8 +44,9 @@ moved over it, so a failed export leaves the old file whole. `--json` prints wha
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
 "seconds", "written"}]}`), and a failure as `{"ok": false, "error": ...}` with exit status 1.
 
-An export takes a document and its destinations, and nothing else. What a file shows is
-the model's business: a different file is a different model.
+An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
+mesh tolerance ([print tolerance](#print-tolerance)). What a file shows is the model's
+business: a different file is a different model.
 
 A written file is a detached copy, whether `cad export`, `exports.py` or a file
 decorator (`@step`, `@glb`, ...) wrote it: nothing ties it to the model, nothing reruns
@@ -168,9 +170,32 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
 
 Mesh exports and the viewer draw the same meshes, made at one tolerance
 (a chord deviation of 0.25% of the mean side of each part's bounding box, and
-28.5 degrees), configurable nowhere. A face the mesher leaves without triangles is left
-out, so a mesh export has a hole there; a snapshot names such faces in a warning, and
-they are usually slivers a boolean left. Repair the face in the model.
+28.5 degrees), unless an STL or a 3MF gives its own ([print tolerance](#print-tolerance)). A
+face the mesher leaves without triangles is left out, so a mesh export has a hole there; a
+snapshot names such faces in a warning, and they are usually slivers a boolean left. Repair
+the face in the model.
+
+## Print tolerance
+
+The viewer's mesh is coarse for a print with tight fits: on an 85 mm part its facets sit up to
+0.2 mm inside a curved surface, as much as a typical clearance, and large cylinders print
+faceted. When an STL or a 3MF is for printing a part with fits, clearances or large curved
+faces, give it an absolute tolerance in millimetres, about a tenth of the smallest clearance
+the part is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints):
+
+```bash
+cad export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+```
+
+The same is `export(x, path, tolerance=0.02)` in an `exports.py` and
+`@stl("hopper.stl", tolerance=0.02)` or `@threemf(...)` on a model. Each part is meshed again
+at it for that file alone; the viewer, snapshots and every other export keep the viewer's
+mesh. The file says what it was meshed at (the STL's header, the 3MF's description). It is
+for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
+one), and a GLB is the viewer's mesh. Finer costs triangles: a tenth of the tolerance is about
+three times the segments round a curve and ten times the triangles of a doubly curved face, so
+stay at or above 0.001 (the floor) and say the file's size when it is large. If the export
+names faces left without triangles, try a slightly different tolerance or repair the face.
 
 ## Other tools
 

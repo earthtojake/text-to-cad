@@ -364,6 +364,13 @@ class ExportTest(unittest.TestCase):
         status, out, err = run("export", str(self.xbf), str(self.folder / "board.obj"))
         self.assertEqual((status, out), (2, ""))
         self.assertIn("an export is one of", err)
+        # An STL's own tolerance reaches the engine and the file says it; a STEP takes none.
+        status, out, err = run("export", str(self.xbf), str(self.folder / "fine.stl"), "--tolerance", "0.01", "--json")
+        self.assertEqual(status, 0, err)
+        self.assertEqual((self.folder / "fine.stl").read_bytes()[:80].rstrip(), b"board (meshed at 0.01 mm)")
+        status, out, err = run("export", str(self.xbf), str(self.folder / "fine.step"), "--tolerance", "0.01")
+        self.assertEqual((status, out), (2, ""))
+        self.assertIn("export the STEP without one", err)
 
     def test_a_step_becomes_an_xbf(self) -> None:
         out = self.folder / "from-step.xbf"

@@ -2,7 +2,7 @@
 ordinary Python scripts call decorated models explicitly.
 
     python SCRIPT.py                                 the models the script explicitly calls
-    cad export SRC DST [DST ...] [--json]
+    cad export SRC DST [DST ...] [--tolerance MM] [--json]
     cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
@@ -43,6 +43,11 @@ def _export_arguments(export: argparse.ArgumentParser) -> None:
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
                              "document as its code built it")
+    from cad.engine.export import MIN_TOLERANCE
+
+    export.add_argument("--tolerance", type=float, metavar="MM",
+                        help=f"mesh an .stl or a .3mf at this absolute tolerance, in mm (at least {MIN_TOLERANCE:g}), "
+                             "instead of the viewer's quarter per cent of each part: for a print whose fits are finer")
     export.add_argument("--json", action="store_true", help="print what was written as JSON")
 
 
@@ -336,7 +341,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     from cad.engine.export import ExportRefused
 
     try:
-        written = api.export(args.source, *args.destinations,
+        written = api.export(args.source, *args.destinations, tolerance=args.tolerance,
                              log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise Failed(str(error), 2) from None

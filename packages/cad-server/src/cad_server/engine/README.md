@@ -526,7 +526,7 @@ again.
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
-| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance, element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
+| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
@@ -555,9 +555,10 @@ again.
 ```
 cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
                                              in an environment of the library's, with its kernel)
-cad export SRC DST [DST ...] [--json]
+cad export SRC DST [DST ...] [--tolerance MM] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
-                                             (.glb, .stl, .3mf: to the other two mesh kinds)
+                                             (.glb, .stl, .3mf: to the other two mesh kinds);
+                                             --tolerance meshes an .stl or a .3mf at MM (Mesh)
 cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
@@ -1778,7 +1779,10 @@ changed or new one fails in one line naming the folder and its mode.
   placement, looks through the materials extension (base materials, `pbmetallic` display
   properties, painted triangles naming their own); **STL**: binary, every placed triangle.
   Their meshes are the process's one mesh cache's (`serve.MESHES`), the viewer's: a part the
-  build meshed for the viewer is not meshed again for a GLB, nor the other way round.
+  build meshed for the viewer is not meshed again for a GLB, nor the other way round. An STL or a
+  3MF at an export's own tolerance (**Mesh**) is meshed again for that file and says so: the STL's
+  header ends `(meshed at 0.01 mm)`, the 3MF's `Description` metadata reads `Meshed at a
+  tolerance of 0.01 mm`.
 - **DXF** (`export/dxf.py`): a planar document -- a model whose body returns a sketch, a face,
   wires or edges -- drawn by build123d's own `ExportDXF` (ezdxf), in millimetres, each edge
   where the document places it one entity, so a curve stays an ARC, CIRCLE, ELLIPSE or SPLINE.
@@ -2362,7 +2366,7 @@ materials apart are prototypes apart, the second its own topology over the same 
 
 ## Mesh
 
-One tolerance, configurable nowhere: a linear deflection of
+One tolerance for everything the engine holds and draws, configurable nowhere: a linear deflection of
 `(Lx + Ly + Lz) / 300 * 0.25` of the part's own bounding box (0.25 %, half
 FreeCAD's default Deviation of 0.5 %, so a large arc's outline is not drawn
 in corners) and FreeCAD's angular deflection of 28.5 degrees, both absolute,
@@ -2388,6 +2392,20 @@ key does not make it, the parts naming it are keyed apart, by the key and their
 own keys together (a placement's look kept apart is such a copy, and keeps one key
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
+
+An STL or a 3MF export may give its own tolerance instead: `cad export ID part.stl --tolerance
+0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
+absolute linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`), the angle
+unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm tube is
+47 segments round at the engine's tolerance, its facets 0.095 mm deep; 205 and 0.005 mm at
+0.01). Each part is meshed again at it for that file alone and never cached, so the viewer, the
+snapshot and every other export keep the engine's mesh; the file says what it was meshed at
+(**Translation formats**). It is refused by name for any other kind (a GLB is the viewer's own
+mesh) and for a mesh file's source, whose triangles are the file's. Since which faces the mesher
+leaves without triangles changes with the tolerance, the export names each part it left faces of,
+and how many. The cost is the triangles: a tenth of the deflection is about three times the
+segments round a curve and ten times the triangles of a doubly curved face, so a whole assembly at
+0.01 mm can run to millions, in its seconds and in its file (50 bytes a triangle in an STL).
 
 Every edge has a class read from the B-rep: 1 feature (two faces at an angle),
 2 tangent (two faces meeting at least G1), 3 seam (a face closing on itself),
