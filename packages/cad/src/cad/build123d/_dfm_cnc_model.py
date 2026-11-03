@@ -70,59 +70,6 @@ def directions_for(axes: int, rotary: np.ndarray | None = None) -> list[np.ndarr
     return found
 
 
-def _owners(listed: Any) -> list[Any]:
-    """A ``TopTools_ListOfShape``'s shapes. Iterating one from Python costs milliseconds an item; an edge's
-    list of faces has one or two, read by ``First`` and ``Last``."""
-    size = listed.Size()
-    if size == 0:
-        return []
-    if size == 1:
-        return [listed.First()]
-    if size == 2:
-        return [listed.First(), listed.Last()]
-    return list(listed)
-
-
-def edges(part: brep.Part) -> list[brep.Edge]:
-    """``_dfm_brep.edges``, the same edges, read without iterating OCCT's lists from Python (see ``_owners``):
-    a hundredfold faster on a part of a few hundred faces."""
-    import build123d as bd
-    from OCP.collections import IndexedDataMap_TopoDS_Shape_List_TopoDS_Shape_TopTools_ShapeMapHasher as Ancestry
-    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_REVERSED
-    from OCP.TopExp import TopExp
-
-    ancestry = Ancestry()
-    TopExp.MapShapesAndAncestors_s(part.shape.wrapped, TopAbs_EDGE, TopAbs_FACE, ancestry)
-    found: list[brep.Edge] = []
-    for index in range(1, ancestry.Extent() + 1):
-        distinct: list[Any] = []
-        for owner in _owners(ancestry.FindFromIndex(index)):
-            if not any(owner.IsSame(other) for other in distinct):
-                distinct.append(owner)
-        if len(distinct) != 2:
-            continue
-        edge = bd.Edge(ancestry.FindKey(index))
-        if edge.length < 1e-9:
-            continue
-        a, b = (bd.Face(face) for face in distinct)
-        try:
-            t, point, tangent = brep._edge_point(edge)
-            na, nb = brep._normal_on(a, edge, t), brep._normal_on(b, edge, t)
-        except Exception:  # noqa: BLE001 - a degenerate edge has no angle to give
-            continue
-        orientation = brep._in_face_orientation(a, edge)
-        along = -tangent if orientation == TopAbs_REVERSED else tangent
-        into_a = np.cross(na, along)
-        between = math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))
-        smooth = between < brep.SMOOTH_DEG
-        concave = (not smooth) and float(nb @ into_a) > 0.0
-        angle = 180.0 + between if concave else 180.0 - between
-        found.append(brep.Edge(part.edge_ordinal(edge), (part.face_ordinal(a), part.face_ordinal(b)), concave, smooth,
-                               angle, float(edge.length), tuple(float(x) for x in point),  # type: ignore[arg-type]
-                               tuple(float(x) for x in tangent)))  # type: ignore[arg-type]
-    return found
-
-
 @dataclass(frozen=True)
 class Hit:
     distance: float
@@ -138,7 +85,7 @@ class Model:
         self.faces = part.faces()
         self.n = len(self.faces)
         self.surfaces = [brep.surface(face) for face in self.faces]
-        self.edges = edges(part)
+        self.edges = brep.edges(part)
         self.adjacent: dict[int, list[brep.Edge]] = {i: [] for i in range(1, self.n + 1)}
         for edge in self.edges:
             self.adjacent[edge.faces[0]].append(edge)
