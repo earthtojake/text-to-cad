@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cad.results import CheckResult
+from cad.results import CheckFinding, CheckResult
 
 __all__ = ["check"]
 
@@ -44,12 +44,19 @@ def check(board: Path) -> CheckResult:
         findings = run_drc(cli, target)
     except KicadRunError as error:  # KiCad refused the board (a newer format, a broken file): its own words
         return failed(target, str(error), code="kicad_failed")
+    found = issues(findings)
+    if not target.with_suffix(".kicad_pro").is_file():
+        # The rules (clearances, track widths, net classes) live in the project: without it KiCad checks
+        # against its defaults, which can pass or fail a board its own project would not.
+        found += (CheckFinding(severity="warning", code="no_project",
+                               message=f"no {target.with_suffix('.kicad_pro').name} beside the board: checked against "
+                                       f"KiCad's default rules, not the board's own"),)
     errors = sum(1 for finding in findings if finding.severity == "error")
     unconnected = sum(1 for finding in findings if finding.check == "unconnected")
     warnings = sum(1 for finding in findings if finding.severity == "warning")
     return CheckResult(
         ok=not (errors or unconnected),
         path=target,
-        findings=issues(findings),
+        findings=found,
         summary="" if errors or unconnected else f"OK {display_path(target)}: DRC clean ({warnings} warning(s))",
     )

@@ -74,6 +74,13 @@ class DocumentType(types.ModuleType):
                                 f"{', '.join('@' + document_type for document_type in taking)}")
             if engine is None:
                 raise TypeError(f"@{entry.id} takes no {type(target).__name__}")
+            scripts = _script_types()
+            if scripts and _parameters(target):
+                # A function of the open board under @<type>: the board script's decorator is missing, or below.
+                raise TypeError(f"@{entry.id} over a function of parameters: a model takes none; a function of "
+                                f"the open board is a board script, declared by "
+                                f"{' or '.join('@' + kind + '(...)' for kind in scripts)} directly on it, "
+                                f"with @{entry.id} above that")
             return engine(target)
 
         return apply
@@ -118,6 +125,25 @@ class DocumentType(types.ModuleType):
         entry = self.entry
         if found is not None and found.id != entry.id:
             raise ValueError(f"{os.fspath(source)} is a {found.id}, not a {entry.id}: use cad.{found.id}")
+
+
+def _script_types() -> tuple[str, ...]:
+    """The types whose own producer declares a function itself (a board script's ``kicad_pcb``)."""
+    from cad.registry import _producers as every
+
+    return tuple(dict.fromkeys(producer.document_type for producer in every()
+                               if producer.declare and producer.decorates is None))
+
+
+def _parameters(target: Any) -> bool:
+    """Whether ``target`` is a function some of whose parameters have no default."""
+    import inspect
+
+    if not inspect.isfunction(target):
+        return False
+    return any(parameter.default is inspect.Parameter.empty
+               and parameter.kind in (parameter.POSITIONAL_ONLY, parameter.POSITIONAL_OR_KEYWORD)
+               for parameter in inspect.signature(target).parameters.values())
 
 
 def _producers(document_type: str) -> tuple[Any, ...]:

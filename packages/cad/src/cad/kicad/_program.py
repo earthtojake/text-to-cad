@@ -26,7 +26,8 @@ from cad._internal import programs
 from cad._internal.programs import version_tuple
 
 __all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError",
-           "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint", "kicad_version", "private_run", "quiet"]
+           "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint", "kicad_version",
+           "private_run", "project_as_found", "quiet"]
 
 # What kicad-cli says on stderr that says nothing about the board.
 _NOISE = ("Fontconfig error",)
@@ -110,6 +111,27 @@ def private_run(prefix: str = "cad-kicad-") -> Iterator[tuple[Path, dict[str, st
     (with whatever KiCad left in it) is removed afterwards. Yields ``(folder, env)``."""
     with programs.private_run(prefix, _HOMES) as run:
         yield run
+
+
+# The project files kicad-cli makes beside a board it only reads, when they are missing: its local settings
+# (.kicad_prl) on a check or an export, and a project (.kicad_pro) when the board has none.
+_PROJECT_FILES = (".kicad_prl", ".kicad_pro")
+
+
+@contextmanager
+def project_as_found(board: Path) -> Iterator[None]:
+    """A read of ``board`` by kicad-cli (a check, an export) leaves its folder as it found it: a project file
+    kicad-cli makes beside it that was not there before is removed afterwards. One that was there is never
+    touched."""
+    made = [board.with_suffix(suffix) for suffix in _PROJECT_FILES if not board.with_suffix(suffix).exists()]
+    try:
+        yield
+    finally:
+        for path in made:
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
 
 
 def kicad_version(cli: Path) -> str | None:

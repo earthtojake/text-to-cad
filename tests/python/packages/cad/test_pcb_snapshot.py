@@ -75,6 +75,9 @@ class BoardJobReplayTest(unittest.TestCase):
 
     def test_each_view_is_written_at_its_size(self) -> None:
         self.assertEqual(5, len(self.result))
+        # Every key the command line prints a snapshot by, as every other kind's report has it.
+        for drawn in self.result:
+            self.assertIs(False, drawn.report["preview"])
         self.assertEqual(["assembly", "below", "outline", "placement", "top"], sorted(self.images))
         for name, image in self.images.items():
             self.assertEqual(SIZE, (image.width, image.height), name)

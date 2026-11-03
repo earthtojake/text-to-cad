@@ -39,6 +39,8 @@ class NativeExports(unittest.TestCase):
             original = board.read_bytes()
             made = {to: export(board, to, root / "fab" / to) for to in EXPORTS}
             self.assertEqual(board.read_bytes(), original)
+            # The board's folder as found: kicad-cli's local settings (.kicad_prl) and project are not left.
+            self.assertEqual(["board.kicad_pcb", "fab"], sorted(path.name for path in root.iterdir()))
             for to, files in made.items():
                 self.assertTrue(files and all(path.is_file() and path.parent.name == to for path in files), (to, files))
 
@@ -78,6 +80,9 @@ class SharedTestBoard(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="kicad-shared-") as folder:
             board = write_board(Path(folder))
             result = drc(board)
+            # No .kicad_pro beside it: checked against KiCad's defaults, and said so; nothing left beside it.
+            self.assertIn("no_project", {issue.code for issue in result.issues}, result)
+            self.assertEqual([board.name], sorted(path.name for path in Path(folder).iterdir()))
             # KiCad read it (a refusal is one issue, `kicad_failed`) and found the unrouted LED net's ratsnest line.
             codes = {issue.code for issue in result.issues}
             self.assertNotIn("kicad_failed", codes, result)
@@ -112,20 +117,35 @@ class StepWithoutModels(unittest.TestCase):
             self.assertIn("R1", said.getvalue())
             self.assertIn("VRML", said.getvalue())
 
+    def test_an_output_folder_that_cannot_be_made_is_the_exports_error(self):
+        from cad.kicad._export import export
+        from cad.kicad._program import KicadRunError
+
+        with tempfile.TemporaryDirectory(prefix="kicad-export-out-") as folder:
+            root = Path(folder)
+            board = root / "board.kicad_pcb"
+            board.write_text(BOARD, encoding="utf-8")
+            (root / "taken").write_text("a file, not a folder", encoding="utf-8")
+            with self.assertRaisesRegex(KicadRunError, "cannot write the drill into"):
+                export(board, "drill", root / "taken")
+
     def test_a_failed_export_still_fails(self):
         import subprocess
 
-        from cad.kicad._export import _step_without_models
+        from cad.kicad._export import _missing_models, _step_written
 
         step = Path(tempfile.mkdtemp(prefix="kicad-step-failed-")) / "board.step"
         step.write_text("ISO-10303-21;", encoding="utf-8")
         written = f"STEP file '{step}' created.\n"
         aborted = "** Error exporting STEP file. Export aborted. **\n"
-        for code, out, warned in ((2, written, True), (2, aborted, False), (3, written, False), (2, "", False)):
-            completed = subprocess.CompletedProcess([], code, out, "")
-            self.assertEqual(_step_without_models("step", completed, step) is not None, warned, (code, out))
-        self.assertIsNone(_step_without_models("gerbers", subprocess.CompletedProcess([], 2, written, ""), step))
-
+        for code, out, ok in ((2, written, True), (2, aborted, False), (3, written, False), (2, "", False)):
+            self.assertEqual(_step_written("step", subprocess.CompletedProcess([], code, out, ""), step), ok, (code, out))
+        self.assertFalse(_step_written("gerbers", subprocess.CompletedProcess([], 2, written, ""), step))
+        # Exit 0 with only files not found (kicad-cli's status then) still says which parts have no body.
+        missing = "Could not add 3D model for C2.\nFile not found: x.step\nCould not add 3D model for C10.\n" + written
+        warning = _missing_models("step", subprocess.CompletedProcess([], 0, missing, ""), step)
+        self.assertIn("2 parts without a 3D model (C2, C10)", warning or "")
+        self.assertIsNone(_missing_models("step", subprocess.CompletedProcess([], 0, written, ""), step))
 
 if __name__ == "__main__":
     unittest.main()

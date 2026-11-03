@@ -48,8 +48,11 @@ A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` 
 the open board (kipy's `Board`), saves it when the function returns and saves nothing when it raises.
 It needs a KiCad nightly's `kicad-cli` (10.99: its headless `api-server`, which `kicad-cli api-server
 --help` lists; a stable `kicad-cli` is refused up front, before any server starts) and the `kicad`
-extra (`cad[kicad]`, kipy) in the environment the script runs in. A `@step` stacked on it writes the saved
-board's STEP (`kicad-cli pcb export step --subst-models`):
+extra (`cad[kicad]`, kipy) in the environment the script runs in. Saving writes the board in the
+nightly's format: a board from an older KiCad is upgraded, which the run says, and that older KiCad
+can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
+step --subst-models`); parts whose 3D model is missing or only in VRML have no body in it, which the run
+names:
 
 ```python
 from cad import kicad_pcb, step
@@ -79,6 +82,7 @@ connector mating side; a plausible-looking layout does not establish electrical 
    rules consistent with the chosen fab and electrical requirements. Refill changed copper zones
    with KiCad before relying on their saved fill; the viewer displays the fill stored in the file.
 3. Run `cad kicad_pcb check board.kicad_pcb` (or `--json`). It checks the saved board against its rules
+   (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`)
    and exits 1 on error-severity violations or unconnected items. Review warnings too. Resolve
    the cause instead of weakening rules to obtain a clean report.
 4. Inspect placement and routing visually: `cad kicad_pcb snapshot board.kicad_pcb tmp/board.png`.

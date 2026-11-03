@@ -195,5 +195,30 @@ class BoardScriptTest(unittest.TestCase):
         self.assertEqual([], _Server.started)
 
 
+    def test_no_kipy_is_refused_before_a_server_starts(self) -> None:
+        with mock.patch.dict(sys.modules, {"kipy": None}), self.assertRaisesRegex(ImportError, "cad\\[kicad\\]"):
+            _session.run(self.script(lambda board: None), cli=Path("kicad-cli"))
+        self.assertEqual([], _Server.started)
+
+    def test_a_socket_path_too_long_for_a_unix_socket_moves_to_a_short_folder(self) -> None:
+        if sys.platform.startswith("win"):
+            self.skipTest("a named pipe has no such limit")
+        deep = self.folder / ("d" * 120)
+        with _session._socket(deep) as socket:
+            self.assertLessEqual(len(str(socket)), 100)
+            self.assertTrue(socket.parent.is_dir())
+            short = socket.parent
+        self.assertFalse(short.exists(), "the short folder is removed")
+        with _session._socket(self.folder) as socket:
+            self.assertEqual(self.folder / "api.sock", socket)
+
+    def test_step_on_a_function_of_the_board_names_the_order(self) -> None:
+        def edits(board):
+            pass
+
+        with self.assertRaisesRegex(TypeError, r"declared by @kicad_pcb\(\.\.\.\) directly on it, with @step above"):
+            step(str(self.folder / "board.step"))(edits)
+
+
 if __name__ == "__main__":
     unittest.main()

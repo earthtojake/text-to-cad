@@ -15,7 +15,7 @@ from pathlib import Path
 
 from cad.results import CheckFinding
 
-from cad.kicad._program import KicadRunError, private_run
+from cad.kicad._program import KicadRunError, private_run, project_as_found
 from cad.kicad._program import quiet as _quiet
 
 __all__ = ["Finding", "KicadRunError", "issues", "run_drc"]
@@ -77,7 +77,7 @@ def _findings(report: dict) -> list[Finding]:
 def run_drc(cli: Path, board: Path, *, timeout: float = _TIMEOUT_SECONDS) -> list[Finding]:
     """KiCad's DRC of ``board``, every severity included. Raises :class:`KicadRunError`
     when ``kicad-cli`` cannot run or refuses the board."""
-    with private_run("cad-drc-") as (scratch, env):
+    with private_run("cad-drc-") as (scratch, env), project_as_found(board):
         report = scratch / "drc.json"
         command = [str(cli), "pcb", "drc", "--format", "json", "--severity-all", "-o", str(report), str(board)]
         try:

@@ -184,7 +184,7 @@ class Held:
         output = io.BytesIO(); image.save(output, format="PNG")
         return output.getvalue(), {"kind": self.kind, "renderer": "pillow", "width": still.size[0], "height": still.size[1],
             "camera": "plan" if still.camera is not None else "top", "projection": "orthographic", "displayMode": display["mode"],
-            "boardDisplay": display, "warnings": self.warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
+            "preview": False, "boardDisplay": display, "warnings": self.warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
 
 
 def _placement(pen, board, place, scale, bottom, line):
