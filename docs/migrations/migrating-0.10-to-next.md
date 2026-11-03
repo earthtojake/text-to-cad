@@ -69,3 +69,21 @@ runs (`part.glb is a glb, not a stl: use cad glb snapshot`).
 
 These stay as they were: `cad run`, `serve`, `status`, `stop`, `delete`, `server`, `setup`, `update`,
 `uninstall`, `doctor`, `plugin`, `viewer`, `telemetry`.
+
+## The manufacturing measurements
+
+The dfm skill's `scripts/mold_tool.py` and the dfam-check skill's `scripts/dfam_tool.py`, and the
+`requirements.txt` each installed beside them, are gone: their measurements are the library's trimesh
+integration now (`cad[trimesh]`), reached by a 3D type's `check`. The report each printed is the
+result's `measurements` (`--json`), its families and figures as they were; a family that could not be
+measured fails the check (exit 1, where the scripts exited 2), and what the figures show are findings.
+
+| 0.10 | Now |
+| --- | --- |
+| `python scripts/mold_tool.py measure part.stl --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]` | `cad stl check part.stl --process molding --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]` |
+| `python scripts/mold_tool.py pulls part.stl` | `cad stl check part.stl --process molding --candidates` |
+| `python scripts/dfam_tool.py measure part.stl [--samples 2000] [--angle-limit 45]` | `cad stl check part.stl --process printing [--samples 2000] [--angle-limit 45]` |
+| `python scripts/dfam_tool.py orientations part.stl [--angle-limit 45]` | `cad stl check part.stl --process printing --candidates [--angle-limit 45]` |
+| a `.3mf` | `cad threemf check part.3mf ...` (its declared unit, read as millimetres) |
+| an `.obj` or a `.ply` | no document type: `cad.trimesh.molding(trimesh.load(path))`, `cad.trimesh.printing(...)` |
+| a STEP or a model, exported to an STL first | `cad step check part.step ...`, `cad xbf check <id> ...`, `cad.xbf.check(handle, process=...)` |

@@ -23,11 +23,11 @@ import cad_server.cli as cli  # noqa: E402
 from cad_server.cli.document_types import operations_of, type_main  # noqa: E402
 
 TYPES = {
-    "xbf": ("export", "snapshot", "inspect"),
-    "step": ("export", "snapshot", "inspect"),
-    "stl": ("export", "snapshot"),
-    "glb": ("export", "snapshot", "inspect"),
-    "threemf": ("export", "snapshot"),
+    "xbf": ("export", "snapshot", "inspect", "check"),
+    "step": ("export", "snapshot", "inspect", "check"),
+    "stl": ("export", "snapshot", "check"),
+    "glb": ("export", "snapshot", "inspect", "check"),
+    "threemf": ("export", "snapshot", "check"),
     "dxf": ("snapshot",),
     "urdf": ("snapshot", "check"),
     "srdf": ("snapshot", "check"),

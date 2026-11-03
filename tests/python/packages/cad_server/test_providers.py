@@ -879,7 +879,7 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
         home = self.make(("npx",))
         self.agents(home, "windsurf")
         # The CLI skips a skill (one its YAML parser refused): what it says it installed is recorded.
-        skipped = [name for name in providers.SKILLS if name != "bambu-labs"]
+        skipped = [name for name in providers.SKILLS if name != "print3d"]
         home.set(skills=skipped)
         (added,) = home.apply(home.plan())
         self.assertEqual(added["skills"], skipped)

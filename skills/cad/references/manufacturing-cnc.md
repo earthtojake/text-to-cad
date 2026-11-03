@@ -1,9 +1,12 @@
 # CNC machining
 
+The evidence, the rules, the review and how to check a redesign are SKILL.md's
+[Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
+to milling and turning.
+
 ## Sources
 
-Where the user supplies no shop specification, start from these two, and read
-the shared rule-selection rules in `SKILL.md` before citing either:
+Where the person supplies no shop specification, start from these two:
 
 - [How to design parts for CNC machining](https://www.hubs.com/knowledge-base/how-design-parts-cnc-machining/) (Protolabs Network) for the design rules: cavities and pockets, internal edges, thin walls, holes, threads, small features, tolerances, setups and orientation, undercuts.
 - [CNC milling guidelines](https://www.protolabs.com/services/cnc-machining/cnc-milling/design-guidelines/) (Protolabs) for that supplier's size limits, materials, finishes, thread conventions and radii.
@@ -12,7 +15,19 @@ Neither establishes the capabilities of an arbitrary lathe, five-axis machine,
 or custom fixture. Obtain the actual turning/tooling specification when
 reviewing those processes.
 
-## Review
+## Measure it
+
+```bash
+cad step inspect part.step                    # parts, bounds, volume
+cad step inspect part.step 'face 12'          # one face: its surface, radius, area, box
+cad xbf inspect "$ID" 'plate/face 7'          # the same of a model's face
+```
+
+A cylindrical face's `radius` is an internal corner's radius or a hole's; its `box` gives a pocket's
+or a slot's depth and width. A check script that calls the model measures what no single face
+answers (a wall between two faces, a pocket's depth from the top face).
+
+## Review the part
 
 Collect material, stock form, milling versus turning, available axes, critical
 fits/tolerances, and the intended shop or tool constraints. If the process is

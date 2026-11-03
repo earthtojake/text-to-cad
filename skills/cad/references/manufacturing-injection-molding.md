@@ -1,9 +1,12 @@
 # Injection molding
 
+The evidence, the rules, the review and how to check a redesign are SKILL.md's
+[Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
+to injection molding.
+
 ## Sources
 
-Where the user supplies no shop specification, start from these two, and read
-the shared rule-selection rules in `SKILL.md` before citing either:
+Where the person supplies no shop specification, start from these two:
 
 - [Injection molding design guide](https://www.hubs.com/guides/injection-molding/) (Protolabs Network) for the design rules: wall thickness and hollowing thick sections, draft, ribs, bosses, undercuts and side actions, snap fits and living hinges, common defects (sink, warp), and the straight-pull cost tips.
 - [Plastic injection molding guidelines](https://www.protolabs.com/services/injection-molding/plastic-injection-molding/design-guidelines/) (Protolabs) for that supplier's size limits, resin-specific wall thickness table, draft, undercut and radii guidance.
@@ -12,33 +15,48 @@ Texture, wall depth, resin grade, fillers, and tooling can change the
 applicable limits. Verify the current guidance before citing numerical
 thresholds.
 
-## Measurement: `scripts/mold_tool.py`
+## Measure it
+
+`cad <type> check --process molding` measures draft, undercuts and projected area along a pull:
 
 ```bash
-python scripts/mold_tool.py measure part.stl --pull z [--units mm]
-python scripts/mold_tool.py pulls part.stl
+cad step check part.step --process molding --pull z
+cad xbf check "$ID" --process molding --pull y --json
+cad stl check part.stl --process molding --units mm
+cad step check part.step --process molding --candidates
 ```
 
-Input is a mesh (`.stl`, `.obj`, `.ply`, `.3mf`). For a STEP, export an STL
-first: for a text-to-cad model, `cad xbf export <id> part.stl` writes one (or `cad step export part.step part.stl` from a STEP).
-Its mesh comes at one fixed tolerance; the tool splits faces further where it
-needs to, so a 1 mm feature gets facets of its own.
+```text
+warning: zero_draft_walls at 0, -10, 0: 1250.84 mm2 of wall has no draft along the pull (under 0.05 deg), 66 triangles; the largest face is 300 mm2
+OK part.step: molding along 0,0,1: walls 1250.84 mm2, zero-draft 1250.84 mm2, min wall draft 0 deg, undercut candidates 0 mm2, projected 550 mm2, depth 10 mm
+```
 
-Mesh files carry no units, so `--units mm|cm|m|in|ft` states the file's, and
-the report repeats it as `scale.declared_units`. Without it everything is read
-as millimetres, and `scale.units_suspect` flags a part whose bounding box is
-then not the size of a molded part. That flag catches only the extremes: a
-4 × 3 × 2 part is plausible in millimetres, centimetres AND inches, so
-`scale.bbox_mm_if_units` gives the envelope under each one. Check it against
-the part you expect rather than treating a clear flag as confirmation.
+The source is an `.stl`, `.3mf`, `.glb`, `.step` or `.xbf`, or a model's id: a STEP or an xbf is
+tessellated by the engine, so there is nothing to export first. `--pull` is an axis (`z`, `-y`) or
+`x,y,z` components, `z` by default; `--wall-limit` (45 degrees) is where a face stops being a wall and
+`--zero-tol` (0.05 degrees) is zero draft. A mesh already held in a program (an `.obj`, a `.ply`) is
+measured with `cad.trimesh.molding(mesh, pull="z")` in a check script.
 
-If a fact family fails, the report carries `"partial": true`, lists the family
-in `partial_sections`, and the command exits 2. Do not read a partial report as
-"no findings". A family that fails inside `pulls` counts: every candidate axis
-carries its own `error`. Exit 1 is a failure with no report to read — a bad
-argument, an unloadable mesh, or a measurement that was not a finite number.
+The check is facts only: it never compares a figure with a resin's or a tool's limit, so its `OK` is
+not a moldable verdict. Its findings say what the figures show (warnings `zero_draft_walls`,
+`undercut_candidates`, `units_suspect`, `several_bodies`, `coarse_curved_face`; info
+`probe_resolution`), each at the place it was measured. It exits 1 when something was not measured: a
+`measurement_failed` error names the family and the rest are still reported, so never read that run
+as "no findings"; `mesh_unreadable`, `not_finite` and `invalid_target` carry no measurements at all.
 
-### `draft`
+`--json` prints one line, `ok`, `findings`, `summary` and `measurements`, the report the families
+below describe.
+
+### Units: `measurements.mesh` and `measurements.scale`
+
+An STL carries no units, so `--units mm|cm|m|in|ft` states the file's (the other types declare their
+own), and the report repeats it as `scale.declared_units`. Without it an STL is read as millimetres,
+and `scale.units_suspect` flags a part whose bounding box is then not the size of a molded part. That
+flag catches only the extremes: a 4 × 3 × 2 part is plausible in millimetres, centimetres AND inches,
+so `scale.bbox_mm_if_units` gives the envelope under each one. Check it against the part you expect
+rather than treating a clear flag as confirmation.
+
+### `measurements.draft`
 
 - `wall_area_mm2`: faces within `--wall-limit` (default 45°) of the pull. Tops,
   bottoms and steep chamfers are not walls and appear in no draft figure.
@@ -74,23 +92,26 @@ giving 0.46°, 0.68° and 1.91° for the same wall at three tessellations.
 A curved face is read at the **5th percentile of its own area**, not its mean
 (which would bury a real low-draft band on a sphere) and not its minimum (the
 chord outlier again). It also carries `spread_deg`, the scatter across the same
-face. On a face whose draft should be uniform that spread is the export's
-tessellation, and it BOUNDS the error: the reading is low by no more than the
-spread it declares. A spread over a degree means re-export finer before citing
-the figure against a limit, and `reading_note` says so. Note that `area_mm2` for
-a curved face is the whole face's area, not the area at that one draft.
+face. On a face whose draft should be uniform that spread is the tessellation,
+and it BOUNDS the error: the reading is low by no more than the spread it
+declares. A spread over a degree means measure a finer mesh before citing the
+figure against a limit, and `reading_note` (the `coarse_curved_face` finding)
+says so. Note that `area_mm2` for a curved face is the whole face's area, not
+the area at that one draft.
 
 Read `min_wall_draft` against `zero_draft_wall_area_mm2` in the same report. If
 there is zero-draft wall area and the minimum is not zero, the two disagree and
 the report is wrong; say so rather than quoting one of them.
 
-### `undercuts`
+### `measurements.undercuts`
 
 A straight two-half pull occlusion test. From each face a ray is cast along the
-direction its mold half withdraws; faces the part itself blocks are candidates.
-Zero-draft walls count only when both directions are blocked. Faces are split
-to a small maximum edge before casting, so the counted area follows the feature
-rather than the tessellation.
+direction its mold half withdraws; faces the part itself blocks are candidates
+(`candidate_area_mm2`, `candidate_area_pct_of_surface`, `largest_candidate_faces`
+with their centroids). Zero-draft walls count only when both directions are
+blocked (`trapped_zero_draft_area_mm2`). Faces are split to a small maximum edge
+before casting, so the counted area follows the feature rather than the
+tessellation.
 
 `opens_toward` is the lean of a face's outward normal along the pull, not its
 mold-half assignment. The test assumes a straight two-half tool with the
@@ -106,33 +127,40 @@ coring a thick section is the standard molding fix, so it is counted in
 `internal_void_count` and the part stays one body. Nothing here measures a
 sealed void's own walls or reaches inside one.
 
-`probe_resolution_note` appears when the face budget stopped the split short.
-A mesh already over budget is cast unsplit, so undercut area follows the
-tessellation; re-export nearer the edge the note names before quoting the area.
+`probe_resolution_note` (the `probe_resolution` finding) appears when the face
+budget stopped the split short. A mesh already over budget is cast unsplit, so
+undercut area follows the tessellation; measure a finer mesh near the edge the
+note names before quoting the area.
 
-### `projection`
+### `measurements.projection`
 
-Silhouette area along the pull, rasterised, with `raster_resolution_mm` sized
-to the part and reported. Plus depth along the pull and volume. The figure is a
-count of covered cells, accurate to about one cell ring.
+Silhouette area along the pull (`projected_area_mm2`), rasterised, with
+`raster_resolution_mm` sized to the part and reported. Plus depth along the pull
+(`depth_along_pull_mm`) and volume. The figure is a count of covered cells,
+accurate to about one cell ring.
 
-### `pulls`
+### `--candidates`: `measurements.pulls.candidates`
 
 Repeats the draft and undercut summaries for x, y, z AND the mesh's own
-principal axes. A part modelled off-axis has no good pull among the three
+principal axes, each row a `pull` with its `undercut_candidate_area_mm2`,
+`wall_area_mm2`, `zero_draft_wall_area_mm2`, `wall_area_below_1deg_mm2` and
+`min_wall_draft_deg`. A part modelled off-axis has no good pull among the three
 world axes, and reading a 2° draft as 12° under `--pull z` looks like a
 measurement rather than a mismatch; `principal0/1/2` are where its draft was
-built. Choose a pull from measured area, not by eye.
+built. Draft magnitude is the same for a +axis and a -axis pull. Choose a pull
+from measured area, not by eye.
 
 ### Not measured here
 
 **Wall thickness.** Measure it on the CAD model, or on the mesh with a tool
-that casts rays, and trust only the thin end of a ray cast: one ray along the
-face normal reads a plate's LENGTH rather than its thickness. The thin end —
-the minimum and the thin samples — is what it gets right, and the thin end is
-what fill depends on. No ray cast sees a sealed void. State the method with any thickness finding.
+that casts rays (`cad <type> check --process printing` reports
+`measurements.wall_thickness`), and trust only the thin end of a ray cast: one
+ray along the face normal reads a plate's LENGTH rather than its thickness. The
+thin end — the minimum and the thin samples — is what it gets right, and the
+thin end is what fill depends on. No ray cast sees a sealed void. State the
+method with any thickness finding.
 
-## Review
+## Review the part
 
 Collect resin grade/filler, nominal wall, pull direction, proposed parting line,
 texture/cosmetic faces, critical fits, and tooling constraints. Treat unknown
@@ -166,8 +194,8 @@ and obtain applicable guidance rather than reusing thermoplastic limits blindly.
 
 The following numbers are illustrative inputs, not default process limits.
 
-If a side wall has measured 0.5 degree draft (from `scripts/mold_tool.py
-measure --pull <axis>`) relative to the confirmed pull and the selected
-texture/tooling specification requires 2 degrees, report the shortfall for that
-wall. Without a confirmed pull direction, report draft as unverified rather
-than failing every vertical-looking face.
+If a side wall has measured 0.5 degree draft (`measurements.draft.min_wall_draft`
+from `cad step check part.step --process molding --pull <axis>`) relative to the
+confirmed pull and the selected texture/tooling specification requires 2 degrees,
+report the shortfall for that wall. Without a confirmed pull direction, report
+draft as unverified rather than failing every vertical-looking face.

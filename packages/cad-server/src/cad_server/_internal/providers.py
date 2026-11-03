@@ -108,11 +108,10 @@ COPY_MARK = ".text-to-cad-copy"
 # release's said so in its body); a loose skill naming it, under one of this repository's skill names
 # (its skills/ folder), is ours.
 PROVENANCE = REPOSITORY
-SKILLS = ("bambu-labs", "cad", "dfam-check", "dfm", "dxf", "engineering-drawing", "gcode", "pcb", "sendcutsend",
-          "simulation")
+SKILLS = ("cad", "dxf", "engineering-drawing", "pcb", "print3d", "sendcutsend", "simulation")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
 # written; a loose copy (the Skills CLI's, which adds skills and never removes one) is moved aside.
-RETIRED_SKILLS = ("pcb-dfm", "sdf", "srdf", "step-parts", "urdf")
+RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "gcode", "pcb-dfm", "sdf", "srdf", "step-parts", "urdf")
 # Claude Desktop's server key, and the variable its server is told its install channel by.
 DESKTOP_KEY = "cad"
 # A checkout's development install (its installer): its catalog, and the file it marks its Cursor copy with.

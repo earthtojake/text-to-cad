@@ -28,7 +28,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "inspect"
+        "inspect",
+        "check"
       ],
       "decorator": true
     },
@@ -45,7 +46,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "inspect"
+        "inspect",
+        "check"
       ],
       "decorator": true
     },
@@ -60,7 +62,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "mesh",
       "operations": [
         "export",
-        "snapshot"
+        "snapshot",
+        "check"
       ],
       "decorator": true
     },
@@ -76,7 +79,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "inspect"
+        "inspect",
+        "check"
       ],
       "decorator": true
     },
@@ -91,7 +95,8 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "mesh",
       "operations": [
         "export",
-        "snapshot"
+        "snapshot",
+        "check"
       ],
       "decorator": true
     },

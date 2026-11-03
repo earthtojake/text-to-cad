@@ -9,10 +9,7 @@
         "cad",
         "dxf",
         "engineering-drawing",
-        "dfm",
-        "dfam-check",
-        "gcode",
-        "bambu-labs",
+        "print3d",
         "sendcutsend"
       ]
     },

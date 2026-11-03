@@ -65,6 +65,9 @@ ALLOWED_CADGEN = {
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
     "cad.registry",  # the document types and integrations: stdlib only
     "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
+    # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
+    # is imported in the function that measures.
+    "cad._internal.manufacturing",
     "cad._internal.aliases",  # the earlier spellings: stdlib only
     # Reached only when a decorator or an engine operation is called (``cad.step.export``,
     # ``cad urdf snapshot``), never by a check: imported in the function that dispatches to it.

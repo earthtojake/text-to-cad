@@ -1,4 +1,4 @@
-"""skills/gcode/scripts/orca_presets.py: complete OrcaSlicer presets for its command line.
+"""skills/print3d/scripts/orca_presets.py: complete OrcaSlicer presets for its command line.
 
 OrcaSlicer's command line slices with defaults when a preset only holds its
 differences from a parent, and refuses a process whose `compatible_printers`
@@ -18,10 +18,10 @@ import unittest
 
 from tests.python.support.paths import REPO_ROOT
 
-sys.path.insert(0, str(REPO_ROOT / "skills/gcode/scripts"))
+sys.path.insert(0, str(REPO_ROOT / "skills/print3d/scripts"))
 import orca_presets  # noqa: E402
 
-SCRIPT = REPO_ROOT / "skills/gcode/scripts/orca_presets.py"
+SCRIPT = REPO_ROOT / "skills/print3d/scripts/orca_presets.py"
 
 
 def write(root: Path, relative: str, data: dict) -> Path:
