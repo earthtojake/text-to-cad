@@ -342,7 +342,8 @@ Laws 1 to 13 and 19 to 23 are the engine's; 14 to 18 hold for the whole package.
 
 22. **A verb's option is about the picture or the path, never the model.** `export` takes a
     document and destinations: what the file holds, its parts and their placement, colours and
-    motion, is what the code built, so no option selects a part or a state. `snapshot`'s
+    motion, is what the code built, so no option selects a part or a state; its one option, an
+    STL's or a 3MF's mesh tolerance, is how finely the file's triangles follow that, not what it holds. `snapshot`'s
     options describe the picture (the camera, the display, the size, the state the mechanism
     is drawn in); `serve`'s and `status`'s the process. Anything that changes what a document
     is, is a function in the model's code: a part's own model, or a model returning the

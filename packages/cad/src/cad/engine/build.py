@@ -850,7 +850,7 @@ def _outputs(plan: list, report: dict[str, Any], log: Callable[[str], None],
         if target.kind == "xbf":
             fresh, size = save(target.path)
         else:
-            size = export.translate(source(), target.kind, target.path)
+            size = export.translate(source(), target.kind, target.path, target.tolerance, log)
             fresh = _stat(target.path) != before
         seconds = time.perf_counter() - clock
         timings[target.kind] = round(seconds, 4)

@@ -2,7 +2,7 @@
   "name": "@cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.10.2",
+  "version": "0.10.3",
   "scripts": {
     "build": "vite build && vite build --config vite.shell.config.mjs",
     "test": "node scripts/run-tests.mjs",

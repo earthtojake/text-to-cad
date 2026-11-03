@@ -1221,8 +1221,8 @@ class ToolArgumentsTest(unittest.TestCase):
             return schema["enum"][0]
         kind = schema.get("type")
         kind = kind[0] if isinstance(kind, list) else kind
-        return {"string": str(self.tmp / "out.png"), "integer": schema.get("minimum", 0), "boolean": False,
-                "object": {}, "array": []}[kind]
+        return {"string": str(self.tmp / "out.png"), "integer": schema.get("minimum", 0),
+                "number": schema.get("minimum", 0), "boolean": False, "object": {}, "array": []}[kind]
 
     def test_every_schema_property_is_one_its_handler_takes(self) -> None:
         for catalog in CATALOGS:
