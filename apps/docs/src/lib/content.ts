@@ -118,31 +118,13 @@ export const skillGroups = [
     name: "PCB",
     path: "skills/pcb",
     summary:
-      "Edits native KiCad circuit boards, inspects parts and nets, runs DRC, and exports fabrication files or STEP for mechanical design.",
+      "Edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP.",
   },
   {
-    name: "PCB DFM",
-    path: "skills/pcb-dfm",
+    name: "Simulation",
+    path: "skills/simulation",
     summary:
-      "Reviews a KiCad board before ordering: KiCad's DRC, decoupling, track width for current, sourcing and the fab's limits.",
-  },
-  {
-    name: "URDF",
-    path: "skills/urdf",
-    summary:
-      "Writes robot structure files with links, joints, limits, inertials, and meshes.",
-  },
-  {
-    name: "SRDF",
-    path: "skills/srdf",
-    summary:
-      "Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.",
-  },
-  {
-    name: "SDF",
-    path: "skills/sdf",
-    summary:
-      "Creates simulator models and worlds with frames, physics, sensors, and lights.",
+      "Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF.",
   },
   {
     name: "SendCutSend",

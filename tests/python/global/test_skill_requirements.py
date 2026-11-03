@@ -12,7 +12,7 @@ release that is not the one running.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
 command in a code block) or what its own Python imports. Skills that never touch it (bambu-labs,
-dfam-check, dfm, gcode, pcb-dfm, sendcutsend) carry no setup block; a `cad <type> export` such a skill
+dfam-check, dfm, gcode, sendcutsend) carry no setup block; a `cad <type> export` such a skill
 mentions in its prose is how a text-to-cad model's file was made, not a command it runs.
 """
 
@@ -25,17 +25,16 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
-SETUP = """Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+SETUP = """Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 {install}
 ```
 
-On Windows, in PowerShell: `{install_windows}`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `{install_windows}`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
+explains any other failure.
 """
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)

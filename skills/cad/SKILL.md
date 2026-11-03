@@ -1,6 +1,6 @@
 ---
 name: cad
-description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer. Covers 3D parts and assemblies, including the part a 2D drawing projects, not the 2D DXF drawing itself or URDF, SRDF and SDF robot descriptions.
+description: Creates and edits parametric CAD parts and assemblies as Python build123d models that text-to-cad's server builds and the CAD Viewer shows live; exports STEP, STL, 3MF, GLB and xbf files on request; resolves prompt references, measures geometry, and articulates or animates assemblies. Use for 3D CAD modeling, editing a model script (any change to a part's or assembly's `.py`), organizing a CAD project, exporting or converting CAD files, Quick Edit prompts, mechanisms, and explode or showcase animations. Opens and reviews existing XBF, STEP/STP, STL, 3MF and GLB files in the CAD Viewer. Covers 3D parts and assemblies, including the part a 2D drawing projects, not the 2D DXF drawing itself or the robot and world descriptions the simulation skill writes.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -28,17 +28,16 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
+explains any other failure.
 
 One server runs for the installation: the first run starts it, every run and every
 command goes through it, and it serves the viewer. `cad status` lists its workers
@@ -48,11 +47,10 @@ command again and it waits for that build and replays it (`cad status` shows it)
 Give a cold build of a large model the shell tool's longest timeout, or run it in the
 background.
 
-Build every model with `cad run`, exactly like `uv run`: the same options (`--with`, `-m`,
-`--python`, `--index-url`, ...) and the same script header. It needs nothing set up. cad itself is
-pinned to this computer's release, and its integrations are worked out from the script's imports
-(`import build123d` is the build123d integration), so a script names only its own packages, at
-the top of the script:
+Build every model with `cad run`, exactly like `uv run`: the same options and the same script
+header, with nothing to set up. cad is pinned to this computer's release and its integrations come
+from the script's imports (`import build123d` is the build123d integration), so a header names only
+the script's own packages, never a version of cad:
 
 ```python
 # /// script
@@ -60,20 +58,10 @@ the top of the script:
 # ///
 ```
 
-`cad run` makes that environment once and keeps it for the runs after. A header may name
-`cad[...]` to choose cad's integrations itself (`"cad[build123d]"`), never a version of cad: a
-script that pins cad to another release is refused. For a one-off, `cad run --with pandas
-src/plate.py` (repeat `--with`, or separate requirements with commas; a local folder or wheel works
-too, its path relative to the working directory, or in the block to the script's folder, and the
-next run installs it again after an edit). A script with no header inside a Python project (a
-`pyproject.toml`) runs with the project's dependencies, its `uv.lock` exactly where it has one
-(`--locked` and `--frozen` as uv reads them), and the project's uv settings (a private index), as
-`uv run` does. A script that stops on an
-import says which integration brings it in one line: add what it names to the header. What cannot
-be installed beside cad is refused in one line with uv's reason: change the requirement it names,
-or, where the network is needed once, run it outside a sandbox or with its permission. In Windows
-PowerShell, put a version constraint (`>=`, `<`) in the block, not on the command line: PowerShell
-hands it to `cad.cmd` unquoted, and cmd reads `>` as a redirection.
+A one-off dependency is `--with`; a script inside a Python project runs with the project's
+dependencies and lock. A run that stops on an import or a requirement says what to change in one
+line. [Environments](references/environments.md) has the details: `--with`, projects and their locks,
+private indexes, the network, and Windows PowerShell.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
@@ -221,32 +209,6 @@ ref picked on its page has no `made_by` and a Quick Edit from it no way back int
 and the model's page stays the better place to look while editing.
 [Exports](references/exports.md#model-page-or-file-page) tables the triggers and costs.
 
-## Pictures
-
-After every run, read its line and the delta under it; a contradiction with what you
-intended is fixed before anything else. A number the person gave is checked by an assert
-inside the model's body on what the geometry measures, a bound, a distance or a volume, or by
-`cad <type> inspect`, never by restating the constant, and never by code after the call in the
-model's script ([inspection](references/inspection-and-validation.md)). A derived number they
-asked for is a check script; neither is ever read off a picture. A structural or appearance
-change, new parts, placements, colours or a mechanism,
-gets the snapshots it takes to judge it, usually one from the angle that shows the change,
-more when a view leaves the question open, and a posed one for a mechanism state; never
-several angles by habit. For a large assembly, isolate the parts the edit touched or hide
-what covers them and frame them, instead of drawing the whole model. Resolve a reference with
-`cad <type> inspect` only when a prompt names one.
-
-```bash
-cad xbf snapshot "$ID" tmp/review.png
-cad xbf snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cad xbf snapshot "$ID" tmp/open.png --pose open
-```
-
-A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing
-but the PNG. Its options say how the picture is drawn: camera (`--camera top`), display,
-grid, pose (`--pose open`) and size. It shows arrangement and appearance, not dimensions
-([snapshots](references/snapshot-review.md)).
-
 ## Prompt references and inspection
 
 A reference such as `0dc50a92-a21f-5895-a245-ebdeb5352f3b#bracket/face 7` names geometry
@@ -294,11 +256,40 @@ that file's own terms (none is a ref `cad <type> inspect` resolves):
 | 3MF | `/work/out/plate.3mf#o2.1` | the 2nd `<build><item>`'s 1st `<component>` (1-based); `#o3` is the 3rd build item |
 | STL | the file alone, on `File:` | one mesh: nothing in it is picked |
 
-## Check the design
+## Check each change
 
-A check is a Python script that calls the model and measures what it returns, so it
-tests the model as it is now. Write one only when the person asks for a dimension, a fit
-or a mass, or when the change is numeric and the number matters ([Pictures](#pictures)):
+After every run, read its line and the delta under it (parts, bounds, joints, sequences): a
+contradiction with what you intended is fixed before anything else. Then check the change the way it
+can be checked:
+
+| The change | Check it with |
+| --- | --- |
+| A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad xbf inspect`; never by restating the constant, never by code after the call in the script |
+| A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
+| New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
+| A reference the prompt names | `cad xbf inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
+
+```bash
+cad xbf snapshot "$ID" tmp/review.png
+cad xbf snapshot "$ID" tmp/top.png --camera top --display hidden-line
+cad xbf snapshot "$ID" tmp/open.png --pose open
+```
+
+A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.
+Its options say how the picture is drawn: camera (`--camera top`), display, grid, pose and size
+([snapshots](references/snapshot-review.md)). For a large assembly, isolate the parts the edit
+touched or hide what covers them, instead of drawing the whole model.
+
+- A number is never read off a picture: a snapshot shows arrangement and appearance, not dimensions.
+- A check that fails or cannot decide has shown nothing about the design.
+- A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius reduced) builds a
+  different design from the one asked for.
+
+### Check scripts
+
+A check is a Python script that calls the model and measures what it returns, so it tests the model
+as it is now. Write one when the person asks for a dimension, a fit or a mass, or when the change is
+numeric and the number matters.
 
 Copy `world_parts` and `find_part` from
 [Opening geometry](references/inspection-and-validation.md#opening-geometry) into the check
@@ -316,17 +307,13 @@ print(plate.bounding_box().size)              # the envelope: not a hole's diame
 print(closest_points(plate, post).distance)   # 0: the standoff sits on the plate
 ```
 
-- Measuring is what shows a request's dimensions and clearances. In an assembly, nothing
-  interferes when `overlap_volume` is 0 for every pair of solids apart from fits named
-  on purpose, and a part meant to rest on another touches it when their
-  `closest_points` distance is 0. Both describe the parts as built, not a pose
+- In an assembly, nothing interferes when `overlap_volume` is 0 for every pair of solids apart from
+  fits named on purpose, and a part meant to rest on another touches it when their `closest_points`
+  distance is 0. Both describe the parts as built, not a pose
   ([measurements](references/inspection-and-validation.md#measurements)).
-- `cad xbf inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which
-  is also the root name `inspect "$ID"` prints): each part's volume times its material's
-  density, and the parts that have no material.
-- A check that fails or cannot decide has shown nothing about the design.
-- A retry that leaves out or shrinks a specified feature (a fillet skipped, a radius
-  reduced) builds a different design from the one asked for.
+- `cad xbf inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
+  the root name `inspect "$ID"` prints): each part's volume times its material's density, and the
+  parts that have no material.
 
 ## Hand off
 
@@ -336,33 +323,13 @@ every assumption or departure from the request.
 
 ### Show the model
 
-Show the user each model you create or change, and any model or file they ask to see.
-A file you export is a download: give its path, do not open it.
-Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad <type> snapshot`.
-
-- If your tools include `cad_show` (your host may prefix it), call it with the model's id
-  or the file's absolute path, and follow its description for when to call it again.
-  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
-  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
-  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
-  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
-  nothing: its `cad_show` opens the model's page in the user's browser and answers with
-  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
-  `cad_export` are on every host. Call only the tools you have, and never say a card
-  shows a model when your host drew none.
-- Otherwise give the user the page's link once: a model's page is the `view:` line its
-  run prints. For a file, run the CAD Viewer, from any folder:
-
-  ```bash
-  cad viewer --json FILE [FILE ...]
-  ```
-
-  The command ensures this installation's server, registers each file and prints
-  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
-  JSON line (never guess the port); the URL carries its token query. A page follows
-  every later run of its model and every rewrite of its file, so share it once.
-  Return that link to the user. If it fails to launch, say so.
+Show the person each model you create or change, and any model or file they ask to see. If your
+tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
+absolute path; its description says the rest. Otherwise give the person the page's link once: a
+model's page is the `view:` line its run prints, and a file's is the `url` that
+`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
+download: give its path. Never screenshot the viewer to check your own work; review with
+`cad <type> snapshot`. If it fails to launch, say so.
 
 Exact selection and measurement need a model's document, an `.xbf` or a STEP; mesh viewers
 measure approximately, on triangles.

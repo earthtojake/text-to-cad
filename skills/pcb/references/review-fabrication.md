@@ -2,8 +2,8 @@
 
 ## Sources
 
-Where the user names no fab, start from these two, and read the rule-selection
-rules in `SKILL.md` before citing either:
+Where the user names no fab, start from these two, and read [choosing the rules](../SKILL.md#choosing-the-rules)
+before citing either:
 
 - [JLCPCB capabilities](https://jlcpcb.com/capabilities/pcb-capabilities): track and space,
   drills, annular rings, copper to edge, silkscreen and solder mask, per layer count.

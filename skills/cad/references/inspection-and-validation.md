@@ -5,7 +5,7 @@ contact, or diagnosing geometry.
 
 This is the catalogue of what exists. Write a check only when the person asks for a dimension, a
 fit or a mass, or the change is numeric and the number matters; run `cad <type> inspect` only when a
-prompt names a reference ([Pictures](../SKILL.md#pictures)).
+prompt names a reference ([Check each change](../SKILL.md#check-each-change)).
 
 ## Contents
 

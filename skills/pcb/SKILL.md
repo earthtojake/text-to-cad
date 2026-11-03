@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit and review native KiCad circuit boards (.kicad_pcb), inspect parts and nets, run DRC, and export fabrication files or STEP for enclosure design. Shows boards in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) - parts and nets, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files or STEP for enclosure design. Shows boards in the CAD Viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -10,17 +10,16 @@ metadata:
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
+explains any other failure.
 
 Viewing, inspecting and taking snapshots need no KiCad installation. DRC (`cad kicad_pcb check`)
 and fabrication/STEP exports (`cad kicad_pcb export`) run a user-installed
@@ -76,52 +75,91 @@ footprint-local positions and rotations must be transformed into the board frame
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
 
-## Edit and check
+## Edit
 
 1. Inspect the saved board with `from cad.kicad_pcb import read_board` in a script run with
    `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
-2. Edit the native files. Keep net assignments, layer stack, track widths, clearances and custom
-   rules consistent with the chosen fab and electrical requirements. Refill changed copper zones
-   with KiCad before relying on their saved fill; the viewer displays the fill stored in the file.
-3. Run `cad kicad_pcb check board.kicad_pcb` (or `--json`). It checks the saved board against its rules
-   (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`)
-   and exits 1 on error-severity violations or unconnected items. Review warnings too. Resolve
-   the cause instead of weakening rules to obtain a clean report.
-4. Inspect placement and routing visually: `cad kicad_pcb snapshot board.kicad_pcb tmp/board.png`.
-   Measure constraints DRC cannot establish, such as decoupling placement and connector access.
-5. Show the result and explain remaining findings. Export only the requested deliverables from
-   that same saved revision; see [manufacturing and STEP](references/manufacturing.md).
+2. Edit the native files, or the board in a board script. Keep net assignments, layer stack, track
+   widths, clearances and custom rules consistent with the chosen fab and electrical requirements.
+   Refill changed copper zones with KiCad (`b.refill_zones()` in a board script) before relying on
+   their saved fill; the viewer displays the fill stored in the file.
+
+## Check each change
+
+Check the saved board after every step, from the same revision you will hand over:
+
+| The change | Check it with |
+| --- | --- |
+| Anything: parts, copper, zones, rules | `cad kicad_pcb check board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`). It exits 1 on error-severity violations or unconnected items. Unconnected items are the routing still to do |
+| Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well; measure decoupling distance and connector access with `read_board` |
+| Routing | The layout's property script ([layout](references/layout.md#a-property-check)): segments off 45 degrees, detours, width for current |
+| How copper and silkscreen look | `cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper` (and `--display '{"mode":"copper","side":"bottom"}'`) |
+| Ready to order | The review below |
+
+- Review warnings too: KiCad's silkscreen, mask and courtyard rules are warnings, and they are what a
+  fab's CAM engineer flags.
+- Resolve the cause instead of weakening rules to obtain a clean report.
+- A clean DRC establishes the board's own rules, nothing more: not the circuit's correctness and not
+  the fab's limits. A number is never read off a snapshot.
+
+## Before ordering
+
+A review of one board, for the fab and assembler it will be ordered from, is a guided review, not a
+fab's own engineering check: report what was not checked. Gather evidence in this order: KiCad's DRC
+(every error blocks ordering); then measurements DRC cannot make, from the board read back with
+`read_board` and the project BOM; then the checklist of what no command measures, with a snapshot.
+
+| Area | Reference | Measured by |
+| --- | --- | --- |
+| Fabrication | [review-fabrication](references/review-fabrication.md) | KiCad's DRC against the board's rules; the rest by inspection |
+| Electrical | [review-electrical](references/review-electrical.md) | the board read back: decoupling distances, narrowest track per net |
+| Assembly and sourcing | [review-assembly](references/review-assembly.md) | the part list and placement file, by inspection |
+
+Each finding names its parts by board reference (`U2`, `C8`, `#net:VBUS`); `read_board(path).resolve(ref)`
+says where one is.
+
+### Choosing the rules
+
+1. Use the selected fab's own capability page for the board's layer count, copper weight and finish.
+   The project's Board Setup and custom rules may differ from the fab's limits: compare them.
+2. Where the person names no fab, review against JLCPCB's standard service and say so.
+3. Record the source, its date and the conditions (layers, copper, finish) with every limit you
+   adopt. If it cannot be checked, report the missing rule rather than invent one.
+
+A fab's standard tier is a price, not a physical limit: finer work is often possible at a surcharge.
+Say which it is.
+
+### The review
+
+Scope first: board file and revision, fab and service, layers, copper, finish, assembled or bare.
+Then the findings, errors first, each with where (board references), the evidence (the command or
+measurement), the rule and its source, the result and the fix; then the coverage: checks run, and
+checks not run with what they need. No findings is not a manufacturability approval.
+
+| Item | Evidence | Rule | Result | Fix |
+| --- | --- | --- | --- | --- |
+| `U2` pad 3 to `C8` | measured 3.67 mm centre to centre from the board read back | decoupling within 3 mm (this review's guide) | review | move `C8` beside pin 3 |
+
+**pass** for a measured item within a cited limit; **fail** for a measured violation or a KiCad
+error; **review** for a risk a person decides; **unverified** where evidence or the fab's rule is
+missing. Keep cost suggestions (basic vs extended parts, a cheaper finish) apart from manufacturing
+constraints. A review alone does not ask for edits or an order: fix only when asked, then check the
+neighbours of every fix (a moved capacitor can open a clearance elsewhere). Never order on the
+person's behalf.
+
+Export only the requested deliverables from the saved revision you checked; see
+[manufacturing and STEP](references/manufacturing.md).
 
 ## Show the model
 
-Show the user each model you create or change, and any model or file they ask to see.
-A file you export is a download: give its path, do not open it.
-Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad <type> snapshot`.
-
-- If your tools include `cad_show` (your host may prefix it), call it with the model's id
-  or the file's absolute path, and follow its description for when to call it again.
-  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
-  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
-  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
-  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
-  nothing: its `cad_show` opens the model's page in the user's browser and answers with
-  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
-  `cad_export` are on every host. Call only the tools you have, and never say a card
-  shows a model when your host drew none.
-- Otherwise give the user the page's link once: a model's page is the `view:` line its
-  run prints. For a file, run the CAD Viewer, from any folder:
-
-  ```bash
-  cad viewer --json FILE [FILE ...]
-  ```
-
-  The command ensures this installation's server, registers each file and prints
-  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
-  JSON line (never guess the port); the URL carries its token query. A page follows
-  every later run of its model and every rewrite of its file, so share it once.
-  Return that link to the user. If it fails to launch, say so.
+Show the person each model you create or change, and any model or file they ask to see. If your
+tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
+absolute path; its description says the rest. Otherwise give the person the page's link once: a
+model's page is the `view:` line its run prints, and a file's is the `url` that
+`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
+download: give its path. Never screenshot the viewer to check your own work; review with
+`cad <type> snapshot`. If it fails to launch, say so.
 
 ## Board views
 

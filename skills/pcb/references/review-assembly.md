@@ -37,7 +37,7 @@ side. Check:
 - Its origin is the board's drill/place origin, set on a corner of the outline,
   so the coordinates are the fab's.
 - Polarity: diodes, LEDs, electrolytics and ICs have a pin-1 or polarity mark on
-  silkscreen that the DRC did not clip (see [fabrication](fabrication.md)).
+  silkscreen that the DRC did not clip (see [fabrication](review-fabrication.md)).
 - Rotation: the assembler's zero orientation can differ from KiCad's; tell the
   user to check the placement preview on the order page, where a wrong rotation
   shows and is corrected.

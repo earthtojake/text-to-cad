@@ -10,17 +10,16 @@ metadata:
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where `~/.local/bin` is not on your PATH, or where a
-project's environment puts its own `cad` first; `cad.cmd` on Windows). If `cad` is not found and
-the CAD app was only just added, its server may still be starting: wait five seconds and run the
-command again, for up to a minute, before anything else. Otherwise install text-to-cad, outside a sandbox or with its permission:
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
 curl -fsSL https://texttocad.dev/install.sh | sh
 ```
 
-On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
-says what to do, and `cad doctor` explains the installation.
+On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If the CAD app was
+only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
+explains any other failure.
 
 Drawings are build123d geometry, so a drawing builds in the server's warm worker
 like any model: the first run of a script loads the CAD kernel (a few seconds),
@@ -274,33 +273,13 @@ cad xbf export "$ID" path/to/drawing.dxf
 
 ## Show the model
 
-Show the user each model you create or change, and any model or file they ask to see.
-A file you export is a download: give its path, do not open it.
-Snapshots and validation don't replace this. Never screenshot the viewer to confirm your
-own work; review with `cad <type> snapshot`.
-
-- If your tools include `cad_show` (your host may prefix it), call it with the model's id
-  or the file's absolute path, and follow its description for when to call it again.
-  The other tools depend on the host. A host that draws CAD cards or tabs (Claude
-  Desktop, the Codex app) also has `cad_view`, which reads what the user selected, and
-  `cad_screenshot`, which shows you what they see, both of a card or tab that is open, for
-  when they ask about it. A text host (Claude Code in a terminal, `codex exec`) draws
-  nothing: its `cad_show` opens the model's page in the user's browser and answers with
-  the URL to give them, and it has no view to read. `cad_inspect`, `cad_snapshot` and
-  `cad_export` are on every host. Call only the tools you have, and never say a card
-  shows a model when your host drew none.
-- Otherwise give the user the page's link once: a model's page is the `view:` line its
-  run prints. For a file, run the CAD Viewer, from any folder:
-
-  ```bash
-  cad viewer --json FILE [FILE ...]
-  ```
-
-  The command ensures this installation's server, registers each file and prints
-  its page, `/<id>`, then exits. Read each file's `url` from `documents` in its one
-  JSON line (never guess the port); the URL carries its token query. A page follows
-  every later run of its model and every rewrite of its file, so share it once.
-  Return that link to the user. If it fails to launch, say so.
+Show the person each model you create or change, and any model or file they ask to see. If your
+tools include `cad_show` (your host may prefix it), call it with the model's id or the file's
+absolute path; its description says the rest. Otherwise give the person the page's link once: a
+model's page is the `view:` line its run prints, and a file's is the `url` that
+`cad viewer --json FILE [FILE ...]` prints for it (never guess the port). A file you export is a
+download: give its path. Never screenshot the viewer to check your own work; review with
+`cad <type> snapshot`. If it fails to launch, say so.
 
 A drawing script's model has a page, but it shows a flat face in the 3D viewer, with no
 pens, layers or entity refs. The drawing a person wants is the exported `.dxf`, which the

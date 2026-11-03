@@ -4,7 +4,7 @@ Read this file when choosing visual checks for a model or a file the viewer open
 
 This is the catalogue of what a snapshot can draw. Take the snapshots a change needs to judge it,
 usually one from the angle that shows it; with a viewer open the person is looking too, so never
-screenshot the card to confirm your own work ([Pictures](../SKILL.md#pictures)).
+screenshot the card to confirm your own work ([Check each change](../SKILL.md#check-each-change)).
 
 ## Contents
 

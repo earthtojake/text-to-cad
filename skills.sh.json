@@ -19,12 +19,12 @@
     {
       "title": "Electronics",
       "description": "Design, check and manufacture circuit boards.",
-      "skills": ["pcb", "pcb-dfm"]
+      "skills": ["pcb"]
     },
     {
       "title": "Robotics",
-      "description": "Robot descriptions for ROS, MoveIt2 and Gazebo.",
-      "skills": ["urdf", "srdf", "sdf"]
+      "description": "Robots and worlds for simulation and motion planning: ROS, MoveIt2 and Gazebo.",
+      "skills": ["simulation"]
     }
   ]
 }

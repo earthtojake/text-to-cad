@@ -98,7 +98,7 @@ focused test, so the file builds on an engine daemon of its own:
 
 ```powershell
 .\.venv\Scripts\python.exe -m cad_server.cli xbf snapshot --help
-& $gitBash scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
+& $gitBash scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 ### Development dependencies
@@ -1243,7 +1243,7 @@ gives each file an engine daemon of its own (a bare `python -m unittest` would b
 on your own daemon), for example:
 
 ```bash
-scripts/test/test-python.sh tests/python/skills/urdf/test_cli.py
+scripts/test/test-python.sh tests/python/packages/cad/test_urdf_source.py
 ```
 
 Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
