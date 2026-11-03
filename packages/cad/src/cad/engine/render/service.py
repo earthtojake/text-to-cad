@@ -418,6 +418,10 @@ def holder(path: Path) -> Any:
         from cad.engine.render.board import Held as Board
 
         return Board(Path(path))
+    if Path(path).suffix.lower() == ".kicad_sch":
+        from cad.engine.render.schematic import Held as Schematic
+
+        return Schematic(Path(path))
     if Path(path).suffix.lower() == formats.DRAWING:
         from cad.engine.render.drawing import Held as Drawing
 

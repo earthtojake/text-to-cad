@@ -221,6 +221,14 @@ _TYPES = (
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
                    "kicad")), decorator=True, decorator_integration="kicad"),
+    DocumentTypeEntry(
+        "kicad_sch", "KiCad schematic", "a KiCad schematic, read with every sheet of its project's hierarchy",
+        (".kicad_sch",), "text/plain; charset=utf-8", "plot",
+        ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"),
+        (Operation("export", "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder", "kicad"),
+         Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
+         Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names"),
+         Operation("check", "KiCad's electrical rules check: errors fail it, warnings are said", "kicad"))),
 )
 
 #: Every document type, by id, in the table's order.

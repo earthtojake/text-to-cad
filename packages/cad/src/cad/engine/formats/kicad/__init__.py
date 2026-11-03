@@ -1,7 +1,7 @@
-"""KiCad board files: read-only parsing and plot geometry, never a live model or cache."""
+"""KiCad board and schematic files: read-only parsing and plot geometry, never a live model or cache."""
 
 PLOT_SCHEMA_VERSION = 4
-PLOT_SUFFIXES = (".kicad_pcb",)
+PLOT_SUFFIXES = (".kicad_pcb", ".kicad_sch")
 
 
 class PlotError(ValueError):

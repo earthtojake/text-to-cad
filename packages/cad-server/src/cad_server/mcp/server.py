@@ -92,8 +92,10 @@ PROTOCOL = 9
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(VIEWER_EXTENSIONS)
-# The formats every surface opens, as the agent is told them: a cadgen engine document (XBF) among them.
-FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values())
+# The formats every surface opens, as the agent is told them: a cadgen engine document (XBF) among them. A
+# KiCad schematic has no view in the CAD app yet (``cad kicad_sch snapshot`` draws it), so none is offered.
+_NO_VIEW_YET = frozenset({"kicad_sch"})
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.id not in _NO_VIEW_YET)
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
 # from an inline cad_show) to sync for the first time: the host loads the page, then the page its

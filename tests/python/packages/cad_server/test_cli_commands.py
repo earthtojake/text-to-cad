@@ -33,6 +33,7 @@ TYPES = {
     "srdf": ("snapshot", "check"),
     "sdf": ("snapshot", "check"),
     "kicad_pcb": ("export", "snapshot", "inspect", "check"),
+    "kicad_sch": ("export", "snapshot", "inspect", "check"),
 }
 COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "requirement", "doctor", "setup", "update", "uninstall", "plugin",
             "viewer", "telemetry")

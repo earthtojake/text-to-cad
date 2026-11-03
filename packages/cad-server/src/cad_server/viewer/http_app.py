@@ -870,7 +870,7 @@ class CadApp:
             return self._engine_route(request, response, kind, ident, rest)
         if kind == "dxf" and rest == ["drawing"]:
             return self._methods(request, {"GET": lambda: self._handle_drawing(response, path)})
-        if kind == "kicad_pcb" and rest == ["plot"]:
+        if kind in ("kicad_pcb", "kicad_sch") and rest == ["plot"]:
             return self._methods(request, {"GET": lambda: self._handle_plot(response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None
@@ -1312,7 +1312,7 @@ class CadApp:
 
     def _handle_plot(self, response, path):
         """``GET /api/v1/documents/kicad_pcb/<id>/plot``: a KiCad board drawn from its file, as geometry
-        per layer (``plots.py`` owns the rules). Each request reads the file as it is now: no board is
+        per layer, or ``kicad_sch``'s, a schematic's every sheet a page (``plots.py`` owns the rules). Each request reads the file as it is now: no board is
         held. A file that is not a readable board is a 400 saying why (``PlotError``)."""
         from .plots import plot_payload_response
 

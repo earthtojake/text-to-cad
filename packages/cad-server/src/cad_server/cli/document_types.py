@@ -274,11 +274,131 @@ def _board_inspect(argv: list[str], prog: str) -> int:
     return _answer(as_json, board, lines)
 
 
+# --- the KiCad schematic's own operations: the kicad integration's, the library's summary and still -----
+
+
+def _schematic_parser(prog: str, operation: str) -> argparse.ArgumentParser:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    if operation == "snapshot":
+        from cad_server.engine.cli import parser_for
+
+        parser = parser_for("snapshot", prog)
+        parser.add_argument("--sheet", metavar="PATH",
+                            help="the sheet to draw, by its path: / (the root, the default), /Power/; the same as "
+                                 "--display '{\"sheet\": PATH}'")
+        parser.add_argument("--border", action="store_true", help="draw the page's edge (off by default)")
+        return parser
+    descriptions = {
+        "export": "Write a saved KiCad schematic's outputs with KiCad's kicad-cli, headless, into a folder: a pdf of "
+                  "every sheet, an svg per sheet, the netlist (the board imports it) or a BOM.",
+        "inspect": "What a saved KiCad schematic holds: its sheets, parts and nets, read from its project's root; "
+                   "with REF, what that reference names (#U3, #U3.7, #net:VBUS, #sheet:/Power/, #wire:<uuid>).",
+    }
+    parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
+    parser.add_argument("schematic", metavar="SCHEMATIC", type=Path,
+                        help="the .kicad_sch (any sheet of its project: the whole hierarchy is read)")
+    if operation == "export":
+        from cad_server.kicad.schematic import EXPORTS
+
+        parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
+        parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
+                            help="the folder to write into, made when missing")
+    else:
+        parser.add_argument("ref", metavar="REF", nargs="?", help="a reference to resolve: #U3, #U3.7, #net:GND")
+    parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
+                        help="print the answer as one JSON line on stdout")
+    return parser
+
+
+def _schematic_check(argv: list[str], prog: str) -> int:
+    return _checked("kicad_sch", ("cad_server.kicad.schematic", "check"), argv, prog)
+
+
+def _schematic_export(argv: list[str], prog: str) -> int:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    args = _schematic_parser(prog, "export").parse_args(argv)
+    _refuse_other_type("kicad_sch", "export", str(args.schematic))
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    from cad.kicad._program import KicadMissingError, KicadRunError
+    from cad_server.kicad.schematic import export
+
+    try:
+        written = export(args.schematic, args.to, args.out)
+    except (KicadMissingError, KicadRunError) as error:
+        return _failed(as_json, prog, str(error))
+    return _answer(as_json, {"ok": True, "written": [str(path) for path in written]},
+                   [f"wrote {path}" for path in written])
+
+
+def _schematic_inspect(argv: list[str], prog: str) -> int:
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST
+
+    args = _schematic_parser(prog, "inspect").parse_args(argv)
+    _refuse_other_type("kicad_sch", "inspect", str(args.schematic))
+    as_json = bool(getattr(args, JSON_FLAG_DEST))
+    if not args.schematic.is_file():
+        return _failed(as_json, prog, f"no schematic {args.schematic}", 2)
+    from cad.kicad_sch import inspect
+
+    try:
+        found = inspect(args.schematic, args.ref)
+    except (OSError, ValueError) as error:
+        return _failed(as_json, prog, f"{type(error).__name__}: {error}")
+    counts = found["counts"]
+    lines = [f"{found['file']}: KiCad {found['format'].get('generator') or found['format'].get('version')}"
+             + (f", in {found['root']}'s hierarchy" if found["root"] != found["file"] else ""),
+             "counts: " + ", ".join(f"{name} {value}" for name, value in counts.items()), "sheets:"]
+    lines += [f"  {sheet['path']:<16} page {sheet['page']:<4} {sheet['file']}  {sheet['symbols']} symbols"
+              for sheet in found["sheets"]]
+    lines.append("parts:")
+    lines += [f"  {part['ref']:<8} {part['value']}  {part['footprint'] or '(no footprint)'}  on {part['sheet']}"
+              for part in found["parts"]]
+    lines.append("nets:")
+    lines += [f"  {net['name']:<20} {', '.join(net['pins'])}" for net in found["nets"]]
+    lines += [f"warning: {warning}" for warning in found["warnings"]]
+    if "resolved" in found:
+        import json
+
+        lines.append(f"{args.ref}: {json.dumps(found['resolved'])}")
+    return _answer(as_json, found, lines)
+
+
+def _schematic_snapshot(argv: list[str], prog: str) -> int:
+    """``cad kicad_sch snapshot``: the engine's verb, ``--sheet`` and ``--border`` folded into its display."""
+    import json
+
+    from cad_server.engine.cli import VERBS, answered
+
+    args = _schematic_parser(prog, "snapshot").parse_args(argv)
+    if args.document is not None:
+        _refuse_other_type("kicad_sch", "snapshot", str(args.document))
+    sheet, border = args.sheet, args.border
+    del args.sheet, args.border
+    if sheet is not None or border:
+        given = args.display
+        if given and not given.strip().startswith("{") and not given.strip().endswith(".json"):
+            given = json.dumps({"appearance": given.strip()})
+        if given and given.strip().endswith(".json"):
+            given = Path(given).read_text(encoding="utf-8")
+        display = json.loads(given) if given else {}
+        if not isinstance(display, dict):
+            raise _Refused("--display is a schematic's display object: {sheet, border, appearance}")
+        display.update({**({"sheet": sheet} if sheet is not None else {}), **({"border": True} if border else {})})
+        args.display = json.dumps(display)
+    return answered(VERBS["snapshot"][2], args, prog)
+
+
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
     ("kicad_pcb", "check"): _board_check,
     ("kicad_pcb", "export"): _board_export,
     ("kicad_pcb", "inspect"): _board_inspect,
+    ("kicad_sch", "check"): _schematic_check,
+    ("kicad_sch", "export"): _schematic_export,
+    ("kicad_sch", "inspect"): _schematic_inspect,
+    ("kicad_sch", "snapshot"): _schematic_snapshot,
 }
 
 
@@ -308,6 +428,12 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
         return generated_parser(("cad_server.kicad.check", "check"), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
+    if (document_type, operation) == ("kicad_sch", "check"):
+        from cad_server._internal.cli_from_function import generated_parser
+
+        return generated_parser(("cad_server.kicad.schematic", "check"), prog=prog)
+    if document_type == "kicad_sch":
+        return _schematic_parser(prog, operation)
     if operation in _ENGINE_SOURCES:
         from cad_server.engine.cli import parser_for
 

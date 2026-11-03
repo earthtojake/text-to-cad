@@ -18,7 +18,9 @@ export const RENDER_FORMAT = Object.freeze({
   SDF: TYPES.sdf.wire,
   // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
   XBF: TYPES.xbf.wire,
-  KICAD_PCB: TYPES.kicad_pcb.wire
+  KICAD_PCB: TYPES.kicad_pcb.wire,
+  // A KiCad schematic, drawn from its files as a board is, every sheet a page (no view of it yet).
+  KICAD_SCH: TYPES.kicad_sch.wire
 });
 
 export const MESH_RENDER_FORMATS = Object.freeze(
