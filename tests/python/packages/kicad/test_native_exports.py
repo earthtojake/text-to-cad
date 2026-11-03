@@ -89,7 +89,7 @@ class SharedTestBoard(unittest.TestCase):
         return written, found["warnings"]
 
     def test_a_nightly_checks_it(self):
-        result = kicode.call(self, "check", self.board)
+        result = kicode.call(self, "drc", self.board)
         codes = {finding["code"] for finding in result["findings"]}
         # No .kicad_pro beside it: checked against KiCad's defaults, and said so.
         self.assertIn("no_project", codes, result)

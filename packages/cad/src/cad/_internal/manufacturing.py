@@ -1,9 +1,9 @@
-"""The manufacturing check every 3D document type shares: ``cad.<type>.check(source, process=...)``.
+"""The manufacturing check every 3D document type shares: ``cad.<type>.dfm(source, process=...)``.
 
-``stl``, ``threemf``, ``glb``, ``step`` and ``xbf`` each answer ``check`` with the same function, made
-for the type here (``check_for``): its signature takes a path (or, for a document the engine holds, its
-id or handle) and plain values alone, so it is the type's (the signature rule), and its measuring is the
-trimesh integration's (``cad.trimesh._check``), imported when it runs. Two processes:
+``model``, ``xbf``, ``step``, ``stl``, ``threemf`` and ``glb`` each answer ``dfm`` with the same function,
+made for the type here (``dfm_for``): its signature takes a file of the type (or, for ``model``, a document
+the engine holds: its id or handle) and plain values alone, so it is the type's (the signature rule), and
+its measuring is the trimesh integration's (``cad.trimesh._check``), imported when it runs. Two processes:
 
 - ``molding``, injection molding: draft, undercut candidates and projected area along one pull
   (``pull``), or with ``candidates`` the pulls ranked (x, y, z and the mesh's principal axes);
@@ -18,13 +18,13 @@ integration.
 
 from __future__ import annotations
 
-import os
+
 from pathlib import Path
 from typing import Any
 
 from cad.results import CheckResult
 
-__all__ = ["DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "check_for", "options"]
+__all__ = ["DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "dfm_for", "options"]
 
 #: The processes a check measures for.
 PROCESSES = ("molding", "printing")
@@ -39,7 +39,8 @@ OPTIONS: dict[str, dict[str, Any]] = {
 DEFAULTS = {name: value for given in OPTIONS.values() for name, value in given.items()}
 # The types that declare their own units, read as millimetres: a units option is the STL's alone.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
-             "step": "a STEP declares its units", "xbf": "an xbf is in millimetres"}
+             "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
+             "model": "a model is in millimetres"}
 
 
 def _flag(name: str) -> str:
@@ -52,7 +53,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *, c
     other process, a pull beside ``candidates`` (which ranks every pull), a units the type does not
     take, or a value out of range."""
     if process is None:
-        raise ValueError(f"cad.{document_type}.check measures for a process: give --process "
+        raise ValueError(f"cad.{document_type}.dfm measures for a process: give --process "
                          f"{' or '.join(PROCESSES)}")
     if process not in PROCESSES:
         raise ValueError(f"--process is {' or '.join(PROCESSES)}, not {process!r}")
@@ -80,21 +81,10 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *, c
     return resolved
 
 
-def _own(document_type: str, source: Any) -> None:
-    """A file of another type refused by name (``part.glb is a glb, not a stl: use cad.glb``)."""
-    if not isinstance(source, (str, os.PathLike)):
-        return
-    from cad.registry import type_of
+def dfm_for(document_type: str) -> Any:
+    """``cad.<document_type>.dfm``: the manufacturing check, for a source of that type."""
 
-    found = type_of(source)
-    if found is not None and found.id != document_type:
-        raise ValueError(f"{os.fspath(source)} is a {found.id}, not a {document_type}: use cad.{found.id}")
-
-
-def check_for(document_type: str) -> Any:
-    """``cad.<document_type>.check``: the manufacturing check, for a source of that type."""
-
-    def check(
+    def dfm(
         source: Path,
         *,
         process: str | None = None,
@@ -114,7 +104,8 @@ def check_for(document_type: str) -> Any:
         with no draft, undercut candidates, overhangs, units that look wrong) as warnings; a family that
         could not be measured is an error, and fails the check. --json carries every measurement.
 
-        source: the file to measure (an .stl, .3mf, .glb, .step or .xbf, or a document id the engine holds).
+        source: what to measure: a file of the type (an .stl, .3mf, .glb, .step or .xbf), or a model's
+          document id the engine holds (cad model dfm), or the handle its call returns.
         process: molding or printing.
         pull: molding: the pull direction, an axis (z, -y) or x,y,z components; default z.
         units: the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.
@@ -128,7 +119,9 @@ def check_for(document_type: str) -> Any:
         resolved = options(document_type, process,
                            {"pull": pull, "units": units, "wall_limit": wall_limit, "zero_tol": zero_tol,
                             "samples": samples, "angle_limit": angle_limit}, candidates=candidates)
-        _own(document_type, source)
+        from cad._internal.document_type import refuse_other
+
+        refuse_other(document_type, source)
         try:
             from cad.trimesh._check import check as measured
         except ModuleNotFoundError as error:
@@ -141,6 +134,6 @@ def check_for(document_type: str) -> Any:
         assert process is not None
         return measured(document_type, source, process=process, candidates=candidates, **resolved)
 
-    check.__module__ = f"cad.{document_type}"
-    check.__qualname__ = "check"
-    return check
+    dfm.__module__ = f"cad.{document_type}"
+    dfm.__qualname__ = dfm.__name__ = "dfm"
+    return dfm

@@ -10,7 +10,7 @@ with the reason (``PlotError``).
 * ``plot``: the payload (``cad.engine.formats.kicad.poured.payload``) with the pours KiCad refills on a
   copy (``cad_server._internal.boards.refill``: kicode, in the environment of ``cad[kicad]``); without
   KiCad, or when the refill fails, the board as saved, the payload's ``pours`` saying so.
-* ``drc``: ``cad kicad_pcb check --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
+* ``drc``: ``cad kicad_pcb drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
   ``findings`` (each a severity, a code, a message and a location) and ``measurements.drc``, every finding
   as KiCad reported it -- ``check`` (violation, unconnected, parity), ``severity``, ``type``,
   ``description``, ``at`` ([x, y] mm in KiCad's frame, y down) and ``items``, each ``{uuid, description,
@@ -88,9 +88,9 @@ class _Work:
 def _refs(found: dict[str, Any], board: Path) -> dict[str, Any]:
     """The DRC's items, each with the board reference it names (``ref``), where the board's index has one."""
     try:
-        from cad.kicad_pcb import read_board
+        from cad import kicad_pcb
 
-        index = read_board(board)
+        index = kicad_pcb.read(board)
     except (OSError, ValueError):
         return found
     import re

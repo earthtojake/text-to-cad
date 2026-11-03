@@ -18,9 +18,9 @@ says so (``partial``, ``partial_sections``). The mesh is never changed: each mea
 by ``units`` to millimetres (molding also drops its zero-area triangles, whose normals have no
 direction).
 
-A file is measured by its document type's check -- ``cad.stl.check("part.stl", process="molding")``,
-``cad.xbf.check(model_handle, process="printing")`` -- which answers a ``CheckResult`` whose
-``measurements`` is this report and whose findings say what it shows (``cad <type> check --process``).
+A file is measured by its document type's check -- ``cad.stl.dfm("part.stl", process="molding")``,
+``cad.xbf.dfm(model_handle, process="printing")`` -- which answers a ``CheckResult`` whose
+``measurements`` is this report and whose findings say what it shows (``cad <type> dfm --process``).
 Everything loads on first use: ``import cad.trimesh`` imports no trimesh.
 """
 

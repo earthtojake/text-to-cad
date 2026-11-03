@@ -1,7 +1,7 @@
 """``cad.sdf``: the SDF document type (``cad.registry``), an SDFormat world or model.
 
 No decorator, for the reason :mod:`cad.urdf` gives: a world or model description is
-authored, not generated. ``cad sdf check`` is a generated MIRROR of :func:`check`;
+authored, not generated. ``cad sdf validate`` is a generated MIRROR of :func:`validate`;
 ``cad sdf snapshot`` draws one (``cad.engine.snapshot``). ``GZ_CHECK_MODES`` is the
 vocabulary of its ``gz_check`` option.
 """
@@ -12,7 +12,7 @@ from pathlib import Path
 
 from cad.results import CheckResult
 
-__all__ = ["check"]
+__all__ = ["validate"]
 
 SUFFIX = ".sdf"
 
@@ -22,7 +22,7 @@ SUFFIX = ".sdf"
 GZ_CHECK_MODES = ("auto", "required", "never")
 
 
-def check(
+def validate(
     path: Path,
     *,
     strict: bool = False,

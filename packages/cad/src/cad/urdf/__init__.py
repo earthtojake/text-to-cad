@@ -1,13 +1,13 @@
 """``cad.urdf``: the URDF document type (``cad.registry``), a robot description.
 
 It has no decorator: a robot description is an AUTHORED file, not a document a model makes.
-``urdf.check`` is ``cad urdf check``; ``urdf.snapshot`` is ``cad urdf snapshot``
+``urdf.validate`` is ``cad urdf validate``; ``urdf.snapshot`` is ``cad urdf snapshot``
 (``cad.engine.snapshot``).
 
-``cad urdf check`` is an ADAPTER over :func:`check` rather than a generated mirror:
+``cad urdf validate`` is an ADAPTER over :func:`validate` rather than a generated mirror:
 ``--packages NAME=PATH`` is repeatable, and a repeatable key/value map is outside the
 annotation set a parser can be derived from. It still answers with the same
-:class:`~cad.results.CheckResult` every type's ``check`` does.
+:class:`~cad.results.CheckResult` every validation does.
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from pathlib import Path
 
 from cad.results import CheckResult
 
-__all__ = ["check"]
+__all__ = ["validate"]
 
 SUFFIX = ".urdf"
 
 
-def check(
+def validate(
     path: Path,
     *,
     strict: bool = False,

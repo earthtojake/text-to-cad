@@ -30,11 +30,11 @@ class NativeFiles(unittest.TestCase):
             root = Path(folder)
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
-            from cad.kicad_pcb import read_board
+            from cad.kicad_pcb import read as read_board
             from cad.engine.api import export
             import build123d as bd
             def drc(path):
-                return kicode.call(self, "check", path)
+                return kicode.call(self, "drc", path)
             cli = kicode.kicad_cli(self)
             original = board.read_bytes()
             result = drc(board)

@@ -22,7 +22,7 @@ a universal minimum radius or flange length.
 ```bash
 cad step inspect part.step                    # parts, bounds, volume
 cad step inspect part.step 'face 9'           # one face: a bend's cylinder and its radius, a hole's
-cad xbf inspect "$ID" 'bracket/face 4'        # the same of a model's face
+cad model inspect "$ID" 'bracket/face 4'        # the same of a model's face
 ```
 
 A bend is a pair of cylindrical faces, inside and outside, whose radii differ by the stock thickness:
@@ -58,7 +58,7 @@ establish that all bends can be made.
 ## Cut files (DXF)
 
 A laser, plasma, waterjet or routing shop cuts the DXF, so review the exact file it gets (a
-text-to-cad drawing's is the one `cad xbf export <id> part.dxf` wrote), not the model it came from.
+text-to-cad drawing's is the one `cad model export <id> part.dxf` wrote), not the model it came from.
 How a drawing is made and exported, and the drawing checks every export runs, are
 [2D profiles and DXF](2d-profiles-and-dxf.md#check-a-drawing). Run `validate_dxf_file` on a file
 from elsewhere, and read with `ezdxf` what the checks do not decide:

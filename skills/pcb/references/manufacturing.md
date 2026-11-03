@@ -4,7 +4,7 @@ Use the chosen manufacturer's current capability page for the specific layer cou
 weight, finish and assembly service. Compare those limits with `.kicad_pro` and `.kicad_dru`;
 DRC checks the project's rules, not a manufacturer's catalog. Record unresolved findings.
 
-Run `cad kicad_pcb check board.kicad_pcb --json` after saving and refilling zones. DRC reports include
+Run `cad kicad_pcb drc board.kicad_pcb --json` after saving and refilling zones. DRC reports include
 violations and unconnected items, with severity and board positions. No report is cached and
 the board source is not rewritten. KiCad may create a local `.kicad_prl` during file commands. An exit code of zero does not establish circuit correctness.
 

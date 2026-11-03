@@ -2,17 +2,18 @@
 ordinary Python scripts call decorated models explicitly.
 
     python SCRIPT.py                                 the models the script explicitly calls
-    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]
+    cad <type> export SRC DST [DST ...] [--tolerance MM] [--json]   (--tolerance: a model's, an xbf's, a STEP's)
     cad <type> snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--camera PRESET|az:el|JSON|authored] [--grid]
         [--pose NAME|JSON] [--annotation FILE] [--measurements FILE] [--width N] [--height N]
         [--size-profile P] [--json]
     cad serve DOC [--port N]
     cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
     cad delete DOC [DOC ...] [--json]             documents deleted: record, cached document, the engine's copy
-    cad xbf inspect DOC [REF] [--query Q] [--json]      what a document holds and its build closure, or what a ref names (``refs``)
+    cad <type> inspect DOC [REF] [--query Q] [--json]   what a document holds and its build closure, or what a ref names (``refs``)
 
-SRC and DOC are an on-disk CAD file's path or a document's id (``ids``): a model's id is what
-``python SCRIPT.py`` prints for it. A script is never a source: no verb imports or builds one.
+SRC and DOC are an on-disk CAD file's path, for the file's own type (``cad xbf``, ``cad step``, ...), or a
+model's document id (``ids``), for ``cad model``: the id ``python SCRIPT.py`` prints for it. A script is never
+a source: no verb imports or builds one.
 
 The ``cad`` command runs each verb by its name (``parser_for``, ``run``); the engine's own entry,
 ``python -m cad_server.engine VERB ...``, takes the same verbs as subcommands (``main``). A verb's failure
@@ -36,10 +37,38 @@ __all__ = ["VERBS", "Failed", "answered", "build_parser", "main", "parser_for", 
            "inspect_main", "inspect_parser"]
 
 
-def _export_arguments(export: argparse.ArgumentParser) -> None:
-    export.add_argument("source", metavar="SRC", help="an .xbf, a .step, a document id (a model's, which "
-                                                      "python SCRIPT.py prints), or a mesh file (.glb, .stl, "
-                                                      ".3mf), which exports to the other two mesh kinds")
+def _source_help(document_type: str | None, generic: str) -> str:
+    """What a type's command takes as its source: a model's document id for ``model``, a file of its own
+    kind for every other type (``generic`` for the engine's own command, which takes any)."""
+    if document_type is None:
+        return generic
+    from cad.registry import DOCUMENT_TYPES
+
+    entry = DOCUMENT_TYPES[document_type]
+    if not entry.has_file:
+        return ("a model's document id, which python SCRIPT.py prints: the document the engine holds of it, "
+                "never built")
+    return f"the {' or '.join(entry.extensions)} file"
+
+
+def _meshes(document_type: str | None) -> bool:
+    """Whether a type's export is a mesh's, to the other mesh kinds (no tolerance: nothing is meshed)."""
+    if document_type is None:
+        return False
+    from cad.registry import DOCUMENT_TYPES
+
+    return DOCUMENT_TYPES[document_type].view == "mesh"
+
+
+def _export_arguments(export: argparse.ArgumentParser, document_type: str | None = None) -> None:
+    export.add_argument("source", metavar="SRC", help=_source_help(
+        document_type, "an .xbf, a .step, a document id (a model's, which python SCRIPT.py prints), or a mesh "
+                       "file (.glb, .stl, .3mf), which exports to the other two mesh kinds"))
+    if _meshes(document_type):
+        export.add_argument("destinations", nargs="+", metavar="DST",
+                            help="the other mesh kinds (.glb, .stl, .3mf), each holding what its format carries")
+        export.add_argument("--json", action="store_true", help="print what was written as JSON")
+        return
     export.add_argument("destinations", nargs="+", metavar="DST",
                         help=".xbf (from a STEP), .step, .glb, .stl, .3mf or .dxf (of a planar document): the "
                              "document as its code built it")
@@ -82,7 +111,7 @@ def _server_arguments(server: argparse.ArgumentParser) -> None:
                         help="replace this installation's page token first: every link shared before stops working")
 
 
-def _inspect_arguments(parser: argparse.ArgumentParser) -> None:
+def _inspect_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> None:
     parser.add_argument("--query", choices=("summary", "structure", "closure", "geometry", "build"),
                         help="inspect a summary and the closure (the default without REF); the structure: the summary "
                              "without its bounds, volume and masses, so nothing is measured, and the closure; the "
@@ -92,8 +121,8 @@ def _inspect_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--json", action="store_true",
                         help="without REF, the summary (or the structure) and the closure as one JSON object (a "
                              "REF's answer is JSON)")
-    parser.add_argument("document", help="an .xbf, a STEP, or a document id; a GLB says its nodes, meshes and "
-                                          "animations")
+    parser.add_argument("document", help=_source_help(
+        document_type, "an .xbf, a STEP, or a document id; a GLB says its nodes, meshes and animations"))
     parser.add_argument("ref", nargs="?", help="[FILE#][OWNER/]ELEMENT or [FILE#]OWNER (cad.engine.refs): OWNER a "
                                                "part's or an assembly's label, or its occurrence path (hand/finger.2); "
                                                "ELEMENT an element name (f:..., e:..., v:...) or face N (edge, vertex). "
@@ -104,15 +133,15 @@ def _inspect_arguments(parser: argparse.ArgumentParser) -> None:
                                                "declared files), then its build closure")
 
 
-def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentParser:
+def _snapshot_arguments(parser: argparse.ArgumentParser, document_type: str | None = None) -> argparse.ArgumentParser:
     from cad.engine import snapshot
 
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
-    parser.add_argument("document", metavar="SRC", nargs="?",
-                        help="a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
-                             "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a model's, which python "
-                             "SCRIPT.py prints: drawn "
-                             "from what the engine holds); with --job, a file drawn in place of every job's input")
+    parser.add_argument("document", metavar="SRC", nargs="?", help=_source_help(
+        document_type, "a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
+                       "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a "
+                       "model's, which python SCRIPT.py prints: drawn from what the engine holds)")
+        + "; with --job, drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
                         help="the .png to write, or a folder (one that is there, or a path ending in a separator) to "
                              "write <SRC's stem>_<UTC time>.png into")
@@ -188,7 +217,7 @@ def _snapshot(args: argparse.Namespace, prog: str = "cad <type> snapshot") -> in
 
 
 def _snapshot_held(args: argparse.Namespace, prog: str) -> int:
-    """``cad xbf snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
+    """``cad model snapshot ID OUT.png``: the document the engine holds of that id, drawn from the
     memory of the worker holding it (``api.snapshot``); nothing is built."""
     from cad.engine import api, snapshot
 
@@ -250,11 +279,21 @@ def build_parser(prog: str = "python -m cad_server.engine") -> argparse.Argument
     return parser
 
 
-def parser_for(verb: str, prog: str | None = None) -> argparse.ArgumentParser:
-    """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...)."""
+def parser_for(verb: str, prog: str | None = None, *, document_type: str | None = None) -> argparse.ArgumentParser:
+    """One verb's parser, as a command of its own (``cad <type> export``, ``cad <type> snapshot``, ...): for
+    ``document_type``, its source said as that type's (a model's id, or a file of its kind), and a mesh's
+    export without ``--tolerance``."""
     help_text, arguments, _runner = VERBS[verb]
+    if document_type is not None and verb in ("export", "snapshot", "inspect"):
+        from cad.registry import DOCUMENT_TYPES
+
+        own = DOCUMENT_TYPES[document_type].operation(verb)
+        help_text = own.summary if own is not None else help_text
     parser = argparse.ArgumentParser(prog=prog or f"cad {verb}", description=help_text)
-    arguments(parser)
+    if document_type is not None and verb in ("export", "snapshot", "inspect"):
+        arguments(parser, document_type)  # type: ignore[call-arg]
+    else:
+        arguments(parser)
     return parser
 
 
@@ -345,7 +384,7 @@ def _export(args: argparse.Namespace, prog: str) -> int:
     from cad.engine.export import ExportRefused
 
     try:
-        written = api.export(args.source, *args.destinations, tolerance=args.tolerance,
+        written = api.export(args.source, *args.destinations, tolerance=getattr(args, "tolerance", None),
                              log=lambda text: print(text, file=sys.stderr))
     except (ExportRefused, ValueError) as error:
         raise Failed(str(error), 2) from None
@@ -379,7 +418,7 @@ def inspect_parser(prog: str = "cad <type> inspect") -> argparse.ArgumentParser:
 
 
 def inspect_main(argv: list[str] | None = None, prog: str = "cad <type> inspect") -> int:
-    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad xbf inspect DOC REF``: what the
+    """``cad xbf inspect DOC``: the build closure the xbf holds; ``cad model inspect ID REF``: what the
     kernel measures of the elements a ref names, and what made each (``made_by``, null for a model's
     document no live worker built; none of a file, which names no model)."""
     return run("inspect", argv, prog)
@@ -809,7 +848,7 @@ def status_text(answer: dict[str, Any]) -> str:
 
 
 # Each verb: its help, the function adding its arguments to a parser, and the function running it.
-VERBS: dict[str, tuple[str, Callable[[argparse.ArgumentParser], None], Callable[[argparse.Namespace, str], int]]] = {
+VERBS: dict[str, tuple[str, Callable[..., Any], Callable[[argparse.Namespace, str], int]]] = {
     "export": ("write an .xbf or a .step to STEP, GLB, STL, 3MF, DXF or xbf files, by suffix; a GLB carries the "
                "document's motions as clips, a DXF draws a planar one", _export_arguments, _export),
     "snapshot": ("draw a document or a file the viewer opens as the CAD Viewer does, into a PNG", _snapshot_arguments,

@@ -32,7 +32,8 @@ if __name__ == "__main__":
 ```
 
 ```bash
-cad run arm.py                                 # builds it in the engine's warm worker
+cad run arm.py                                 # builds it in the engine's warm worker, printing its id
+cad model export <id> arm.3mf --tolerance 0.01 # the model as the engine holds it, by that id
 cad xbf export XBF/arm.xbf arm.glb arm.stl     # more translations of the document it wrote
 cad xbf snapshot XBF/arm.xbf arm.png           # a still of it, drawn by OCCT
 cad serve XBF/arm.xbf                          # the document on a local page
@@ -40,16 +41,20 @@ cad xbf inspect XBF/arm.xbf                    # what it holds, then its build c
 ```
 
 The same operations are functions of each type: `xbf.export("XBF/arm.xbf", "arm.glb")`,
-`xbf.snapshot(...)`, `xbf.inspect(...)`, and `step.read("vendor.step")` reads a file into a model.
+`xbf.snapshot(...)`, `xbf.inspect(...)`; `model.export(arm(), "arm.glb")` exports the model a call returns,
+and `step.read("vendor.step")` reads a file into a model.
 
 ## Definitions
 
 These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
-  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `step`, `glb`,
-  `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf` because an id must be a valid
-  Python name. The registry (`cad.registry`) maps file extensions to ids (`.step` and `.stp` are `step`).
+  id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `model`, `step`,
+  `glb`, `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf`
+  because an id must be a valid Python name. The registry (`cad.registry`) maps file extensions to ids (`.step`
+  and `.stp` are `step`). `model` is the one type with no file: a model built from code and held in the
+  engine's memory, addressed by its document id or the handle its call returns (`@model` declares one);
+  `xbf` is the `.xbf` file the engine writes of one, and takes files alone.
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
   `kicad`, `trimesh`),
@@ -61,8 +66,11 @@ These words mean one thing each, in the code, the commands and every document.
   tool: OCP is a dependency of `build123d`, not an integration.
 - **Producer**: code that makes a document type from some input. Many integrations can produce one type.
   Each type documents the content it carries, and each producer states which parts of it it provides.
-- **Operation**: one of a fixed set, `export`, `snapshot`, `inspect` and `check`. Each type implements those
-  that make sense for it.
+- **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
+  `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
+  (a 3D type's manufacturing check), `drc` (a board's design rule check), `erc` (a schematic's electrical
+  rules check), `validate` (a robot description's conformance check). Each type implements those that make
+  sense for it.
 
 `python -m cad.registry <type>` prints a type's help, worked out from the registry: the content it carries,
 its operations and what writes it.
@@ -72,7 +80,7 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
-document's manufacturing check (`cad.<type>.check(source, process="molding"|"printing")`, measured with
+document's manufacturing check (`cad.<type>.dfm(source, process="molding"|"printing")`, measured with
 trimesh); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
@@ -373,9 +381,10 @@ document types', the integrations' and the CLI's.
     engine's **Architecture**.
 
 21. **Operations on documents are Python functions the CLI exposes; process control is the
-    CLI's alone.** `export`, `snapshot`, `inspect` and `check` are functions of each document type
-    (`cad.xbf.export`, `cad.urdf.check`, ...), one to one with the commands that call them (`cad xbf
-    export`, `cad urdf check`); serving, the engine's status, stopping it and running it (`cad serve`,
+    CLI's alone.** A type's operations -- `export` and `snapshot`, `inspect`, and those named for what
+    they do (`dfm`, `drc`, `erc`, `validate`) -- are functions of each document type (`cad.model.export`,
+    `cad.xbf.export`, `cad.kicad_pcb.drc`, `cad.urdf.validate`, ...), one to one with the commands that
+    call them (`cad model export`, `cad xbf export`, `cad kicad_pcb drc`, `cad urdf validate`); serving, the engine's status, stopping it and running it (`cad serve`,
     `status`, `stop`, `server`), and deleting a document (`cad delete`, which the home's Delete is too),
     are commands only, with no function of the library. Every successful server-backed build reports its id and localhost
     viewer URL, including a build with file outputs. A cold `daemon=False` build has no served
@@ -449,11 +458,16 @@ document types', the integrations' and the CLI's.
     function it is given (a KiCad board script, `@kicad_pcb`, run through KiCad's IPC API; the `@step`
     stacked on one, written by `kicad-cli`); which one is the registry's, by what is decorated.
 
-28. **The CLI is `cad <document_type> <operation> <file>`.** One set of operation names, shared by every
-    type; each type implements those that make sense. A new operation must be code-free, frequently
-    needed and meaningful across types. One result shape per operation: `check` returns findings, each
-    with a severity, a code and a location (`--json`: `cad.results.CheckResult`); `export` says the files
-    it wrote. A type's own options live with the type (`cad srdf check robot.srdf --urdf robot.urdf`).
+28. **The CLI is `cad <document_type> <operation> <file>`.** `export` and `snapshot` are shared by every
+    type that has them (and `inspect` and `read` where a type has them); every other operation is named
+    for what it does -- `dfm` a 3D type's manufacturing check, `drc` a board's design rule check, `erc` a
+    schematic's electrical rules check, `validate` a robot description's conformance check -- never a
+    shared word that means something different per type. Each type implements those that make sense; a
+    `model`, which has no file, is named by its document id (`cad model export <id> arm.step`). A new
+    shared operation must be code-free, frequently needed and meaningful across types. One result shape
+    per operation: a check (`dfm`, `drc`, `erc`, `validate`) returns findings, each with a severity, a code
+    and a location (`--json`: `cad.results.CheckResult`); `export` says the files it wrote. A type's own
+    options live with the type (`cad srdf validate robot.srdf --urdf robot.urdf`).
     `cad <type> --help` lists the type's operations, `cad <type> <operation> --help` its options, and `cad
     --help` groups the commands by type. The commands that are no document's -- setup, update,
     uninstall, doctor, plugin, viewer, status, stop, server, telemetry, run, serve and delete -- stay
@@ -498,7 +512,7 @@ temporary artifact. Browser downloads choose the viewer user's local destination
 before starting. An agent's explicit host path is a different destination contract.
 
 `cad <type> inspect`, `cad.<type>.inspect()` and `cad_inspect` read existing files or the
-documents the engine holds by id. They never execute source to obtain a missing model or write
+documents the engine holds by id (`cad model inspect <id>`, `cad.model.inspect(handle)`). They never execute source to obtain a missing model or write
 its declared outputs. An unbuilt or unsaved model requires an explicit build: one
 the engine built before names the command (`cad run` and the script that defines it). With no reference,
 `cad <type> inspect` prints what the document holds -- its state, parts, bounds, volume, materials,
@@ -514,23 +528,25 @@ build metadata. File metadata does not imply a live worker.
 
 ```
 src/cad/
-  __init__.py            # the root, exactly: model, __version__, CadDeprecationWarning and the
-                         #   document types, loaded on first use; the font guard, the lazy
+  __init__.py            # the root, exactly: __version__, CadDeprecationWarning and the
+                         #   document types (model among them), loaded on first use; the font guard, the lazy
                          #   kernel and the earlier spellings' aliases, first
   registry.py            # the document types and the integrations: the one table every layer
                          #   reads, kernel-free (`python -m cad.registry --js` writes the JS)
+  model/                 # the model, the type with no file: @model and a model's operations, by
+                         #   its handle or document id (a ModelType)
   xbf/, step/, stl/,     # the document types, each a DocumentType (`cad.<type>`): its decorator,
-  glb/, threemf/, dxf/   #   its reader and its operations
-  urdf/, sdf/, srdf/     # the robot descriptions' types: `check` and the checks behind it
+  glb/, threemf/, dxf/   #   its reader and its operations (a 3D type's dfm among them)
+  urdf/, sdf/, srdf/     # the robot descriptions' types: `validate` and the checks behind it
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
-  kicad_pcb/             # a saved KiCad board: read_board, inside and inspect (the reader is
+  kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
-                         #   still engine/render/board.py); check and export, the kicad
+                         #   still engine/render/board.py); drc and export, the kicad
                          #   integration's; @kicad_pcb is the kicad integration's board script
-  kicad_sch/             # a saved KiCad schematic: read_schematic (its hierarchy, its nets and
+  kicad_sch/             # a saved KiCad schematic: read (its hierarchy, its nets and
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
-                         #   check (ERC) and export, the kicad integration's
+                         #   erc and export, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
                          #   on _internal/programs), a board script through its headless
                          #   api-server and KiPy (_session), DRC (_check), its exports (_export),
@@ -539,7 +555,7 @@ src/cad/
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
                          #   taking a trimesh.Trimesh and answering its report as data (_molding,
-                         #   _printing), and the check every 3D type runs with them (_check)
+                         #   _printing), and the dfm every 3D type runs with them (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -549,7 +565,8 @@ src/cad/
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
                          #   on this computer (places)
-  results.py             # the operations' shared result types: what a `check` returns, typed
+  results.py             # the operations' shared result types: what a check (dfm, drc, erc,
+                         #   validate) and a KiCad export return, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
   _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
@@ -580,40 +597,40 @@ the library never builds, caches or writes back an XCAF model of a board. The pa
 board index live under `src/cad/engine/formats/kicad/`, the standard library alone, so the server
 and a script run with `cad run` import them without the CAD kernel; the flat renderer is
 `src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.kicad_pcb` is
-the document type: `read_board` exposes the inspection index, `inside` the even-odd test a check measures
-with, and `inspect` the board in one look. KiCad owns authoring, DRC (`cad.kicad_pcb.check`, `cad
-kicad_pcb check`) and the fabrication, assembly and 3D exports (`cad.kicad_pcb.export(board, to, out)`,
+the document type: `kicad_pcb.read` exposes the inspection index, `inside` the even-odd test a check measures
+with, and `inspect` the board in one look. KiCad owns authoring, DRC (`cad.kicad_pcb.drc`, `cad
+kicad_pcb drc`) and the fabrication, assembly and 3D exports (`cad.kicad_pcb.export(board, to, out)`,
 `cad kicad_pcb export --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`), the `kicad`
 integration's, run by kicode's `kicad-cli` (`cad[kicad]`; a person's own KiCad is never run). A script
 run with `cad run` that calls them gets the extra; the command runs them in the extra's environment. An
 exported STEP enters the ordinary foreign-file path.
 
-A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read_schematic` reads the whole
+A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read` reads the whole
 hierarchy from its project's root sheet (whichever of its sheets it is given): its sheets, symbols and
 pins, wires, buses, labels and junctions, and the nets they make, resolved as KiCad's connection graph
 resolves them -- the names `kicad-cli sch export netlist` gives, which are the board's -- and answers
 references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
 (`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
 board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
-the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.check`, `cad
-kicad_sch check`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
+the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
+kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
 
 ## Manufacturing checks
 
-A 3D document's `check` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.stl.check`, `cad.threemf.check`, `cad.glb.check`, `cad.step.check` and
-`cad.xbf.check`, one to one with `cad <type> check --process molding|printing`. The source is a file of
-the type or, for `xbf`, a document the engine holds (its id, or the handle a model's call returns), so a
+A 3D document's `dfm` measures it for a manufacturing process, with the `trimesh` integration
+(`cad[trimesh]`): `cad.model.dfm`, `cad.xbf.dfm`, `cad.step.dfm`, `cad.stl.dfm`, `cad.threemf.dfm` and
+`cad.glb.dfm`, one to one with `cad <type> dfm --process molding|printing`. The source is a file of
+the type or, for `model`, a document the engine holds (its id, or the handle a model's call returns), so a
 check script measures the model it builds:
 
 ```python
-from cad import stl, xbf
+from cad import model, stl
 from part import part                  # a model
 
-result = xbf.check(part(), process="molding", pull="-z")    # draft, undercuts, projected area
-stl.check("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
-stl.check("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
+result = model.dfm(part(), process="molding", pull="-z")    # draft, undercuts, projected area
+stl.dfm("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
+stl.dfm("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
 result.ok, result.findings, result.measurements["draft"]["min_wall_draft"]
 ```
 
@@ -627,7 +644,7 @@ in millimetres), and errors for what could not be measured (`measurement_failed`
 `angle_limit` (45) and `samples` (2000); `units` (`mm`, `cm`, `m`, `in`, `ft`) an STL's alone, the
 other types declaring their own; `candidates` either's. An option of the other process is refused by
 name. A mesh is measured as the viewer reads it: an STL as it is, a 3MF's or a GLB's objects placed in
-millimetres, Z up, and a STEP or an xbf as the engine tessellates it.
+millimetres, Z up, and a model, a STEP or an xbf as the engine tessellates it.
 
 Measured as a mesh, a curved face's draft is read from its facets, which are chords: the report says how
 far its facets disagree (`spread_deg`) and when to export finer. The trimesh integration's functions
@@ -635,5 +652,5 @@ measure a mesh a program already holds, answering the same report as data:
 `cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
 `cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` (any file trimesh reads, an `.obj`
 or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
-`cad.trimesh` gets the integration; one that only calls `cad.<type>.check` names it in its header
+`cad.trimesh` gets the integration; one that only calls `cad.<type>.dfm` names it in its header
 (`cad[trimesh]`), and a check without it says so in one line.

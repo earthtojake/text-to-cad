@@ -10,7 +10,7 @@ Use this reference when writing or editing URDF XML directly. The `.urdf` file i
 4. If links reference meshes, prepare or verify the per-link assets first (see [meshes.md](meshes.md)).
 5. Apply URDF frame semantics exactly: joint origin in parent frame, child link frame at joint frame, joint axis in joint frame, visual/collision/inertial origins in link frame (see [urdf-frames.md](urdf-frames.md)).
 6. Author links, joints, limits, axes, origins, inertials, and geometry per this contract. Compute derived numbers — inertia tensors, unit conversions, mirrored transforms — with formulas or a helper script; never freehand them (see [inertials.md](inertials.md)).
-7. Validate with `cad urdf check <file.urdf>` and fix findings until clean.
+7. Validate with `cad urdf validate <file.urdf>` and fix findings until clean.
 8. Run the rest of the verification recipe in [urdf-checks.md](urdf-checks.md): external tools when available, then a viewer sweep ([Show the model](../SKILL.md#show-the-model)) of every movable joint against the ledger's positive-motion statements.
 9. Report smoke tests run, checks skipped, remaining assumptions, and unchecked spatial data.
 

@@ -15,7 +15,7 @@ KiCad's boards and the `kicad` integration together.
 
 How an integration gets installed on a person's computer is covered for a Python library alone: `cad
 run` makes a program's environment with the integrations its imports use, and an operation the `cad`
-command runs that needs one its own environment lacks (a 3D type's `check`, the `trimesh`
+command runs that needs one its own environment lacks (a 3D type's `dfm`, the `trimesh`
 integration's) runs in the environment of that integration, made once by the engine the same way
 (`cad_server/_internal/integration_env.py`). An external program that ships as a Python package (KiCad's
 `kicad-cli`, in kicode) is its integration's extra and installs the same way; any other is the person's to

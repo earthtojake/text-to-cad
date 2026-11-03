@@ -16,7 +16,7 @@ python phalanges.py
 python routing.py
 python guide_mounts.py
 python forearm.py
-cad xbf snapshot "$ID" fist.png --pose fist          # ID: anatomy_layout's id: line
+cad model snapshot "$ID" fist.png --pose fist          # ID: anatomy_layout's id: line
 ```
 
 | Script | Models |

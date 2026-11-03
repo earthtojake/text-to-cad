@@ -1,4 +1,4 @@
-"""What the ``urdf``/``srdf``/``sdf`` ``check`` operations share.
+"""What the ``urdf``/``srdf``/``sdf`` ``validate`` operations share.
 
 The checkers all answer with :class:`cad._internal.findings.FindingsReport` — an
 accumulator of Findings split by severity — and the public verbs all answer with

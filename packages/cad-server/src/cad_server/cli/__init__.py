@@ -2,7 +2,7 @@
 
 Two kinds of command. A document type's: ``cad <document_type> <operation> <file>``, one per type in
 the registry (``cad.registry``), each its own module, ``cad_server.cli.<type>``
-(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf check``). And the
+(``cad_server.cli.document_types``: ``cad xbf export``, ``cad stl snapshot``, ``cad urdf validate``). And the
 commands that are no document's: the engine's process control (``serve``, ``status``, ``stop``,
 ``delete``, ``server``), ``run``, and the installation's (``setup``, ``update``, ``uninstall``,
 ``doctor``, ``plugin``, ``viewer``, ``telemetry``).
@@ -82,7 +82,8 @@ def _type_lines() -> str:
     width = max(len(name) for name in DOCUMENT_TYPES)
     ops = {name: ", ".join(operations_of(name)) for name in DOCUMENT_TYPES}
     ops_width = max(len(text) for text in ops.values())
-    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: {', '.join(entry.extensions)}"
+    return "\n".join(f"  {name.ljust(width)}  {ops[name].ljust(ops_width)}  {entry.title}: "
+                     f"{', '.join(entry.extensions) or 'a document id, held in memory'}"
                      for name, entry in DOCUMENT_TYPES.items()) + "\n"
 
 
@@ -284,7 +285,7 @@ def _run_module(command: str, module_name: str, rest: list[str]) -> int:
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so
-    # `cad urdf check --help` says "cad urdf check".
+    # `cad urdf validate --help` says "cad urdf validate".
     # Not every command takes a name for its parser, hence the signature check rather
     # than a blanket keyword.
     import inspect  # only the dispatcher needs it; `--help` does not.

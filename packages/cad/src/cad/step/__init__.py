@@ -3,7 +3,7 @@
 ``@step("arm.step")`` declares a model's STEP file;
 ``step.read(path)`` reads one into a model;
 its operations (``step.export(source, *destinations)``, ...) are the ``cad step <operation>`` commands'.
-``step.check(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
+``step.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
 the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.step`` imports no CAD kernel (``cad._internal.document_type``).
 """

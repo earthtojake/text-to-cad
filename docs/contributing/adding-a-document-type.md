@@ -21,7 +21,8 @@ one on demand, and this guide does not decide how one will.
 - [ ] **The registry entry**, in `packages/cad/src/cad/registry.py` (`_TYPES`): the id, its title, a
       one-line summary, its extensions (the first the one a written file takes), its MIME type, how it
       is viewed (`document`, `mesh`, `drawing`, `robot`, `plot`), the content it carries, its
-      operations (from `export`, `snapshot`, `inspect`, `check`, each with the integration it needs),
+      operations (`export` and `snapshot`, shared by every type that has them; `inspect`; or one named
+      for what it does: `dfm`, `drc`, `erc`, `validate`; each with the integration it needs),
       and whether it has a decorator or a reader. `wire` only if a released protocol already spells it
       otherwise; a new type never needs one.
 - [ ] **Regenerate the JavaScript**: `python -m cad.registry --js >
@@ -29,15 +30,17 @@ one on demand, and this guide does not decide how one will.
       fails until you do.
 - [ ] **The type's package**, `packages/cad/src/cad/<id>/__init__.py`, ending in
       `_bind(__name__)` (`cad._internal.document_type`). Put here only what takes paths, plain values
-      or our own types (the signature rule): its reader, its `check`, its standard's own vocabulary.
+      or our own types (the signature rule): its reader, its check (`validate`, `drc`, ...), its standard's
+      own vocabulary.
       It imports no third-party library; a helper that takes a tool's objects is that integration's.
       Add the id to `cad._TYPES` in `packages/cad/src/cad/__init__.py`.
 - [ ] **Its operations.** Every operation it lists must run, as a function (`cad.<id>.<operation>`)
       and as a command (`cad <id> <operation>`). `export`, `snapshot` and `inspect` of a file the
-      engine reads are the engine's verbs; a `check` is the type's own function, answering
-      `cad.results.CheckResult` (findings with a severity, a code and a location). A new operation
-      name is a change to the fixed set: it must be code-free, frequently needed and meaningful across
-      types.
+      engine reads are the engine's verbs; a check is the type's own function, named for what it
+      checks (`validate`, `drc`, `erc`; a 3D type's `dfm` is the one manufacturing check every 3D type
+      shares), answering `cad.results.CheckResult` (findings with a severity, a code and a location). A
+      new operation name is a change to the closed set (`cad.registry.OPERATIONS`); a new shared one
+      must be code-free, frequently needed and meaningful across types.
 - [ ] **Its command module**, `packages/cad-server/src/cad_server/cli/<id>.py`, the same three lines
       as every other type's; options of its own live with the type
       (`cad_server/cli/document_types.py`). Pin it in
@@ -120,17 +123,17 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    environment the first time a board command needs it, as it does the `trimesh` integration's.
 3. **The type's entry** (`DOCUMENT_TYPES["kicad_pcb"]`): `.kicad_pcb`, viewed as a `plot`, its content
    (the board's layers, footprints and pads, nets, tracks, vias and zones, its outline), and its
-   operations: `snapshot` and `inspect` our own code's, `check` and `export` the `kicad` integration's.
+   operations: `snapshot` and `inspect` our own code's, `drc` and `export` the `kicad` integration's.
    Its decorator is the `kicad` integration's producer: `@kicad_pcb("board.kicad_pcb")` declares a
    persistent board script (step 6).
-4. **The type's package**, `cad/kicad_pcb/`: `read_board(path)` and `inside(...)`, which take paths and
+4. **The type's package**, `cad/kicad_pcb/`: `kicad_pcb.read(path)` and `inside(...)`, which take paths and
    our own board objects, so they are the type's (the signature rule); `snapshot` and `inspect`, the
-   library's board renderer and summary. `check` and `export` hand the board to the `kicad`
+   library's board renderer and summary. `drc` and `export` hand the board to the `kicad`
    integration (`cad.kicad._check`, `cad.kicad._export`), imported when they run, and work wherever
    kicode is installed; the command runs them in the environment of `cad[kicad]`. Calling `kicad_pcb`
    as a decorator hands the function to the `kicad` integration (`cad/kicad/`), so the type's package
    still imports no third-party library.
-5. **The commands**: `cad kicad_pcb check BOARD` (KiCad's DRC: it fails on errors or unconnected items,
+5. **The commands**: `cad kicad_pcb drc BOARD` (KiCad's DRC: it fails on errors or unconnected items,
    says the warnings, and answers `kicad_failed` when KiCad refuses the board), `cad kicad_pcb export
    BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`, `cad kicad_pcb snapshot` and
    `cad kicad_pcb inspect`

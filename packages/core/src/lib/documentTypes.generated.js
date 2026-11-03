@@ -6,7 +6,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "export",
     "snapshot",
     "inspect",
-    "check"
+    "dfm",
+    "drc",
+    "erc",
+    "validate"
   ],
   "views": [
     "document",
@@ -16,6 +19,21 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "plot"
   ],
   "documentTypes": [
+    {
+      "id": "model",
+      "title": "model",
+      "wire": "model",
+      "extensions": [],
+      "mime": "",
+      "view": "document",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "dfm"
+      ],
+      "decorator": true
+    },
     {
       "id": "xbf",
       "title": "XBF",
@@ -29,7 +47,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -47,7 +65,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -63,7 +81,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -80,7 +98,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -96,7 +114,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -125,7 +143,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -140,7 +158,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -155,7 +173,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -172,7 +190,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "drc"
       ],
       "decorator": true
     },
@@ -189,7 +207,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "erc"
       ],
       "decorator": false
     }

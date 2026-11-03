@@ -11,7 +11,7 @@ is ever read:
   pours from (``CAD_KICAD_REFILL=0`` turns it off: the pours as saved, and no kicode fetched to draw a board;
   the test runner's default, but for the KiCad suite); ``payload`` is that payload, the one the CAD Viewer's board page and ``cad kicad_pcb
   snapshot`` both draw (``prepare`` keeps it before a snapshot's render process reads it).
-* ``drc``: ``cad.kicad_pcb.check`` of the saved board, the ``CheckResult`` ``cad kicad_pcb check --json``
+* ``drc``: ``cad.kicad_pcb.drc`` of the saved board, the ``CheckResult`` ``cad kicad_pcb drc --json``
   prints, as data (``drc.json``).
 * ``exported``: an export's download kept by its kind (``exports/<kind>/``), for the kinds a function of
   the key alone (not ``step`` and ``glb``, whose 3D models are files of their own, outside it; nor a BOM,
@@ -81,7 +81,7 @@ def prepare(board: Path) -> None:
 
 
 def drc(board: Path, board_key: str) -> dict[str, Any]:
-    """KiCad's DRC of the saved board, as ``cad kicad_pcb check --json`` prints it: kept for ``board_key``."""
+    """KiCad's DRC of the saved board, as ``cad kicad_pcb drc --json`` prints it: kept for ``board_key``."""
     from cad.engine.formats.kicad.poured import folder
 
     kept = folder(board_key) / "drc.json"
@@ -91,7 +91,7 @@ def drc(board: Path, board_key: str) -> dict[str, Any]:
         pass
     from cad_server._internal import integration_env
 
-    found = integration_env.call(_python(), "kicad_pcb", "check", [str(board)], {})
+    found = integration_env.call(_python(), "kicad_pcb", "drc", [str(board)], {})
     if not any(finding.get("code") in ("kicad_missing", "kicad_failed") for finding in found.get("findings") or ()):
         _write(kept, json.dumps(found, separators=(",", ":")).encode("utf-8"))
     return found

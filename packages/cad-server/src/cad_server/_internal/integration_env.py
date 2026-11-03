@@ -1,7 +1,7 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
-A 3D type's ``check`` is the trimesh integration's (``cad.registry``): the library measures the mesh
-with trimesh; a KiCad board's and a schematic's ``check`` and ``export`` are the kicad integration's, run by
+A 3D type's ``dfm`` is the trimesh integration's (``cad.registry``): the library measures the mesh
+with trimesh; a KiCad board's ``drc``, a schematic's ``erc`` and their ``export`` are the kicad integration's, run by
 kicode's kicad-cli. The command's own environment -- the server's installation -- holds the library without
 it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at
 the installation's release, made once by the device's engine outside any sandbox and used again, as

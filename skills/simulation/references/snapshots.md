@@ -24,7 +24,7 @@ viewer's own forward kinematics and drawn in one colour of the Parts palette.
 - **URDF**: mimic joints and four-bar linkages are followed; a `<tcad:four_bar>` input is refused
   by name (an input follows its driver; [urdf-four-bar.md](urdf-four-bar.md)).
 - **SRDF**: hand it the `.srdf`: it draws the paired URDF's geometry, the same-folder `.urdf`
-  whose `<robot name>` matches, exactly as `cad srdf check` pairs them. No match, or more than one,
+  whose `<robot name>` matches, exactly as `cad srdf validate` pairs them. No match, or more than one,
   is refused before anything renders, naming the robot name it looked for and the `.urdf` files it
   found. The robot opens at every joint zero, then this SRDF's `home` group state if it declares
   one. `--pose` names a group state (`group/name`, or a name only one group has) or gives joint

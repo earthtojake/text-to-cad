@@ -2,7 +2,7 @@
 
 The ``kicad`` integration's probe (``cad.registry.INTEGRATIONS["kicad"]``), run by the library's one
 helper for the external programs our code runs (``cad._internal.programs``), the standard library
-alone, so the library's ``@kicad_pcb``, ``cad.kicad_pcb.check`` and ``export`` and the server's commands
+alone, so the library's ``@kicad_pcb``, ``cad.kicad_pcb.drc`` and ``export`` and the server's commands
 find and run it the same way. The ``kicad-cli`` run is the integration's own: kicode's
 (``kicode.executable()``, the ``cad[kicad]`` extra's), or the file ``CAD_KICAD_CLI`` names, refused unless
 it is a ``kicad-cli`` (``kicad-cli.exe`` on Windows). A person's own KiCad is never run -- not on PATH,

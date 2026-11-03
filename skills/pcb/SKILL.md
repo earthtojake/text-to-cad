@@ -21,8 +21,8 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
 explains any other failure.
 
-Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb check`), ERC (`cad
-kicad_sch check`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and a `@kicad_pcb` board script run KiCad's command line, `kicad-cli`,
+Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
+kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and a `@kicad_pcb` board script run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
 board script's environment it. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
@@ -71,14 +71,14 @@ to it after. For creation or structured edits read [native files](references/boa
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
 group at a time, route octolinear by hand (never an autorouter) with widths for each net's current,
-and check each step with `cad kicad_pcb check` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
+and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
 
 ## Edit
 
-1. Inspect the saved board with `from cad.kicad_pcb import read_board` in a script run with
+1. Inspect the saved board with `from cad import kicad_pcb` in a script run with
    `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
 2. Edit the native files, or the board in a board script. Keep net assignments, layer stack, track
@@ -92,10 +92,10 @@ Check the saved board after every step, from the same revision you will hand ove
 
 | The change | Check it with |
 | --- | --- |
-| The schematic | `cad kicad_sch check board.kicad_sch` (KiCad's ERC: errors fail it) and `cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed ([schematic](references/schematic.md)) |
+| The schematic | `cad kicad_sch erc board.kicad_sch` (KiCad's ERC: errors fail it) and `cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed ([schematic](references/schematic.md)) |
 | Board against schematic | the pin-by-pin comparison in [schematic](references/schematic.md#into-the-board-and-back): every pad on its schematic pin's net |
-| Anything: parts, copper, zones, rules | `cad kicad_pcb check board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`). It exits 1 on error-severity violations or unconnected items. Unconnected items are the routing still to do |
-| Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well; measure decoupling distance and connector access with `read_board` |
+| Anything: parts, copper, zones, rules | `cad kicad_pcb drc board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`). It exits 1 on error-severity violations or unconnected items. Unconnected items are the routing still to do |
+| Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well; measure decoupling distance and connector access with `kicad_pcb.read` |
 | Routing | The layout's property script ([layout](references/layout.md#a-property-check)): segments off 45 degrees, detours, width for current |
 | How copper and silkscreen look | `cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper` (and `--display '{"mode":"copper","side":"bottom"}'`) |
 | Ready to order | The review below |
@@ -111,7 +111,7 @@ Check the saved board after every step, from the same revision you will hand ove
 A review of one board, for the fab and assembler it will be ordered from, is a guided review, not a
 fab's own engineering check: report what was not checked. Gather evidence in this order: KiCad's DRC
 (every error blocks ordering); then measurements DRC cannot make, from the board read back with
-`read_board` and the project BOM; then the checklist of what no command measures, with a snapshot.
+`kicad_pcb.read` and the project BOM; then the checklist of what no command measures, with a snapshot.
 
 | Area | Reference | Measured by |
 | --- | --- | --- |
@@ -119,7 +119,7 @@ fab's own engineering check: report what was not checked. Gather evidence in thi
 | Electrical | [review-electrical](references/review-electrical.md) | the board read back: decoupling distances, narrowest track per net |
 | Assembly and sourcing | [review-assembly](references/review-assembly.md) | the part list and placement file, by inspection |
 
-Each finding names its parts by board reference (`U2`, `C8`, `#net:VBUS`); `read_board(path).resolve(ref)`
+Each finding names its parts by board reference (`U2`, `C8`, `#net:VBUS`); `kicad_pcb.read(path).resolve(ref)`
 says where one is.
 
 ### Choosing the rules

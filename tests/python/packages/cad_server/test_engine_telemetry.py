@@ -331,9 +331,9 @@ class ThroughTheDaemonTest(unittest.TestCase):
         pointer, handed = model_id(self.folder / "part.py", "part"), run.stdout.split("SHAPE ", 1)[1].split()[0]
         refused = model_id(self.folder / "part.py", "nowhere")
         for ident in (pointer, handed):
-            done = self.run_in("-m", "cad_server.cli", "xbf", "export", ident, str(self.folder / f"{ident}.stl"))
+            done = self.run_in("-m", "cad_server.cli", "model", "export", ident, str(self.folder / f"{ident}.stl"))
             self.assertEqual(done.returncode, 0, done.stderr)
-        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "xbf", "export", refused, str(self.folder / "x.stl")).returncode, 0)
+        self.assertNotEqual(self.run_in("-m", "cad_server.cli", "model", "export", refused, str(self.folder / "x.stl")).returncode, 0)
         from tests.python.packages.cad_server.engine.test_snapshot import gl
 
         try:
@@ -342,7 +342,7 @@ class ThroughTheDaemonTest(unittest.TestCase):
         except unittest.SkipTest:
             drawn = False
         if drawn:
-            done = self.run_in("-m", "cad_server.cli", "xbf", "snapshot", pointer, str(self.folder / "part.png"))
+            done = self.run_in("-m", "cad_server.cli", "model", "snapshot", pointer, str(self.folder / "part.png"))
             self.assertEqual(done.returncode, 0, done.stderr)
         spool = self.state / analytics.SPOOL
         spooled = spool.read_text(encoding="utf-8")

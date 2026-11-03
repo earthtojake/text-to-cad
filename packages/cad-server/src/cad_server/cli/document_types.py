@@ -1,22 +1,25 @@
 """``cad <document_type> <operation> <file>``: every document type's commands, from the registry.
 
-The shape is one for every type (``cad.registry``): the type's id, then one of the fixed operations
-it implements, then its file -- ``cad xbf export arm.xbf arm.step``, ``cad stl snapshot part.stl
-part.png``, ``cad srdf check robot.srdf --urdf robot.urdf``. Each operation has one result shape:
-``export`` says the files it wrote, ``check`` its findings (each with a severity, a code and a
+The shape is one for every type (``cad.registry``): the type's id, then one of the operations it
+implements, then its file (or, for ``model``, a model's document id) -- ``cad xbf export arm.xbf
+arm.step``, ``cad model export <id> arm.glb``, ``cad stl snapshot part.stl part.png``, ``cad srdf validate
+robot.srdf --urdf robot.urdf``. ``export`` and ``snapshot`` are shared by every type that has them; the
+others are named for what they do. Each operation has one result shape: ``export`` says the files it
+wrote; ``dfm``, ``drc``, ``erc`` and ``validate`` their findings (each with a severity, a code and a
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
-A 3D type's ``check`` (``stl``, ``threemf``, ``glb``, ``step``, ``xbf``) is the manufacturing check, the
-trimesh integration's: ``cad stl check part.stl --process molding --pull -z``, ``cad xbf check <id>
---process printing --candidates``. It runs here when this environment holds trimesh, else in the
+A 3D type's ``dfm`` (``model``, ``xbf``, ``step``, ``stl``, ``threemf``, ``glb``) is the manufacturing
+check, the trimesh integration's: ``cad stl dfm part.stl --process molding --pull -z``, ``cad model dfm
+<id> --process printing --candidates``. It runs here when this environment holds trimesh, else in the
 environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
-board's and a schematic's ``check`` and ``export`` are the kicad integration's, run the same way: here when
-this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the environment of
-``cad[kicad]``.
+board's ``drc`` and a schematic's ``erc``, and their ``export``, are the kicad integration's, run the same
+way: here when this process runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the
+environment of ``cad[kicad]``.
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
-anything runs: ``part.glb is a glb, not a stl: use cad glb snapshot``.
+anything runs: ``part.glb is a glb, not a stl: use cad glb snapshot``; a model's document id given to a
+file's type, and a file given to ``model``, the same.
 
 Each type's command is its own module (``cad_server.cli.<type>``), so ``python -m
 cad_server.cli.step export ...`` runs what ``cad step export ...`` does. Dispatch stays lazy: the
@@ -40,12 +43,12 @@ _ENGINE_SOURCES = {"export": "source", "snapshot": "document", "inspect": "docum
 
 
 def _urdf_parser(prog: str) -> argparse.ArgumentParser:
-    """``cad urdf check``'s parser, an ADAPTER's: ``--packages NAME=PATH`` repeats, a key/value map no
+    """``cad urdf validate``'s parser, an ADAPTER's: ``--packages NAME=PATH`` repeats, a key/value map no
     signature derives (``cad_server._internal.cli_from_function``)."""
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
     parser = argparse.ArgumentParser(prog=prog, description="Check one URDF robot description for conformance.")
-    parser.add_argument("path", metavar="PATH", type=Path, help="The .urdf file to check.")
+    parser.add_argument("path", metavar="PATH", type=Path, help="The .urdf file to validate.")
     parser.add_argument("--strict", action="store_true", help="Treat warnings as blocking.")
     parser.add_argument("--packages", action="append", default=[], metavar="NAME=PATH",
                         help="Resolve package://NAME/... mesh URIs against PATH. Repeatable.")
@@ -55,19 +58,19 @@ def _urdf_parser(prog: str) -> argparse.ArgumentParser:
     return parser
 
 
-def _urdf_check(argv: list[str], prog: str) -> int:
+def _urdf_validate(argv: list[str], prog: str) -> int:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST, call_verb
 
     args = _urdf_parser(prog).parse_args(argv)
-    _refuse_other_type("urdf", "check", str(args.path))
-    return call_verb(("cad.urdf", "check"),
-                     lambda check: check(args.path, strict=bool(args.strict), packages=package_map(args.packages),
+    _refuse_other_type("urdf", "validate", str(args.path))
+    return call_verb(("cad.urdf", "validate"),
+                     lambda validate: validate(args.path, strict=bool(args.strict), packages=package_map(args.packages),
                                          verbose=bool(args.verbose)),
                      prog=prog, as_json=bool(getattr(args, JSON_FLAG_DEST)), verbose=bool(args.verbose))
 
 
 def package_map(entries: Sequence[str]) -> "dict[str, Path] | None":
-    """``NAME=PATH`` pairs as the map ``cad.urdf.check`` takes, or None for no roots."""
+    """``NAME=PATH`` pairs as the map ``cad.urdf.validate`` takes, or None for no roots."""
     if not entries:
         return None
     roots: dict[str, Path] = {}
@@ -79,11 +82,11 @@ def package_map(entries: Sequence[str]) -> "dict[str, Path] | None":
     return roots
 
 
-def _generated_check(document_type: str) -> Callable[[list[str], str], int]:
-    """A check whose options are its function's signature (``cad_server._internal.cli_from_function``)."""
+def _generated(document_type: str, operation: str) -> Callable[[list[str], str], int]:
+    """An operation whose options are its function's signature (``cad_server._internal.cli_from_function``)."""
 
     def run(argv: list[str], prog: str) -> int:
-        return _checked(document_type, (f"cad.{document_type}", "check"), argv, prog)
+        return _checked(document_type, (f"cad.{document_type}", operation), argv, prog)
 
     return run
 
@@ -94,7 +97,7 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
     def run(argv: list[str], prog: str) -> int:
         from cad_server.engine.cli import VERBS, answered, parser_for
 
-        args = parser_for(verb, prog).parse_args(argv)
+        args = parser_for(verb, prog, document_type=document_type).parse_args(argv)
         source = getattr(args, _ENGINE_SOURCES[verb], None)
         if source is not None:
             _refuse_other_type(document_type, verb, str(source))
@@ -121,16 +124,16 @@ def pull_value(argv: list[str]) -> list[str]:
     return out
 
 
-def _manufacturing_check(document_type: str) -> Callable[[list[str], str], int]:
-    """``cad <type> check --process molding|printing``: the library's check (``cad.<type>.check``), run here
-    when this environment holds the trimesh integration, else in the environment that holds it
+def _dfm(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> dfm --process molding|printing``: the library's manufacturing check (``cad.<type>.dfm``),
+    run here when this environment holds the trimesh integration, else in the environment that holds it
     (``cad_server._internal.integration_env``), its options refused here first, before one is made."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad_server._internal import integration_env
 
         argv = pull_value(argv)
-        target = (f"cad.{document_type}", "check")
+        target = (f"cad.{document_type}", "dfm")
         integration = "trimesh"
         if integration_env.carries(integration):
             return _checked(document_type, target, argv, prog)
@@ -149,7 +152,7 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
 
     parser = generated_parser(target, prog=prog)
     parsed = parser.parse_args(argv)
-    _refuse_other_type(document_type, "check", str(parsed.source))
+    _refuse_other_type(document_type, target[1], str(parsed.source))
     positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
 
     def said(line: str) -> None:
@@ -159,7 +162,7 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
         given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
         python = integration_env.environment(integration, said)
-        found = integration_env.call(python, document_type, "check", [str(value) for value in positional], keywords)
+        found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)
         return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
                            findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
                            summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
@@ -196,7 +199,7 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
 
 def _runs_kicad_here() -> bool:
     """Whether this process runs KiCad itself (``CAD_KICAD_CLI`` names one, or kicode is installed here);
-    else a board's or a schematic's check and export run in the environment of ``cad[kicad]``."""
+    else a board's DRC, a schematic's ERC and their exports run in the environment of ``cad[kicad]``."""
     from cad.kicad._program import carried
 
     return carried()
@@ -212,12 +215,12 @@ def _kicad_elsewhere(document_type: str, operation: str, args: list, kwargs: dic
     return integration_env.call(integration_env.environment("kicad", said), document_type, operation, args, kwargs)
 
 
-def _kicad_check(document_type: str) -> Callable[[list[str], str], int]:
-    """A KiCad file's check (a board's DRC, a schematic's ERC), the kicad integration's: run here when this
-    process runs KiCad, else in the environment of ``cad[kicad]``, its file refused here first."""
+def _kicad_rules(document_type: str, operation: str) -> Callable[[list[str], str], int]:
+    """A KiCad file's rules check (a board's ``drc``, a schematic's ``erc``), the kicad integration's: run here
+    when this process runs KiCad, else in the environment of ``cad[kicad]``, its file refused here first."""
 
     def run(argv: list[str], prog: str) -> int:
-        target = (f"cad.{document_type}", "check")
+        target = (f"cad.{document_type}", operation)
         if _runs_kicad_here():
             return _checked(document_type, target, argv, prog)
         from cad.results import CheckFinding, CheckResult
@@ -225,10 +228,10 @@ def _kicad_check(document_type: str) -> Callable[[list[str], str], int]:
 
         parsed = generated_parser(target, prog=prog).parse_args(argv)
         source = vars(parsed)[_first_parameter(target)]
-        _refuse_other_type(document_type, "check", str(source))
+        _refuse_other_type(document_type, operation, str(source))
 
         def checked() -> CheckResult:
-            found = _kicad_elsewhere(document_type, "check", [str(Path(source).expanduser().resolve())], {}, prog)
+            found = _kicad_elsewhere(document_type, operation, [str(Path(source).expanduser().resolve())], {}, prog)
             return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
                                findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
                                summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
@@ -247,14 +250,14 @@ def _first_parameter(target: tuple[str, str]) -> str:
 
 
 def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
-    """A generated check run: its file, the function's first parameter as the parser read it (wherever it
-    stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
+    """A generated operation's run: its file, the function's first parameter as the parser read it (wherever
+    it stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
     from cad_server._internal.cli_from_function import generated_main, generated_parser
 
     parsed = generated_parser(target, prog=prog).parse_args(argv)
     source = getattr(parsed, _first_parameter(target), None)
     if source is not None:
-        _refuse_other_type(document_type, "check", str(source))
+        _refuse_other_type(document_type, target[1], str(source))
     return generated_main(target, argv, prog=prog)
 
 
@@ -443,10 +446,10 @@ def _schematic_snapshot(argv: list[str], prog: str) -> int:
 
 # A type's operations its own code runs, in place of the engine's verb of that name.
 _OWN: dict[tuple[str, str], Callable[[list[str], str], int]] = {
-    ("kicad_pcb", "check"): _kicad_check("kicad_pcb"),
+    ("kicad_pcb", "drc"): _kicad_rules("kicad_pcb", "drc"),
     ("kicad_pcb", "export"): _kicad_export("kicad_pcb"),
     ("kicad_pcb", "inspect"): _board_inspect,
-    ("kicad_sch", "check"): _kicad_check("kicad_sch"),
+    ("kicad_sch", "erc"): _kicad_rules("kicad_sch", "erc"),
     ("kicad_sch", "export"): _kicad_export("kicad_sch"),
     ("kicad_sch", "inspect"): _schematic_inspect,
     ("kicad_sch", "snapshot"): _schematic_snapshot,
@@ -461,10 +464,12 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
         elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
-        elif _name == "check" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
-            OPERATIONS[(_entry.id, _name)] = _manufacturing_check(_entry.id)
-        elif _name == "check":
-            OPERATIONS[(_entry.id, _name)] = _urdf_check if _entry.id == "urdf" else _generated_check(_entry.id)
+        elif _name == "dfm" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
+            OPERATIONS[(_entry.id, _name)] = _dfm(_entry.id)
+        elif (_entry.id, _name) == ("urdf", "validate"):
+            OPERATIONS[(_entry.id, _name)] = _urdf_validate
+        else:
+            OPERATIONS[(_entry.id, _name)] = _generated(_entry.id, _name)
 del _entry, _name
 
 
@@ -473,10 +478,10 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
     prog = prog or f"cad {document_type} {operation}"
     if (document_type, operation) not in OPERATIONS:
         raise KeyError(f"cad {document_type} has no operation {operation!r}")
-    if document_type in ("kicad_pcb", "kicad_sch") and operation == "check":
+    if (document_type, operation) in (("kicad_pcb", "drc"), ("kicad_sch", "erc")):
         from cad_server._internal.cli_from_function import generated_parser
 
-        return generated_parser((f"cad.{document_type}", "check"), prog=prog)
+        return generated_parser((f"cad.{document_type}", operation), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
     if document_type == "kicad_sch":
@@ -484,7 +489,7 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
     if operation in _ENGINE_SOURCES:
         from cad_server.engine.cli import parser_for
 
-        return parser_for(operation, prog)
+        return parser_for(operation, prog, document_type=document_type)
     if document_type == "urdf":
         return _urdf_parser(prog)
     from cad_server._internal.cli_from_function import generated_parser
@@ -498,13 +503,26 @@ def operations_of(document_type: str) -> tuple[str, ...]:
 
 
 def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
-    """A file of another type, refused by name before anything runs."""
-    suffix = Path(source).suffix
+    """A source of another type, refused by name before anything runs: a file of another type, a model's
+    document id given to a file's type, a file given to ``model``."""
+    from cad.engine.ids import is_id
+
+    def use(other: str) -> str:
+        return f": use cad {other} {operation}" if (other, operation) in OPERATIONS else \
+            f"; cad {other} takes {', '.join(operations_of(other))}"
+
+    given = source.partition("#")[0]
+    entry = DOCUMENT_TYPES[document_type]
+    if is_id(given):
+        if entry.has_file:
+            raise _Refused(f"{source} is a model's document id, not a {entry.suffix} file{use('model')}")
+        return
+    suffix = Path(given).suffix
     found = by_extension(suffix) if suffix else None
     if found is not None and found.id != document_type:
-        also = f": use cad {found.id} {operation}" if (found.id, operation) in OPERATIONS else \
-            f"; cad {found.id} takes {', '.join(operations_of(found.id))}"
-        raise _Refused(f"{source} is a {found.id}, not a {document_type}{also}")
+        raise _Refused(f"{source} is a {found.id}, not a {document_type}{use(found.id)}")
+    if found is None and not entry.has_file:
+        raise _Refused(f"cad model takes a model's document id (python SCRIPT.py prints it), not {source!r}")
 
 
 class _Refused(Exception):
@@ -513,7 +531,8 @@ class _Refused(Exception):
 
 def type_usage(document_type: str) -> str:
     """``cad <type> --help``: the type and its operations, from the registry."""
-    return (f"usage: cad {document_type} <operation> FILE [options]\n\n{help_text(document_type)}\n\n"
+    what = "FILE" if DOCUMENT_TYPES[document_type].has_file else "ID"
+    return (f"usage: cad {document_type} <operation> {what} [options]\n\n{help_text(document_type)}\n\n"
             f"Run 'cad {document_type} <operation> --help' for an operation's options.\n")
 
 

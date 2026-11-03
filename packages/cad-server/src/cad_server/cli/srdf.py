@@ -1,4 +1,4 @@
-"""``cad srdf <operation>``: the SRDF document type's commands (snapshot, check).
+"""``cad srdf <operation>``: the SRDF document type's commands (snapshot, validate).
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.srdf <operation> ...`` runs what the ``cad`` command does.

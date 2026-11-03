@@ -17,7 +17,7 @@ existing `.dxf`. Whether a cut file is ready for a shop is the sheet-metal revie
 ## A drawing is a model
 
 **A drawing is a `@model` function that takes no parameters and returns build123d 2D geometry on
-z=0: a sketch, a face, wires or edges. `cad xbf export <id> drawing.dxf` writes the DXF.** You never
+z=0: a sketch, a face, wires or edges. `cad model export <id> drawing.dxf` writes the DXF.** You never
 construct a document, name an entity, or write a file from the model. It builds in the server's warm
 worker like any model, and the DXF is written from its document by build123d's own exporter, once the
 drawing checks pass. The CAD Viewer and `cad dxf snapshot` read the `.dxf` itself, so the file a
@@ -68,13 +68,13 @@ if __name__ == "__main__":
 
 ```bash
 cad run src/gasket.py                   # prints id: and view:
-cad xbf export "$ID" DXF/gasket.dxf     # ID: the id: line it printed; runs the drawing checks
+cad model export "$ID" DXF/gasket.dxf     # ID: the id: line it printed; runs the drawing checks
 ```
 
 Running the script is the only way to build a drawing, and exporting it the only way to write its
 DXF. `cad run <drawing>.py` writes nothing; it prints each model's report (`built
 src/gasket.py::gasket cold in 2.29s: ...`), its `id:` and its page, and exits 1 when a body raises.
-Run each drawing script directly; do not sweep directories. `cad xbf export` exits 2 when it refuses
+Run each drawing script directly; do not sweep directories. `cad model export` exits 2 when it refuses
 the drawing (3D, off the plane, a failed drawing check), naming which. An existing `.dxf` needs
 neither: hand it straight to a snapshot or the viewer.
 
@@ -258,13 +258,13 @@ Faces laid side by side are not an unfolded blank: a blank for bending needs the
   `CIRCLE`, kerf included. A profile that comes out as hundreds of short `LINE`s fell back to the
   sampled path: check the union's inputs rather than accept it.
 - **Why did it (not) rebuild?** The run's report says how each body went (`run` or `replayed`);
-  `cad xbf inspect <id>` prints what the drawing was built from.
+  `cad model inspect <id>` prints what the drawing was built from.
 
 ## Check a drawing
 
 | The change | Check it with |
 | --- | --- |
-| Any drawing | `cad xbf export`: the drawing checks run on the document it is about to write |
+| Any drawing | `cad model export`: the drawing checks run on the document it is about to write |
 | A dimension the person gave | A targeted `ezdxf` read of the exported `.dxf` (below): extents, a circle's radius, counts by layer |
 | Layout, layers, marking | `cad dxf snapshot` of the exported file ([below](#see-a-drawing)) |
 | A file from elsewhere | `validate_dxf_file` (below), then the same reads |

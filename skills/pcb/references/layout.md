@@ -30,7 +30,7 @@ function returns, and the next step reads what the last one saved.
    arcs and vias in a commit (`b.begin_commit()`, `b.create_items([...])`, `b.push_commit(...)`);
    headless KiCad has no interactive router.
 6. **Refill and check after every routing step.** `b.refill_zones()`, save, then
-   `cad kicad_pcb check board.kicad_pcb`: its unconnected items are the routing still to do, and its
+   `cad kicad_pcb drc board.kicad_pcb`: its unconnected items are the routing still to do, and its
    errors are what to fix now. Moving a part after routing is fine: reroute what it touched.
 7. **Check what DRC doesn't.** Write a script of the layout's own properties and run it after every
    step (below). Fix what it finds the same way.
@@ -46,9 +46,9 @@ import math
 import sys
 from collections import defaultdict
 
-from cad.kicad_pcb import read_board
+from cad import kicad_pcb
 
-board = read_board(sys.argv[1] if len(sys.argv) > 1 else "board.kicad_pcb")
+board = kicad_pcb.read(sys.argv[1] if len(sys.argv) > 1 else "board.kicad_pcb")
 
 # 1. Octolinear: every straight segment runs at a multiple of 45 degrees (arcs excluded).
 off_angle = []

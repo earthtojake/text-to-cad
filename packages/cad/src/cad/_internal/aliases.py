@@ -37,13 +37,11 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",
-        "export": "cad.engine.api.export",
+        # A model's export, its handle's or its id's: a file's is its own type's (cad.step.export, ...).
+        "export": "cad.model.export",
         "snapshot": "cad.engine.api.snapshot",
         "inspect": "cad.engine.api.inspect",
     },
-    "cad.urdf": {"validate": "cad.urdf.check"},
-    "cad.sdf": {"validate": "cad.sdf.check"},
-    "cad.srdf": {"validate": "cad.srdf.check"},
     # The 0.10 call shapes, each a CheckResult or a CheckFinding.
     "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
 }
@@ -51,9 +49,9 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
 #: What the deprecation says to use instead, where the new path is not one object: the root's
 #: operations are each document type's now.
 _ADVICE = {
-    "cad.export": "cad.<document_type>.export (cad.xbf.export, cad.step.export, ...)",
-    "cad.snapshot": "cad.<document_type>.snapshot (cad.xbf.snapshot, cad.stl.snapshot, ...)",
-    "cad.inspect": "cad.<document_type>.inspect (cad.xbf.inspect, cad.step.inspect, ...)",
+    "cad.export": "cad.model.export (a file's: cad.<document_type>.export, cad.step.export, ...)",
+    "cad.snapshot": "cad.<document_type>.snapshot (cad.model.snapshot, cad.stl.snapshot, ...)",
+    "cad.inspect": "cad.<document_type>.inspect (cad.model.inspect, cad.step.inspect, ...)",
     "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
     "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
 }

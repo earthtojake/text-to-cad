@@ -617,9 +617,11 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              of the library's, with its kernel)
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
-cad xbf|step export SRC DST [DST ...] [--tolerance MM] [--json]
-                                             SRC an .xbf, a .step or a document id;
-                                             --tolerance meshes an .stl or a .3mf at MM (Mesh)
+cad model export ID DST [DST ...] [--tolerance MM] [--json]
+                                             a model, by its document id: the document the engine holds
+cad xbf|step export FILE DST [DST ...] [--tolerance MM] [--json]
+                                             SRC an .xbf or a .step; --tolerance (a model's, an xbf's, a
+                                             STEP's) meshes an .stl or a .3mf at MM (Mesh)
 cad glb|stl|threemf export SRC DST [DST ...] [--json]
                                              a mesh to the other two mesh kinds
 cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored]
@@ -628,7 +630,7 @@ cad TYPE snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camer
 cad TYPE snapshot --job PACKET [SRC] [the same flags, each over every job]
                                              every picture a Quick Edit packet (or a job file) names
 cad serve DOC [--port N]
-cad xbf|step|glb inspect DOC [REF] [--query Q] [--json]
+cad model inspect ID [REF] [--query Q] [--json] | xbf|step|glb inspect FILE [REF] [...]
                                              what the document holds, then its build closure; with REF
                                              (**References**): an element's facts and
                                              what made it, or a part's or an assembly's volume, mass and
@@ -637,18 +639,19 @@ cad xbf|step|glb inspect DOC [REF] [--query Q] [--json]
                                              mesh, is refused, saying what shows it); Q summary (the default
                                              without REF), structure (the summary with nothing measured),
                                              closure, geometry (the default with REF) or build
-cad urdf|sdf|srdf check FILE [--strict] [--json] [the type's own options]
+cad urdf|sdf|srdf validate FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
-cad xbf|step|stl|glb|threemf check SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
+cad model|xbf|step|stl|glb|threemf dfm SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
                 [--zero-tol DEG] [--units U] [--candidates] [--json]
-cad xbf|step|stl|glb|threemf check SRC --process printing [--angle-limit DEG] [--samples N]
+cad model|xbf|step|stl|glb|threemf dfm SRC --process printing [--angle-limit DEG] [--samples N]
                 [--units U] [--candidates] [--json]
                                              the manufacturing check, the trimesh integration's: SRC a
-                                             file or a document id; its findings and every measurement
-cad kicad_pcb check BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
+                                             file of the type, or a model's id; its findings and every
+                                             measurement
+cad kicad_pcb drc BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
                                              KiCad's DRC and fabrication outputs, by kicad-cli; the board
                                              in one look, by the library's reader
-cad kicad_sch check SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
+cad kicad_sch erc SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
                                              KiCad's ERC and the schematic's outputs, by kicad-cli, run on
                                              the project's root sheet whichever sheet is named
 cad kicad_sch inspect SCHEMATIC [REF] [--json]
@@ -663,15 +666,18 @@ cad delete DOC [DOC ...] [--json]        each document deleted: its record, its 
 ```
 
 The rule: `cad <document_type> <operation> <file>`, the type's id as the registry names it
-(`cad.registry`), one set of operation names every type shares; `TYPE` is any type with that
-operation (`cad <type> --help` lists a type's). A file of another type is refused by name before
-anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`). A document id is a
-model's document, an xbf: `cad xbf export ID ...`. The commands are the server's
+(`cad.registry`); `export` and `snapshot` are shared by every type that has them, `inspect` where a type
+has it, and every other operation is named for what it does (`dfm`, `drc`, `erc`, `validate`); `TYPE` is any
+type with that operation (`cad <type> --help` lists a type's). A file of another type is refused by name
+before anything runs, exit 2 (`part.glb is a glb, not a stl: use cad glb snapshot`). A model's document
+is a type of its own, `model`, with no file: `cad model export ID ...` takes its id, a file's type refuses
+one (`ID is a model's document id, not a .xbf file: use cad model export`), and `cad model` refuses a file
+the same way. The commands are the server's
 (`cad_server.cli.document_types`), each type's its own module (`python -m cad_server.cli.xbf export ...`);
 `python -m cad_server.engine VERB ...` takes the engine's verbs, its own entry.
 
-Every `SRC` and `DOC` is an on-disk CAD file's path or a document's id (`ids`): a model's id is
-what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
+Every `SRC` and `DOC` is an on-disk CAD file's path, for the file's type, or a model's document id
+(`ids`), for `cad model`: a model's id is what `cad run SCRIPT.py` prints for it (`id:`, beside its page, `view: <engine>/<id>`). A document
 id is read as the engine holds it, never built: one it does not hold is refused with the command
 that builds it again, `cad run <the script that defines it>`. A script is never a source: `x.py`
 and `x.py::fn` are refused as any other file that is no document is.
@@ -832,10 +838,12 @@ against it. `wire` is the one other spelling, the frozen
 protocols': `3mf` for `threemf` in `/api/v1/documents/<kind>/...` and in the analytics schemas.
 
 **A type's object.** Each `cad/<type>/__init__.py` ends by binding its module to `DocumentType`
-(`cad._internal.document_type.bind`), the module class of every type: `__call__` is the decorator
-(`cad.engine.model`'s, for a type with one), `read` the type's reader, and `export`, `snapshot` and
-`inspect` the engine's functions (`api`) behind a check that the source is no file of another type;
-`check` is the type's own function. Each attribute is resolved on first use and kept, so `cad.step.read
+(`cad._internal.document_type.bind`), the module class of every type (`ModelType` for `cad.model`, whose
+`__call__` is the engine's `model` itself): `__call__` is the decorator (`cad.engine.model`'s, for a type
+with one), `read` the type's reader, and `export`, `snapshot` and `inspect` the engine's functions (`api`)
+behind a check that the source is the type's (`refuse_other`: no file of another type; for `model`, a
+handle or an id and no file; for a file's type, no handle or id); a mesh's `export` takes no `tolerance`.
+`dfm` is the manufacturing check's (below); `drc`, `erc` and `validate` are the type's own functions. Each attribute is resolved on first use and kept, so `cad.step.read
 is cad.engine.model.read_step` and `import cad` loads no kernel. The earlier spellings resolve through
 `cad._internal.aliases`: names through `lookup` (a module's `__getattr__`), modules through a
 meta-path finder that hands out the new module under the old name (and runs it, for `python -m`), each
@@ -858,19 +866,20 @@ decorated function is the engine's model.
 
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and
-runners) for `export`, `snapshot` and `inspect`, the type's `check` for `check` (generated from the
+runners) for `export`, `snapshot` and `inspect`, each with its source said as the type's and a mesh's export
+without `--tolerance`; the type's own function for `dfm`, `drc`, `erc` and `validate` (generated from the
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
 
-**The manufacturing check.** A 3D type's `check` (`xbf`, `step`, `stl`, `glb`, `threemf`: the
-registry's `check` operation of the `trimesh` integration) is one function the library makes for each
-(`cad._internal.manufacturing.check_for`, bound by `DocumentType`): its options belong to a process,
+**The manufacturing check.** A 3D type's `dfm` (`model`, `xbf`, `step`, `stl`, `glb`, `threemf`: the
+registry's `dfm` operation of the `trimesh` integration) is one function the library makes for each
+(`cad._internal.manufacturing.dfm_for`, bound by `DocumentType`): its options belong to a process,
 `molding` or `printing`, and are resolved there, the standard library alone -- an option of the other
 process, a pull beside `--candidates` and a unit for a type that declares its own are refused before
 anything is read. The measuring is `cad.trimesh._check`'s: an STL is read as it is; a 3MF or a GLB is
 written as one STL in a temporary folder by the library's mesh readers (millimetres, Z up, as the viewer
-reads it; no kernel); a STEP, an xbf or a document id is exported to that STL by the engine. The report
+reads it; no kernel); a STEP, an xbf or a model is exported to that STL by the engine. The report
 (`_molding`, `_printing`: injection molding's draft, undercuts and projection along a pull, or the pulls
 ranked; 3D printing's mesh, overhangs, walls and support, or the orientations ranked) is the result's
 `measurements`; a family that failed, a mesh that did not read and a figure that is no finite number are
@@ -881,14 +890,16 @@ extra); else in the environment of `cad[trimesh]` at the installation's release,
 as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
 (`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
 
-**The KiCad board's check and export.** `cad kicad_pcb check` and `cad kicad_pcb export` are the library's
-`cad.kicad_pcb.check` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
+**The KiCad board's DRC, the schematic's ERC and their exports.** `cad kicad_pcb drc` and `cad kicad_pcb export` are the library's
+`cad.kicad_pcb.drc` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
 way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
 names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
 installation's release, made once by the engine (some 100 MB of kicode from PyPI, the first time). kicad-cli
 is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
 `PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
-for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings).
+for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings). A
+schematic's `cad kicad_sch erc` and `export` are `cad.kicad_sch.erc` and `export` (`cad.kicad._schematic`),
+run the same way.
 
 ## Profiling
 
@@ -2067,14 +2078,15 @@ make a child's part, placed in its caller's assembly, other bytes than its own b
 The xbf is saved first, then each derived file. Nothing of them is sent to a page: one serving
 a declared file follows that file's bytes (**Document lifetime**).
 
-**Functions** (`api`, also `cad.export`, `cad.snapshot` and `cad.inspect`; `serve`,
+**Functions** (`api`, behind each type's `cad.<type>.export`, `.snapshot` and `.inspect`; `serve`,
 `status`, `stop`, `delete` and `server` only the CLI calls): one per command, each through the daemon. No function builds source text;
 a shape made elsewhere is handed over, never built (`model(shape, name=...)`, **Shapes handed over**).
 `export(source, *destinations)` a list of `Written`; `snapshot(source, out, ...)` a `Drawn`, and `snapshot(job=PACKET, ...)` (with `source` in place of the packet's input, as `--job PACKET SRC`) a list of them, one verb with two input shapes, anything else refused as Python refuses a call; `inspect(doc)` what
 the document holds and its build closure (`query="summary"`; `"structure"` the same with nothing measured, and with no
 query the closure alone), `inspect(doc, ref)` an element's facts. Each takes a handle (what a model call
 returns), a document id or a file path; `export` and `snapshot` take the decorated function too,
-building it first. A handle exports and draws its document the same way (`.export()`,
+building it first. A type's function takes its own sources alone: `cad.model.*` a handle, an id or a
+decorated function, every other type's a file of it (`cad.xbf.export("arm.xbf", ...)`). A handle exports and draws its document the same way (`.export()`,
 `.snapshot()`); a `Model`'s `.build(verify=, profile=, daemon=)` is the debug seam, a `Report`: it
 and its children, as declared.
 
@@ -2586,7 +2598,7 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-An STL or a 3MF export may give its own tolerance instead: `cad xbf export ID part.stl --tolerance
+An STL or a 3MF export may give its own tolerance instead: `cad model export ID part.stl --tolerance
 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
 absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
@@ -3336,7 +3348,7 @@ script again with changed code updates the same document and open viewers; `pyth
 prints each model's `id:` and `view:` lines (`<engine>/<id>`), and `handle.url` is the page. No list
 of ids is saved.
 
-`cad serve ID`, `cad xbf snapshot ID view.png`, `cad xbf export ID part.step`, and `cad
+`cad serve ID`, `cad model snapshot ID view.png`, `cad model export ID part.step`, and `cad
 inspect ID 'face 1'` take the id; `cad <type> inspect 'ID#face 1'` uses the same reference syntax.
 Each reads the document the engine holds, as it is: editing the script changes nothing until
 Python runs it again, and no verb imports, runs or builds a script. An id the engine no longer

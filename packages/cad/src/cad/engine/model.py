@@ -411,7 +411,9 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
     from cad.engine import api
 
     caller = sys._getframe(1)
-    while caller.f_back is not None and caller.f_code.co_filename == __file__:
+    # Past this module and ``cad.model``'s own call of it (``cad._internal.document_type``): the program's line.
+    while caller.f_back is not None and (caller.f_code.co_filename == __file__
+                                         or caller.f_globals.get("__name__") == "cad._internal.document_type"):
         caller = caller.f_back
     return api.hand_over(target, name, animations=animations, frame=caller)
 
@@ -1006,7 +1008,7 @@ def check_result(model: Model, result: Any) -> None:
     the model declares of it: today a model returns a build123d shape, the build123d integration's."""
     from cad.registry import producer_for
 
-    for kind in dict.fromkeys(("xbf", *(output.kind for output in model.outputs))):
+    for kind in dict.fromkeys(("model", *(output.kind for output in model.outputs))):
         producer_for(kind, result, where=f"model {model.identity}")
     if result.__dict__.get("_wrapped") is None:
         raise ValueError(f"model {model.identity} returned an empty shape")

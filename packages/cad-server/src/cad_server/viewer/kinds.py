@@ -28,9 +28,10 @@ API = "/api/v1"
 # A file's kind is its document type as the API spells it (``cad.registry``'s ``wire``: the id, but
 # ``3mf`` for ``threemf``, the spelling released pages read).
 FILE_KINDS = {extension: entry.wire for entry in DOCUMENT_TYPES.values() for extension in entry.extensions}
-KINDS = ("model", *(entry.wire for entry in DOCUMENT_TYPES.values()))
+# ``model`` is a document type of its own, the one with no file (``cad.registry``): a model's document.
+KINDS = tuple(entry.wire for entry in DOCUMENT_TYPES.values())
 # The documents the engine itself serves: their structure, parts and version are its reads.
-ENGINE_KINDS = frozenset({"model", *(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")})
+ENGINE_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "document")
 ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name

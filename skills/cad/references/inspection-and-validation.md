@@ -22,7 +22,7 @@ model, so it measures the model as its code is now.
 
 A dimension the person gave is checked where the server already holds the geometry: an
 `assert` inside the model's body, on the shape it is about to return, or `cad <type> inspect`
-(`cad xbf inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
+(`cad model inspect "$ID" bracket` gives a part's bounds, volume and mass). Never append the
 check to the model's script after its call: reading `.shape` there brings the shape into the
 script's own process and loads the CAD kernel there, about 3 s, after the server has answered,
 on every run. A check script pays the same once, so it is for a derived number the person
@@ -172,7 +172,7 @@ is. To change what a person picked, read the ref's answer and either edit the co
 its `made_by` names or pick the same element in the body:
 
 ```bash
-cad xbf inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
+cad model inspect "$ID" "plate/f:plate.body.6;M:plate.relief"   # centroid (0, 0, 6), a plane
 ```
 
 ```python
@@ -191,7 +191,7 @@ def bracket():
 
 ## Which code made it
 
-`cad xbf inspect DOC REF` answers what a ref names, placed where its occurrence stands:
+`cad model inspect ID REF` (`cad xbf inspect FILE REF` of a saved `.xbf`) answers what a ref names, placed where its occurrence stands:
 
 - an element: its kind, number, name and canonical ref; the kernel's facts (a face's
   area, centroid, surface type, exact box, radius; an edge's length, curve type, class
@@ -201,7 +201,7 @@ def bracket():
   with the parts that have no material listed under `unweighed`.
 
 ```text
-$ cad xbf inspect "$ID" "bracket/face 7"
+$ cad model inspect "$ID" "bracket/face 7"
 {
   "ref": "bracket/f:bracket_body.hole.1;M:bracket_body.body_dedanl",
   "path": "bracket/bracket",
@@ -225,12 +225,12 @@ the xbf a model declares among them -- answers none: a file names no model. A re
 several selectors answers a list; one
 that names nothing is refused (exit 2).
 
-Without a REF, `cad xbf inspect DOC` prints what the document holds, one screen, then what
+Without a REF, `cad model inspect ID` prints what the document holds, one screen, then what
 it was built from. Read it for the names a ref, a pose or a snapshot takes, rather than
 guessing them:
 
 ```text
-$ cad xbf inspect "$ID"
+$ cad model inspect "$ID"
 hinge  fb5d7d22-372e-5e1e-a44b-a2aebf954533
 state       live, cached, built 12s ago
 parts       2 in hinge
@@ -322,7 +322,7 @@ usually a sliver a boolean left.
 
 A part given a native material (`from bd_materials import metals`; `part.material = metals.aluminum()`,
 [materials](build123d-modeling.md#colour-and-materials)) is weighed by
-`cad xbf inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
+`cad model inspect "$ID" OWNER`. For explicit densities, a centre of mass or inertia:
 
 ```python
 from cad.build123d import mass_properties

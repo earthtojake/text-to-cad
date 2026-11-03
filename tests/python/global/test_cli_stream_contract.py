@@ -156,7 +156,7 @@ class StdoutIsTheResultTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             robot = Path(tmp) / "stream_contract.urdf"
             robot.write_text(ROBOT_URDF, encoding="utf-8")
-            result = run("urdf", "check", str(robot))
+            result = run("urdf", "validate", str(robot))
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertTrue(result.stdout.strip())
 

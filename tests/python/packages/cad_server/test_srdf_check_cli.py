@@ -10,10 +10,10 @@ import unittest
 from cad_server.cli import srdf as _command
 
 
-class cli:  # noqa: N801 - ``cad srdf check``, as the old module's ``main`` was called
+class cli:  # noqa: N801 - ``cad srdf validate``, as the old module's ``main`` was called
     @staticmethod
     def main(argv):
-        return _command.main(["check", *argv])
+        return _command.main(["validate", *argv])
 
 
 SAMPLE_URDF = """\

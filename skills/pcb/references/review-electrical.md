@@ -13,7 +13,7 @@ and works badly.
 
 ## Measure
 
-Read the board back with $pcb's `read_board` (its checks reference has the
+Read the board back with $pcb's `kicad_pcb.read` (its checks reference has the
 API): every part with its pads and their nets, every net with its tracks, vias
 and pours. A board carries no pin types and no currents, so two inputs come from
 elsewhere: which pads are IC power inputs (the circuit specification's pad-to-net

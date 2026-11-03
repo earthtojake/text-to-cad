@@ -6,9 +6,9 @@ look at it and check it before laying out, and hold the board to it after.
 ## Read it
 
 ```python
-from cad.kicad_sch import read_schematic
+from cad import kicad_sch
 
-sch = read_schematic("board.kicad_sch")     # any sheet: the hierarchy is read from the project's root
+sch = kicad_sch.read("board.kicad_sch")     # any sheet: the hierarchy is read from the project's root
 print(sch.sheets)                           # each sheet: its path ("/", "/Power/"), page, file
 print(sch.net("/Power/VBUS").pins)          # a net, by KiCad's name: the pins on it
 pin = sch.resolve("#U3.7")                  # a pin: its name, electrical type, sheet, where, its net
@@ -52,12 +52,12 @@ cad kicad_sch snapshot board.kicad_sch tmp/power.png --sheet /Power/
 Each picture is one sheet, drawn from the file's own symbols, wires and labels in KiCad's
 colours, framed on what the sheet draws (`--border` draws the page's edge and frames the page).
 Look after every edit. The text is a stroke font of its own, not KiCad's: same places, other glyphs.
-A number is never read off a picture: read it from `read_schematic`.
+A number is never read off a picture: read it from `kicad_sch.read`.
 
 ## Check it
 
 ```bash
-cad kicad_sch check board.kicad_sch --json
+cad kicad_sch erc board.kicad_sch --json
 ```
 
 KiCad's electrical rules check (ERC) on the whole hierarchy, every finding with its sheet and where
@@ -97,10 +97,9 @@ writes `tmp/board.net`, the netlist [layout](layout.md)'s first step imports in 
 pin:
 
 ```python
-from cad.kicad_pcb import read_board
-from cad.kicad_sch import read_schematic
+from cad import kicad_pcb, kicad_sch
 
-sch, board = read_schematic("board.kicad_sch"), read_board("board.kicad_pcb")
+sch, board = kicad_sch.read("board.kicad_sch"), kicad_pcb.read("board.kicad_pcb")
 want = {(pin.ref, pin.number): pin.net for pin in sch.pins if not pin.ref.startswith("#")}
 have = {(pad.part, pad.number): pad.net for pad in board.pads}
 for key in sorted(set(want) | set(have)):

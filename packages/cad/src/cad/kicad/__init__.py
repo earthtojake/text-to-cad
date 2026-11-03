@@ -10,13 +10,13 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
 * ``_session``: what ``@kicad_pcb("board.kicad_pcb")`` runs -- a private ``kicad-cli api-server`` on the
   board, KiPy connected to it, the function handed the open board, the board saved when it returns
   and not when it raises, the server stopped and its folder removed.
-* ``_check``: KiCad's design rule check (``cad.kicad_pcb.check``, ``cad kicad_pcb check``).
+* ``_check``: KiCad's design rule check (``cad.kicad_pcb.drc``, ``cad kicad_pcb drc``).
 * ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
   drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export``, the server's ``cad
   kicad_pcb export`` and the STEP a board script declares are written by.
 * ``_schematic``: a schematic's electrical rules check and its outputs (``EXPORTS``: pdf, svg, netlist,
-  bom) by ``kicad-cli``, from its project's root sheet (``cad.kicad_sch.check`` and ``export``, ``cad
-  kicad_sch check`` and ``export``).
+  bom) by ``kicad-cli``, from its project's root sheet (``cad.kicad_sch.erc`` and ``export``, ``cad
+  kicad_sch erc`` and ``export``).
 * ``_producers``: the producers this integration registers (``cad.registry``): a board script makes a
   ``kicad_pcb``, and the ``step`` stacked on it.
 

@@ -10,7 +10,7 @@ const stemOf = resource => stem(pathOf(resource));
 const typeOf = path => {
   const name = String(path || "").split("/").pop().toLowerCase();
   const found = DOCUMENT_TYPE_REGISTRY.documentTypes.find(type => type.extensions.some(extension => name.endsWith(extension)));
-  return found ? found.id : "xbf";
+  return found ? found.id : "model";
 };
 const snapshotCommand = resource => `cad ${typeOf(pathOf(resource))} snapshot --annotation`;
 // Awaited the first time something reads it: a file is fetched only by a host that carries its bytes.

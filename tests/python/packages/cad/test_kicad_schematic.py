@@ -215,7 +215,7 @@ class TheType(SchematicFixture):
         from cad._internal.document_type import DocumentType
 
         self.assertIsInstance(cad.kicad_sch, DocumentType)
-        self.assertIs(cad.kicad_sch.read_schematic, read_schematic)
+        self.assertIs(cad.kicad_sch.read, read_schematic)
         found = cad.kicad_sch.inspect(self.child, "#net:MID")
         self.assertEqual((found["root"], found["counts"]["sheets"], found["counts"]["parts"]), ("divider.kicad_sch", 2, 5))
         self.assertEqual(found["resolved"]["pins"], ["C1.1", "R1.2", "R2.1"])
@@ -224,7 +224,7 @@ class TheType(SchematicFixture):
         from unittest import mock
 
         with mock.patch.dict(os.environ, {"CAD_KICAD_CLI": str(Path(self.folder.name) / "no-kicad-cli")}):
-            checked = cad.kicad_sch.check(self.root)
+            checked = cad.kicad_sch.erc(self.root)
             self.assertEqual([finding.code for finding in checked.findings], ["kicad_missing"])
             self.assertIn("cad[kicad]", checked.findings[0].message)
             with self.assertRaisesRegex(RuntimeError, r"cad\[kicad\]"):

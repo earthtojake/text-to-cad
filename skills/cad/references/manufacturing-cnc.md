@@ -20,7 +20,7 @@ reviewing those processes.
 ```bash
 cad step inspect part.step                    # parts, bounds, volume
 cad step inspect part.step 'face 12'          # one face: its surface, radius, area, box
-cad xbf inspect "$ID" 'plate/face 7'          # the same of a model's face
+cad model inspect "$ID" 'plate/face 7'          # the same of a model's face
 ```
 
 A cylindrical face's `radius` is an internal corner's radius or a hole's; its `box` gives a pocket's

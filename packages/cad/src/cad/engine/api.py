@@ -529,10 +529,10 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
 
 def _said(written: list[Written], destinations: tuple) -> list[Written]:
     """``written``, a line said of each file when the call is the program's own (the first frame
-    outside this module, past the verb's observer, is ``__main__``'s), as a model call's report is
-    said (``Model.__call__``)."""
+    outside this module and a document type's dispatch of it, past the verb's observer, is
+    ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
     frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get("__name__") == __name__:
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.document_type"):
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         from cad.engine.said import written as said_written

@@ -20,9 +20,9 @@ HEAVY = ("OCP", "build123d")
 # The engine's own surface (``cad.engine``), which the library's namespaces are made of.
 ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
-# The root: the model, the version, the deprecation's class, and the document types.
-TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
-ROOT = ("model", "__version__", "CadDeprecationWarning", *TYPES)
+# The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
+TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
     "cad.build123d": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
@@ -47,7 +47,8 @@ class RootExports(unittest.TestCase):
 
         self.assertEqual(sorted(ROOT), sorted(cad.__all__))
         self.assertEqual(sorted(cad.engine.__all__), sorted(ENGINE))
-        self.assertIs(cad.model, cad.engine.model)
+        # ``model`` is a type with no file: its decorator is the engine's model, its operations a model's.
+        self.assertEqual(cad.model.__call__.__doc__.split(":")[0], "``@model`` or ``@model(name=...)``")
         for name in ("Material", "materials"):
             self.assertFalse(hasattr(cad.engine, name), f"materials come from bd_materials: {name}")
         for name in TYPES:
@@ -56,7 +57,8 @@ class RootExports(unittest.TestCase):
         self.assertIs(cad.step.read, cad.engine.model.read_step)
         self.assertIs(cad.xbf.read, cad.engine.read_xbf)
         self.assertIs(cad.stl.read, cad.engine.read_mesh)
-        self.assertIs(cad.urdf.check, cad.urdf.__dict__["check"])
+        self.assertIs(cad.urdf.validate, cad.urdf.__dict__["validate"])
+        self.assertIs(cad.kicad_pcb.read, cad.kicad_pcb.__dict__["read"])
         self.assertTrue(cad.xbf.export.__doc__.endswith(api.export.__doc__))
 
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
@@ -122,10 +124,11 @@ class RootExports(unittest.TestCase):
         ``store=``: every document is kept alike."""
         import inspect
 
-        parameters = inspect.signature(cad.engine.model.model).parameters
-        self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
-            ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
-            ("animations", inspect.Parameter.KEYWORD_ONLY)])
+        for declare in (cad.engine.model.model, cad.model.__call__):
+            parameters = inspect.signature(declare).parameters
+            self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
+                ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
+                ("animations", inspect.Parameter.KEYWORD_ONLY)])
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf", "kicad_pcb"):
             with self.subTest(kind=kind):
                 if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's

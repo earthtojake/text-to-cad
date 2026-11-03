@@ -1,7 +1,7 @@
 """Real KiCad on the test schematics: ERC, the exports, and the nets the reader resolves held to KiCad's own.
 
 The schematics are the test projects (``tests/python/support/kicad_schematic.py``), written fresh in a
-temporary folder; ``cad.kicad_sch.check`` and ``export`` run where the ``cad`` command runs them, in the
+temporary folder; ``cad.kicad_sch.erc`` and ``export`` run where the ``cad`` command runs them, in the
 environment of ``cad[kicad]`` (``tests/python/support/kicode.py``): kicode's kicad-cli, headless, in private
 homes.
 """
@@ -44,7 +44,7 @@ class SchematicFiles(unittest.TestCase):
         cls.busses = write_bus_schematic(Path(cls.folder.name) / "busses")
 
     def test_the_reader_resolves_the_nets_kicad_does(self) -> None:
-        from cad.kicad_sch import read_schematic
+        from cad.kicad_sch import read as read_schematic
 
         for root in (self.divider, self.busses):
             with self.subTest(schematic=root.name):
@@ -55,7 +55,7 @@ class SchematicFiles(unittest.TestCase):
     def test_erc_finds_what_kicad_finds_where_it_is(self) -> None:
         before = sorted(path.name for path in self.divider.parent.iterdir())
         # Any sheet: the hierarchy from its root.
-        result = kicode.call(self, "check", self.divider.with_name("load.kicad_sch"), document_type="kicad_sch")
+        result = kicode.call(self, "erc", self.divider.with_name("load.kicad_sch"), document_type="kicad_sch")
         self.assertFalse(result["ok"])
         errors = [finding for finding in result["findings"] if finding["severity"] == "error"]
         # Neither power net has a source (no PWR_FLAG): KiCad flags +5V's and the first GND's pins.

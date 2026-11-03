@@ -27,7 +27,7 @@ the selected service allows remains a finding even when DRC is clean.
 
 ## Review
 
-Run KiCad's DRC with $pcb: `cad kicad_pcb check board.kicad_pcb`. Its types are KiCad's:
+Run KiCad's DRC with $pcb: `cad kicad_pcb drc board.kicad_pcb`. Its types are KiCad's:
 
 | Type | Meaning | Usual fix |
 | --- | --- | --- |
@@ -47,7 +47,7 @@ result is unreadable references and polarity marks. Treat them as **review**
 items, and as **fail** when a polarity mark or pin-1 indicator is the clipped
 part.
 
-Then by inspection, with a snapshot and the board read back ($pcb's `read_board`):
+Then by inspection, with a snapshot and the board read back ($pcb's `kicad_pcb.read`):
 
 - Outline: closed, one `Edge.Cuts` loop per board, internal cutouts with radii the
   fab's router can cut (often 0.5 mm minimum inside corners).
@@ -66,5 +66,5 @@ The following numbers are illustrative inputs, not default limits.
 A board drawn in KiCad has a clean DRC with a 0.09 mm minimum clearance in its
 Board Setup. The user orders 2-layer boards from JLCPCB, whose standard 2-layer
 space is 0.10 mm. The DRC passing proves nothing about the 0.09-0.10 mm gaps:
-set the rule to 0.10 mm, rerun the DRC with $pcb (`cad kicad_pcb check`), and report
+set the rule to 0.10 mm, rerun the DRC with $pcb (`cad kicad_pcb drc`), and report
 what fails.

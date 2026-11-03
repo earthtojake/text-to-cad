@@ -97,7 +97,8 @@ _RESOURCE_NOT_FOUND = -32002
 _NO_VIEW_YET = frozenset({"kicad_sch"})
 EXTENSIONS = sorted(set(VIEWER_EXTENSIONS) - {suffix for entry in DOCUMENT_TYPES.values() if entry.id in _NO_VIEW_YET
                                               for suffix in entry.extensions})
-FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.id not in _NO_VIEW_YET)
+# File formats alone: a model, the one type with no file, is shown by its document id.
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.id not in _NO_VIEW_YET and entry.has_file)
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
 # from an inline cad_show) to sync for the first time: the host loads the page, then the page its

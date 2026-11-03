@@ -5,7 +5,7 @@ type has no decorator. A schematic is a hierarchy: its project's root sheet (the
 beside the ``.kicad_pro``) and the sheets it places, each a file of its own. Its functions take paths
 and plain values, so they are the type's, not the ``kicad`` integration's (the signature rule):
 
-* :func:`read_schematic` reads the whole hierarchy from the root, whichever of its sheets it is given,
+* :func:`read` reads the whole hierarchy from the root, whichever of its sheets it is given,
   with the standard library (:mod:`cad.engine.formats.kicad.schematic`), so a script run with ``cad
   run`` imports it without the CAD kernel and without KiCad: its sheets, symbols and their pins,
   wires, labels and the nets they make, and ``resolve(ref)`` for a reference in the board's grammar
@@ -13,9 +13,9 @@ and plain values, so they are the type's, not the ``kicad`` integration's (the s
 * :func:`inspect` is the schematic in one look as plain data -- its sheets, parts and nets, and what a
   reference names -- what ``cad kicad_sch inspect`` prints; ``snapshot`` draws one sheet flat, as
   ``cad kicad_sch snapshot`` does.
-* :func:`check` (KiCad's electrical rules check) and :func:`export` (a pdf, svgs, the netlist, a BOM) run
+* :func:`erc` (KiCad's electrical rules check) and :func:`export` (a pdf, svgs, the netlist, a BOM) run
   KiCad's own ``kicad-cli``, the ``kicad`` integration's (kicode, ``cad[kicad]``), as the board's do: they
-  are the commands ``cad kicad_sch check`` and ``cad kicad_sch export``, one to one. Where this environment
+  are the commands ``cad kicad_sch erc`` and ``cad kicad_sch export``, one to one. Where this environment
   lacks kicode, the command runs them in the environment of ``cad[kicad]`` the engine makes on first need;
   a function called here says to install the extra (or run the script with ``cad run``, which does).
 """
@@ -24,10 +24,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cad.engine.formats.kicad.schematic import read_schematic
+from cad.engine.formats.kicad.schematic import read_schematic as read
 from cad.results import CheckResult, ExportResult
 
-__all__ = ["check", "export", "inspect", "read_schematic"]
+__all__ = ["erc", "export", "inspect", "read"]
 
 
 def inspect(path: Path | str, ref: str | None = None) -> dict:
@@ -39,7 +39,7 @@ def inspect(path: Path | str, ref: str | None = None) -> dict:
     return inspect_schematic(path, ref)
 
 
-def check(schematic: Path) -> CheckResult:
+def erc(schematic: Path) -> CheckResult:
     """Check the KiCad schematic SCHEMATIC with KiCad's electrical rules check.
 
     Runs ``kicad-cli sch erc`` on the saved hierarchy (from its project's root sheet) with every
@@ -49,9 +49,9 @@ def check(schematic: Path) -> CheckResult:
 
     schematic: the .kicad_sch to check (any sheet of its project: the check reads the whole hierarchy).
     """
-    from cad.kicad._schematic import check as erc
+    from cad.kicad._schematic import check
 
-    return erc(Path(schematic))
+    return check(Path(schematic))
 
 
 def export(schematic: Path | str, to: str, out: Path | str) -> ExportResult:

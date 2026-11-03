@@ -3,7 +3,7 @@
 A check script reads a board under ``cad run`` and the server plots one in its own process, where
 the CAD kernel is not installed; KiCad is never required to read a board. Static, over the AST, so
 a lazy or function-local import counts too. (Drawing a board, ``render/board.py``, is Pillow's and
-outside this family.) ``cad.kicad_pcb.check`` and ``export`` hand the board to the kicad integration,
+outside this family.) ``cad.kicad_pcb.drc`` and ``export`` hand the board to the kicad integration,
 imported when they run: its DRC and exports, which import nothing but the standard library and kicode's
 names, and kicode only where kicad-cli is run.
 """

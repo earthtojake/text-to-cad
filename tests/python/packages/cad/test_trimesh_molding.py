@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""Injection molding's measurements (``cad.trimesh._molding``) and its check (``cad.stl.check(...,
+"""Injection molding's measurements (``cad.trimesh._molding``) and its check (``cad.stl.dfm(...,
 process="molding")``).
 
 Each part is built with build123d so the correct answer is known from the
@@ -504,7 +504,7 @@ class RobustnessTest(unittest.TestCase):
 class CheckTest(unittest.TestCase):
     def test_the_check_measures_every_family_and_passes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="-z")
+            result = cad.stl.dfm(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="-z")
 
         self.assertTrue(result.ok)
         report = result.measurements
@@ -518,7 +518,7 @@ class CheckTest(unittest.TestCase):
     def test_a_bad_pull_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             with self.assertRaises(ValueError):
-                cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="sideways")
+                cad.stl.dfm(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="sideways")
 
 
 class MinimumDraftKeepsRealWallsTest(unittest.TestCase):
@@ -730,7 +730,7 @@ class PullsReportsItsFailuresTest(unittest.TestCase):
         mold_tool._undercut_facts = boom
         try:
             with tempfile.TemporaryDirectory() as td:
-                result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", candidates=True)
+                result = cad.stl.dfm(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", candidates=True)
         finally:
             mold_tool._undercut_facts = original
 
@@ -790,7 +790,7 @@ class NonFiniteTest(unittest.TestCase):
         mold_tool._projection_facts = lambda *_a, **_k: {"projected_area_mm2": float("nan")}
         try:
             with tempfile.TemporaryDirectory() as td:
-                result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding")
+                result = cad.stl.dfm(_stl(Box(20, 20, 15), Path(td), "box"), process="molding")
         finally:
             mold_tool._projection_facts = original
 

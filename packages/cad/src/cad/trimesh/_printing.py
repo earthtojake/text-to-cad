@@ -2,7 +2,7 @@
 wall thickness, support volume, and the candidate orientations ranked.
 
 Facts, never verdicts: nothing here compares a figure against a process's limit.
-``cad.<type>.check(..., process="printing")`` turns the report into findings
+``cad.<type>.dfm(..., process="printing")`` turns the report into findings
 (``cad.trimesh._check``); ``cad.trimesh.printing`` and ``cad.trimesh.orientations``
 hand it back as data.
 

@@ -10,7 +10,7 @@ Each project has one layout, the cad skill's: its sources in `src/` (shared modu
 `src/lib/`), each model a `@model` function its script calls under `if __name__ ==
 "__main__":`. A run writes nothing: it builds the model in the engine and prints its
 document's `id:` and page (`view:`), which every later run updates. A file is written
-on request, `cad xbf export <id> STEP/<name>.step`, into the project's root-level
+on request, `cad model export <id> STEP/<name>.step`, into the project's root-level
 `STEP/`, `STL/`, `GLB/`, `3MF/` or `DXF/`, which each project's `.gitignore` keeps out
 of Git. `juno` and `lyra` carry an authored URDF and SRDF beside `src/`; the link meshes
 they reference are written by each project's `exports.py` (`3MF/<link>.3mf`), so run it
@@ -46,7 +46,7 @@ project delivers them and because something outside the model reads them:
 | `drawings` (all eight) | `DXF/<name>.dxf` | `src/exports.py` | the DXF deliverables, flat patterns among them; a drawing exists for its DXF |
 | `juno`, `lyra` (every link model) | `3MF/<link>.3mf` | `src/exports.py` | the URDFs reference them |
 | `examples` (`electronics_enclosure_base_drawing`) | `PDF/electronics_enclosure_base_drawing.pdf` | `@eng_drawing` | an engineering drawing is its PDF |
-| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
+| `examples` (`electronics_enclosure_base_import`) | `STEP/electronics_enclosure_base.step`, `STEP/basic_shape_mating_test_fixture.step` | `cad.model.export(model, path)` in the script's `__main__` | the two import models read them back; made on the spot, so no STEP is committed |
 | `radial` | `XBF/radial.xbf` | `@xbf` | the slow model's result kept across runs and engine restarts: a cold build takes most of an hour; every body replays, and a no-op takes the file (0.2 s) instead of sampling the running motion again (5.6 s without it) |
 
 ## Build and snapshot
@@ -55,8 +55,8 @@ From a model's `src/` folder, with the engine's environment (the library on the 
 
 ```
 python SCRIPT.py                         # the models its __main__ calls: each prints id: and view:
-cad xbf snapshot "$ID" OUT.png            # drawn by OCCT
-cad xbf export "$ID" GLB/NAME.glb         # a file of it, on request
+cad model snapshot "$ID" OUT.png            # drawn by OCCT
+cad model export "$ID" GLB/NAME.glb         # a file of it, on request
 ```
 
 A model script is Python and takes no options: running it asks the engine to build each

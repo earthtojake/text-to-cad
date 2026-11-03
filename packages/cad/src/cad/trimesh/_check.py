@@ -1,4 +1,4 @@
-"""The manufacturing check of a 3D document, measured with trimesh: what ``cad.<type>.check(source,
+"""The manufacturing check of a 3D document, measured with trimesh: what ``cad.<type>.dfm(source,
 process=...)`` runs once its options are resolved (``cad._internal.manufacturing``).
 
 **The mesh.** An STL is measured as it is; a 3MF or a GLB is read by the library's own readers (its

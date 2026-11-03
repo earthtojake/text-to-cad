@@ -20,15 +20,15 @@ joint in the wrong spot.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Describe a robot's links and joints** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf check`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
-| **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf check`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
-| **Model or world for Gazebo / gz** | The `.sdf` and its ledger, then `cad sdf check`. | [Authoring](references/sdf-authoring.md), [frames](references/sdf-frames.md), [examples](references/sdf-examples.md), [ledger](references/sdf-ledger.md) |
+| **Describe a robot's links and joints** (ROS, RViz, TF, MoveIt's model) | The `.urdf` and its ledger, then `cad urdf validate`. | [Authoring](references/urdf-authoring.md), [frames](references/urdf-frames.md), [ledger](references/urdf-ledger.md) |
+| **Add MoveIt planning groups, end effectors, named states, collision pairs** | The URDF's link/joint table, then a `.srdf` beside it and `cad srdf validate`. | [Authoring](references/srdf-authoring.md), [end effectors](references/srdf-end-effectors.md), [collisions](references/srdf-disabled-collisions.md), [ledger](references/srdf-ledger.md) |
+| **Model or world for Gazebo / gz** | The `.sdf` and its ledger, then `cad sdf validate`. | [Authoring](references/sdf-authoring.md), [frames](references/sdf-frames.md), [examples](references/sdf-examples.md), [ledger](references/sdf-ledger.md) |
 | **SDF for a robot that has a URDF** | Derive it from the URDF; never re-author it. | [Interoperability](references/interoperability.md#sdf-from-a-urdf) |
-| **Link meshes from a CAD model** | One mesh per link in the link's frame: `cad xbf export <id> link.stl`. | [Meshes](references/meshes.md) |
+| **Link meshes from a CAD model** | One mesh per link in the link's frame: `cad model export <id> link.stl`. | [Meshes](references/meshes.md) |
 | **Mass, center of mass, inertia** | A formula or a throwaway script, never intuition. | [Inertials](references/inertials.md) |
 | **Close a nonlinear four-bar in the CAD Viewer** | `<tcad:four_bar>` on the derived URDF joint. | [Four-bar](references/urdf-four-bar.md) |
 | **See the robot, a pose or a named state** | `cad urdf snapshot`, `cad srdf snapshot` or `cad sdf snapshot`. | [Snapshots](references/snapshots.md) |
-| **Check a change** | The format's `check` command, then its review. | [Check each change](#check-each-change) |
+| **Check a change** | The format's `validate` command, then its review. | [Check each change](#check-each-change) |
 | **Open an existing URDF, SRDF or SDF** | Show it to the person. | [Show the model](#show-the-model) |
 
 ## Setup
@@ -62,7 +62,7 @@ nothing beyond the Python standard library; a snapshot draws with the CAD kernel
 
 Names are identifiers every consumer shares: SRDF groups, controllers and TF read the URDF's link
 and joint names, so a rename updates every consumer in the same task, and any URDF edit re-runs
-`cad srdf check` on the SRDF beside it ([Interoperability](references/interoperability.md)).
+`cad srdf validate` on the SRDF beside it ([Interoperability](references/interoperability.md)).
 
 ## Rules for every format
 
@@ -110,7 +110,7 @@ coincides with the joint frame, `<axis>` is expressed in the joint frame, and th
    `continuous`. Every movable joint has a stated positive-motion convention; the axis sign is part
    of the model.
 5. Compute the inertials ([Inertials](references/inertials.md)).
-6. Check it ([URDF checks](references/urdf-checks.md)): `cad urdf check`, `check_urdf` when
+6. Check it ([URDF checks](references/urdf-checks.md)): `cad urdf validate`, `check_urdf` when
    installed, then the viewer sweep of every movable joint.
 
 ## SRDF
@@ -121,7 +121,7 @@ or joint units. Derive groups, end effectors, states and disabled collisions fro
 topology, MoveIt Setup Assistant output, sampled collision analysis, or explicit user data; never
 type a link or joint name from memory.
 
-1. **Start from a valid URDF** (`cad urdf check`), and **extract its table**: robot name, links,
+1. **Start from a valid URDF** (`cad urdf validate`), and **extract its table**: robot name, links,
    joints with type, parent, child, limits and mimic flags. Copy every name from it
    ([SRDF authoring](references/srdf-authoring.md#extract-the-urdf-table)).
 2. **Identify the planning task**: arm IK, gripper control, mobile base, dual-arm, tool use, or
@@ -163,7 +163,7 @@ signed-distance-field geometry, and not planning semantics.
 6. Author per the [worked examples](references/sdf-examples.md). Never invent plugin filenames,
    topics, frame names, namespaces or parameters: copy them from the simulator's documentation and
    cite it.
-7. Check it ([SDF checks](references/sdf-checks.md)): `cad sdf check` (which runs `gz sdf --check`
+7. Check it ([SDF checks](references/sdf-checks.md)): `cad sdf validate` (which runs `gz sdf --check`
    whenever `gz` is on PATH), then simulator load, joint motion and plugin/sensor startup.
 
 ## Check each change
@@ -171,11 +171,11 @@ signed-distance-field geometry, and not planning semantics.
 Each format has its validator and its snapshot:
 
 ```bash
-cad urdf check path/to/robot.urdf
-cad urdf check path/to/robot.urdf --packages robot_description=/path/to/pkg
-cad srdf check path/to/robot.srdf --strict
-cad sdf check path/to/model.sdf --json
-cad sdf check path/to/model.sdf --gz-check required
+cad urdf validate path/to/robot.urdf
+cad urdf validate path/to/robot.urdf --packages robot_description=/path/to/pkg
+cad srdf validate path/to/robot.srdf --strict
+cad sdf validate path/to/model.sdf --json
+cad sdf validate path/to/model.sdf --gz-check required
 cad urdf snapshot path/to/robot.urdf review.png --pose '{"shoulder_pitch": 30}'
 cad srdf snapshot path/to/robot.srdf review.png --pose arm/ready
 cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
@@ -183,13 +183,13 @@ cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
 
 | Change | Check it with |
 | --- | --- |
-| Any `.urdf` | `cad urdf check` until clean; `check_urdf FILE` (liburdfdom) when installed. |
+| Any `.urdf` | `cad urdf validate` until clean; `check_urdf FILE` (liburdfdom) when installed. |
 | A joint origin, axis, sign or limit | The viewer sweep: every movable joint through its limits against the ledger's positive-motion statement, or snapshots at `--pose` values. The only check that catches a flipped sign. |
 | A mesh, its scale or its placement | A snapshot: meshes at sane scale and pose; ~1000x too large or small is a `scale` bug. |
 | An inertial | The [sanity gates](references/inertials.md#sanity-gates). |
-| Any `.srdf` | `cad srdf check` (it cross-checks every name, chain, state and pair against the paired URDF); named states in a snapshot (`--pose group/state`). |
-| A URDF with an SRDF beside it | `cad srdf check` on that SRDF again, and its group states against the new limits. |
-| Any `.sdf` | `cad sdf check` (`gz sdf --check` included when `gz` is on PATH; `--gz-check required` demands it). |
+| Any `.srdf` | `cad srdf validate` (it cross-checks every name, chain, state and pair against the paired URDF); named states in a snapshot (`--pose group/state`). |
+| A URDF with an SRDF beside it | `cad srdf validate` on that SRDF again, and its group states against the new limits. |
+| Any `.sdf` | `cad sdf validate` (`gz sdf --check` included when `gz` is on PATH; `--gz-check required` demands it). |
 | SDF dynamics, plugins, sensors | A load in the target simulator, a small positive motion of each joint, plugin and sensor startup ([smoke tests](references/sdf-checks.md#smoke-tests)). |
 | A MoveIt or ROS consumer | Its own load when available: RViz, robot_state_publisher's TF tree, a Gazebo load, MoveIt Setup Assistant (IK for the primary group, plan to a named state). |
 

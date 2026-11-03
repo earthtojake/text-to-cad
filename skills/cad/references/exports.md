@@ -23,12 +23,13 @@ prepares the file, the browser saves it. No code changes, nothing rebuilds, and 
 destination is written from the document the server holds, by its suffix:
 
 ```bash
-cad xbf export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
-`$ID` is the `id:` line the model's run printed. The output folders are generated on
+`$ID` is the `id:` line the model's run printed: `cad model` takes a model by its id, and
+every other type takes a file of its own. The output folders are generated on
 request and gitignored by default ([version control](project-layout.md#version-control)). The source can also be a file the
-server reads as a document, an `.xbf` or a `.step`:
+server reads as a document, an `.xbf` or a `.step`, by its own type:
 
 ```bash
 cad step export vendor/motor.step vendor/motor.xbf
@@ -45,7 +46,8 @@ written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes
 "seconds", "written"}]}`), and a failure as `{"ok": false, "error": ...}` with exit status 1.
 
 An export takes a document and its destinations, and nothing else but an STL's or a 3MF's
-mesh tolerance ([print tolerance](#print-tolerance)). What a file shows is the model's
+mesh tolerance ([print tolerance](#print-tolerance)), which a model's, an xbf's and a STEP's
+export take and a mesh's does not. What a file shows is the model's
 business: a different file is a different model.
 
 A written file is a detached copy, whether `cad <type> export`, `exports.py` or a file
@@ -70,16 +72,18 @@ files ([projects built around exported files](../SKILL.md#projects-built-around-
 
 A project whose files are delivered again after each change (a print set, a STEP for a
 supplier) keeps one script beside its models that imports them and exports each. From
-Python the one spelling is `export(x, path, ...)`, where `x` is what a model call returns
-(the document's handle), a document id, or a file. The model function itself is taken
-too: it is called as the script's own call is, so an unchanged model comes from the
-server's cache or is replayed, and the file is written from that call's document.
+Python the one spelling is `model.export(x, path, ...)`, where `x` is what a model call
+returns (the document's handle) or a document id; a file is its own type's
+(`xbf.export("share/arm.xbf", ...)`). The model function itself is taken too: it is called
+as the script's own call is, so an unchanged model comes from the server's cache or is
+replayed, and the file is written from that call's document. A handle's own `.export(path,
+...)` is the same function.
 
 ```python
 # src/exports.py
 from pathlib import Path
 
-from cad import export
+from cad import model
 
 from assembly import assembly
 from standoff import standoff_m3, standoff_m4
@@ -87,9 +91,9 @@ from standoff import standoff_m3, standoff_m4
 ROOT = Path(__file__).resolve().parent.parent      # the project's folder
 
 if __name__ == "__main__":
-    export(assembly(), ROOT / "STEP/assembly.step", ROOT / "GLB/assembly.glb")
-    export(standoff_m3(), ROOT / "STL/standoff_m3.stl", ROOT / "3MF/standoff_m3.3mf")
-    export(standoff_m4(), ROOT / "STL/standoff_m4.stl")
+    model.export(assembly(), ROOT / "STEP/assembly.step", ROOT / "GLB/assembly.glb")
+    model.export(standoff_m3(), ROOT / "STL/standoff_m3.stl", ROOT / "3MF/standoff_m3.3mf")
+    model.export(standoff_m4(), ROOT / "STL/standoff_m4.stl")
 ```
 
 ```bash
@@ -119,7 +123,7 @@ def arm_folded():
 
 ```bash
 cad run src/arm_poses.py                          # prints arm_folded's id
-cad xbf export "$FOLDED_ID" STEP/arm_folded.step
+cad model export "$FOLDED_ID" STEP/arm_folded.step
 ```
 
 `posed(assembly, state)` places the assembly's parts at a state the assembly names
@@ -160,7 +164,7 @@ geometry, names, colours and materials. Keep the xbf beside the STEP, and read t
   the model's configuration sequences as an animation of its name
   ([kinematics](kinematics.md#configuration-sequences)), and each of its `animation()`s
   ([animation](animation.md)). A GLB exported from the model, by its id, by
-  `export(x, path)` or from an xbf the model exported, carries its sequences and its
+  `model.export(x, path)` or from an xbf the model exported, carries its sequences and its
   animations, byte for byte the same file.
 - **3MF**: an object per part, a build item per placement, in millimetres, with colours
   and materials through the materials extension.
@@ -184,10 +188,10 @@ faces, give it an absolute tolerance in millimetres, about a tenth of the smalle
 the part is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints):
 
 ```bash
-cad xbf export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad model export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 ```
 
-The same is `export(x, path, tolerance=0.02)` in an `exports.py` and
+The same is `model.export(x, path, tolerance=0.02)` in an `exports.py` and
 `@stl("hopper.stl", tolerance=0.02)` or `@threemf(...)` on a model. Each part is meshed again
 at the finer of the tolerance and its own, for that file alone, so a small part is never made
 coarser; the viewer, snapshots and every other export keep the viewer's mesh. The file says

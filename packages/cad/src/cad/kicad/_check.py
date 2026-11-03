@@ -1,4 +1,4 @@
-"""KiCad's design rule check of a saved board: ``cad.kicad_pcb.check`` and ``cad kicad_pcb check``.
+"""KiCad's design rule check of a saved board: ``cad.kicad_pcb.drc`` and ``cad kicad_pcb drc``.
 
 ``kicad-cli pcb drc`` (kicode's, or the one ``CAD_KICAD_CLI`` names: ``_program``) runs against the saved
 board and the ``.kicad_pro`` beside it, with no display to reach and every KiCad home (settings,
@@ -48,7 +48,7 @@ class Finding:
 
 def issues(findings) -> tuple[CheckFinding, ...]:
     """Every finding as the line protocol's issue, errors first, then by check and rule:
-    the one text a finding is printed as, by the build and by ``cad kicad_pcb check``."""
+    the one text a finding is printed as, by the build and by ``cad kicad_pcb drc``."""
     order = sorted(findings, key=lambda finding: (finding.severity != "error", finding.check, finding.type))
     return tuple(
         CheckFinding(

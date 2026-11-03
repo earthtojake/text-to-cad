@@ -56,7 +56,7 @@ environment's interpreter for direct CLI calls:
 ```bash
 scripts/bundle/bundle.sh
 ./.venv/bin/python -m cad_server.cli xbf snapshot --help
-./.venv/bin/python -m cad_server.cli urdf check --help
+./.venv/bin/python -m cad_server.cli urdf validate --help
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
@@ -110,7 +110,7 @@ build123d and the rest; the library's required dependency is numpy alone), so th
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
 (not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
-<type> check --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
+<type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
 cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
 environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from

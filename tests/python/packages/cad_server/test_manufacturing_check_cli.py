@@ -1,4 +1,4 @@
-"""``cad <type> check --process molding|printing``: a 3D type's manufacturing check, as a command.
+"""``cad <type> dfm --process molding|printing``: a 3D type's manufacturing check, as a command.
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
 command: its options, its one result shape, its refusals before anything is read, a STEP measured
@@ -26,7 +26,7 @@ from cad_server.cli.document_types import pull_value, type_main
 def _run(document_type: str, *argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = type_main(document_type, ["check", *argv])
+        code = type_main(document_type, ["dfm", *argv])
     return code, out.getvalue(), err.getvalue()
 
 
@@ -68,7 +68,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertIn("a 3MF declares its unit", json.loads(out)["error"])
         code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "molding")
         self.assertEqual(code, 2)
-        self.assertIn("box.glb is a glb, not a stl: use cad glb check", err)
+        self.assertIn("box.glb is a glb, not a stl: use cad glb dfm", err)
 
     def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
         """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one."""

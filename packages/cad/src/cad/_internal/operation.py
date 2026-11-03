@@ -2,7 +2,7 @@
 an environment of the library that holds the integration the operation needs.
 
 The ``cad`` command runs in the server's environment, which holds no integration but the ones it was
-installed with; an operation that needs another (a 3D type's ``check``, the trimesh integration's) runs
+installed with; an operation that needs another (a 3D type's ``dfm``, the trimesh integration's; a board's ``drc``, the kicad integration's) runs
 here instead, in the environment the server made for that integration (``cad[<integration>]`` at its own
 release). It reads one request on stdin -- ``{"type", "operation", "args", "kwargs"}``, plain JSON -- calls
 ``cad.<type>.<operation>(*args, **kwargs)`` and writes one line on stdout: ``{"result": ...}``, the result

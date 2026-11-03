@@ -1,8 +1,8 @@
 """KiCad's electrical rules check of a saved schematic and its outputs, by KiCad's own command line,
-headless, in private homes: ``cad.kicad_sch.check`` and ``export``, and the commands ``cad kicad_sch check``
+headless, in private homes: ``cad.kicad_sch.erc`` and ``export``, and the commands ``cad kicad_sch erc``
 and ``cad kicad_sch export``, which run them here or in the environment of ``cad[kicad]``.
 
-Reading a schematic is the document type's (:func:`cad.kicad_sch.read_schematic`, the standard library
+Reading a schematic is the document type's (:func:`cad.kicad_sch.read`, the standard library
 alone); drawing one is ``cad kicad_sch snapshot``'s. ``kicad-cli`` is kicode's, or the one
 ``CAD_KICAD_CLI`` names (``_program``), found and run as the board's DRC and exports are: every run gets
 homes of its own, opens no window, and leaves the project's folder as it found it. The schematic is

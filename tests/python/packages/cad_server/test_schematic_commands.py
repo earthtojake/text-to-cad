@@ -1,5 +1,5 @@
 """A saved KiCad schematic through the commands: ``cad kicad_sch snapshot --sheet`` draws one sheet as it is
-now, ``cad kicad_sch inspect`` says what it holds and what a reference names, and ``cad kicad_sch check``
+now, ``cad kicad_sch inspect`` says what it holds and what a reference names, and ``cad kicad_sch erc``
 without a kicad-cli to run says how to get one.
 
 The schematic is the test project (``tests/python/support/kicad_schematic.py``), written fresh. ERC and the
@@ -60,7 +60,7 @@ class SchematicCommands(unittest.TestCase):
         self.assertIn("is a kicad_pcb, not a kicad_sch: use cad kicad_pcb inspect", other.stderr)
 
     def test_erc_without_kicad_fails_saying_how_to_install_it(self) -> None:
-        done = cad("kicad_sch", "check", str(self.schematic), "--json",
+        done = cad("kicad_sch", "erc", str(self.schematic), "--json",
                    env={**os.environ, "CAD_KICAD_CLI": str(self.root / "no-kicad-cli")})
         self.assertEqual(done.returncode, 1, done.stderr)
         [issue] = json.loads(done.stdout)["findings"]

@@ -2,7 +2,7 @@
 
 ``@threemf("arm.3mf")`` declares a model's 3MF file;
 its operations (``threemf.export(source, *destinations)``, ...) are the ``cad threemf <operation>`` commands'.
-``threemf.check(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
+``threemf.dfm(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
 the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.threemf`` imports no CAD kernel (``cad._internal.document_type``).
 """
