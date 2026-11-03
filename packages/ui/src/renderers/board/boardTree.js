@@ -64,19 +64,24 @@ export function buildBoardTree(index, t = english) {
   const parts = KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => ({
     id: `kind:${kind}`, kind: "group", label: t(GROUP_KEYS[kind]), detail: String(byKind.get(kind).length), children: byKind.get(kind),
   }));
-  const nets = [...index.nets.values()]
+  const listed = [...index.nets.values()]
     .filter((net) => net.pads.length || net.tracks.length)
-    // KiCad's names for a pin on nothing are not nets anyone routes: they stay out of the list.
-    .filter((net) => !net.name.startsWith("unconnected-("))
-    .sort((a, b) => naturalCompare(a.name, b.name))
-    .map((net) => ({
-      id: `net:${net.name}`, kind: "net", selector: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
-      detail: t(net.pads.length === 1 ? "board.text.count_pad" : "board.text.count_pads", { count: net.pads.length }), selectionId: `net:${net.name}`, searchAliases: [],
-      children: net.pads.map((pad) => ({ pad, key: `${pad.ref}.${pad.number}` })).sort((a, b) => naturalCompare(a.key, b.key)).map(({ pad }) => padNode(pad, { underNet: true })),
-    }));
+    .sort((a, b) => naturalCompare(a.name, b.name));
+  const netNode = (net) => ({
+    id: `net:${net.name}`, kind: "net", selector: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
+    detail: t(net.pads.length === 1 ? "board.text.count_pad" : "board.text.count_pads", { count: net.pads.length }), selectionId: `net:${net.name}`, searchAliases: [],
+    children: net.pads.map((pad) => ({ pad, key: `${pad.ref}.${pad.number}` })).sort((a, b) => naturalCompare(a.key, b.key)).map(({ pad }) => padNode(pad, { underNet: true })),
+  });
+  // KiCad names a pin on nothing a net of its own, `unconnected-(U3-Pad9)`, and counts it as KiCad's
+  // Nets count does: the board's every net is counted, those pins' kept together, under one shut group.
+  const loose = listed.filter((net) => net.name.startsWith("unconnected-(")).map(netNode);
+  const nets = listed.filter((net) => !net.name.startsWith("unconnected-(")).map(netNode);
+  if (loose.length) {
+    nets.push({ id: "group:unconnected", kind: "group", label: t("board.text.unconnected_pins"), detail: String(loose.length), children: loose });
+  }
   const roots = [
     { id: "group:parts", kind: "group", label: t("board.text.parts"), detail: String(index.parts.size), children: parts },
-    { id: "group:nets", kind: "group", label: t("board.text.nets"), detail: String(nets.length), children: nets },
+    { id: "group:nets", kind: "group", label: t("board.text.nets"), detail: String(listed.length), children: nets },
   ];
   const nodesById = new Map();
   const parents = new Map();

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createBoardIndex } from "@cad/core/lib/board2d/boardIndex.js";
 import { boardTreeAncestors, boardTreeNodeIds, buildBoardTree, partKind } from "./boardTree.js";
+import { openUntilChoice } from "../kit/inspector/treeExpansion.js";
 import { boardReferenceId, describeBoardReference } from "./boardFacts.js";
 
 const square = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
@@ -28,15 +29,25 @@ const index = createBoardIndex(BOARD);
 
 test("the tree is parts by kind, then nets", () => {
   const tree = buildBoardTree(index);
-  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 3", "Nets 2"]);
+  // Every net is counted, as KiCad counts them: a pin on nothing is a net of its own, `unconnected-(…)`.
+  assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["Parts 3", "Nets 3"]);
   const parts = tree.roots[0].children;
   assert.deepEqual(parts.map((node) => node.label), ["ICs", "Capacitors"]);
   assert.deepEqual(parts[1].children.map((node) => node.label), ["C2", "C10"], "natural order");
   // A pin of two pads is one row; a pad row says its pin's name and net.
   assert.deepEqual(parts[0].children[0].children.map((node) => [node.label, node.detail]), [["2", "VO · VIN"], ["4", "NC · unconnected-(U1-NC-Pad4)"]]);
-  // KiCad's names for a pin on nothing are not nets anyone routes.
-  assert.deepEqual(tree.roots[1].children.map((node) => node.label), ["GND", "VIN"]);
+  // KiCad's names for a pin on nothing are not nets anyone routes: they are kept together, after the nets,
+  // under one group, shut as the tree opens.
+  assert.deepEqual(tree.roots[1].children.map((node) => `${node.label} ${node.detail}`), ["GND 1 pad", "VIN 3 pads", "Unconnected pins 1"]);
   assert.deepEqual(tree.roots[1].children[1].children.map((node) => node.label), ["C2.1", "C10.1", "U1.2"]);
+  const loose = tree.roots[1].children[2];
+  assert.deepEqual([loose.id, loose.kind, loose.children.map((node) => node.label)], ["group:unconnected", "group", ["unconnected-(U1-NC-Pad4)"]]);
+  assert.deepEqual(boardTreeAncestors(tree, "net:unconnected-(U1-NC-Pad4)"), ["group:nets", "group:unconnected"]);
+  // Shut while it holds more than one: the tree's one rule, a choice (`openUntilChoice`).
+  const two = buildBoardTree(createBoardIndex({ ...BOARD, nets: [...BOARD.nets, { name: "unconnected-(U1-NC-Pad5)", class: "Default" }],
+    pads: [...BOARD.pads, { ...BOARD.pads.at(-1), number: "5", net: "unconnected-(U1-NC-Pad5)", at: [17, 16], polygon: square(17, 16, 1, 1) }] }));
+  assert.equal(two.roots[1].detail, "4");
+  assert.ok(!openUntilChoice(two.roots, (node) => node.children).has("group:unconnected"));
   assert.equal(partKind("TP3"), "Test points");
   assert.equal(partKind("ZZ1"), "Other");
 });

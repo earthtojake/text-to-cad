@@ -10,12 +10,12 @@
  * ```
  *
  * **Modes** are presets, as a 3D view's are (`ui/docs/render-mode.md`): each names the layer
- * KINDS it draws. **Board** is the board as it is made (`plot2d`'s
- * default view: every layer but the courtyards, mask and paste included). **Copper** is the
- * copper, vias, holes, outline and ratsnest. **Assembly** is the silkscreen, fab and courtyards
- * with the holes, outline and ratsnest. **Placement** is the board before it is wired: no copper
- * and no drill layer (a via's hole is routing); the overlay draws the pads, their holes and every
- * connection as an airwire (`board2d/boardOverlay.js`).
+ * KINDS it draws, the drawing sheet and the board's area under them all. **Board** is KiCad's own
+ * view of a board it opens (`plot2d`'s default view): every layer. **Copper** is the copper, vias,
+ * holes, outline, ratsnest and the pads' and vias' names. **Assembly** is the silkscreen, fab and
+ * courtyards with the holes, outline and ratsnest. **Placement** is the board before it is wired:
+ * no copper and no drill layer (a via's hole is routing); the overlay draws the pads, their holes
+ * and every connection as an airwire (`board2d/boardOverlay.js`).
  *
  * `layers` is the ids drawn, or null for the mode's own set (resolved against the sheet, so a
  * rebuild that adds a layer draws it under the mode). A display whose layers differ from its
@@ -28,18 +28,32 @@
 
 /** What each mode draws, by layer kind (the outline always), and whether the overlay draws airwires. */
 export const BOARD_DISPLAY_MODES = Object.freeze({
-  board: Object.freeze({ kinds: Object.freeze(["copper", "mask", "paste", "silk", "fab", "adhesive", "user", "margin", "via", "drill", "outline", "ratsnest"]), airwires: false }),
-  copper: Object.freeze({ kinds: Object.freeze(["copper", "via", "drill", "outline", "ratsnest"]), airwires: false }),
-  assembly: Object.freeze({ kinds: Object.freeze(["silk", "fab", "courtyard", "drill", "outline", "ratsnest"]), airwires: false }),
-  placement: Object.freeze({ kinds: Object.freeze(["fab", "courtyard", "outline"]), airwires: true }),
+  board: Object.freeze({ kinds: Object.freeze(["sheet", "area", "copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
+  copper: Object.freeze({ kinds: Object.freeze(["sheet", "area", "copper", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
+  assembly: Object.freeze({ kinds: Object.freeze(["sheet", "area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"]), airwires: false }),
+  placement: Object.freeze({ kinds: Object.freeze(["sheet", "area", "fab", "courtyard", "outline"]), airwires: true }),
 });
 /** The mode ids, in the order a menu lists them. */
 export const BOARD_DISPLAY_MODE_IDS = Object.freeze(["board", "copper", "assembly", "placement"]);
 export const BOARD_DISPLAY_SIDES = Object.freeze(["top", "bottom"]);
 export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null });
-/** The ids of what goes through the board, and how the Display names them. */
-export const BOARD_THROUGH_LAYER_LABELS = Object.freeze({ vias: "Vias", ratsnest: "Ratsnest", drills: "Drills" });
+/** The ids of what is not a board layer — the canvas under it, what goes through it — and how the Display names them. */
+export const BOARD_THROUGH_LAYER_LABELS = Object.freeze({
+  area: "Board area", sheet: "Drawing sheet", vias: "Vias", drills: "Drills", ratsnest: "Ratsnest", names: "Names"
+});
 const INNER_COPPER = /^In\d+\.Cu$/;
+// The sides' layers as the Layers section lists them, whatever order they are drawn in: the front
+// outermost first down to its copper, the back from its copper outwards.
+const FRONT_ORDER = ["F.CrtYd", "F.Fab", "F.SilkS", "F.Paste", "F.Adhes", "F.Mask", "F.Cu"];
+const BACK_ORDER = ["B.Cu", "B.Mask", "B.Adhes", "B.Paste", "B.SilkS", "B.Fab", "B.CrtYd"];
+// The rest as KiCad's Appearance panel lists them, then what is not a board layer.
+const OTHER_ORDER = ["Dwgs.User", "Cmts.User", "Eco1.User", "Eco2.User", "Edge.Cuts", "Margin"];
+const rankIn = (order, id) => {
+  const at = order.indexOf(id);
+  if (at >= 0) return at;
+  const user = /^User\.(\d+)$/.exec(id);
+  return user ? order.length + Number(user[1]) : order.length + 100;
+};
 
 const sheetLayers = (sheet) => (Array.isArray(sheet?.layers) ? sheet.layers : []);
 const sameSet = (left, right) => left.length === right.length && left.every((id) => right.includes(id));
@@ -116,21 +130,25 @@ export function boardDrawView(display, sheet) {
 /**
  * A sheet's layers as the Display lists them, in four groups: Front (outermost first, down to
  * the copper), Inner (the inner coppers, `In1.Cu` first), Back (the copper first, outwards) and
- * Other (the outline, the user layers and the margin in the stack's order, then the vias, the
- * ratsnest and the drills). A group with no layers is left out.
+ * Other (the user layers, the outline and the margin as KiCad lists them, then the board's area,
+ * the drawing sheet, the vias, the drills, the ratsnest and the names). A group with no layers is
+ * left out. The order is a list's, not the drawing's.
  *
  * @returns {{ id: "front"|"inner"|"back"|"other", label: string, layers: { id: string, label: string }[] }[]}
  */
 export function boardLayerGroups(sheet) {
   const layers = sheetLayers(sheet);
   const row = (layer) => ({ id: layer.id, label: BOARD_THROUGH_LAYER_LABELS[layer.id] || layer.id });
-  const front = layers.filter((layer) => layer.side === "front").reverse();
-  const inner = layers.filter((layer) => layer.kind === "copper" && INNER_COPPER.test(layer.id)).reverse();
-  const back = layers.filter((layer) => layer.side === "back").reverse();
+  const sorted = (list, order) => [...list].sort((a, b) => rankIn(order, a.id) - rankIn(order, b.id));
+  const front = sorted(layers.filter((layer) => layer.side === "front"), FRONT_ORDER);
+  const inner = layers.filter((layer) => layer.kind === "copper" && INNER_COPPER.test(layer.id))
+    .sort((a, b) => Number(/\d+/.exec(a.id)[0]) - Number(/\d+/.exec(b.id)[0]));
+  const back = sorted(layers.filter((layer) => layer.side === "back"), BACK_ORDER);
   const placed = new Set([...front, ...inner, ...back].map((layer) => layer.id));
-  const through = new Set(Object.keys(BOARD_THROUGH_LAYER_LABELS));
+  const through = Object.keys(BOARD_THROUGH_LAYER_LABELS);
   const rest = layers.filter((layer) => !placed.has(layer.id));
-  const other = [...rest.filter((layer) => !through.has(layer.id)), ...rest.filter((layer) => through.has(layer.id))];
+  const other = [...sorted(rest.filter((layer) => !through.includes(layer.id)), OTHER_ORDER),
+    ...rest.filter((layer) => through.includes(layer.id)).sort((a, b) => through.indexOf(a.id) - through.indexOf(b.id))];
   return [
     { id: "front", label: "Front", layers: front.map(row) },
     { id: "inner", label: "Inner", layers: inner.map(row) },

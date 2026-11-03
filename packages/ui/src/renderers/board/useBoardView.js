@@ -2,34 +2,25 @@
  * The canvas a board is painted on: every flat view's (`kit/viewport/useFlatCanvasView.js` —
  * drag to pan, wheel or pinch to zoom about the pointer, double-click to fit, a tap and the
  * pointer resting over it for the tool in hand), painting the board from the rasters kept of it
- * (`boardRasters.js`) on the theme's background, then what the tools draw over it (`overlay`), in
- * the same frame, so a capture of the canvas holds it too.
+ * (`boardRasters.js`) on KiCad's canvas, then what the tools draw over it (`overlay`), in the same
+ * frame, so a capture of the canvas holds it too.
  *
- * The sheet is drawn on its own background, KiCad's board colour; only the surround is the
- * theme's, so a theme flip repaints the surround and redraws nothing.
+ * The whole pane is the board's background, KiCad's canvas colour, whatever the theme: KiCad draws
+ * a board on its page on one dark canvas, and the drawing sheet's page reaches past the board.
  *
  * The pane says whether what it shows is final — drawn at the scale it is shown at — as
  * `data-board-settled` on its element, written as it paints (no render): a zoom is `false` until
  * the view has rested and been drawn again.
  */
 import { useCallback, useEffect, useRef } from "react";
-import { APP_THEME_COLORS } from "@cad/core/lib/appTheme.js";
 import { clearSurface } from "@cad/core/lib/drawing2d/index.js";
 import { drawPlot, fitPlotTransform } from "@cad/core/lib/plot2d/index.js";
-import { cssColorToHex } from "../kit/look/chromeBackdrop.js";
 import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { createBoardRasters } from "./boardRasters.js";
 
-/** The theme's background around the board, read at draw time off the pane's own element. */
-function surroundColor(element, colorScheme) {
-  const fallback = (colorScheme === "dark" ? APP_THEME_COLORS.dark : APP_THEME_COLORS.light).background;
-  try {
-    const value = element?.ownerDocument?.defaultView?.getComputedStyle(element).getPropertyValue("--background").trim();
-    return cssColorToHex(value || "") || fallback;
-  } catch {
-    return fallback;
-  }
-}
+/** KiCad's canvas around the board: the board's own background, before a board has loaded too. */
+const KICAD_CANVAS = "#001023";
+const surroundColor = (plot) => plot?.layout.sheets[0]?.background || KICAD_CANVAS;
 
 /**
  * @param {object} options
@@ -55,8 +46,8 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
   const drawViewKey = JSON.stringify(drawView);
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
-  const paint = useCallback((ctx, { width, height, pixelRatio, transform, element, colorScheme: scheme }) => {
-    clearSurface(ctx, { width, height, pixelRatio, background: surroundColor(element, scheme) });
+  const paint = useCallback((ctx, { width, height, pixelRatio, transform, element }) => {
+    clearSurface(ctx, { width, height, pixelRatio, background: surroundColor(plotRef.current) });
     const rasters = rastersRef.current;
     if (!rasters || !transform) return;
     const final = rasters.paint(ctx, { transform, width, height, pixelRatio });
@@ -91,7 +82,7 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
 
   /**
    * The board on its own, for a library card: fitted whole to `width` × `height`, drawn as a
-   * snapshot draws it, on the theme's background — the pane's view is left as it is.
+   * snapshot draws it, on KiCad's canvas — the pane's view is left as it is.
    */
   const thumbnail = useCallback(({ width, height }) => new Promise((resolve, reject) => {
     const current = plotRef.current;
@@ -101,13 +92,13 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     canvas.height = Math.max(1, Math.round(height));
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error("The browser cannot draw the board’s picture.")); return; }
-    clearSurface(context, { width: canvas.width, height: canvas.height, background: surroundColor(containerRef.current, schemeRef.current) });
+    clearSurface(context, { width: canvas.width, height: canvas.height, background: surroundColor(current) });
     drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height) });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("The browser could not encode this board as a PNG."));
     }, "image/png");
-  }), [containerRef, schemeRef]);
+  }), []);
 
   return { containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, capture, thumbnail,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };

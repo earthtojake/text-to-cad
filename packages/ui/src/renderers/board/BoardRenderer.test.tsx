@@ -322,7 +322,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   const layers = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layers]'); expect(found).not.toBeNull(); return found!; });
   expect([...layers.querySelectorAll('[data-layer-group]')].map(group => group.getAttribute('data-layer-group'))).toEqual(['front', 'back', 'other']);
   expect([...layers.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
-    .toEqual(['F.CrtYd', 'F.Fab', 'F.SilkS', 'F.Paste', 'F.Mask', 'F.Cu', 'B.Cu', 'B.Mask', 'Edge.Cuts', 'vias', 'ratsnest', 'drills']);
+    .toEqual(['F.CrtYd', 'F.Fab', 'F.SilkS', 'F.Paste', 'F.Mask', 'F.Cu', 'B.Cu', 'B.Mask', 'Edge.Cuts', 'area', 'sheet', 'vias', 'drills', 'ratsnest', 'names']);
   // One glyph a row: a layer has nothing under it, so its glyph is its colour, and nothing stands before it.
   for (const row of layers.querySelectorAll('[data-layer-row]')) {
     expect([...row.querySelectorAll('[data-layer-glyph]')].map(glyph => glyph.getAttribute('data-layer-glyph'))).toEqual(['swatch']);
@@ -332,7 +332,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   await waitFor(() => expect(drawn.at(-1)!.layers).not.toContain('F.Cu'));
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Custom' })).toBeTruthy();
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.layers).toEqual(
-    ['B.Mask', 'B.Cu', 'F.Mask', 'F.Paste', 'F.SilkS', 'F.Fab', 'Edge.Cuts', 'vias', 'ratsnest', 'drills']));
+    ['sheet', 'area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
   // Shown again, the set is the mode's own: stored as the mode's, so a rebuild's new layer follows it.
   fireEvent.click(layers.querySelector('[data-layer-visibility="F.Cu"]')!);
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null }));
@@ -357,7 +357,7 @@ it('Display is a stock menu: a mode closes it; View from below and the pours lea
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(menuShown('Display')).toBeNull());
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null }));
-  expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['B.Cu', 'F.Cu', 'Edge.Cuts', 'vias', 'ratsnest', 'drills'] });
+  expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['sheet', 'area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
   dispose();
 });
 

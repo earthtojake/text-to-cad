@@ -141,7 +141,8 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
-The viewer and snapshots approximate mask/paste openings and use stroke lettering; dimensions,
-text boxes, embedded images and keepout hatching are not drawn. KiCad's DRC and manufacturing
+The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
+at 60%, pad numbers and net names on pads, vias and tracks, dimensions, the drawing sheet); they approximate mask/paste openings
+and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.

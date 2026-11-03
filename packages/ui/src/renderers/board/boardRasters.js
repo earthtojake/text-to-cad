@@ -94,8 +94,11 @@ export function createBoardRasters({ layout, onChange, view = null, createCanvas
     const context = canvas.getContext("2d");
     if (!context) throw new Error("This browser gave no 2D canvas context, so the plot cannot be drawn.");
     // The board's Display (`view`: its side, its layers, its pours) is drawn into the patch; a frame
-    // only places patches, so it never applies it twice.
-    drawPlot(context, layout, { transform: { scale, offsetX: originX - left, offsetY: originY - top }, view });
+    // only places patches, so it never applies it twice. The patch is at device scale; what a label
+    // needs to be drawn (its level of detail) is the view's own scale, in CSS pixels, and where a
+    // track's names fall the view's own size, in millimetres, not the patch's.
+    const viewport = [frame.width / frame.transform.scale, frame.height / frame.transform.scale];
+    drawPlot(context, layout, { transform: { scale, offsetX: originX - left, offsetY: originY - top }, view, detail: frame.transform.scale, viewport });
     patches.push({
       canvas, scale, used: (clock += 1),
       rect: [(left - originX) / scale, (top - originY) / scale, (right - originX) / scale, (bottom - originY) / scale]

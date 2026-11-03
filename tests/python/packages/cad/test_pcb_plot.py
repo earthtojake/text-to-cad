@@ -1,11 +1,12 @@
 """The plot payload: a KiCad board as the picture the viewer and `cad <type> snapshot` draw, from the file.
 
 Built from the test board (`tests/python/support/kicad_board.py`, in the format KiCad 11's
-headless API saves) without KiCad: the sheet and its layers in KiCad's stacking order, pads
-on every copper layer they are on, tracks, the via and the holes, the pour's saved fill, text
-in the permissive stroke font, mask and paste derived from the pads, the outline, and the
-ratsnest from the engine's own connectivity. The payload is a function of the file's bytes, and
-the store caches it by them. The JavaScript renderer's fixture
+headless API saves) without KiCad: the sheet and its layers in the order KiCad's PCB editor draws
+them (the front copper active), pads on every copper layer they flash on with their numbers and
+nets, tracks, the via's rings and the holes, the pour's saved fill and border hatch, text in the
+permissive stroke font, mask and paste derived from the pads, the outline, the board's area, the
+drawing sheet, and the ratsnest from the engine's own connectivity. The payload is a function of
+the file's bytes, and the store caches it by them. The JavaScript renderer's fixture
 (`packages/ui/src/renderers/board/__fixtures__/board.plot.json`) is this same board's payload.
 """
 
@@ -51,15 +52,20 @@ class PlotPayloadTest(unittest.TestCase):
     def items(self, layer: str, **where):
         return [item for item in self.layers[layer]["items"] if all(item.get(key) == value for key, value in where.items())]
 
-    def test_the_sheet_is_the_outline_and_the_layers_stack_back_to_front(self) -> None:
+    def test_the_sheet_is_the_outline_and_the_layers_stack_as_kicad_draws_them(self) -> None:
         self.assertEqual((self.payload["schemaVersion"], self.payload["kind"], self.payload["generator"]), (PLOT_SCHEMA_VERSION, "board", "pcbnew 10.99"))
         self.assertEqual((self.sheet["name"], self.sheet["width"], self.sheet["height"], self.sheet["background"]), ("blinky", 40.0, 30.0, BOARD_BACKGROUND))
+        # KiCad's PCB editor with the front copper active: the page and the board's area under all, the back
+        # side, the user layers and the outline, the front side up to its copper, what goes through on top.
         self.assertEqual(
             [(layer["id"], layer["kind"], layer["side"]) for layer in self.sheet["layers"]],
-            [("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"), ("F.Cu", "copper", "front"), ("F.Mask", "mask", "front"),
-             ("F.Paste", "paste", "front"), ("F.SilkS", "silk", "front"), ("F.Fab", "fab", "front"), ("F.CrtYd", "courtyard", "front"),
-             ("Edge.Cuts", "outline", "both"), ("vias", "via", "both"), ("ratsnest", "ratsnest", "both"), ("drills", "drill", "both")],
+            [("sheet", "sheet", "both"), ("area", "area", "both"), ("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"),
+             ("Edge.Cuts", "outline", "both"), ("F.Fab", "fab", "front"), ("F.CrtYd", "courtyard", "front"), ("F.Paste", "paste", "front"),
+             ("F.SilkS", "silk", "front"), ("F.Mask", "mask", "front"), ("F.Cu", "copper", "front"),
+             ("drills", "drill", "both"), ("vias", "via", "both"), ("ratsnest", "ratsnest", "both"), ("names", "names", "both")],
         )
+        # The board's paper, A4, its corner on KiCad's origin, which is the board's corner here.
+        self.assertEqual(self.sheet["page"], [0.0, 0.0, 297.0, 210.0])
         # The board's index rides beside the picture, in sheet millimetres; KiCad's origin is the sheet's corner here.
         self.assertEqual(self.payload["board"]["origin"], [0.0, 0.0])
         self.assertEqual([part["ref"] for part in self.payload["board"]["parts"]], ["D1", "J1", "R1"])
@@ -80,17 +86,64 @@ class PlotPayloadTest(unittest.TestCase):
     def test_tracks_vias_pours_and_holes(self) -> None:
         [track] = self.items("F.Cu", t="path", net="VBUS")
         self.assertEqual((track["w"], track["pts"]), (1.0, [[5.0, 15.0], [34.175, 15.0]]))
-        [via] = self.layers["vias"]["items"]
-        self.assertEqual(via, {"t": "circle", "at": [18.0, 27.0], "r": 0.3, "w": 0.0, "via": "through", "net": "GND"})
-        holes = sorted((item["hole"], item["r"]) for item in self.layers["drills"]["items"])
-        self.assertEqual(holes, [("pad", 0.5), ("pad", 0.5), ("via", 0.15)])
+        # A via is a ring on each copper layer it flashes on, its annular width wide, and its hole on `vias`:
+        # golden in a plated wall, KiCad's 20 um of plating painted half as thick again.
+        for layer in ("F.Cu", "B.Cu"):
+            self.assertEqual(self.items(layer, t="circle"), [{"t": "circle", "at": [18.0, 27.0], "r": 0.225, "w": 0.15, "via": "through", "net": "GND"}])
+        [hole] = self.layers["vias"]["items"]
+        self.assertEqual(hole, {"t": "circle", "at": [18.0, 27.0], "r": 0.15, "w": 0.03, "hole": "via", "via": "through"})
+        # A pad's hole is on `drills`, its wall as wide.
+        self.assertEqual(sorted((item["hole"], item["r"], item["w"]) for item in self.layers["drills"]["items"]), [("pad", 0.5, 0.03), ("pad", 0.5, 0.03)])
         [fill] = self.items("B.Cu", pour=True)
         self.assertEqual((fill["t"], fill["net"], fill["pts"]), ("poly", "GND", [[1.5, 16.5], [19.5, 16.5], [19.5, 28.5], [1.5, 28.5]]))
-        # The pour's drawn outline is a hairline, shown whether or not the fill is.
-        [outline] = self.items("B.Cu", t="path")
-        self.assertEqual((outline["w"], outline["closed"], outline["pts"][0]), (0.0, True, [1.0, 16.0]))
+        # The pour's drawn outline is a hairline, shown whether or not the fill is, with KiCad's edge hatch:
+        # short strokes in from the outline every 0.5 mm, as point pairs.
+        [outline] = self.items("B.Cu", t="path", closed=True)
+        self.assertEqual((outline["w"], outline["pts"][0]), (0.0, [1.0, 16.0]))
+        [hatch] = self.items("B.Cu", pairs=True)
+        self.assertEqual((hatch["w"], len(hatch["pts"]) % 2), (0.0, 0))
+        self.assertTrue(all(1 - 1e-6 <= x <= 20 + 1e-6 and 16 - 1e-6 <= y <= 29 + 1e-6 for x, y in hatch["pts"]))
         [edge] = self.layers["Edge.Cuts"]["items"]
         self.assertEqual((edge["t"], edge["w"], edge["closed"], len(edge["pts"])), ("path", 0.1, True, 4))
+        # The board's area is the outline filled, under everything.
+        self.assertEqual(self.layers["area"]["items"], [{"t": "poly", "pts": [[0.0, 0.0], [40.0, 0.0], [40.0, 30.0], [0.0, 30.0]]}])
+
+    def test_pads_and_vias_are_named_as_kicad_names_them(self) -> None:
+        # A through-hole pad's number above its net, centred on it, over everything (`names`).
+        names = {(item["text"], tuple(item["at"])): item for item in self.layers["names"]["items"]}
+        number, net = names[("1", (5.0, 14.6))], names[("VBUS", (5.0, 15.4857))]
+        self.assertEqual((number["kind"], number["angle"], number["size"]), ("pad", 0.0, [0.578, 0.5202]))
+        self.assertEqual(net["size"], [0.4335, 0.3901])
+        # Shown once the view reads the pad: half a millimetre at KiCad's zoom 1 (91 dpi), over its 1.7 mm.
+        self.assertAlmostEqual(number["lod"], 0.5 * 91 / 25.4 / 1.7, places=3)
+        # A surface pad's names are on its copper; R1's pads stand taller than wide, so theirs read upwards,
+        # the number left of the net name.
+        r1 = [item for item in self.items("F.Cu", t="label") if 33 < item["at"][0] < 37]
+        self.assertEqual(sorted((item["text"], item["angle"]) for item in r1), [("1", 90.0), ("2", 90.0), ("LED", 90.0), ("VBUS", 90.0)])
+        by_text = {item["text"]: item["at"] for item in r1}
+        self.assertLess(by_text["1"][0], 34.175)
+        self.assertGreater(by_text["VBUS"][0], 34.175)
+        # The via's net, in it, once its 0.6 mm reads (10 mm at zoom 1).
+        [via] = [item for item in self.layers["names"]["items"] if item["kind"] == "via"]
+        self.assertEqual((via["text"], via["at"]), ("GND", [18.0, 27.0]))
+        self.assertAlmostEqual(via["lod"], 10 * 91 / 25.4 / 0.6, places=3)
+        # The front copper's pads carry their clearance (the net class's default here), for KiCad's outline of it.
+        self.assertEqual({item.get("clearance") for item in self.items("F.Cu", t="poly")}, {0.2})
+        self.assertFalse(any("clearance" in item for item in self.items("B.Cu", t="poly")))
+
+    def test_the_board_is_drawn_on_kicads_default_drawing_sheet(self) -> None:
+        items = self.layers["sheet"]["items"]
+        texts = [item["text"] for item in items if item["t"] == "text"]
+        # The grid's references along each side, every 50 mm in from the 10 mm frame, and the title block.
+        self.assertEqual(texts[:20], [*"123456123456", *"ABCDABCD"])
+        self.assertIn("Size: A4", texts)
+        self.assertIn("File: blinky.kicad_pcb", texts)
+        self.assertIn("KiCad E.D.A. 10.99", texts)
+        # The page's edge is grey, its own line; the frames are 0.15 mm lines.
+        page = [item for item in items if item.get("page")]
+        self.assertEqual(len(page), 4)
+        self.assertEqual(sorted({tuple(point) for item in page for point in item["pts"]}), [(0.0, 0.0), (0.0, 210.0), (297.0, 0.0), (297.0, 210.0)])
+        self.assertTrue(all(item["w"] == 0.15 for item in items if item["t"] == "path" and not item.get("page")))
 
     def test_mask_and_paste_are_derived_from_the_pads(self) -> None:
         self.assertEqual(sorted(item["ref"] for item in self.layers["F.Mask"]["items"]), ["#D1.1", "#D1.2", "#J1.1", "#J1.2", "#R1.1", "#R1.2"])
@@ -136,7 +189,8 @@ class PlotPayloadTest(unittest.TestCase):
         moved.write_text(BOARD.replace("(gr_rect (start 0 0) (end 40 30)", "(gr_rect (start -10 20) (end 30 50)"), encoding="utf-8")
         payload = build_plot(moved)
         self.assertEqual((payload["sheets"][0]["width"], payload["sheets"][0]["height"], payload["board"]["origin"]), (40.0, 30.0, [10.0, -20.0]))
-        [track] = [item for item in payload["sheets"][0]["layers"][2]["items"] if item["t"] == "path" and item.get("net") == "VBUS"]
+        [front] = [layer for layer in payload["sheets"][0]["layers"] if layer["id"] == "F.Cu"]
+        [track] = [item for item in front["items"] if item["t"] == "path" and item.get("net") == "VBUS"]
         self.assertEqual(track["pts"], [[15.0, -5.0], [44.175, -5.0]])
 
     def test_every_request_reads_the_saved_file_without_a_cache(self) -> None:
@@ -304,6 +358,172 @@ class ReaderEdgesTest(unittest.TestCase):
         self.assertEqual(2, len(read_index(text).tracks))
 
 
+class KiCadDrawingTest(unittest.TestCase):
+    """What KiCad's PCB editor draws that the file does not spell out: copper a pad or via keeps only
+    where something joins it, the lines of a dimension, KiCad 5's shorthand, teardrops, rule areas,
+    knocked-out text and text kept upright."""
+
+    plot = ReaderEdgesTest.plot
+
+    @staticmethod
+    def layers(payload: dict) -> dict:
+        return {layer["id"]: layer for layer in payload["sheets"][0]["layers"]}
+
+    def test_a_via_with_its_unused_copper_removed_keeps_it_where_it_is_joined(self) -> None:
+        board = _board(
+            '(via (at 10 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (remove_unused_layers yes) (keep_end_layers yes)'
+            ' (zone_layer_connections "In1.Cu") (net 1))\n'
+            '(via (at 20 10) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (remove_unused_layers yes) (net 1))\n'
+            '(via (at 25 15) (size 0.6) (drill 0.3) (layers "F.Cu" "B.Cu") (remove_unused_layers no) (net 1))\n'
+            '(segment (start 20 10) (end 25 10) (width 0.25) (layer "In2.Cu") (net 1))',
+            layers='(0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal)')
+        layers = self.layers(self.plot(board))
+        rings = {at: sorted(layer for layer, entry in layers.items() for item in entry["items"]
+                            if item.get("via") and not item.get("hole") and item["at"] == [x, y])
+                 for at, (x, y) in (("ends+zone", (10.0, 10.0)), ("track", (20.0, 10.0)), ("all", (25.0, 15.0)))}
+        self.assertEqual(rings["ends+zone"], ["B.Cu", "F.Cu", "In1.Cu"])
+        self.assertEqual(rings["track"], ["In2.Cu"])
+        self.assertEqual(rings["all"], ["B.Cu", "F.Cu", "In1.Cu", "In2.Cu"])
+        self.assertEqual(3, len(layers["vias"]["items"]), "every via's hole is drawn, whatever copper it keeps")
+
+    def test_dimensions_are_the_lines_kicad_draws_for_them(self) -> None:
+        text = '(gr_text "20.0000 mm" (at 15 0.8 0) (layer "Dwgs.User") (effects (font (size 1 1) (thickness 0.15))))'
+        modern = _board('(dimension (type aligned) (layer "Dwgs.User") (pts (xy 5 5) (xy 25 5)) (height -3)'
+                        ' (style (thickness 0.15) (arrow_length 1.27) (text_position_mode 0) (extension_height 0.58642)'
+                        f' (extension_offset 0) keep_text_aligned) {text})', layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (17 "Dwgs.User" user)')
+        # KiCad 5 stored what it drew; KiCad reads it back as the same aligned dimension.
+        legacy = _board(f'(dimension 20 (width 0.15) (layer Dwgs.User) {text}'
+                        ' (feature1 (pts (xy 5 5) (xy 5 1.41358))) (feature2 (pts (xy 25 5) (xy 25 1.41358)))'
+                        ' (crossbar (pts (xy 25 2) (xy 5 2))) (arrow1a (pts (xy 5 2) (xy 6 1.4))) (arrow1b (pts (xy 5 2) (xy 6 2.6)))'
+                        ' (arrow2a (pts (xy 25 2) (xy 24 1.4))) (arrow2b (pts (xy 25 2) (xy 24 2.6))))',
+                        layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (17 "Dwgs.User" user)')
+        drawn = []
+        for board in (modern, legacy):
+            items = self.layers(self.plot(board))["Dwgs.User"]["items"]
+            segments = sorted(tuple(tuple(round(v, 3) for v in point) for point in item["pts"]) for item in items if item["t"] == "path")
+            self.assertEqual(["20.0000 mm"], [item["text"] for item in items if item["t"] == "text"])
+            drawn.append(segments)
+        self.assertEqual(drawn[0], drawn[1])
+        # Two extension lines up past the crossbar, the crossbar 3 mm out, and an arrowhead at each end.
+        self.assertIn(((5.0, 5.0), (5.0, 1.414)), drawn[0])
+        self.assertIn(((25.0, 5.0), (25.0, 1.414)), drawn[0])
+        self.assertIn(((5.0, 2.0), (25.0, 2.0)), drawn[0])
+        self.assertIn(((5.0, 2.0), (6.127, 1.414)), drawn[0])
+        self.assertIn(((25.0, 2.0), (23.873, 2.586)), drawn[0])
+        self.assertEqual(7, len(drawn[0]))
+        # An orthogonal one measures along its axis: its second extension line runs to the point it measures.
+        orthogonal = _board('(dimension (type orthogonal) (layer "Dwgs.User") (pts (xy 5 5) (xy 25 10)) (height 3) (orientation 0)'
+                            f' (style (thickness 0.15) (arrow_length 1.27) (extension_height 0.58642) (extension_offset 0)) {text})',
+                            layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (17 "Dwgs.User" user)')
+        lines = [tuple(tuple(round(v, 3) for v in point) for point in item["pts"])
+                 for item in self.layers(self.plot(orthogonal))["Dwgs.User"]["items"] if item["t"] == "path"]
+        self.assertIn(((5.0, 8.0), (25.0, 8.0)), lines)
+        self.assertIn(((25.0, 7.414), (25.0, 10.0)), lines)
+
+    def test_kicad_5_shorthand_is_read_as_kicad_reads_it(self) -> None:
+        text = ('(kicad_pcb (version 20171130) (host pcbnew 5.1.0)\n'
+                ' (layers (0 F.Cu signal) (31 B.Cu signal) (37 F.SilkS user) (44 Edge.Cuts user))\n'
+                ' (net 0 "") (net 1 GND)\n'
+                ' (net_class Default "default" (clearance 0.2) (trace_width 0.25) (via_dia 0.8) (via_drill 0.4) (uvia_dia 0.3)'
+                ' (uvia_drill 0.1) (add_net GND))\n'
+                ' (module R_0603 (layer F.Cu) (at 10 10)\n'
+                '  (fp_text reference R7 (at 0 -1.5) (layer F.SilkS) (effects (font (size 1 1) (thickness 0.15))))\n'
+                '  (fp_text user %R (at 0 1.5) (layer F.SilkS) (effects (font (size 1 1) (thickness 0.15)))))\n'
+                ' (via (at 20 10) (size 0.8) (layers F.Cu B.Cu) (net 1))\n'
+                ' (gr_line (start 0 0) (end 30 0) (layer Edge.Cuts) (width 0.1)) (gr_line (start 30 0) (end 30 20) (layer Edge.Cuts) (width 0.1))\n'
+                ' (gr_line (start 30 20) (end 0 20) (layer Edge.Cuts) (width 0.1)) (gr_line (start 0 20) (end 0 0) (layer Edge.Cuts) (width 0.1)))')
+        layers = self.layers(self.plot(text))
+        # %R is the reference; a via with no drill takes its net class's.
+        self.assertEqual(["R7", "R7"], [item["text"] for item in layers["F.SilkS"]["items"] if item["t"] == "text"])
+        [hole] = layers["vias"]["items"]
+        self.assertEqual(0.2, hole["r"])
+        [ring] = [item for item in layers["F.Cu"]["items"] if item.get("via")]
+        self.assertEqual((0.3, 0.2), (ring["r"], ring["w"]))
+
+    def test_teardrops_rule_areas_and_knocked_out_text(self) -> None:
+        board = _board(
+            '(zone (net 1) (net_name "A") (layer "F.Cu") (hatch full 0.1) (attr (teardrop (type padvia)))'
+            ' (polygon (pts (xy 10 10) (xy 12 10) (xy 11 12))) (filled_polygon (layer "F.Cu") (pts (xy 10 10) (xy 12 10) (xy 11 12))))\n'
+            '(zone (net 0) (net_name "") (layers "F.Cu" "B.Cu") (hatch edge 0.5) (keepout (tracks not_allowed) (vias not_allowed)'
+            ' (pads allowed) (copperpour not_allowed) (footprints allowed)) (polygon (pts (xy 2 2) (xy 8 2) (xy 8 8) (xy 2 8))))\n'
+            '(gr_text "KO" (at 20 15 0) (layer "F.SilkS" knockout) (effects (font (size 1 1) (thickness 0.15))))',
+            layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (5 "F.SilkS" user)')
+        layers = self.layers(self.plot(board))
+        front = layers["F.Cu"]["items"]
+        # A teardrop is a pour drawn opaque, with no outline of its own.
+        [tear] = [item for item in front if item.get("pour")]
+        self.assertTrue(tear["teardrop"])
+        self.assertFalse(any(item["t"] == "path" and item["pts"][0] == [10.0, 10.0] for item in front))
+        # A rule area is its outline and hatch on each layer it keeps out of, and no fill.
+        for layer in ("F.Cu", "B.Cu"):
+            outline = [item for item in layers[layer]["items"] if item.get("closed") and item["pts"][0] == [2.0, 2.0]]
+            self.assertEqual(1, len(outline), layer)
+            self.assertTrue(any(item.get("pairs") for item in layers[layer]["items"]), layer)
+        # Knocked-out text carries the box the letters are cut from, round them.
+        [ko] = [item for item in layers["F.SilkS"]["items"] if item["t"] == "text"]
+        corners = ko["knockout"]
+        xs, ys = [x for x, _ in corners], [y for _, y in corners]
+        stroke_xs = [x for stroke in ko["strokes"] for x, _ in stroke]
+        self.assertLess(min(xs), min(stroke_xs))
+        self.assertGreater(max(xs), max(stroke_xs))
+        self.assertLess(min(ys), 14.5)
+        self.assertGreater(max(ys), 15.5)
+
+    def test_footprint_text_reads_upright_unless_unlocked(self) -> None:
+        def strokes(angle: str, unlocked: str = "") -> list:
+            board = _board(_pad("U1", "15 10", f'(fp_text user "AB" (at 0 2 {angle}) {unlocked}(layer "F.SilkS") '
+                                               '(effects (font (size 1 1) (thickness 0.15))))'),
+                           layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (5 "F.SilkS" user)')
+            return [item["strokes"] for item in self.layers(self.plot(board))["F.SilkS"]["items"] if item.get("text") == "AB"][0]
+
+        self.assertEqual(strokes("0"), strokes("180"), "turned half a turn, it is turned back to read")
+        self.assertNotEqual(strokes("0"), strokes("180", "(unlocked yes) "))
+
+
+class TrackNameTest(unittest.TestCase):
+    """A track's net name, which the plot does not carry: the renderers lay it out as KiCad does, by one rule."""
+
+    def test_a_track_s_name_is_laid_out_as_the_viewer_lays_it(self) -> None:
+        from cad.engine.formats.kicad.labels import KICAD_PX_PER_MM, is_track, track_labels, track_name_detail
+
+        # plot2d/trackNames.test.js reads the same numbers.
+        def laid(pts, net="CLK", viewport=(30, 20)):
+            return [(label["text"], [round(v, 3) for v in label["at"]], [round(v, 3) for v in label["size"]], round(label["angle"], 3),
+                     round(label["w"], 3)) for label in track_labels({"pts": pts, "w": 0.25, "net": net}, viewport)]
+
+        self.assertEqual(laid([[0, 0], [10, 0]], "/cpu/CLK"), [("CLK", [5, 0], [0.138, 0.138], 0, 0.021)])
+        self.assertEqual([label[3] for label in laid([[0, 10], [0, 0]])], [90])
+        self.assertEqual([label[3] for label in laid([[0, 0], [4, 4]])], [-45])
+        self.assertEqual([label[3] for label in laid([[4, 0], [0, 4]])], [45])
+        self.assertEqual(laid([[0, 0], [0.7, 0]]), [], "shorter than its name")
+        self.assertEqual([label[1] for label in laid([[0, 0], [90, 0]])], [[22.5, 0], [45, 0], [67.5, 0]])
+        self.assertEqual(len(laid([[0, 0], [0, 50]])), 3, "KiCad rounds a half away from zero")
+        self.assertEqual(len(laid([[0, 0], [40, 40]])), 2)
+        self.assertEqual(laid([[0, 0], [3, 1], [6, 0]]), [("CLK", [3, 1], [0.138, 0.138], -18.435, 0.021)])
+        self.assertTrue(is_track({"t": "path", "pts": [[0, 0], [1, 0]], "w": 0.25, "net": "GND"}))
+        self.assertFalse(is_track({"t": "path", "pts": [[0, 0], [1, 0], [1, 1]], "w": 0, "closed": True, "net": "GND"}))
+        self.assertFalse(is_track({"t": "path", "pts": [[0, 0], [1, 1]], "w": 0.1, "pairs": True, "net": "GND"}))
+        self.assertAlmostEqual(track_name_detail(0.25), 16 * KICAD_PX_PER_MM)
+
+    def test_the_snapshot_writes_a_track_s_name_once_the_view_reads_it(self) -> None:
+        import numpy
+        from PIL import Image
+
+        from cad.engine.render.board import _Painter
+
+        layer = {"id": "F.Cu", "kind": "copper", "items": [{"t": "path", "pts": [[0, 2], [20, 2]], "w": 1, "net": "VIN"}]}
+
+        def lettered(scale: float) -> int:
+            image = Image.new("RGB", (round(20 * scale), round(4 * scale)), BOARD_BACKGROUND)
+            _Painter(image, lambda point: (point[0] * scale, point[1] * scale), scale, 1, BOARD_BACKGROUND).layer(
+                layer, poured=True, vias=True, names=True, mirrored=False, viewport=(image.width / scale, image.height / scale))
+            # The track is KiCad's red (its green 52); its name, KiCad's light name colour over it, is far greener.
+            return int((numpy.asarray(image)[..., 1] > 150).sum())
+
+        self.assertEqual(lettered(10), 0, "4 mm over the 1 mm track: 14.3 px per mm before it reads")
+        self.assertGreater(lettered(40), 0)
+
+
 class StrokeFontTest(unittest.TestCase):
     def test_the_font_covers_ascii_and_stands_a_capital_at_the_text_size(self) -> None:
         self.assertEqual(len(GLYPHS), 95)
@@ -329,6 +549,16 @@ class StrokeFontTest(unittest.TestCase):
         # A character the font lacks is a box, and an empty size draws nothing.
         self.assertEqual(len(text_strokes("é", size=(1, 1))), 1)
         self.assertEqual(text_strokes("x", size=(0, 0)), [])
+        # Italic leans right as KiCad slants it: an eighth of the height above the baseline.
+        [upright], [leaning] = text_strokes("l", size=(1, 1)), text_strokes("l", size=(1, 1), italic=True)
+        self.assertAlmostEqual((leaning[0][0] - leaning[-1][0]) - (upright[0][0] - upright[-1][0]), (upright[-1][1] - upright[0][1]) / 8, places=6)
+
+    def test_the_viewer_lays_labels_out_in_the_same_font(self) -> None:
+        # The board view lays a pad's names out itself (`@cad/core`'s plot2d/strokeFont.js): its table is this one.
+        source = repo_path("packages", "core", "src", "lib", "plot2d", "strokeFont.js").read_text(encoding="utf-8")
+        table = source[source.index("export const GLYPHS = Object.freeze(["):]
+        table = table[:table.index("]);")]
+        self.assertEqual(tuple(json.loads(f"[{table.split('[', 1)[1].rstrip().rstrip(',')}]")), GLYPHS)
 
 
 if __name__ == "__main__":
