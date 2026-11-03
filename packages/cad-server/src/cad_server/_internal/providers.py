@@ -45,9 +45,10 @@ An app with a plugin path is never one of them.
 
 A second copy loads every skill twice: the plugin from another catalog (a checkout's development
 install, the GitHub catalog), this repository's skills installed loose, a server someone added by hand
-that runs text-to-cad. The plan removes it, the loose skills moved aside rather than deleted, and out of
-the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would put
-them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
+that runs text-to-cad. The plan removes it: a loose copy of a skill this release ships moved aside rather
+than deleted, one an earlier release shipped and this one does not (``RETIRED_SKILLS``) deleted, and each
+out of the Skills CLI's record where it installed them from GitHub (``unlock_skill``: its ``update`` would
+put them back). A loose skill is ours when its ``SKILL.md`` names one of this repository's skills
 (``SKILLS``) and this repository (``PROVENANCE``: its front matter's ``metadata.repository``, an
 earlier release's body). The one folder two kinds of agent share,
 ``~/.agents/skills`` (Codex and Gemini CLI read it; it is Cline's and Zed's own), is the Skills CLI
@@ -110,7 +111,7 @@ COPY_MARK = ".text-to-cad-copy"
 PROVENANCE = REPOSITORY
 SKILLS = ("cad", "engineering-drawing", "pcb", "print3d", "sendcutsend", "simulation")
 # The skills an earlier release shipped and this one does not. The plugin folder drops them when it is
-# written; a loose copy (the Skills CLI's, which adds skills and never removes one) is moved aside.
+# written; a loose copy (the Skills CLI's, which adds skills and never removes one) is deleted.
 RETIRED_SKILLS = ("bambu-labs", "dfam-check", "dfm", "dxf", "gcode", "pcb-dfm", "sdf", "srdf", "step-parts", "urdf")
 # Claude Desktop's server key, and the variable its server is told its install channel by.
 DESKTOP_KEY = "cad"
@@ -331,7 +332,8 @@ def shared_skills(machine: Optional[Machine] = None) -> Path:
     return _machine(machine).home / ".agents" / "skills"
 
 
-# The skill folders each app owns: a loose skill found in one is that app's to move aside, unless
+# The skill folders each app owns: a loose skill found in one is that app's to take out (one it ships moved
+# aside, a retired one deleted), unless
 # the folder is a Skills CLI agent's here (``_claimed``).
 def _own_skill_folders(host: str, machine: Machine) -> List[Path]:
     return {"claude": [claude_dir(machine) / "skills"], "codex": [codex_home(machine) / "skills", shared_skills(machine)],
@@ -1180,6 +1182,9 @@ def _removal(app: App, copy: Copy, machine: Machine, action: str = "remove dupli
     """The step that takes ``copy`` out of ``app``, by the app's own command or as a file."""
     cli = app.command
     words = copy.words(machine)
+    if copy.kind == "skills" and Path(copy.path).name in RETIRED_SKILLS:
+        # Nothing ships it any more: deleted, and out of the Skills CLI's record.
+        return Step(app.id, action, words, edit={"op": "remove", "path": copy.path, "unlock": True})
     if copy.kind == "skills":
         return Step(app.id, action, words, edit={"op": "move", "path": copy.path})
     if copy.kind == "folder":
@@ -1464,10 +1469,11 @@ def feeds(apps: Mapping[str, App], selected: Iterable[str]) -> bool:
 
 
 def _once(steps: List[Step]) -> List[Step]:
-    """``steps`` with each loose skill moved once: two apps read ``~/.agents/skills``."""
+    """``steps`` with each loose skill moved or deleted once: two apps read ``~/.agents/skills``."""
     seen, kept = set(), []
     for step in steps:
-        path = (step.edit or {}).get("path") if (step.edit or {}).get("op") == "move" else None
+        edit = step.edit or {}
+        path = edit.get("path") if edit.get("op") == "move" or edit.get("unlock") else None
         if path in seen:
             continue
         if path:
@@ -1491,7 +1497,7 @@ def _plan_skills(release: str, machine: Machine, agents: Sequence[str], record: 
         where, have = shown(folder, machine), ours_in(folder)
         for skill in loose_skills([folder], RETIRED_SKILLS):
             steps.append(Step(agent, "remove retired", f"{skill.name} in {where}: text-to-cad {release} no longer ships it",
-                              edit={"op": "move", "path": str(skill)}))
+                              edit={"op": "remove", "path": str(skill), "unlock": True}))
         had = record.get(agent) if isinstance(record.get(agent), dict) else {}
         before = had.get("release")
         # Up to date: this release's, and every skill the CLI said it installed still there. A skill
@@ -1920,7 +1926,8 @@ def skills_lock(machine: Optional[Machine] = None) -> Path:
 
 def unlock_skill(name: str, machine: Optional[Machine] = None) -> bool:
     """The Skills CLI's entry for the skill ``name`` removed where it came from this repository on GitHub: a
-    loose copy, moved aside, which ``npx skills update`` would put back once the repository's skills change.
+    loose copy, moved aside or deleted, which ``npx skills update`` would put back once the repository's skills
+    change.
     One it installed from the plugin folder (this installer's, for an agent without a plugin) stays. Whether
     one was removed; a record that cannot be read is left as it is."""
     path = skills_lock(machine)
@@ -1994,6 +2001,10 @@ def apply(step: Step, machine: Optional[Machine] = None, *, say: Callable[[str],
             say(f"remove {shown(edit['path'], machine)}")
             remove_path(edit["path"])
             record.update({"kind": "remove", "path": edit["path"]})
+            # A retired skill deleted: the Skills CLI's record of it goes too, so its `update` does not put it back.
+            if edit.get("unlock") and unlock_skill(Path(edit["path"]).name, machine):
+                say(f"remove {Path(edit['path']).name} from {shown(skills_lock(machine), machine)}")
+                record["unlocked"] = str(skills_lock(machine))
         elif edit["op"] == "copy":
             say(f"copy {shown(edit['from'], machine)} to {shown(edit['path'], machine)}")
             mark = copy_plugin(edit["from"], edit["path"])
