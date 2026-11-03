@@ -8,7 +8,7 @@ Run in order; stop and fix at the first failing step:
 
 1. **Bundled validator** (always): `cad urdf check path/to/robot.urdf`. It collects *all* findings in one pass (severity, code, XML path); fix them and re-run until clean. Use `--strict` to fail on warnings, `--json` for machine-readable output, and `--packages NAME=PATH` (repeatable) to resolve `package://` mesh URIs.
 2. **External URDF tools** (when installed): `check_urdf robot.urdf` (ros liburdfdom) parses with the reference parser and prints the link tree. Report as skipped when unavailable.
-3. **Viewer sweep** (open it as in [Show the model](../SKILL.md#show-the-model)): load the file, confirm meshes appear at sane scale and pose, then sweep **every** movable joint through its limits and compare the motion against the ledger's positive-motion statement, joint by joint. This is the only step that catches a wrong axis sign.
+3. **Viewer sweep** (open it as in [Show the model](../SKILL.md#show-the-model)): load the file, confirm meshes appear at sane scale and pose, then sweep **every** movable joint through its limits and compare the motion against the ledger's positive-motion statement, joint by joint. This is the only step that catches a wrong axis sign. Snapshots at `--pose` values ([snapshots.md](snapshots.md)) record the same sweep as stills. A link alone does not complete the sweep; report any checks you could not perform.
 4. **Consumer smoke test** (when the target runtime is available): RViz display, robot_state_publisher TF tree, Gazebo/Ignition load, or MoveIt model load.
 
 Report which steps ran and which were skipped.
@@ -51,7 +51,7 @@ Authoring hygiene:
 - visual `<material name>` references without a matching definition warn;
 - mesh extensions outside the common set (stl/dae/obj/3mf/glb/gltf/ply) warn.
 
-The validator intentionally does not require inertials or collision geometry on every link — that is target-consumer policy, decided in the ledger (see `references/inertials.md`). When a file fails a *project* policy rather than these checks, report it as policy failure, not URDF invalidity.
+The validator intentionally does not require inertials or collision geometry on every link — that is target-consumer policy, decided in the ledger (see [inertials.md](inertials.md)). When a file fails a *project* policy rather than these checks, report it as policy failure, not URDF invalidity.
 
 ## What Validation Cannot Prove
 
@@ -64,4 +64,4 @@ Call these out explicitly in the final report when they were not independently v
 
 ## Failure Handling
 
-When validation fails: fix the `.urdf` (and the ledger if the modeled facts changed), re-run the validator, and continue the recipe from the top. If the root cause is a bad mesh export, fix it in the owning CAD workflow first — do not paper over asset problems with URDF origins.
+When validation fails: fix the `.urdf` (and the ledger if the modeled facts changed), re-run the validator, and continue the recipe from the top. If the root cause is a bad mesh export, fix it in the owning CAD workflow first ([meshes.md](meshes.md)) — do not paper over asset problems with URDF origins. If an SRDF sits beside the URDF, re-run `cad srdf check` on it ([interoperability.md](interoperability.md#when-the-urdf-changes)).

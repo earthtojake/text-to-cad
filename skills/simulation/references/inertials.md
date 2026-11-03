@@ -1,12 +1,12 @@
-# URDF Inertials
+# Inertials
 
-Inertials are the most-freehanded and least-checked part of LLM-authored URDFs. The rule is absolute: **never type inertia numbers from intuition.** Every `mass`, inertial `origin`, and `inertia` value is either copied from source data (CAD mass properties, vendor datasheet, measurement) or computed by a formula or script in the same task. Record which, per link, in the design ledger.
+Inertials are the most-freehanded and least-checked part of LLM-authored URDFs and SDFs. The rule is absolute: **never type inertia numbers from intuition.** Every `mass`, inertial `origin`, and `inertia` value is either copied from source data (CAD mass properties, vendor datasheet, measurement) or computed by a formula or script in the same task. Record which, per link, in the design ledger ([urdf-ledger.md](urdf-ledger.md), [sdf-ledger.md](sdf-ledger.md)).
 
 ## When Inertials Are Required
 
-- Simulation and dynamics consumers (Gazebo/Ignition, physics engines, torque control): every physical link needs a valid `inertial`.
+- Simulation and dynamics consumers (Gazebo/Ignition, physics engines, torque control): every physical link needs a valid `inertial`. For dynamic SDF models inertial data is simulation-critical: very small, zero, negative, or guessed inertias are high risk, and the SDF validator warns about a dynamic physical link without one.
 - Visualization-only or kinematics-only consumers (RViz, CAD Viewer, MoveIt kinematic planning): inertials are optional but still recommended so the model stays simulator-ready.
-- Frame-only links (`base_footprint`, optical frames, TCP markers): intentionally omit `inertial` and mark the link frame-only in the ledger.
+- Frame-only links (`base_footprint`, optical frames, TCP markers), and in SDF frame-like or static links: intentionally omit `inertial` and mark the link frame-only in the ledger.
 
 Do not give movable physical links zero or missing mass for a simulation target; most engines misbehave. If mass is unknown, use a documented assumed density or assumed total mass distributed by volume, and say so in the ledger.
 
@@ -15,6 +15,8 @@ Do not give movable physical links zero or missing mass for a simulation target;
 - `<inertial><origin>` is the center of mass expressed in the link frame. It is not the visual origin, the collision origin, or the joint origin.
 - `<inertia>` is the rotational inertia tensor about the center of mass, expressed in the inertial frame (link frame rotated by the inertial origin `rpy`), in kg·m².
 - If source data gives the tensor about another point, transfer it to the COM (parallel axis theorem, subtracting) before writing it down — or simpler, re-export CAD mass properties about the COM.
+
+In SDF the same quantities are elements: `<inertial>` holds `<mass>`, an optional `<pose>` for the center of mass, and `<inertia>` with `<ixx>`, `<ixy>`, `<ixz>`, `<iyy>`, `<iyz>`, `<izz>` ([sdf-examples.md](sdf-examples.md)). Do not copy visual origins into inertial origins unless that is physically justified. A placeholder inertial, only where the user asked for a scaffold, is labelled as one ([guardrails.md](guardrails.md#placeholder-policy)).
 
 ## Closed-Form Formulas (solid, uniform density)
 
@@ -43,19 +45,19 @@ print(mesh.moment_inertia)       # about COM, link-frame axes -> ixx..izz
 
 Requirements for the script route:
 
-- The mesh must be the same file, same frame, and same scale as the URDF reference; otherwise the COM and tensor land in the wrong frame.
+- The mesh must be the same file, same frame, and same scale as the URDF or SDF reference; otherwise the COM and tensor land in the wrong frame.
 - The mesh should be watertight for volume integration; if it is not, fix the export or fall back to a documented primitive approximation.
 - Uniform density is an assumption — record the chosen density (or the total-mass target it was derived from) in the ledger.
 - CAD-native mass properties (for example OCP/OpenCascade `BRepGProp` on the STEP solid) are better than mesh integration when the STEP source is available; same rules apply.
 
-For complex or parametric models it is reasonable to keep this helper script on disk next to the model's other source files and reference it from the ledger. That is optional; the checked-in URDF values remain canonical.
+For complex or parametric models it is reasonable to keep this helper script on disk next to the model's other source files and reference it from the ledger. That is optional; the checked-in URDF or SDF values remain canonical.
 
 ## Sanity Gates
 
 Before accepting any inertial block, check:
 
 1. `mass > 0`, all values finite; diagonal `ixx, iyy, izz > 0`.
-2. Triangle inequality: `ixx + iyy ≥ izz`, `ixx + izz ≥ iyy`, `iyy + izz ≥ ixx`. The bundled validator reports a violation as the warning `inertia_triangle_inequality`, which `--strict` promotes to blocking; positive-semidefiniteness and positive diagonals are hard errors.
+2. Triangle inequality: `ixx + iyy ≥ izz`, `ixx + izz ≥ iyy`, `iyy + izz ≥ ixx`. The bundled URDF validator reports a violation as the warning `inertia_triangle_inequality`, which `--strict` promotes to blocking; positive-semidefiniteness and positive diagonals are hard errors. The SDF validator also warns on a triangle-inequality violation and requires a positive-semidefinite tensor.
 3. Magnitude plausibility: for a part with characteristic size `d` and mass `m`, diagonal terms should be within roughly an order of magnitude of `m·d²/10`. A 0.5 kg, 10 cm part with `ixx = 2.0` kg·m² is wrong by ~1000×.
 4. COM plausibility: the inertial origin lies inside (or very near) the part's bounding volume.
 5. Off-diagonal terms are small relative to diagonals unless the part is genuinely skewed in the link frame — large `ixy/ixz/iyz` values usually mean the tensor was expressed in the wrong frame.

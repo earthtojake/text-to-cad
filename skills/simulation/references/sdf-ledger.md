@@ -13,7 +13,7 @@ Create or update this ledger before writing SDF XML. The ledger's canonical home
 | Units | meters, kilograms, seconds, radians unless documented otherwise |
 | Coordinate convention | REP-103-like / simulator-specific / documented exception |
 | World support needed | yes/no; reason |
-| External checks | `gz sdf --check` mode (`auto`/`required`/`never`), simulator load, CAD Viewer, other |
+| External checks | `gz sdf --check` mode (`auto`/`required`/`never`, [sdf-checks.md](sdf-checks.md#external-checks)), simulator load, CAD Viewer, other |
 
 ## Model or world scope
 
@@ -77,6 +77,8 @@ Do not invent plugin filenames, topics, frame names, namespaces, controller para
 
 ## Mesh URI policy
 
+What each form means and which the CAD Viewer draws: [meshes.md](meshes.md#reference-forms).
+
 | URI kind | Allowed? | Resolution expectation | Notes |
 |---|---|---|---|
 | Relative local path | | Relative to the `.sdf` file location | |
@@ -100,14 +102,6 @@ List every guessed or inferred value:
 
 If a value cannot be derived or safely assumed, generate a minimal placeholder only when the user asked for a placeholder, and label it as such.
 
-## Compact response template
+## Reporting
 
-```text
-SDF file: path/to/model.sdf
-Target consumer: Gazebo Harmonic, SDF 1.12
-Bundled validation: passed with 2 warnings
-External checks: gz sdf --check skipped, gz not installed
-Assumptions:
-- Assumed mesh units are meters.
-- Assumed camera optical frame follows simulator plugin documentation.
-```
+Finish with the compact report in [guardrails.md](guardrails.md#the-report): the file, target consumer and SDF version, bundled validation result, external checks, assumptions and risks.

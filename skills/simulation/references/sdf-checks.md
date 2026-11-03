@@ -1,4 +1,4 @@
-# SDF validation
+# SDF validation and smoke tests
 
 Every created or modified `.sdf` is validated with `cad sdf check <file.sdf>` before the task is reported complete. The validator collects all findings in one pass (severity, code, XML path); `--strict` fails on warnings and `--json` emits a machine-readable document. The bundled validation is dependency-light and intended to catch common structural errors. It is not a replacement for libsdformat, Gazebo, or target-simulator validation.
 
@@ -127,7 +127,7 @@ Plugin filenames and parameters can pass bundled validation and still fail in th
 
 CAD Viewer lists SDF plugins, sensors, lights, physics settings and includes as static metadata, with their counts (an included model is not drawn). A model nested in the model is drawn with it. No plugin runs and none moves the model, whatever its name: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
 
-What the viewer and `cad sdf snapshot` draw is narrower than what the validator accepts: the server resolves the frame graph into every link's rest placement — the model's and every model nested in it, whose links, frames and joints it names by scope (`arm::elbow`, the name `--pose` takes; a nested model is posed in the model it is nested in and attached to its `canonical_link`, else its first link) — meshes `box`, `cylinder`, `sphere` and `capsule` itself, and draws a mesh `<uri>` only when it is a local STL, 3MF or GLB file beside the description or in its ROS package (`package://NAME/...`: the nearest folder above the description named NAME, or holding a `package.xml` that names it). A `plane`, `heightmap`, `polyline` or `ellipsoid`, a `model://` or remote URI, a package no folder above the description is, a `.dae`, `.obj` or `.ply` mesh, a missing file, or a scoped name that names nothing is refused by name, the viewer refuses a model placed by `placement_frame`, and the validator's own errors refuse the file before anything renders.
+What the viewer and `cad sdf snapshot` draw, and what they refuse by name, is narrower than what the validator accepts: see [snapshots.md](snapshots.md#sdf). Static rendering does not execute SDF plugins or read file-authored motion metadata; review placement, resources and joints, and keep simulator checks separate.
 
 After `.sdf` files are created or modified, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
@@ -159,3 +159,86 @@ Separate these categories:
 | Project policy | mesh location, preferred URI style, STL/DAE preference, collision simplification, no unresolved external URIs |
 
 Do not reject valid SDF merely because it violates a project policy unless the task or repository requires that policy. Prefer warnings and strict-mode controls.
+
+## Smoke tests
+
+Use smoke tests after the SDF passes bundled validation. The goal is to catch simulator and spatial failures that dependency-light XML checks cannot detect.
+
+### Bundled validation
+
+```bash
+cad sdf check path/to/model.sdf
+cad sdf check path/to/model.sdf --strict
+```
+
+Use `--strict` when warnings should block handoff. It is safe on any machine: the default `--gz-check auto` notes a missing `gz` as `info` rather than a finding against the file, so `--strict` fails only on the document's own warnings.
+
+### SDFormat parser check
+
+`cad sdf check` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
+
+```bash
+gz sdf --check path/to/model.sdf
+```
+
+or make it mandatory, so a missing `gz` is an error instead of a note:
+
+```bash
+cad sdf check path/to/model.sdf --gz-check required
+```
+
+Use the exact simulator environment that will consume the file when possible.
+
+### Simulator load check
+
+Load the model or world in the target simulator and check:
+
+- no parser warnings or plugin load errors;
+- model appears at the intended pose;
+- visual and collision assets resolve;
+- collision geometry is not visibly offset from visuals;
+- dynamic model does not explode, fall through the floor, or produce invalid inertia warnings.
+
+### Joint motion check
+
+For each non-fixed joint:
+
+- command a small positive motion;
+- confirm the moving child moves in the expected direction;
+- confirm limits stop motion where expected;
+- confirm continuous joints can rotate continuously if intended.
+
+### CAD Viewer static review
+
+After generating or modifying an `.sdf`, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
+
+- confirm direct model links, joints, frames, visuals, and collisions are placed correctly;
+- confirm includes, plugins, sensors and lights are listed as static metadata, and nested models are drawn with the model;
+- confirm the Viewer refuses by name any geometry or mesh it cannot draw, rather than leaving it out;
+- record any simulator-only behavior that CAD Viewer cannot execute.
+
+### Sensor and plugin check
+
+For each sensor or plugin:
+
+- confirm plugin library loads;
+- confirm expected topics/services appear;
+- confirm frame names match the design ledger;
+- confirm update rate and namespace behavior;
+- capture one sample output if practical.
+
+### Visual review
+
+Return the live CAD Viewer link, or explicitly report why launching failed. Visual review is useful but insufficient: it can catch gross placement and mesh problems, but it cannot prove axis frames, inertials, dynamics, or plugin behavior.
+
+## When to stop
+
+Stop and fix the SDF (or its upstream assets) when:
+
+- bundled validation has errors;
+- `gz sdf --check` fails under a required external-check policy;
+- the simulator reports invalid inertias or unresolved required assets;
+- a joint moves opposite from the documented positive direction;
+- plugin startup fails for a plugin required by the task.
+
+Report each check as run, passed, failed or skipped in the compact report ([guardrails.md](guardrails.md#the-report)).
