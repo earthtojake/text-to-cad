@@ -3,8 +3,13 @@
  * pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
  * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
  * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
- * hand takes it (`onDrag`, a board's Point or area drawing its box): then the middle button pans,
- * as KiCad's does (`middlePan`). Every flat view (a 2D drawing, a board) is this one hook under its own paint.
+ * hand takes it (`onDrag`, a board's Select drawing its box): then the middle button pans, as
+ * KiCad's does (`middlePan`), and the view's other drags are the 3D views' (`orbitPan`, three's
+ * OrbitControls as `useViewerRuntime.js` sets them): the right button's drag pans (a Mac
+ * trackpad's two-finger click and drag) and a primary drag with Ctrl, Cmd or Shift held pans, the
+ * browser's menu kept off the picture; a press of either that does not travel is no tap. The wheel
+ * and a trackpad's two-finger scroll zoom, as a pinch does. Every flat view (a 2D drawing, a
+ * board) is this one hook under its own paint.
  *
  * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
  * already the person's), the `bounds` the fit frames (`@cad/core`'s plane maths,
@@ -45,6 +50,8 @@ const LINE_HEIGHT_PX = 16;
 const PAGE_HEIGHT_PX = 400;
 /** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
 export const TAP_SLOP_PX = 4;
+/** How much closer than the fit framing a thing may bring the view. */
+export const FRAME_ZOOM_CAP = 24;
 function wheelZoomFactor(event) {
   const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
   const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
@@ -70,9 +77,10 @@ function wheelZoomFactor(event) {
  *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
  *   release are the tool's too, and the view does not pan.
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
+ * @param {boolean} [options.orbitPan]  The 3D views' pans: a right-button drag, and a primary drag with Ctrl, Cmd or Shift.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDrag = null, middlePan = false }) {
+  onTap = null, onHover = null, onDrag = null, middlePan = false, orbitPan = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -99,6 +107,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   dragRef.current = onDrag;
   const middlePanRef = useRef(middlePan);
   middlePanRef.current = middlePan;
+  const orbitPanRef = useRef(orbitPan);
+  orbitPanRef.current = orbitPan;
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
 
@@ -153,6 +163,20 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   }, [requestPaint]);
 
   const fit = useCallback(() => refit(true), [refit]);
+
+  /**
+   * Frame a box of the picture (model space, y up), centred, with the fit's margin; never closer
+   * than `FRAME_ZOOM_CAP` times the fit, so a pad or a short track is framed in what is round it.
+   */
+  const frame = useCallback((box) => {
+    const { width, height } = sizeRef.current;
+    if (!box || !fitScaleRef.current || width <= 0 || height <= 0) return;
+    const [minX, minY, maxX, maxY] = box;
+    const fitted = fitTransform([minX, minY, maxX, maxY], width, height);
+    const scale = clampScale(Math.min(fitted.scale, fitScaleRef.current * FRAME_ZOOM_CAP), zoomLimits(fitScaleRef.current));
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    moveTo({ scale, offsetX: width / 2 - cx * scale, offsetY: height / 2 + cy * scale });
+  }, [moveTo]);
 
   const zoomBy = useCallback((factor, anchor) => {
     const transform = transformRef.current;
@@ -268,14 +292,19 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
-      const middle = event.pointerType === "mouse" && event.button === 1 && middlePanRef.current;
-      if (event.pointerType === "mouse" && event.button !== 0 && !middle) return;
+      const mouse = event.pointerType === "mouse";
+      const middle = mouse && event.button === 1 && middlePanRef.current;
+      // The 3D views' pans: the right button's drag, a primary drag with a modifier (a click with one is still a click).
+      const secondary = mouse && event.button === 2 && orbitPanRef.current;
+      const modified = orbitPanRef.current && event.button === 0 && (event.ctrlKey || event.metaKey || event.shiftKey);
+      if (mouse && event.button !== 0 && !middle && !secondary) return;
       capturePointer(canvas, event.pointerId);
       const point = local(event);
       pointers.set(event.pointerId, point);
       // A second finger is a pinch: a drag the tool had taken lets go.
       if (press?.drag && pointers.size > 1) dragRef.current?.("cancel", { start: press.start, point, event });
-      press = pointers.size === 1 ? { id: event.pointerId, start: point, moved: middle, drag: false, pan: middle } : null;
+      press = pointers.size === 1
+        ? { id: event.pointerId, start: point, moved: middle, drag: false, pan: middle || secondary || modified, tapless: secondary } : null;
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 1) setDragging(true);
       hoverRef.current?.(null, null);
@@ -319,13 +348,15 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       releasePointer(canvas, event.pointerId);
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 0) setDragging(false);
-      const tapped = press && press.id === event.pointerId && !press.moved && event.type === "pointerup";
+      const tapped = press && press.id === event.pointerId && !press.moved && !press.tapless && event.type === "pointerup";
       const dragged = press?.drag && press.id === event.pointerId ? press : null;
       press = null;
       if (dragged && at) dragRef.current?.(event.type === "pointerup" ? "end" : "cancel", { start: dragged.start, point: at, event });
       if (tapped && at) tapRef.current?.(at, event);
     };
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
+    // The right button is a pan: the browser's own menu stays off the picture, as OrbitControls keeps it off a 3D view.
+    const onContextMenu = (event) => { if (orbitPanRef.current) event.preventDefault(); };
     const onWheel = (event) => {
       if (!transformRef.current) return;
       // The page must not scroll under a picture being zoomed, so this listener
@@ -342,7 +373,9 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     canvas.addEventListener("pointerleave", onPointerLeave);
     canvas.addEventListener("wheel", onWheel, { passive: false });
     canvas.addEventListener("dblclick", onDoubleClick);
+    canvas.addEventListener("contextmenu", onContextMenu);
     return () => {
+      canvas.removeEventListener("contextmenu", onContextMenu);
       canvas.removeEventListener("pointerdown", onPointerDown);
       canvas.removeEventListener("pointermove", onPointerMove);
       canvas.removeEventListener("pointerup", onPointerUp);
@@ -363,5 +396,5 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

@@ -108,6 +108,17 @@ const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.
 const openMenu = (name: string) => waitFor(() => { const found = document.querySelector<HTMLElement>(`[role=menu][aria-label="${name}"]`); expect(found).not.toBeNull(); return found!; });
 const menuShown = (name: string) => document.querySelector(`[role=menu][aria-label="${name}"]`);
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
+/** Select's filter menu, opened from its chevron when a press on the board has put it away. */
+const filterMenu = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>) => {
+  const shown = menuShown('Selection filter') as HTMLElement | null;
+  if (shown) return shown;
+  await user.click(within(strip(pane)).getByRole('button', { name: /^Selection filter:/ }));
+  return openMenu('Selection filter');
+};
+/** Ticks or unticks one of the filter's boxes, the menu opened first. */
+const toggleBox = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>, name: string) => {
+  await user.click(within(await filterMenu(pane, user)).getByRole('menuitemcheckbox', { name }));
+};
 
 /** A tap on the board where sheet point `at` is on screen in the last frame painted. */
 const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unknown> = {}) => {
@@ -130,9 +141,9 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
-  // The sidebar's tiles: the Board and its Layers. Nothing is picked yet: no Quick Edit.
+  // The sidebar's tabs: the Circuit and its Layers. Nothing is picked yet: no Quick Edit.
   expect(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getAllByRole('button').map(button => button.getAttribute('aria-label')))
-    .toEqual(['Board', 'Layers']);
+    .toEqual(['Circuit', 'Layers']);
   expect(box(pane)).toBeNull();
   dispose();
 });
@@ -141,12 +152,12 @@ it('a native board uses the host language for its controls, tree and accessible 
   const { pane, dispose } = await open('blinky.kicad_pcb', { locale: 'zh-CN' });
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('电路板：blinky.kicad_pcb');
-  expect(within(pane).getByRole('button', { name: '电路板' })).toBeTruthy();
-  fireEvent.click(within(pane).getByRole('button', { name: '电路板' }));
-  expect(within(pane).getByRole('textbox', { name: '筛选电路板' })).toBeTruthy();
+  expect(within(pane).getByRole('button', { name: '电路' })).toBeTruthy();
+  fireEvent.click(within(pane).getByRole('button', { name: '电路' }));
+  expect(within(pane).getByRole('textbox', { name: '筛选电路' })).toBeTruthy();
   expect(within(pane).getByRole('button', { name: '选择', exact: true })).toBeTruthy();
-  expect(within(pane).getByText('元件')).toBeTruthy();
-  expect(within(pane).queryByText('Parts')).toBeNull();
+  expect(within(pane).getByText('电阻')).toBeTruthy();
+  expect(within(pane).queryByText('Resistors')).toBeNull();
   dispose();
 });
 
@@ -213,7 +224,7 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   dispose();
 });
 
-it("Select's filter is one choice of what a press takes: Parts takes the part, over copper too; Nets takes the whole net", async () => {
+it("Select's filter is KiCad's grid of boxes: they tick what a click takes, All items ticks them all, and the menu stays up", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
@@ -221,55 +232,82 @@ it("Select's filter is one choice of what a press takes: Parts takes the part, o
   const controller = await controllerOf(view);
   await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
   const menu = await openMenu('Selection filter');
-  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent))
-    .toEqual(['All', 'Parts', 'Pads', 'Nets', 'Tracks', 'Vias', 'Zones', 'Text', 'Dimensions', 'Graphics', 'Point or area']);
-  await user.click(within(menu).getByRole('menuitemradio', { name: 'Parts' }));
-  // Choosing one puts the menu away.
-  await waitFor(() => expect(menuShown('Selection filter')).toBeNull());
+  const boxes = () => within(menu).getAllByRole('menuitemcheckbox').map(item => [item.textContent, item.getAttribute('aria-checked')]);
+  // KiCad's two columns, row by row; every kind ticked and no locked items as a board opens.
+  expect(boxes()).toEqual([['All items', 'true'], ['Locked items', 'false'], ['Footprints', 'true'], ['Text', 'true'], ['Tracks', 'true'],
+    ['Vias', 'true'], ['Pads', 'true'], ['Graphics', 'true'], ['Zones', 'true'], ['Rule Areas', 'true'], ['Dimensions', 'true']]);
+  // All items unticks every kind, and the menu stays up for the next box.
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'All items' }));
+  expect(boxes().filter(([, checked]) => checked === 'true')).toEqual([]);
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Footprints' }));
+  expect(menuShown('Selection filter')).not.toBeNull();
+  expect(boxes()[0]).toEqual(['All items', 'mixed']);
+  expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Footprints' })).toBeTruthy();
   // R1.1, under the VBUS track's end: the part, not the pad or the copper.
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#R1']);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Parts' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Nets' }));
-  expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' })).toBeTruthy();
-  tap(pane, [34.175, 15]);
-  expect(selected(controller)).toEqual(['#net:VBUS']);
-  // Zones takes the pour anywhere inside it; Graphics a part's own silkscreen line, which All leaves to its part.
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Zones' }));
+  // A press on the board puts the menu away, as any dropdown's outside press does.
+  expect(menuShown('Selection filter')).toBeNull();
+  // Zones alone takes the pour anywhere inside it; Graphics without Footprints a part's own silkscreen line.
+  await toggleBox(pane, user, 'Footprints');
+  await toggleBox(pane, user, 'Zones');
   tap(pane, [10, 20]);
   expect(selected(controller)).toEqual(['#zone:7a1c0000-0000-4000-8000-000000000004']);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Zones' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Graphics' }));
+  await toggleBox(pane, user, 'Zones');
+  await toggleBox(pane, user, 'Graphics');
   tap(pane, [5.6, 16.27]);  // J1's silkscreen line between its pins, from (3.62, 16.27) to (6.38, 16.27)
   expect(selected(controller)).toEqual([`#shape:${(BOARD as any).sheets[0].layers.find((layer: any) => layer.id === 'F.SilkS').items
     .find((item: any) => item.ref === '#J1' && item.pts?.every((point: number[]) => point[1] === 16.27)).id}`]);
+  // Nothing ticked takes nothing: a click clears.
+  await toggleBox(pane, user, 'Graphics');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual([]);
   dispose();
 });
 
-it("Point or area names a place: a tap a point, a drag the box between its ends, on the working layer, as the prompt's packet carries them", async () => {
+it('a locked footprint is no pick until Locked items is ticked, but for its pads, as KiCad lets a click take one', async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const board = JSON.parse(JSON.stringify(BOARD));
+  board.board.parts.find((part: any) => part.ref === 'R1').locked = true;
+  readPlot = () => json(board);
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual(['#R1.1']);
+  await toggleBox(pane, user, 'All items');
+  await toggleBox(pane, user, 'Footprints');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual([]);
+  await toggleBox(pane, user, 'Locked items');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual(['#R1']);
+  dispose();
+});
+
+it("a drag under Select draws the box and names the area on the working layer; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
   const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
   const view = await open('blinky.kicad_pcb', { promptFiles });
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Point or area' }));
-  expect(pane.querySelector('[data-board-surface] canvas')!.className).toContain('cursor-crosshair');
-  // On R1.1, the place and not the pad: on F.Cu, the copper seen from the top.
-  tap(pane, [34.2, 15.3]);
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3']);
-  // A drag is the box between its ends, Shift adding it; it does not pan.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
-  const before = { ...frames.at(-1)! };
   const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
   const press = { pointerId: 1, pointerType: 'mouse', button: 0 };
+  // A click that wavers a pixel or two is still a click: R1.1.
+  const r11 = at([34.175, 15]);
+  fireEvent.pointerDown(canvas, { ...press, ...r11 });
+  fireEvent.pointerMove(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
+  fireEvent.pointerUp(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
+  expect(selected(controller)).toEqual(['#R1.1']);
+  // A drag is the box between its ends, on F.Cu, the copper seen from the top; Shift adds it; it does not pan.
+  const before = { ...frames.at(-1)! };
   fireEvent.pointerDown(canvas, { ...press, ...at([30, 10]) });
   fireEvent.pointerMove(canvas, { ...press, ...at([34, 14]) });
   fireEvent.pointerMove(canvas, { ...press, ...at([40, 20]) });
   fireEvent.pointerUp(canvas, { ...press, ...at([40, 20]), shiftKey: true });
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   expect(frames.at(-1)).toEqual(before);
   // The middle button pans, as KiCad's does, and picks nothing.
   const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
@@ -277,40 +315,108 @@ it("Point or area names a place: a tap a point, a drag the box between its ends,
   fireEvent.pointerMove(canvas, { ...middle, ...at([25, 15]) });
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).toBeGreaterThan(before.offsetX));
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  // The 3D views' drags: the right button's (a trackpad's two-finger click and drag) pans, and keeps the
+  // browser's menu off; a left drag with Ctrl, Cmd or Shift pans; a right press that does not travel picks nothing.
+  const pans = async (init: Record<string, unknown>, [dx, dy]: [number, number]) => {
+    const was = { ...frames.at(-1)! };
+    fireEvent.pointerDown(canvas, { ...press, ...init, ...at([20, 15]) });
+    fireEvent.pointerMove(canvas, { ...press, ...init, ...at([20 + dx, 15 + dy]) });
+    fireEvent.pointerUp(canvas, { ...press, ...init, ...at([20 + dx, 15 + dy]) });
+    await waitFor(() => expect([frames.at(-1)!.offsetX, frames.at(-1)!.offsetY]).not.toEqual([was.offsetX, was.offsetY]));
+  };
+  expect(fireEvent.contextMenu(canvas)).toBe(false);
+  await pans({ button: 2, pointerId: 3 }, [0, 5]);
+  await pans({ ctrlKey: true }, [5, 0]);
+  await pans({ metaKey: true }, [0, -5]);
+  await pans({ shiftKey: true }, [-5, 0]);
+  fireEvent.pointerDown(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
+  fireEvent.pointerUp(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
   expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
-    .toEqual(['point 34.2, 15.3', 'Remove point 34.2, 15.3', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
+    .toEqual(['R1.1', 'Remove R1.1', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
   // The note's packet names them, for a snapshot to light them where the person put them.
   const note = within(quickEdit).getByRole('textbox', { name: 'Describe your changes' });
   note.textContent = 'Keep this clear.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x30y10..x40y20`));
+  // A click on bare board lets go of it all, as KiCad's does.
+  tap(pane, [36, 26]);
+  expect(selected(controller)).toEqual([]);
   dispose();
 });
 
-it('the Board section lists parts by kind and nets: a row selects, its eye isolates, and the isolation is the file’s', async () => {
+it('the Circuit tab is the parts in their schematic blocks, then the nets: a block selects its parts, a row selects and frames, an eye isolates', async () => {
+  const board = JSON.parse(JSON.stringify(BOARD));
+  const sheets: Record<string, string> = { J1: 'power', R1: 'led', D1: 'led' };
+  for (const part of board.board.parts) part.sheet = sheets[part.ref];
+  readPlot = () => json(board);
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Board' }));
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Circuit' }));
   const section = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-tool-panel-id="board"]'); expect(found).not.toBeNull(); return found!; });
   const inSection = within(section);
-  expect(inSection.getByRole('textbox', { name: 'Filter board' })).toBeTruthy();
-  // It opens until there is a choice: Parts and Nets, each kind on its one part; a part's pads and a net's stay shut.
-  expect([...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'))).toEqual([
-    'group:parts', 'kind:Diodes', 'part:D1', 'kind:Resistors', 'part:R1', 'kind:Connectors', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']);
-  fireEvent.click(inSection.getByRole('button', { name: 'Select R1' }));
-  expect(selected(controller)).toEqual(['#R1']);
-  // The part's card is what the board says of it, in KiCad's millimetres, y down.
-  expect(box(pane)!.textContent).toContain('R1');
-  fireEvent.click(inSection.getByRole('button', { name: 'Isolate R1' }));
-  expect(inSection.getByRole('button', { name: 'Exit isolate R1' }).getAttribute('aria-pressed')).toBe('true');
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#R1'] }));
+  expect(inSection.getByRole('textbox', { name: 'Filter circuit' })).toBeTruthy();
+  const rows = () => [...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'));
+  // The blocks the footprints record, then the nets, open as a tree opens until there is a choice, a block of several shut.
+  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']);
+  // A block's name selects every part in it, a chip each, and frames them.
+  const fitted = { ...frames.at(-1)! };
+  fireEvent.click(inSection.getByRole('button', { name: 'Select led' }));
+  expect(selected(controller)).toEqual(['#D1', '#R1']);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
+  await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
+    .filter(label => !label!.startsWith('Remove'))).toEqual(['D1', 'R1']));
+  expect(section.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
+  // A part selects as a click on the board does, and frames it.
+  const before = { ...frames.at(-1)! };
+  fireEvent.click(inSection.getByRole('button', { name: 'Select J1' }));
+  expect(selected(controller)).toEqual(['#J1']);
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(before.offsetX));
+  // The filter finds a part by its value and a net by its name.
+  fireEvent.change(inSection.getByRole('textbox', { name: 'Filter circuit' }), { target: { value: 'VBUS' } });
+  await waitFor(() => expect(section.querySelector('[data-search-row="net:VBUS"]')).not.toBeNull());
+  fireEvent.click(within(section.querySelector<HTMLElement>('[data-search-row="net:VBUS"]')!).getByRole('button', { name: 'Select VBUS' }));
+  expect(selected(controller)).toEqual(['#net:VBUS']);
+  fireEvent.change(inSection.getByRole('textbox', { name: 'Filter circuit' }), { target: { value: '' } });
+  fireEvent.click(inSection.getByRole('button', { name: 'Isolate J1' }));
+  expect(inSection.getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
+  dispose();
+});
+
+it("the Layers tab's options draw as KiCad's: Dim other layers, the zones' and tracks' opacity, and a row's press makes it the active layer", async () => {
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Layers' }));
+  const options = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layer-options]'); expect(found).not.toBeNull(); return found!; });
+  const layers = pane.querySelector<HTMLElement>('[data-board-layers]')!;
+  // KiCad's own as a board opens: F.Cu active (its dot), nothing dimmed, the zones at 60%, the tracks at 100%.
+  expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).not.toBeNull();
+  expect(drawn.at(-1)).toMatchObject({ active: null, dim: null, zones: 0.6, tracks: 1 });
+  await user.click(within(options).getByRole('checkbox', { name: 'Dim other layers' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ dim: 'F.Cu' }));
+  // A row's press: B.Cu active, drawn on top, the rest dimmed round it.
+  await user.click(within(layers).getByRole('button', { name: 'Make B.Cu the active layer' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ active: 'B.Cu', dim: 'B.Cu' }));
+  expect(layers.querySelector('[data-layer-row="B.Cu"] [data-layer-active]')).not.toBeNull();
+  expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).toBeNull();
+  // The board's area and what goes through the board are no active layer.
+  expect(within(layers.querySelector<HTMLElement>('[data-layer-row="vias"]')!).queryByRole('button', { name: /active layer/ })).toBeNull();
+  // The zones' opacity, typed into its value.
+  const zones = within(options).getByRole('textbox', { name: 'Zone opacity value' });
+  await user.clear(zones);
+  await user.type(zones, '25{Enter}');
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ zones: 0.25 }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value)
+    .toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: 'B.Cu', dim: true, zones: 0.25, tracks: 1 }));
   dispose();
 });
 
@@ -322,7 +428,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   const layers = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layers]'); expect(found).not.toBeNull(); return found!; });
   expect([...layers.querySelectorAll('[data-layer-group]')].map(group => group.getAttribute('data-layer-group'))).toEqual(['front', 'back', 'other']);
   expect([...layers.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
-    .toEqual(['F.CrtYd', 'F.Fab', 'F.SilkS', 'F.Paste', 'F.Mask', 'F.Cu', 'B.Cu', 'B.Mask', 'Edge.Cuts', 'area', 'sheet', 'vias', 'drills', 'ratsnest', 'names']);
+    .toEqual(['F.CrtYd', 'F.Fab', 'F.SilkS', 'F.Paste', 'F.Mask', 'F.Cu', 'B.Cu', 'B.Mask', 'Edge.Cuts', 'area', 'vias', 'drills', 'ratsnest', 'names']);
   // One glyph a row: a layer has nothing under it, so its glyph is its colour, and nothing stands before it.
   for (const row of layers.querySelectorAll('[data-layer-row]')) {
     expect([...row.querySelectorAll('[data-layer-glyph]')].map(glyph => glyph.getAttribute('data-layer-glyph'))).toEqual(['swatch']);
@@ -332,10 +438,10 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   await waitFor(() => expect(drawn.at(-1)!.layers).not.toContain('F.Cu'));
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Custom' })).toBeTruthy();
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.layers).toEqual(
-    ['sheet', 'area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
+    ['area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
   // Shown again, the set is the mode's own: stored as the mode's, so a rebuild's new layer follows it.
   fireEvent.click(layers.querySelector('[data-layer-visibility="F.Cu"]')!);
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
   dispose();
 });
 
@@ -356,8 +462,8 @@ it('Display is a stock menu: a mode closes it; View from below and the pours lea
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' })).toBeTruthy();
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(menuShown('Display')).toBeNull());
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null }));
-  expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['sheet', 'area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
+  expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
   dispose();
 });
 
@@ -383,7 +489,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, dim: false, zones: 0.6, tracks: 1 } })]);
   expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });

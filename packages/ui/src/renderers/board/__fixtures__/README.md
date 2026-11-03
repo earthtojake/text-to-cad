@@ -4,8 +4,7 @@
 `docs/plot-payload.md`): the test board of the Python suite
 (`tests/python/support/kicad_board.py`, in the format KiCad 11's headless API saves) as
 `cad.engine.formats.kicad.plot.build_plot` writes it, so the tests need neither KiCad nor a board. One
-40 x 30 mm sheet on `#001023` on an A4 page (its drawing sheet's frame and title block on `sheet`, the
-board's area on `area`), its layers bottom to top as KiCad draws them, and its `board` index:
+40 x 30 mm sheet on `#001023` (the board's area on `area`), its layers bottom to top as KiCad draws them, and its `board` index:
 
 - `J1`, a 1x02 pin header at (5, 15): through-hole pads `1` (VBUS, at (5, 15)) and `2` (GND,
   at (5, 17.54)), on both coppers, with their holes on `drills` and their numbers and nets on `names`;

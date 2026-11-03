@@ -272,12 +272,13 @@ def _mid_uv(face: Any) -> tuple[float, float]:
     return (umin + umax) / 2.0, (vmin + vmax) / 2.0
 
 
-def point_normal(face: Any, u: float, v: float) -> tuple[np.ndarray, np.ndarray]:
-    """The point at ``(u, v)`` of ``face`` and its outward unit normal (the face's orientation applied)."""
+def point_normal(face: Any, u: float, v: float, props: Any = None) -> tuple[np.ndarray, np.ndarray]:
+    """The point at ``(u, v)`` of ``face`` and its outward unit normal (the face's orientation applied).
+    ``props``: the face's ``BRepGProp_Face``, made once by a caller that asks many points of one face."""
     from OCP.BRepGProp import BRepGProp_Face
     from OCP.gp import gp_Pnt, gp_Vec
 
-    props = BRepGProp_Face(face.wrapped)
+    props = props if props is not None else BRepGProp_Face(face.wrapped)
     point, normal = gp_Pnt(), gp_Vec()
     props.Normal(u, v, point, normal)
     length = normal.Magnitude()
@@ -347,16 +348,25 @@ class Edge:
     tangent: tuple[float, float, float]
 
 
-def _in_face_orientation(face: Any, edge: Any) -> Any:
+def _orientations(face: Any) -> list[tuple[Any, Any]]:
+    """The edges of a face as it bounds them, each with its orientation in the face."""
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp_Explorer
 
+    found = []
     explorer = TopExp_Explorer(face.wrapped, TopAbs_EDGE)
     while explorer.More():
         current = explorer.Current()
-        if current.IsSame(edge.wrapped):
-            return current.Orientation()
+        found.append((current, current.Orientation()))
         explorer.Next()
+    return found
+
+
+def _in_face_orientation(face: Any, edge: Any, walked: list[tuple[Any, Any]] | None = None) -> Any:
+    """The orientation of ``edge`` in ``face`` (``walked``: the face's ``_orientations``, made once)."""
+    for current, orientation in walked if walked is not None else _orientations(face):
+        if current.IsSame(edge.wrapped):
+            return orientation
     return None
 
 
@@ -391,8 +401,11 @@ def edges(part: Part) -> list[Edge]:
     ancestry = TopTools_IndexedDataMapOfShapeListOfShape()
     TopExp.MapShapesAndAncestors_s(part.shape.wrapped, TopAbs_EDGE, TopAbs_FACE, ancestry)
     found: list[Edge] = []
+    walked: dict[int, list[tuple[Any, Any]]] = {}  # each face's edges walked once, not once an edge
     for index in range(1, ancestry.Extent() + 1):
-        owners = list(ancestry.FindFromIndex(index))
+        listed = ancestry.FindFromIndex(index)  # iterating an OCCT list from Python costs milliseconds an item
+        owners = ([] if listed.Size() == 0 else [listed.First()] if listed.Size() == 1
+                  else [listed.First(), listed.Last()] if listed.Size() == 2 else list(listed))
         distinct: list[Any] = []
         for owner in owners:
             if not any(owner.IsSame(other) for other in distinct):
@@ -408,7 +421,10 @@ def edges(part: Part) -> list[Edge]:
             na, nb = _normal_on(a, edge, t), _normal_on(b, edge, t)
         except Exception:  # noqa: BLE001 - a degenerate edge has no angle to give
             continue
-        orientation = _in_face_orientation(a, edge)
+        key = part.face_ordinal(a)
+        if key not in walked:
+            walked[key] = _orientations(a)
+        orientation = _in_face_orientation(a, edge, walked[key])
         along = -tangent if orientation == TopAbs_REVERSED else tangent
         into_a = np.cross(na, along)  # the material of a face lies to the left of its edges, seen from outside
         between = math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))
@@ -425,38 +441,106 @@ def edges(part: Part) -> list[Edge]:
 
 
 class Rays:
-    """Exact rays against a shape (``IntCurvesFace_ShapeIntersector``): the first face a ray hits, every
-    crossing of a line, the wall under a point."""
+    """Exact rays against a shape: the first face a ray hits, every crossing of a line, the wall under a
+    point. Each face the ray's line could cross, by its bounding box (a slab test over every box at once),
+    is intersected exactly (``IntCurvesFace_Intersector``), nearest box first, until no nearer crossing can
+    follow -- a ray costs the faces near it, not the shape's every face. A crossing is its distance and the
+    ``TopoDS_Face`` crossed; ``ordinal`` is that face's in the shape (``TopExp.MapShapes``' order)."""
 
-    def __init__(self, shape: Any, tolerance: float = 1e-6) -> None:
-        from OCP.IntCurvesFace import IntCurvesFace_ShapeIntersector
+    def __init__(self, shape: Any, tolerance: float = 1e-7) -> None:
+        from OCP.Bnd import Bnd_Box
+        from OCP.BRepBndLib import BRepBndLib
+        from OCP.collections import IndexedMap_TopoDS_Shape_TopTools_ShapeMapHasher as FaceMap
+        from OCP.TopAbs import TopAbs_FACE
+        from OCP.TopExp import TopExp
+        from OCP.TopoDS import TopoDS
 
         self.shape = shape
-        self._intersector = IntCurvesFace_ShapeIntersector()
-        self._intersector.Load(shape.wrapped, tolerance)
+        self._tolerance = tolerance
+        faces = FaceMap()
+        TopExp.MapShapes_s(shape.wrapped, TopAbs_FACE, faces)
+        self.faces = [TopoDS.Face(faces.FindKey(index)) for index in range(1, faces.Extent() + 1)]
+        whole = Bnd_Box()
+        BRepBndLib.Add_s(shape.wrapped, whole, False)
+        size = float(np.sqrt(whole.SquareExtent())) if not whole.IsVoid() else 1.0
+        self.boxes = np.zeros((len(self.faces), 6))
+        for index, face in enumerate(self.faces):
+            box = Bnd_Box()
+            BRepBndLib.Add_s(face, box, False)
+            box.Enlarge(1e-4 * size + 1e-6)
+            low, high = box.CornerMin(), box.CornerMax()
+            self.boxes[index] = (low.X(), low.Y(), low.Z(), high.X(), high.Y(), high.Z())
+        self._intersectors: dict[int, Any] = {}
+
+    def _candidates(self, o: np.ndarray, d: np.ndarray, start: float, end: float) -> tuple[np.ndarray, np.ndarray]:
+        """The faces whose boxes the ray meets between ``start`` and ``end``, nearest first, and where it
+        enters each."""
+        lows, highs = self.boxes[:, :3], self.boxes[:, 3:]
+        flat = np.abs(d) <= 1e-300
+        with np.errstate(divide="ignore", invalid="ignore"):
+            inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d))
+            t1, t2 = (lows - o) * inverse, (highs - o) * inverse
+        lo = np.where(flat, -np.inf, np.minimum(t1, t2))
+        hi = np.where(flat, np.inf, np.maximum(t1, t2))
+        across = np.all(~flat | ((lows <= o) & (o <= highs)), axis=1)
+        enter, leave = lo.max(axis=1), hi.min(axis=1)
+        mask = across & (enter <= leave) & (leave >= start) & (enter <= end)
+        index = np.flatnonzero(mask)
+        entries = np.maximum(enter[index], start)
+        order = np.argsort(entries)
+        return index[order], entries[order]
+
+    def _intersector(self, index: int) -> Any:
+        found = self._intersectors.get(index)
+        if found is None:
+            from OCP.IntCurvesFace import IntCurvesFace_Intersector
+
+            found = self._intersectors[index] = IntCurvesFace_Intersector(self.faces[index], self._tolerance)
+        return found
+
+    def _crossings(self, origin: Iterable[float], direction: Iterable[float], start: float, end: float,
+                   nearest: bool) -> list[tuple[float, int]]:
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+        o = np.asarray(list(origin), dtype=float)
+        d = np.asarray(list(direction), dtype=float)
+        d = d / (np.linalg.norm(d) or 1.0)
+        candidates, entries = self._candidates(o, d, start, end)
+        if not len(candidates):
+            return []
+        line = gp_Lin(gp_Pnt(*o), gp_Dir(*d))
+        found: list[tuple[float, int]] = []
+        for index, entry in zip(candidates, entries):
+            if nearest and found and entry > found[0][0]:
+                break
+            intersector = self._intersector(int(index))
+            intersector.Perform(line, start, found[0][0] if nearest and found else end)
+            if not intersector.IsDone():
+                continue
+            for k in range(1, intersector.NbPnt() + 1):
+                w = float(intersector.WParameter(k))
+                if start <= w <= end:
+                    found.append((w, int(index)))
+            if nearest and found:
+                found = [min(found)]
+        found.sort()
+        return found
 
     def hits(self, origin: Iterable[float], direction: Iterable[float], start: float = 0.0,
              end: float = 1e9) -> list[tuple[float, Any]]:
         """Every crossing of the ray from ``origin`` along ``direction`` between ``start`` and ``end``: its
         distance and the ``TopoDS_Face`` it crosses, nearest first."""
-        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
-
-        o, d = list(origin), list(direction)
-        self._intersector.Perform(gp_Lin(gp_Pnt(*o), gp_Dir(*d)), start, end)
-        if not self._intersector.IsDone():
-            return []
-        found = [(float(self._intersector.WParameter(i)), self._intersector.Face(i))
-                 for i in range(1, self._intersector.NbPnt() + 1)]
-        found.sort(key=lambda hit: hit[0])
-        return found
+        return [(w, self.faces[index]) for w, index in self._crossings(origin, direction, start, end, False)]
 
     def first(self, origin: Iterable[float], direction: Iterable[float], skip: float = 1e-5,
               end: float = 1e9) -> tuple[float, Any] | None:
         """The nearest crossing beyond ``skip``, or None."""
-        for distance, face in self.hits(origin, direction, 0.0, end):
-            if distance > skip:
-                return distance, face
-        return None
+        found = self._crossings(origin, direction, skip, end, True)
+        return (found[0][0], self.faces[found[0][1]]) if found else None
+
+    def ordinal(self, face: Any) -> int:
+        """The ordinal (1-based) of a face a crossing names, 0 for none of this shape's."""
+        return next((index + 1 for index, mine in enumerate(self.faces) if mine.IsSame(face)), 0)
 
     def thickness(self, point: Iterable[float], normal: Iterable[float], skip: float = 1e-5) -> float | None:
         """The wall under ``point`` of a face whose outward normal there is ``normal``: the distance, into the
@@ -470,7 +554,7 @@ class Rays:
         """The stretches of the whole line through ``origin`` along ``direction`` that lie in the material,
         from its crossings taken in pairs (a closed solid's), as distances from ``origin``."""
         crossings: list[float] = []
-        for distance, _ in self.hits(origin, direction, -1e9, 1e9):
+        for distance, _ in self._crossings(origin, direction, -1e9, 1e9, False):
             if not crossings or distance - crossings[-1] > tolerance:
                 crossings.append(distance)
         return [(crossings[i], crossings[i + 1]) for i in range(0, len(crossings) - 1, 2)]
@@ -514,7 +598,7 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     from OCP.TopLoc import TopLoc_Location
 
     if deflection is None:
-        box = face.bounding_box()
+        box = face.bounding_box(optimal=False)
         deflection = max(1e-3, 0.02 * max(box.size.X, box.size.Y, box.size.Z))
     _triangulated(face, deflection)
     location = TopLoc_Location()
@@ -532,6 +616,9 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     if total <= 0.0:
         return []
     target = total / max(1, count)
+    from OCP.BRepGProp import BRepGProp_Face
+
+    props = BRepGProp_Face(face.wrapped)
     found: list[Sample] = []
     for (a, b, c), area in zip(corners, areas):
         if area <= 0.0:
@@ -547,7 +634,7 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
                     wc = 1.0 - wa - wb
                     if uvs is not None:
                         u, v = wa * uvs[a] + wb * uvs[b] + wc * uvs[c]
-                        point, normal = point_normal(face, float(u), float(v))
+                        point, normal = point_normal(face, float(u), float(v), props)
                     else:
                         point = wa * nodes[a] + wb * nodes[b] + wc * nodes[c]
                         normal = np.cross(nodes[b] - nodes[a], nodes[c] - nodes[a])

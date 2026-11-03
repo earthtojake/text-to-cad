@@ -14,7 +14,8 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
   mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
-  appearance}``.
+  active, dim, zones, tracks, appearance}`` (the active layer drawn on top, Dim fading the rest,
+  the zones' and tracks' opacities from 0 to 1).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
