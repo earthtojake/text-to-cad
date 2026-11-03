@@ -34,7 +34,7 @@ TYPES = {
     "sdf": ("snapshot", "check"),
     "kicad_pcb": ("export", "snapshot", "inspect", "check"),
 }
-COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "requirement", "doctor", "setup", "update", "uninstall", "plugin",
+COMMANDS = ("serve", "status", "stop", "delete", "server", "run", "requirement", "doctor", "setup", "update", "update auto", "uninstall", "plugin",
             "viewer", "telemetry")
 
 

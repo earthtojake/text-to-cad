@@ -47,7 +47,8 @@ checksum. It:
    kernel (OCP, build123d and what they need, about 220 MB the first time), is made on
    first need -- the first model, or the first view that needs the kernel -- in
    text-to-cad's cache folder ([What a model runs in](#what-a-model-runs-in)). An update
-   makes none either.
+   you run makes none either; an automatic update makes its release's before it restarts
+   the server on it, so your next model doesn't wait for one.
 8. Writes the plugin, this release's, into a folder of text-to-cad's state folder
    (`plugin`), and points each app at that folder with the app's own commands
    ([What each app gets](#what-each-app-gets)), removing duplicate copies, among them

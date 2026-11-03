@@ -35,7 +35,8 @@ current installation's
 5. **build123d.** The environment the engine's own kernel processes start from, ``cad[build123d]`` at
    this release (``cad_server._internal.base``), is said in the plan and never made here: it is made on
    first need (the first build, or a view or operation that needs the kernel), from uv's cache where it
-   holds it. Nothing is installed at setup, nor after an update.
+   holds it. Nothing is installed at setup, nor after an update the person asks for; an automatic update's
+   first half (``PREPARE_ENV``, below) is the one run that makes it, before the engine switches by itself.
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
    (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
    a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one

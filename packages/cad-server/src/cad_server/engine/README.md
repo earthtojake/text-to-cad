@@ -577,7 +577,9 @@ which the distribution makes as `places.KERNEL`): a model's worker but one in it
 the documents worker, the standby, the render processes, and the meshing and reading pools, whose spawned
 processes start on the base's own import path, which the marker records (`serve._spawn_in`). **The base is
 made on first need**, never ahead of it: nothing makes it at install time (`cad setup`, `cad doctor` and an
-update leave it alone), and the engine starts and serves with none made -- pages, the home, documents
+update the person asks for leave it alone; an automatic update makes its release's before it switches, so the
+first build after a switch nobody asked for waits on nothing: **An automatic update never
+interrupts**, under **Architecture**), and the engine starts and serves with none made -- pages, the home, documents
 held in the cache, `status`. The first thing that needs it makes it: a `cad run` of a script whose
 environment it is, or the start of one of the engine's kernel processes -- a build's worker, or a view or
 an operation that opens or draws a STEP or an xbf, or meshes one (`places.kernel`, `base.kernel`) --, by

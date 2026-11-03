@@ -101,6 +101,8 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
         if len(argv) > 1 and (argv[0], argv[1]) in OPERATIONS:
             return f"{argv[0]} {argv[1]}", argv[2:]
         return None
+    if " ".join(argv[:2]) in _COMMANDS:  # a two-word command (``update auto``) before its first word
+        return " ".join(argv[:2]), argv[2:]
     if argv[:1] and argv[0] in _COMMANDS:
         return argv[0], argv[1:]
     return None
@@ -108,7 +110,7 @@ def resolve(argv: list[str]) -> tuple[str, list[str]] | None:
 
 def build_parser_for(name: str):
     """The parser a resolved command (``resolve``) parses with, or None for one that builds its own."""
-    if " " in name:
+    if name not in _COMMANDS:  # a document type's operation (``xbf export``)
         from cad_server.cli.document_types import build_parser
 
         document_type, operation = name.split(" ", 1)
@@ -201,6 +203,8 @@ def _main(argv: list[str] | None) -> int:
         return 0
 
     command, rest = argv[0], argv[1:]
+    if " ".join(argv[:2]) in _COMMANDS:  # a two-word command (``update auto``) before its first word
+        command, rest = " ".join(argv[:2]), argv[2:]
     if command in TYPE_COMMANDS:
         entry: tuple[str, str] | None = (TYPE_COMMANDS[command], "")
     else:
