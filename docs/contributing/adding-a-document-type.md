@@ -113,10 +113,11 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    type's, not the integration's.
 2. **The integration's entry** (`INTEGRATIONS["kicad"]`): process kind `separate`, the probe
    `kicad-cli` with the minimum version our exports need and the install hint said when it is missing,
-   and `CAD_KICAD_CLI` as the variable that names it outright. Its extra, `cad[kicad]`, is KiCad's IPC
-   API client, `kicad-python==0.8.0` (kipy, MIT): what a board script is handed its board through.
-   `kicad-cli` itself is never a dependency yet: it is the person's KiCad, found by the probe; a
-   packaged `kicad-cli` (and a kipy pin matched to it, on our own package index) is a later change.
+   and `CAD_KICAD_CLI` as the variable that names it outright. Its extra, `cad[kicad]`, is kicode
+   (`kicode==10.99.0.dev20261031`, GPL-3.0-or-later as KiCad is, run as a program and imported as KiPy's
+   MIT client): KiCad's headless `kicad-cli` and its IPC API client, KiPy (as `kicode`), one nightly's
+   build of both. The person's own KiCad is never run; the `cad` command installs the extra's
+   environment the first time a board command needs it, as it does the `trimesh` integration's.
 3. **The type's entry** (`DOCUMENT_TYPES["kicad_pcb"]`): `.kicad_pcb`, viewed as a `plot`, its content
    (the board's layers, footprints and pads, nets, tracks, vias and zones, its outline), and its
    operations: `snapshot` and `inspect` our own code's, `check` and `export` the `kicad` integration's.
@@ -124,30 +125,31 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    persistent board script (step 6).
 4. **The type's package**, `cad/kicad_pcb/`: `read_board(path)` and `inside(...)`, which take paths and
    our own board objects, so they are the type's (the signature rule); `snapshot` and `inspect`, the
-   library's board renderer and summary. `check` and `export` run `kicad-cli`, which the server runs,
-   not a model's process: as functions they raise, naming the command (`cad kicad_pcb check`), since
-   making them work in Python needs an operation of the engine's, which is open. Calling `kicad_pcb`
+   library's board renderer and summary. `check` and `export` hand the board to the `kicad`
+   integration (`cad.kicad._check`, `cad.kicad._export`), imported when they run, and work wherever
+   kicode is installed; the command runs them in the environment of `cad[kicad]`. Calling `kicad_pcb`
    as a decorator hands the function to the `kicad` integration (`cad/kicad/`), so the type's package
    still imports no third-party library.
 5. **The commands**: `cad kicad_pcb check BOARD` (KiCad's DRC: it fails on errors or unconnected items,
    says the warnings, and answers `kicad_failed` when KiCad refuses the board), `cad kicad_pcb export
-   BOARD --to gerbers|drill|pos|step -o DIR`, `cad kicad_pcb snapshot` and `cad kicad_pcb inspect`
+   BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`, `cad kicad_pcb snapshot` and
+   `cad kicad_pcb inspect`
    (its parts, nets and layers).
 6. **The external program and the board script**: the library's one helper for programs our code
    runs (`packages/cad/src/cad/_internal/programs.py`, the standard library alone, so the library's
-   decorator and the server's commands share it) finds `kicad-cli` by its override, then `PATH`, then
-   the places KiCad installs it, checks the minimum version, runs it headless with a private home, and
+   decorator and the server's commands share it) finds `kicad-cli` by its override, then the package
+   that carries it (`kicode.executable()`; never `PATH` or KiCad's installation folders), checks the
+   minimum version, runs it headless with a private home (`kicode.environment(root)` for kicode's), and
    says one line when it is missing. Every rule that keeps a desktop app out holds and is tested: only
    `kicad-cli` (`kicad-cli.exe`) is ever run, an override of any other name is refused, no
    `DISPLAY` or `WAYLAND_DISPLAY` reaches it, and Open in refuses a `.kicad_*` file. A board script
    runs `kicad-cli api-server --socket <path> <board>` the same way (`--socket` takes a plain path;
-   kipy connects to its `ipc://` form) once `kicad-cli api-server --help` says it has one (a nightly's,
-   10.99, for now: a stable `kicad-cli` is refused before any server starts), waits until kipy's ping
+   KiPy connects to its `ipc://` form; kicode's always has one, and an override's `kicad-cli api-server
+   --help` must list it, else it is refused before any server starts), waits until KiPy's ping
    answers (never for a file: on Windows the address is a named pipe), hands the function the open board, saves it when the function
-   returns and saves nothing when it raises, then stops the server and removes its folder. kipy's
-   `check_version()` is never called: the PyPI 0.8.0 client targets KiCad 10.0.6 and calls the nightly
-   (10.99) a future version, while it reads and edits the nightly's boards (the matching client is
-   kicad-python's git main, not on PyPI). A `@step` stacked on the script is the integration's second
+   returns and saves nothing when it raises, then stops the server and removes its folder. KiPy's
+   `check_version()` is never called. Upstream `kipy` is never imported: it and kicode register the same
+   protobuf files and cannot share a process. A `@step` stacked on the script is the integration's second
    producer: the saved board's STEP, by `kicad-cli pcb export step --subst-models`. Which producer a
    decorator uses is the registry's (`declarer_for`), by what it decorates:
 
@@ -156,12 +158,12 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
 
    @step("STEP/board.step")
    @kicad_pcb("board.kicad_pcb")
-   def board(b):                 # kipy's open Board; the file is the source
+   def board(b):                 # KiPy's open Board (kicode's); the file is the source
        ...
    ```
 7. **The viewer**: the board renderer (`packages/ui/src/renderers/board/`), the plot payload the
    server resolves (`cad_server/viewer/plots.py`), its icon, and the `plot` route of its kind.
 8. **Tests and CI**: board fixtures written by the tests, the commands' refusals, the parity of the
    board-reference grammar between Python and JavaScript, the board script's lifecycle with the server
-   and kipy stood in for, and a CI job that installs the KiCad nightly and the `kicad` extra and runs the
-   real round trip, its cost stated in the pull request (about 67 s).
+   and KiPy stood in for, and a CI job that makes the environment of `cad[kicad]` as the server does and
+   runs the real round trip and every export in it, its cost stated in the pull request.

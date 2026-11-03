@@ -10,6 +10,14 @@ end), and one nobody fetches within ``ARTIFACT_SECONDS`` (ten minutes) is delete
 way its job is ``expired`` (``fetched`` says which), and the page offers to export it again. A
 job's record lives as long as the engine that ran it -- the page session -- bounded by the
 history, never by a day.
+
+A KiCad board's exports (``BOARD``) are KiCad's: the job runs ``cad.kicad_pcb.export`` in the environment
+of ``cad[kicad]`` (kicode's kicad-cli, ``cad_server._internal.integration_env``, made on first need), on the
+job's own thread, never a request's, from the board's bytes the page shows (the catalog's hash of them,
+checked before and, by ``mtime_ns-size``, after). One file is downloaded as it is; a folder of files (the
+Gerbers, the drill files, the PDF's two pages) as one ``.zip``. A download of the board's key is kept
+(``boards.KEPT``: every kind but those reading files outside the key -- 3D models, schematic sheets) and
+answered again for the same bytes without KiCad.
 """
 from __future__ import annotations
 
@@ -24,6 +32,19 @@ import time
 from pathlib import Path
 
 FORMATS = {"step": ".step", "glb": ".glb", "stl": ".stl", "threemf": ".3mf", "dxf": ".dxf", "xbf": ".xbf", "original": ".xbf"}
+# A KiCad board's (``cad.kicad._export.EXPORTS``), by the end of the download's name after the board's stem.
+BOARD = {"gerbers": "-gerbers.zip", "drill": "-drill.zip", "pos": "-pos.csv", "bom": "-bom.csv", "step": ".step",
+         "glb": ".glb", "odb": "-odb.zip", "ipc2581": "-ipc2581.xml", "pdf": "-pdf.zip", "dxf": "-outline.dxf"}
+BOARD_SUFFIX = ".kicad_pcb"
+
+
+def is_board(spec) -> bool:
+    return str(spec.get("doc") or "").lower().endswith(BOARD_SUFFIX)
+
+
+def ending(spec, kind) -> str:
+    """The end of the download's name: a board's (``BOARD``) or any other document's (``FORMATS``)."""
+    return BOARD[kind] if is_board(spec) else FORMATS[kind]
 from cad_server.jobs import Jobs, JobError as ExportError, STATUS_SECONDS, TERMINAL
 
 ARTIFACT_SECONDS = 600
@@ -38,6 +59,22 @@ def specification(payload):
     if not all(isinstance(payload.get(k), str) and payload[k] for k in ("doc", "revision")):
         raise ExportError("Export requires the displayed document and revision.")
     return {"doc": payload["doc"], "revision": payload["revision"]}
+
+
+def pack(written, folder, target):
+    """The files an export wrote into ``folder``: one moved to ``target``, several zipped into it (by their
+    paths inside ``folder``)."""
+    import zipfile
+
+    if not written:
+        raise ExportError("KiCad wrote no file.")
+    if len(written) == 1 and not target.name.endswith(".zip"):
+        shutil.move(str(written[0]), str(target))
+        return
+    folder = Path(folder).resolve()  # as the export names what it wrote: /private/var, not /var, on macOS
+    with zipfile.ZipFile(target, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(Path(path).resolve() for path in written):
+            archive.write(path, path.relative_to(folder).as_posix())
 
 
 class ExportJobs(Jobs):
@@ -99,7 +136,7 @@ class ExportJobs(Jobs):
             raise ExportError("This host does not serve exportable documents.")
         from cad.engine.export import MESHES
 
-        if Path(spec["doc"]).suffix.lower() in MESHES:
+        if Path(spec["doc"]).suffix.lower() in MESHES or is_board(spec):
             return self._mesh_source(spec)
         with self.server.load_lock:
             doc = self.server.served.get(spec["doc"])
@@ -120,8 +157,8 @@ class ExportJobs(Jobs):
 
     @staticmethod
     def _mesh_source(spec):
-        """A mesh file the page shows (``doc`` its absolute path, ``revision`` the catalog's hash of
-        the bytes on screen), exported to the other mesh kinds from the file as it is now: refused
+        """A mesh file or a KiCad board the page shows (``doc`` its absolute path, ``revision`` the catalog's
+        hash of the bytes on screen), exported from the file as it is now: refused
         when its bytes are not the ones shown, and by the worker when it changes after this check
         (``{"version": "<mtime_ns>-<size>"}``, ``export/viewer.check``)."""
         from cad_server.viewer.scanner import _file_stats, _sha256_file, is_served_cad_asset
@@ -133,6 +170,8 @@ class ExportJobs(Jobs):
         return {"path": str(path)}, {"version": f"{stat.st_mtime_ns}-{stat.st_size}"}, path.stem
 
     def _worker(self, spec, target, progress):
+        if is_board(spec):
+            return self._board(spec, target, progress)
         from cad.engine.client import request
 
         source, expected, _name = self._source(spec)
@@ -142,12 +181,46 @@ class ExportJobs(Jobs):
             raise ExportError((answer or {}).get("failed", "The export worker disconnected."))
         return answer["done"]
 
+    def _board(self, spec, target, progress):
+        """KiCad's ``spec["format"]`` of the board, run where kicode is (``integration_env``), into a folder
+        of its own beside ``target``; then the one file it wrote moved to ``target``, or every file it wrote
+        zipped into it. A board whose bytes changed while KiCad read it is refused."""
+        from cad.engine.formats.kicad.poured import key
+        from cad_server._internal import boards, integration_env
+
+        source, expected, _name = self._source(spec)
+        board = Path(source["path"])
+        # An export of these bytes made before is the same file (``boards.KEPT``): answered without KiCad.
+        board_key = key(board)
+        kept = boards.exported(board_key, spec["format"], target.name)
+        if kept is not None:
+            shutil.copyfile(kept, target)
+            return {"written": [str(target)], "warnings": [], "kept": True}
+        progress({"kind": "export", "stage": "Preparing KiCad"})
+        python = integration_env.environment("kicad", lambda line: None, engine=False)
+        out = target.parent / "kicad"
+        progress({"kind": "export", "stage": "Running KiCad"})
+        try:
+            found = integration_env.call(python, "kicad_pcb", "export", [str(board), spec["format"], str(out)], {})
+        except integration_env.Failed as error:
+            raise ExportError(str(error)) from None
+        stat = board.stat()
+        if f"{stat.st_mtime_ns}-{stat.st_size}" != expected["version"]:
+            raise ExportError("The source changed. Open Export again to use the displayed revision.", 409)
+        written = [Path(path) for path in found.get("written") or ()]
+        pack(written, out, target)
+        shutil.rmtree(out, ignore_errors=True)
+        if key(board) == board_key:
+            boards.keep_export(board_key, spec["format"], target)
+        return {"written": [str(target)], "warnings": list(found.get("warnings") or ())}
+
     def create(self, payload):
         if not isinstance(payload, dict) or set(payload) != {"requestId", "epoch", "source", "format"}:
             raise ExportError("Export requires requestId, epoch, source and format.")
         spec = specification(payload["source"])
         kind, request_id = payload["format"], payload["requestId"]
-        if not isinstance(kind, str) or kind not in FORMATS or not isinstance(request_id, str) or not re.fullmatch(r"[\w-]{16,100}", request_id):
+        kinds = BOARD if is_board(spec) else FORMATS
+        if not isinstance(kind, str) or kind not in kinds or not isinstance(request_id, str) or not re.fullmatch(r"[\w-]{16,100}", request_id):
             raise ExportError("Invalid export format or request identity.")
         if payload["epoch"] != self.epoch:
             raise ExportError("The export session restarted. Open Export again.", 409)
@@ -167,12 +240,12 @@ class ExportJobs(Jobs):
             self._start()
             spec["format"] = kind
             return self._submit(request_id, normalized, spec=spec, expiresAt=0, readers=0,
-                                directory=None, filename="export" + FORMATS[kind])
+                                directory=None, filename="export" + ending(spec, kind))
 
     def _perform(self, job, progress):
         _source, _expected, name = self._source(job["spec"])
         stem = (re.sub(r"[^\w .-]", "_", name)[:100].strip(" .") or "export")
-        filename = stem + FORMATS[job["spec"]["format"]]
+        filename = stem + ending(job["spec"], job["spec"]["format"])
         directory = Path(tempfile.mkdtemp(prefix="cad-download-", dir=self.root))
         with self.changed:
             job["directory"] = directory

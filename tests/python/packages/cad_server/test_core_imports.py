@@ -146,7 +146,7 @@ class SidesTest(unittest.TestCase):
 # Each extra's distributions, as their modules are named (``packages/cad/pyproject.toml``).
 EXTRA_MODULES = {"build123d": {"build123d", "OCP", "bd_materials", "threejs_materials", "matplotlib", "shapely", "ezdxf",
                                "PIL"},
-                 "kicad": {"kipy"},
+                 "kicad": {"kicode"},
                  "trimesh": {"trimesh", "rtree", "scipy"}}
 # The library's required dependencies, as modules, which any of its code may import.
 REQUIRED = {"numpy"}

@@ -21,19 +21,17 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
 explains any other failure.
 
-Viewing, inspecting and taking snapshots need no KiCad installation. DRC (`cad kicad_pcb check`),
-ERC (`cad kicad_sch check`) and the exports (`cad kicad_pcb export`, `cad kicad_sch export`) run a user-installed
-[KiCad 9 or newer](https://www.kicad.org/download/)'s `kicad-cli`; a `@kicad_pcb` board script
-needs a KiCad nightly's (10.99), the only one with the headless `api-server` for now, and is
-refused before it starts without one.
-`CAD_KICAD_CLI` can name its `kicad-cli` (the command line itself, named `kicad-cli`); otherwise
-`cad kicad_pcb check` uses `kicad-cli` on PATH, then the one inside the usual macOS or Windows installation.
-It runs `kicad-cli` headless, with private settings, and never opens KiCad. For the direct export
-examples below, `kicad-cli` means that same executable; never open a board in KiCad's app to check it.
+Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb check`), ERC (`cad
+kicad_sch check`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and a `@kicad_pcb` board script run KiCad's command line, `kicad-cli`,
+and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
+time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
+board script's environment it. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
+another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for a
+board script). It runs headless, with private settings, and never opens KiCad's app; never open a
+board in KiCad's app to check it.
 
-Native boards here use KiCad's nightly format, so they open only in a nightly KiCad app, and DRC and
-exports need a nightly `kicad-cli` for now. A stable KiCad refuses a board saved by the nightly (DRC
-then reports `kicad_failed`); viewing and snapshots still work.
+kicode's KiCad is a nightly (10.99), so a board it saves is in the nightly's format, which a stable
+KiCad app refuses; viewing and snapshots still work.
 
 ## Native files are the source
 
@@ -44,12 +42,13 @@ but reread the current file before editing and preserve unknown records and UUID
 an existing project from an incomplete description.
 
 A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` hands the function
-the open board (kipy's `Board`), saves it when the function returns and saves nothing when it raises.
-It needs a KiCad nightly's `kicad-cli` (10.99: its headless `api-server`, which `kicad-cli api-server
---help` lists; a stable `kicad-cli` is refused up front, before any server starts) and the `kicad`
-extra (`cad[kicad]`, kipy) in the environment the script runs in. Saving writes the board in the
-nightly's format: a board from an older KiCad is upgraded, which the run says, and that older KiCad
-can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
+the open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`), saves it when the function
+returns and saves nothing when it raises. Run it with `cad run board.py`, which gives it the `kicad`
+extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a `kicad-cli` that
+`CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import KiPy's names
+from `kicode` (`from kicode.proto.common.types import KIID`), never from `kipy`: the two cannot share a
+process. Saving writes the board in the nightly's format: a board from an older KiCad is upgraded,
+which the run says, and that older KiCad can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
 step --subst-models`); parts whose 3D model is missing or only in VRML have no body in it, which the run
 names:
 
@@ -85,7 +84,7 @@ connector mating side; a plausible-looking layout does not establish electrical 
 2. Edit the native files, or the board in a board script. Keep net assignments, layer stack, track
    widths, clearances and custom rules consistent with the chosen fab and electrical requirements.
    Refill changed copper zones with KiCad (`b.refill_zones()` in a board script) before relying on
-   their saved fill; the viewer displays the fill stored in the file.
+   their saved fill.
 
 ## Check each change
 

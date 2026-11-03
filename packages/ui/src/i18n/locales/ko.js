@@ -124,6 +124,8 @@ export default {
   "export.preparing": "{name} 준비 중…",
   "export.dismiss": "내보내기 상태 숨기기",
   "export.failed": "내보내기 실패",
+  "export.format.drill": "드릴",
+  "export.format.position": "부품 배치",
 
   "app.start.notAnswering": "CAD 뷰어가 응답하지 않습니다",
   "app.engine.notRunning": "CAD가 실행 중이 아닙니다.",

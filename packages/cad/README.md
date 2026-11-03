@@ -525,15 +525,16 @@ src/cad/
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read_board, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
-                         #   still engine/render/board.py); check and export are the server's;
-                         #   @kicad_pcb is the kicad integration's board script
+                         #   still engine/render/board.py); check and export, the kicad
+                         #   integration's; @kicad_pcb is the kicad integration's board script
   kicad_sch/             # a saved KiCad schematic: read_schematic (its hierarchy, its nets and
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
                          #   check (ERC) and export are the server's
-  kicad/                 # the kicad integration: kicad-cli found and run (_program, on
-                         #   _internal/programs), a board script through its headless api-server
-                         #   and kipy (_session), its exports (_export) and producers
+  kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
+                         #   on _internal/programs), a board script through its headless
+                         #   api-server and KiPy (_session), DRC (_check), its exports (_export)
+                         #   and producers
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -580,11 +581,12 @@ board index live under `src/cad/engine/formats/kicad/`, the standard library alo
 and a script run with `cad run` import them without the CAD kernel; the flat renderer is
 `src/cad/engine/render/board.py`, which imports Pillow only when it draws. `cad.kicad_pcb` is
 the document type: `read_board` exposes the inspection index, `inside` the even-odd test a check measures
-with, and `inspect` the board in one look. KiCad owns authoring, DRC (`cad kicad_pcb check`, the
-server's, the `kicad` integration's) and mechanical and fabrication exports (`cad kicad_pcb export
---to gerbers|drill|pos|step -o DIR`); an exported STEP enters the ordinary foreign-file path. As
-functions, `cad.kicad_pcb.check` and `export` say to run those commands: they run `kicad-cli`, which
-the server runs and a model's process never does. No KiCad IPC client is bundled.
+with, and `inspect` the board in one look. KiCad owns authoring, DRC (`cad.kicad_pcb.check`, `cad
+kicad_pcb check`) and the fabrication, assembly and 3D exports (`cad.kicad_pcb.export(board, to, out)`,
+`cad kicad_pcb export --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`), the `kicad`
+integration's, run by kicode's `kicad-cli` (`cad[kicad]`; a person's own KiCad is never run). A script
+run with `cad run` that calls them gets the extra; the command runs them in the extra's environment. An
+exported STEP enters the ordinary foreign-file path.
 
 A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read_schematic` reads the whole
 hierarchy from its project's root sheet (whichever of its sheets it is given): its sheets, symbols and

@@ -70,7 +70,7 @@ class NativeBoardCommands(unittest.TestCase):
         [issue] = result["findings"]
         self.assertEqual(issue["code"], "kicad_missing")
         self.assertIn("CAD_KICAD_CLI names", issue["message"])
-        self.assertIn("kicad.org/download", issue["message"])
+        self.assertIn("cad[kicad]", issue["message"])
 
 
 if __name__ == "__main__":

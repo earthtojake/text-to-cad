@@ -1,22 +1,24 @@
-"""``cad.kicad``: the kicad integration -- our code for KiCad, kicad-cli and its IPC API.
+"""``cad.kicad``: the kicad integration -- our code for KiCad: kicad-cli and its IPC API, both kicode's.
 
-KiCad (``kicad-cli``, a program the person installs) is an integration of kind C, an external program our
-code runs, with a separate process; its extra, ``cad[kicad]``, is the IPC API's Python client, kipy
-(``kicad-python``), which a persistent board script's function is handed a board of. What is here:
+KiCad's command line, ``kicad-cli``, is an external program our code runs (kind C), with a separate
+process; its extra, ``cad[kicad]``, is kicode, which carries that program and KiPy, the IPC API's Python
+client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad is never run. What is here:
 
 * ``_program``: ``kicad-cli`` found and run, by the library's one helper for external programs
-  (``cad._internal.programs``): ``CAD_KICAD_CLI``, refused unless it names a ``kicad-cli``, then PATH,
-  then the usual installation; only ``kicad-cli`` itself is ever run, headless, in private homes.
+  (``cad._internal.programs``): ``CAD_KICAD_CLI``, refused unless it names a ``kicad-cli``, then
+  kicode's; only ``kicad-cli`` itself is ever run, headless, in private homes (``kicode.environment``).
 * ``_session``: what ``@kicad_pcb("board.kicad_pcb")`` runs -- a private ``kicad-cli api-server`` on the
-  board, kipy connected to it, the function handed the open board, the board saved when it returns
+  board, KiPy connected to it, the function handed the open board, the board saved when it returns
   and not when it raises, the server stopped and its folder removed.
-* ``_export``: the board's fabrication outputs by ``kicad-cli pcb export`` (gerbers, drill, pos, step),
-  which the server's ``cad kicad_pcb export`` and the STEP a board script declares are written by.
+* ``_check``: KiCad's design rule check (``cad.kicad_pcb.check``, ``cad kicad_pcb check``).
+* ``_export``: the board's fabrication, assembly and 3D outputs by ``kicad-cli`` (``EXPORTS``: gerbers,
+  drill, pos, bom, step, glb, odb, ipc2581, pdf, dxf), which ``cad.kicad_pcb.export``, the server's ``cad
+  kicad_pcb export`` and the STEP a board script declares are written by.
 * ``_producers``: the producers this integration registers (``cad.registry``): a board script makes a
   ``kicad_pcb``, and the ``step`` stacked on it.
 
 The board readers are the document type's (``cad.kicad_pcb``), our own code for the file format: viewing,
-reading and drawing a board need no KiCad. Importing this package starts nothing and imports no kipy.
+reading and drawing a board need no KiCad. Importing this package starts nothing and imports no kicode.
 """
 
 from __future__ import annotations

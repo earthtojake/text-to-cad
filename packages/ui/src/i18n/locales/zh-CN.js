@@ -125,6 +125,8 @@ export default {
   "export.preparing": "正在准备 {name}…",
   "export.dismiss": "隐藏导出状态",
   "export.failed": "导出失败",
+  "export.format.drill": "钻孔",
+  "export.format.position": "元件位置",
 
   "app.start.notAnswering": "CAD 查看器没有响应",
   "app.engine.notRunning": "CAD 未在运行。",

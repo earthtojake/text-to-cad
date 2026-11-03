@@ -1,11 +1,19 @@
 # The plot payload (schema 4)
 
 `GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad <type> snapshot` draw a KiCad board from
-one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` alone (no KiCad process) and
-drawn by `@cad/core/lib/plot2d` on a 2D canvas. The payload is geometry per layer; what
+one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` and drawn by
+`@cad/core/lib/plot2d` on a 2D canvas. Its pours are KiCad's refill of them, not the fills the file
+saved, which go stale: KiCad refills the zones of a temporary copy of the board (kicode's headless
+api-server, in the environment of `cad[kicad]`) and the plot is drawn from the copy's bytes, under the
+board's own name and project (`cad.engine.formats.kicad.poured`, the one function the page and the
+snapshot share); the person's file is never written. The payload is geometry per layer; what
 colour a layer is drawn in is the renderer's (`plot2d/theme.js`, KiCad's default theme). It is a
-function of the saved board and companion project bytes. Every request rereads them; no
-parsed-board cache is kept. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
+function of the board's, its project's and its rules' bytes (and the plotting code): the engine keeps
+it by a sha256 of them (`poured.key`; in memory, and gzipped under `<cache>/kicad/<key>/`), so a changed
+file is a new key and nothing stale is served. The route answers 202 `{"state": "plotting", "retryMs"}`
+while it is made (the client asks again), `etag: "<key>"` with every 200 and 304 to a request naming it,
+`cache-control: no-store` as every engine answer, and the body zstd- or gzip-coded for a browser that
+accepts it. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
 a mismatch is refused by name on both sides.
 
 The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
@@ -24,7 +32,28 @@ board is the board alone, which the fit frames.
     "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
     "layers": [ { "id": "area", "kind": "area", "side": "both", "items": [ ... ] }, ... ]
   }],
-  "board": { ... }                 // the board's index, in sheet millimetres
+  "board": { ... },                // the board's index, in sheet millimetres
+  "pours": { "refilled": true }    // KiCad refilled them; else { "refilled": false, "warning": "why" }: as saved
+}
+```
+
+## The DRC beside it
+
+`GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, kept by the
+same key and made off the request the same way (202 `{"state": "checking", "retryMs"}` while it runs):
+the `CheckResult` `cad kicad_pcb check --json` prints, as data.
+
+```jsonc
+{
+  "ok": false, "path": "/boards/blinky.kicad_pcb", "summary": "",
+  "findings": [ { "severity": "error", "code": "unconnected_items", "message": "...", "location": "(20, 23.175) mm", "hint": null } ],
+  "measurements": { "drc": [ {
+    "check": "unconnected",          // violation, unconnected or parity
+    "severity": "error", "type": "unconnected_items", "description": "Missing connection between items",
+    "at": [20.0, 23.175],            // the first item's position: millimetres in KiCad's frame, y down
+    "items": [ { "uuid": "...", "description": "Pad 2 [LED] of D1 on F.Cu", "pos": [20.0, 23.175],
+                 "ref": "#D1.2" } ]   // the board reference it names, where the index has one
+  } ] }
 }
 ```
 

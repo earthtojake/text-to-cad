@@ -1,7 +1,7 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
 A 3D type's ``check`` is the trimesh integration's (``cad.registry``): the library measures the mesh
-with trimesh. The command's own environment -- the server's installation -- holds the library without
+with trimesh; a KiCad board's ``check`` and ``export`` are the kicad integration's, run by kicode's kicad-cli. The command's own environment -- the server's installation -- holds the library without
 it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at
 the installation's release, made once by the device's engine outside any sandbox and used again, as
 ``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from uv's cache). Its
@@ -43,14 +43,15 @@ def carries(integration: str) -> bool:
         return False
 
 
-def environment(integration: str, told: Callable[[str], None]) -> str:
+def environment(integration: str, told: Callable[[str], None], *, engine: bool = True) -> str:
     """The Python of the environment that holds ``integration``, made first when it is not complete (by
-    the device's engine when one runs, its lines said to ``told``). ``Failed`` in uv's or the engine's words."""
+    the device's engine when one runs, its lines said to ``told``; here, with ``engine`` false: the engine
+    itself, a viewer export). ``Failed`` in uv's or the engine's words."""
     from cad_server._internal import base, extras
 
     try:
         found = extras.ensure(base.Installation.here(), extras.Spec(integrations=(integration,)), told=told,
-                              engine=True)
+                              engine=engine)
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
     return found.python

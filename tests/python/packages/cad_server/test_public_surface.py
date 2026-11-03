@@ -39,9 +39,9 @@ PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
 MIRRORS: dict[str, tuple[str, str]] = {
     "sdf check": ("cad.sdf", "check"),
     "srdf check": ("cad.srdf", "check"),
-    # KiCad's design rule check of a saved board: the kicad integration's, the server's, since it runs kicad-cli.
-    "kicad_pcb check": ("cad_server.kicad.check", "check"),
-    # KiCad's electrical rules check of a saved schematic: likewise the kicad integration's, the server's.
+    # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
+    "kicad_pcb check": ("cad.kicad_pcb", "check"),
+    # KiCad's electrical rules check of a saved schematic: the kicad integration's kicad-cli, run by the server.
     "kicad_sch check": ("cad_server.kicad.schematic", "check"),
     # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
     **{f"{document_type} check": (f"cad.{document_type}", "check")

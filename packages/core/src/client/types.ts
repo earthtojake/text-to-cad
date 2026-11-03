@@ -308,7 +308,9 @@ export interface CadActivity {
   crash?: CadPageCrash;
 }
 
-export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original';
+/** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
+export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
+  | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf';
 export interface ExportSource { doc: string; revision: string }
 /** One export: `epoch` is the session's (`ExportService.epoch`), `''` until the page has asked it. */
 export interface ExportRequest { requestId: string; epoch: string; source: ExportSource; format: ExportFormat }

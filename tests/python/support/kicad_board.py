@@ -32,7 +32,7 @@ from __future__ import annotations
 import itertools
 from pathlib import Path
 
-__all__ = ["BOARD", "UUIDS", "write_board"]
+__all__ = ["BOARD", "SCHEMATIC", "UUIDS", "write_board", "write_schematic"]
 
 #: The board's own items' uuids, by what they are.
 UUIDS = {
@@ -164,4 +164,44 @@ def write_board(folder: Path, name: str = "blinky") -> Path:
     """Write the board as ``<folder>/<name>.kicad_pcb`` and answer its path."""
     path = Path(folder) / f"{name}.kicad_pcb"
     path.write_text(BOARD, encoding="utf-8")
+    return path
+
+
+# The schematic beside the board, for the BOM: the board's three parts as symbols of one library symbol
+# each, R1 with an LCSC part number. KiCad 9's schematic syntax, which every newer kicad-cli reads.
+_SHEET_UUID = "5c4e0000-0000-4000-8000-000000000000"
+
+
+def _lib_symbol(name: str) -> str:
+    return (f'(symbol "t:{name}" (in_bom yes) (on_board yes)'
+            f' (property "Reference" "{name[0]}" (at 0 0 0) {_HIDDEN})'
+            f' (property "Value" "{name}" (at 0 0 0) {_HIDDEN})'
+            f' (symbol "{name}_1_1" (rectangle (start -1 -1) (end 1 1) (stroke (width 0) (type default)) (fill (type none)))'
+            f' (pin passive line (at -2.54 0 0) (length 1.54) (name "~" {_HIDDEN}) (number "1" {_HIDDEN}))'
+            f' (pin passive line (at 2.54 0 180) (length 1.54) (name "~" {_HIDDEN}) (number "2" {_HIDDEN}))))')
+
+
+def _symbol(lib: str, ref: str, value: str, footprint: str, at: str, index: int, extra: dict[str, str]) -> str:
+    fields = {"Reference": ref, "Value": value, "Footprint": footprint, "Datasheet": "", **extra}
+    props = " ".join(f'(property "{name}" "{text}" (at {at} 0) {_HIDDEN})' for name, text in fields.items())
+    uuid = f"5c4e0000-0000-4000-8000-{index:012d}"
+    return (f'(symbol (lib_id "t:{lib}") (at {at} 0) (unit 1) (exclude_from_sim no) (in_bom yes) (on_board yes)'
+            f' (dnp no) (uuid "{uuid}") {props}'
+            f' (pin "1" (uuid "{uuid[:-3]}a01")) (pin "2" (uuid "{uuid[:-3]}a02"))'
+            f' (instances (project "{{project}}" (path "/{_SHEET_UUID}" (reference "{ref}") (unit 1)))))')
+
+
+SCHEMATIC = ("(kicad_sch (version 20250114) (generator \"eeschema\") (generator_version \"9.0\")"
+             f' (uuid "{_SHEET_UUID}") (paper "A4")'
+             f' (lib_symbols {_lib_symbol("R")} {_lib_symbol("LED")} {_lib_symbol("Conn")})'
+             f' {_symbol("R", "R1", "1k", "Resistor_SMD:R_0603_1608Metric", "50 50", 1, {"LCSC": "C21190"})}'
+             f' {_symbol("LED", "D1", "red", "LED_SMD:LED_0603_1608Metric", "70 50", 2, {})}'
+             f' {_symbol("Conn", "J1", "Conn_01x02", "Connector_PinHeader_2.54mm:PinHeader_1x02_P2.54mm_Vertical", "30 50", 3, {})}'
+             ' (sheet_instances (path "/" (page "1"))) (embedded_fonts no))\n')
+
+
+def write_schematic(folder: Path, name: str = "blinky") -> Path:
+    """The board's schematic, ``<name>.kicad_sch`` in ``folder`` (the BOM's source); its path."""
+    path = Path(folder) / f"{name}.kicad_sch"
+    path.write_text(SCHEMATIC.replace("{project}", name), encoding="utf-8")
     return path
