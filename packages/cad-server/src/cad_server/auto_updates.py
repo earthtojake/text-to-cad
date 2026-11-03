@@ -1,8 +1,15 @@
 """Automatic updates: the person's setting, and the rules the engine keeps when it updates by itself.
 
+**Automatic updates take patch releases only** (``takes``): 0.11.0 to 0.11.1, never 0.11.x to 0.12.0. A
+patch release carries nothing a person or an agent must change for, so it can land under a running
+agent thread unannounced; a minor or major release may (a command renamed, a migration guide), so it
+waits for the person's click -- the update button, ``cad update``, the install command -- as every
+update did before. The release process holds a patch to that (the release check refuses a patch
+release that adds or changes a migration guide).
+
 With automatic updates on -- the default (``DEFAULT``) -- the device's engine reads the version feed
-once an hour (``cad_server/updates.py``) and, when it names a release newer than this one, updates to
-it with no click (``cad_server._internal.update.Update.automatic``): the release is installed and its
+once an hour (``cad_server/updates.py``) and, when it names a patch release newer than this one, updates
+to it with no click (``cad_server._internal.update.Update.automatic``): the release is installed and its
 CAD kernel environment made at once, in the background, and the agent apps' plugins are moved to it
 and the engine switched (``cad_server._internal.switch``) only once nothing has run for a minute
 (``IDLE_SECONDS``): no build, draw, export or agent's call in flight, no switch or other update
@@ -49,6 +56,22 @@ IDLE_SECONDS = 60.0
 # How long before the same release is tried again by itself once an attempt of it did not hold.
 RETRY_SECONDS = 24 * 60 * 60
 _OFF = ("0", "off", "false", "no")
+
+
+def _release(version: Any) -> tuple[int, int, int] | None:
+    """``X.Y.Z`` as numbers, or None for anything else (a development or pre-release version)."""
+    parts = str(version).split(".") if isinstance(version, str) else []
+    if len(parts) != 3 or not all(part.isdigit() for part in parts):
+        return None
+    return int(parts[0]), int(parts[1]), int(parts[2])
+
+
+def takes(version: Any, latest: Any) -> bool:
+    """Whether the engine at ``version`` updates to ``latest`` by itself: a later patch release of the
+    same minor release (``0.11.0`` to ``0.11.3``), never a minor or major one (``0.11.3`` to ``0.12.0``),
+    which waits for a click. Anything that is not a plain ``X.Y.Z`` is never taken."""
+    have, want = _release(version), _release(latest)
+    return have is not None and want is not None and want[:2] == have[:2] and want > have
 
 
 def _environment_off() -> bool:
@@ -224,4 +247,8 @@ def describe(engine: dict[str, Any] | None = None, *, now: float | None = None) 
         last = attempted()
         if last is not None and last.get("error"):
             line += f"; the update to {last['release']} on {_when(last['at'])} failed: {last['error']}"
+    newer = updates.notice()
+    if found["automatic"] and newer is not None and not takes(newer["version"], newer["latest"]):
+        line += (f"; text-to-cad {newer['latest']} is out, a new minor release: automatic updates take "
+                 "patch releases only, so update with the button or `cad update`")
     return line

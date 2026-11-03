@@ -53,8 +53,9 @@ src/cad_server/
   language.py            # the language the person chose for the CAD views
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
-  auto_updates.py        # automatic updates: the person's setting (on by default), the idle and
-                         #   retry rules the engine's own update keeps
+  auto_updates.py        # automatic updates: the person's setting (on by default), patch
+                         #   releases only (takes), the idle and retry rules the engine's own
+                         #   update keeps
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
                          #   cad[build123d], made by uv on first need; extras: the one a
@@ -112,7 +113,8 @@ up or updates text-to-cad in every agent app it finds, each by its own command
 (`_internal/providers.py`), installs its release's folder -- and no environment for models: each is
 made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
 `cad setup`, as the update button does, and `cad update auto on|off` turns automatic updates on or off
-(on by default: the engine installs a newer release in the background and switches to it once idle);
+(on by default: the engine installs a newer patch release in the background and switches to it once
+idle; a minor or major release waits for the update button or `cad update`);
 `cad uninstall` takes text-to-cad out; `cad plugin` writes
 the plugin folder and prints its path; and `cad telemetry` the person's answer. The mechanism is the
 engine README's **CLI** and **Document types and integrations**.

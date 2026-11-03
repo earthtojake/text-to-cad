@@ -64,6 +64,21 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
+# A patch release installs itself on every device with automatic updates on (the server's
+# auto_updates.takes: patch releases only), under agent threads that are running, with no click.
+# So it may carry nothing a person or an agent must change for, and a migration guide is exactly
+# that: a change that needs one is a minor or major release, which waits for the person's click.
+if [ "${version%.*}" = "${base_version%.*}" ]; then
+  migrations="$(git diff --name-only --diff-filter=ACMR "$base" HEAD -- docs/migrations)"
+  if [ -n "$migrations" ]; then
+    echo "VERSION $version is a patch release, which installs itself on every device, but this" >&2
+    echo "pull request adds or changes a migration guide:" >&2
+    echo "$migrations" | sed 's/^/  /' >&2
+    echo "A change people must migrate for is a minor release: scripts/release/bump-version.sh minor." >&2
+    exit 1
+  fi
+fi
+
 # Publish Release starts on a push that changes VERSION, and GitHub matches a push's paths
 # against its first 300 changed files only: a release that changes more might never start it.
 changed="$(git diff --name-only "$base" HEAD | wc -l | tr -d '[:space:]')"

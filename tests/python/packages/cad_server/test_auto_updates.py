@@ -105,6 +105,24 @@ class RetryTest(Fixture):
         self.assertTrue(auto_updates.quiet(100.0, 100.0 + auto_updates.IDLE_SECONDS))
 
 
+class PatchOnlyTest(Fixture):
+    def test_automatic_updates_take_patch_releases_only(self) -> None:
+        self.assertTrue(auto_updates.takes("0.11.0", "0.11.1"))
+        self.assertTrue(auto_updates.takes("0.11.0", "0.11.12"))
+        for version, latest in (("0.11.3", "0.12.0"), ("0.11.3", "1.0.0"), ("1.4.2", "2.0.0"),
+                                ("0.11.1", "0.11.1"), ("0.11.2", "0.11.1"),
+                                ("0.11.0", "0.11.1rc1"), ("0.11.0.dev0", "0.11.1"), (None, "0.11.1")):
+            self.assertFalse(auto_updates.takes(version, latest), (version, latest))
+
+    def test_cad_update_auto_says_a_minor_release_waits_for_a_click(self) -> None:
+        with mock.patch("cad_server.updates.notice", return_value={"latest": "1.2.0", "version": "1.1.0"}):
+            line = auto_updates.describe()
+        self.assertIn("text-to-cad 1.2.0 is out, a new minor release: automatic updates take patch releases only, "
+                      "so update with the button or `cad update`", line)
+        with mock.patch("cad_server.updates.notice", return_value={"latest": "1.1.1", "version": "1.1.0"}):
+            self.assertNotIn("minor release", auto_updates.describe())
+
+
 class Engine:
     """The daemon as an automatic update sees it: its work in flight, when its work last ended, its drain,
     its stop and its server's port."""
@@ -133,7 +151,7 @@ class AutomaticTest(Fixture):
         installations.point("1.1.0")
         self.log = self.root / "setup.log"
         self.command = self.setup_script(0)
-        self.notice = {"latest": "1.2.0", "version": "1.1.0"}
+        self.notice = {"latest": "1.1.1", "version": "1.1.0"}
         for patch in (mock.patch.object(auto_updates, "IDLE_SECONDS", 0.3),
                       mock.patch.object(update, "IDLE_POLL_SECONDS", 0.02),
                       mock.patch("cad_server.updates.notice", side_effect=lambda: self.notice),
@@ -156,7 +174,7 @@ class AutomaticTest(Fixture):
     def setup_script(self, code: int) -> str:
         """A release's ``cad setup --engine-update``: each run's ``PREPARE_ENV`` kept in the log, an apps
         frame on stdout for a whole run, and ``code``."""
-        frame = {"progress": {"kind": "update", "stage": "apps", "job": "1.2.0", "outputs": [], "detail": "",
+        frame = {"progress": {"kind": "update", "stage": "apps", "job": "1.1.1", "outputs": [], "detail": "",
                               "done": 2, "total": 4, "elapsedMs": 0}}
         script = self.root / f"setup-{code}.py"
         script.write_text(
@@ -188,11 +206,11 @@ class AutomaticTest(Fixture):
         return (self.job.status()["automatic"] or {}).get("state") == "waiting"
 
     def test_it_gets_ready_at_once_and_switches_only_once_nothing_has_run_for_a_while(self) -> None:
-        self.assertEqual(self.job.automatic(self.engine), "1.2.0")
+        self.assertEqual(self.job.automatic(self.engine), "1.1.1")
         self.until(self.waiting, "the release installed and its base made")
         self.assertEqual(self.runs(), [[["setup", "--engine-update"], "1"]], "its first half alone: no app changed")
         self.assertEqual(self.job.snapshot()["state"], "idle", "no page shows an update until it switches")
-        self.assertEqual(auto_updates.attempted()["release"], "1.2.0")
+        self.assertEqual(auto_updates.attempted()["release"], "1.1.1")
         self.assertIsNone(self.job.automatic(self.engine), "one at a time")
         # Busy well past the idle window: it waits.
         asked = self.engine.asked
@@ -203,11 +221,11 @@ class AutomaticTest(Fixture):
         self.engine.busy, self.engine.worked = False, time.monotonic()
         self.until(lambda: self.job.snapshot()["state"] == "restarting", "the switch")
         self.assertEqual(self.runs()[1], [["setup", "--engine-update"], ""], "its whole setup: the apps' plugins")
-        self.assertEqual(self.job.snapshot()["target"], "1.2.0")
+        self.assertEqual(self.job.snapshot()["target"], "1.1.1")
         self.assertIsNone(self.job.status()["automatic"])
         (then,) = self.engine.drained
         then()  # drained: its helper starts
-        self.spawned.assert_called_once_with("1.2.0", port=4567, previous="1.1.0")
+        self.spawned.assert_called_once_with("1.1.1", port=4567, previous="1.1.0")
         self.assertIsNone(self.job.automatic(self.engine), "a switch underway")
 
     def test_a_click_while_it_gets_ready_makes_it_the_click_s_at_once(self) -> None:
@@ -215,7 +233,7 @@ class AutomaticTest(Fixture):
         self.until(self.waiting, "ready")
         with mock.patch("cad_server.updates.newest", side_effect=AssertionError("the click joins it: no feed read")):
             started = self.job.start(SimpleNamespace(port=4567, retire=self.engine.drain))
-        self.assertEqual((started["state"], started["target"]), ("working", "1.2.0"))
+        self.assertEqual((started["state"], started["target"]), ("working", "1.1.1"))
         self.until(lambda: self.job.snapshot()["state"] == "restarting", "the switch, though the engine is busy")
         self.assertEqual(len(self.engine.drained), 1, "the drain still waits for what is in flight")
 
@@ -227,21 +245,21 @@ class AutomaticTest(Fixture):
         self.assertEqual(auto_updates.attempted()["error"], "the CAD kernel environment needs the network once")
         self.assertIsNone(self.job.automatic(self.engine), "not again in a loop")
         self.assertEqual(len(self.runs()), 1)
-        self.notice = {"latest": "1.3.0", "version": "1.1.0"}
+        self.notice = {"latest": "1.1.2", "version": "1.1.0"}
         self.command = self.setup_script(0)
-        self.assertEqual(self.job.automatic(self.engine), "1.3.0", "a newer release the feed names: at once")
+        self.assertEqual(self.job.automatic(self.engine), "1.1.2", "a newer release the feed names: at once")
         self.until(self.waiting, "ready")
-        self.assertIn("text-to-cad 1.3.0 installed, switching once idle", auto_updates.describe(self.job.status()))
+        self.assertIn("text-to-cad 1.1.2 installed, switching once idle", auto_updates.describe(self.job.status()))
 
     def test_a_switch_that_failed_is_kept_as_the_automatic_attempt_s_and_nothing_starts_for_a_while(self) -> None:
-        auto_updates.attempt("1.2.0")
-        switch._record({"from": "1.1.0", "to": "1.2.0", "port": 4567, "ok": False, "error": "it exited with code 3"})
+        auto_updates.attempt("1.1.1")
+        switch._record({"from": "1.1.0", "to": "1.1.1", "port": 4567, "ok": False, "error": "it exited with code 3"})
         self.job.recall()
         self.assertEqual(auto_updates.attempted()["error"], "it exited with code 3")
-        self.notice = {"latest": "1.3.0", "version": "1.1.0"}
+        self.notice = {"latest": "1.1.2", "version": "1.1.0"}
         self.assertIsNone(self.job.automatic(self.engine), "a failure recalled: nothing for ten minutes")
         self.job.failed_at -= update.RECALL_SECONDS
-        self.assertEqual(self.job.automatic(self.engine), "1.3.0")
+        self.assertEqual(self.job.automatic(self.engine), "1.1.2")
 
     def test_nothing_starts_when_it_is_off_nothing_is_newer_or_another_update_is_underway(self) -> None:
         from cad_server._internal.file_lock import exclusive
@@ -265,6 +283,14 @@ class AutomaticTest(Fixture):
         self.assertEqual(self.runs(), [])
         self.assertIsNone(auto_updates.attempted(), "nothing was tried")
 
+    def test_a_minor_or_major_release_is_never_started_by_itself(self) -> None:
+        for latest in ("1.2.0", "2.0.0"):
+            self.notice = {"latest": latest, "version": "1.1.0"}
+            self.assertIsNone(self.job.automatic(self.engine), latest)
+        self.assertEqual(self.runs(), [])
+        self.assertIsNone(auto_updates.attempted(), "nothing was tried")
+        self.assertEqual(self.job.status()["automatic"], None)
+
     def test_turned_off_while_it_waits_it_is_given_up_and_goes_on_when_turned_on(self) -> None:
         self.job.automatic(self.engine)
         self.until(self.waiting, "ready")
@@ -272,7 +298,7 @@ class AutomaticTest(Fixture):
         self.until(lambda: self.job.status()["automatic"] is None, "given up")
         self.assertEqual((self.engine.drained, auto_updates.attempted()), ([], None))
         auto_updates.change({"automatic": True})
-        self.assertEqual(self.job.automatic(self.engine), "1.2.0")
+        self.assertEqual(self.job.automatic(self.engine), "1.1.1")
 
 
 class DaemonTest(unittest.TestCase):

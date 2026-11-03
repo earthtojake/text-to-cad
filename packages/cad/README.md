@@ -323,7 +323,8 @@ document types', the integrations' and the CLI's.
     from its cache and the network for what that lacks; one that cannot reach it says so in a line
     and leaves everything as it was. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
-    background and switches only once it has been idle for a minute.
+    background and switches only once it has been idle for a minute. It takes patch releases
+    only; a minor or major release waits for the person's click.
     A command sends nothing itself: what it counted -- an engine verb's build, export or
     snapshot (`_internal/engine_telemetry.py`, the server's observer of the engine), a drawing, a
     crash; a model's own process, where only the library is installed, counts nothing -- is kept

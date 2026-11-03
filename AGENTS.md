@@ -37,6 +37,11 @@ exact version, ask which one. A release pull request comes one of two ways:
   `main`'s and stamps the derived metadata and every pin of the release's own
   (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
+A patch release installs itself on every device (automatic updates take patch releases only), so a
+release that renames, removes or needs a migration guide is a minor one: Version Check refuses a patch
+that adds or changes a migration guide ([CONTRIBUTING.md, "Shipping a
+release"](CONTRIBUTING.md#shipping-a-release)).
+
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
 its Version Check vets the bump (a branch of this repository only, a version past
