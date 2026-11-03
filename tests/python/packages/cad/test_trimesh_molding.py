@@ -504,17 +504,25 @@ class RobustnessTest(unittest.TestCase):
 class CheckTest(unittest.TestCase):
     def test_the_check_measures_every_family_and_passes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="-z")
+            path = _stl(Box(20, 20, 15), Path(td), "box")
+            result = cad.stl.check(path, process="molding", pull="-z")
+            facts = cad.stl.check(path, process="molding", pull="-z", rules="none")
 
-        self.assertTrue(result.ok)
         report = result.measurements
         self.assertFalse(report["partial"])
-        self.assertEqual(sorted(report), ["draft", "mesh", "partial", "process", "projection", "rules", "scale", "source",
-                                         "undercuts"])
-        self.assertNotIn("wall_thickness", report, "thickness is 3D printing's measurement")
+        self.assertEqual(sorted(report), ["bosses", "clamp", "corners", "draft", "envelope", "mesh", "notes", "partial",
+                                         "parting", "process", "projection", "ribs", "rules", "scale", "source",
+                                         "thickness", "undercuts"])
+        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=0.5, msg="a solid block reads its least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
-        # A plain box's four sides have no draft: said, and the check still passes (facts, not verdicts).
-        self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["zero_draft_walls"])
+        # A plain box's four sides have no draft: the fact is said, and the generic rules' 0.5 deg minimum
+        # (Protolabs') fails the check at each side; facts alone (rules none) still pass.
+        self.assertIn("zero_draft_walls", [f.code for f in result.findings if f.severity == "warning"])
+        self.assertFalse(result.ok)
+        self.assertEqual(sum(f.code == "molding.draft_min" for f in result.findings), 4)
+        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"molding.draft_min"})
+        self.assertTrue(facts.ok)
+        self.assertEqual([f.code for f in facts.findings if f.severity == "warning"], ["zero_draft_walls"])
 
     def test_a_bad_pull_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
