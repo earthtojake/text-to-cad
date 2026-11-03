@@ -52,7 +52,7 @@ These words mean one thing each, in the code, the commands and every document.
   Python name. The registry (`cad.registry`) maps file extensions to ids (`.step` and `.stp` are `step`).
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
-  `kicad`),
+  `kicad`, `trimesh`),
   never for a capability. It is three things: one extra, `cad[<name>]`, grouping the dependencies our code
   for it needs; our code for it -- helpers that take its objects, producers and operations; and a process
   kind: in-process, separate process, or both.
@@ -71,8 +71,9 @@ its operations and what writes it.
 makes an edit cost what it changed, documents and their exports, kinematics and configuration sequences,
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
-HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; and
-engineering drawings (`@eng_drawing`).
+HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
+document's manufacturing check (`cad.<type>.check(source, process="molding"|"printing")`, measured with
+trimesh); and engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -527,6 +528,11 @@ src/cad/
   kicad/                 # the kicad integration: kicad-cli found and run (_program, on
                          #   _internal/programs), a board script through its headless api-server
                          #   and kipy (_session), its exports (_export) and producers
+  trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
+                         #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
+                         #   printing (overhangs, walls, support), orientations (ranked) -- each
+                         #   taking a trimesh.Trimesh and answering its report as data (_molding,
+                         #   _printing), and the check every 3D type runs with them (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
@@ -539,7 +545,11 @@ src/cad/
   results.py             # the operations' shared result types: what a `check` returns, typed
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
-  _internal/             # DocumentType (document_type), the earlier spellings (aliases), the
+  _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
+                         #   signature and options, the trimesh integration's measuring imported
+                         #   when it runs (manufacturing), the runner of one operation the server's
+                         #   command hands an environment that holds its integration (operation),
+                         #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
                          #   runner `cad run` starts a program by (program: the program's
                          #   folder last on its path), the lazy kernel (lazy_kernel: `import
@@ -569,3 +579,42 @@ server's, the `kicad` integration's) and mechanical and fabrication exports (`ca
 --to gerbers|drill|pos|step -o DIR`); an exported STEP enters the ordinary foreign-file path. As
 functions, `cad.kicad_pcb.check` and `export` say to run those commands: they run `kicad-cli`, which
 the server runs and a model's process never does. No KiCad IPC client is bundled.
+
+## Manufacturing checks
+
+A 3D document's `check` measures it for a manufacturing process, with the `trimesh` integration
+(`cad[trimesh]`): `cad.stl.check`, `cad.threemf.check`, `cad.glb.check`, `cad.step.check` and
+`cad.xbf.check`, one to one with `cad <type> check --process molding|printing`. The source is a file of
+the type or, for `xbf`, a document the engine holds (its id, or the handle a model's call returns), so a
+check script measures the model it builds:
+
+```python
+from cad import stl, xbf
+from part import part                  # a model
+
+result = xbf.check(part(), process="molding", pull="-z")    # draft, undercuts, projected area
+stl.check("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
+stl.check("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
+result.ok, result.findings, result.measurements["draft"]["min_wall_draft"]
+```
+
+The figures are facts, never verdicts: nothing compares them against a resin's, a printer's or a tool's
+limit. The answer is a `cad.results.CheckResult`: `measurements` every family measured, its findings
+what they show -- warnings (`zero_draft_walls`, `undercut_candidates`, `overhangs`, `units_suspect`,
+`not_watertight`, `several_bodies`, `coarse_curved_face`), each at the place it was measured (`x, y, z`
+in millimetres), and errors for what could not be measured (`measurement_failed`, `mesh_unreadable`,
+`not_finite`, `invalid_target`), which alone fail it. Each option belongs to a process: molding's
+`pull` (`z`, `-y`, `x,y,z`; default `z`), `wall_limit` (45 degrees) and `zero_tol` (0.05); printing's
+`angle_limit` (45) and `samples` (2000); `units` (`mm`, `cm`, `m`, `in`, `ft`) an STL's alone, the
+other types declaring their own; `candidates` either's. An option of the other process is refused by
+name. A mesh is measured as the viewer reads it: an STL as it is, a 3MF's or a GLB's objects placed in
+millimetres, Z up, and a STEP or an xbf as the engine tessellates it.
+
+Measured as a mesh, a curved face's draft is read from its facets, which are chords: the report says how
+far its facets disagree (`spread_deg`) and when to export finer. The trimesh integration's functions
+measure a mesh a program already holds, answering the same report as data:
+`cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
+`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` (any file trimesh reads, an `.obj`
+or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
+`cad.trimesh` gets the integration; one that only calls `cad.<type>.check` names it in its header
+(`cad[trimesh]`), and a check without it says so in one line.

@@ -1,55 +1,42 @@
-#!/usr/bin/env python3
-"""Fact-only injection-molding geometry measurements for mesh files.
+"""Injection molding's measurements of a triangle mesh, with trimesh: draft, undercut
+candidates and projected area along one pull, and the candidate pulls ranked.
 
-Reports measurements as JSON. It never emits pass/fail, verdicts, or
-moldability statuses; comparisons against resin, texture and tooling limits
-belong to the skill workflow using `references/injection-molding.md`.
-
-Requires: trimesh, numpy, rtree (pip install -r requirements.txt)
-
-Usage:
-    python mold_tool.py measure <mesh> --pull z [--units mm] [--wall-limit 45] [--zero-tol 0.05]
-    python mold_tool.py pulls <mesh> [--units mm] [--wall-limit 45] [--zero-tol 0.05]
-
-`measure` reports three fact families for one pull axis: draft, undercut
-candidates, and projection. `pulls` repeats the draft and undercut summaries
-for x, y, z and the mesh's own principal axes. Wall thickness is NOT measured
-here: the injection-molding reference says how to measure it.
+Facts, never verdicts: nothing here compares a figure against a resin's, a
+texture's or a tool's limit. ``cad.<type>.check(..., process="molding")`` turns
+the report into findings (``cad.trimesh._check``); ``cad.trimesh.molding`` and
+``cad.trimesh.pulls`` hand it back as data.
 
 Draft is measured per triangle as the angle between the face and the pull
 axis: 0 means the face is parallel to the pull (no draft), 90 means it is
-perpendicular to it (a top or bottom face). Faces at or above `--wall-limit`
+perpendicular to it (a top or bottom face). Faces at or above ``wall_limit``
 from the pull axis are not counted as walls. A flat face is pooled by normal
 and read exactly; a CURVED face is pooled by the surface it lies on and read at
 the 5th percentile of that surface's area, because a facet of a curved face is
-a chord and chords scatter -- `spread_deg` reports that scatter and bounds how
+a chord and chords scatter -- ``spread_deg`` reports that scatter and bounds how
 far low the reading can be. A curved face merely TANGENT to the pull is
 reported apart from a flat zero-draft wall because its area is a tessellation
-artifact.
-Which mold half forms a face, whether a parting line makes it an undercut, and
-side actions are not determined here. The undercut family is a straight-pull
-occlusion test: a face whose withdrawal ray is blocked by the part itself is
-reported as a candidate.
+artifact. Which mold half forms a face, whether a parting line makes it an
+undercut, and side actions are not determined here. The undercut family is a
+straight-pull occlusion test: a face whose withdrawal ray is blocked by the
+part itself is reported as a candidate. Wall thickness is not measured here: it
+is 3D printing's family (``_printing``).
 
-If a fact family fails, the report carries `"partial": true`, names the family
-in `partial_sections`, and the command exits 2, so neither a JSON reader nor a
-shell caller can take a partial report for a complete one.
+A family that fails leaves an ``error`` field where its facts would be, and the
+report says so (``partial``, ``partial_sections``), so a report missing a family
+never reads as one whose part had nothing to find.
 """
 
 from __future__ import annotations
 
-import argparse
-import json
-import sys
-
 import numpy as np
 import trimesh
 
+# Length units a mesh file may carry, as a factor to millimetres: an STL is unitless, so the caller
+# states which one (the check's one table).
+from cad._internal.manufacturing import UNITS_MM as _UNITS_MM
+
 _AXES = {"x": (1.0, 0.0, 0.0), "y": (0.0, 1.0, 0.0), "z": (0.0, 0.0, 1.0)}
 _BINS_DEG = [0.0, 0.25, 0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
-#: Length units a mesh file may carry, as a factor to millimetres. STL, OBJ,
-#: PLY and 3MF are unitless in practice, so the caller states which one.
-_UNITS_MM = {"mm": 1.0, "cm": 10.0, "m": 1000.0, "in": 25.4, "ft": 304.8}
 #: The occlusion test casts one ray per triangle and counts the WHOLE triangle,
 #: so a CAD-coarse mesh rounds an undercut to its nearest triangle. Faces are
 #: split to at most this fraction of the bounding-box diagonal before casting.
@@ -67,15 +54,22 @@ _RASTER_ROW_CELLS = 250_000
 
 
 def _load(path: str, units: str = "mm") -> trimesh.Trimesh:
-    """Read a mesh, scale it to millimetres, and drop degenerate faces.
+    """Read a mesh file and prepare it as ``_prepared`` does."""
+    mesh = trimesh.load(path, force="mesh")
+    if isinstance(mesh, trimesh.Scene):
+        mesh = mesh.dump(concatenate=True)
+    return _prepared(mesh, units)
+
+
+def _prepared(mesh: trimesh.Trimesh, units: str = "mm") -> trimesh.Trimesh:
+    """Scale a mesh to millimetres and drop degenerate faces.
 
     A zero-area triangle -- build123d exports a couple on any sphere -- makes
     trimesh's face normal NaN, and a NaN then reaches the report as a bare
     `NaN` token that strict JSON parsers reject.
     """
-    mesh = trimesh.load(path, force="mesh")
-    if isinstance(mesh, trimesh.Scene):
-        mesh = mesh.dump(concatenate=True)
+    if units not in _UNITS_MM:
+        raise ValueError(f"units is one of {', '.join(sorted(_UNITS_MM))}, not {units!r}")
     factor = _UNITS_MM[units]
     if factor != 1.0:
         mesh.apply_scale(factor)
@@ -601,7 +595,7 @@ def _scale_hint(mesh: trimesh.Trimesh) -> dict:
     if suspect:
         note = (
             f"read as {units}, giving a {round(diag, 3)} mm bounding-box diagonal, which is outside "
-            "the usual range of an injection-molded part. Pass --units with the file's real units."
+            "the usual range of an injection-molded part. Give the file's real units (--units)."
         )
     else:
         note = (
@@ -872,7 +866,7 @@ def _pull_facts(mesh: trimesh.Trimesh, wall_limit: float, zero_tol: float) -> di
         undercuts = _safe(_undercut_facts, mesh, axis, zero_tol)
         if "error" in facts or "error" in undercuts:
             # Keeping only the numbers discards the one field that says a family
-            # did not measure, and `pulls` is the verb an agent runs FIRST to
+            # did not measure, and `pulls` is what an agent runs FIRST to
             # choose a pull: a null candidate area that reads as "no undercuts"
             # is exactly the silent "no findings" the partial machinery exists
             # to stop. The error travels with the candidate it belongs to.
@@ -919,7 +913,7 @@ def _has_error(value) -> bool:
 
     Scanning only the top level missed a family that failed INSIDE another --
     `pulls` runs the undercut test once per candidate axis, and a report whose
-    every candidate had failed still exited 0 and read as complete.
+    every candidate had failed still passed and read as complete.
     """
     if isinstance(value, dict):
         return "error" in value or any(_has_error(v) for v in value.values())
@@ -932,7 +926,7 @@ def _mark_partial(report: dict) -> bool:
     """Flag a report whose families did not all measure.
 
     A family that failed leaves an `error` field where its facts should be.
-    Without this, the report reads as complete and the command exits 0, so a
+    Without this, the report reads as complete and the check passes, so a
     dead family becomes a silent "no findings".
     """
     failed = sorted(key for key, value in report.items() if _has_error(value))
@@ -942,98 +936,25 @@ def _mark_partial(report: dict) -> bool:
     return bool(failed)
 
 
-def _normalise_argv(argv: list[str]) -> list[str]:
-    """Let `--pull -z` through argparse, which reads `-z` as an option."""
-    out: list[str] = []
-    index = 0
-    while index < len(argv):
-        token = argv[index]
-        if token == "--pull" and index + 1 < len(argv) and argv[index + 1].startswith("-"):
-            out.append(f"--pull={argv[index + 1]}")
-            index += 2
-            continue
-        out.append(token)
-        index += 1
-    return out
+def measure(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol: float) -> dict:
+    """Every family for one pull: the mesh, its scale, draft, undercuts and projection."""
+    report = {
+        "mesh": _safe(_mesh_facts, mesh),
+        "scale": _safe(_scale_hint, mesh),
+        "draft": _safe(_draft_facts, mesh, pull, wall_limit, zero_tol),
+        "undercuts": _safe(_undercut_facts, mesh, pull, zero_tol),
+        "projection": _safe(_projection_facts, mesh, pull),
+    }
+    _mark_partial(report)
+    return report
 
 
-class _Parser(argparse.ArgumentParser):
-    """A usage error exits 1, not argparse's 2.
-
-    Exit 2 means "the report you are holding is partial" here, and a caller
-    that branches on it would read a misspelled flag as a measured part with a
-    failed family.
-    """
-
-    def error(self, message: str):  # noqa: D102 - argparse's own contract
-        print(json.dumps({"error": f"usage: {message}", "usage": self.format_usage().strip()}))
-        raise SystemExit(1)
-
-
-def main(argv: list[str] | None = None) -> int:
-    ap = _Parser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    sub = ap.add_subparsers(dest="command", required=True, parser_class=_Parser)
-
-    m = sub.add_parser("measure", help="draft, undercut and projection facts for one pull axis")
-    m.add_argument("mesh")
-    m.add_argument("--pull", default="z", help="axis name (z, -y, or --pull=-z) or x,y,z components")
-    m.add_argument("--units", default="mm", choices=sorted(_UNITS_MM), help="the mesh file's length units")
-    m.add_argument("--wall-limit", type=float, default=45.0)
-    m.add_argument("--zero-tol", type=float, default=0.05)
-
-    p = sub.add_parser("pulls", help="draft and undercut summaries for x, y, z and the principal axes")
-    p.add_argument("mesh")
-    p.add_argument("--units", default="mm", choices=sorted(_UNITS_MM), help="the mesh file's length units")
-    p.add_argument("--wall-limit", type=float, default=45.0)
-    p.add_argument("--zero-tol", type=float, default=0.05)
-
-    args = ap.parse_args(_normalise_argv(list(sys.argv[1:] if argv is None else argv)))
-
-    try:
-        mesh = _load(args.mesh, args.units)
-    except Exception as e:
-        print(json.dumps({"error": f"failed to load mesh: {e}"}))
-        return 1
-
-    if args.command == "measure":
-        try:
-            pull = _pull_vector(args.pull)
-        except ValueError as e:
-            print(json.dumps({"error": str(e)}))
-            return 1
-        report = {
-            "file": args.mesh,
-            "mesh": _safe(_mesh_facts, mesh),
-            "scale": _safe(_scale_hint, mesh),
-            "draft": _safe(_draft_facts, mesh, pull, args.wall_limit, args.zero_tol),
-            "undercuts": _safe(_undercut_facts, mesh, pull, args.zero_tol),
-            "projection": _safe(_projection_facts, mesh, pull),
-        }
-    else:
-        report = {
-            "file": args.mesh,
-            "mesh": _safe(_mesh_facts, mesh),
-            "scale": _safe(_scale_hint, mesh),
-            "pulls": _safe(_pull_facts, mesh, args.wall_limit, args.zero_tol),
-        }
-
-    partial = _mark_partial(report)
-    # allow_nan=False: a NaN is not JSON, and a report a parser rejects is worse
-    # than one that says it failed. A NaN that survives everything upstream is a
-    # failure to report, not a traceback to print: the header promises JSON on
-    # stdout for every outcome.
-    try:
-        text = json.dumps(report, indent=2, allow_nan=False)
-    except ValueError as exc:
-        print(json.dumps({
-            "file": args.mesh,
-            "error": f"a measurement was not a finite number, so the report is not JSON: {exc}",
-            "partial": True,
-        }))
-        return 1
-    print(text)
-    return 2 if partial else 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+def pulls(mesh: trimesh.Trimesh, wall_limit: float, zero_tol: float) -> dict:
+    """The mesh, its scale and the candidate pulls ranked: x, y, z and its principal axes."""
+    report = {
+        "mesh": _safe(_mesh_facts, mesh),
+        "scale": _safe(_scale_hint, mesh),
+        "pulls": _safe(_pull_facts, mesh, wall_limit, zero_tol),
+    }
+    _mark_partial(report)
+    return report

@@ -165,6 +165,11 @@ _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", 
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
                                          "element or part is and what made it", _KERNEL)
 _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL)
+# The manufacturing check every 3D type shares (``cad._internal.manufacturing``), measured with trimesh.
+_CHECK_MANUFACTURING = Operation("check", "measure it for manufacturing: injection molding (--process molding: draft, "
+                                          "undercuts, projected area) or 3D printing (--process printing: walls, "
+                                          "overhangs, support); --candidates ranks the pulls or orientations",
+                                 "trimesh")
 
 _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "element names", "mechanism",
                      "configuration sequences")
@@ -174,22 +179,22 @@ _TYPES = (
         "xbf", "XBF", "the engine's own document: an XCAF document saved as BinXCAF, with its build closure",
         (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _CHECK_MANUFACTURING), decorator=True, reader=True),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _CHECK_MANUFACTURING), decorator=True, reader=True),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
-        (_EXPORT_MESH, _SNAPSHOT), decorator=True, reader=True),
+        (_EXPORT_MESH, _SNAPSHOT, _CHECK_MANUFACTURING), decorator=True, reader=True),
     DocumentTypeEntry(
         "glb", "GLB", "a binary glTF scene of triangle meshes", (".glb",), "model/gltf-binary", "mesh",
         ("triangles", "assembly", "names", "colours", "materials", "animations"),
-        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB), decorator=True),
+        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _CHECK_MANUFACTURING), decorator=True),
     DocumentTypeEntry(
         "threemf", "3MF", "a 3D Manufacturing Format package of triangle meshes", (".3mf",), "model/3mf", "mesh",
         ("triangles", "assembly", "names", "colours", "materials"),
-        (_EXPORT_MESH, _SNAPSHOT), decorator=True, wire="3mf"),
+        (_EXPORT_MESH, _SNAPSHOT, _CHECK_MANUFACTURING), decorator=True, wire="3mf"),
     DocumentTypeEntry(
         "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
         ("2D geometry", "layers"), (_SNAPSHOT,), decorator=True),
@@ -241,6 +246,11 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                         "https://www.kicad.org/download/, or set CAD_KICAD_CLI to its kicad-cli",
                     "CAD_KICAD_CLI"),
         modules=("kipy",), distributions=("kicad-python",), identity=("kicad-python",)),
+    "trimesh": Integration(
+        "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
+                   "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
+                   "and support", extra="trimesh", process="in-process",
+        modules=("trimesh",), distributions=("trimesh", "rtree", "scipy"), identity=("trimesh",)),
 })
 
 _BY_EXTENSION = MappingProxyType({extension: entry for entry in _TYPES for extension in entry.extensions})

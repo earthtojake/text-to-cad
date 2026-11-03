@@ -13,8 +13,12 @@ An integration usually makes or checks a document type, and adding a type has it
 [walkthrough](adding-a-document-type.md#walkthrough-a-type-and-its-integration-together-kicad) adds
 KiCad's boards and the `kicad` integration together.
 
-How an integration gets installed on a person's computer is not covered yet: no release installs
-one on demand, `cad doctor` reports none, and this guide does not decide how either will work.
+How an integration gets installed on a person's computer is covered for a Python library alone: `cad
+run` makes a program's environment with the integrations its imports use, and an operation the `cad`
+command runs that needs one its own environment lacks (a 3D type's `check`, the `trimesh`
+integration's) runs in the environment of that integration, made once by the engine the same way
+(`cad_server/_internal/integration_env.py`). An external program is the person's to install, found by
+its probe; `cad doctor` reports no integration, and this guide does not decide how either will.
 
 ## Is it really an integration?
 

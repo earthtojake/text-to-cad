@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Measurement tests for the injection-molding tool.
+"""Injection molding's measurements (``cad.trimesh._molding``) and its check (``cad.stl.check(...,
+process="molding")``).
 
 Each part is built with build123d so the correct answer is known from the
 construction: a wall lofted at 2 deg reads 2 deg because it was built that
@@ -20,11 +21,8 @@ import numpy as np
 from build123d import (Align, Axis, Box, Circle, Cone, Cylinder, GeomType, Plane, Pos,
                        Rectangle, export_stl, extrude, loft)
 
-from tests.python.support.paths import add_repo_path
-
-add_repo_path("skills/dfm/scripts")
-
-import mold_tool  # noqa: E402
+import cad
+from cad.trimesh import _molding as mold_tool
 
 
 def _stl(part, tmp: Path, name: str) -> str:
@@ -497,35 +495,30 @@ class RobustnessTest(unittest.TestCase):
         self.assertNotIn("partial_sections", clean)
 
     def test_pull_accepts_a_negative_axis_and_refuses_an_empty_one(self) -> None:
-        self.assertEqual(
-            mold_tool._normalise_argv(["measure", "p.stl", "--pull", "-z"]),
-            ["measure", "p.stl", "--pull=-z"],
-        )
         np.testing.assert_allclose(mold_tool._pull_vector("-z"), [0, 0, -1])
         for bad in ("", "   ", "-"):
             with self.assertRaises(ValueError):
                 mold_tool._pull_vector(bad)
 
 
-class CommandLineTest(unittest.TestCase):
-    def test_the_cli_runs_end_to_end_and_exits_zero(self) -> None:
+class CheckTest(unittest.TestCase):
+    def test_the_check_measures_every_family_and_passes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            code, text = _run_cli(["measure", _stl(Box(20, 20, 15), Path(td), "box"), "--pull", "-z"])
+            result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="-z")
 
-        self.assertEqual(code, 0)
-        report = json.loads(text)
+        self.assertTrue(result.ok)
+        report = result.measurements
         self.assertFalse(report["partial"])
-        self.assertEqual(sorted(k for k in report if k != "file"),
-                         ["draft", "mesh", "partial", "projection", "scale", "undercuts"])
-        self.assertNotIn("wall_thickness", report, "thickness is $dfam-check's measurement")
-        self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0], "--pull -z reached argparse")
+        self.assertEqual(sorted(report), ["draft", "mesh", "partial", "process", "projection", "scale", "undercuts"])
+        self.assertNotIn("wall_thickness", report, "thickness is 3D printing's measurement")
+        self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
+        # A plain box's four sides have no draft: said, and the check still passes (facts, not verdicts).
+        self.assertEqual([f.code for f in result.findings if f.severity == "warning"], ["zero_draft_walls"])
 
-    def test_a_bad_pull_exits_one(self) -> None:
+    def test_a_bad_pull_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            code, text = _run_cli(["measure", _stl(Box(20, 20, 15), Path(td), "box"), "--pull", "sideways"])
-
-        self.assertEqual(code, 1)
-        self.assertIn("error", json.loads(text))
+            with self.assertRaises(ValueError):
+                cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", pull="sideways")
 
 
 class MinimumDraftKeepsRealWallsTest(unittest.TestCase):
@@ -722,13 +715,13 @@ class SealedVoidTest(unittest.TestCase):
 
 
 class PullsReportsItsFailuresTest(unittest.TestCase):
-    def test_a_failed_undercut_family_reaches_the_exit_code(self) -> None:
+    def test_a_failed_undercut_family_fails_the_check(self) -> None:
         """`pulls` kept the numbers and threw the error away.
 
         With rtree missing, `measure` exited 2 and named the family while
         `pulls` exited 0 with three null areas and no error anywhere -- the
         silent "no findings" the partial machinery exists to prevent, on the
-        verb an agent runs FIRST to choose a pull direction.
+        ranking an agent runs FIRST to choose a pull direction.
         """
         def boom(*_args, **_kwargs):
             raise RuntimeError("No module named 'rtree'")
@@ -737,15 +730,17 @@ class PullsReportsItsFailuresTest(unittest.TestCase):
         mold_tool._undercut_facts = boom
         try:
             with tempfile.TemporaryDirectory() as td:
-                code, text = _run_cli(["pulls", _stl(Box(20, 20, 15), Path(td), "box")])
+                result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding", candidates=True)
         finally:
             mold_tool._undercut_facts = original
 
-        report = json.loads(text)
-        self.assertEqual(code, 2)
+        report = result.measurements
+        self.assertFalse(result.ok)
         self.assertTrue(report["partial"])
         self.assertEqual(report["partial_sections"], ["pulls"])
         self.assertTrue(all("error" in c for c in report["pulls"]["candidates"]))
+        self.assertEqual([(f.severity, f.code, f.location) for f in result.findings],
+                         [("error", "measurement_failed", "pulls")])
 
     def test_an_error_nested_anywhere_marks_the_report(self) -> None:
         nested = {"pulls": {"candidates": [{"pull": "z", "error": "boom"}]}}
@@ -785,30 +780,24 @@ class ProbeBudgetTest(unittest.TestCase):
         self.assertAlmostEqual(edge, float(np.linalg.norm(mesh.extents)) * mold_tool._PROBE_EDGE_FRACTION)
 
 
-class ExitCodesTest(unittest.TestCase):
-    def test_a_usage_error_exits_one_not_two(self) -> None:
-        """Exit 2 means the report is partial; a misspelled flag is not that."""
-        with tempfile.TemporaryDirectory() as td:
-            path = _stl(Box(20, 20, 15), Path(td), "box")
-            with self.assertRaises(SystemExit) as raised:
-                _run_cli(["measure", path, "--not-a-flag"])
+class NonFiniteTest(unittest.TestCase):
+    def test_a_non_finite_measurement_fails_the_check_as_json(self) -> None:
+        """A NaN is not JSON: the check fails, saying so, rather than print a bare NaN token."""
+        import dataclasses
+        import json
 
-        self.assertEqual(raised.exception.code, 1)
-
-    def test_a_non_finite_measurement_exits_one_as_json(self) -> None:
-        """allow_nan=False raised through main() as a traceback on stdout."""
         original = mold_tool._projection_facts
         mold_tool._projection_facts = lambda *_a, **_k: {"projected_area_mm2": float("nan")}
         try:
             with tempfile.TemporaryDirectory() as td:
-                code, text = _run_cli(["measure", _stl(Box(20, 20, 15), Path(td), "box")])
+                result = cad.stl.check(_stl(Box(20, 20, 15), Path(td), "box"), process="molding")
         finally:
             mold_tool._projection_facts = original
 
-        self.assertEqual(code, 1)
-        report = json.loads(text)
-        self.assertIn("not a finite number", report["error"])
-        self.assertTrue(report["partial"])
+        self.assertFalse(result.ok)
+        self.assertEqual(result.findings[0].code, "not_finite")
+        self.assertIn("not a finite number", result.findings[0].message)
+        json.dumps(dataclasses.asdict(result), default=str, allow_nan=False)
 
 
 class PullVectorSignTest(unittest.TestCase):
@@ -830,17 +819,6 @@ class ZeroToleranceIsHonouredTest(unittest.TestCase):
         self.assertGreater(facts["zero_draft_wall_area_mm2"], 0.0, "1 deg is under a 2 deg tolerance")
         for face in facts["largest_zero_draft_faces"]:
             self.assertEqual(face["opens_toward"], "none")
-
-
-def _run_cli(argv: list[str]) -> tuple[int, str]:
-    """Run main() with stdout captured, returning its exit code and output."""
-    import contextlib
-    import io
-
-    buffer = io.StringIO()
-    with contextlib.redirect_stdout(buffer):
-        code = mold_tool.main(argv)
-    return code, buffer.getvalue()
 
 
 if __name__ == "__main__":

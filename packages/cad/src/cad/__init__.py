@@ -8,7 +8,9 @@ script's ``@kicad_pcb("board.kicad_pcb")``), its reader where it has one (``step
 operations, one to one with the ``cad <type> <operation>`` commands (``.export``, ``.snapshot``,
 ``.inspect``, ``.check``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
-``animation``, measurements, flat patterns). Process control (``cad serve``, ``status``, ``stop``,
+``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
+``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
+``orientations``). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
 kernel, and ``import build123d`` binds a module the kernel loads into on its first attribute
 (``_internal/lazy_kernel.py``). The earlier spellings (``cad.read_step``, ``cad.export``, ``cad.ap242``,
@@ -51,7 +53,7 @@ del _install_font_guard
 _TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
-_INTEGRATIONS = ("build123d", "kicad")
+_INTEGRATIONS = ("build123d", "kicad", "trimesh")
 
 __all__ = [
     "__version__",

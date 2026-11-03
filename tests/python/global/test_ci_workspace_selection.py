@@ -222,9 +222,15 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                 self.assertEqual(route(path)["skills_runtime"], "false")
 
     def test_a_skill_script_runs_its_suite(self):
-        self.assertEqual(tests_for("skills/dfm/scripts/mold_tool.py")["skills_tests"], [f"{SKILLS}/dfm"])
-        # gcode's suite is light, so it already runs on every change.
+        # Every skill suite is light, so it already runs on every change.
         self.assertEqual(jobs_for("skills/gcode/scripts/orca_presets.py"), {"skills"})
+        self.assertEqual(tests_for("skills/gcode/scripts/orca_presets.py")["skills_tests"], [])
+
+    def test_the_manufacturing_check_runs_the_package_suites(self):
+        # Its measurements are the library's trimesh integration: no skill suite reads them.
+        chosen = tests_for("packages/cad/src/cad/trimesh/_molding.py")
+        self.assertEqual(chosen["cadgen_tests"], [CADGEN])
+        self.assertEqual(chosen["skills_tests"], [])
 
     def test_a_test_file_runs_itself(self):
         self.assertEqual(tests_for(f"{SERVER}/test_settings.py")["cadgen_tests"], [f"{SERVER}/test_settings.py"])
@@ -232,7 +238,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(tests_for(f"{SHIM}/test_protocol.py")["cadgen_tests"], [f"{SHIM}/test_protocol.py"])
         self.assertEqual(tests_for(f"{POLICY}/test_cli_stream_contract.py")["skills_policy"],
                          [f"{POLICY}/test_cli_stream_contract.py"])
-        self.assertEqual(tests_for(f"{SKILLS}/dfm/test_mold_tool.py")["skills_tests"], [f"{SKILLS}/dfm/test_mold_tool.py"])
+        self.assertEqual(tests_for(f"{LIBRARY}/test_trimesh_molding.py")["cadgen_tests"],
+                         [f"{LIBRARY}/test_trimesh_molding.py"])
         self.assertEqual(tests_for(f"{LIBRARY}/engine/formats_golden/stl.png")["cadgen_tests"], [CADGEN])
 
     def test_cadgen_runs_its_suites_its_hosts_and_the_wheel(self):

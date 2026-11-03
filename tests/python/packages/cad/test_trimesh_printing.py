@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Measurement tests for the dfam-check tool.
+"""3D printing's measurements (``cad.trimesh._printing``) and its check (``cad.<type>.check(...,
+process="printing")``).
 
 Each part is built with build123d so the correct answer is known from the
 construction rather than from a recorded run: a 2 mm wall is 2 mm because it
@@ -11,24 +12,17 @@ a diff against whatever the tool happened to print last time.
 
 from __future__ import annotations
 
-import contextlib
-import io
 import json
 import math
-import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 import trimesh
 from build123d import Box, Polyline, Pos, Rotation, export_stl, extrude, make_face
 
-from tests.python.support.paths import add_repo_path
-
-add_repo_path("skills/dfam-check/scripts")
-
-import dfam_tool  # noqa: E402
+import cad
+from cad.trimesh import _printing as dfam_tool
 
 
 def _stl(part, tmp: Path, name: str) -> str:
@@ -139,23 +133,31 @@ class OrientationTest(unittest.TestCase):
 
 
 class FormatCoverageTest(unittest.TestCase):
-    """SKILL.md advertises .stl, .obj, .ply and .3mf, so each has to load.
+    """Every 3D mesh type's check reads its file as the viewer does (millimetres, Z up), and the
+    Python API measures any mesh trimesh reads (an .obj, a .ply).
 
     A format that is claimed but unreadable is worse than one that is not
     claimed, because the failure surfaces at the user rather than here.
     """
 
-    def test_each_advertised_format_loads_and_measures(self) -> None:
+    def test_each_mesh_type_loads_and_measures(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
-            source = trimesh.load(_stl(Box(20, 20, 15), tmp, "box"), force="mesh")
-
-            for suffix in (".stl", ".obj", ".ply", ".3mf"):
+            stl = _stl(Box(20, 20, 15), tmp, "box")
+            cad.stl.export(stl, tmp / "box.3mf", tmp / "box.glb")
+            for kind, path in (("stl", stl), ("threemf", tmp / "box.3mf"), ("glb", tmp / "box.glb")):
+                with self.subTest(kind=kind):
+                    result = getattr(cad, kind).check(path, process="printing")
+                    facts = result.measurements["mesh"]
+                    self.assertTrue(result.ok)
+                    self.assertAlmostEqual(facts["volume_mm3"], 6000.0, delta=1.0)
+                    self.assertEqual(facts["bbox_mm"], [20.0, 20.0, 15.0], "Z up, in millimetres")
+            source = trimesh.load(stl, force="mesh")
+            for suffix in (".obj", ".ply"):
                 with self.subTest(fmt=suffix):
                     path = tmp / f"box{suffix}"
                     source.export(str(path))
-                    facts = dfam_tool._mesh_facts(dfam_tool._load(str(path)))
-
+                    facts = cad.trimesh.printing(trimesh.load(str(path), force="mesh"))["mesh"]
                     self.assertAlmostEqual(facts["volume_mm3"], 6000.0, delta=1.0)
                     self.assertEqual(facts["body_count"], 1)
 
@@ -174,48 +176,51 @@ class DegenerateMeshTest(unittest.TestCase):
         self.assertIn("degenerate", facts["note"])
 
 
-def _run_cli_status(argv: list[str]) -> tuple[int, dict]:
-    """Invoke the CLI the way a skill run does: its exit code and its JSON."""
-    buf = io.StringIO()
-    with mock.patch.object(sys, "argv", ["dfam_tool.py", *argv]):
-        with contextlib.redirect_stdout(buf):
-            code = dfam_tool.main()
-    return code, json.loads(buf.getvalue())
+def _checked(path, **options) -> tuple[bool, dict]:
+    """Check the way a skill run does: whether it passed, and what it measured."""
+    result = cad.stl.check(path, process="printing", **options)
+    return result.ok, result.measurements
 
 
-def _run_cli(argv: list[str]) -> dict:
-    """Invoke the CLI the way a skill run does and parse what it prints."""
-    return _run_cli_status(argv)[1]
+def _measured(path, **options) -> dict:
+    return _checked(path, **options)[1]
 
 
-class CliTest(unittest.TestCase):
-    def test_measure_emits_every_fact_family(self) -> None:
+class CheckTest(unittest.TestCase):
+    def test_the_check_emits_every_fact_family(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(Box(20, 20, 15), tmp, "box")
-            payload = _run_cli(["measure", path, "--angle-limit", "45"])
+            payload = _measured(path, angle_limit=45.0)
 
-        self.assertGreaterEqual(
-            set(payload), {"file", "mesh", "overhangs", "wall_thickness"}
-        )
+        self.assertGreaterEqual(set(payload), {"mesh", "overhangs", "wall_thickness", "support_volume"})
 
     def test_angle_limit_is_echoed_back(self) -> None:
         """The limit used has to travel with the numbers it produced."""
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(Box(20, 20, 15), tmp, "box")
-            payload = _run_cli(["measure", path, "--angle-limit", "30"])
+            payload = _measured(path, angle_limit=30.0)
 
         self.assertEqual(payload["overhangs"]["angle_limit_used_deg"], 30.0)
 
-    def test_orientations_subcommand_emits_candidates(self) -> None:
+    def test_candidates_rank_the_orientations(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(_wedge(30.0), tmp, "wedge30")
-            payload = _run_cli(["orientations", path, "--angle-limit", "45"])
+            result = cad.stl.check(path, process="printing", candidates=True)
 
-        self.assertEqual(len(payload["orientations"]["candidates"]), 6)
+        self.assertEqual(len(result.measurements["orientations"]["candidates"]), 6)
+        self.assertIn("orientations by support area", result.summary)
 
+    def test_an_overhang_is_said_where_it_is(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            result = cad.stl.check(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
+
+        self.assertTrue(result.ok, "a fact, not a verdict")
+        overhang = next(f for f in result.findings if f.code == "overhangs")
+        self.assertEqual(overhang.severity, "warning")
+        self.assertEqual(len(overhang.location.split(", ")), 3)
 
 
 class MultiBodyWallTest(unittest.TestCase):
@@ -302,7 +307,8 @@ class ResilienceTest(unittest.TestCase):
                 faces=[[0, 1, 2]],
                 process=False,
             ).export(str(path))
-            code, payload = _run_cli_status(["measure", str(path)])
+            result = cad.stl.check(path, process="printing")
+        payload = result.measurements
 
         self.assertIn("error", payload["support_volume"])
         self.assertNotIn("error", payload["overhangs"])
@@ -313,16 +319,19 @@ class ResilienceTest(unittest.TestCase):
         # report from a part that has no thin walls.
         self.assertTrue(payload["partial"])
         self.assertIn("support_volume", payload["partial_sections"])
-        self.assertEqual(code, 2)
+        self.assertFalse(result.ok)
+        self.assertIn(("error", "measurement_failed", "support_volume"),
+                      [(f.severity, f.code, f.location) for f in result.findings])
 
     def test_a_complete_report_is_not_partial(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             path = _stl(Box(20, 20, 15), Path(td), "box")
-            code, payload = _run_cli_status(["measure", path])
+            ok, payload = _checked(path)
 
         self.assertFalse(payload["partial"])
         self.assertNotIn("partial_sections", payload)
-        self.assertEqual(code, 0)
+        self.assertTrue(ok)
+        json.dumps(payload, allow_nan=False)
 
 
 class ScaleHintTest(unittest.TestCase):
@@ -337,12 +346,18 @@ class ScaleHintTest(unittest.TestCase):
         self.assertTrue(dfam_tool._scale_hint(small)["units_suspect"])
         self.assertFalse(dfam_tool._scale_hint(big)["units_suspect"])
 
-    def test_scale_appears_in_both_subcommands(self) -> None:
+    def test_scale_appears_in_both_reports(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(Box(20, 20, 15), tmp, "box")
-            self.assertIn("scale", _run_cli(["measure", path]))
-            self.assertIn("scale", _run_cli(["orientations", path]))
+            self.assertIn("scale", _measured(path))
+            self.assertIn("scale", _measured(path, candidates=True))
+
+    def test_units_scale_an_stl_to_millimetres(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            facts = _measured(_stl(Box(2, 2, 1.5), Path(td), "cm"), units="cm")["mesh"]
+
+        self.assertAlmostEqual(facts["volume_mm3"], 6000.0, delta=1.0)
 
 
 if __name__ == "__main__":

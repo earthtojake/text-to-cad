@@ -3,6 +3,8 @@
 ``@stl("arm.stl")`` declares a model's STL file;
 ``stl.read(path)`` reads one into a model;
 its operations (``stl.export(source, *destinations)``, ...) are the ``cad stl <operation>`` commands'.
+``stl.check(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
+the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.stl`` imports no CAD kernel (``cad._internal.document_type``).
 """
 
