@@ -10,7 +10,7 @@ the distance between them is zero.
 from __future__ import annotations
 
 import math
-from typing import Iterable, Sequence
+from typing import Iterable, Iterator, Sequence
 
 __all__ = [
     "XY",
@@ -183,16 +183,67 @@ def segments_distance(a: XY, b: XY, c: XY, d: XY) -> float:
     return min(segment_distance(a, c, d), segment_distance(b, c, d), segment_distance(c, a, b), segment_distance(d, a, b))
 
 
+def _bounds(points: Sequence[XY]) -> tuple[float, float, float, float]:
+    xs, ys = [p[0] for p in points], [p[1] for p in points]
+    return min(xs), min(ys), max(xs), max(ys)
+
+
+def _edges_in(points: Sequence[XY], region: tuple[float, float, float, float]) -> list[tuple[XY, XY]]:
+    """The polygon's edges whose bounding box reaches ``region``: only those can meet an edge inside it."""
+    left, top, right, bottom = region
+    return [(a, b) for a, b in zip(points, [*points[1:], points[0]])
+            if min(a[0], b[0]) <= right and max(a[0], b[0]) >= left and min(a[1], b[1]) <= bottom and max(a[1], b[1]) >= top]
+
+
+# Below this many edge pairs every pair is tested; above it the second polygon's edges are bucketed.
+_PAIRS_DIRECT = 4096
+
+
 def polygons_overlap(first: Sequence[XY], second: Sequence[XY]) -> bool:
     """Whether two polygons share any area or touch: a point of one inside the other, or two
-    edges that meet."""
+    edges that meet.
+
+    Only edges inside the region both polygons' boxes share can meet, and each is tested only against
+    the other's edges in the same cells of a grid over that region: two pours of thousands of vertices
+    that do not touch cost about their edge counts, not their product."""
     if len(first) < 3 or len(second) < 3:
         return False
     if inside(first[0], second) or inside(second[0], first):
         return True
-    edges = list(zip(second, [*second[1:], second[0]]))
-    for a, b in zip(first, [*first[1:], first[0]]):
-        for c, d in edges:
-            if _segments_cross(a, b, c, d):
-                return True
+    a_box, b_box = _bounds(first), _bounds(second)
+    region = (max(a_box[0], b_box[0]), max(a_box[1], b_box[1]), min(a_box[2], b_box[2]), min(a_box[3], b_box[3]))
+    if region[0] > region[2] or region[1] > region[3]:
+        return False
+    mine, theirs = _edges_in(first, region), _edges_in(second, region)
+    if not mine or not theirs:
+        return False
+    if len(mine) * len(theirs) <= _PAIRS_DIRECT:
+        return any(_segments_cross(a, b, c, d) for a, b in mine for c, d in theirs)
+    across = max(1, math.isqrt(len(theirs)))
+    left, top = region[0], region[1]
+    width = max(region[2] - left, 1e-9) / across
+    height = max(region[3] - top, 1e-9) / across
+
+    def cells(a: XY, b: XY) -> Iterator[tuple[int, int]]:
+        x0 = min(across - 1, max(0, int((min(a[0], b[0]) - left) / width)))
+        x1 = min(across - 1, max(0, int((max(a[0], b[0]) - left) / width)))
+        y0 = min(across - 1, max(0, int((min(a[1], b[1]) - top) / height)))
+        y1 = min(across - 1, max(0, int((max(a[1], b[1]) - top) / height)))
+        for x in range(x0, x1 + 1):
+            for y in range(y0, y1 + 1):
+                yield x, y
+
+    grid: dict[tuple[int, int], list[int]] = {}
+    for index, (c, d) in enumerate(theirs):
+        for cell in cells(c, d):
+            grid.setdefault(cell, []).append(index)
+    for a, b in mine:
+        tested: set[int] = set()
+        for cell in cells(a, b):
+            for index in grid.get(cell, ()):
+                if index not in tested:
+                    tested.add(index)
+                    c, d = theirs[index]
+                    if _segments_cross(a, b, c, d):
+                        return True
     return False

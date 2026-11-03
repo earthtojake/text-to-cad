@@ -51,7 +51,7 @@ from typing import Iterable, Sequence
 
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import (
-    FootprintFrame, copper_layers, expand_copper, footprint_property, graphic, item_layers, layer_of, net_of, net_table,
+    FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_layers, layer_of, net_of, net_table,
     pad_shape, points_of, read_index,
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
@@ -300,10 +300,21 @@ class _Builder:
             points = [frame.place(point) for point in points]
         width = _stroke_width(node)
         flags = {"ref": selector} if selector else {}
+        # A shape on copper that carries a net is copper of that net (a filled rectangle joining pads):
+        # drawn with it, and joined with it in the ratsnest.
+        net = net_of(node, self.table) if expand_copper([layer], self.copper) else None
+        if net:
+            flags["net"] = net
         if closed and _filled(node):
             self.sheet.polygon(layer, points, width=width, **flags)
+            if net:
+                self.sheet.copper.append(Copper.polygon(net, [layer], points))
         else:
             self.sheet.path(layer, points, width, closed=closed, **flags)
+            if net:
+                ends = [*points, points[0]] if closed else points
+                for start, end in zip(ends, ends[1:]):
+                    self.sheet.copper.append(Copper.segment(net, layer, start, end, width))
 
     # -- pads --------------------------------------------------------------------------
 
@@ -346,7 +357,9 @@ class _Builder:
             for layer in self._technical(layers, "Paste"):
                 if paste_margin < 0 and min(abs(size[0]), abs(size[1])) > 0:
                     factor = max(0.0, 1 + 2 * paste_margin / min(abs(size[0]), abs(size[1])))
-                    self.sheet.polygon(layer, _scaled(shape, centre, factor), **flags)
+                    shifted = rotate(offset[0], offset[1], angle)  # shrunk about the shape's own centre
+                    self.sheet.polygon(layer, _scaled(shape, (centre[0] + shifted[0], centre[1] + shifted[1]), factor),
+                                       **flags)
                 else:
                     self.sheet.polygon(layer, shape, width=2 * paste_margin, **flags)
 
@@ -367,9 +380,9 @@ class _Builder:
         sizes = [float(value) for value in drill[1:] if isinstance(value, (int, float))]
         if not sizes:
             return None
-        offset = sexpr.pair(sexpr.find(drill, "offset"), (0.0, 0.0))
-        dx, dy = rotate(offset[0], offset[1], angle)
-        at = (centre[0] + dx, centre[1] + dy)
+        # The hole is at the pad's own position: a drill offset moves the copper shape, never the hole (KiCad's
+        # pad position is its hole's; the shape is drawn at position + offset).
+        at = centre
         flag = {"hole": "npth" if kind == "np_thru_hole" else "pad"}
         if any(isinstance(value, Sym) and value == "oval" for value in drill[1:]) and len(sizes) >= 2 and abs(sizes[0] - sizes[1]) > 1e-9:
             outline = [(at[0] + x, at[1] + y) for x, y in (rotate(px, py, angle) for px, py in _slot(sizes[0], sizes[1]))]
@@ -411,8 +424,10 @@ class _Builder:
             return
         kind = "through"
         for atom in node[1:]:
-            if isinstance(atom, Sym) and atom in ("blind", "micro"):
-                kind = str(atom)
+            # KiCad 10 writes a buried via (inner layers only) apart from a blind one; KiCad 9's "blind" was
+            # both. The payload's kinds are KiCad 9's, so a buried via is drawn and joined as a blind one.
+            if isinstance(atom, Sym) and atom in ("blind", "buried", "micro"):
+                kind = "blind" if atom == "buried" else str(atom)
         size = sexpr.number(sexpr.value(node, "size"), 0.0)
         drill = sexpr.number(sexpr.value(node, "drill"), 0.0)
         net = net_of(node, self.table)
@@ -509,7 +524,7 @@ def _tree(path: Path, data: bytes) -> list:
         raise PlotError(f"{path.name} is not a readable KiCad board ({error})") from None
     if sexpr.head(tree) != "kicad_pcb":
         raise PlotError(f"{path.name} is not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)")
-    return tree
+    return canonical_copper(tree)
 
 
 def _generator(tree: list) -> str:

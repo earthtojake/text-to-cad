@@ -203,6 +203,107 @@ class ConnectivityTest(unittest.TestCase):
         self.assertEqual(ratsnest([self.pad("ONE", (0, 0)), Copper.segment("", "F.Cu", (0, 0), (1, 0), 0.2)]), [])
 
 
+def _board(body: str, layers: str = '(0 "F.Cu" signal) (2 "B.Cu" signal)', version: str = "20241229",
+           nets: str = '(net 0 "") (net 1 "A")') -> str:
+    """A KiCad 9 board around ``body``: its copper ``layers``, ``nets``, a 30 x 20 mm outline."""
+    return (f'(kicad_pcb (version {version}) (generator "pcbnew") (general (thickness 1.6)) (paper "A4")\n'
+            f' (layers {layers} (25 "Edge.Cuts" user))\n {nets}\n'
+            ' (gr_rect (start 0 0) (end 30 20) (stroke (width 0.1) (type solid)) (fill no) (layer "Edge.Cuts"))\n'
+            f'{body}\n)')
+
+
+def _pad(ref: str, at: str, pad: str) -> str:
+    return (f'(footprint "t:{ref}" (layer "F.Cu") (at {at})\n'
+            f'  (property "Reference" "{ref}" (at 0 -2) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))\n'
+            f'  {pad})')
+
+
+class ReaderEdgesTest(unittest.TestCase):
+    """What KiCad's own demo boards showed the reader missing: pours that do not touch decided by their
+    edges near each other, copper graphics on a net, a pad's drill offset, buried vias, KiCad 5's
+    renamed copper layers."""
+
+    def plot(self, text: str) -> dict:
+        with tempfile.TemporaryDirectory(prefix="pcb-edges-") as folder:
+            path = Path(folder) / "edge.kicad_pcb"
+            path.write_text(text, encoding="utf-8")
+            return build_plot(path)
+
+    def test_polygons_overlap_answers_as_every_edge_pair_would(self) -> None:
+        import math
+        import random
+
+        from cad.engine.formats.kicad.geometry import _segments_cross, inside, polygons_overlap
+
+        def every_pair(first, second):
+            if inside(first[0], second) or inside(second[0], first):
+                return True
+            edges = list(zip(second, [*second[1:], second[0]]))
+            return any(_segments_cross(a, b, c, d) for a, b in zip(first, [*first[1:], first[0]]) for c, d in edges)
+
+        def ring(cx, cy, count, radius, rng):
+            return [(cx + radius * (0.6 + 0.4 * rng.random()) * math.cos(2 * math.pi * k / count),
+                     cy + radius * (0.6 + 0.4 * rng.random()) * math.sin(2 * math.pi * k / count)) for k in range(count)]
+
+        rng = random.Random(756)
+        for _ in range(300):
+            count = rng.choice([4, 12, 80, 400])  # 80 x 400 edges: bucketed
+            first = ring(0, 0, count, 10, rng)
+            second = ring(rng.uniform(-22, 22), rng.uniform(-22, 22), rng.choice([4, 80, 400]), 10, rng)
+            self.assertEqual(polygons_overlap(first, second), every_pair(first, second))
+
+    def test_a_copper_graphic_on_a_net_joins_what_it_covers(self) -> None:
+        pads = (_pad("P1", "5 10", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "A"))') + "\n" +
+                _pad("P2", "15 10", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "A"))'))
+        self.assertEqual(1, self.plot(_board(pads))["unrouted"])
+        joined = self.plot(_board(pads + '\n(gr_rect (start 4 9) (end 16 11) (stroke (width 0) (type solid)) '
+                                          '(fill yes) (layer "F.Cu") (net 1))'))
+        self.assertEqual(0, joined["unrouted"])
+        layers = {layer["id"]: layer for layer in joined["sheets"][0]["layers"]}
+        self.assertIn("A", {item.get("net") for item in layers["F.Cu"]["items"] if item["t"] == "poly" and "ref" not in item})
+
+    def test_a_drill_offset_moves_the_copper_and_leaves_the_hole(self) -> None:
+        payload = self.plot(_board(_pad("J1", "10 10", '(pad "1" thru_hole oval (at 0 0) (size 3 1.5) '
+                                                       '(drill 0.8 (offset 0.6 0)) (layers "*.Cu" "*.Mask") (net 1 "A"))')))
+        layers = {layer["id"]: layer for layer in payload["sheets"][0]["layers"]}
+        [hole] = layers["drills"]["items"]
+        self.assertEqual([10.0, 10.0], hole["at"])
+        [shape] = [item for item in layers["F.Cu"]["items"] if item.get("ref") == "#J1.1"]
+        left, _, right, _ = _extent(shape["pts"])
+        self.assertAlmostEqual(10.6, (left + right) / 2, places=6)
+
+    def test_a_buried_via_joins_only_its_own_layers(self) -> None:
+        def board(kind: str) -> str:
+            return _board(
+                _pad("P1", "5 10", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu") (net 1 "A"))') + "\n" +
+                _pad("P2", "15 10", '(pad "1" thru_hole circle (at 0 0) (size 1.6 1.6) (drill 0.8) (layers "*.Cu") (net 1 "A"))') +
+                '\n(segment (start 5 10) (end 10 10) (width 0.25) (layer "F.Cu") (net 1))'
+                '\n(segment (start 10 10) (end 15 10) (width 0.25) (layer "In2.Cu") (net 1))'
+                f'\n(via {kind} (at 10 10) (size 0.6) (drill 0.3) (layers "In1.Cu" "In2.Cu") (net 1))',
+                layers='(0 "F.Cu" signal) (4 "In1.Cu" signal) (6 "In2.Cu" signal) (2 "B.Cu" signal)')
+
+        self.assertEqual(0, self.plot(board(""))["unrouted"], "a through via joins F.Cu to In2.Cu")
+        self.assertEqual(1, self.plot(board("buried"))["unrouted"], "a buried via reaches no F.Cu")
+        self.assertEqual(1, self.plot(board("blind"))["unrouted"])
+
+    def test_kicad_5_renamed_copper_layers_are_the_copper(self) -> None:
+        text = ('(kicad_pcb (version 20171130) (host pcbnew 5.1.0)\n'
+                ' (layers (0 top_layer signal) (31 bottom_layer signal) (44 Edge.Cuts user))\n'
+                ' (net 0 "") (net 1 GND)\n'
+                ' (gr_line (start 0 0) (end 30 0) (layer Edge.Cuts) (width 0.1))\n'
+                ' (gr_line (start 30 0) (end 30 20) (layer Edge.Cuts) (width 0.1))\n'
+                ' (gr_line (start 30 20) (end 0 20) (layer Edge.Cuts) (width 0.1))\n'
+                ' (gr_line (start 0 20) (end 0 0) (layer Edge.Cuts) (width 0.1))\n'
+                ' (segment (start 5 5) (end 25 5) (width 0.25) (layer top_layer) (net 1))\n'
+                ' (segment (start 5 15) (end 25 15) (width 0.25) (layer bottom_layer) (net 1)))')
+        layers = {layer["id"]: layer for layer in self.plot(text)["sheets"][0]["layers"]}
+        self.assertEqual(1, len([item for item in layers["F.Cu"]["items"] if item["t"] == "path"]))
+        self.assertEqual(1, len([item for item in layers["B.Cu"]["items"] if item["t"] == "path"]))
+        from cad.engine.formats.kicad.board_index import read_index
+
+        self.assertEqual(2, len(read_index(text).tracks))
+
+
 class StrokeFontTest(unittest.TestCase):
     def test_the_font_covers_ascii_and_stands_a_capital_at_the_text_size(self) -> None:
         self.assertEqual(len(GLYPHS), 95)

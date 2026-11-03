@@ -11,7 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from cad.engine.formats.kicad import sexpr
-from cad.engine.formats.kicad.board_index import BoardView, read_index
+from cad.engine.formats.kicad.board_index import BoardView, canonical_copper, read_index
 
 __all__ = ["inspect_board"]
 
@@ -64,7 +64,7 @@ def inspect_board(path: Path | str) -> dict:
     except UnicodeDecodeError:
         raise ValueError(f"{board.name} is not a readable KiCad board: it is not UTF-8 text") from None
     try:
-        tree = sexpr.parse(text)
+        tree = canonical_copper(sexpr.parse(text))
         index = read_index(tree, project=board.with_suffix(".kicad_pro"))
     except (sexpr.SexprError, ValueError) as error:
         raise ValueError(f"{board.name} is {error}") from None

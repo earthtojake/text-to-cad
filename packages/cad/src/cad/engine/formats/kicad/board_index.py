@@ -42,7 +42,7 @@ import re
 from collections import deque
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Callable, Iterable, Mapping, Sequence
+from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from cad.engine.formats.kicad.ref_path import ref_prefix_names
 from cad.engine.formats.kicad import sexpr
@@ -679,6 +679,47 @@ def item_layers(node: list) -> list[str]:
     return [layer] if layer else []
 
 
+_COPPER_KINDS = ("signal", "power", "mixed", "jumper")
+
+
+def canonical_copper(tree: list) -> list:
+    """``tree`` with KiCad 5's renamed copper layers under KiCad's own names. A KiCad 5 board names a
+    copper layer as its user renamed it (``(0 top_layer signal)``) and every item on it by that name;
+    KiCad 6 and later keep ``F.Cu`` and store the user's name beside it. KiCad 5 numbered copper 0 (front)
+    to 31 (back), inner layers 1-30, so the number gives the name. Answers ``tree`` itself when nothing is
+    renamed."""
+    table = sexpr.find(tree, "layers")
+    renames: dict[str, str] = {}
+    for entry in (table or [])[1:]:
+        if not (isinstance(entry, list) and len(entry) >= 3 and isinstance(entry[0], (int, float))):
+            continue
+        number, name, kind = int(entry[0]), str(entry[1]), str(entry[2])
+        if _COPPER.match(name) or kind not in _COPPER_KINDS:
+            continue
+        canonical = "F.Cu" if number == 0 else "B.Cu" if number == 31 else f"In{number}.Cu" if 1 <= number <= 30 else None
+        if canonical is not None:
+            renames[name] = canonical
+    if not renames:
+        return tree
+
+    def renamed(atom: Any) -> Any:
+        if isinstance(atom, str) and str(atom) in renames:
+            return type(atom)(renames[str(atom)])
+        return atom
+
+    def walk(node: Any) -> Any:
+        if not isinstance(node, list):
+            return node
+        if sexpr.head(node) in ("layer", "layers") and node is not table:
+            return [node[0], *(renamed(atom) if not isinstance(atom, list) else walk(atom) for atom in node[1:])]
+        if node is table:
+            return [node[0], *([entry[0], renamed(entry[1]), *entry[2:]] if isinstance(entry, list) and len(entry) >= 2
+                               else entry for entry in node[1:])]
+        return [walk(child) for child in node]
+
+    return walk(tree)
+
+
 def copper_layers(tree: list) -> list[str]:
     """The board's copper layers as its layer table declares them, front first."""
     table = sexpr.find(tree, "layers")
@@ -886,6 +927,7 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
             raise ValueError(f"not a readable KiCad board ({error})") from None
     if sexpr.head(tree) != "kicad_pcb":
         raise ValueError("not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)")
+    tree = canonical_copper(tree)
     table = net_table(tree)
     copper = copper_layers(tree)
     parts: list[Part] = []
