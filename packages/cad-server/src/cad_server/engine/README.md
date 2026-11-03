@@ -1751,8 +1751,12 @@ of the file's warm render process; `daemon=False` serves each file once for all 
 `--json` prints `{"ok": true, "pictures": [what each drew]}`.
 
 **Native KiCad stills.** A `.kicad_pcb` is a file source, with no XCAF document or model worker.
-`formats/kicad/plot.py` rereads the board and its sibling project on each request, discarding
-the index after creating the plot payload. `render/board.py` paints the same layer primitives
+`formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's
+refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the
+environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the engine's memory
+(`viewer/plots.py`) and gzipped under `<cache>/kicad/<key>/`, which a board's snapshot is drawn from too
+(`renders.py` keeps it before the render process reads it; a payload drawn as saved says why in
+`pours` and in the snapshot's warnings). `render/board.py` paints the same layer primitives
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
 plan cameras, annotation and measurements. Its render-service handle holds only a path; no
 board plot or parsed model is persisted. It refuses Preview, pose and transparent output.

@@ -321,6 +321,9 @@ class BoardExportTest(unittest.TestCase):
         self.jobs = ExportJobs(SimpleNamespace(touch=lambda: None), root=self.downloads)
         self.addCleanup(self.jobs.close)
         self.called = []
+        cache = patch.dict("os.environ", {"CAD_CACHE_DIR": str(Path(self.tmp.name) / "cache")})
+        cache.start()
+        self.addCleanup(cache.stop)
 
     def kicad(self, args):
         board, to, out = args
@@ -359,6 +362,12 @@ class BoardExportTest(unittest.TestCase):
             self.assertEqual("blinky-bom.csv", path.read_text(encoding="utf-8"))
         # KiCad ran on the job's own thread, never the request's.
         self.assertEqual({"cad-operation"}, {thread for _to, thread in self.called})
+        # The same bytes again: the kept download, without KiCad (a BOM reads the schematic, so it runs again).
+        again = self.exported("gerbers")
+        self.assertEqual((again["state"], again["filename"]), ("ready", "blinky-gerbers.zip"), again)
+        self.assertEqual(["gerbers", "bom"], [to for to, _thread in self.called])
+        self.exported("bom")
+        self.assertEqual(["gerbers", "bom", "bom"], [to for to, _thread in self.called])
 
     def test_a_board_offers_kicads_kinds_alone_and_a_changed_board_is_refused(self):
         from cad.kicad._export import EXPORTS

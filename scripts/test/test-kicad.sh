@@ -26,5 +26,7 @@ print(python)"
 )" || { echo "test-kicad.sh: the environment of cad[kicad] could not be made" >&2; exit 1; }
 "$CAD_TEST_KICODE_PYTHON" -c "import kicode; print(f'kicode {kicode.KICAD_VERSION} ({kicode.KICAD_COMMIT[:9]}): {kicode.executable()}')"
 export CAD_TEST_KICODE_PYTHON
+# The engines the suite starts refill a board's pours with KiCad, as a person's do (the runner's default is off).
+export CAD_KICAD_REFILL=1
 
 run_python_unittest "KiCad board Python tests" "tests/python/packages/kicad" "${PACKAGE_SOURCES[@]}"

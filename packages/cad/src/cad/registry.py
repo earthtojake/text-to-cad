@@ -247,7 +247,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                         "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
                                         "KiCad 9 or newer (a nightly's, 10.99, for a @kicad_pcb board script)",
                     "CAD_KICAD_CLI"),
-        modules=("kicode",), distributions=("kicode", "kicode-pcb", "kicode-sch"),
+        modules=("kicode",), distributions=("kicode",),
         identity=("kicode", "kicode-pcb", "kicode-sch")),
     "trimesh": Integration(
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "

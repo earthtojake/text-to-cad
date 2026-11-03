@@ -15,7 +15,9 @@ A KiCad board's exports (``BOARD``) are KiCad's: the job runs ``cad.kicad_pcb.ex
 of ``cad[kicad]`` (kicode's kicad-cli, ``cad_server._internal.integration_env``, made on first need), on the
 job's own thread, never a request's, from the board's bytes the page shows (the catalog's hash of them,
 checked before and, by ``mtime_ns-size``, after). One file is downloaded as it is; a folder of files (the
-Gerbers, the drill files, the PDF's two pages) as one ``.zip``.
+Gerbers, the drill files, the PDF's two pages) as one ``.zip``. A download of the board's key is kept
+(``boards.KEPT``: every kind but those reading files outside the key -- 3D models, schematic sheets) and
+answered again for the same bytes without KiCad.
 """
 from __future__ import annotations
 
@@ -183,10 +185,17 @@ class ExportJobs(Jobs):
         """KiCad's ``spec["format"]`` of the board, run where kicode is (``integration_env``), into a folder
         of its own beside ``target``; then the one file it wrote moved to ``target``, or every file it wrote
         zipped into it. A board whose bytes changed while KiCad read it is refused."""
-        from cad_server._internal import integration_env
+        from cad.engine.formats.kicad.poured import key
+        from cad_server._internal import boards, integration_env
 
         source, expected, _name = self._source(spec)
         board = Path(source["path"])
+        # An export of these bytes made before is the same file (``boards.KEPT``): answered without KiCad.
+        board_key = key(board)
+        kept = boards.exported(board_key, spec["format"], target.name)
+        if kept is not None:
+            shutil.copyfile(kept, target)
+            return {"written": [str(target)], "warnings": [], "kept": True}
         progress({"kind": "export", "stage": "Preparing KiCad"})
         python = integration_env.environment("kicad", lambda line: None, engine=False)
         out = target.parent / "kicad"
@@ -201,6 +210,8 @@ class ExportJobs(Jobs):
         written = [Path(path) for path in found.get("written") or ()]
         pack(written, out, target)
         shutil.rmtree(out, ignore_errors=True)
+        if key(board) == board_key:
+            boards.keep_export(board_key, spec["format"], target)
         return {"written": [str(target)], "warnings": list(found.get("warnings") or ())}
 
     def create(self, payload):

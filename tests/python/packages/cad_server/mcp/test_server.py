@@ -345,11 +345,19 @@ class TabServerTest(_Session):
         self.assertEqual(event["launch"]["model"], str(board))
         status, opened = self.http("POST", "/api/v1/documents", {"path": str(board)})
         self.assertEqual((status, opened["kind"]), (201, "kicad_pcb"))
-        status, first = self.http("GET", f"{opened['api']}/plot")
+        def plotted():
+            # Made off the request: a 202 while it is, asked again as the page does.
+            for _ask in range(200):
+                status, body = self.http("GET", f"{opened['api']}/plot")
+                if status != 202:
+                    return status, body
+            return status, body
+
+        status, first = plotted()
         self.assertEqual(status, 200)
         board.write_text(BOARD.replace('(width 1) (layer "F.Cu") (net "VBUS")',
                                        '(width 0.5) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
-        status, changed = self.http("GET", f"{opened['api']}/plot")
+        status, changed = plotted()
         self.assertEqual(status, 200)
         self.assertNotEqual(first, changed)
         self.assertEqual(self.opened, [])

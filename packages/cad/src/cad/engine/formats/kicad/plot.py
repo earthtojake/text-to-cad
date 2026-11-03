@@ -2,8 +2,9 @@
 
 The payload (``cad.engine.formats.kicad.PLOT_SCHEMA_VERSION`` 4; its contract is the core
 package's ``docs/plot-payload.md``) is built from the ``.kicad_pcb`` alone: no
-KiCad runs. The file is KiCad's own, and everything the picture needs is in it,
-the pours' saved fills included. Authors must refill changed zones in KiCad before saving.
+KiCad runs here. The file is KiCad's own, and everything the picture needs is in it,
+the pours' saved fills included -- which the viewer and the snapshot replace with KiCad's refill of
+them, drawing from a refilled copy's bytes (``build_plot(path, data)``, :mod:`.poured`).
 
 The picture is KiCad's PCB editor's, with its default display: every layer shown,
 the front copper the active layer, and KiCad's drawing order for that (its
@@ -946,10 +947,12 @@ def _shifted(item: dict, dx: float, dy: float) -> dict:
     return out
 
 
-def build_plot(path: Path | str) -> dict:
-    """The plot payload of the board at ``path``."""
+def build_plot(path: Path | str, data: bytes | None = None) -> dict:
+    """The plot payload of the board at ``path``: of its saved bytes, or of ``data`` in their place (KiCad's
+    refill of them, ``poured``), read beside the same project and named the same."""
     path = _checked(Path(path))
-    data, _project = _read(path)
+    if data is None:
+        data, _project = _read(path)
     return _build(path, _tree(path, data))
 
 

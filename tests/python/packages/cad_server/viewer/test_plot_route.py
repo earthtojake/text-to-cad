@@ -1,27 +1,57 @@
-"""A KiCad board's ``plot`` (``GET /api/v1/documents/kicad_pcb/<id>/plot``) against a real launched
-server, and the route's rules (``cad_server.viewer.plots``).
+"""A KiCad board's ``plot`` and ``drc`` (``GET /api/v1/documents/kicad_pcb/<id>/plot|drc``) against a real
+launched server, and the route's rules (``cad_server.viewer.plots``).
 
-A board is opened by its absolute path, as every file is, and its plot is read from the file on
-every request: an edit saved under the same path is the next answer, and nothing is cached. The
-board is the test board (``tests/python/support/kicad_board.py``), written fresh into a temporary
-folder.
+A board is opened by its absolute path, as every file is. Its plot is drawn from KiCad's refill of a copy
+(stood in for here: KiCad runs in the KiCad suite alone) and kept by the board's bytes, so an edit saved
+under the same path is the next answer's new key, and the same bytes are answered without plotting again.
+The board is the test board (``tests/python/support/kicad_board.py``), written fresh into a temporary
+folder; the cache is the test file's own (``CAD_CACHE_DIR``).
 """
 
 from __future__ import annotations
 
+import gzip
 import http.client
 import json
 import tempfile
 import threading
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from tests.python.support.kicad_board import BOARD, write_board
 
 from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION
 from cad_server.viewer import handler as handler_module
+from cad_server.viewer.compressed import Coded
 from cad_server.viewer.http_app import create_cad_app
-from cad_server.viewer.plots import plot_payload_response
+from cad_server.viewer.plots import BoardAnswers
+
+# The test board's VBUS track, 1 mm wide as saved; the stand-in refill writes it 0.5 mm, so a plot says
+# which bytes it was drawn from.
+SAVED = '(width 1) (layer "F.Cu") (net "VBUS")'
+REFILLED = '(width 0.5) (layer "F.Cu") (net "VBUS")'
+
+
+class Refill:
+    """KiCad's refill stood in for: a copy of the board with the track changed, or a failure."""
+
+    def __init__(self, fails: bool = False) -> None:
+        self.calls, self.fails = 0, fails
+
+    def __call__(self, board: Path, out_dir: Path) -> Path:
+        self.calls += 1
+        if self.fails:
+            raise RuntimeError("no kicad-cli here")
+        copy = out_dir / board.name
+        copy.write_text(board.read_text(encoding="utf-8").replace(SAVED, REFILLED), encoding="utf-8")
+        return copy
+
+
+def width(body: bytes) -> float:
+    payload = json.loads(body)
+    tracks = [track for track in payload["board"]["tracks"] if track.get("net") == "VBUS"]
+    return tracks[0]["width"]
 
 
 class PlotRules(unittest.TestCase):
@@ -30,24 +60,110 @@ class PlotRules(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.folder = Path(self._tmp.name)
         self.board = write_board(self.folder)
+        # Each test's own cache: what one kept is no other's.
+        cache = mock.patch.dict("os.environ", {"CAD_CACHE_DIR": str(self.folder / "cache")})
+        cache.start()
+        self.addCleanup(cache.stop)
 
-    def test_a_board_answers_its_saved_file_again(self) -> None:
-        status, body = plot_payload_response(str(self.board))
+    def answered(self, answers: BoardAnswers, product: str = "plot", **options):
+        status, body, key = answers.response(product, str(self.board), **options)
+        return status, body.data if isinstance(body, Coded) else body, key
+
+    def test_the_plot_is_drawn_from_kicads_refill_and_kept_by_the_boards_bytes(self) -> None:
+        refill = Refill()
+        answers = BoardAnswers(refill=refill)
+        status, body, key = self.answered(answers)
         self.assertEqual(status, 200)
         payload = json.loads(body)
         self.assertEqual((payload["schemaVersion"], payload["kind"], payload["unrouted"]), (PLOT_SCHEMA_VERSION, "board", 1))
-        self.assertEqual([part["ref"] for part in payload["board"]["parts"]], ["D1", "J1", "R1"])
-        self.assertEqual(plot_payload_response(str(self.board)), (200, body))
+        self.assertEqual(payload["pours"], {"refilled": True})
+        self.assertEqual(width(body), 0.5, "drawn from the refilled copy")
+        self.assertEqual(self.board.read_text(encoding="utf-8"), BOARD, "the person's file is never written")
+        # The same bytes: answered from memory, and by a new engine from the disk, without KiCad.
+        self.assertEqual(self.answered(answers), (200, body, key))
+        self.assertEqual(self.answered(BoardAnswers(refill=refill)), (200, body, key))
+        self.assertEqual(refill.calls, 1)
+        # A client that names the key it holds is told it is current.
+        self.assertEqual(self.answered(answers, if_none_match=f'"{key}"')[0], 304)
+        # An edit is a new key: plotted (and refilled) again.
+        self.board.write_text(BOARD.replace("blinky", "blinky v2"), encoding="utf-8")
+        status, changed, other = self.answered(answers)
+        self.assertEqual((status, refill.calls), (200, 2))
+        self.assertNotEqual(other, key)
+
+    def test_without_kicad_the_board_is_plotted_as_saved_and_says_so(self) -> None:
+        refill = Refill(fails=True)
+        status, body, _key = self.answered(BoardAnswers(refill=refill))
+        self.assertEqual(status, 200)
+        pours = json.loads(body)["pours"]
+        self.assertFalse(pours["refilled"])
+        self.assertIn("no kicad-cli here", pours["warning"])
+        self.assertEqual(width(body), 1.0, "drawn as saved")
+        # Nothing kept on disk: a new engine tries KiCad again.
+        self.answered(BoardAnswers(refill=refill))
+        self.assertEqual(refill.calls, 2)
+
+    def test_a_board_that_takes_longer_than_the_hold_is_asked_again(self) -> None:
+        release = threading.Event()
+
+        def slow(board: Path, out_dir: Path) -> Path:
+            release.wait(10)
+            return Refill()(board, out_dir)
+
+        answers = BoardAnswers(refill=slow, hold_seconds=0, retry_ms=250)
+        self.assertEqual(self.answered(answers)[:2], (202, {"state": "plotting", "retryMs": 250}))
+        release.set()
+        answers.hold_seconds = 10
+        self.assertEqual(self.answered(answers)[0], 200)
 
     def test_what_the_route_will_not_take(self) -> None:
-        self.assertEqual(plot_payload_response(str(self.folder / "other.kicad_pcb")), (404, {"error": "Not found"}))
+        answers = BoardAnswers(refill=Refill())
+        self.assertEqual(answers.response("plot", str(self.folder / "other.kicad_pcb")), (404, {"error": "Not found"}, ""))
         for ref, message in (("", r"absolute path of a \.kicad_pcb"), ("blinky.kicad_pcb", r"absolute"),
                              (str(self.folder / "part.step"), r"part\.step is not a \.kicad_pcb file")):
             with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, message):
-                plot_payload_response(ref)
+                answers.response("plot", ref)
         (self.folder / "broken.kicad_pcb").write_text("(kicad_sch)", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, r"broken\.kicad_pcb is not a KiCad board"):
-            plot_payload_response(str(self.folder / "broken.kicad_pcb"))
+        status, body, _key = answers.response("plot", str(self.folder / "broken.kicad_pcb"))
+        self.assertEqual(status, 400)
+        self.assertIn("broken.kicad_pcb is not a KiCad board", body["error"])
+
+    def test_the_drc_is_kicads_check_kept_by_the_boards_bytes_its_items_named(self) -> None:
+        found = {"ok": False, "path": str(self.board), "summary": "", "findings": [
+            {"severity": "error", "code": "unconnected_items", "message": "Missing connection", "location": "(20, 23) mm",
+             "hint": None}],
+                 "measurements": {"drc": [{"check": "unconnected", "severity": "error", "type": "unconnected_items",
+                                           "description": "Missing connection", "at": [20.0, 23.175], "items": [
+                                               {"uuid": "x", "description": "Pad 2 [LED] of D1 on F.Cu", "pos": [20.0, 23.175]},
+                                               {"uuid": "7a1c0000-0000-4000-8000-000000000001", "description": "Track",
+                                                "pos": [5.0, 15.0]}]}]}}
+        calls = []
+
+        def drc(board, board_key):
+            calls.append(board_key)
+            return json.loads(json.dumps(found))
+
+        with mock.patch("cad_server._internal.boards.drc", drc):
+            answers = BoardAnswers(refill=Refill())
+            status, body, key = self.answered(answers, "drc")
+            self.assertEqual(self.answered(answers, "drc"), (status, body, key))
+        self.assertEqual((status, calls), (200, [key]))
+        items = json.loads(body)["measurements"]["drc"][0]["items"]
+        self.assertEqual([item.get("ref") for item in items], ["#D1.2", "#track:7a1c0000-0000-4000-8000-000000000001"])
+
+
+class Codings(unittest.TestCase):
+    def test_the_coding_is_the_browsers_choice_zstd_first(self) -> None:
+        from cad_server.viewer.compressed import chosen, encode
+
+        self.assertEqual(chosen("gzip, deflate, br, zstd"), "zstd")
+        self.assertEqual(chosen("gzip, deflate"), "gzip")
+        self.assertEqual(chosen("*"), "gzip")
+        for accept in ("", "identity", "gzip;q=0", "br"):
+            with self.subTest(accept=accept):
+                self.assertIsNone(chosen(accept))
+        data = b'{"items":[' + b'[1.25,2.5],' * 4000 + b'[0,0]]}'
+        self.assertEqual(gzip.decompress(encode(data, "gzip")), data)
 
 
 class PlotRoute(unittest.TestCase):
@@ -56,7 +172,12 @@ class PlotRoute(unittest.TestCase):
         self.addCleanup(self._tmp.cleanup)
         self.folder = Path(self._tmp.name)
         self.board = write_board(self.folder)
+        # Each test's own cache: what one kept is no other's.
+        cache = mock.patch.dict("os.environ", {"CAD_CACHE_DIR": str(self.folder / "cache")})
+        cache.start()
+        self.addCleanup(cache.stop)
         app = create_cad_app(host="127.0.0.1", port=0, dist_dir="")
+        app.boards = BoardAnswers(refill=Refill(), hold_seconds=30)
         server = handler_module.serve(app, "127.0.0.1", 0)
         self.port = server.server_address[1]
         app.port = self.port
@@ -66,11 +187,11 @@ class PlotRoute(unittest.TestCase):
         self.addCleanup(server.server_close)
         self.addCleanup(server.shutdown)
 
-    def request(self, method: str, target: str, body: dict | None = None):
+    def request(self, method: str, target: str, body: dict | None = None, headers: dict | None = None):
         conn = http.client.HTTPConnection("127.0.0.1", self.port, timeout=30)
         try:
             conn.request(method, target, body=None if body is None else json.dumps(body).encode(),
-                         headers={"x-cad-viewer": "1"} if method == "POST" else {})
+                         headers={**({"x-cad-viewer": "1"} if method == "POST" else {}), **(headers or {})})
             response = conn.getresponse()
             return response.status, dict(response.getheaders()), response.read()
         finally:
@@ -89,14 +210,24 @@ class PlotRoute(unittest.TestCase):
         self.assertEqual(status, 200, first[:400])
         self.assertEqual(headers["content-type"], "application/json; charset=utf-8")
         self.assertEqual(json.loads(first)["kind"], "board")
+        self.assertNotIn("content-encoding", {name.lower() for name in headers}, "no coding asked, none sent")
+        tag = headers["etag"]
+        # Compressed for a browser that takes it, the same bytes once decoded; a client naming the key is told
+        # it is current.
+        status, coded_headers, coded = self.request("GET", f"{api}/plot", headers={"accept-encoding": "gzip, deflate"})
+        self.assertEqual((status, coded_headers["content-encoding"], coded_headers["etag"]), (200, "gzip", tag))
+        self.assertEqual(gzip.decompress(coded), first)
+        self.assertLess(len(coded), len(first) / 3)
+        self.assertEqual(self.request("GET", f"{api}/plot", headers={"if-none-match": tag})[0], 304)
         self.board.write_text(BOARD.replace('(width 1) (layer "F.Cu") (net "VBUS")',
-                                            '(width 0.5) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
-        status, _, changed = self.request("GET", f"{api}/plot")
+                                            '(width 0.4) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
+        status, headers, changed = self.request("GET", f"{api}/plot")
         self.assertEqual(status, 200)
         self.assertNotEqual(first, changed)
-        # Its routes are its plot and its source; another kind's read is a 404 naming them.
+        self.assertNotEqual(headers["etag"], tag)
+        # Its routes are its plot, its DRC and its source; another kind's read is a 404 naming them.
         status, _, body = self.request("GET", f"{api}/drawing")
-        self.assertEqual((status, json.loads(body)["hint"]), (404, "a kicad_pcb's routes are plot, source"))
+        self.assertEqual((status, json.loads(body)["hint"]), (404, "a kicad_pcb's routes are plot, drc, source"))
 
     def test_a_file_that_is_no_board_is_a_400_saying_why(self) -> None:
         broken = self.folder / "broken.kicad_pcb"

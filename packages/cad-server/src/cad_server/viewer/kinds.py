@@ -10,7 +10,8 @@ a document of that kind, and the same id under another kind is a 404 that names 
   part's ``faces``/``edges``/``vertices/<ordinal>``, ``groups``, ``volume``), ``measure``,
   ``kinematics``, ``POST pose``, ``POST mesh``; a file's also its ``source``.
 * ``dxf``: ``drawing`` (the 2D payload), ``source``.
-* ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``source``.
+* ``kicad_pcb``: ``plot`` (the board's geometry per layer, and its index), ``drc`` (KiCad's design rule
+  check of it), ``source``.
 * ``urdf``, ``srdf``, ``sdf``: ``structure`` (the robot resolved for the page), ``parts/<digest>``
   (a primitive's mesh), ``source``.
 * ``stl``, ``glb``, ``3mf``: ``source``, which the page parses itself.

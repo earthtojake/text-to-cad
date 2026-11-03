@@ -38,7 +38,8 @@ class KicadReaderIsStdlibPure(unittest.TestCase):
                            if name != "__future__" and name.partition(".")[0] not in sys.stdlib_module_names
                            and name != OWN and not name.startswith(OWN + ".")
                            and name not in ("cad._internal.document_type",  # cad.kicad_pcb is a DocumentType
-                                            "cad.results", "cad.kicad._check", "cad.kicad._export"))
+                                            "cad.results", "cad.kicad._check", "cad.kicad._export",
+                                            "cad.engine.places", "cad.engine.atomic_replace"))  # poured's cache
         self.assertEqual(offenders, [])
 
 
