@@ -19,7 +19,8 @@ bottom-side placement includes mirroring. Never apply a translation or rotation 
 
 For a new board, start with a valid native file from the KiCad version in use. Establish the
 layer stack, closed Edge.Cuts outline and thickness, place verified library footprints, assign
-nets from the circuit specification, route and refill zones, then save and run DRC. A schematic
+nets from the circuit specification, route and refill zones, then save and run DRC; with a
+schematic, follow [layout](layout.md), which imports its netlist. A schematic
 and its pin/net mapping remain part of the project when present. A board without a schematic
 requires an explicit, reviewable circuit specification; footprint numbers alone do not tell
 which connections are electrically correct.

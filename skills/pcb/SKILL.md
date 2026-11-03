@@ -68,7 +68,10 @@ if __name__ == "__main__":
 ```
 
 For creation or structured edits read [native files](references/board-api.md). For parts and
-footprints read [parts](references/parts.md). KiCad's file coordinates are millimetres, **y down**;
+footprints read [parts](references/parts.md). To place and route a board, read
+[layout](references/layout.md): start from the schematic's netlist, place one part or functional
+group at a time, route octolinear by hand (never an autorouter) with widths for each net's current,
+and check each step with `cad kicad_pcb check` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
