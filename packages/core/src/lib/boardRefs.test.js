@@ -15,7 +15,7 @@ import {
 const fixture = JSON.parse(readFileSync(new URL("./boardRefs.parity.json", import.meta.url), "utf8"));
 
 test("every selector case parses as the fixture says", () => {
-  for (const { selector, kind, ref, pad, net, at, canonical } of fixture.selectorCases) {
+  for (const { selector, kind, ref, pad, net, at, to, layer, id, canonical } of fixture.selectorCases) {
     const parsed = parseBoardRefSelector(selector);
     assert.ok(parsed, selector);
     assert.equal(parsed.kind, kind, selector);
@@ -23,7 +23,12 @@ test("every selector case parses as the fixture says", () => {
     assert.equal(parsed.ref, ref, selector);
     assert.equal(parsed.pad, pad, selector);
     assert.equal(parsed.net, net, selector);
+    assert.equal(parsed.layer, layer, selector);
+    assert.equal(parsed.id, id, selector);
     assert.deepEqual(parsed.at, at, selector);
+    assert.deepEqual(parsed.to, to, selector);
+    // The canonical form is a fixed point.
+    assert.equal(parseBoardRefSelector(parsed.canonical).canonical, canonical, selector);
   }
 });
 
@@ -61,4 +66,9 @@ test("only KiCad documents speak this language", () => {
   assert.ok(isBoardRefPath("x.KICAD_PCB"));
   assert.ok(!isBoardRefPath("part.step"));
   assert.throws(() => buildBoardRefToken({ path: "b.kicad_pcb", selectors: ["o1.f2.e3"] }), /not a board reference/);
+});
+
+test("what the language cannot say is refused when formatting", () => {
+  assert.throws(() => formatBoardRefSelector({ kind: "track", id: "not-a-uuid" }), /uuid/);
+  assert.throws(() => formatBoardRefSelector({ kind: "point", at: [1, 2], layer: "Front" }), /not a KiCad layer/);
 });

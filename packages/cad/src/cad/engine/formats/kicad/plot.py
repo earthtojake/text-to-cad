@@ -46,13 +46,14 @@ from __future__ import annotations
 import json
 import math
 import re
+from collections import Counter
 from pathlib import Path
 from typing import Iterable, Sequence
 
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import (
-    FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_layers, layer_of, net_of, net_table,
-    pad_shape, points_of, read_index,
+    FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, net_of,
+    net_table, pad_shape, points_of, read_index,
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
 from cad.engine.formats.kicad.geometry import XY, box, rotate
@@ -225,6 +226,8 @@ def _scaled(polygon: Sequence[XY], centre: XY, factor: float) -> list[XY]:
 class _Builder:
     def __init__(self, tree: list):
         self.tree = tree
+        # Each graphic drawn with its uuid and its footprint's: the ids are settled once all are drawn.
+        self.named: list[tuple[dict, str, str | None]] = []
         self.table = net_table(tree)
         self.copper = copper_layers(tree)
         setup = sexpr.find(tree, "setup") or []
@@ -241,6 +244,7 @@ class _Builder:
         value = footprint_property(node, "Value") or ""
         fields = {str(item[1]): str(item[2]) for item in sexpr.find_all(node, "property") if len(item) >= 3}
         selector = f"#{ref}" if ref else None
+        owner = item_id(node)
         margins = (
             sexpr.value(node, "solder_mask_margin"),
             sexpr.value(node, "solder_paste_margin"),
@@ -255,7 +259,7 @@ class _Builder:
             elif head == "property" or head == "fp_text":
                 self.footprint_text(child, frame, ref, value, fields)
             elif head and head.startswith("fp_") and head[3:] in _GRAPHICS:
-                self.graphic(child, frame, selector)
+                self.graphic(child, frame, selector, owner)
 
     def footprint_text(self, node: list, frame: FootprintFrame, ref: str, value: str, fields: dict[str, str]) -> None:
         if _hidden(node):
@@ -290,7 +294,7 @@ class _Builder:
         strokes = text_strokes(text, size=size, at=at, angle=angle, justify=justify, mirror="mirror" in justify)
         self.sheet.text(layer, text, strokes, thickness, **({"ref": selector} if selector else {}))
 
-    def graphic(self, node: list, frame: FootprintFrame | None, selector: str | None) -> None:
+    def graphic(self, node: list, frame: FootprintFrame | None, selector: str | None, owner: str | None = None) -> None:
         drawn = graphic(node)
         layer = layer_of(node)
         if drawn is None or layer is None:
@@ -300,6 +304,13 @@ class _Builder:
             points = [frame.place(point) for point in points]
         width = _stroke_width(node)
         flags = {"ref": selector} if selector else {}
+        # What a pick names it by (`#shape:<id>`) and what it is, a line unless it says: the index's Shape.
+        uid = item_id(node)
+        if uid:
+            shape = (sexpr.head(node) or "_").split("_", 1)[1]
+            flags["id"] = uid
+            if shape != "line":
+                flags["shape"] = shape
         # A shape on copper that carries a net is copper of that net (a filled rectangle joining pads):
         # drawn with it, and joined with it in the ratsnest.
         net = net_of(node, self.table) if expand_copper([layer], self.copper) else None
@@ -315,6 +326,9 @@ class _Builder:
                 ends = [*points, points[0]] if closed else points
                 for start, end in zip(ends, ends[1:]):
                     self.sheet.copper.append(Copper.segment(net, layer, start, end, width))
+        drawn_item = self.sheet.layers.get(layer, [None])[-1]
+        if uid and drawn_item is not None and drawn_item.get("id") == uid:
+            self.named.append((drawn_item, uid, owner))
 
     # -- pads --------------------------------------------------------------------------
 
@@ -488,6 +502,11 @@ class _Builder:
                         self.text(layer, node[1], sexpr.pair(at, (0.0, 0.0)), sexpr.number(at[3]) if len(at) > 3 else 0.0, node)
             elif head and head.startswith("gr_") and head[3:] in _GRAPHICS:
                 self.graphic(node, None, None)
+        # A uuid that copies of one footprint share names each under its footprint's, as the index names them.
+        counts = Counter(uid for _item, uid, _owner in self.named)
+        for item, uid, owner in self.named:
+            if owner and counts[uid] > 1:
+                item["id"] = f"{owner}/{uid}"
         return self.sheet
 
 
@@ -570,7 +589,7 @@ def build_plot(path: Path | str) -> dict:
 
 
 def _build(path: Path, tree: list) -> dict:
-    index = read_index(tree, project=path.with_suffix(".kicad_pro"))
+    index = read_index(tree, project=path.with_suffix(".kicad_pro"), graphics=False)
     sheet = _Builder(tree).build()
     lines = ratsnest(sheet.copper)
     for start, end in lines:

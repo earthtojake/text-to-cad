@@ -43,9 +43,11 @@ class BoardSelectorParityTest(unittest.TestCase):
                 self.assertIsNotNone(parsed)
                 self.assertEqual(case["kind"], parsed.kind)
                 self.assertEqual(case["canonical"], parsed.canonical)
-                for field in ("ref", "pad", "net"):
+                for field in ("ref", "pad", "net", "layer", "id"):
                     self.assertEqual(case.get(field), getattr(parsed, field), field)
-                self.assertEqual(case.get("at"), list(parsed.at) if parsed.at is not None else None)
+                for field in ("at", "to"):
+                    value = getattr(parsed, field)
+                    self.assertEqual(case.get(field), list(value) if value is not None else None, field)
                 # The canonical form is a fixed point.
                 self.assertEqual(case["canonical"], parse_board_selector(parsed.canonical).canonical)
 
@@ -56,7 +58,7 @@ class BoardSelectorParityTest(unittest.TestCase):
 
     def test_every_format_case_formats_as_the_fixture_says(self) -> None:
         for case in _fixture()["formatCases"]:
-            fields = {key: case[key] for key in ("ref", "pad", "net", "at") if key in case}
+            fields = {key: case[key] for key in ("ref", "pad", "net", "at", "to", "layer", "id") if key in case}
             with self.subTest(selector=case["selector"]):
                 self.assertEqual(case["selector"], format_board_selector(case["kind"], **fields))
                 self.assertEqual(case["kind"], parse_board_selector(case["selector"]).kind)
@@ -94,6 +96,11 @@ class BoardSelectorEdgesTest(unittest.TestCase):
             ("net", {"net": ""}),
             ("copper", {"net": "VIN"}),
             ("hole", {}),
+            ("track", {}),
+            ("via", {"id": "not-a-uuid"}),
+            ("text", {"id": "a/b/c"}),
+            ("point", {"at": (1, 2), "layer": "Front"}),
+            ("area", {"at": (1, 2)}),
         ):
             with self.subTest(kind=kind, fields=fields), self.assertRaises(ValueError):
                 format_board_selector(kind, **fields)

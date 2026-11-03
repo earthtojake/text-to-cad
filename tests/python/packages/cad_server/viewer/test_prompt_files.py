@@ -140,6 +140,25 @@ class PromptFilesRouteTest(unittest.TestCase):
         self.assertEqual(packet["jobs"][0]["outputs"], [{"path": str(self.files / "blinky-1-current-view.png"),
                                                          "label": "current view", "width": 1600, "height": 1200}])
 
+    def test_a_boards_prompt_names_its_references_for_the_snapshot_to_light(self) -> None:
+        """What a board's prompt names in it goes in its packet, canonical; a job takes them, and only a board's."""
+        board = self.tmp / "blinky.kicad_pcb"
+        board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        plan = {"position": [20, -15, 60], "target": [20, -15, 0], "up": [0, 1, 0], "orthographicHalfHeight": 16}
+        request = {"name": "blinky.kicad_pcb", "input": str(board), "annotation": None,
+                   "views": [{"label": "current view", "camera": plan, "display": {"mode": "board"}}],
+                   "references": ["#R1", "#track:7A1C0000-0000-4000-8000-000000000001", "#F.Cu@x20y15..x10y5"]}
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", request)
+        self.assertEqual(status, 200, body)
+        packet = json.loads((self.files / "blinky-1.snapshot.json").read_text(encoding="utf-8"))
+        self.assertEqual(packet["references"], ["#R1", "#track:7a1c0000-0000-4000-8000-000000000001", "#F.Cu@x10y5..x20y15"])
+        self.assertEqual(job_pictures(packet)[0][2].references, packet["references"])
+        for references, said in ((["#R1", "not one"], "is not a board reference"), ("#R1", "references lists board references")):
+            status, body, _ = self.call("POST", "/api/v1/local/prompt-files", {**request, "references": references})
+            self.assertEqual((status, said in json.loads(body)["error"]), (400, True), references)
+        status, body, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(references=["#R1"]))
+        self.assertEqual((status, "is no board" in json.loads(body)["error"]), (400, True))
+
     def test_a_prompt_without_an_annotation_names_none_and_the_next_prompt_is_numbered_on(self) -> None:
         _, first, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))
         _, second, _ = self.call("POST", "/api/v1/local/prompt-files", self.request(annotation=None))

@@ -1,10 +1,13 @@
 """Any KiCad board, read as what a person can point at, and board references answered.
 
 :func:`read_index` reads a saved ``.kicad_pcb`` into its parts (footprints, with their fields and outlines), pads,
-tracks, vias, pours, unplated holes, ``Edge.Cuts`` outline and nets, from the
-file alone: no KiCad runs. :func:`read_board` (``pcb.read_board``) answers
+tracks, vias, pours, unplated holes, ``Edge.Cuts`` outline, nets, texts, dimensions and
+graphics, from the file alone: no KiCad runs. :func:`read_board` (``pcb.read_board``) answers
 board references (:mod:`cad.engine.formats.kicad.refs`) against that index:
-``board.resolve("#U3.9")`` is pad 9 of U3, where it is, its net, and its part.
+``board.resolve("#U3.9")`` is pad 9 of U3, where it is, its net, and its part;
+``board.resolve("#track:<uuid>")`` the track KiCad saved with that uuid (an item's
+uuid is kept by every save, so a reference outlives an edit around it); ``#F.Cu@x10y5``
+what F.Cu holds at a point, ``#@x10y5..x20y15`` what lies inside a box.
 
 Frames
 ------
@@ -39,7 +42,7 @@ from __future__ import annotations
 import difflib
 import math
 import re
-from collections import deque
+from collections import Counter, deque
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -50,18 +53,26 @@ from cad.engine.formats.kicad.geometry import (
     XY, arc_points, area, bezier_points, box, format_xy, hull, inside, polygon_distance, polyline_distance, rotate,
 )
 from cad.engine.formats.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
-from cad.engine.formats.kicad.refs import BoardSelector, format_board_selector, parse_board_selector, parse_board_token, selector_or_none
+from cad.engine.formats.kicad.refs import (
+    ITEM_KINDS, BoardSelector, format_board_selector, parse_board_selector, parse_board_token, selector_or_none,
+)
+from cad.engine.formats.kicad.sexpr import Sym
+from cad.engine.formats.kicad.stroke_font import text_strokes
 
 __all__ = [
+    "Area",
     "BoardIndex",
     "BoardView",
     "Copper",
+    "Dimension",
     "FootprintFrame",
     "Hole",
     "Net",
     "Pad",
     "Part",
     "Point",
+    "Shape",
+    "Text",
     "Track",
     "Via",
     "Zone",
@@ -69,6 +80,7 @@ __all__ = [
     "expand_copper",
     "footprint_property",
     "graphic",
+    "item_id",
     "item_layers",
     "layer_of",
     "net_of",
@@ -172,15 +184,26 @@ class Part:
 
 @dataclass(frozen=True)
 class Track:
-    """A copper segment or arc (sampled to points), on one layer."""
+    """A copper segment or arc (sampled to points), on one layer. ``id`` is the uuid KiCad saved it
+    with (``#track:<id>``), ``None`` on a board that saved none."""
 
     net: str | None
     layer: str
     width: float
     points: tuple[XY, ...]
     arc: bool = False
+    id: str | None = None
 
     kind = "track"
+
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("track", id=self.id)
+
+    @property
+    def length(self) -> float:
+        """Along the track, mm (an arc's sampled points: within a micron of the arc)."""
+        return sum(math.hypot(b[0] - a[0], b[1] - a[1]) for a, b in zip(self.points, self.points[1:]))
 
     def __repr__(self) -> str:
         what = "arc" if self.arc else "track"
@@ -189,32 +212,135 @@ class Track:
 
 @dataclass(frozen=True)
 class Via:
+    """A via: ``layers`` the two copper layers it joins, as the file names them; ``type`` through,
+    blind, buried or micro."""
+
     net: str | None
     at: XY
     diameter: float
     drill: float
     layers: tuple[str, ...] = ("F.Cu", "B.Cu")
+    id: str | None = None
+    type: str = "through"
 
     kind = "via"
 
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("via", id=self.id)
+
     def __repr__(self) -> str:
-        return f"Via({self.net!r} at {format_xy(self.at)}, {self.diameter:g}/{self.drill:g} mm)"
+        what = "" if self.type == "through" else f"{self.type} "
+        return f"Via({what}{self.net!r} at {format_xy(self.at)}, {self.diameter:g}/{self.drill:g} mm, {'-'.join(self.layers)})"
 
 
 @dataclass(frozen=True)
 class Zone:
-    """A pour on one copper layer: its outline as drawn, and the copper KiCad filled it with."""
+    """A pour on one copper layer: its outline as drawn, and the copper KiCad filled it with. A zone
+    on several layers is one of these per layer, alike but for ``layer`` and ``fills``; ``layers``
+    names them all, ``id`` is the zone's uuid (``#zone:<id>``)."""
 
     net: str | None
     layer: str
     outline: tuple[XY, ...]
     fills: tuple[tuple[XY, ...], ...] = ()
+    id: str | None = None
+    name: str | None = None
+    priority: int = 0
+    layers: tuple[str, ...] = ()
 
     kind = "zone"
 
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("zone", id=self.id)
+
+    @property
+    def filled_area(self) -> float | None:
+        """The copper KiCad filled this layer with, mm² (its fills hold their holes by slits, so each
+        is its area); ``None`` while it is unfilled."""
+        return sum(abs(area(fill)) for fill in self.fills) if self.fills else None
+
     def __repr__(self) -> str:
-        state = "filled" if self.fills else "unfilled"
-        return f"Zone({self.net!r} on {self.layer}, {state})"
+        state = f"filled {self.filled_area:.4g} mm²" if self.fills else "unfilled"
+        named = f" {self.name!r}" if self.name else ""
+        return f"Zone({self.net!r}{named} on {', '.join(self.layers or (self.layer,))}, {state})"
+
+
+@dataclass(frozen=True)
+class Text:
+    """A text on the board: a board's (``gr_text``), or a footprint's shown field or ``fp_text``
+    (``part``, its reference). ``polygon`` is the box its letters fill on the board; ``size`` the
+    letters' height and ``angle`` its turn, as KiCad keeps them."""
+
+    id: str | None
+    text: str
+    layer: str
+    at: XY
+    angle: float
+    size: float
+    polygon: tuple[XY, ...]
+    part: str | None = None
+
+    kind = "text"
+
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("text", id=self.id)
+
+    def __repr__(self) -> str:
+        owner = f" of {self.part}" if self.part else ""
+        return f"Text({self.text!r}{owner} on {self.layer} at {format_xy(self.at)}, {self.size:g} mm)"
+
+
+@dataclass(frozen=True)
+class Dimension:
+    """A dimension: ``value`` the text KiCad shows for it (``"20.5740 mm"``), ``lines`` what it draws
+    from (its extension lines and crossbar, a leader, a centre's cross), ``polygon`` its text's box."""
+
+    id: str | None
+    type: str  # aligned, orthogonal, leader, center or radial
+    layer: str
+    value: str
+    lines: tuple[tuple[XY, XY], ...]
+    polygon: tuple[XY, ...] = ()
+    part: str | None = None
+
+    kind = "dimension"
+
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("dimension", id=self.id)
+
+    def __repr__(self) -> str:
+        return f"Dimension({self.type} {self.value!r} on {self.layer})"
+
+
+@dataclass(frozen=True)
+class Shape:
+    """A graphic: a board's ``gr_*`` or a footprint's ``fp_*`` (``part``) line, rect, circle, arc,
+    poly or curve, its ``points`` on the board (an arc, a circle and a curve sampled), stroked
+    ``width`` wide and ``filled`` or not; ``net`` when it is copper of a net."""
+
+    id: str | None
+    shape: str  # line, rect, circle, arc, poly, curve
+    layer: str
+    width: float
+    points: tuple[XY, ...]
+    closed: bool = False
+    filled: bool = False
+    part: str | None = None
+    net: str | None = None
+
+    kind = "shape"
+
+    @property
+    def selector(self) -> str | None:
+        return selector_or_none("shape", id=self.id)
+
+    def __repr__(self) -> str:
+        owner = f" of {self.part}" if self.part else ""
+        return f"Shape({self.shape}{owner} on {self.layer}, {self.width:g} mm)"
 
 
 @dataclass(frozen=True)
@@ -276,7 +402,8 @@ class Copper:
 
 @dataclass(frozen=True)
 class Point:
-    """A point on (or off) the board and what is there."""
+    """A point on (or off) the board and what is there: on ``layer`` alone when it names one (what
+    the layer holds, the parts on its side, the holes through it: :meth:`BoardView.at`)."""
 
     at: XY
     on_board: bool  # inside the Edge.Cuts outline (and outside its cutouts)
@@ -284,18 +411,67 @@ class Point:
     pads: tuple[Pad, ...]
     copper: tuple[Track | Via | Zone, ...]  # tracks, vias and filled pours, any net
     holes: tuple[Hole, ...]
+    layer: str | None = None
+    texts: tuple[Text, ...] = ()
+    shapes: tuple[Shape, ...] = ()
 
     kind = "point"
 
     @property
     def selector(self) -> str:
-        return format_board_selector("point", at=self.at)
+        return format_board_selector("point", at=self.at, layer=self.layer)
 
     def __repr__(self) -> str:
-        what = [repr(item) for item in (*self.pads, *self.copper, *self.holes)]
+        what = [repr(item) for item in (*self.pads, *self.copper, *self.holes, *self.texts, *self.shapes)]
         what += [f"inside {part.ref}" for part in self.parts]
-        where = "on the board" if self.on_board else "off the board"
+        where = ("on the board" if self.on_board else "off the board") + (f", on {self.layer}" if self.layer else "")
         return f"Point({format_xy(self.at)}, {where}" + (f": {'; '.join(what)}" if what else "") + ")"
+
+
+@dataclass(frozen=True)
+class Area:
+    """A box on the board and what lies wholly inside it (KiCad's window selection): on ``layer``
+    alone when it names one, as :class:`Point` is. ``box`` is its low corner and its high one."""
+
+    box: tuple[XY, XY]
+    layer: str | None
+    parts: tuple[Part, ...]
+    pads: tuple[Pad, ...]
+    tracks: tuple[Track, ...]
+    vias: tuple[Via, ...]
+    zones: tuple[Zone, ...]
+    texts: tuple[Text, ...]
+    dimensions: tuple[Dimension, ...]
+    shapes: tuple[Shape, ...]
+    holes: tuple[Hole, ...]
+
+    kind = "area"
+
+    @property
+    def size(self) -> tuple[float, float]:
+        """Its width and height, mm."""
+        (x0, y0), (x1, y1) = self.box
+        return x1 - x0, y1 - y0
+
+    @property
+    def polygon(self) -> tuple[XY, ...]:
+        """The box as a polygon, for :func:`inside`."""
+        (x0, y0), (x1, y1) = self.box
+        return (x0, y0), (x1, y0), (x1, y1), (x0, y1)
+
+    @property
+    def selector(self) -> str:
+        return format_board_selector("area", at=self.box[0], to=self.box[1], layer=self.layer)
+
+    def __repr__(self) -> str:
+        width, height = self.size
+        held = [f"{len(found)} {name}" for name, found in (
+            ("parts", self.parts), ("pads", self.pads), ("tracks", self.tracks), ("vias", self.vias), ("zones", self.zones),
+            ("texts", self.texts), ("dimensions", self.dimensions), ("shapes", self.shapes), ("holes", self.holes)) if found]
+        on = f" on {self.layer}" if self.layer else ""
+        parts = f" ({', '.join(part.ref for part in self.parts[:8])}{', ...' if len(self.parts) > 8 else ''})" if self.parts else ""
+        return (f"Area({format_xy(self.box[0])} to {format_xy(self.box[1])}, {width:g} x {height:g} mm{on}: "
+                + (", ".join(held) if held else "nothing") + parts + ")")
 
 
 @dataclass(frozen=True)
@@ -310,6 +486,10 @@ class BoardIndex:
     outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts as polylines; a closed one repeats its first point
     nets: tuple[tuple[str, str], ...]  # (name, class), in natural order
     origin: XY
+    texts: tuple[Text, ...] = ()
+    dimensions: tuple[Dimension, ...] = ()
+    shapes: tuple[Shape, ...] = ()
+    layers: tuple[str, ...] = ()  # every layer the board's table declares, as KiCad names it
 
     @property
     def pads(self) -> tuple[Pad, ...]:
@@ -343,6 +523,12 @@ class BoardIndex:
             holes=tuple(replace(hole, at=point(hole.at)) for hole in self.holes),
             outline=tuple(points(line) for line in self.outline),
             origin=point(self.origin),
+            texts=tuple(replace(text, at=point(text.at), polygon=points(text.polygon)) for text in self.texts),
+            dimensions=tuple(
+                replace(item, lines=tuple((point(a), point(b)) for a, b in item.lines), polygon=points(item.polygon))
+                for item in self.dimensions
+            ),
+            shapes=tuple(replace(shape, points=points(shape.points)) for shape in self.shapes),
         )
 
     def as_json(self, digits: int = 4) -> dict:
@@ -378,17 +564,38 @@ class BoardIndex:
                 for pad in self.pads
             ],
             "tracks": [
-                {"net": track.net, "layer": track.layer, "width": num(track.width), "points": path(track.points)}
+                {"net": track.net, "layer": track.layer, "width": num(track.width), "points": path(track.points),
+                 **({"id": track.id} if track.id else {}), **({"arc": True} if track.arc else {})}
                 for track in self.tracks
             ],
             "vias": [
-                {"net": via.net, "at": xy(via.at), "diameter": num(via.diameter), "drill": num(via.drill)}
+                {"net": via.net, "at": xy(via.at), "diameter": num(via.diameter), "drill": num(via.drill),
+                 **({"id": via.id} if via.id else {}), "layers": list(via.layers), "type": via.type}
                 for via in self.vias
             ],
-            "zones": [{"net": zone.net, "layer": zone.layer, "outline": path(zone.outline)} for zone in self.zones],
+            "zones": [
+                {"net": zone.net, "layer": zone.layer, "outline": path(zone.outline),
+                 **({"id": zone.id} if zone.id else {}), **({"name": zone.name} if zone.name else {}),
+                 **({"priority": zone.priority} if zone.priority else {}),
+                 **({"filled": num(zone.filled_area)} if zone.fills else {})}
+                for zone in self.zones
+            ],
             "holes": [{"at": xy(hole.at), "diameter": num(hole.diameter), "part": hole.part} for hole in self.holes],
             "outline": [path(line) for line in self.outline],
             "nets": [{"name": name, "class": netclass} for name, netclass in self.nets],
+            # What a person picks beside the copper: the texts and the dimensions (a graphic is picked
+            # from what the plot draws of it, which carries its id: the plot's `graphic`).
+            "texts": [
+                {"id": text.id, "text": text.text, "layer": text.layer, "at": xy(text.at), "angle": num(text.angle),
+                 "size": num(text.size), "polygon": path(text.polygon), **({"part": text.part} if text.part else {})}
+                for text in self.texts if text.id
+            ],
+            "dimensions": [
+                {"id": item.id, "type": item.type, "layer": item.layer, "value": item.value,
+                 "lines": [path(line) for line in item.lines], "polygon": path(item.polygon),
+                 **({"part": item.part} if item.part else {})}
+                for item in self.dimensions if item.id
+            ],
         }
 
 
@@ -532,6 +739,180 @@ def layer_of(node: list) -> str | None:
     """An item's ``(layer NAME)``, or ``None``."""
     layer = sexpr.value(node, "layer")
     return str(layer) if layer is not None else None
+
+
+_ID = re.compile(r"[0-9a-f]+(?:-[0-9a-f]+)*")
+_NIL = re.compile(r"[0-]+")
+
+
+def item_id(node: list) -> str | None:
+    """The uuid KiCad saved ``node`` with -- its ``(uuid "...")``, an older board's ``(tstamp ...)`` --
+    lower case, what a ``#track:<uuid>`` reference names it by; ``None`` for none, or KiCad's nil uuid."""
+    for key in ("uuid", "tstamp"):
+        found = sexpr.find(node, key)
+        if found is None or len(found) < 2:
+            continue
+        atom = found[1]
+        if isinstance(atom, bool) or isinstance(atom, float):
+            return None  # a tstamp the reader took for a number it cannot give back
+        # An all-digit tstamp reads as an integer: KiCad wrote it as eight hex digits.
+        text = (f"{atom:08d}" if atom >= 0 else "") if isinstance(atom, int) else str(atom).strip().lower()
+        return text if _ID.fullmatch(text) and not _NIL.fullmatch(text) else None
+    return None
+
+
+def _hidden(node: list) -> bool:
+    """A text KiCad does not show (``(hide yes)``, an older board's ``hide``): as the plot reads it."""
+    return str(sexpr.value(node, "hide", "")) == "yes" or any(isinstance(atom, Sym) and atom == "hide" for atom in node[1:])
+
+
+def _text_effects(node: list) -> tuple[tuple[float, float], float, list[str]]:
+    """A text's ``(effects ...)``: its size (height, width), stroke and justification, as the plot reads them."""
+    effects = sexpr.find(node, "effects")
+    font = sexpr.find(effects, "font") if effects is not None else None
+    size = sexpr.pair(sexpr.find(font, "size"), (1.0, 1.0)) if font is not None else (1.0, 1.0)
+    thickness = sexpr.number(sexpr.value(font, "thickness"), 0.0) if font is not None else 0.0
+    justify = [str(atom) for atom in (sexpr.find(effects, "justify") or [])[1:]] if effects is not None else []
+    return (abs(size[0]), abs(size[1])), thickness or abs(size[0]) * 0.15, justify
+
+
+def _text_box(text: str, at: XY, angle: float, node: list) -> tuple[XY, ...]:
+    """The box ``text``'s letters fill where KiCad puts it: drawn unturned about its anchor in the
+    plot's stroke font (``stroke_font``), its stroke round it, then turned and placed as KiCad turns text."""
+    size, thickness, justify = _text_effects(node)
+    points = [point for stroke in text_strokes(text, size=size, justify=justify, mirror="mirror" in justify) for point in stroke]
+    if not points:
+        return ()
+    reach = thickness / 2
+    x0, y0 = min(x for x, _ in points) - reach, min(y for _, y in points) - reach
+    x1, y1 = max(x for x, _ in points) + reach, max(y for _, y in points) + reach
+    radians = math.radians(angle)
+    cos, sin = math.cos(radians), math.sin(radians)
+    return tuple((at[0] + x * cos + y * sin, at[1] - x * sin + y * cos) for x, y in ((x0, y0), (x1, y0), (x1, y1), (x0, y1)))
+
+
+def _stroke_width(node: list) -> float:
+    stroke = sexpr.find(node, "stroke")
+    if stroke is not None:
+        return sexpr.number(sexpr.value(stroke, "width"), 0.0)
+    return sexpr.number(sexpr.value(node, "width"), 0.0)
+
+
+def _filled(node: list) -> bool:
+    fill = sexpr.find(node, "fill")
+    if fill is None or len(fill) < 2:
+        return False
+    value = fill[1]
+    if isinstance(value, list):  # KiCad 6: (fill (type solid))
+        value = sexpr.value(fill, "type")
+    return str(value) in ("yes", "solid")
+
+
+def _text_item(text: str, layer: str, at: XY, angle: float, node: list, part: str | None) -> Text:
+    return Text(id=item_id(node), text=text, layer=layer, at=at, angle=angle, size=_text_effects(node)[0][0],
+                polygon=_text_box(text, at, angle, node), part=part)
+
+
+def _footprint_text(node: list, frame: "FootprintFrame", ref: str, value: str, fields: Mapping[str, str]) -> Text | None:
+    """A footprint's text as the plot draws it (a field shown, an ``fp_text``; ``${REFERENCE}`` and
+    its kin substituted), or ``None`` for one it does not draw."""
+    if _hidden(node) or len(node) < 3:
+        return None
+    if sexpr.head(node) == "property":
+        if not isinstance(node[2], str):
+            return None
+        text = node[2]
+    else:  # fp_text reference|value|user "text"
+        which = str(node[1])
+        text = ref if which == "reference" else value if which == "value" else str(node[2])
+    text = re.sub(r"\$\{([^}]+)\}", lambda match: {"REFERENCE": ref, "VALUE": value}.get(match.group(1), fields.get(match.group(1), match.group(0))), text)
+    layer, at = layer_of(node), sexpr.find(node, "at")
+    if not text.strip() or layer is None or at is None:
+        return None
+    angle = sexpr.number(at[3]) if len(at) > 3 else 0.0
+    return _text_item(text, layer, frame.place(sexpr.pair(at, (0.0, 0.0))), angle, node, ref or None)
+
+
+def _shape_item(node: list, points: Sequence[XY], closed: bool, part: str | None, table, copper: Sequence[str]) -> Shape:
+    layer = layer_of(node) or ""
+    net = net_of(node, table) if expand_copper([layer], copper) else None
+    return Shape(id=item_id(node), shape=(sexpr.head(node) or "_").split("_", 1)[1], layer=layer, width=_stroke_width(node),
+                 points=tuple(points), closed=closed, filled=closed and _filled(node), part=part, net=net)
+
+
+_DIMENSION_TYPES = ("aligned", "orthogonal", "leader", "center", "radial")
+
+
+def _read_dimension(node: list, part: str | None) -> Dimension | None:
+    """A dimension, from KiCad 6's ``(dimension (type ..) (pts ..) (height ..) ...)`` or a KiCad 5
+    board's, whose extension lines and crossbar are saved as it drew them."""
+    layer = layer_of(node)
+    if layer is None:
+        return None
+    shown = sexpr.find(node, "gr_text")
+    value = str(shown[1]) if shown is not None and len(shown) > 1 and isinstance(shown[1], str) else ""
+    lines: list[tuple[XY, XY]] = []
+    kind = str(sexpr.value(node, "type") or "aligned")
+    if sexpr.find(node, "crossbar") is not None:  # KiCad 5
+        for key in ("feature1", "feature2", "crossbar"):
+            ends = points_of(sexpr.find(sexpr.find(node, key) or [], "pts"))
+            if len(ends) >= 2:
+                lines.append((ends[0], ends[1]))
+        measured = node[1] if len(node) > 1 and isinstance(node[1], (int, float)) else None
+    else:
+        ends = points_of(sexpr.find(node, "pts"))
+        if len(ends) < 2:
+            return None
+        (sx, sy), (ex, ey) = ends[0], ends[1]
+        height = sexpr.number(sexpr.value(node, "height"), 0.0)
+        measured = math.hypot(ex - sx, ey - sy)
+        if kind == "orthogonal":
+            vertical = sexpr.number(sexpr.value(node, "orientation"), 0.0) == 1
+            near, far = ((sx + height, sy), (sx + height, ey)) if vertical else ((sx, sy + height), (ex, sy + height))
+            lines += [((sx, sy), near), (near, far), (far, (ex, ey))]
+            measured = abs(ey - sy) if vertical else abs(ex - sx)
+        elif kind == "center":
+            dx, dy = ex - sx, ey - sy
+            lines += [((sx - dx, sy - dy), (sx + dx, sy + dy)), ((sx + dy, sy - dx), (sx - dy, sy + dx))]
+        elif kind in ("leader", "radial"):
+            lines.append(((sx, sy), (ex, ey)))
+        else:  # aligned: the crossbar stands `height` off the measured line, KiCad's way round (y down)
+            if measured > 0:
+                ox, oy = -(ey - sy) / measured * height, (ex - sx) / measured * height
+                near, far = (sx + ox, sy + oy), (ex + ox, ey + oy)
+                lines += [((sx, sy), near), (near, far), (far, (ex, ey))]
+    if not value and isinstance(measured, (int, float)) and kind not in ("leader", "center"):
+        value = f"{measured:.4g} mm"
+    polygon: tuple[XY, ...] = ()
+    if shown is not None and value:
+        at = sexpr.find(shown, "at")
+        if at is not None:
+            polygon = _text_box(value, sexpr.pair(at, (0.0, 0.0)), sexpr.number(at[3]) if len(at) > 3 else 0.0, shown)
+    if not lines and not polygon:
+        return None
+    return Dimension(id=item_id(node), type=kind if kind in _DIMENSION_TYPES else "aligned", layer=layer, value=value,
+                     lines=tuple(lines), polygon=polygon, part=part)
+
+
+class _Named:
+    """Items as they are read, each with its footprint's uuid: an item whose uuid another of its kind
+    shares -- copies of one footprint that kept their items' uuids -- is named under its footprint's,
+    ``<footprint uuid>/<uuid>``, so every reference names one item. A zone is read as one item per
+    layer, all one zone."""
+
+    def __init__(self) -> None:
+        self.read: dict[str, list[tuple[list, str | None]]] = {kind: [] for kind in ITEM_KINDS}
+
+    def add(self, kind: str, items: Iterable, owner: str | None = None) -> None:
+        items = [item for item in items if item is not None]
+        if items:
+            self.read[kind].append((items, owner))
+
+    def named(self, kind: str) -> list:
+        read = self.read[kind]
+        shared = {uid for uid, count in Counter(items[0].id for items, _owner in read if items[0].id).items() if count > 1}
+        return [replace(item, id=f"{owner}/{item.id}") if owner and item.id in shared else item
+                for items, owner in read for item in items]
 
 
 # --- pads ----------------------------------------------------------------------------------
@@ -809,21 +1190,26 @@ def _read_pad(node: list, frame: FootprintFrame, ref: str, table, copper: Sequen
     ), None
 
 
-def _read_footprint(node: list, table, copper: Sequence[str]) -> tuple[Part, list[Hole], list[Zone], list[list[XY]]]:
+def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, graphics: bool = True) -> tuple[Part, list[Hole], list[list[XY]]]:
+    """A footprint: its part, its unplated holes and its Edge.Cuts pieces; its zones, texts, graphics
+    (with ``graphics``) and dimensions go to ``named``, under the footprint's uuid."""
     frame = FootprintFrame(node)
+    owner = item_id(node)
     bottom = layer_of(node) == "B.Cu"
     ref = footprint_property(node, "Reference") or ""
     value = footprint_property(node, "Value") or ""
     fields: dict[str, str] = {}
+    shown: dict[str, str] = {}
     for item in sexpr.find_all(node, "property"):
         if len(item) >= 3 and item[1] not in ("Reference", "Value") and str(item[2]):
             fields[str(item[1])] = str(item[2])
+        if len(item) >= 3:
+            shown[str(item[1])] = str(item[2])
     attr = sexpr.find(node, "attr")
     dnp = attr is not None and any(str(flag) == "dnp" for flag in attr[1:])
     in_bom = attr is None or not any(str(flag) in ("exclude_from_bom", "board_only") for flag in attr[1:])
     pads: list[Pad] = []
     holes: list[Hole] = []
-    zones: list[Zone] = []
     edges: list[list[XY]] = []
     courtyard: dict[str, list[tuple[list[XY], bool]]] = {"F.CrtYd": [], "B.CrtYd": []}
     fab: list[XY] = []
@@ -839,7 +1225,13 @@ def _read_footprint(node: list, table, copper: Sequence[str]) -> tuple[Part, lis
                 holes.append(hole)
             continue
         if head == "zone":
-            zones.extend(_read_zone(child, table, copper))  # stored in the board's frame
+            named.add("zone", _read_zone(child, table, copper), owner)  # stored in the board's frame
+            continue
+        if head in ("property", "fp_text"):
+            named.add("text", [_footprint_text(child, frame, ref, value, shown)], owner)
+            continue
+        if head in ("dimension", "gr_dimension"):
+            named.add("dimension", [_read_dimension(child, ref or None)], owner)  # stored in the board's frame
             continue
         if not head.startswith("fp_") or head.split("_", 1)[1] not in _GRAPHICS:
             continue
@@ -848,6 +1240,8 @@ def _read_footprint(node: list, table, copper: Sequence[str]) -> tuple[Part, lis
             continue
         points = [frame.place(point) for point in drawn[0]]
         layer = layer_of(child)
+        if layer is not None and graphics:
+            named.add("shape", [_shape_item(child, points, drawn[1], ref or None, table, copper)], owner)
         if layer in courtyard:
             courtyard[layer].append((points, drawn[1]))
         elif layer in ("F.Fab", "B.Fab"):
@@ -875,7 +1269,7 @@ def _read_footprint(node: list, table, copper: Sequence[str]) -> tuple[Part, lis
         pads=_counted(pads),
         in_bom=in_bom,
     )
-    return part, holes, zones, edges
+    return part, holes, edges
 
 
 def _counted(pads: list[Pad]) -> tuple[Pad, ...]:
@@ -909,14 +1303,29 @@ def _read_zone(node: list, table, copper: Sequence[str]) -> list[Zone]:
         layer = layer_of(filled) or layers[0]
         fills.setdefault(layer, []).append(tuple(points_of(sexpr.find(filled, "pts"))))
     net = net_of(node, table)
-    return [Zone(net=net, layer=layer, outline=outline, fills=tuple(fills.get(layer, ()))) for layer in layers]
+    name = sexpr.value(node, "name")
+    priority = sexpr.value(node, "priority")
+    return [Zone(net=net, layer=layer, outline=outline, fills=tuple(fills.get(layer, ())), id=item_id(node),
+                 name=str(name) if isinstance(name, str) and name else None,
+                 priority=int(priority) if isinstance(priority, int) and not isinstance(priority, bool) else 0,
+                 layers=tuple(layers))
+            for layer in layers]
 
 
-def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
+def _via_type(node: list) -> str:
+    """A via's type, as KiCad writes it: ``blind``, ``buried`` (KiCad 10), ``micro``, else through."""
+    for atom in node[1:]:
+        if isinstance(atom, Sym) and atom in ("blind", "buried", "micro"):
+            return str(atom)
+    return "through"
+
+
+def read_index(text: str | list, *, project: Path | None = None, graphics: bool = True) -> BoardIndex:
     """The board ``text`` (a ``.kicad_pcb``'s, or its parsed tree) as an index in KiCad's frame.
 
     ``project`` is the ``.kicad_pcb``'s ``.kicad_pro``, read for the nets' classes when it
-    exists. Raises ``ValueError`` for text that is not a KiCad board.
+    exists. ``graphics=False`` leaves the graphics (``shapes``) out: the plot, which draws them
+    itself, names each by its id (``plot.py``). Raises ``ValueError`` for text that is not a KiCad board.
     """
     if isinstance(text, list):
         tree = text
@@ -932,17 +1341,16 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
     copper = copper_layers(tree)
     parts: list[Part] = []
     holes: list[Hole] = []
-    zones: list[Zone] = []
     edges: list[list[XY]] = []
     tracks: list[Track] = []
     vias: list[Via] = []
+    named = _Named()
     for node in tree[1:]:
         head = sexpr.head(node)
         if head in ("footprint", "module"):  # a KiCad 5 board's footprints are modules
-            part, part_holes, part_zones, part_edges = _read_footprint(node, table, copper)
+            part, part_holes, part_edges = _read_footprint(node, table, copper, named, graphics)
             parts.append(part)
             holes.extend(part_holes)
-            zones.extend(part_zones)
             edges.extend(part_edges)
         elif head in ("segment", "arc"):
             if head == "segment":
@@ -952,7 +1360,8 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
             if None in points:
                 continue
             net = net_of(node, table)
-            tracks.append(Track(net=net, layer=layer_of(node) or "", width=sexpr.number(sexpr.value(node, "width")), points=tuple(points), arc=head == "arc"))
+            tracks.append(Track(net=net, layer=layer_of(node) or "", width=sexpr.number(sexpr.value(node, "width")), points=tuple(points),
+                                arc=head == "arc", id=item_id(node)))
         elif head == "via":
             at = sexpr.pair(sexpr.find(node, "at"))
             if at is None:
@@ -960,18 +1369,30 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
             net = net_of(node, table)
             vias.append(Via(
                 net=net, at=at, diameter=sexpr.number(sexpr.value(node, "size")), drill=sexpr.number(sexpr.value(node, "drill")),
-                layers=tuple(item_layers(node)) or ("F.Cu", "B.Cu"),
+                layers=tuple(item_layers(node)) or ("F.Cu", "B.Cu"), id=item_id(node), type=_via_type(node),
             ))
         elif head == "zone":
-            zones.extend(_read_zone(node, table, copper))
-        elif head and head.startswith("gr_") and head[3:] in _GRAPHICS and layer_of(node) == "Edge.Cuts":
+            named.add("zone", _read_zone(node, table, copper))
+        elif head == "gr_text":
+            layer, at = layer_of(node), sexpr.find(node, "at")
+            if len(node) > 1 and isinstance(node[1], str) and not _hidden(node) and layer and at is not None:
+                named.add("text", [_text_item(node[1], layer, sexpr.pair(at, (0.0, 0.0)), sexpr.number(at[3]) if len(at) > 3 else 0.0, node, None)])
+        elif head in ("dimension", "gr_dimension"):
+            named.add("dimension", [_read_dimension(node, None)])
+        elif head and head.startswith("gr_") and head[3:] in _GRAPHICS:
             drawn = graphic(node)
-            if drawn is not None:
+            if drawn is None or layer_of(node) is None:
+                continue
+            if graphics:
+                named.add("shape", [_shape_item(node, drawn[0], drawn[1], None, table, copper)])
+            if layer_of(node) == "Edge.Cuts":
                 edges.append(drawn[0] + [drawn[0][0]] if drawn[1] else drawn[0])
+    zones = named.named("zone")
     names = {pad.net for part in parts for pad in part.pads} | {track.net for track in tracks} | {via.net for via in vias} | {zone.net for zone in zones}
     names |= {unescape_net_name(name) for name in table.values()}
     assigned, patterns = project_netclasses(project)
     nets = tuple((name, netclass_of(name, assigned, patterns)) for name in sorted((name for name in names if name), key=natural))
+    declared = tuple(str(entry[1]) for entry in (sexpr.find(tree, "layers") or [])[1:] if isinstance(entry, list) and len(entry) >= 2)
     return BoardIndex(
         parts=tuple(sorted(parts, key=lambda part: natural(part.ref))),
         tracks=tuple(tracks),
@@ -981,6 +1402,10 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
         outline=tuple(tuple(line) for line in _chain(edges)),
         nets=nets,
         origin=(0.0, 0.0),
+        texts=tuple(named.named("text")),
+        dimensions=tuple(named.named("dimension")),
+        shapes=tuple(named.named("shape")),
+        layers=declared,
     )
 
 
@@ -988,9 +1413,12 @@ def read_index(text: str | list, *, project: Path | None = None) -> BoardIndex:
 
 
 _FORMS = (
-    "a board's are a part #U3, a pad #U3.9, a net #net:VIN, copper #net:VIN@x40.1y21.6 or a point "
-    "#@x40.1y21.6 (millimetres in KiCad's frame, y down)"
+    "a board's are a part #U3, a pad #U3.9, a net #net:VIN, copper #net:VIN@x40.1y21.6, an item by its uuid "
+    "(#track:, #via:, #zone:, #text:, #dimension:, #shape:), a point #@x40.1y21.6 or #F.Cu@x40.1y21.6, or an area "
+    "#@x10y5..x20y15 or #F.Cu@x10y5..x20y15 (millimetres in KiCad's frame, y down)"
 )
+# A layer's side, as a part's: what a point or an area on that layer holds of the parts.
+_SIDES = {"F": "top", "B": "bottom"}
 
 
 class BoardView:
@@ -1000,7 +1428,11 @@ class BoardView:
     reference (with or without its file): ``#U3`` is a :class:`Part`, ``#U3.9`` a
     :class:`Pad`, ``#net:VIN`` a :class:`Net` with everything
     on it, ``#net:VIN@x40.1y21.6`` that net's :class:`Copper` at the point (within
-    ``COPPER_TOLERANCE``), ``#@x40.1y21.6`` a :class:`Point` and what is there (:meth:`at`).
+    ``COPPER_TOLERANCE``), ``#track:<uuid>`` a :class:`Track` (``#via:`` a :class:`Via`,
+    ``#zone:`` a :class:`Zone`, ``#text:`` a :class:`Text`, ``#dimension:`` a
+    :class:`Dimension`, ``#shape:`` a :class:`Shape`), ``#@x40.1y21.6`` a :class:`Point`
+    and what is there (:meth:`at`; ``#F.Cu@x40.1y21.6`` what is there on F.Cu), and
+    ``#@x10y5..x20y15`` an :class:`Area` and what lies inside it (:meth:`area`).
     """
 
     def __init__(self, path: Path, index: BoardIndex):
@@ -1011,6 +1443,21 @@ class BoardView:
         self.vias: tuple[Via, ...] = index.vias
         self.zones: tuple[Zone, ...] = index.zones
         self.holes: tuple[Hole, ...] = index.holes
+        self.texts: tuple[Text, ...] = index.texts
+        self.dimensions: tuple[Dimension, ...] = index.dimensions
+        self.shapes: tuple[Shape, ...] = index.shapes
+        #: Every layer the board declares, as KiCad names it.
+        self.layers: tuple[str, ...] = index.layers
+        # Each item kind by uuid: an item under its whole id, and one named under its footprint's
+        # uuid also under its own, which then names every copy that shares it.
+        self._items: dict[str, dict[str, list]] = {kind: {} for kind in ITEM_KINDS}
+        for kind, items in (("track", self.tracks), ("via", self.vias), ("zone", self.zones), ("text", self.texts),
+                            ("dimension", self.dimensions), ("shape", self.shapes)):
+            for item in items:
+                if item.id:
+                    self._items[kind].setdefault(item.id, []).append(item)
+                    if "/" in item.id:
+                        self._items[kind].setdefault(item.id.split("/", 1)[1], []).append(item)
         #: Edge.Cuts as polylines; a closed one repeats its first point.
         self.outline: tuple[tuple[XY, ...], ...] = index.outline
         self._parts = {part.ref: part for part in index.parts}
@@ -1056,9 +1503,28 @@ class BoardView:
             raise ValueError(f"{self.path.name} has no net {name!r}{hint}")
         return found
 
+    def item(self, kind: str, uid: str):
+        """The ``kind`` (``"track"``, ``"via"``, ``"zone"``, ``"text"``, ``"dimension"``, ``"shape"``) KiCad
+        saved with uuid ``uid`` (``<footprint uuid>/<uuid>`` for one of the copies of a footprint that share
+        it). A zone on several layers answers its first; its ``layers`` names them all."""
+        if kind not in ITEM_KINDS:
+            raise ValueError(f"a board's items are its {', '.join(f'{name}s' for name in ITEM_KINDS)}, not {kind!r}")
+        found = self._items[kind].get(str(uid or "").lower(), [])
+        # A zone is one item per layer: those that share their whole id are one zone.
+        whole = list(dict.fromkeys(item.id for item in found))
+        if len(whole) == 1:
+            return found[0]
+        if not whole:
+            raise ValueError(f"{self.path.name} has no {kind} {uid}: a {kind} is named by the uuid its board file saved it with"
+                             f" ({len(self._items[kind])} are named on this board)")
+        raise ValueError(f"{self.path.name} has {len(whole)} {kind}s with uuid {uid}, on copies of one footprint: name one "
+                         f"under its footprint's uuid, {', '.join(f'#{kind}:{name}' for name in whole[:4])}")
+
     def resolve(self, ref: str):
         """What the reference ``ref`` names: a :class:`Part`, :class:`Pad`, :class:`Net`,
-        :class:`Copper` or :class:`Point`. A file before the ``#`` must name this board."""
+        :class:`Copper`, an item (:class:`Track`, :class:`Via`, :class:`Zone`, :class:`Text`,
+        :class:`Dimension`, :class:`Shape`), a :class:`Point` or an :class:`Area`. A file
+        before the ``#`` must name this board."""
         answers = self.resolve_all(ref)
         if len(answers) != 1:
             raise ValueError(f"{ref!r} names {len(answers)} things; resolve_all() answers each, in the order written")
@@ -1077,7 +1543,7 @@ class BoardView:
         if path and not ref_prefix_names(path, str(self.path)):
             raise ValueError(f"reference names {path!r}, but this board is {str(self.path)!r}")
         if not selectors:
-            raise ValueError(f"{ref!r} names the whole board; name a part, pad, net, copper or point in it")
+            raise ValueError(f"{ref!r} names the whole board; name a part, pad, net, copper, item, point or area in it")
         return [self._answer(selector) for selector in selectors]
 
     def _answer(self, selector: BoardSelector):
@@ -1089,7 +1555,45 @@ class BoardView:
             return self.net(selector.net)
         if selector.kind == "copper":
             return self.copper(selector.net, *selector.at)
-        return self.at(*selector.at)
+        if selector.kind in ITEM_KINDS:
+            return self.item(selector.kind, selector.id)
+        if selector.kind == "area":
+            return self.area(*selector.at, *selector.to, layer=selector.layer)
+        return self.at(*selector.at, layer=selector.layer)
+
+    def _layer(self, layer: str | None) -> str | None:
+        """``layer`` when the board has it (or names no layers), else a refusal naming its layers."""
+        if layer is None or not self.layers or layer in self.layers:
+            return layer
+        raise ValueError(f"{self.path.name} has no layer {layer}; its layers are {', '.join(self.layers)}")
+
+    def _on(self, item, layer: str | None) -> bool:
+        """Whether ``item`` is on ``layer`` (any, for none): an item with a layer on its own; a pad on
+        a copper layer it is on, or on its side's other layers; a via on the copper it spans; a part
+        on its side's layers (every part, on a layer of neither side); a hole through every layer."""
+        if layer is None or isinstance(item, Hole):
+            return True
+        side = _SIDES.get(layer.split(".", 1)[0]) if layer.startswith(("F.", "B.")) else None
+        copper = bool(_COPPER.match(layer))
+        if isinstance(item, Part):
+            return side is None or item.side == side
+        if isinstance(item, Pad):
+            if copper:
+                return item.side == "both" or item.side == side
+            return side is not None and item.side in (side, "both")
+        if isinstance(item, Via):
+            return copper and layer in self._spanned(item)
+        return getattr(item, "layer", None) == layer
+
+    def _spanned(self, via: Via) -> list[str]:
+        """The copper a via joins, top to bottom: every layer for a through via, else from one of its
+        layers to the other in the stack (F.Cu, the inner layers in order, B.Cu)."""
+        stack = sorted((name for name in (self.layers or via.layers) if _COPPER.match(name)),
+                       key=lambda name: (0, 0) if name == "F.Cu" else (2, 0) if name == "B.Cu" else (1, int(re.sub(r"\D", "", name) or 0)))
+        if via.type == "through" or len(via.layers) < 2:
+            return stack
+        ends = sorted(stack.index(name) for name in via.layers if name in stack)
+        return stack[ends[0]:ends[-1] + 1] if ends else stack
 
     def copper(self, net: str, x: float, y: float) -> Copper:
         """``net``'s pads, tracks, vias and filled pours at (x, y), nearest first."""
@@ -1112,16 +1616,49 @@ class BoardView:
         near.sort(key=lambda entry: entry[0])
         return Copper(net=found, at=point, items=tuple(item for _distance, item in near))
 
-    def at(self, x: float, y: float) -> Point:
-        """What is at (x, y): the parts whose outline holds it, pads, copper and holes there."""
+    def at(self, x: float, y: float, layer: str | None = None) -> Point:
+        """What is at (x, y): the parts whose outline holds it, pads, copper, holes, texts and graphics
+        there; on ``layer`` alone when one is given (``"F.Cu"``: what that layer holds there, the parts
+        on its side and the holes through it)."""
         point = (float(x), float(y))
+        layer = self._layer(layer)
         closed = [line for line in self.outline if _closed(line)]
         crossings = sum(inside(point, line[:-1]) for line in closed)
-        pads = tuple(pad for part in self.parts for pad in part.pads if polygon_distance(point, pad.polygon) == 0)
-        copper = tuple(item for item in (*self.tracks, *self.vias, *self.zones) if _reach(item, point) == 0)
+        on = lambda items: tuple(item for item in items if self._on(item, layer))  # noqa: E731
+        pads = on(pad for part in self.parts for pad in part.pads if polygon_distance(point, pad.polygon) == 0)
+        copper = on(item for item in (*self.tracks, *self.vias, *self.zones) if _reach(item, point) == 0)
         holes = tuple(hole for hole in self.holes if math.hypot(point[0] - hole.at[0], point[1] - hole.at[1]) <= hole.diameter / 2)
-        parts = tuple(part for part in self.parts if len(part.outline) >= 3 and inside(point, part.outline))
-        return Point(at=point, on_board=crossings % 2 == 1, parts=parts, pads=pads, copper=copper, holes=holes)
+        parts = on(part for part in self.parts if len(part.outline) >= 3 and inside(point, part.outline))
+        texts = on(text for text in self.texts if len(text.polygon) >= 3 and inside(point, text.polygon))
+        shapes = on(shape for shape in self.shapes if _shape_reach(shape, point) <= 0)
+        return Point(at=point, on_board=crossings % 2 == 1, parts=parts, pads=pads, copper=copper, holes=holes,
+                     layer=layer, texts=texts, shapes=shapes)
+
+    def area(self, x0: float, y0: float, x1: float, y1: float, layer: str | None = None) -> Area:
+        """What lies wholly inside the box from (x0, y0) to (x1, y1), as KiCad's window selection takes it:
+        parts by their outline, pads, tracks, zones, texts, dimensions and graphics by every point they are
+        drawn through, vias and holes by their disc; on ``layer`` alone when one is given, as :meth:`at`.
+        Anything else is :func:`inside` the box's ``polygon``."""
+        (lx, ly), (hx, hy) = (min(x0, x1), min(y0, y1)), (max(x0, x1), max(y0, y1))
+        layer = self._layer(layer)
+
+        def held(points: Iterable[XY], reach: float = 0.0) -> bool:
+            points = list(points)
+            return bool(points) and all(lx <= x - reach and x + reach <= hx and ly <= y - reach and y + reach <= hy for x, y in points)
+
+        on = lambda items: tuple(item for item in items if self._on(item, layer))  # noqa: E731
+        return Area(
+            box=((float(lx), float(ly)), (float(hx), float(hy))), layer=layer,
+            parts=on(part for part in self.parts if held(part.outline)),
+            pads=on(pad for pad in self.pads if held(pad.polygon)),
+            tracks=on(track for track in self.tracks if held(track.points)),
+            vias=on(via for via in self.vias if held([via.at], via.diameter / 2)),
+            zones=on(zone for zone in self.zones if held(zone.outline)),
+            texts=on(text for text in self.texts if held(text.polygon)),
+            dimensions=on(item for item in self.dimensions if held([*(end for line in item.lines for end in line), *item.polygon])),
+            shapes=on(shape for shape in self.shapes if held(shape.points)),
+            holes=tuple(hole for hole in self.holes if held([hole.at], hole.diameter / 2)),
+        )
 
 
 def _reach(item, point: XY) -> float:
@@ -1135,6 +1672,14 @@ def _reach(item, point: XY) -> float:
     if isinstance(item, Zone):
         return min((polygon_distance(point, fill) for fill in item.fills), default=math.inf)
     return math.inf
+
+
+def _shape_reach(shape: Shape, point: XY) -> float:
+    """How far ``point`` is from what ``shape`` draws: 0 or less on it (in its fill, or within its stroke)."""
+    if len(shape.points) >= 3 and shape.filled and inside(point, shape.points):
+        return 0.0
+    line = [*shape.points, shape.points[0]] if shape.closed and len(shape.points) >= 3 else list(shape.points)
+    return polyline_distance(point, line) - shape.width / 2 if line else math.inf
 
 
 def read_board(path: Path | str) -> BoardView:

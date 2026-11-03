@@ -16,7 +16,10 @@
 - a GND track from D1.1 to a via at (18, 27), and a GND pour on `B.Cu` over the bottom left
   (its fill (1.5, 16.5) to (19.5, 28.5));
 - the LED net unrouted: one `ratsnest` line from D1.2 to R1.2 (`unrouted: 1`);
-- the text `blinky` on the top silkscreen at (20, 5), and each part's reference and value.
+- the text `blinky` on the top silkscreen at (20, 5), and each part's reference and value;
+- every item with the uuid KiCad saves it with (the support board's `UUIDS` for the board's own:
+  the VBUS track `…0001`, the GND track `…0002`, the via `…0003`, the pour `…0004`, `blinky`
+  `…0005`, the outline `…0006`; a footprint and its items `f00d0000-…` in the order written).
 
 `BoardRenderer.browser.test.mjs` and `BoardRenderer.test.tsx` serve it as the route would.
 Regenerate it when the payload's shape or the board changes (the Python suite asserts they

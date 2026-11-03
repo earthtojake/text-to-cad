@@ -74,7 +74,10 @@ Flags any item may carry: `ref`, the board reference of what drew it (`#R1` for 
 graphics and text, `#R1.2` for a pad and its mask and paste); `net`, the net of a piece of copper;
 `pour: true`, a zone's fill, which a view with `poured: false` leaves out; `via`
 (`through`, `blind`, `micro`) on a via's disc and `hole` (`pad`, `via`, `npth`) on a drill
-hole, which the theme colours by kind.
+hole, which the theme colours by kind. A graphic (`gr_*`, `fp_*`) carries `id`, the uuid KiCad saved
+it with (`<footprint uuid>/<uuid>` where copies of a footprint share its items' uuids), which the
+viewer picks it by (`#shape:<id>`), and `shape` when it is not a line (`rect`, `circle`, `arc`,
+`poly`, `curve`): what the board index would otherwise repeat of every graphic is drawn here once.
 
 What each thing becomes:
 
@@ -108,8 +111,17 @@ Not drawn: dimensions, text boxes, images, rule areas (keepouts) and a zone's ha
 
 `board` is `cad.engine.formats.kicad.board_index.BoardIndex.as_json()` in sheet millimetres: `parts` (ref,
 value, footprint, side, `at`, `rotation`, `fields`, `dnp`, `outline`), `pads` (part, number, name,
-net, type, side, `at`, `polygon`, `drill`), `tracks`, `vias`, `zones` (outlines), `holes`,
-`outline` (Edge.Cuts chained into polylines) and `nets` (name, class). `origin` is where KiCad's
+net, type, side, `at`, `polygon`, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
+`vias` (net, `at`, diameter, drill, the two `layers` it joins, `type`: `through`, `blind`, `buried`,
+`micro`), `zones` (net, layer, `outline`, `name`, `priority`, `filled`: the mm² of copper KiCad filled
+that layer with; a zone on several layers is one entry per layer, alike but for its layer), `holes`,
+`outline` (Edge.Cuts chained into polylines), `nets` (name, class), `texts` (a board's text and each
+footprint's shown fields and `fp_text`: `text` as drawn, layer, `at`, `angle`, `size` (the letters'
+height), `polygon` (the box its letters fill), `part`) and `dimensions` (`type`, layer, `value`: the
+text KiCad shows for it, `lines`: what it is drawn from, `polygon`: its value's box, `part`). Tracks,
+vias, zones, texts and dimensions carry `id`, the uuid KiCad saved them with, as graphics do: what a
+pick names them by (`#track:<id>`, `#via:`, `#zone:`, `#text:`, `#dimension:`). `origin` is where KiCad's
 page origin (0, 0) lies on the sheet, so the viewer's index (`board2d/boardIndex.js`) reads every
-position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`) back in KiCad's own frame,
-millimetres, y down: a point the viewer copies pastes straight into a script's `Vector2.from_xy_mm`.
+position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2..x3y4`) back in
+KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's
+`Vector2.from_xy_mm`.
