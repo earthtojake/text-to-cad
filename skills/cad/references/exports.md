@@ -189,12 +189,14 @@ cad export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 
 The same is `export(x, path, tolerance=0.02)` in an `exports.py` and
 `@stl("hopper.stl", tolerance=0.02)` or `@threemf(...)` on a model. Each part is meshed again
-at it for that file alone; the viewer, snapshots and every other export keep the viewer's
-mesh. The file says what it was meshed at (the STL's header, the 3MF's description). It is
+at the finer of the tolerance and its own, for that file alone, so a small part is never made
+coarser; the viewer, snapshots and every other export keep the viewer's mesh. The file says
+what it was meshed to (the STL's header, the 3MF's description). It is
 for STL and 3MF only: a STEP has no mesh (send a STEP when the person's slicer or shop takes
-one), and a GLB is the viewer's mesh. Finer costs triangles: a tenth of the tolerance is about
-three times the segments round a curve and ten times the triangles of a doubly curved face, so
-stay at or above 0.001 (the floor) and say the file's size when it is large. If the export
+one), and a GLB is the viewer's mesh. Finer costs triangles on the large curved parts: a tenth of the tolerance is about
+three times the segments round a curve and ten times the triangles of a doubly curved face (a
+600-part robot arm at 0.01 mm was 30% more triangles than the viewer's mesh), so stay at or
+above 0.001 (the floor) and say the file's size when it is large. If the export
 names faces left without triangles, try a slightly different tolerance or repair the face.
 
 ## Other tools

@@ -1,8 +1,8 @@
 """An STL's or a 3MF's own mesh tolerance (`export/__init__.py`, `export/mesh.py`): an absolute
-linear deflection in millimetres, for a print whose fits are finer than the viewer's quarter per
-cent of each part, given by `export(tolerance=)`, `cad export --tolerance` or the decorator; each
-part meshed again at it for that file alone, the cache left holding the engine's tolerance, and the
-file saying what it was meshed at (#753)."""
+ceiling on the linear deflection in millimetres, for a print whose fits are finer than the viewer's
+quarter per cent of each part, given by `export(tolerance=)`, `cad export --tolerance` or the
+decorator; each part meshed again at the finer of the two for that file alone, the cache left
+holding the engine's tolerance, and the file saying what it was meshed to (#753)."""
 
 from __future__ import annotations
 
@@ -69,7 +69,7 @@ class ExportToleranceTest(unittest.TestCase):
         [written] = api.export(self.xbf, fine, tolerance=0.01, daemon=False, progress=False)
         self.assertEqual(written.kind, "stl")
         header, points = _stl(fine)
-        self.assertEqual(header.rstrip(), b"tube (meshed at 0.01 mm)")
+        self.assertEqual(header.rstrip(), b"tube (meshed within 0.01 mm)")
         self.assertLessEqual(_depth(_segments(points)), 0.01)
         # The cache still holds the engine's tolerance: an export after it is the viewer's mesh.
         api.export(self.xbf, coarse, daemon=False, progress=False)
@@ -77,9 +77,17 @@ class ExportToleranceTest(unittest.TestCase):
         self.assertEqual(header.rstrip(), b"tube")
         self.assertEqual(_segments(points), 47)
 
+    def test_a_tolerance_coarser_than_a_part_s_own_leaves_the_part_as_the_viewer_meshes_it(self) -> None:
+        # The tube's own deflection is a quarter per cent of its 230 mm of sides, 0.19 mm: a ceiling of 1 mm
+        # never makes it coarser (a small part meshed coarser than its own was seen to lose faces).
+        coarse, ceiling = self.folder / "viewer.stl", self.folder / "ceiling.stl"
+        api.export(self.xbf, coarse, daemon=False, progress=False)
+        api.export(self.xbf, ceiling, tolerance=1.0, daemon=False, progress=False)
+        self.assertEqual(_stl(ceiling)[1].tobytes(), _stl(coarse)[1].tobytes())
+
     def test_a_declared_3mf_at_a_tolerance_is_meshed_to_it_and_says_so(self) -> None:
         model = zipfile.ZipFile(self.folder / "fine.3mf").read("3D/3dmodel.model").decode()
-        self.assertIn('<metadata name="Description">Meshed at a tolerance of 0.01 mm</metadata>', model)
+        self.assertIn('<metadata name="Description">Meshed to within 0.01 mm</metadata>', model)
         vertices = re.findall(r'<vertex x="([^"]+)" y="([^"]+)" z="([^"]+)"/>', model)
         self.assertLessEqual(_depth(_segments(np.array(vertices, dtype=float))), 0.01)
 

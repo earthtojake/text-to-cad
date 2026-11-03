@@ -9,11 +9,12 @@ derived file a decorator declares and a file ``cad export`` asks for are the sam
 call, so the same document writes the same bytes.
 
 An STL or a 3MF is meshed at the engine's one tolerance, the viewer's, from the one mesh cache,
-unless the export gives its own (``tolerance``: an absolute linear deflection in millimetres, for a
-print file whose fits are finer than a quarter per cent of the part): then each part is meshed
-again at it for that file alone, never cached, and the file says it (``tolerance_of``,
-``export/mesh.py``); a face the mesher leaves without triangles at it is told by name (``told``),
-since which faces it leaves changes with the tolerance (``engine/mesh.py``). No other kind is
+unless the export gives its own (``tolerance``: a ceiling on the linear deflection in millimetres,
+for a print file whose fits are finer than a quarter per cent of the part): then each part is meshed
+again, at the finer of its own and the ceiling (``engine/mesh.py``), for that file alone, never
+cached, and the file says it (``tolerance_of``, ``export/mesh.py``); a face the mesher leaves
+without triangles is told by name (``told``), since which faces it leaves changes with the
+deflection. No other kind is
 meshed by the export (a GLB is the viewer's own mesh), so no other takes one.
 
 The file holds the document as its code built it: every part, placed where the document
@@ -426,8 +427,8 @@ def _instances(node: dict[str, Any]) -> list[int]:
 def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
               told: Callable[[str], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
-    as ``kind`` (from the suffix when None), an STL or a 3MF meshed at ``tolerance`` (mm) when one is
-    given (``told`` hears each part it left faces of without triangles); returns the file's size. The
+    as ``kind`` (from the suffix when None), an STL or a 3MF meshed to within ``tolerance`` (mm) when
+    one is given (``told`` hears each part it left faces of without triangles); returns the file's size. The
     translation lands only where the file does not hold its bytes already (``put``): a file written
     again the same is left as it is. Every declared file is written this way too, after the build or
     the take-up that made its document (``build``)."""
@@ -463,6 +464,6 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     _written, size = put(path, lambda temporary: spec.write(view, temporary))
     if told is not None:
         for name, faces in (view.unmeshed or {}).items():
-            told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles at "
-                 f"{tolerance:g} mm; another tolerance meshes {'them' if faces != 1 else 'it'} differently")
+            told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
+                 f"meshing to within {tolerance:g} mm")
     return size

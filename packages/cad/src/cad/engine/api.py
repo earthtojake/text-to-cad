@@ -197,7 +197,7 @@ class Document:
 
     def export(self, *destinations: Any, tolerance: float | None = None) -> list[Written]:
         """``export(handle, *destinations)``: the document written to each destination; an STL or a
-        3MF meshed at ``tolerance`` (mm) when one is given, as ``export`` does."""
+        3MF meshed to within ``tolerance`` (mm) when one is given, as ``export`` does."""
         self._outside("export")
         return _said(_exporting(self, destinations, tolerance=tolerance), destinations)
 
@@ -508,9 +508,9 @@ def export(source: Any, *destinations: Any, tolerance: float | None = None,
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
     carries every configuration sequence the document defines, as a clip. An STL and a 3MF are
     meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part), unless
-    ``tolerance`` gives an absolute one in millimetres (at least ``export.MIN_TOLERANCE``), for a
-    print whose fits are finer: each part is then meshed again at it for these files, and each file
-    says it; every destination is then an STL or a 3MF. A call the program's own
+    ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
+    print whose fits are finer: each part is then meshed again at the finer of the two for these
+    files, and each file says it; every destination is then an STL or a 3MF. A call the program's own
     code makes (``python exports.py``) says each file, as ``cad export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a

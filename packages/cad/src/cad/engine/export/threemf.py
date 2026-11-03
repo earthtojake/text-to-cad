@@ -108,7 +108,7 @@ def write(view: Any, path: Path) -> None:
                  f'</m:pbmetallicdisplayproperties>' if shown else "")
     group = f' m:displaypropertiesid="{PROPERTIES_ID}"' if shown else ""
     tolerance = view.tolerance
-    described = (f'<metadata name="Description">Meshed at a tolerance of {tolerance:g} mm</metadata>'
+    described = (f'<metadata name="Description">Meshed to within {tolerance:g} mm</metadata>'
                  if tolerance is not None else "")
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              f'<model unit="millimeter" xml:lang="en-US" xmlns="{CORE}" xmlns:m="{MATERIALS}">'

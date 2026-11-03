@@ -14,8 +14,10 @@ names the pair (the three are kept in the kernel-free ``mesh_format``, which the
 without the kernel), and a served part's URL carries it, so a browser holding a part's buffer made
 at another pair never draws it. The constant pair is configurable nowhere: what the viewer, a
 snapshot and the mesh cache hold is meshed at it. An STL or a 3MF export alone may give its own
-linear deflection (``mesh_shape(tolerance=)``, absolute, in millimetres; ``export/__init__.py``),
-meshed for that file and never cached, the angle the same. The call goes
+linear deflection (``mesh_shape(tolerance=)``, absolute, in millimetres; ``export/__init__.py``), a
+ceiling: a part whose own deflection is finer keeps it, so a tolerance never makes a part coarser
+than the viewer draws it (most of a robot's parts are small enough that a quarter per cent of them is
+finer than a twentieth of a millimetre). It is meshed for that file and never cached, the angle the same. The call goes
 through ``IMeshTools_Parameters`` with one knob set besides:
 ``EnableControlSurfaceDeflectionAllSurfaces``, which holds analytic faces (torus, sphere,
 cone) to the deflection -- measured across nine large documents, from 1.5-2x the deflection to
@@ -195,13 +197,13 @@ def read_shape(data: bytes) -> Any:
 def mesh_shape(shape: Any, *, parallel: bool = True, tolerance: float | None = None) -> Mesh:
     """Mesh one part (a shape, or its ``shape_bytes``) at its own frame: its location is not
     applied. ``parallel`` is the kernel's face parallelism; it does not change the result.
-    ``tolerance`` is an export's own linear deflection in millimetres, in place of the part's
-    quarter per cent (``deflection``)."""
+    ``tolerance`` is an export's own ceiling on the linear deflection, in millimetres: the finer of it
+    and the part's quarter per cent (``deflection``)."""
     from OCP.BRepMesh import BRepMesh_IncrementalMesh
     from OCP.IMeshTools import IMeshTools_Parameters
 
     local = read_shape(shape if isinstance(shape, (bytes, bytearray, memoryview)) else shape_bytes(shape))
-    linear = deflection(local) if tolerance is None else float(tolerance)
+    linear = deflection(local) if tolerance is None else min(deflection(local), float(tolerance))
     parameters = IMeshTools_Parameters()
     parameters.Deflection, parameters.Angle, parameters.Relative, parameters.InParallel = linear, ANGULAR, False, parallel
     parameters.EnableControlSurfaceDeflectionAllSurfaces = True

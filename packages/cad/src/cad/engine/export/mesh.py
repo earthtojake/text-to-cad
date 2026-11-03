@@ -5,7 +5,7 @@ A part is meshed once per geometry key, wherever it is placed, from its shape by
 process's mesh cache -- the one the viewer serves from (``serve.MESHES``): a worker's
 patch, its exports and a snapshot it draws all take a key's buffer from there, so a part
 the build meshed for the viewer is not meshed again for a GLB. An export's own tolerance
-(``View.tolerance``: an STL's or a 3MF's) meshes each part again at it, for that file alone: the
+(``View.tolerance``: an STL's or a 3MF's) meshes each part again to within it, for that file alone: the
 cache holds the engine's tolerance and nothing else. A mesh file's document is meshed already:
 its parts' meshes are the file's (``Source.meshes``), and nothing is cached.
 

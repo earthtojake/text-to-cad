@@ -18,8 +18,8 @@ _RECORD = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribut
 
 def header(name: str, tolerance: float | None) -> bytes:
     """The 80 bytes before the triangles: the name, cut to leave room for the tolerance it was
-    meshed at when the export gave one."""
-    said = f" (meshed at {tolerance:g} mm)".encode("ascii") if tolerance is not None else b""
+    meshed to within when the export gave one."""
+    said = f" (meshed within {tolerance:g} mm)".encode("ascii") if tolerance is not None else b""
     return (name.encode("ascii", "replace")[:80 - len(said)] + said).ljust(80, b" ")
 
 

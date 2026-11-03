@@ -302,7 +302,7 @@ def _export(request: dict[str, Any], log: Callable[[str], None]) -> dict[str, An
     to each destination, and drawn into ``draw``'s
     PNG where the request has one (``{"out", option: value}``, the snapshot verb's: a
     model's picture is drawn from the document in this worker's memory). An STL or a 3MF is
-    meshed at the request's ``tolerance`` where it gives one (``export/__init__.py``), and its
+    meshed to within the request's ``tolerance`` where it gives one (``export/__init__.py``), and its
     row says it. Answers what was written."""
     from cad.engine import build as engine_build
     from cad.engine import export
