@@ -21,7 +21,7 @@ const EMPTY = Object.freeze([]);
 const ROW_ACTIONS_WIDTH = "1.5rem";
 // A part or a net can be isolated; a pad is seen with its part, a group is many things.
 const isolable = node => node.kind === "part" || node.kind === "net";
-// A row's kind, in the glyphs Select's filter names the kinds with: a pad's copper, a part's body and legs, a net's trace.
+// A row's kind, in the glyphs Select's filter and the chips name the kinds with: a pad's copper, a part's body and legs, a net's trace.
 const KIND_GLYPHS = Object.freeze({ part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
 function KindGlyph({ kind }) {
   const Glyph = KIND_GLYPHS[kind] || PadKindIcon;

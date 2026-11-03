@@ -34,6 +34,8 @@ const ZONE_FILL = "rgba(141, 197, 255, 0.12)";
 const COPPER_ZONE_FILL = "rgba(141, 197, 255, 0.18)";
 // A text's, a dimension's value's and an area's box: lit, and the board still read through it.
 const BOX_FILL = "rgba(141, 197, 255, 0.16)";
+// The box being dragged: lighter still, so the board under it reads while it is drawn.
+const DRAFT_FILL = "rgba(141, 197, 255, 0.1)";
 // Placement's pads, KiCad's default theme's F.Cu and B.Cu (a through-hole pad is the side looked at),
 // and its airwires: thin, light, under everything a person points at.
 const PLACEMENT_PAD_FILL = Object.freeze({ front: "rgba(200, 52, 52, 0.9)", back: "rgba(77, 127, 196, 0.9)" });
@@ -223,13 +225,14 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
   }
 }
 
-/** The box an area is being dragged over, page millimetres: a dashed outline, under the highlights. */
+/**
+ * The box an area is being dragged over, page millimetres, under the highlights: KiCad's window
+ * selection, a translucent rectangle in a solid outline (what an area names is what lies wholly
+ * inside it, as KiCad's left-to-right box takes).
+ */
 function draftBox(ctx, view, box, color) {
   const [x0, y0, x1, y1] = box;
-  ctx.save();
-  ctx.setLineDash([4 * view.px, 3 * view.px]);
-  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1, fill: BOX_FILL });
-  ctx.restore();
+  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1.5, fill: DRAFT_FILL });
 }
 
 /**
@@ -243,7 +246,7 @@ function draftBox(ctx, view, box, color) {
  *   placement?: boolean }} frame
  *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
  *   `placement`: a board's Placement display, its pads and airwires drawn here.
- *   `draft`: the page box an area is being dragged over (Select's Point or area), or null.
+ *   `draft`: the page box an area is being dragged over (a drag under Select), or null.
  */
 export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
   mirrorX = null, colors = null, placement = false, draft = null }) {

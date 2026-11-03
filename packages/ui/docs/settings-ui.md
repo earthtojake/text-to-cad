@@ -283,7 +283,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, and the view's hand: a drag pans, a tap picks what its filter takes, on a layer the Display draws: All, Parts, Pads, Nets, Tracks, Vias, Zones, Text, Dimensions, Graphics; or, its last mode, Point or area: a tap a point and a drag a box, on the view's working layer, the middle button panning), Pencil, Shapes, Measure; Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the middle button, or Space held, and a drag pans), Pencil, Shapes, Measure; Display |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -377,6 +377,24 @@ or edge pick grows, each with its glyph and independent of each other: **Group e
 connected edges with a picked edge), shown while edges are picked, and **Group faces** (the
 smoothly joined faces with a picked face), shown while faces are; a hidden one keeps its choice
 for when it shows again.
+
+**A board's filter is KiCad's Selection Filter** (`board/BoardSelectFilter.jsx`), the one
+Select filter that is a checklist, because KiCad's is: the chevron's dropdown, headed "Pick",
+holds a grid of stock checkbox items in KiCad's two columns, row by row — **All items** and
+**Locked items**, **Footprints** and **Text**, **Tracks** and **Vias**, **Pads** and **Graphics**,
+**Zones** and **Rule Areas**, then **Dimensions** — each with its kind's glyph and its check at the
+row's right end. Ticking a box leaves the menu up (a press on the board puts it away) and takes
+Select up. All items ticks or unticks every kind, and shows a dash while some are ticked; Locked
+items is no kind: ticked, a click takes what KiCad saved locked as well (a pad is taken whatever
+its part, as KiCad's single click), and it is unticked as a board opens, as KiCad's. Every kind is
+ticked as a board opens; the filter holds while the file is open. A click takes the most specific
+thing the boxes tick (`board/boardPick.js`): with Footprints ticked a footprint's graphics are its
+part's; with the zones alone a zone is taken anywhere inside it. KiCad's Grid Items, Points and
+Other items have no box: the board's index holds none of them. A whole net is picked from the Board
+section's Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
+everything", "Selection filter: Pads, Vias"). Select on a board has no modes: a click picks and a
+drag draws a box, the area it names (KiCad's window selection, a translucent rectangle as it is
+dragged); the view pans under the middle button or Space held, as KiCad's.
 
 The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
 `selectGeometryMode`): All, a press takes the face or edge it lands on where the part's

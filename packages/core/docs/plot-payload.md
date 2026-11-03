@@ -97,8 +97,8 @@ a hole, whose `w` is then its plated wall's width and `span` (a blind or buried 
 bottom copper; `clearance` on a front-copper pad; `page` on the page's own edge. A graphic (`gr_*`,
 `fp_*`) carries `id`, the uuid KiCad saved it with (`<footprint uuid>/<uuid>` where copies of a
 footprint share its items' uuids), which the viewer picks it by (`#shape:<id>`), and `shape` when it
-is not a line (`rect`, `circle`, `arc`, `poly`, `curve`): what the board index would otherwise repeat
-of every graphic is drawn here once.
+is not a line (`rect`, `circle`, `arc`, `poly`, `curve`), and `locked: true` when KiCad saved it
+locked: what the board index would otherwise repeat of every graphic is drawn here once.
 
 What each thing becomes:
 
@@ -166,13 +166,17 @@ value, footprint, side, `at`, `rotation`, `fields`, `dnp`, `outline`), `pads` (p
 net, type, side, `at`, `polygon`, `drill`), `tracks` (net, layer, width, `points`, `arc` for an arc),
 `vias` (net, `at`, diameter, drill, the two `layers` it joins, `type`: `through`, `blind`, `buried`,
 `micro`), `zones` (net, layer, `outline`, `name`, `priority`, `filled`: the mm² of copper KiCad filled
-that layer with; a zone on several layers is one entry per layer, alike but for its layer), `holes`,
+that layer with; a zone on several layers is one entry per layer, alike but for its layer; a rule
+area, KiCad's keepout zone, is one with `rule: true`, no net and no fill, one entry per layer it
+keeps out of, its copper and the other layers it names), `holes`,
 `outline` (Edge.Cuts chained into polylines), `nets` (name, class), `texts` (a board's text and each
 footprint's shown fields and `fp_text`: `text` as drawn, layer, `at`, `angle`, `size` (the letters'
 height), `polygon` (the box its letters fill), `part`) and `dimensions` (`type`, layer, `value`: the
 text KiCad shows for it, `lines`: what it is drawn from, `polygon`: its value's box, `part`). Tracks,
 vias, zones, texts and dimensions carry `id`, the uuid KiCad saved them with, as graphics do: what a
-pick names them by (`#track:<id>`, `#via:`, `#zone:`, `#text:`, `#dimension:`). `origin` is where KiCad's
+pick names them by (`#track:<id>`, `#via:`, `#zone:`, `#text:`, `#dimension:`). A part, a track, a
+via, a zone, a text or a dimension KiCad saved locked carries `locked: true` (a part's pads, texts and
+graphics are locked with it): what Select's Locked items filter reads. `origin` is where KiCad's
 page origin (0, 0) lies on the sheet, so the viewer's index (`board2d/boardIndex.js`) reads every
 position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2..x3y4`) back in
 KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's

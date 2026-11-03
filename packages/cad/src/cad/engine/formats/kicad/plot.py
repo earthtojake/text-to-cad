@@ -67,7 +67,7 @@ from typing import Iterable, Sequence
 
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.board_index import (
-    FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, net_of,
+    FootprintFrame, canonical_copper, copper_layers, expand_copper, footprint_property, graphic, item_id, item_layers, layer_of, locked, net_of,
     net_table, pad_shape, points_of, read_index,
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
@@ -568,6 +568,8 @@ class _Builder:
             flags["id"] = uid
             if shape != "line":
                 flags["shape"] = shape
+            if locked(node):
+                flags["locked"] = True
         # A shape on copper that carries a net is copper of that net (a filled rectangle joining pads):
         # drawn with it, and joined with it in the ratsnest.
         net = net_of(node, self.table) if expand_copper([layer], self.copper) else None

@@ -153,6 +153,7 @@ class Part:
     outline: tuple[XY, ...]  # the courtyard, else the box around its pads and fabrication drawing
     pads: tuple[Pad, ...] = ()
     in_bom: bool = True  # False when the footprint is excluded from the BOM (or on the board only)
+    locked: bool = False  # KiCad's lock: its pads, texts and graphics are locked with it
 
     kind = "part"
 
@@ -193,6 +194,7 @@ class Track:
     points: tuple[XY, ...]
     arc: bool = False
     id: str | None = None
+    locked: bool = False
 
     kind = "track"
 
@@ -222,6 +224,7 @@ class Via:
     layers: tuple[str, ...] = ("F.Cu", "B.Cu")
     id: str | None = None
     type: str = "through"
+    locked: bool = False
 
     kind = "via"
 
@@ -238,7 +241,9 @@ class Via:
 class Zone:
     """A pour on one copper layer: its outline as drawn, and the copper KiCad filled it with. A zone
     on several layers is one of these per layer, alike but for ``layer`` and ``fills``; ``layers``
-    names them all, ``id`` is the zone's uuid (``#zone:<id>``)."""
+    names them all, ``id`` is the zone's uuid (``#zone:<id>``). A rule area (KiCad's keepout zone,
+    ``rule``) is one too, with no net and no fill, on every layer it keeps out of; a board's are
+    :attr:`BoardView.rule_areas`, never among its pours."""
 
     net: str | None
     layer: str
@@ -248,6 +253,8 @@ class Zone:
     name: str | None = None
     priority: int = 0
     layers: tuple[str, ...] = ()
+    locked: bool = False
+    rule: bool = False
 
     kind = "zone"
 
@@ -264,6 +271,8 @@ class Zone:
     def __repr__(self) -> str:
         state = f"filled {self.filled_area:.4g} mm²" if self.fills else "unfilled"
         named = f" {self.name!r}" if self.name else ""
+        if self.rule:
+            return f"Zone(rule area{named} on {', '.join(self.layers or (self.layer,))})"
         return f"Zone({self.net!r}{named} on {', '.join(self.layers or (self.layer,))}, {state})"
 
 
@@ -281,6 +290,7 @@ class Text:
     size: float
     polygon: tuple[XY, ...]
     part: str | None = None
+    locked: bool = False
 
     kind = "text"
 
@@ -305,6 +315,7 @@ class Dimension:
     lines: tuple[tuple[XY, XY], ...]
     polygon: tuple[XY, ...] = ()
     part: str | None = None
+    locked: bool = False
 
     kind = "dimension"
 
@@ -331,6 +342,7 @@ class Shape:
     filled: bool = False
     part: str | None = None
     net: str | None = None
+    locked: bool = False
 
     kind = "shape"
 
@@ -490,6 +502,7 @@ class BoardIndex:
     dimensions: tuple[Dimension, ...] = ()
     shapes: tuple[Shape, ...] = ()
     layers: tuple[str, ...] = ()  # every layer the board's table declares, as KiCad names it
+    rule_areas: tuple[Zone, ...] = ()  # the keepout zones, one per layer each keeps out of
 
     @property
     def pads(self) -> tuple[Pad, ...]:
@@ -520,6 +533,7 @@ class BoardIndex:
                 replace(zone, outline=points(zone.outline), fills=tuple(points(fill) for fill in zone.fills))
                 for zone in self.zones
             ),
+            rule_areas=tuple(replace(zone, outline=points(zone.outline)) for zone in self.rule_areas),
             holes=tuple(replace(hole, at=point(hole.at)) for hole in self.holes),
             outline=tuple(points(line) for line in self.outline),
             origin=point(self.origin),
@@ -551,7 +565,7 @@ class BoardIndex:
                 {
                     "ref": part.ref, "value": part.value, "footprint": part.footprint, "side": part.side,
                     "at": xy(part.at), "rotation": num(part.rotation), "fields": dict(part.fields),
-                    "dnp": part.dnp, "outline": path(part.outline),
+                    "dnp": part.dnp, "outline": path(part.outline), **({"locked": True} if part.locked else {}),
                 }
                 for part in self.parts
             ],
@@ -565,20 +579,23 @@ class BoardIndex:
             ],
             "tracks": [
                 {"net": track.net, "layer": track.layer, "width": num(track.width), "points": path(track.points),
-                 **({"id": track.id} if track.id else {}), **({"arc": True} if track.arc else {})}
+                 **({"id": track.id} if track.id else {}), **({"arc": True} if track.arc else {}),
+                 **({"locked": True} if track.locked else {})}
                 for track in self.tracks
             ],
             "vias": [
                 {"net": via.net, "at": xy(via.at), "diameter": num(via.diameter), "drill": num(via.drill),
-                 **({"id": via.id} if via.id else {}), "layers": list(via.layers), "type": via.type}
+                 **({"id": via.id} if via.id else {}), "layers": list(via.layers), "type": via.type,
+                 **({"locked": True} if via.locked else {})}
                 for via in self.vias
             ],
             "zones": [
                 {"net": zone.net, "layer": zone.layer, "outline": path(zone.outline),
                  **({"id": zone.id} if zone.id else {}), **({"name": zone.name} if zone.name else {}),
                  **({"priority": zone.priority} if zone.priority else {}),
-                 **({"filled": num(zone.filled_area)} if zone.fills else {})}
-                for zone in self.zones
+                 **({"filled": num(zone.filled_area)} if zone.fills else {}),
+                 **({"locked": True} if zone.locked else {}), **({"rule": True} if zone.rule else {})}
+                for zone in (*self.zones, *self.rule_areas)
             ],
             "holes": [{"at": xy(hole.at), "diameter": num(hole.diameter), "part": hole.part} for hole in self.holes],
             "outline": [path(line) for line in self.outline],
@@ -587,13 +604,14 @@ class BoardIndex:
             # from what the plot draws of it, which carries its id: the plot's `graphic`).
             "texts": [
                 {"id": text.id, "text": text.text, "layer": text.layer, "at": xy(text.at), "angle": num(text.angle),
-                 "size": num(text.size), "polygon": path(text.polygon), **({"part": text.part} if text.part else {})}
+                 "size": num(text.size), "polygon": path(text.polygon), **({"part": text.part} if text.part else {}),
+                 **({"locked": True} if text.locked else {})}
                 for text in self.texts if text.id
             ],
             "dimensions": [
                 {"id": item.id, "type": item.type, "layer": item.layer, "value": item.value,
                  "lines": [path(line) for line in item.lines], "polygon": path(item.polygon),
-                 **({"part": item.part} if item.part else {})}
+                 **({"part": item.part} if item.part else {}), **({"locked": True} if item.locked else {})}
                 for item in self.dimensions if item.id
             ],
         }
@@ -761,6 +779,15 @@ def item_id(node: list) -> str | None:
     return None
 
 
+def locked(node: list) -> bool:
+    """Whether KiCad saved ``node`` locked: ``(locked yes)``, ``(locked)``, or an older board's bare
+    ``locked`` atom (``(footprint "R" locked ...)``, ``(segment locked ...)``)."""
+    found = sexpr.find(node, "locked")
+    if found is not None:
+        return len(found) < 2 or str(found[1]) in ("yes", "true")
+    return any(isinstance(atom, Sym) and atom == "locked" for atom in node[1:])
+
+
 def _hidden(node: list) -> bool:
     """A text KiCad does not show (``(hide yes)``, an older board's ``hide``): as the plot reads it."""
     return str(sexpr.value(node, "hide", "")) == "yes" or any(isinstance(atom, Sym) and atom == "hide" for atom in node[1:])
@@ -810,7 +837,7 @@ def _filled(node: list) -> bool:
 
 def _text_item(text: str, layer: str, at: XY, angle: float, node: list, part: str | None) -> Text:
     return Text(id=item_id(node), text=text, layer=layer, at=at, angle=angle, size=_text_effects(node)[0][0],
-                polygon=_text_box(text, at, angle, node), part=part)
+                polygon=_text_box(text, at, angle, node), part=part, locked=locked(node))
 
 
 def _footprint_text(node: list, frame: "FootprintFrame", ref: str, value: str, fields: Mapping[str, str]) -> Text | None:
@@ -837,7 +864,7 @@ def _shape_item(node: list, points: Sequence[XY], closed: bool, part: str | None
     layer = layer_of(node) or ""
     net = net_of(node, table) if expand_copper([layer], copper) else None
     return Shape(id=item_id(node), shape=(sexpr.head(node) or "_").split("_", 1)[1], layer=layer, width=_stroke_width(node),
-                 points=tuple(points), closed=closed, filled=closed and _filled(node), part=part, net=net)
+                 points=tuple(points), closed=closed, filled=closed and _filled(node), part=part, net=net, locked=locked(node))
 
 
 _DIMENSION_TYPES = ("aligned", "orthogonal", "leader", "center", "radial")
@@ -891,7 +918,7 @@ def _read_dimension(node: list, part: str | None) -> Dimension | None:
     if not lines and not polygon:
         return None
     return Dimension(id=item_id(node), type=kind if kind in _DIMENSION_TYPES else "aligned", layer=layer, value=value,
-                     lines=tuple(lines), polygon=polygon, part=part)
+                     lines=tuple(lines), polygon=polygon, part=part, locked=locked(node))
 
 
 class _Named:
@@ -1268,6 +1295,7 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
         outline=tuple(outline),
         pads=_counted(pads),
         in_bom=in_bom,
+        locked=locked(node),
     )
     return part, holes, edges
 
@@ -1292,9 +1320,15 @@ def _outline(items: list[tuple[list[XY], bool]]) -> list[XY]:
 
 
 def _read_zone(node: list, table, copper: Sequence[str]) -> list[Zone]:
-    if sexpr.find(node, "keepout") is not None:
-        return []  # a rule area, not copper
+    rule = sexpr.find(node, "keepout") is not None
     layers = expand_copper(item_layers(node), copper)
+    if rule:
+        # A rule area keeps out of its copper and of the other layers it names, as the plot draws it.
+        layers = list(dict.fromkeys([*layers, *(layer for layer in item_layers(node) if not _COPPER.match(layer) and "*" not in layer and "&" not in layer)]))
+        outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
+        name = sexpr.value(node, "name")
+        return [Zone(net=None, layer=layer, outline=outline, id=item_id(node), name=str(name) if isinstance(name, str) and name else None,
+                     layers=tuple(layers), locked=locked(node), rule=True) for layer in layers]
     if not layers:
         return []
     outline = tuple(points_of(sexpr.find(sexpr.find(node, "polygon") or [], "pts")))
@@ -1308,7 +1342,7 @@ def _read_zone(node: list, table, copper: Sequence[str]) -> list[Zone]:
     return [Zone(net=net, layer=layer, outline=outline, fills=tuple(fills.get(layer, ())), id=item_id(node),
                  name=str(name) if isinstance(name, str) and name else None,
                  priority=int(priority) if isinstance(priority, int) and not isinstance(priority, bool) else 0,
-                 layers=tuple(layers))
+                 layers=tuple(layers), locked=locked(node))
             for layer in layers]
 
 
@@ -1361,7 +1395,7 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
                 continue
             net = net_of(node, table)
             tracks.append(Track(net=net, layer=layer_of(node) or "", width=sexpr.number(sexpr.value(node, "width")), points=tuple(points),
-                                arc=head == "arc", id=item_id(node)))
+                                arc=head == "arc", id=item_id(node), locked=locked(node)))
         elif head == "via":
             at = sexpr.pair(sexpr.find(node, "at"))
             if at is None:
@@ -1369,7 +1403,7 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
             net = net_of(node, table)
             vias.append(Via(
                 net=net, at=at, diameter=sexpr.number(sexpr.value(node, "size")), drill=sexpr.number(sexpr.value(node, "drill")),
-                layers=tuple(item_layers(node)) or ("F.Cu", "B.Cu"), id=item_id(node), type=_via_type(node),
+                layers=tuple(item_layers(node)) or ("F.Cu", "B.Cu"), id=item_id(node), type=_via_type(node), locked=locked(node),
             ))
         elif head == "zone":
             named.add("zone", _read_zone(node, table, copper))
@@ -1387,7 +1421,8 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
                 named.add("shape", [_shape_item(node, drawn[0], drawn[1], None, table, copper)])
             if layer_of(node) == "Edge.Cuts":
                 edges.append(drawn[0] + [drawn[0][0]] if drawn[1] else drawn[0])
-    zones = named.named("zone")
+    zones = [zone for zone in named.named("zone") if not zone.rule]
+    rule_areas = [zone for zone in named.named("zone") if zone.rule]
     names = {pad.net for part in parts for pad in part.pads} | {track.net for track in tracks} | {via.net for via in vias} | {zone.net for zone in zones}
     names |= {unescape_net_name(name) for name in table.values()}
     assigned, patterns = project_netclasses(project)
@@ -1406,6 +1441,7 @@ def read_index(text: str | list, *, project: Path | None = None, graphics: bool 
         dimensions=tuple(named.named("dimension")),
         shapes=tuple(named.named("shape")),
         layers=declared,
+        rule_areas=tuple(rule_areas),
     )
 
 
@@ -1442,6 +1478,8 @@ class BoardView:
         self.tracks: tuple[Track, ...] = index.tracks
         self.vias: tuple[Via, ...] = index.vias
         self.zones: tuple[Zone, ...] = index.zones
+        #: The rule areas (keepout zones), one per layer each keeps out of: ``#zone:<uuid>`` names them too.
+        self.rule_areas: tuple[Zone, ...] = index.rule_areas
         self.holes: tuple[Hole, ...] = index.holes
         self.texts: tuple[Text, ...] = index.texts
         self.dimensions: tuple[Dimension, ...] = index.dimensions
@@ -1451,7 +1489,7 @@ class BoardView:
         # Each item kind by uuid: an item under its whole id, and one named under its footprint's
         # uuid also under its own, which then names every copy that shares it.
         self._items: dict[str, dict[str, list]] = {kind: {} for kind in ITEM_KINDS}
-        for kind, items in (("track", self.tracks), ("via", self.vias), ("zone", self.zones), ("text", self.texts),
+        for kind, items in (("track", self.tracks), ("via", self.vias), ("zone", (*self.zones, *self.rule_areas)), ("text", self.texts),
                             ("dimension", self.dimensions), ("shape", self.shapes)):
             for item in items:
                 if item.id:

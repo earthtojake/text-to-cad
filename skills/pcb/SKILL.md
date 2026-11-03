@@ -163,10 +163,11 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 
 ## Board views
 
-The board view supports layers, selection, Measure, annotations and Quick Edit. Select picks
-parts, pads, nets, tracks, vias, zones, texts, dimensions and graphics, or, as Point or area, a
-point or a box on the layer the person works on; each arrives as a reference
-([checks](references/checks.md#references) says what each names and how to resolve it).
+The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
+KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
+Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
+area, a box on the layer the person works on; the sidebar's Nets pick a whole net. Each arrives as
+a reference ([checks](references/checks.md#references) says what each names and how to resolve it).
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:

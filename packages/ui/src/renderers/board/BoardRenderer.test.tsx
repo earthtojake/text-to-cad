@@ -108,6 +108,17 @@ const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.
 const openMenu = (name: string) => waitFor(() => { const found = document.querySelector<HTMLElement>(`[role=menu][aria-label="${name}"]`); expect(found).not.toBeNull(); return found!; });
 const menuShown = (name: string) => document.querySelector(`[role=menu][aria-label="${name}"]`);
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
+/** Select's filter menu, opened from its chevron when a press on the board has put it away. */
+const filterMenu = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>) => {
+  const shown = menuShown('Selection filter') as HTMLElement | null;
+  if (shown) return shown;
+  await user.click(within(strip(pane)).getByRole('button', { name: /^Selection filter:/ }));
+  return openMenu('Selection filter');
+};
+/** Ticks or unticks one of the filter's boxes, the menu opened first. */
+const toggleBox = async (pane: HTMLElement, user: ReturnType<typeof userEvent.setup>, name: string) => {
+  await user.click(within(await filterMenu(pane, user)).getByRole('menuitemcheckbox', { name }));
+};
 
 /** A tap on the board where sheet point `at` is on screen in the last frame painted. */
 const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unknown> = {}) => {
@@ -213,7 +224,7 @@ it('a tap picks the most specific thing: a pad, then copper, then nothing; Shift
   dispose();
 });
 
-it("Select's filter is one choice of what a press takes: Parts takes the part, over copper too; Nets takes the whole net", async () => {
+it("Select's filter is KiCad's grid of boxes: they tick what a click takes, All items ticks them all, and the menu stays up", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
@@ -221,55 +232,82 @@ it("Select's filter is one choice of what a press takes: Parts takes the part, o
   const controller = await controllerOf(view);
   await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
   const menu = await openMenu('Selection filter');
-  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent))
-    .toEqual(['All', 'Parts', 'Pads', 'Nets', 'Tracks', 'Vias', 'Zones', 'Text', 'Dimensions', 'Graphics', 'Point or area']);
-  await user.click(within(menu).getByRole('menuitemradio', { name: 'Parts' }));
-  // Choosing one puts the menu away.
-  await waitFor(() => expect(menuShown('Selection filter')).toBeNull());
+  const boxes = () => within(menu).getAllByRole('menuitemcheckbox').map(item => [item.textContent, item.getAttribute('aria-checked')]);
+  // KiCad's two columns, row by row; every kind ticked and no locked items as a board opens.
+  expect(boxes()).toEqual([['All items', 'true'], ['Locked items', 'false'], ['Footprints', 'true'], ['Text', 'true'], ['Tracks', 'true'],
+    ['Vias', 'true'], ['Pads', 'true'], ['Graphics', 'true'], ['Zones', 'true'], ['Rule Areas', 'true'], ['Dimensions', 'true']]);
+  // All items unticks every kind, and the menu stays up for the next box.
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'All items' }));
+  expect(boxes().filter(([, checked]) => checked === 'true')).toEqual([]);
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Footprints' }));
+  expect(menuShown('Selection filter')).not.toBeNull();
+  expect(boxes()[0]).toEqual(['All items', 'mixed']);
+  expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Footprints' })).toBeTruthy();
   // R1.1, under the VBUS track's end: the part, not the pad or the copper.
   tap(pane, [34.175, 15]);
   expect(selected(controller)).toEqual(['#R1']);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Parts' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Nets' }));
-  expect(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' })).toBeTruthy();
-  tap(pane, [34.175, 15]);
-  expect(selected(controller)).toEqual(['#net:VBUS']);
-  // Zones takes the pour anywhere inside it; Graphics a part's own silkscreen line, which All leaves to its part.
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Nets' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Zones' }));
+  // A press on the board puts the menu away, as any dropdown's outside press does.
+  expect(menuShown('Selection filter')).toBeNull();
+  // Zones alone takes the pour anywhere inside it; Graphics without Footprints a part's own silkscreen line.
+  await toggleBox(pane, user, 'Footprints');
+  await toggleBox(pane, user, 'Zones');
   tap(pane, [10, 20]);
   expect(selected(controller)).toEqual(['#zone:7a1c0000-0000-4000-8000-000000000004']);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: Zones' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Graphics' }));
+  await toggleBox(pane, user, 'Zones');
+  await toggleBox(pane, user, 'Graphics');
   tap(pane, [5.6, 16.27]);  // J1's silkscreen line between its pins, from (3.62, 16.27) to (6.38, 16.27)
   expect(selected(controller)).toEqual([`#shape:${(BOARD as any).sheets[0].layers.find((layer: any) => layer.id === 'F.SilkS').items
     .find((item: any) => item.ref === '#J1' && item.pts?.every((point: number[]) => point[1] === 16.27)).id}`]);
+  // Nothing ticked takes nothing: a click clears.
+  await toggleBox(pane, user, 'Graphics');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual([]);
   dispose();
 });
 
-it("Point or area names a place: a tap a point, a drag the box between its ends, on the working layer, as the prompt's packet carries them", async () => {
+it('a locked footprint is no pick until Locked items is ticked, but for its pads, as KiCad lets a click take one', async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const board = JSON.parse(JSON.stringify(BOARD));
+  board.board.parts.find((part: any) => part.ref === 'R1').locked = true;
+  readPlot = () => json(board);
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual(['#R1.1']);
+  await toggleBox(pane, user, 'All items');
+  await toggleBox(pane, user, 'Footprints');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual([]);
+  await toggleBox(pane, user, 'Locked items');
+  tap(pane, [34.175, 15]);
+  expect(selected(controller)).toEqual(['#R1']);
+  dispose();
+});
+
+it("a drag under Select draws the box and names the area on the working layer; the middle button and Space held pan; a jittered click is a click", async () => {
   const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
   const view = await open('blinky.kicad_pcb', { promptFiles });
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Selection filter: everything' }));
-  await user.click(within(await openMenu('Selection filter')).getByRole('menuitemradio', { name: 'Point or area' }));
-  expect(pane.querySelector('[data-board-surface] canvas')!.className).toContain('cursor-crosshair');
-  // On R1.1, the place and not the pad: on F.Cu, the copper seen from the top.
-  tap(pane, [34.2, 15.3]);
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3']);
-  // A drag is the box between its ends, Shift adding it; it does not pan.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
-  const before = { ...frames.at(-1)! };
   const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
   const press = { pointerId: 1, pointerType: 'mouse', button: 0 };
+  // A click that wavers a pixel or two is still a click: R1.1.
+  const r11 = at([34.175, 15]);
+  fireEvent.pointerDown(canvas, { ...press, ...r11 });
+  fireEvent.pointerMove(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
+  fireEvent.pointerUp(canvas, { ...press, clientX: r11.clientX + 2, clientY: r11.clientY + 1 });
+  expect(selected(controller)).toEqual(['#R1.1']);
+  // A drag is the box between its ends, on F.Cu, the copper seen from the top; Shift adds it; it does not pan.
+  const before = { ...frames.at(-1)! };
   fireEvent.pointerDown(canvas, { ...press, ...at([30, 10]) });
   fireEvent.pointerMove(canvas, { ...press, ...at([34, 14]) });
   fireEvent.pointerMove(canvas, { ...press, ...at([40, 20]) });
   fireEvent.pointerUp(canvas, { ...press, ...at([40, 20]), shiftKey: true });
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   expect(frames.at(-1)).toEqual(before);
   // The middle button pans, as KiCad's does, and picks nothing.
   const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
@@ -277,18 +315,31 @@ it("Point or area names a place: a tap a point, a drag the box between its ends,
   fireEvent.pointerMove(canvas, { ...middle, ...at([25, 15]) });
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).toBeGreaterThan(before.offsetX));
-  expect(selected(controller)).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  // Space held, a left drag pans too (a trackpad's way), its hand the cursor; let go, a drag is a box again.
+  const panned = { ...frames.at(-1)! };
+  fireEvent.keyDown(window, { key: ' ', code: 'Space' });
+  await waitFor(() => expect(canvas.className).toContain('cursor-grab'));
+  fireEvent.pointerDown(canvas, { ...press, ...at([20, 15]) });
+  fireEvent.pointerMove(canvas, { ...press, ...at([20, 20]) });
+  fireEvent.pointerUp(canvas, { ...press, ...at([20, 20]) });
+  fireEvent.keyUp(window, { key: ' ', code: 'Space' });
+  await waitFor(() => expect(frames.at(-1)!.offsetY).toBeGreaterThan(panned.offsetY));
+  await waitFor(() => expect(canvas.className).not.toContain('cursor-grab'));
+  expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
   expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
-    .toEqual(['point 34.2, 15.3', 'Remove point 34.2, 15.3', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
+    .toEqual(['R1.1', 'Remove R1.1', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
   // The note's packet names them, for a snapshot to light them where the person put them.
   const note = within(quickEdit).getByRole('textbox', { name: 'Describe your changes' });
   note.textContent = 'Keep this clear.';
   fireEvent.input(note);
   fireEvent.click(within(quickEdit).getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
-  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#F.Cu@x34.2y15.3', '#F.Cu@x30y10..x40y20']);
+  expect((promptFiles.create.mock.calls[0] as any)[0].references).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   await waitFor(() => expect(copied.at(-1)).toContain(`${FILE}#F.Cu@x30y10..x40y20`));
+  // A click on bare board lets go of it all, as KiCad's does.
+  tap(pane, [36, 26]);
+  expect(selected(controller)).toEqual([]);
   dispose();
 });
 

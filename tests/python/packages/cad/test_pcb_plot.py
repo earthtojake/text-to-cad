@@ -469,6 +469,30 @@ class KiCadDrawingTest(unittest.TestCase):
         self.assertLess(min(ys), 14.5)
         self.assertGreater(max(ys), 15.5)
 
+    def test_the_index_carries_rule_areas_apart_and_what_kicad_saved_locked(self) -> None:
+        from cad.engine.formats.kicad.board_index import BoardView, read_index
+        board = _board(
+            '(zone (net 0) (net_name "") (layers "F.Cu" "B.Cu") (uuid "0a000000-0000-4000-8000-000000000001") (name "keep")'
+            ' (hatch edge 0.5) (keepout (tracks not_allowed) (vias not_allowed) (pads allowed) (copperpour not_allowed) (footprints allowed))'
+            ' (polygon (pts (xy 2 2) (xy 8 2) (xy 8 8) (xy 2 8))))\n'
+            '(segment (start 1 1) (end 9 1) (width 0.25) (layer "F.Cu") (net 1) (locked yes) (uuid "0a000000-0000-4000-8000-000000000002"))\n'
+            '(gr_line (start 1 3) (end 9 3) (stroke (width 0.1) (type solid)) (layer "F.SilkS") (locked yes) (uuid "0a000000-0000-4000-8000-000000000003"))\n'
+            + _pad("U1", "15 10", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(layer "F.Cu")', '(locked yes) (layer "F.Cu")', 1),
+            layers='(0 "F.Cu" signal) (2 "B.Cu" signal) (5 "F.SilkS" user)')
+        payload = self.plot(board)
+        zones = payload["board"]["zones"]
+        # A rule area is no pour: one entry per layer it keeps out of, marked, with no net and no fill.
+        self.assertEqual([(zone["layer"], zone.get("rule"), zone["net"]) for zone in zones], [("F.Cu", True, None), ("B.Cu", True, None)])
+        self.assertEqual([part.get("locked") for part in payload["board"]["parts"]], [True])
+        self.assertEqual([track.get("locked") for track in payload["board"]["tracks"]], [True])
+        [line] = [item for item in self.layers(payload)["F.SilkS"]["items"] if item.get("id") == "0a000000-0000-4000-8000-000000000003"]
+        self.assertTrue(line["locked"])
+        view = BoardView(Path("rules.kicad_pcb"), read_index(board))
+        self.assertEqual(view.zones, ())
+        area = view.resolve("#zone:0a000000-0000-4000-8000-000000000001")
+        self.assertTrue(area.rule)
+        self.assertEqual((area.name, area.layers), ("keep", ("F.Cu", "B.Cu")))
+
     def test_footprint_text_reads_upright_unless_unlocked(self) -> None:
         def strokes(angle: str, unlocked: str = "") -> list:
             board = _board(_pad("U1", "15 10", f'(fp_text user "AB" (at 0 2 {angle}) {unlocked}(layer "F.SilkS") '

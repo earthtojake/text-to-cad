@@ -3,8 +3,10 @@
  * pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
  * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
  * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
- * hand takes it (`onDrag`, a board's Point or area drawing its box): then the middle button pans,
- * as KiCad's does (`middlePan`). Every flat view (a 2D drawing, a board) is this one hook under its own paint.
+ * hand takes it (`onDrag`, a board's Select drawing its box): then the middle button pans, as
+ * KiCad's does (`middlePan`), and so does a drag with Space held (`spacePan`), as KiCad's and a
+ * design tool's hand do — a trackpad's way to pan, its two-finger scroll zooming as a wheel does in
+ * every flat view. Every flat view (a 2D drawing, a board) is this one hook under its own paint.
  *
  * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
  * already the person's), the `bounds` the fit frames (`@cad/core`'s plane maths,
@@ -70,9 +72,10 @@ function wheelZoomFactor(event) {
  *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
  *   release are the tool's too, and the view does not pan.
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
+ * @param {boolean} [options.spacePan]  A press with Space held pans (the view's `panReady` says Space is held).
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDrag = null, middlePan = false }) {
+  onTap = null, onHover = null, onDrag = null, middlePan = false, spacePan = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -101,6 +104,10 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   middlePanRef.current = middlePan;
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
+  // Space held, for `spacePan`: a press then pans whatever the tool; and whether the pointer is over the picture.
+  const spaceRef = useRef(false);
+  const overRef = useRef(false);
+  const [panReady, setPanReady] = useState(false);
 
   const paint = useCallback(() => {
     frameRef.current = 0;
@@ -268,7 +275,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
       // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
-      const middle = event.pointerType === "mouse" && event.button === 1 && middlePanRef.current;
+      const middle = (event.pointerType === "mouse" && event.button === 1 && middlePanRef.current)
+        || (spaceRef.current && event.button === 0);
       if (event.pointerType === "mouse" && event.button !== 0 && !middle) return;
       capturePointer(canvas, event.pointerId);
       const point = local(event);
@@ -284,6 +292,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onPointerMove = (event) => {
       const previous = pointers.get(event.pointerId);
       if (!previous) {
+        overRef.current = true;
         // Nothing pressed: the pointer resting over the picture, for the tool in hand.
         if (!pointers.size && event.pointerType !== "touch") hoverRef.current?.(local(event), event);
         return;
@@ -325,7 +334,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       if (dragged && at) dragRef.current?.(event.type === "pointerup" ? "end" : "cancel", { start: dragged.start, point: at, event });
       if (tapped && at) tapRef.current?.(at, event);
     };
-    const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
+    const onPointerLeave = () => { overRef.current = false; if (!pointers.size) hoverRef.current?.(null, null); };
     const onWheel = (event) => {
       if (!transformRef.current) return;
       // The page must not scroll under a picture being zoomed, so this listener
@@ -353,6 +362,31 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     };
   }, [fit, moveTo, zoomBy]);
 
+  // ---- Space held: the hand ---------------------------------------------------
+  // Held anywhere but in a field, it readies the hand; over the picture, its keystroke is the view's
+  // (no page scroll, no button pressed under the focus). Let go, or the window left, and it is not.
+  useEffect(() => {
+    if (!spacePan || typeof window === "undefined") return undefined;
+    const typing = (target) => Boolean(target?.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target?.tagName || ""));
+    const hold = (held) => { if (spaceRef.current !== held) { spaceRef.current = held; setPanReady(held); } };
+    const onKeyDown = (event) => {
+      if (event.code !== "Space" || event.metaKey || event.ctrlKey || event.altKey || typing(event.target)) return;
+      if (overRef.current) event.preventDefault();
+      hold(true);
+    };
+    const onKeyUp = (event) => { if (event.code === "Space") hold(false); };
+    const release = () => hold(false);
+    window.addEventListener("keydown", onKeyDown);
+    window.addEventListener("keyup", onKeyUp);
+    window.addEventListener("blur", release);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("keyup", onKeyUp);
+      window.removeEventListener("blur", release);
+      release();
+    };
+  }, [spacePan]);
+
   /** The framed picture as a PNG, the surface included: it is painted into the canvas. */
   const encode = useCallback((noun) => new Promise((resolve, reject) => {
     const canvas = canvasRef.current;
@@ -363,5 +397,5 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  return { containerRef, canvasRef, dragging, panReady, fit, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

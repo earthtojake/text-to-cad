@@ -38,7 +38,7 @@ The viewer hands you what the person picked as references, the file then `#` the
 | `#net:GND@x12y8` | that net's copper at a point (a board saved without uuids names copper so) | `Copper` |
 | `#track:<uuid>` | a track or an arc | `Track`: net, layer, width, `length`, `points` |
 | `#via:<uuid>` | a via | `Via`: net, `at`, diameter, drill, `layers` (its two ends), `type` |
-| `#zone:<uuid>` | a zone, on each of its layers | `Zone` (its first layer's): net, `layers`, `name`, `priority`, `filled_area` |
+| `#zone:<uuid>` | a zone, on each of its layers, or a rule area (a keepout) | `Zone` (its first layer's): net, `layers`, `name`, `priority`, `filled_area`; a rule area's `rule` is true, its net none (`board.rule_areas` lists them, never among `board.zones`) |
 | `#text:<uuid>` | a board's text, or a footprint's shown field or `fp_text` | `Text`: `text`, layer, `at`, `angle`, `size`, `part` |
 | `#dimension:<uuid>` | a dimension | `Dimension`: `type`, layer, `value` (as KiCad shows it), `lines` |
 | `#shape:<uuid>` | a graphic: a `gr_*` or `fp_*` line, rect, circle, arc, poly or curve | `Shape`: `shape`, layer, width, `points`, `part` |
@@ -47,9 +47,10 @@ The viewer hands you what the person picked as references, the file then `#` the
 | `#@x10y5..x20y15` | an area, the box between two corners | `Area`: `box`, `size`, and what lies wholly inside (`board.area(x0, y0, x1, y1)`) |
 | `#F.Cu@x10y5..x20y15` | an area on a layer | `Area` with `layer`: that layer's part of it, the parts on its side |
 
-Coordinates are millimetres in KiCad's frame, y down, as the file holds them. A point's or an
-area's layer is the one the person was working on (the copper nearest them, or the layer they
-isolated): put what they ask for there unless the note says otherwise. A `<uuid>` is the one the
+Coordinates are millimetres in KiCad's frame, y down, as the file holds them. The viewer names an
+area when the person drags a box (it names no point; a point is yours to write): its layer is the
+one they were working on (the copper nearest them, or the layer they isolated), so put what they
+ask for there unless the note says otherwise. A `<uuid>` is the one the
 board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it
 still names the item after you move it: find it in the file by that uuid (case-insensitive), or
 in a `@kicad_pcb` script with `board.get_items_by_id(KIID(value=uuid))` (`from
