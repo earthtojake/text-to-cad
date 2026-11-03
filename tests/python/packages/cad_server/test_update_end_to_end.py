@@ -282,6 +282,21 @@ class UpdateEndToEndTest(unittest.TestCase):
         log = self.work / "state" / "update.log"
         return log.read_text(encoding="utf-8", errors="replace") if log.exists() else "(no update log)"
 
+    def running(self) -> str:
+        """Every process still running from this test's folder, its pid and command line: on a stalled update,
+        whether the engine before is still there, and whether the switch helper the update log names is."""
+        if WINDOWS:
+            listing = ["powershell", "-NoProfile", "-Command",
+                       "Get-CimInstance Win32_Process | ForEach-Object { \"$($_.ProcessId) $($_.CommandLine)\" }"]
+        else:
+            listing = ["ps", "-axo", "pid=,command="]
+        try:
+            listed = subprocess.run(listing, capture_output=True, text=True, timeout=60).stdout
+        except (OSError, subprocess.SubprocessError) as error:
+            return f"(could not list the processes: {error})"
+        found = [line.strip() for line in listed.splitlines() if str(self.work) in line]
+        return "processes from the test's folder:\n" + ("\n".join(found) if found else "(none)")
+
     def test_the_button_installs_the_next_release_and_its_engine_takes_the_port_and_token(self) -> None:
         # Release A, as the install command sets it up: uvx's environment, whose `cad setup` makes A's
         # release folder and sets it up from there. Claude Desktop's folder is there: its config gets CAD's
@@ -342,8 +357,9 @@ class UpdateEndToEndTest(unittest.TestCase):
         deadline = clicked + 300
         while back is None:
             # Where it stopped, when it does: the stages the page saw, and the engine's last answer.
-            self.assertLess(time.monotonic(), deadline, f"no engine of {B} answered; stages {stages}, last answer "
-                            f"{status} {json.dumps(answer)[:600]}\n{self.said()}")
+            if time.monotonic() >= deadline:  # the message made once, on failure: it lists the processes
+                self.fail(f"no engine of {B} answered; stages {stages}, last answer {status} "
+                          f"{json.dumps(answer)[:600]}\n{self.said()}\n{self.running()}")
             status, answer = self.version(token)
             if status is None:
                 gone = gone or time.monotonic()
