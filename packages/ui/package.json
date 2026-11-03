@@ -1,6 +1,6 @@
 {
   "name": "@cad/ui",
-  "version": "0.10.1",
+  "version": "0.10.2",
   "private": true,
   "type": "module",
   "files": [
@@ -92,7 +92,7 @@
     "react": "^18.3.1 || ^19.0.0",
     "react-dom": "^18.3.1 || ^19.0.0",
     "lucide-react": "^1.45.0",
-    "three": "0.186.1"
+    "three": "0.187.0"
   },
   "dependencies": {
     "class-variance-authority": "0.7.1",
@@ -108,11 +108,11 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@types/node": "22.20.5",
-    "@types/three": "^0.186.0",
+    "@types/three": "^0.187.0",
     "lucide-react": "1.61.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",
-    "three": "0.186.1",
+    "three": "0.187.0",
     "typescript": "5.9.3",
     "esbuild": "0.28.2",
     "@tailwindcss/postcss": "4.3.3",
