@@ -517,6 +517,11 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
     sys.stdout.write(f"{SERVER} {own_version() or installed}\n")
     sys.stdout.write(f"  python   {sys.version.split()[0]} ({sys.executable})\n")
     sys.stdout.write(f"  install  {location}\n")
+    package = installations.packaged()
+    if package:
+        # An app package's shell: what this registers and makes, Windows keeps inside that package.
+        sys.stdout.write(f"  package  {installations.packaged_words(package)}: run the install command from a "
+                         "terminal of its own\n")
     # Its record and the command the skills run it by (`cad_server._internal.installations`).
     for line in _setup():
         sys.stdout.write(f"  {line}\n")

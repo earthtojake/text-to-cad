@@ -9,7 +9,11 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. It names
 `www.texttocad.dev` because `texttocad.dev` redirects there with a 308, which Windows
-PowerShell 5.1's `irm` does not follow.
+PowerShell 5.1's `irm` does not follow. Run it in a terminal of its own (Windows
+Terminal or PowerShell), not in a Windows Store app's shell such as the Claude
+desktop app's: Windows keeps what such an app's commands write under
+`%LOCALAPPDATA%` inside that app, where no terminal and no other agent app finds
+it, so the command installs nothing there and says so.
 
 This page is the long way round: what that command does, step by step, each agent
 app's own commands to install, update or reinstall text-to-cad one app at a time,

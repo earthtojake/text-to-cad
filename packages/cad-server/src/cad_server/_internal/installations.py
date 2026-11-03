@@ -89,6 +89,34 @@ def state():
     return Folder(state_dir())
 
 
+def packaged() -> str | None:
+    """The Windows app package this process runs inside, by its full name, else None. Every process an
+    MSIX-packaged app starts (the Claude desktop app's shell among them) inherits its package, and what it
+    creates under ``%LOCALAPPDATA%`` -- the state folder, the cache -- Windows writes into the package's own
+    ``LocalCache`` instead, which only that app's processes see: an installation made there is one no
+    terminal and no other app can run."""
+    if not WINDOWS:
+        return None
+    import ctypes
+
+    try:
+        current = ctypes.windll.kernel32.GetCurrentPackageFullName
+    except (AttributeError, OSError):
+        return None
+    length = ctypes.c_uint32(0)
+    # ERROR_INSUFFICIENT_BUFFER (122) asks for the name's length; APPMODEL_ERROR_NO_PACKAGE, not packaged.
+    if current(ctypes.byref(length), None) != 122:
+        return None
+    name = ctypes.create_unicode_buffer(length.value)
+    return (name.value or None) if current(ctypes.byref(length), name) == 0 else None
+
+
+def packaged_words(package: str) -> str:
+    """What ``cad setup`` and ``cad doctor`` say of an installation made inside ``package``."""
+    return (f"this shell runs inside the Windows app package {package}, so what it installs under "
+            "%LOCALAPPDATA% is seen only inside that app: no terminal and no other agent app could run it")
+
+
 def targets() -> tuple[str, str, str] | None:
     """This installation's console script, python and environment, or ``None`` without a console
     script. The python is the environment's own path, never resolved: resolving it reaches the base

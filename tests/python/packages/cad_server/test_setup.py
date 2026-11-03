@@ -285,6 +285,24 @@ class TheCommand(Fixture):
         self.assertEqual(calls, [["claude", "plugin", "list", "--json"], ["claude", "plugin", "marketplace", "list", "--json"]])
         setup.stop_earlier.assert_not_called()
 
+    def test_inside_a_windows_app_package_it_installs_nothing_and_says_where_to_run_it(self) -> None:
+        """An MSIX app's shell (the Claude desktop app's) has what it writes under %LOCALAPPDATA% kept
+        inside that app's package, where no terminal or other app sees it (#759)."""
+        command(self.bin, "claude", CLAUDE)
+        before = self.snapshot()
+        with mock.patch.object(installations, "packaged", return_value="Claude_1.0.0.0_x64__pzs8sxrjxfjjc"):
+            code, out, _err = self.run_setup()
+            self.assertEqual(code, 1, out)
+            self.assertTrue(out.startswith("Not installed: this shell runs inside the Windows app package "
+                                           "Claude_1.0.0.0_x64__pzs8sxrjxfjjc"), out)
+            self.assertIn(f"not from an app's: {updates.command()}", out)
+            self.assertEqual(self.snapshot(), before)
+            self.assertFalse(self.state.exists())
+            code, out, _err = self.run_setup("--dry-run")
+        self.assertEqual(code, 0, out)
+        self.assertTrue(out.startswith("Not installed: "), out)
+        self.assertEqual(out.splitlines()[-1], "Dry run: nothing was changed.")
+
     def test_json_is_the_plan_and_what_was_done_and_progress_goes_to_stderr(self) -> None:
         self.desktop_with({})
         code, out, err = self.run_setup("--dry-run", "--json")

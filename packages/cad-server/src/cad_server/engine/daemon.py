@@ -496,8 +496,15 @@ def _proc_holder(port: int) -> tuple[int | None, str | None, str | None]:
     return None, None, None
 
 
+def _console(argv: list[str]) -> str:
+    """What a Windows console tool printed. Such tools write in the console's OEM code page, not
+    the one ``text=True`` assumes (UTF-8 under ``PYTHONUTF8=1``), and a localized header in it
+    must not end the read: ``netstat`` on a zh-TW Windows writes cp950."""
+    return subprocess.run(argv, capture_output=True, encoding="oem", errors="replace", timeout=10).stdout or ""
+
+
 def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
-    said = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True, timeout=10).stdout
+    said = _console(["netstat", "-ano", "-p", "TCP"])
     pid = None
     for line in said.splitlines():
         fields = line.split()
@@ -506,8 +513,7 @@ def _netstat_holder(port: int) -> tuple[int | None, str | None, str | None]:
             break
     if pid is None:
         return None, None, None
-    listed = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True,
-                            text=True, timeout=10).stdout.strip()
+    listed = _console(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"]).strip()
     name = listed.split('","', 1)[0].strip('"') if listed.startswith('"') else None
     return pid, name, None
 

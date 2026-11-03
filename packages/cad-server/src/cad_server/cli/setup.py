@@ -78,7 +78,12 @@ Never done here: restarting an app, anything that needs sudo or a password, remo
 command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
 command of the app's removes (an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
 
-Exit status: 0 done, or nothing to do; 1 a step failed; 2 bad arguments.
+Run inside a Windows app package (an MSIX app's shell, the Claude desktop app's among them), it
+installs nothing and says so (``installations.packaged``): what it would write under ``%LOCALAPPDATA%``
+Windows keeps inside that app's package, where no terminal and no other app finds it; ``--dry-run``
+says it before the plan.
+
+Exit status: 0 done, or nothing to do; 1 a step failed, or nothing was installed inside an app package; 2 bad arguments.
 """
 
 from __future__ import annotations
@@ -769,9 +774,18 @@ class Installer:
         return not failed, [step.data() for step in steps]
 
     def install(self) -> int:
+        from cad_server._internal import installations
+
         providers = self.providers
         where = f"engine port {self.port}" if self.port else "engine on any free port"
         title = f"text-to-cad {self.release} for this machine ({where}):"
+        if not self.engine_update and (package := installations.packaged()):
+            from cad_server.updates import command
+
+            self.say(f"Not installed: {installations.packaged_words(package)}. Run the install command from "
+                     f"a terminal of its own (Windows Terminal or PowerShell), not from an app's: {command()}")
+            if not self.args.dry_run:
+                return 1
         if not self.args.dry_run and not self.engine_update:
             relocated = self._relocated()
             if relocated is not None:
