@@ -118,7 +118,7 @@ export const skillGroups = [
     name: "PCB",
     path: "skills/pcb",
     summary:
-      "Edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP.",
+      "Checks KiCad schematics (ERC), edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP.",
   },
   {
     name: "Simulation",

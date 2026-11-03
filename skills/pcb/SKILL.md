@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) - parts and nets, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files or STEP for enclosure design. Shows boards in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards in the CAD Viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -21,8 +21,8 @@ On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. If
 only just added, its server may still be starting: try again for up to a minute first. `cad doctor`
 explains any other failure.
 
-Viewing, inspecting and taking snapshots need no KiCad installation. DRC (`cad kicad_pcb check`)
-and fabrication/STEP exports (`cad kicad_pcb export`) run a user-installed
+Viewing, inspecting and taking snapshots need no KiCad installation. DRC (`cad kicad_pcb check`),
+ERC (`cad kicad_sch check`) and the exports (`cad kicad_pcb export`, `cad kicad_sch export`) run a user-installed
 [KiCad 9 or newer](https://www.kicad.org/download/)'s `kicad-cli`; a `@kicad_pcb` board script
 needs a KiCad nightly's (10.99), the only one with the headless `api-server` for now, and is
 refused before it starts without one.
@@ -66,7 +66,9 @@ if __name__ == "__main__":
     board()
 ```
 
-For creation or structured edits read [native files](references/board-api.md). For parts and
+A board's design starts at its schematic, which says what connects to what: read it, check it with
+ERC and look at each sheet ([schematic](references/schematic.md)) before laying out, and hold the board
+to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
 group at a time, route octolinear by hand (never an autorouter) with widths for each net's current,
@@ -91,6 +93,8 @@ Check the saved board after every step, from the same revision you will hand ove
 
 | The change | Check it with |
 | --- | --- |
+| The schematic | `cad kicad_sch check board.kicad_sch` (KiCad's ERC: errors fail it) and `cad kicad_sch snapshot board.kicad_sch tmp/sheet.png --sheet /Power/` for each sheet changed ([schematic](references/schematic.md)) |
+| Board against schematic | the pin-by-pin comparison in [schematic](references/schematic.md#into-the-board-and-back): every pad on its schematic pin's net |
 | Anything: parts, copper, zones, rules | `cad kicad_pcb check board.kicad_pcb` (or `--json`): KiCad's DRC against the board's own rules (its `.kicad_pro`'s; without one, KiCad's defaults, which it warns about as `no_project`). It exits 1 on error-severity violations or unconnected items. Unconnected items are the routing still to do |
 | Placement | `cad kicad_pcb snapshot board.kicad_pcb tmp/placement.png --display placement`: short, uncrossed ratsnest lines mean a group is placed well; measure decoupling distance and connector access with `read_board` |
 | Routing | The layout's property script ([layout](references/layout.md#a-property-check)): segments off 45 degrees, detours, width for current |

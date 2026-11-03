@@ -177,3 +177,58 @@ page origin (0, 0) lies on the sheet, so the viewer's index (`board2d/boardIndex
 position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2..x3y4`) back in
 KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's
 `Vector2.from_xy_mm`.
+
+## The schematic payload
+
+`GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic
+from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
+`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page. A
+schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a
+point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
+(`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
+sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
+fields, as data: the drawing sheet itself is not drawn).
+
+```jsonc
+{
+  "schemaVersion": 4,
+  "kind": "schematic",
+  "generator": "eeschema 9.0",
+  "sheets": [{
+    "name": "/", "path": "/", "number": "1", "file": "divider.kicad_sch", "title": {"title": "Divider"},
+    "width": 297.0, "height": 210.0, "background": "#F5F4EF", "page": [0.0, 0.0, 297.0, 210.0],
+    "layers": [ { "id": "wires", "kind": "wire", "side": "both", "items": [ ... ] }, ... ]
+  }],
+  "warnings": [],                   // a sheet file not there, a symbol the file does not embed
+  "schematic": { ... }              // the index, in each sheet's page millimetres
+}
+```
+
+The layers, bottom to top, each present only where it draws something but `page`: `page` (kind
+`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked), `notes`
+(`notes`: free text, text boxes and graphics), `sheets` (`sheet_box`: the hierarchical sheets' boxes,
+their names, files and pins, `role` `name`, `file`, `field` or `pin`), `symbols` (`symbol`: each body
+from the drawing the file embeds, its fills first), `pins` (`pin`), `wires` (`wire`), `buses` (`bus`,
+and the bus entries), `junctions` (`junction`), `no_connects` (`no_connect`), `pin_numbers`
+(`pin_number`), `pin_names` (`pin_name`), `fields` (`field`: a symbol's shown fields, `field` its name,
+`Reference`, `Value` or another) and `labels` (`label`: `label` its kind, `local`, `global` or
+`hierarchical`, the flags' outlines and their text). Items are the board's primitives (`path`,
+`poly`, `circle`, `text`), with the board's flags where they mean the same -- `ref` (`#R1`, `#R1.2` a
+pin, `#sheet:/Load/` a sheet's box), `net`, `id` (the uuid KiCad saved it with) -- and two of a
+schematic's own: `fill: "background"` on a symbol body KiCad fills with its device background, and
+`color` (`#rrggbb`, with `opacity`) where the file gives an item a colour of its own. What colour a
+layer is drawn in is the renderer's, KiCad's default schematic theme (`render/schematic.py` on the
+server's side). Text is Hershey Simplex at KiCad's positions, a field centred in the box KiCad gives
+it and read horizontally or vertically as KiCad turns it; a pin's name and number sit as the
+symbol's `pin_names` offset places them.
+
+`schematic` is `cad.engine.formats.kicad.schematic.SchematicIndex.as_json()`: `sheets` (path, name,
+file, page, parent, `at` and `size` on the parent, `pins` with their nets), `parts` (ref, value,
+footprint, lib id, `mpn`, fields, `units`: each placed unit's sheet, `at`, angle, mirror, id), `pins`
+(part, number, name, electrical type, sheet, `at`, net), `wires` (kind `wire` or `bus`, sheet, points,
+net, id), `junctions`, `labels` (kind, text, sheet, `at`, angle, shape, net, id; a power symbol's net
+as kind `power`), `no_connects`, `bus_entries` and `nets` (name, pins as `R1.2`, the sheets it reaches),
+every net named as KiCad names it, the board's names.
+
+Not drawn: images, tables, KiCad's drawing sheet (frame and title block), and line styles (a dashed
+stroke is drawn solid).
