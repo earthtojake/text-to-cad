@@ -62,9 +62,9 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
                                           options["zero_tol"])
         elif process == "printing":
             if candidates:
-                report = _printing.orientations(mesh, angle_limit(options))
+                report = _printing.orientations(mesh, angle_limit(options), options)
             else:
-                report = _printing.measure(mesh, options["samples"], angle_limit(options))
+                report = _printing.measure(mesh, options["samples"], angle_limit(options), options)
         else:
             raise Unmeasured("needs_exact_geometry", f"a {process} check measures exact geometry: check the "
                              "part's STEP or xbf")
