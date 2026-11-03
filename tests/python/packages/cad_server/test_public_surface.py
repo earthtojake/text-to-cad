@@ -41,9 +41,9 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "srdf check": ("cad.srdf", "check"),
     # KiCad's design rule check of a saved board: the kicad integration's, the server's, since it runs kicad-cli.
     "kicad_pcb check": ("cad_server.kicad.check", "check"),
-    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
+    # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
     **{f"{document_type} check": (f"cad.{document_type}", "check")
-       for document_type in ("xbf", "step", "stl", "glb", "threemf")},
+       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
