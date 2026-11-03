@@ -272,12 +272,13 @@ def _mid_uv(face: Any) -> tuple[float, float]:
     return (umin + umax) / 2.0, (vmin + vmax) / 2.0
 
 
-def point_normal(face: Any, u: float, v: float) -> tuple[np.ndarray, np.ndarray]:
-    """The point at ``(u, v)`` of ``face`` and its outward unit normal (the face's orientation applied)."""
+def point_normal(face: Any, u: float, v: float, props: Any = None) -> tuple[np.ndarray, np.ndarray]:
+    """The point at ``(u, v)`` of ``face`` and its outward unit normal (the face's orientation applied).
+    ``props``: the face's ``BRepGProp_Face``, made once by a caller that asks many points of one face."""
     from OCP.BRepGProp import BRepGProp_Face
     from OCP.gp import gp_Pnt, gp_Vec
 
-    props = BRepGProp_Face(face.wrapped)
+    props = props if props is not None else BRepGProp_Face(face.wrapped)
     point, normal = gp_Pnt(), gp_Vec()
     props.Normal(u, v, point, normal)
     length = normal.Magnitude()
@@ -347,16 +348,25 @@ class Edge:
     tangent: tuple[float, float, float]
 
 
-def _in_face_orientation(face: Any, edge: Any) -> Any:
+def _orientations(face: Any) -> list[tuple[Any, Any]]:
+    """The edges of a face as it bounds them, each with its orientation in the face."""
     from OCP.TopAbs import TopAbs_EDGE
     from OCP.TopExp import TopExp_Explorer
 
+    found = []
     explorer = TopExp_Explorer(face.wrapped, TopAbs_EDGE)
     while explorer.More():
         current = explorer.Current()
-        if current.IsSame(edge.wrapped):
-            return current.Orientation()
+        found.append((current, current.Orientation()))
         explorer.Next()
+    return found
+
+
+def _in_face_orientation(face: Any, edge: Any, walked: list[tuple[Any, Any]] | None = None) -> Any:
+    """The orientation of ``edge`` in ``face`` (``walked``: the face's ``_orientations``, made once)."""
+    for current, orientation in walked if walked is not None else _orientations(face):
+        if current.IsSame(edge.wrapped):
+            return orientation
     return None
 
 
@@ -391,6 +401,7 @@ def edges(part: Part) -> list[Edge]:
     ancestry = TopTools_IndexedDataMapOfShapeListOfShape()
     TopExp.MapShapesAndAncestors_s(part.shape.wrapped, TopAbs_EDGE, TopAbs_FACE, ancestry)
     found: list[Edge] = []
+    walked: dict[int, list[tuple[Any, Any]]] = {}  # each face's edges walked once, not once an edge
     for index in range(1, ancestry.Extent() + 1):
         listed = ancestry.FindFromIndex(index)  # iterating an OCCT list from Python costs milliseconds an item
         owners = ([] if listed.Size() == 0 else [listed.First()] if listed.Size() == 1
@@ -410,7 +421,10 @@ def edges(part: Part) -> list[Edge]:
             na, nb = _normal_on(a, edge, t), _normal_on(b, edge, t)
         except Exception:  # noqa: BLE001 - a degenerate edge has no angle to give
             continue
-        orientation = _in_face_orientation(a, edge)
+        key = part.face_ordinal(a)
+        if key not in walked:
+            walked[key] = _orientations(a)
+        orientation = _in_face_orientation(a, edge, walked[key])
         along = -tangent if orientation == TopAbs_REVERSED else tangent
         into_a = np.cross(na, along)  # the material of a face lies to the left of its edges, seen from outside
         between = math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))
@@ -602,6 +616,9 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
     if total <= 0.0:
         return []
     target = total / max(1, count)
+    from OCP.BRepGProp import BRepGProp_Face
+
+    props = BRepGProp_Face(face.wrapped)
     found: list[Sample] = []
     for (a, b, c), area in zip(corners, areas):
         if area <= 0.0:
@@ -617,7 +634,7 @@ def samples(face: Any, count: int = 64, deflection: float | None = None) -> list
                     wc = 1.0 - wa - wb
                     if uvs is not None:
                         u, v = wa * uvs[a] + wb * uvs[b] + wc * uvs[c]
-                        point, normal = point_normal(face, float(u), float(v))
+                        point, normal = point_normal(face, float(u), float(v), props)
                     else:
                         point = wa * nodes[a] + wb * nodes[b] + wc * nodes[c]
                         normal = np.cross(nodes[b] - nodes[a], nodes[c] - nodes[a])
