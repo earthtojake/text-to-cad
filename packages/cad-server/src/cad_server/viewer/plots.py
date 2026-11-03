@@ -1,4 +1,6 @@
-"""``GET /api/v1/documents/kicad_pcb/<id>/plot``: a KiCad board drawn from its file, as geometry per layer.
+"""``GET /api/v1/documents/kicad_pcb/<id>/plot``: a KiCad board drawn from its file, as geometry per layer;
+``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files, every
+sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`).
 
 A ``.kicad_pcb`` is read by the library's board reader (:mod:`cad.engine.formats.kicad.plot`): no
 KiCad runs, and each request reads the current file without a parsed-board cache. This module is
@@ -28,10 +30,10 @@ def resolve_plot_path(file_ref) -> str | None:
     Raises ``ValueError`` for a ref this route will not take.
     """
     if not file_ref:
-        raise ValueError("a board's plot is read from the absolute path of a .kicad_pcb")
+        raise ValueError("a plot is read from the absolute path of a .kicad_pcb or a .kicad_sch")
     candidate = absolute_path(file_ref)
     if not candidate.lower().endswith(PLOT_SUFFIXES):
-        raise ValueError(f"a plot is a KiCad board's; {node_basename(candidate)} is not a .kicad_pcb file")
+        raise ValueError(f"a plot is a KiCad board's or schematic's; {node_basename(candidate)} is neither")
     return candidate if os.path.isfile(candidate) else None
 
 
@@ -40,6 +42,10 @@ def plot_payload_response(file_ref) -> tuple[int, bytes | dict]:
     candidate = resolve_plot_path(file_ref)
     if candidate is None:
         return 404, {"error": "Not found"}
+    if candidate.lower().endswith(".kicad_sch"):
+        from cad.engine.formats.kicad.schematic_plot import schematic_payload_bytes
+
+        return 200, schematic_payload_bytes(candidate)
     from cad.engine.formats.kicad.plot import plot_payload_bytes
 
     return 200, plot_payload_bytes(candidate)

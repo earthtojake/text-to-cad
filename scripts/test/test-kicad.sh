@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Native KiCad file commands with an installed KiCad 9+: DRC, a STEP and mesh round trip, and (on a
-# nightly, with the kicad extra) a @kicad_pcb board script through the headless api-server.
+# Native KiCad file commands with an installed KiCad 9+: DRC, a STEP and mesh round trip, a schematic's
+# ERC, exports and nets held to KiCad's netlist, and (on a nightly, with the kicad extra) a @kicad_pcb
+# board script through the headless api-server.
 # The runner gives each test file its own engine, state and cache folders. No libraries or
 # server or browser. KiCad is found as `cad kicad_pcb check` finds it (CAD_KICAD_CLI, else PATH).
 

@@ -48,7 +48,7 @@ These words mean one thing each, in the code, the commands and every document.
 
 - **Document type**: what is in a file. Always called "document type". Each has one lowercase underscore
   id, the same in Python, the CLI, the registry, the server, the viewer and the JavaScript: `step`, `glb`,
-  `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`. 3MF's id is `threemf` because an id must be a valid
+  `stl`, `threemf`, `dxf`, `xbf`, `urdf`, `sdf`, `srdf`, `kicad_pcb`, `kicad_sch`. 3MF's id is `threemf` because an id must be a valid
   Python name. The registry (`cad.registry`) maps file extensions to ids (`.step` and `.stp` are `step`).
 - **Document**: one instance of a document type, either a file read on its own or one built from code.
 - **Integration**: our support for one third-party tool, named for the tool's own project (`build123d`,
@@ -527,6 +527,10 @@ src/cad/
                          #   engine/formats/kicad, the standard library alone, and its flat
                          #   still engine/render/board.py); check and export are the server's;
                          #   @kicad_pcb is the kicad integration's board script
+  kicad_sch/             # a saved KiCad schematic: read_schematic (its hierarchy, its nets and
+                         #   references; engine/formats/kicad/schematic, the standard library
+                         #   alone) and inspect; its flat still engine/render/schematic.py;
+                         #   check (ERC) and export are the server's
   kicad/                 # the kicad integration: kicad-cli found and run (_program, on
                          #   _internal/programs), a board script through its headless api-server
                          #   and kipy (_session), its exports (_export) and producers
@@ -581,6 +585,17 @@ server's, the `kicad` integration's) and mechanical and fabrication exports (`ca
 --to gerbers|drill|pos|step -o DIR`); an exported STEP enters the ordinary foreign-file path. As
 functions, `cad.kicad_pcb.check` and `export` say to run those commands: they run `kicad-cli`, which
 the server runs and a model's process never does. No KiCad IPC client is bundled.
+
+A `.kicad_sch` is source too, read the same way. `cad.kicad_sch.read_schematic` reads the whole
+hierarchy from its project's root sheet (whichever of its sheets it is given): its sheets, symbols and
+pins, wires, buses, labels and junctions, and the nets they make, resolved as KiCad's connection graph
+resolves them -- the names `kicad-cli sch export netlist` gives, which are the board's -- and answers
+references in the board's grammar where they mean the same (`#U3`, `#U3.7`, `#net:VBUS`) and its own
+(`#sheet:/Power/`, `#wire:<uuid>`). Its plot payload (`engine/formats/kicad/schematic_plot.py`) is the
+board's shape, every sheet a page, drawn from the symbols' own drawings the file embeds, its text in
+the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad
+kicad_sch check`) and the exports (`cad kicad_sch export --to pdf|svg|netlist|bom -o DIR`), the
+server's; as functions, `cad.kicad_sch.check` and `export` say so.
 
 ## Manufacturing checks
 

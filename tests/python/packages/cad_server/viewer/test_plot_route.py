@@ -4,7 +4,7 @@ server, and the route's rules (``cad_server.viewer.plots``).
 A board is opened by its absolute path, as every file is, and its plot is read from the file on
 every request: an edit saved under the same path is the next answer, and nothing is cached. The
 board is the test board (``tests/python/support/kicad_board.py``), written fresh into a temporary
-folder.
+folder. A KiCad schematic's plot is the same route's (``kicad_sch``): every sheet a page.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ import unittest
 from pathlib import Path
 
 from tests.python.support.kicad_board import BOARD, write_board
+from tests.python.support.kicad_schematic import write_schematic
 
 from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION
 from cad_server.viewer import handler as handler_module
@@ -42,7 +43,7 @@ class PlotRules(unittest.TestCase):
     def test_what_the_route_will_not_take(self) -> None:
         self.assertEqual(plot_payload_response(str(self.folder / "other.kicad_pcb")), (404, {"error": "Not found"}))
         for ref, message in (("", r"absolute path of a \.kicad_pcb"), ("blinky.kicad_pcb", r"absolute"),
-                             (str(self.folder / "part.step"), r"part\.step is not a \.kicad_pcb file")):
+                             (str(self.folder / "part.step"), r"part\.step is neither")):
             with self.subTest(ref=ref), self.assertRaisesRegex(ValueError, message):
                 plot_payload_response(ref)
         (self.folder / "broken.kicad_pcb").write_text("(kicad_sch)", encoding="utf-8")
@@ -76,11 +77,11 @@ class PlotRoute(unittest.TestCase):
         finally:
             conn.close()
 
-    def opened(self, path: Path) -> str:
+    def opened(self, path: Path, kind: str = "kicad_pcb") -> str:
         status, _, body = self.request("POST", "/api/v1/documents", {"path": str(path)})
         self.assertEqual(status, 201, body[:400])
         reply = json.loads(body)
-        self.assertEqual(reply["kind"], "kicad_pcb")
+        self.assertEqual(reply["kind"], kind)
         return reply["api"]
 
     def test_a_board_opened_by_its_path_answers_its_plot_as_the_file_is_now(self) -> None:
@@ -97,6 +98,13 @@ class PlotRoute(unittest.TestCase):
         # Its routes are its plot and its source; another kind's read is a 404 naming them.
         status, _, body = self.request("GET", f"{api}/drawing")
         self.assertEqual((status, json.loads(body)["hint"]), (404, "a kicad_pcb's routes are plot, source"))
+
+    def test_a_schematic_answers_every_sheet_a_page(self) -> None:
+        schematic = write_schematic(self.folder / "divider")
+        status, _, body = self.request("GET", f"{self.opened(schematic.with_name('load.kicad_sch'), 'kicad_sch')}/plot")
+        self.assertEqual(status, 200, body[:400])
+        payload = json.loads(body)
+        self.assertEqual((payload["kind"], [page["path"] for page in payload["sheets"]]), ("schematic", ["/", "/Load/"]))
 
     def test_a_file_that_is_no_board_is_a_400_saying_why(self) -> None:
         broken = self.folder / "broken.kicad_pcb"

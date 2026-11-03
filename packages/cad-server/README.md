@@ -28,7 +28,7 @@ src/cad_server/
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a KiCad board's plot (plots), a robot's
+                         #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
                          #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
                          #   engine sessions (http), tools and launches (server), the agent
@@ -44,7 +44,9 @@ src/cad_server/
                          #   (install, on the one helper for external programs,
                          #   the library's cad._internal.programs), KiCad's design rule check (`cad kicad_pcb
                          #   check`: check, cli) and its fabrication exports (`cad kicad_pcb
-                         #   export`: export), each run headless in private homes
+                         #   export`: export), a schematic's electrical rules check and exports
+                         #   (`cad kicad_sch check|export`: schematic), each run headless in
+                         #   private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
@@ -92,7 +94,13 @@ each by the installed `kicad-cli`, found by the one helper for the external prog
 (the library's `cad._internal.programs`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
 PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
 headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
-`.kicad_*` file, and viewing a board needs no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
+`.kicad_*` file, and viewing a board needs no KiCad. A KiCad schematic's are the same integration's, on
+its project's root sheet whichever sheet is named: `cad kicad_sch check` is KiCad's electrical rules check
+(it fails on errors and says the warnings, each with its sheet and where; the library checks a headless
+`kicad-cli` cannot make, the person's global libraries being out of its reach, are one note) and `cad
+kicad_sch export SCHEMATIC --to pdf|svg|netlist|bom -o DIR` its outputs; `cad kicad_sch snapshot --sheet
+/Power/` draws one sheet, and `cad kicad_sch inspect SCHEMATIC [REF]` says what it holds and what a
+reference names, the library's, with no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
 check SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs

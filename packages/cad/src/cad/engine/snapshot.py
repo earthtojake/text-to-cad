@@ -16,6 +16,9 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
   mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
   active, dim, zones, tracks, appearance}`` (the active layer drawn on top, Dim fading the rest,
   the zones' and tracks' opacities from 0 to 1).
+- ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
+  painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
+  ``{sheet, border, appearance}`` (the root sheet, ``/``, unless it names another: ``/Power/``).
 
 Through the daemon each file drawn gets a render process of its own, warm, read again when a file
 it read changes; ``daemon=False`` (Python's alone) draws in this process. Every kind is drawn in the engine's one
@@ -172,10 +175,15 @@ def exploded_amount(display: dict[str, Any]) -> float:
     return float(exploded["amount"]) if exploded and exploded.get("enabled") else 0.0
 
 
-def parse_display(value: str | None, grid: bool, *, board: bool = False) -> dict[str, Any]:
+def parse_display(value: str | None, grid: bool, *, board: bool = False, schematic: bool = False) -> dict[str, Any]:
     """``--display``: a mode, ``exploded=AMOUNT``, an appearance (``light``, ``dark``: all a drawing
     takes), several by commas (``hidden-line,exploded=0.6``), or the viewer's display object (JSON,
-    or a JSON file). A KiCad board's (``board``) is its own vocabulary (``render/board.py``)."""
+    or a JSON file). A KiCad board's (``board``) is its own vocabulary (``render/board.py``), and so is a
+    schematic's (``schematic``: ``render/schematic.py``)."""
+    if schematic:
+        from cad.engine.render.schematic import display_options as schematic_options
+
+        return schematic_options(value, grid)
     if board:
         from cad.engine.render.board import display_options
 
@@ -524,7 +532,7 @@ def parse_size(width: int | None, height: int | None, profile: str | None) -> tu
 
 DOCUMENTS = (".xbf", ".step", ".stp")
 # The files no document, each read by its reader (``formats.KINDS``): meshes, robots, a drawing.
-FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb")
+FILES = (".stl", ".3mf", ".glb", ".urdf", ".sdf", ".srdf", ".dxf", ".kicad_pcb", ".kicad_sch")
 MESHES = (".stl", ".3mf", ".glb")
 
 
@@ -662,12 +670,12 @@ def write_png(out: Path, data: bytes) -> None:
 
 def options(display: Any = None, camera: Any = None, grid: bool = False, width: int | None = None,
             height: int | None = None, size_profile: str | None = None, *,
-            board: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
+            board: bool = False, schematic: bool = False) -> tuple[dict[str, Any], Any, tuple[int, int]]:
     """A snapshot's options as a function gives them -- ``display`` a mode, a
     JSON text or the display object -- checked as the verb checks its flags."""
     if isinstance(display, dict):
         display = json.dumps(display)
-    return (parse_display(display, bool(grid), board=board), parse_camera(camera if camera is None or isinstance(camera, str)
+    return (parse_display(display, bool(grid), board=board, schematic=schematic), parse_camera(camera if camera is None or isinstance(camera, str)
                                                               else json.dumps(camera)),
             parse_size(width, height, size_profile))
 
@@ -963,8 +971,9 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         if not by_id(document):
             document = document.expanduser().resolve()
         board = document.suffix.lower() == ".kicad_pcb"
-        drawing = board or document.suffix.lower() == ".dxf"
-        shown_flags = parse_display(display, grid, board=board) if display is not None else None
+        schematic = document.suffix.lower() == ".kicad_sch"
+        drawing = board or schematic or document.suffix.lower() == ".dxf"
+        shown_flags = parse_display(display, grid, board=board, schematic=schematic) if display is not None else None
         settings = _settings(view.get("output"), f"{where}.output", drawing)
         tight, padding = settings.get("tightFrame", True), float(settings.get("padding", PADDING))
         scale = float(settings.get("renderScale", 1.0))
@@ -973,8 +982,8 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
         else:
             if view.get("display") is not None and not isinstance(view["display"], dict):
                 raise SnapshotRefused(f"{where}.display is the view's display object")
-            shown = parse_display(json.dumps(view["display"]), grid, board=board) if view.get("display") else (
-                {"grid": True} if grid else {})
+            shown = (parse_display(json.dumps(view["display"]), grid, board=board, schematic=schematic)
+                     if view.get("display") else ({"grid": True} if grid else {}))
         selection = view.get("selection")
         if selection is not None:
             if not isinstance(selection, dict) or set(selection) - set(SELECTION_KEYS):
@@ -1028,6 +1037,10 @@ def job_pictures(job: Any, source: Any = None, *, display: Any = None, camera: A
             from cad.engine.render.board import refusals as board_refusals
 
             board_refusals(still, document.name)
+        if document.suffix.lower() == ".kicad_sch":
+            from cad.engine.render.schematic import refusals as schematic_refusals
+
+            schematic_refusals(still, document.name)
         if document.suffix.lower() == ".dxf":
             from cad.engine.render.drawing import refusals as drawing_refusals
 

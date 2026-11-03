@@ -586,10 +586,10 @@ failure: the next asker makes it again.
 | `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
-| `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board drawn flat (`render/board.py`), into a PNG; a script's model drawn from its worker's memory |
-| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw) |
+| `snapshot.py` | `cad <type> snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`), or a KiCad board or one sheet of a KiCad schematic drawn flat (`render/board.py`, `render/schematic.py`), into a PNG; a script's model drawn from its worker's memory |
+| `formats/` | the files the stills draw that are not documents, each read into a structure and part buffers: STL (numpy), 3MF (zip + XML), GLB (OCCT's glTF reader, textures and all; and numpy's, for a conversion: `gltf`), URDF/SDF/SRDF (XML, the viewer's forward kinematics), DXF (group codes, flattened as the viewer's pane draws it); a KiCad board (`kicad/`: its S-expressions read by the standard library alone into an index of parts, pads, tracks, vias, pours, holes, outline and nets, its references, and the plot payload the page and the flat still draw); a KiCad schematic (`kicad/schematic*.py`: its hierarchy read from its project's root into sheets, symbols and pins, wires, buses, labels, and the nets KiCad's connection graph makes of them, its references, and its plot payload, every sheet a page) |
 | `mesh_uri.py` | a robot description's mesh reference: its URI scheme (a drive letter is none: `C:/x` is a path) and the local file it names (`file:` read by the platform's `url2pathname`, a `file://HOST/` share a UNC path on Windows and no local file elsewhere); the standard library only, so the URDF and SDF readers and validators, the viewer's robot payload and the stills (`formats/robot.py`) all read one the same way |
-| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
+| `render/` | the stills drawn by OCCT from the engine's meshes: a document held and drawn, and the render process per served document and per file (`service.py`, the library's; the daemon's side of it is the server's `renders.py`); the scene (`occt.py`); a DXF drawn in the 2D look (`drawing.py`); a KiCad board's flat still, painted with Pillow from its plot (`board.py`), and a schematic sheet's (`schematic.py`); the viewer's Explode, ported (`explode.py`); a part's buffer as OCCT shapes (`shapes.py`); the headless OpenGL context per platform (`context.py`) |
 | `daemon.py`, `worker.py`, `client.py` | one daemon for the device (its engine folder), one warm worker per model script and Python, at most one per core alive (`supervisor.py`), connect-or-start (an installation's engine, never one of the library's own environment), a hold; a worker's memory cap. The daemon is the server's; the worker and the client are the library's, which a model's process and its worker run where only the library is installed |
 | `supervisor.py`, `services.py` | the server's one supervisor of every process the daemon starts (`Supervisor`, `Process`), and their declarations (`WORKER`, `RENDER`): **Services** |
 | `renders.py` | the server's side of the render processes: a served document's picture, its version sent first, the process leased from the supervisor |
@@ -645,6 +645,17 @@ cad xbf|step|stl|glb|threemf check SRC --process printing [--angle-limit DEG] [-
                 [--units U] [--candidates] [--json]
                                              the manufacturing check, the trimesh integration's: SRC a
                                              file or a document id; its findings and every measurement
+cad kicad_pcb check BOARD [--json] | export BOARD --to gerbers|drill|pos|step -o DIR | inspect BOARD
+                                             KiCad's DRC and fabrication outputs, by kicad-cli; the board
+                                             in one look, by the library's reader
+cad kicad_sch check SCHEMATIC [--json] | export SCHEMATIC --to pdf|svg|netlist|bom -o DIR
+                                             KiCad's ERC and the schematic's outputs, by kicad-cli, run on
+                                             the project's root sheet whichever sheet is named
+cad kicad_sch inspect SCHEMATIC [REF] [--json]
+                                             its sheets, parts and nets; with REF (#U3, #U3.7, #net:VBUS,
+                                             #sheet:/Power/, #wire:<uuid>), what that names
+cad kicad_sch snapshot SCHEMATIC OUT.png [--sheet PATH] [--border] [--display light|dark|JSON] [...]
+                                             one sheet drawn flat (the root unless --sheet names another)
 cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
 cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
@@ -1753,6 +1764,13 @@ with Pillow in sheet millimetres, including top/bottom mirroring, Display preset
 plan cameras, annotation and measurements. Its render-service handle holds only a path; no
 board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
 No KiCad installation is required to view a board; KiCad's own CLI performs DRC and exports.
+A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
+the hierarchy from its project's root and builds the page the display names (`{sheet, border,
+appearance}`: the root, `/`, unless it names another; the page's edge off unless asked; light or
+dark), and `render/schematic.py` paints it in KiCad's schematic colours, framed on what the page draws
+(the whole page with its border on) or through a plan camera. Its handle watches every sheet file of
+the hierarchy, so an edit to any sheet draws anew. It refuses Preview, pose, transparent output and
+references; KiCad's own CLI performs ERC and the exports.
 
 **The OCCT stills.** A document is drawn by OCCT's own OpenGL renderer from the engine's meshes
 (`render/`): one presentation per part and look, each
@@ -2686,7 +2704,8 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
 `POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
-`source`; `urdf`, `srdf`, `sdf` --
+`source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index:
+`viewer/plots.py`), `source`; `urdf`, `srdf`, `sdf` --
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks

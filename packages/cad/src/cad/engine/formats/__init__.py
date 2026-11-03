@@ -48,7 +48,7 @@ __all__ = ["DRAWING", "Foreign", "FormatError", "KINDS", "MESHES", "Part", "Plac
            "read", "stale"]
 
 KINDS = {".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".dxf": "dxf",
-         ".kicad_pcb": "kicad_pcb"}
+         ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch"}
 MESHES = (".stl", ".3mf", ".glb")
 ROBOTS = (".urdf", ".sdf", ".srdf")
 DRAWING = ".dxf"

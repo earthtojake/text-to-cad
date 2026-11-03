@@ -175,6 +175,23 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "check"
       ],
       "decorator": true
+    },
+    {
+      "id": "kicad_sch",
+      "title": "KiCad schematic",
+      "wire": "kicad_sch",
+      "extensions": [
+        ".kicad_sch"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "plot",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "check"
+      ],
+      "decorator": false
     }
   ]
 });

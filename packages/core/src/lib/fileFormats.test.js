@@ -32,10 +32,12 @@ test("a KiCad board is a plot: a CAD file with its own asset, not a mesh", () =>
   assert.equal(isPlotRenderFormat(RENDER_FORMAT.KICAD_PCB), true);
   assert.equal(isMeshRenderFormat(RENDER_FORMAT.KICAD_PCB), false);
   assert.equal(meshAssetKeyForEntry({ kind: "kicad_pcb" }), RENDER_FORMAT.KICAD_PCB);
-  // The project and the schematic beside a board are not drawn: only the board is.
-  for (const path of ["blinky.kicad_pro", "blinky.kicad_sch", "config.yml"]) {
+  // The project beside a board is not drawn; its schematic is a plot of its own, every sheet a page.
+  for (const path of ["blinky.kicad_pro", "config.yml"]) {
     assert.equal(renderFormatFromPath(path), "", path);
   }
+  assert.equal(renderFormatFromPath("blinky.kicad_sch"), RENDER_FORMAT.KICAD_SCH);
+  assert.equal(isPlotRenderFormat(RENDER_FORMAT.KICAD_SCH), true);
   assert.equal(isPlotRenderFormat(RENDER_FORMAT.DXF), false);
 });
 

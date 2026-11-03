@@ -41,6 +41,8 @@ MIRRORS: dict[str, tuple[str, str]] = {
     "srdf check": ("cad.srdf", "check"),
     # KiCad's design rule check of a saved board: the kicad integration's, the server's, since it runs kicad-cli.
     "kicad_pcb check": ("cad_server.kicad.check", "check"),
+    # KiCad's electrical rules check of a saved schematic: likewise the kicad integration's, the server's.
+    "kicad_sch check": ("cad_server.kicad.schematic", "check"),
     # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
     **{f"{document_type} check": (f"cad.{document_type}", "check")
        for document_type in ("xbf", "step", "stl", "glb", "threemf")},
@@ -67,6 +69,11 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),
+    # A KiCad schematic's: its exports, kicad-cli's; its summary and what a reference names; its still, the
+    # engine's snapshot with the sheet to draw and its page's edge.
+    "kicad_sch export": frozenset({"schematic", "to", "out"}),
+    "kicad_sch inspect": frozenset({"schematic", "ref"}),
+    "kicad_sch snapshot": SNAPSHOT | {"sheet", "border"},
     **{f"{document_type} inspect": frozenset({"document", "ref", "query", "json"})
        for document_type in ("xbf", "step", "glb")},
     "serve": frozenset({"document", "port"}),

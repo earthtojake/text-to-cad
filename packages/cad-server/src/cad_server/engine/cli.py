@@ -110,7 +110,7 @@ def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
     parser.usage = "%(prog)s SRC OUT.png [options] | --job PACKET [SRC] [options]"
     parser.add_argument("document", metavar="SRC", nargs="?",
                         help="a document (.xbf, .step), a mesh file (.glb, .stl, .3mf), a robot (.urdf, .sdf, .srdf), "
-                             "a drawing (.dxf), a KiCad board (.kicad_pcb), or a document id (a model's, which python "
+                             "a drawing (.dxf), a KiCad board (.kicad_pcb) or schematic (.kicad_sch), or a document id (a model's, which python "
                              "SCRIPT.py prints: drawn "
                              "from what the engine holds); with --job, a file drawn in place of every job's input")
     parser.add_argument("out", metavar="OUT.png", nargs="?",
@@ -128,7 +128,8 @@ def _snapshot_arguments(parser: argparse.ArgumentParser) -> argparse.ArgumentPar
                                           "hidden, isolated: part refs the picture leaves out, or alone draws), or "
                                           "a JSON file of it; a drawing takes appearance alone: light or dark, as the word "
                                           "or as {\"appearance\": ...}; a KiCad board a board mode (board, copper, assembly, "
-                                          "placement) or {mode, side, poured, layers, active, dim, zones, tracks, appearance}")
+                                          "placement) or {mode, side, poured, layers, active, dim, zones, tracks, appearance}; a KiCad schematic "
+                                          "{sheet, border, appearance}")
     parser.add_argument("--grid", action="store_true", help="draw the measuring grid")
     parser.add_argument("--camera", help="a preset (iso, front, back, left, right, top, bottom), azimuth:elevation, "
                                          "a camera JSON object (its position, target and orthographicHalfHeight in "
