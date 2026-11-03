@@ -174,15 +174,38 @@ function disposeScene(scene) {
   });
 }
 
+// A PMREM's levels, finest first, as `readPixels` lays them out: each level its six faces in
+// three's cube order (+x, -x, +y, -y, +z, -z), each face its rows bottom first.
+function pmremLevels(size, levels) {
+  return Array.from({ length: levels }, (_, lod) => size >> lod);
+}
+
 function ownedEnvironmentResource(identity, target, renderer) {
   let disposed = false;
   return {
     identity,
     texture: target.texture,
+    // Its pixels, to rebuild it from on another renderer (`environmentResourceFromPixels`): RGBA
+    // half floats. Read as floats, which a float target always reads as.
     async readPixels() {
-      const data = new Uint16Array(target.width * target.height * 4);
-      await renderer.readRenderTargetPixelsAsync(target, 0, 0, target.width, target.height, data);
-      return { data, width: target.width, height: target.height };
+      const gl = renderer.getContext();
+      const sizes = pmremLevels(target.width, target.texture.mipmaps.length);
+      const face = new Float32Array(target.width * target.width * 4);
+      const data = new Uint16Array(sizes.reduce((sum, side) => sum + 6 * side * side * 4, 0));
+      const previous = renderer.getRenderTarget();
+      try {
+        let at = 0;
+        sizes.forEach((side, lod) => {
+          for (let index = 0; index < 6; index += 1, at += side * side * 4) {
+            renderer.setRenderTarget(target, index, lod);
+            gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, face, 0);
+            for (let value = 0; value < side * side * 4; value += 1) data[at + value] = THREE.DataUtils.toHalfFloat(face[value]);
+          }
+        });
+      } finally {
+        renderer.setRenderTarget(previous);
+      }
+      return { data, size: target.width, levels: sizes.length };
     },
     dispose() {
       if (disposed) return;
@@ -190,6 +213,70 @@ function ownedEnvironmentResource(identity, target, renderer) {
       target.dispose?.();
     }
   };
+}
+
+// Each texel of a level's faces (stacked, +x at the bottom) into the face being drawn.
+const COPY_FACE_FRAGMENT = /* glsl */ `
+uniform sampler2D faces;
+uniform int face;
+void main() {
+  ivec2 at = ivec2( gl_FragCoord.xy );
+  gl_FragColor = texelFetch( faces, ivec2( at.x, at.y + face * textureSize( faces, 0 ).x ), 0 );
+}
+`;
+
+/**
+ * A PMREM resource made on `renderer` from another's pixels (`readPixels`, a worker's): the same
+ * cube target, each level's faces drawn into it as they were read.
+ */
+export function environmentResourceFromPixels(renderer, identity, { data, size, levels }) {
+  const target = new THREE.WebGLCubeRenderTarget(size, {
+    minFilter: THREE.LinearMipmapLinearFilter, generateMipmaps: false, type: THREE.HalfFloatType,
+    colorSpace: THREE.LinearSRGBColorSpace, depthBuffer: false
+  });
+  const sizes = pmremLevels(size, levels);
+  for (const side of sizes) target.texture.mipmaps.push({ width: side, height: side });
+  target.texture.name = PROCEDURAL_STUDIO_ENVIRONMENT_ID;
+  target.texture.isPMREMTexture = true;
+  const material = new THREE.ShaderMaterial({
+    vertexShader: "void main() { gl_Position = vec4( position.xy, 0.0, 1.0 ); }",
+    fragmentShader: COPY_FACE_FRAGMENT,
+    uniforms: { faces: { value: null }, face: { value: 0 } },
+    blending: THREE.NoBlending, depthTest: false, depthWrite: false
+  });
+  const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), material);
+  quad.frustumCulled = false;
+  const camera = new THREE.Camera();
+  const previous = renderer.getRenderTarget();
+  const autoClear = renderer.autoClear;
+  renderer.autoClear = false;
+  let at = 0;
+  try {
+    for (const [lod, side] of sizes.entries()) {
+      const length = 6 * side * side * 4;
+      const faces = new THREE.DataTexture(data.subarray(at, at + length), side, 6 * side, THREE.RGBAFormat, THREE.HalfFloatType);
+      faces.minFilter = faces.magFilter = THREE.NearestFilter;
+      faces.generateMipmaps = false;
+      faces.needsUpdate = true;
+      material.uniforms.faces.value = faces;
+      // three draws into a level by the target's viewport, unscaled (as its PMREM does).
+      target.viewport.set(0, 0, side, side);
+      for (let index = 0; index < 6; index += 1) {
+        material.uniforms.face.value = index;
+        renderer.setRenderTarget(target, index, lod);
+        renderer.render(quad, camera);
+      }
+      faces.dispose();
+      at += length;
+    }
+  } finally {
+    target.viewport.set(0, 0, size, size);
+    renderer.setRenderTarget(previous);
+    renderer.autoClear = autoClear;
+    quad.geometry.dispose();
+    material.dispose();
+  }
+  return ownedEnvironmentResource(identity, target, renderer);
 }
 
 /**

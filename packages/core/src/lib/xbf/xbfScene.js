@@ -111,6 +111,10 @@ export function xbfLookParameters(THREE, rgba, material = null, thickness = 0) {
     clearcoat: finite(material.clearcoat, 0), clearcoatRoughness: finite(material.clearcoatRoughness, 0),
     emissiveIntensity: finite(material.emissiveIntensity, 1)
   });
+  // The diffuse layer as rough as the surface (three's EON, an energy-preserving rough diffuse): a
+  // matte plastic or rubber stays lit toward its silhouette, as a real one does, where Lambert's
+  // darkens it. Only a material's own look takes it (the regular modes draw OCCT's model).
+  if (parameters.metalness < 1) parameters.diffuseRoughness = parameters.roughness;
   for (const key of ["sheen", "sheenRoughness", "specularIntensity", "iridescence", "iridescenceIOR", "dispersion", "alphaTest"]) {
     if (material[key] != null) parameters[key] = material[key];
   }
