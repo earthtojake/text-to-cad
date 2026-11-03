@@ -18,7 +18,8 @@ export function useBoardDocument({ workspace, path }) {
   const { plot } = payload;
   const sheet = plot?.layout.sheets[0] ?? null;
   const board = plot?.board ?? null;
-  const index = useMemo(() => (board && sheet ? createBoardIndex(board, { x: sheet.x, y: sheet.y }) : null), [board, sheet]);
+  // The index points at what the board's index lists, and at the graphics the sheet draws (each by its id).
+  const index = useMemo(() => (board && sheet ? createBoardIndex(board, sheet) : null), [board, sheet]);
   const layered = Array.isArray(sheet?.layers) && sheet.layers.length > 0;
 
   // With a board on screen, a failure to read the file again leaves that board to use.

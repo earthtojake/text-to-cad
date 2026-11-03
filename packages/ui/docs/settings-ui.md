@@ -283,6 +283,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
+| KiCad board | Select (in hand, and the view's hand: a drag pans, a tap picks what its filter takes, on a layer the Display draws: All, Parts, Pads, Nets, Tracks, Vias, Zones, Text, Dimensions, Graphics; or, its last mode, Point or area: a tap a point and a drag a box, on the view's working layer, the middle button panning), Pencil, Shapes, Measure; Display |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:

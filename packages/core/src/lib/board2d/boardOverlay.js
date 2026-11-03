@@ -32,6 +32,8 @@ const PART_FILL = "rgba(141, 197, 255, 0.10)";
 const PART_PAD_FILL = "rgba(141, 197, 255, 0.35)";
 const ZONE_FILL = "rgba(141, 197, 255, 0.12)";
 const COPPER_ZONE_FILL = "rgba(141, 197, 255, 0.18)";
+// A text's, a dimension's value's and an area's box: lit, and the board still read through it.
+const BOX_FILL = "rgba(141, 197, 255, 0.16)";
 // Placement's pads, KiCad's default theme's F.Cu and B.Cu (a through-hole pad is the side looked at),
 // and its airwires: thin, light, under everything a person points at.
 const PLACEMENT_PAD_FILL = Object.freeze({ front: "rgba(200, 52, 52, 0.9)", back: "rgba(77, 127, 196, 0.9)" });
@@ -196,13 +198,38 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
     strokes(ctx, view, net.tracks, color, trackWidth(view, 2));
     dots(ctx, view, net.vias, color, viaRadius(view, 2.5));
     polygons(ctx, view, net.pads.flatMap(pinPads), { color, width: 1, fill: color });
-  } else if (kind === "copper" || kind === "point") {
-    const item = kind === "copper" ? resolved.item : null;
+  } else if (kind === "copper" || kind === "point" || kind === "track" || kind === "via" || kind === "zone") {
+    const item = kind === "point" ? null : resolved.item;
     if (item?.kind === "track") strokes(ctx, view, [item], color, trackWidth(view, 3));
     else if (item?.kind === "via") dots(ctx, view, [item], color, viaRadius(view, 3));
+    // A zone named by its uuid is the zone on each of its layers: one outline.
     else if (item?.kind === "zone") polygons(ctx, view, [{ polygon: item.outline, box: item.box }], { color, width: 2, fill: COPPER_ZONE_FILL });
-    crosshairs?.push({ at: resolved.page || toPage(resolved.at), color });
+    // Copper and a point are a place: its crosshair; an item named by its uuid is the item alone.
+    if (kind === "copper" || kind === "point") crosshairs?.push({ at: resolved.page || toPage(resolved.at), color });
+  } else if (kind === "text") {
+    polygons(ctx, view, [resolved.item], { color, width: 1.5 * weight, fill: BOX_FILL });
+  } else if (kind === "dimension") {
+    const item = resolved.item;
+    strokes(ctx, view, item.lines.map((points) => ({ points, box: item.box })), color, () => 2 * view.px);
+    if (item.polygon.length > 2) polygons(ctx, view, [{ polygon: item.polygon, box: item.box }], { color, width: 1, fill: BOX_FILL });
+  } else if (kind === "shape") {
+    const item = resolved.item;
+    if (item.filled) polygons(ctx, view, [{ polygon: item.points, box: item.box }], { color, width: 2 * weight, fill: BOX_FILL });
+    else strokes(ctx, view, [{ points: item.closed ? [...item.points, item.points[0]] : item.points, box: item.box }], color,
+      () => Math.max(3 * view.px, item.width));
+  } else if (kind === "area") {
+    const [x0, y0, x1, y1] = resolved.box;
+    polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box: resolved.box }], { color, width: 1.5 * weight, fill: BOX_FILL });
   }
+}
+
+/** The box an area is being dragged over, page millimetres: a dashed outline, under the highlights. */
+function draftBox(ctx, view, box, color) {
+  const [x0, y0, x1, y1] = box;
+  ctx.save();
+  ctx.setLineDash([4 * view.px, 3 * view.px]);
+  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1, fill: BOX_FILL });
+  ctx.restore();
 }
 
 /**
@@ -216,9 +243,10 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
  *   placement?: boolean }} frame
  *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
  *   `placement`: a board's Placement display, its pads and airwires drawn here.
+ *   `draft`: the page box an area is being dragged over (Select's Point or area), or null.
  */
 export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
-  mirrorX = null, colors = null, placement = false }) {
+  mirrorX = null, colors = null, placement = false, draft = null }) {
   if (!ctx || !index || !transform || !(transform.scale > 0)) return;
   colors = colors || BOARD_OVERLAY_COLORS;
   const view = createView(transform, { width, height, mirrorX });
@@ -236,6 +264,7 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
     ctx.fillRect(0, 0, width, height);
   }
   pageSpace(ctx, view, pixelRatio);
+  if (draft) draftBox(ctx, view, draft, colors.selection);
   for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25 });
   if (placement) {
     const nets = new Set(selection.filter((resolved) => resolved.kind === "net").map((resolved) => resolved.net.name));

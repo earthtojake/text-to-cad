@@ -42,8 +42,11 @@ function surroundColor(element, colorScheme) {
  * @param {(ctx: CanvasRenderingContext2D, frame: { transform: object, pixelRatio: number, width: number, height: number }) => void} [options.overlay]
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
+ * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's Point or area: a drag is its box,
+ *   and the middle button pans.
  */
-export function useBoardView({ plot, restored = null, colorScheme = "light", onViewMoved, drawView = null, overlay = null, onTap = null, onHover = null }) {
+export function useBoardView({ plot, restored = null, colorScheme = "light", onViewMoved, drawView = null, overlay = null, onTap = null, onHover = null,
+  onDrag = null }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const rastersRef = useRef(null);
@@ -60,7 +63,8 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     overlayRef.current?.(ctx, { transform, pixelRatio, width, height });
     if (element) element.dataset.boardSettled = final ? "true" : "false";
   }, []);
-  const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover });
+  const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
+    onDrag, middlePan: true });
   const { containerRef, schemeRef, requestPaint, paintNow, encode } = view;
 
   // One raster cache per board and Display: a new revision or a new set of layers starts afresh.

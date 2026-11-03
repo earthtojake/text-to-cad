@@ -25,13 +25,17 @@ import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { boardAnnotationDocument, boardAnnotationSurface } from "./boardAnnotation.js";
-import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
+import {
+  AreaKindIcon, DimensionKindIcon, GraphicKindIcon, NetKindIcon, PadKindIcon, PartKindIcon, TextKindIcon, TrackKindIcon, ViaKindIcon, ZoneKindIcon
+} from "./boardIcons.jsx";
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
 import { boardDisplayControl, readBoardDisplay } from "./BoardDisplay.jsx";
 import BoardSection from "./BoardSection.jsx";
 import LayersSection from "./LayersSection.jsx";
-import { BOARD_NO_CAMERA, BOARD_NO_DISPLAY, BOARD_SELECT_KINDS, BOARD_TOOL, BOARD_TOOL_MODES, boardPickKinds } from "./tools.js";
+import {
+  BOARD_NO_CAMERA, BOARD_NO_DISPLAY, BOARD_POINT_MODE, BOARD_SELECT_KINDS, BOARD_TOOL, BOARD_TOOL_MODES, boardPickKinds, boardPointing, boardWorkingLayer
+} from "./tools.js";
 import { useBoardDocument } from "./useBoardDocument.js";
 import { readBoardIsolation, useBoardIsolation } from "./useBoardIsolation.js";
 import { useBoardView } from "./useBoardView.js";
@@ -44,11 +48,14 @@ import { useBoardView } from "./useBoardView.js";
  * It is a flat view, composed exactly as a drawing's (`../dxf/DxfRenderer.jsx`), from the same
  * kit (`kit/shell/FlatViewFrame.jsx`, `useFlatView.js`): Select — the board's hand, a drag pans,
  * the wheel or a pinch zooms, a double-click fits, a tap picks the most specific thing its filter
- * ticks under the pointer (a pad, then copper, then a part), Shift adds — Annotate, which draws on
- * the board, and Measure, between points snapped to pad, via and hole centres, track ends and
- * outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
- * references (`#R1`, `#R1.2`, `#net:VBUS`), whose views are the window on screen as a plan-view
- * camera with the board's Display, which `cad <type> snapshot --job` draws again. Its sidebar is the
+ * ticks under the pointer, on a layer the Display draws (a pad, a via, a track, a text, a dimension,
+ * a graphic, a pour by its outline, then a part), Shift adds; or, as Point or area, a place: a tap a
+ * point, a drag the box between its ends, each on the view's working layer (`tools.js`), the middle
+ * button panning — Annotate, which draws on the board, and Measure, between points snapped to pad,
+ * via and hole centres, track ends and outline corners, in millimetres. What is picked, drawn and
+ * measured is Quick Edit's, in board references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`,
+ * `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
+ * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
  * Board (parts and nets) and its Layers; its one view control is its Display (the modes, the pours,
  * the side), the contract `cad <type> snapshot --display` shares. A payload without its index
  * (an older server's) is the picture alone: no tools, no Board, no Quick Edit.
@@ -61,12 +68,15 @@ const BOARD_SURFACE = Object.freeze({ "data-board-surface": "", "data-cad-dark-p
 const SLICES = Object.freeze({ board: "1", isolated: "1" });
 
 const BOARD_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
-const KIND_ICONS = Object.freeze({ parts: PartKindIcon, pads: PadKindIcon, nets: NetKindIcon });
-const KIND_LABELS = Object.freeze({ parts: "board.text.parts", pads: "board.text.pads", nets: "board.text.nets" });
-// Select's menu, one choice (`kit/tools/select/SelectFilterMenu.jsx`): All, then each kind alone.
+const KIND_ICONS = Object.freeze({ parts: PartKindIcon, pads: PadKindIcon, nets: NetKindIcon, tracks: TrackKindIcon, vias: ViaKindIcon,
+  zones: ZoneKindIcon, texts: TextKindIcon, dimensions: DimensionKindIcon, graphics: GraphicKindIcon, [BOARD_POINT_MODE]: AreaKindIcon });
+const KIND_LABELS = Object.freeze({ parts: "board.text.parts", pads: "board.text.pads", nets: "board.text.nets", tracks: "board.text.tracks",
+  vias: "board.text.vias", zones: "board.text.zones", texts: "board.text.texts", dimensions: "board.text.dimensions", graphics: "board.text.graphics",
+  [BOARD_POINT_MODE]: "board.text.point_or_area" });
+// Select's menu, one choice (`kit/tools/select/SelectFilterMenu.jsx`): All, then each kind alone, then a place: Point or area.
 const SELECT_MODES = [
   { id: "all", labelKey: "pick.all", kinds: BOARD_SELECT_KINDS, icon: modeGlyphIcon("all") },
-  ...BOARD_SELECT_KINDS.map(id => {
+  ...[...BOARD_SELECT_KINDS, BOARD_POINT_MODE].map(id => {
     const Icon = KIND_ICONS[id];
     return { id, labelKey: KIND_LABELS[id], kinds: [id], icon: <Icon className="size-3.5" /> };
   })
@@ -82,6 +92,10 @@ function readTransform(raw) {
   const { scale, offsetX, offsetY } = raw;
   return finite(scale) && scale > 0 && finite(offsetX) && finite(offsetY) ? { scale, offsetX, offsetY } : null;
 }
+/** What a board's snapshot packet carries of its prompt's references: their selectors into the board, once each, as the box orders them. */
+const boardPacketReferences = (references, file) => [...new Set(references
+  .filter(reference => reference?.resource?.path === file && reference.target?.kind === "cad-selector")
+  .flatMap(reference => reference.target.selectors))];
 /** The board's Display as a view carries it, and a snapshot job reads it. */
 const viewDisplay = display => ({ mode: display.mode, side: display.side, poured: display.poured, ...(display.layers ? { layers: [...display.layers] } : {}) });
 
@@ -139,6 +153,17 @@ function BoardSurface({ view, data }) {
   filterRef.current = filter;
   const sideRef = useRef(display.side);
   sideRef.current = display.side;
+  // What a press may take is on a layer the Display draws; a point or an area is on its working layer.
+  const drawnLayers = useMemo(() => new Set(drawView?.layers || []), [drawView]);
+  const drawnRef = useRef(drawnLayers);
+  drawnRef.current = drawnLayers;
+  const workingRef = useRef(null);
+  workingRef.current = drawView ? boardWorkingLayer(sheet, drawView.layers, display.side) : null;
+  const pointing = boardPointing(filter);
+  const pointingRef = useRef(pointing);
+  pointingRef.current = pointing;
+  // The box an area is being dragged over (page millimetres), painted over the board: never React state.
+  const draftRef = useRef(null);
   const placementRef = useRef(false);
   placementRef.current = boardDisplayAirwires(display);
   const isolationRef = useRef(isolation);
@@ -173,7 +198,8 @@ function BoardSurface({ view, data }) {
     }
     const { hovered, selected } = highlightRef.current;
     const net = selected.some(item => item.kind === "net");
-    drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current });
+    drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current,
+      draft: draftRef.current });
     const session = annotationRef.current;
     drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorRef.current), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
   }, []);
@@ -198,7 +224,7 @@ function BoardSurface({ view, data }) {
   }
 
   // ---- pointer: what a tap and a resting pointer do under each tool -----------
-  const [pointing, setPointing] = useState(false);
+  const [overPick, setOverPick] = useState(false);
   const measureHoverRef = useRef(null);
   const measureAnchorRef = useRef(null);
   useEffect(() => { if (!measuring) { measureHoverRef.current = null; measureAnchorRef.current = null; } }, [measuring]);
@@ -219,7 +245,12 @@ function BoardSurface({ view, data }) {
     };
     const pickAt = (point, pointerType) => {
       const at = atPoint(point, pointerType), board = indexRef.current, kinds = boardPickKinds(filterRef.current);
-      return at && board && kinds ? board.pick(at.page, { kinds, view: sideRef.current, tolerance: at.reach }) : null;
+      return at && board && kinds ? board.pick(at.page, { kinds, view: sideRef.current, tolerance: at.reach, layers: drawnRef.current }) : null;
+    };
+    // Point or area: a press names the point under it, on the view's working layer.
+    const placeAt = point => {
+      const at = atPoint(point, "mouse"), board = indexRef.current;
+      return at && board ? board.pointSelector(at.page, workingRef.current) : null;
     };
     const inkUnder = (point, pointerType) => (annotationRef.current.items.length
       ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
@@ -240,6 +271,11 @@ function BoardSurface({ view, data }) {
       }
       if (tool !== BOARD_TOOL.SELECT) return;
       const shift = event.shiftKey;
+      if (pointingRef.current) {
+        const selector = placeAt(point);
+        if (selector) selectionRef.current.pick({ id: selector }, { multiSelect: shift });
+        return;
+      }
       const session = annotationRef.current;
       // Front to back, as every view picks: a measurement, then the ink, then the board's own.
       if (measured(() => selectionRef.current.clear()).press(pointer(event))) {
@@ -267,7 +303,8 @@ function BoardSurface({ view, data }) {
         return;
       }
       let over = false, inkIds = [], hit = null;
-      if (tool === BOARD_TOOL.SELECT && point && indexRef.current) {
+      // Point or area lights nothing under the pointer: what it names is the place itself.
+      if (tool === BOARD_TOOL.SELECT && point && indexRef.current && !pointingRef.current) {
         const onMeasurement = measured(() => {}).hover(pointer(event));
         const ink = onMeasurement ? null : inkUnder(point, event.pointerType);
         inkIds = ink ? withGroups([ink], annotationRef.current.items) : [];
@@ -276,13 +313,25 @@ function BoardSurface({ view, data }) {
       } else if (measureRef.current.hovered) measureRef.current.hover("");
       if (inkIds.join() !== hoveredInkRef.current.join()) { hoveredInkRef.current = inkIds; requestPaint(); }
       selectionRef.current.hover(hit ? hit.selector : "");
-      setPointing(current => (current === over ? current : over));
+      setOverPick(current => (current === over ? current : over));
     };
-    return { tap, hover };
+    // Point or area's drag is the box between its ends: drawn as it goes, an area once it lets go.
+    const drag = (phase, { start, point, event }) => {
+      const board = indexRef.current;
+      if (toolRef.current !== BOARD_TOOL.SELECT || !pointingRef.current || !board) return false;
+      const from = atPoint(start, "mouse")?.page, to = atPoint(point, "mouse")?.page;
+      if (!from || !to) return false;
+      draftRef.current = phase === "start" || phase === "move"
+        ? [Math.min(from[0], to[0]), Math.min(from[1], to[1]), Math.max(from[0], to[0]), Math.max(from[1], to[1])] : null;
+      requestPaint();
+      if (phase === "end") selectionRef.current.pick({ id: board.areaSelector(from, to, workingRef.current) }, { multiSelect: Boolean(event?.shiftKey) });
+      return true;
+    };
+    return { tap, hover, drag };
   }, [annotationSurface, requestPaint]);
 
   const boardView = useBoardView({
-    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover
+    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag
   });
   viewRef.current = boardView;
   paintRef.current = boardView.requestPaint;
@@ -350,7 +399,8 @@ function BoardSurface({ view, data }) {
     const list = raw.flatMap(selector => splitBoardRefSelectors(selector));
     const unknown = list.filter(selector => !parseBoardRefSelector(selector) || !index?.resolve(selector));
     if (!index || unknown.length) {
-      throw new Error(`Not on this board: ${unknown.join(", ") || list.join(", ")}. Select board references such as #U3, #U3.9, #net:VIN or #@x10y5.`);
+      throw new Error(`Not on this board: ${unknown.join(", ") || list.join(", ")}. Select board references such as #U3, #U3.9, #net:VIN, `
+        + "#track:<uuid> (#via:, #zone:, #text:, #dimension:, #shape:), #F.Cu@x10y5 or #F.Cu@x10y5..x20y15.");
     }
     selectionRef.current.clear();
     for (const selector of list) selectionRef.current.select(parseBoardRefSelector(selector).canonical, { multiSelect: true });
@@ -372,7 +422,7 @@ function BoardSurface({ view, data }) {
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: boardAnnotationDocument, runtime, live: BOARD_LIVE,
-    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed")
+    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 
   // ---- the frame ---------------------------------------------------------------
@@ -391,8 +441,9 @@ function BoardSurface({ view, data }) {
   </> : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
-  // over what a press would pick. Measure keeps its crosshair (Annotate's layer has its own).
-  const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
+  // over what a press would pick. Measure and Point or area keep a crosshair (Annotate's layer has its own).
+  const cursor = measuring || (pointing && toolMode === BOARD_TOOL.SELECT) ? "cursor-crosshair"
+    : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
     <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}

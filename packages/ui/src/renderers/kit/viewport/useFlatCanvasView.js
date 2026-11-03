@@ -2,8 +2,9 @@
  * A flat picture on a canvas, and the three things a person does to it: drag to pan, wheel or
  * pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
  * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
- * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, whatever the tool.
- * Every flat view (a 2D drawing, a board) is this one hook under its own paint.
+ * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
+ * hand takes it (`onDrag`, a board's Point or area drawing its box): then the middle button pans,
+ * as KiCad's does (`middlePan`). Every flat view (a 2D drawing, a board) is this one hook under its own paint.
  *
  * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
  * already the person's), the `bounds` the fit frames (`@cad/core`'s plane maths,
@@ -64,9 +65,14 @@ function wheelZoomFactor(event) {
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  *   A pointer resting over the canvas with nothing pressed (null: it left).
+ * @param {(phase: "start" | "move" | "end" | "cancel", drag: { start: { x: number, y: number }, point: { x: number, y: number },
+ *   event: PointerEvent | null }) => boolean | void} [options.onDrag]  Asked, as a press with the primary button
+ *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
+ *   release are the tool's too, and the view does not pan.
+ * @param {boolean} [options.middlePan]  A press of the middle button pans.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null }) {
+  onTap = null, onHover = null, onDrag = null, middlePan = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -89,6 +95,10 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   tapRef.current = onTap;
   const hoverRef = useRef(onHover);
   hoverRef.current = onHover;
+  const dragRef = useRef(onDrag);
+  dragRef.current = onDrag;
+  const middlePanRef = useRef(middlePan);
+  middlePanRef.current = middlePan;
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
 
@@ -253,15 +263,19 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     };
 
     // The press that may still be a tap: where it went down, until it travels or a second finger lands.
+    // `drag`: the tool took it (`onDrag`); `pan`: a middle press, a pan from the start.
     let press = null;
     const onPointerDown = (event) => {
       // Primary press only: a secondary or middle press belongs to whatever the
-      // host puts on them, not to panning.
-      if (event.pointerType === "mouse" && event.button !== 0) return;
+      // host puts on them, not to panning — but a view whose tool takes its drags pans with the middle.
+      const middle = event.pointerType === "mouse" && event.button === 1 && middlePanRef.current;
+      if (event.pointerType === "mouse" && event.button !== 0 && !middle) return;
       capturePointer(canvas, event.pointerId);
       const point = local(event);
       pointers.set(event.pointerId, point);
-      press = pointers.size === 1 ? { id: event.pointerId, start: point, moved: false } : null;
+      // A second finger is a pinch: a drag the tool had taken lets go.
+      if (press?.drag && pointers.size > 1) dragRef.current?.("cancel", { start: press.start, point, event });
+      press = pointers.size === 1 ? { id: event.pointerId, start: point, moved: middle, drag: false, pan: middle } : null;
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 1) setDragging(true);
       hoverRef.current?.(null, null);
@@ -279,9 +293,12 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       const transform = transformRef.current;
       if (!transform) return;
       if (pointers.size === 1) {
+        if (press?.drag) { dragRef.current?.("move", { start: press.start, point, event }); return; }
         if (press && !press.moved) {
           if (Math.hypot(point.x - press.start.x, point.y - press.start.y) <= TAP_SLOP_PX) return;
           press.moved = true;
+          // The tool in hand may take the drag (a box drawn), else it pans.
+          if (!press.pan && dragRef.current?.("start", { start: press.start, point, event }) === true) { press.drag = true; return; }
           moveTo(panTransform(transform, point.x - press.start.x, point.y - press.start.y));
           return;
         }
@@ -303,7 +320,9 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       if (pointers.size === 2) measurePinch();
       if (pointers.size === 0) setDragging(false);
       const tapped = press && press.id === event.pointerId && !press.moved && event.type === "pointerup";
+      const dragged = press?.drag && press.id === event.pointerId ? press : null;
       press = null;
+      if (dragged && at) dragRef.current?.(event.type === "pointerup" ? "end" : "cancel", { start: dragged.start, point: at, event });
       if (tapped && at) tapRef.current?.(at, event);
     };
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
