@@ -71,6 +71,25 @@ class TheCommandTable(unittest.TestCase):
         self.assertEqual(1, code)
         self.assertIn('"error": "robot.srdf is a srdf, not a urdf: use cad srdf check"', said)
 
+    def test_a_types_own_option_before_its_file_is_no_file(self) -> None:
+        """``--urdf robot.urdf`` is srdf check's own option, wherever it stands: the file the check is of is
+        the one the parser takes as its file, never the first word without a dash."""
+        import tempfile
+        from pathlib import Path
+
+        with tempfile.TemporaryDirectory() as folder:
+            urdf, srdf = Path(folder) / "robot.urdf", Path(folder) / "robot.srdf"
+            urdf.write_text('<robot name="r"><link name="a"/></robot>', encoding="utf-8")
+            srdf.write_text('<robot name="r"><group name="arm"><link name="a"/></group></robot>', encoding="utf-8")
+            for argv in (["srdf", "check", "--urdf", str(urdf), str(srdf)], ["srdf", "check", str(srdf), "--urdf", str(urdf)]):
+                with self.subTest(argv=argv):
+                    code, said, err = _run([*argv, "--json"])
+                    self.assertNotIn("is a urdf, not a srdf", said + err)
+                    self.assertIn('"path"', said)
+            code, said, _ = _run(["srdf", "check", "--urdf", str(urdf), str(urdf), "--json"])
+            self.assertEqual(1, code)
+            self.assertIn("is a urdf, not a srdf", said)
+
     def test_an_operation_a_type_lacks_names_the_ones_it_has(self) -> None:
         code, _, err = _run(["stl", "inspect", "part.stl"])
         self.assertEqual(2, code)

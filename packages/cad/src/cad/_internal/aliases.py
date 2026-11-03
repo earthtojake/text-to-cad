@@ -17,6 +17,7 @@ import importlib.abc
 import importlib.util
 import os
 import sys
+from pkgutil import resolve_name as _resolve
 import warnings
 from typing import Any
 
@@ -43,7 +44,8 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
     "cad.urdf": {"validate": "cad.urdf.check"},
     "cad.sdf": {"validate": "cad.sdf.check"},
     "cad.srdf": {"validate": "cad.srdf.check"},
-    "cad.results": {"ValidationResult": "cad.results.CheckResult", "ValidationIssue": "cad.results.CheckFinding"},
+    # The 0.10 call shapes, each a CheckResult or a CheckFinding.
+    "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
 }
 
 #: What the deprecation says to use instead, where the new path is not one object: the root's
@@ -52,13 +54,15 @@ _ADVICE = {
     "cad.export": "cad.<document_type>.export (cad.xbf.export, cad.step.export, ...)",
     "cad.snapshot": "cad.<document_type>.snapshot (cad.xbf.snapshot, cad.stl.snapshot, ...)",
     "cad.inspect": "cad.<document_type>.inspect (cad.xbf.inspect, cad.step.inspect, ...)",
+    "cad.results.ValidationResult": "cad.results.CheckResult (findings=, each with location=)",
+    "cad.results.ValidationIssue": "cad.results.CheckFinding (severity, code, message, location=, hint=)",
 }
 
 #: ``old module -> new module``: a module the library had, answered by the module that holds its names now.
 MODULE_ALIASES: dict[str, str] = {
     "cad.ap242": "cad.build123d",
     "cad.gltf": "cad.build123d",
-    "cad.geometry": "cad.build123d",
+    "cad.geometry": "cad.build123d._geometry",
     "cad.flatten": "cad.build123d._flatten",
     "cad.findings": "cad._internal.findings",
     "cad.xml_common": "cad._internal.xml_common",
@@ -88,11 +92,6 @@ def warn(old: str, new: str) -> None:
     _WARNED.add(old)
     warnings.warn(f"{old} is deprecated; use {_ADVICE.get(old, new)}", CadDeprecationWarning,
                   skip_file_prefixes=_SKIPPED)
-
-
-def _resolve(path: str) -> Any:
-    module, _, name = path.rpartition(".")
-    return getattr(importlib.import_module(module), name)
 
 
 def lookup(owner: str, name: str) -> Any:

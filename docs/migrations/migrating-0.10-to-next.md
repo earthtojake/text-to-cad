@@ -30,7 +30,7 @@ and its operations -- and our helpers that take build123d's objects are `cad.bui
 | `from cad.geometry import overlap_volume, ...` | `from cad.build123d import overlap_volume, ...` |
 | `from cad import flatten` / `flatten.flat_pattern(...)` | `from cad.build123d import flat_pattern` / `flat_pattern(...)` (also `planar_faces`, `flatten_face`, `flatten_faces`, `union_faces`, `offset_profile`) |
 | `cad.urdf.validate`, `cad.sdf.validate`, `cad.srdf.validate` | `cad.urdf.check`, `cad.sdf.check`, `cad.srdf.check` |
-| `cad.results.ValidationResult`, `ValidationIssue` | `cad.results.CheckResult`, `CheckFinding` (`.findings`, each with `.location`) |
+| `cad.results.ValidationResult`, `ValidationIssue` | `cad.results.CheckResult`, `CheckFinding` (`.findings`, each with `.location`); the old names keep their 0.10 call shapes, `ValidationIssue(severity, message, element=, code=, hint=)` and `ValidationResult(ok, path, issues=, summary=)`, and `.issues` and `.element` still read |
 | `cad.findings`, `cad.xml_common`, `cad.check_fonts`, `cad.urdf_source`, `cad.sdf_source`, `cad.sdf_validation`, `cad.sdf_external`, `cad.srdf_source`, `cad.srdf_validation` | private now (`cad._internal.*`, `cad.<type>._*`): the aliases keep working, and nothing of a model's needs them |
 | `cad.pcb` (the KiCad pull request's, never released) | `cad.kicad_pcb`: `read_board`, `inside`, `inspect` (was `inspect_board`); no alias, as it never shipped |
 | `cad.eng_drawing` | unchanged |

@@ -2,10 +2,11 @@
 declare.
 
 The root holds ``model``, ``__version__``, ``CadDeprecationWarning`` and the document types, one object
-each (``cad.registry``): ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf`` and
-``srdf``. A type is its decorator where it has one (``@step("arm.step")``), its reader where it has
-one (``step.read``) and its operations, one to one with the ``cad <type> <operation>`` commands
-(``.export``, ``.snapshot``, ``.inspect``, ``.check``). Our helpers that take build123d's objects are
+each (``cad.registry``): ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``,
+``srdf`` and ``kicad_pcb``. A type is its decorator where it has one (``@step("arm.step")``, a board
+script's ``@kicad_pcb("board.kicad_pcb")``), its reader where it has one (``step.read``) and its
+operations, one to one with the ``cad <type> <operation>`` commands (``.export``, ``.snapshot``,
+``.inspect``, ``.check``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns). Process control (``cad serve``, ``status``, ``stop``,
 ``server``) is the ``cad`` command's alone. Every name loads on first use: ``import cad`` imports no CAD
@@ -92,7 +93,7 @@ def __dir__() -> list[str]:
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, sdf, srdf, step, stl, threemf, urdf, xbf
+    from cad import dxf, glb, kicad_pcb, sdf, srdf, step, stl, threemf, urdf, xbf
     from cad.engine.model import model
 
 

@@ -31,10 +31,10 @@ NAMES = {
     "cad.urdf": {"validate": "cad.urdf.check"},
     "cad.sdf": {"validate": "cad.sdf.check"},
     "cad.srdf": {"validate": "cad.srdf.check"},
-    "cad.results": {"ValidationResult": "cad.results.CheckResult", "ValidationIssue": "cad.results.CheckFinding"},
+    "cad.results": {"ValidationResult": "cad.results._ValidationResult", "ValidationIssue": "cad.results._ValidationIssue"},
 }
 MODULES = {
-    "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d",
+    "cad.ap242": "cad.build123d", "cad.gltf": "cad.build123d", "cad.geometry": "cad.build123d._geometry",
     "cad.flatten": "cad.build123d._flatten", "cad.findings": "cad._internal.findings",
     "cad.xml_common": "cad._internal.xml_common", "cad.check_fonts": "cad._internal.check_fonts",
     "cad.urdf_source": "cad.urdf._source", "cad.sdf_source": "cad.sdf._source",
@@ -82,6 +82,50 @@ class TheAliases(unittest.TestCase):
             self.assertEqual([f"{script}:1: CadDeprecationWarning: cad.read_step is deprecated; use cad.step.read",
                               f"{script}:4: CadDeprecationWarning: cad.urdf.validate is deprecated; use cad.urdf.check",
                               f"{script}:5: CadDeprecationWarning: cad.ap242 is deprecated; use cad.build123d"], lines)
+
+    def test_the_old_result_types_take_their_0_10_call_shapes(self) -> None:
+        from cad import results
+
+        with warnings.catch_warnings(record=True) as said:
+            warnings.simplefilter("always")
+            ValidationIssue, ValidationResult = results.ValidationIssue, results.ValidationResult
+        self.assertTrue(any(issubclass(item.category, cad.CadDeprecationWarning) for item in said) or
+                        "cad.results.ValidationIssue" in aliases._WARNED)
+        issue = ValidationIssue("error", "a joint has no parent", "/robot/joint[1]", "missing_parent", "name one")
+        self.assertIsInstance(issue, results.CheckFinding)
+        self.assertEqual(("error", "a joint has no parent", "/robot/joint[1]", "missing_parent", "name one"),
+                         (issue.severity, issue.message, issue.element, issue.code, issue.hint))
+        self.assertEqual("/robot/joint[1]", issue.location)
+        keyword = ValidationIssue(severity="warning", message="m", element="e", code="c")
+        self.assertEqual(("warning", "m", "e", "c", None), (keyword.severity, keyword.message, keyword.element,
+                                                            keyword.code, keyword.hint))
+        result = ValidationResult(False, Path("robot.urdf"), issues=(issue,), summary="")
+        self.assertIsInstance(result, results.CheckResult)
+        self.assertEqual(((issue,), (issue,), False), (result.issues, result.findings, result.ok))
+        self.assertEqual(ValidationResult(True, Path("r.urdf")).issues, ())
+        self.assertEqual(issue.human_line(), "error: missing_parent at /robot/joint[1]: a joint has no parent Hint: name one")
+
+    def test_every_module_alias_answers_every_name_its_0_10_module_exported(self) -> None:
+        # What each 0.10 module exported, beyond its private names: each resolves through its alias.
+        exported = {
+            "cad.ap242": ("configuration_sequence", "gear_pair", "mechanism_state", "posed", "rack_and_pinion_pair",
+                          "screw_pair"),
+            "cad.gltf": ("animation",),
+            "cad.geometry": ("GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties", "Matrix3",
+                             "closest_points", "overlap_volume", "is_sound", "topology_errors", "boundary_edges",
+                             "self_intersections", "mass_properties"),
+            "cad.flatten": ("axis_value", "snap", "planar_faces", "flatten_face", "flatten_faces", "union_faces",
+                            "offset_profile", "flat_pattern"),
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", cad.CadDeprecationWarning)
+            for old, names in exported.items():
+                module = importlib.import_module(old)
+                for name in names:
+                    with self.subTest(name=f"{old}.{name}"):
+                        self.assertTrue(hasattr(module, name))
+            self.assertIs(importlib.import_module("cad.geometry").Matrix3,
+                          importlib.import_module("cad.build123d._geometry").Matrix3, "a name cad.build123d does not list")
 
     def test_a_module_alias_still_runs_as_a_program(self) -> None:
         proc = subprocess.run([sys.executable, "-m", "cad.check_fonts", "--help"], capture_output=True, text=True,

@@ -22,12 +22,13 @@ from __future__ import annotations
 import json
 import sys
 from collections.abc import Callable, Mapping
+from functools import cache
 from dataclasses import dataclass, field
 from types import MappingProxyType
 from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
-           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "help_text", "integrations_of", "producer_for", "producers_for",
+           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "decorators_taking", "help_text", "integrations_of", "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a fixed set shared by every type; each type implements those that make sense for it.
@@ -233,8 +234,12 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
                  "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
         process="separate",
-        probe=Probe("kicad-cli", "9.0", "install KiCad 9 or newer from https://www.kicad.org/download/, or set "
-                                        "CAD_KICAD_CLI to its kicad-cli", "CAD_KICAD_CLI"),
+        # A check or an export runs kicad-cli 9 or newer; a board script its headless api-server, a nightly's
+        # alone for now (cad.kicad._program.check_api_server refuses one without it before starting it).
+        probe=Probe("kicad-cli", "9.0", "a check or an export needs KiCad 9 or newer, a @kicad_pcb board script a "
+                                        "KiCad nightly (10.99, for kicad-cli's api-server): install one from "
+                                        "https://www.kicad.org/download/, or set CAD_KICAD_CLI to its kicad-cli",
+                    "CAD_KICAD_CLI"),
         modules=("kipy",), distributions=("kicad-python",), identity=("kicad-python",)),
 })
 
@@ -262,6 +267,7 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
     return by_extension(name[dot:]) if dot > 0 else None
 
 
+@cache
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
@@ -306,6 +312,13 @@ def declarer_for(document_type: str, target: Any) -> Producer | None:
     if len(found) > 1:
         raise RuntimeError(f"@{document_type}: {len(found)} producers declare {type(target).__name__}: exactly one may")
     return found[0] if found else None
+
+
+def decorators_taking(target: Any) -> tuple[str, ...]:
+    """The types whose decorator a producer declares for ``target`` by what it is (``decorates``, not None):
+    a @kicad_pcb board script's ``step``. Empty for a target any decorator takes, a plain function."""
+    return tuple(dict.fromkeys(producer.document_type for producer in _producers() if producer.declare
+                               and producer.decorates is not None and producer.decorates(target)))
 
 
 def help_text(document_type: str) -> str:

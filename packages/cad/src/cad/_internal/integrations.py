@@ -64,10 +64,24 @@ def _from_registry() -> dict[str, Integration]:
 INTEGRATIONS: dict[str, Integration] = _from_registry()
 
 
+# The library's own names (``cad``, ``cadgen``): ``cad.<integration>`` is that integration's namespace.
+_LIBRARY = ("cad", "cadgen")
+
+
+def _namespaces() -> dict[str, str]:
+    """Each integration's namespace in the library (``cad.build123d``), by its name, to its extra."""
+    from cad.registry import INTEGRATIONS as REGISTERED
+
+    return {name: integration.extra for name, integration in REGISTERED.items() if integration.extra}
+
+
 def for_module(name: str) -> str | None:
-    """The integration whose modules hold ``name`` (a module's dotted name: its top level decides), or None."""
-    top = name.split(".", 1)[0]
-    return next((key for key, found in INTEGRATIONS.items() if top in found.modules), None)
+    """The integration whose modules hold ``name`` (a module's dotted name: its top level decides), or whose
+    namespace in the library it is (``cad.build123d``, ``cad.kicad._session``: the registry's), or None."""
+    parts = name.split(".")
+    if parts[0] in _LIBRARY:
+        return _namespaces().get(parts[1]) if len(parts) > 1 else None
+    return next((key for key, found in INTEGRATIONS.items() if parts[0] in found.modules), None)
 
 
 def for_distribution(name: str) -> str | None:

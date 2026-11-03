@@ -14,6 +14,7 @@ locks nothing of the person's: it gets homes of its own (``headless_env``).
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -24,8 +25,8 @@ from cad.registry import INTEGRATIONS
 from cad._internal import programs
 from cad._internal.programs import version_tuple
 
-__all__ = ["CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError", "check_version",
-           "find_kicad_cli", "headless_env", "install_hint", "kicad_version", "private_run", "quiet"]
+__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError",
+           "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint", "kicad_version", "private_run", "quiet"]
 
 # What kicad-cli says on stderr that says nothing about the board.
 _NOISE = ("Fontconfig error",)
@@ -74,6 +75,10 @@ def _installed() -> list[Path]:
 #: ``kicad-cli`` as the helper runs it.
 KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: _installed(), homes=_HOMES,
                                      title="KiCad 9")
+#: What a board script needs beyond a check's or an export's kicad-cli: its headless api-server.
+API_SERVER_HINT = ("a @kicad_pcb board script runs kicad-cli's headless api-server, which only a KiCad nightly "
+                   "(10.99) has for now; a check or an export needs only KiCad 9 or newer. Install a nightly from "
+                   "https://www.kicad.org/download/, or set CAD_KICAD_CLI to a nightly's kicad-cli")
 KICAD_MINIMUM = KICAD.minimum
 
 
@@ -110,6 +115,22 @@ def private_run(prefix: str = "cad-kicad-") -> Iterator[tuple[Path, dict[str, st
 def kicad_version(cli: Path) -> str | None:
     """What ``kicad-cli version`` says it is (``9.0.1``), run headless; None when it does not run."""
     return programs.version(KICAD, cli)
+
+
+def check_api_server(cli: Path) -> Path:
+    """``cli`` when it has the headless ``api-server`` a board script runs: ``kicad-cli api-server --help``,
+    run headless, lists its ``--socket``. Else ``KicadMissingError``, before any server is started: a stable
+    KiCad's kicad-cli has no such command."""
+    with private_run("cad-kicad-probe-") as (_folder, env):
+        try:
+            done = subprocess.run([str(cli), "api-server", "--help"], env=env, stdin=subprocess.DEVNULL,
+                                  capture_output=True, text=True, timeout=60, check=False)
+            said = f"{done.stdout}\n{done.stderr}"
+        except (OSError, subprocess.SubprocessError):
+            said = ""
+    if "--socket" not in said:
+        raise KicadMissingError(f"{cli} has no api-server: {API_SERVER_HINT}")
+    return cli
 
 
 def check_version(cli: Path, version: str | None) -> str:

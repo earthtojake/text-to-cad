@@ -75,12 +75,7 @@ def _generated_check(document_type: str) -> Callable[[list[str], str], int]:
     """A check whose options are its function's signature (``cad_server._internal.cli_from_function``)."""
 
     def run(argv: list[str], prog: str) -> int:
-        from cad_server._internal.cli_from_function import generated_main
-
-        first = next((token for token in argv if not token.startswith("-")), None)
-        if first is not None:
-            _refuse_other_type(document_type, "check", first)
-        return generated_main((f"cad.{document_type}", "check"), argv, prog=prog)
+        return _checked(document_type, (f"cad.{document_type}", "check"), argv, prog)
 
     return run
 
@@ -124,12 +119,22 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
 
 
 def _board_check(argv: list[str], prog: str) -> int:
-    from cad_server._internal.cli_from_function import generated_main
+    return _checked("kicad_pcb", ("cad_server.kicad.check", "check"), argv, prog)
 
-    first = next((token for token in argv if not token.startswith("-")), None)
-    if first is not None:
-        _refuse_other_type("kicad_pcb", "check", first)
-    return generated_main(("cad_server.kicad.check", "check"), argv, prog=prog)
+
+def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
+    """A generated check run: its file, the function's first parameter as the parser read it (wherever it
+    stands among the options: ``--urdf robot.urdf robot.srdf``), refused when it is another type's."""
+    import inspect
+
+    from cad_server._internal.cli_from_function import _verb, generated_main, generated_parser
+
+    parsed = generated_parser(target, prog=prog).parse_args(argv)
+    first = next(iter(inspect.signature(_verb(target)).parameters))
+    source = getattr(parsed, first, None)
+    if source is not None:
+        _refuse_other_type(document_type, "check", str(source))
+    return generated_main(target, argv, prog=prog)
 
 
 def _answer(as_json: bool, payload: dict, lines: list[str]) -> int:

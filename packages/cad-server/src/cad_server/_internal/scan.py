@@ -122,6 +122,7 @@ class _Reader:
                     if node.module in LIBRARY:
                         for alias in node.names:
                             imported[alias.asname or alias.name] = alias.name
+                            self.module(f"{node.module}.{alias.name}")  # ``from cad import build123d``
                     else:
                         for alias in node.names:  # ``from pkg import module``: a local module too
                             self.module(f"{node.module}.{alias.name}")

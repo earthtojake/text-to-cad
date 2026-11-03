@@ -1,9 +1,10 @@
 """``cad.kicad_pcb``: the KiCad PCB document type (``cad.registry``), a saved KiCad board.
 
-A ``.kicad_pcb`` is an AUTHORED file, edited in KiCad or as text, never a document a model makes, so
-this type has no decorator (what would write a board from a model's code is open). Its functions take
-paths and our own board objects, so they are the type's, not the ``kicad`` integration's (the signature
-rule):
+A ``.kicad_pcb`` is an AUTHORED file, edited in KiCad or as text, never a document a model makes. Its
+decorator, ``@kicad_pcb("board.kicad_pcb")``, declares a board script that edits that saved board through
+KiCad's IPC API (the ``kicad`` integration's producer, ``cad.kicad._session``; a ``@step`` stacked on it
+writes the saved board's STEP), never a model. Its functions take paths and our own board objects, so
+they are the type's, not the ``kicad`` integration's (the signature rule):
 
 * :func:`read_board` parses the file and the ``.kicad_pro`` beside it with the standard library
   (:mod:`cad.engine.formats.kicad`), so a check script run with ``cad run`` imports it without the

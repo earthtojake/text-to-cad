@@ -19,6 +19,7 @@ from __future__ import annotations
 import os
 import sys
 import types
+from pkgutil import resolve_name as _resolve
 from typing import Any
 
 __all__ = ["DocumentType", "bind"]
@@ -26,13 +27,6 @@ __all__ = ["DocumentType", "bind"]
 # A type's reader, by id: the function that reads a file of it into a model.
 _READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
-
-
-def _resolve(path: str) -> Any:
-    import importlib
-
-    module, _, name = path.rpartition(".")
-    return getattr(importlib.import_module(module), name)
 
 
 class DocumentType(types.ModuleType):
@@ -45,8 +39,9 @@ class DocumentType(types.ModuleType):
 
         return DOCUMENT_TYPES[self.__name__.rpartition(".")[2]]
 
-    def __call__(self, out: Any = None, /, *, name: str | None = None) -> Any:
-        """``@<type>("out.<ext>", name=...)``: declare the file a model writes, of this type."""
+    def __call__(self, out: Any, *, name: str | None = None) -> Any:
+        """``@<type>("out.<ext>", name=...)`` (or ``@<type>(out="out.<ext>")``, the decorator's 0.10 signature):
+        declare the file a model writes, of this type."""
         entry = self.entry
         if not entry.decorator:
             raise TypeError(f"cad.{entry.id} has no decorator: a {entry.title} is authored, not made by a model "
@@ -65,13 +60,18 @@ class DocumentType(types.ModuleType):
         prepared = _resolve(own.declare)(entry.id, out, name) if own is not None else None
 
         def apply(target: Any) -> Any:
-            from cad.registry import declarer_for
+            from cad.registry import declarer_for, decorators_taking
 
             declarer = declarer_for(entry.id, target)
             if declarer is own and prepared is not None:
                 return prepared(target)
             if declarer is not None:
                 return _resolve(declarer.declare)(entry.id, out, name)(target)
+            taking = decorators_taking(target)
+            if taking:
+                # A target only some producers declare for (a @kicad_pcb board script): never the engine's model.
+                raise TypeError(f"@{entry.id} takes no {type(target).__name__}: one takes "
+                                f"{', '.join('@' + document_type for document_type in taking)}")
             if engine is None:
                 raise TypeError(f"@{entry.id} takes no {type(target).__name__}")
             return engine(target)

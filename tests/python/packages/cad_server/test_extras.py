@@ -243,6 +243,12 @@ class ChoosingTest(unittest.TestCase):
         self.assertEqual(scan.scan(script=self.folder / "dynamic.py"), set(), "an import by name is not seen")
         self.assertEqual(scan.scan(module="lib", cwd=self.folder), {"build123d"})
         self.assertEqual(scan.scan(code="import OCP.TopoDS", cwd=self.folder), {"build123d"})
+        # cad's own namespace of an integration (the registry's) is that integration, however it is imported.
+        for code, found in (("from cad.build123d import paint", {"build123d"}), ("from cad import build123d", {"build123d"}),
+                            ("import cad.kicad._session", {"kicad"}), ("from cadgen.build123d import memo", {"build123d"}),
+                            ("from cad import step, model", set())):
+            with self.subTest(code=code):
+                self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
         self.assertEqual(self.spec("model.py").integrations, ("build123d", "kicad"))
         self.assertTrue(self.spec("--with", "build123d", "plain.py").integrations == ("build123d",),
                         "a requirement that is an integration's distribution is that integration")

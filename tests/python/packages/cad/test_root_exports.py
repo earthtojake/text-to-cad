@@ -59,6 +59,25 @@ class RootExports(unittest.TestCase):
         self.assertIs(cad.urdf.check, cad.urdf.__dict__["check"])
         self.assertTrue(cad.xbf.export.__doc__.endswith(api.export.__doc__))
 
+    def test_what_the_root_says_of_its_types_is_what_it_has(self):
+        """Every type is in the root's docstring and in the imports type checkers read, and no type that
+        has a decorator says it has none."""
+        import ast
+        import inspect
+
+        from cad.registry import DOCUMENT_TYPES
+
+        tree = ast.parse(inspect.getsource(cad))
+        checked = {alias.asname or alias.name for node in ast.walk(tree) if isinstance(node, ast.If)
+                   and getattr(node.test, "id", "") == "_TYPE_CHECKING" for child in node.body
+                   if isinstance(child, ast.ImportFrom) for alias in child.names}
+        for name in TYPES:
+            with self.subTest(name=name):
+                self.assertIn(name, checked, "a type type checkers do not see")
+                self.assertIn(f"``{name}``", cad.__doc__)
+                if DOCUMENT_TYPES[name].decorator:
+                    self.assertNotIn("no decorator", " ".join(getattr(cad, name).__doc__.split()))
+
     def test_snapshot_is_one_verb_of_two_input_shapes(self):
         """One picture (``source``, ``out``) or every picture a job names (``job``, ``source`` in place of its
         input); no ``snapshot_job``, and any other call refused as Python refuses one."""
@@ -111,6 +130,36 @@ class RootExports(unittest.TestCase):
                 if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's
                     self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters), ["out", "name"])
                 self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name"])
+
+    def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
+        """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either
+        way and ``name=`` by keyword, exactly the 0.10 decorator's signature, and a path is required."""
+        from cad import step, xbf
+
+        def arm():
+            return None
+
+        def plate():
+            return None
+
+        built = xbf(out="XBF/arm.xbf")(step(out="arm.step", name="arm_named")(arm))
+        self.assertEqual(sorted(output.kind for output in built.outputs), ["step", "xbf"])
+        self.assertEqual("plate", step("plate.step")(plate).name)
+        for call in (lambda: step(), lambda: step("a.step", "b"), lambda: step(path="a.step")):
+            with self.subTest(call=call), self.assertRaises(TypeError):
+                call()
+
+    def test_a_board_script_takes_no_decorator_but_its_own(self):
+        """A @kicad_pcb board script is never made a model: a decorator no producer of its type declares for
+        it is refused at decoration, naming the ones that take it."""
+        from cad import glb, kicad_pcb, step, stl, xbf
+
+        script = kicad_pcb("board.kicad_pcb")(lambda board: None)
+        for decorator in (xbf, glb, stl):
+            with self.subTest(decorator=decorator), self.assertRaises(TypeError) as caught:
+                decorator(f"board{decorator.entry.suffix}")(script)
+            self.assertIn("one takes @step", str(caught.exception))
+        self.assertIs(script, step("board.step")(script))
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

@@ -22,8 +22,11 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. Any other failure
 says what to do, and `cad doctor` explains the installation.
 
-Viewing, inspecting and taking snapshots need no KiCad installation. DRC and fabrication/STEP
-exports use a user-installed [KiCad 9 or newer](https://www.kicad.org/download/).
+Viewing, inspecting and taking snapshots need no KiCad installation. DRC (`cad kicad_pcb check`)
+and fabrication/STEP exports (`cad kicad_pcb export`) run a user-installed
+[KiCad 9 or newer](https://www.kicad.org/download/)'s `kicad-cli`; a `@kicad_pcb` board script
+needs a KiCad nightly's (10.99), the only one with the headless `api-server` for now, and is
+refused before it starts without one.
 `CAD_KICAD_CLI` can name its `kicad-cli` (the command line itself, named `kicad-cli`); otherwise
 `cad kicad_pcb check` uses `kicad-cli` on PATH, then the one inside the usual macOS or Windows installation.
 It runs `kicad-cli` headless, with private settings, and never opens KiCad. For the direct export
@@ -43,8 +46,9 @@ an existing project from an incomplete description.
 
 A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` hands the function
 the open board (kipy's `Board`), saves it when the function returns and saves nothing when it raises.
-It needs a KiCad nightly's `kicad-cli` (its headless `api-server`) and the `kicad` extra
-(`cad[kicad]`, kipy) in the environment the script runs in. A `@step` stacked on it writes the saved
+It needs a KiCad nightly's `kicad-cli` (10.99: its headless `api-server`, which `kicad-cli api-server
+--help` lists; a stable `kicad-cli` is refused up front, before any server starts) and the `kicad`
+extra (`cad[kicad]`, kipy) in the environment the script runs in. A `@step` stacked on it writes the saved
 board's STEP (`kicad-cli pcb export step --subst-models`):
 
 ```python

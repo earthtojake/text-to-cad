@@ -141,7 +141,9 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    `kicad-cli` (`kicad-cli.exe`) is ever run, an override of any other name is refused, no
    `DISPLAY` or `WAYLAND_DISPLAY` reaches it, and Open in refuses a `.kicad_*` file. A board script
    runs `kicad-cli api-server --socket <path> <board>` the same way (`--socket` takes a plain path;
-   kipy connects to its `ipc://` form), hands the function the open board, saves it when the function
+   kipy connects to its `ipc://` form) once `kicad-cli api-server --help` says it has one (a nightly's,
+   10.99, for now: a stable `kicad-cli` is refused before any server starts), waits until kipy's ping
+   answers (never for a file: on Windows the address is a named pipe), hands the function the open board, saves it when the function
    returns and saves nothing when it raises, then stops the server and removes its folder. kipy's
    `check_version()` is never called: the PyPI 0.8.0 client targets KiCad 10.0.6 and calls the nightly
    (10.99) a future version, while it reads and edits the nightly's boards (the matching client is
