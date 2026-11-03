@@ -450,7 +450,7 @@ def _decorator(kind: str) -> Callable[..., Any]:
     decorate.__qualname__ = kind
     decorate.__doc__ = (f"Declare an explicit output: @{kind}(out='path{SUFFIXES[kind]}'), optionally named "
                         "within the script folder by name=. The output path is required; decoration builds nothing."
-                        + (" tolerance= meshes it at an absolute tolerance in mm, as cad export --tolerance does."
+                        + (" tolerance= meshes it at an absolute tolerance in mm, as cad xbf export --tolerance does."
                            if kind in ("stl", "threemf") else ""))
     return decorate
 

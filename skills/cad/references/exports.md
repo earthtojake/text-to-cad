@@ -184,7 +184,7 @@ faces, give it an absolute tolerance in millimetres, about a tenth of the smalle
 the part is designed around (0.02 for a 0.2 mm fit; 0.01 to 0.05 covers most prints):
 
 ```bash
-cad export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
+cad xbf export "$ID" STL/hopper.stl 3MF/hopper.3mf --tolerance 0.02
 ```
 
 The same is `export(x, path, tolerance=0.02)` in an `exports.py` and

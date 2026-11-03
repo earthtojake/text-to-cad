@@ -2550,7 +2550,7 @@ own keys together (a placement's look kept apart is such a copy, and keeps one k
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
 
-An STL or a 3MF export may give its own tolerance instead: `cad export ID part.stl --tolerance
+An STL or a 3MF export may give its own tolerance instead: `cad xbf export ID part.stl --tolerance
 0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
 absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
 the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
