@@ -10,7 +10,7 @@ import { PATCH_LIMIT, SETTLE_MS, createBoardRasters } from "./boardRasters.js";
 // drawn, a zoom is redrawn at its own scale once the view rests, and the cache stays bounded.
 
 // A 40 x 30 mm board of one track: enough geometry to draw, and to tell a patch's drawing from a frame's.
-const PAYLOAD = { schemaVersion: 3, kind: "board", unrouted: 0, sheets: [
+const PAYLOAD = { schemaVersion: 4, kind: "board", unrouted: 0, sheets: [
   { name: "blinky", width: 40, height: 30, background: "#001023", layers: [
     { id: "F.Cu", kind: "copper", side: "front", items: [{ t: "path", pts: [[5, 15], [35, 15]], w: 1, net: "VIN" }] }
   ] }
@@ -62,8 +62,9 @@ test("the first frame is drawn at once, from the board's geometry, at the pane's
   const fitted = fitPlotTransform(layout, 800, 600);
   assert.equal(paint(fitted), true, "the first frame is final");
   assert.equal(made.length, 1);
-  // The patch is the board drawn into it (the track stroked), no image placed on it.
-  assert.equal(made[0].strokes, 1);
+  // The patch is the board drawn into it (the track stroked, then its net name, which the fitted view
+  // reads: 4 mm over its 1 mm width at KiCad's zoom 1), no image placed on it.
+  assert.equal(made[0].strokes, 2);
   assert.deepEqual(made[0].draws, []);
   // And the pane shows that patch, at exactly its own size in device pixels.
   assert.equal(screen.draws.length, 1);

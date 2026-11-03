@@ -288,6 +288,9 @@ RULES: tuple[Rule, ...] = (
     # the payload suite asserts they are current.
     Rule(("packages/ui/src/renderers/robot/__fixtures__/**",),
          select(cadgen=[f"{CADGEN_SUITE}/cad_server/test_robot_payload.py"])),
+    # The board renderer's fixture is the test board's plot payload: the plot suite asserts it is current.
+    Rule(("packages/ui/src/renderers/board/__fixtures__/**",),
+         select(cadgen=[f"{CADGEN_SUITE}/cad/test_pcb_plot.py"])),
     Rule(("tests/browser/**",), select(flags=["web_viewer", "packaging"])),
 
     # Tests: a test file runs itself. The KiCad suite is its job's alone (test-kicad.sh, with KiCad

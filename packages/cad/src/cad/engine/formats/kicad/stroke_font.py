@@ -19,7 +19,8 @@ the baseline at y = 9; descenders reach y = 16.
 character advanced by its own bearings, the whole string placed by its
 justification about the anchor, scaled to KiCad's text size (``size`` is the
 height of a capital, and the width scales the glyphs horizontally), mirrored for
-text seen from the other side of the board, and turned by its angle. A
+text seen from the other side of the board, slanted for italic text as KiCad slants
+its own (an eighth of a glyph's height above the baseline), and turned by its angle. A
 character the font has no glyph for is drawn as a box the size of an ``X``.
 """
 
@@ -71,6 +72,8 @@ _BASELINE = 9.0
 _CAP_HEIGHT = _BASELINE - _CAP_TOP
 # KiCad's own stroke font puts the gap between two lines of text at about 1.6 times the size.
 _LINE_SPACING = 1.62
+# KiCad's italic: a point moves right by this share of its height above the baseline (ITALIC_TILT).
+_ITALIC_TILT = 1 / 8
 
 
 def _decode(glyph: str) -> tuple[float, float, list[list[tuple[float, float]]]]:
@@ -108,14 +111,14 @@ def glyph_strokes(character: str) -> tuple[float, float, list[list[tuple[float, 
     return left, right, [box]
 
 
-def _line_strokes(line: str, scale_x: float, scale_y: float) -> tuple[float, list[list[tuple[float, float]]]]:
+def _line_strokes(line: str, scale_x: float, scale_y: float, tilt: float = 0.0) -> tuple[float, list[list[tuple[float, float]]]]:
     """One line's strokes, the pen starting at x = 0 on the baseline, and the line's width."""
     strokes: list[list[tuple[float, float]]] = []
     pen = 0.0
     for character in line:
         left, right, glyph = glyph_strokes(character)
         for stroke in glyph:
-            strokes.append([((pen + x - left) * scale_x, y * scale_y) for x, y in stroke])
+            strokes.append([((pen + x - left) * scale_x - (y - _BASELINE) * scale_y * tilt, y * scale_y) for x, y in stroke])
         pen += right - left
     return pen * scale_x, strokes
 
@@ -128,6 +131,7 @@ def text_strokes(
     angle: float = 0.0,
     justify: Sequence[str] = (),
     mirror: bool = False,
+    italic: bool = False,
 ) -> list[list[tuple[float, float]]]:
     """``text`` as stroke polylines in millimetres, y down, placed as KiCad places text.
 
@@ -137,7 +141,7 @@ def text_strokes(
     ``left``, ``right``, ``top`` or ``bottom``. ``mirror`` flips the text about its anchor's
     vertical, as KiCad mirrors text seen from the far side of the board. ``angle`` is degrees
     counter-clockwise as seen on the board (KiCad's), applied last. A text of several lines
-    stacks them downwards, each justified on its own.
+    stacks them downwards, each justified on its own. ``italic`` slants it as KiCad does.
     """
     height, width = float(size[0]), float(size[1])
     if height <= 0:
@@ -145,7 +149,7 @@ def text_strokes(
     scale_y = height / _CAP_HEIGHT
     scale_x = (width if width > 0 else height) / _CAP_HEIGHT
     lines = str(text).split("\n")
-    laid = [_line_strokes(line, scale_x, scale_y) for line in lines]
+    laid = [_line_strokes(line, scale_x, scale_y, _ITALIC_TILT if italic else 0.0) for line in lines]
     line_height = height * _LINE_SPACING
     block_height = height + line_height * (len(lines) - 1)
     # Where the first line's capitals' centre lands against the anchor: on it, or half the

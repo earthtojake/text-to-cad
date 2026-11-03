@@ -1,6 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
 const GROUP_KEYS = {"front": "board.text.front", "inner": "board.text.inner", "back": "board.text.back", "other": "board.text.other"};
-const THROUGH_KEYS = {"vias": "board.text.vias", "ratsnest": "board.text.ratsnest", "drills": "board.text.drills"};
+const THROUGH_KEYS = {"vias": "board.text.vias", "ratsnest": "board.text.ratsnest", "drills": "board.text.drills", "names": "board.text.names", "sheet": "board.text.drawing_sheet", "area": "board.text.board_area"};
 import { useMemo } from "react";
 import { Eye, EyeOff, Layers } from "lucide-react";
 import { boardDisplayLayers, boardLayerGroups, layerColor, toggleBoardLayer } from "@cad/core/lib/plot2d/index.js";
@@ -30,8 +30,9 @@ function LayerEye({ id, hidden, onToggle }) {
 
 /**
  * A board's **Layers**, a section of the file sidebar, as a drawing's is (`../dxf/LayersSection.jsx`):
- * every layer the board's picture holds, grouped as KiCad stacks them — Front (outermost first),
- * Inner, Back, then Other (the outline, the user layers, the vias, the ratsnest and the drill holes)
+ * every layer the board's picture holds, grouped as KiCad lists them — Front (outermost first),
+ * Inner, Back, then Other (the user layers and the outline, the board's area, the drawing sheet, the
+ * vias, the drill holes, the ratsnest and the pads' and vias' names)
  * — each with its colour, its name, how many things it draws, and an eye that hides or shows it in
  * the view. A layer has nothing under it, so its one glyph is its colour (KiCad's, `plot2d/theme.js`),
  * on the section title's line with the groups' labels (`kit/inspector/layerRows.jsx`). A layer hidden or shown is the board's Display (`plot2d/boardDisplay.js`'s `layers`), the

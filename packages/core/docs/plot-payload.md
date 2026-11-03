@@ -1,4 +1,4 @@
-# The plot payload (schema 3)
+# The plot payload (schema 4)
 
 `GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad <type> snapshot` draw a KiCad board from
 one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` alone (no KiCad process) and
@@ -8,15 +8,21 @@ function of the saved board and companion project bytes. Every request rereads t
 parsed-board cache is kept. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
 a mismatch is refused by name on both sides.
 
+The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
+front copper the active layer, KiCad's drawing order for that (`pcbnew/pcb_draw_panel_gal.cpp`), its
+colours, zones at its 60% opacity, a plated hole seen through to the board's background, a pad's
+number and net name over it, and the board on its page, KiCad's drawing sheet round it.
+
 ```jsonc
 {
-  "schemaVersion": 3,
+  "schemaVersion": 4,
   "kind": "board",                 // words only: what the payload draws
   "generator": "pcbnew 10.99",     // what wrote the file, for words
   "unrouted": 1,                   // connections still to make: the ratsnest's lines
   "sheets": [{
     "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
-    "layers": [ { "id": "B.Cu", "kind": "copper", "side": "back", "items": [ ... ] }, ... ]
+    "page": [0.0, 0.0, 297.0, 210.0],  // the paper KiCad draws the board on, in sheet millimetres
+    "layers": [ { "id": "sheet", "kind": "sheet", "side": "both", "items": [ ... ] }, ... ]
   }],
   "board": { ... }                 // the board's index, in sheet millimetres
 }
@@ -27,37 +33,48 @@ a mismatch is refused by name on both sides.
 One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outline (`Edge.Cuts`)
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
-decimals. The sheet is what the renderer frames and fills with the board's background; it clips
-nothing to it. An item past the outline — a fab note off the edge, as KiCad draws one — is drawn
-where it falls, over the surround (`layoutPlot`'s `extent` is the box of everything drawn).
+decimals. The sheet is what the renderer frames; the whole canvas is its background, KiCad's. It
+clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one, the drawing
+sheet — is drawn where it falls (`layoutPlot`'s `extent` is the box of everything drawn). `page` is
+the paper's box (`(paper "A4")`, `(paper "User" w h)`, portrait turned): KiCad's page origin is its
+top-left corner.
 
 ## The layers
 
-Back to front as seen from the top: `B.CrtYd`, `B.Fab`, `B.SilkS`, `B.Paste`, `B.Adhes`, `B.Mask`,
-`B.Cu`, the inner coppers deepest first (`In4.Cu` … `In1.Cu`), `F.Cu`, `F.Mask`, `F.Adhes`,
-`F.Paste`, `F.SilkS`, `F.Fab`, `F.CrtYd`, the user layers (`Dwgs.User`, `Cmts.User`, `Eco1.User`,
-`Eco2.User`, `User.N`), `Margin`, `Edge.Cuts`, then three layers of what goes through the board:
-`vias`, `ratsnest`, `drills`. A layer the board declares but draws nothing on is left out, except
-the copper layers, which are always present so a view can name them.
+Bottom to top, as KiCad draws them with the front copper active: `sheet` (the drawing sheet),
+`area` (the board's area), the back side (`B.Fab`, `B.CrtYd`, `B.Adhes`, `B.Paste`, `B.SilkS`,
+`B.Mask`, `B.Cu`), the inner coppers deepest first (`In4.Cu` … `In1.Cu`), the user layers and the
+outline (`User.N` … `User.1`, `Margin`, `Edge.Cuts`, `Eco2.User`, `Eco1.User`, `Cmts.User`,
+`Dwgs.User`), the front side in the back's order (`F.Fab` … `F.Mask`, `F.Cu`), then four layers of
+what goes through the board: `drills` (pads' and unplated holes), `vias` (vias' holes), `ratsnest`,
+and `names` (the numbers and nets of the pads through the board, and the vias' nets). A layer the
+board declares but draws nothing on is left out, except the copper layers, which are always present
+so a view can name them, and `names` while anything is named.
+
+Within a copper layer the items stand in KiCad's order too: the pours' fills, then the tracks,
+graphics and pour outlines, the via rings, the pads, then the names written on that copper (a
+surface pad's).
 
 | field | meaning |
 | --- | --- |
-| `id` | KiCad's layer name, or `vias`, `ratsnest`, `drills` |
-| `kind` | `copper`, `silk`, `fab`, `courtyard`, `mask`, `paste`, `adhesive`, `user`, `margin`, `outline`, `via`, `ratsnest`, `drill` |
-| `side` | `front` (`F.*`), `back` (`B.*`) or `both` (inner copper, the outline, and what goes through the board) |
-| `items` | what the layer draws, in file order |
+| `id` | KiCad's layer name, or `sheet`, `area`, `drills`, `vias`, `ratsnest`, `names` |
+| `kind` | `sheet`, `area`, `copper`, `silk`, `fab`, `courtyard`, `mask`, `paste`, `adhesive`, `user`, `margin`, `outline`, `drill`, `via`, `ratsnest`, `names` |
+| `side` | `front` (`F.*`), `back` (`B.*`) or `both` (inner copper, the outline, the user layers, the page and the board's area, and what goes through the board) |
+| `items` | what the layer draws, bottom to top |
 
-A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: without one, the board
-as it is made is every layer but the `courtyard`, `mask` and `paste` kinds; seen from below, the
-stack reverses and the `outline`, `via`, `ratsnest` and `drill` kinds stay on top, each layer
-mirrored about the sheet's vertical centre line. The board's Display (`plot2d/boardDisplay.js`:
-`{ mode, side, poured, layers }`, the viewer's and `cad <type> snapshot --display`'s one contract)
-is a view over these ids: a mode is a set of layer kinds, `layers` an explicit set of ids (one
-that differs from its mode's reads as Custom), `poured` and `side` switches of their own. What is
-drawn ON the board — an annotation's ink, Measure's ends — is kept in sheet millimetres, so it
-stays on what it marks from either side; the view's plan is the sheet with y negated, mirrored
-about its middle from below (`plot2d/boardView.js`), the frame a Quick Edit's plan-view camera
-speaks.
+A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: without one, every layer
+(KiCad's default); seen from below, the board's stack reverses while `sheet` and `area` stay under
+it and the `drill`, `via`, `ratsnest` and `names` kinds stay on top, each layer mirrored about the
+sheet's vertical centre line — the drawing sheet's page moved where the mirrored board lies and
+read the right way round, as KiCad draws its title block in a flipped view. A via's copper is drawn
+while `vias` is, and a name while `names` is, so a view hides a via, or every name, as one. The
+board's Display (`plot2d/boardDisplay.js`: `{ mode, side, poured, layers }`, the viewer's and
+`cad <type> snapshot --display`'s one contract) is a view over these ids: a mode is a set of layer
+kinds, `layers` an explicit set of ids (one that differs from its mode's reads as Custom), `poured`
+and `side` switches of their own. What is drawn ON the board — an annotation's ink, Measure's ends
+— is kept in sheet millimetres, so it stays on what it marks from either side; the view's plan is
+the sheet with y negated, mirrored about its middle from below (`plot2d/boardView.js`), the frame a
+Quick Edit's plan-view camera speaks.
 
 ## The items
 
@@ -65,34 +82,61 @@ Each item has `t`, its type; every point is sheet millimetres.
 
 | `t` | fields | draws |
 | --- | --- | --- |
-| `poly` | `pts` (3+ vertices), optional `w` | a filled polygon, its outline also stroked `w` wide when `w` > 0 (a mask opening grown by its margin, a graphic drawn with a pen) |
-| `path` | `pts` (2+ points), `w`, optional `closed` | a stroked polyline, round caps and joins; `w` 0 is a hairline (one CSS pixel at any zoom) |
-| `circle` | `at`, `r`, `w` | a filled disc (`w` 0) or a ring `w` wide |
-| `text` | `text`, `w`, `strokes` (polylines of 2+ points) | the string's strokes, `w` wide |
+| `poly` | `pts` (3+ vertices), optional `w`, optional `holes` (rings of 3+ points) | a filled polygon, its holes left open, its outline also stroked `w` wide when `w` > 0 (a mask opening grown by its margin, a graphic drawn with a pen) |
+| `path` | `pts` (2+ points), `w`, optional `closed`, optional `pairs` | a stroked polyline, round caps and joins; with `pairs`, separate segments, the points taken two by two; `w` 0 is a hairline (one CSS pixel at any zoom) |
+| `circle` | `at`, `r`, `w` | a filled disc (`w` 0) or a ring `w` wide centred on `r` |
+| `text` | `text`, `w`, `strokes` (polylines of 2+ points), optional `knockout` | the string's strokes, `w` wide; knocked out (`knockout`: the four corners of its box), the box filled and the letters cut from it |
+| `label` | `kind` (`pad`, `via`), `text`, `at`, `size` (height, width), `angle`, `w`, `lod` | a name the renderer lays out in the stroke font (`plot2d/strokeFont.js`, the engine's `stroke_font` point for point), centred on `at`, `angle` degrees counter-clockwise, its strokes `w` wide; drawn once the view shows `lod` CSS pixels per millimetre, and from below laid out to read the right way round |
 
 Flags any item may carry: `ref`, the board reference of what drew it (`#R1` for a footprint's
 graphics and text, `#R1.2` for a pad and its mask and paste); `net`, the net of a piece of copper;
-`pour: true`, a zone's fill, which a view with `poured: false` leaves out; `via`
-(`through`, `blind`, `micro`) on a via's disc and `hole` (`pad`, `via`, `npth`) on a drill
-hole, which the theme colours by kind.
+`pour: true`, a zone's fill, which a view with `poured: false` leaves out and which is drawn at
+KiCad's zone opacity, and `teardrop: true` on a teardrop's, drawn opaque as KiCad draws teardrops;
+`via` (`through`, `blind`, `micro`) on a via's copper and its hole; `hole` (`pad`, `via`, `npth`) on
+a hole, whose `w` is then its plated wall's width and `span` (a blind or buried via's) its top and
+bottom copper; `clearance` on a front-copper pad; `page` on the page's own edge.
 
 What each thing becomes:
 
 - **Pads** are their padstack's outline (rect, roundrect, oval, circle, trapezoid, chamfered,
-  custom: the hull of its primitives) as a `poly` on every copper layer they are on, with `ref`
-  and `net`. A through-hole pad's hole is a `circle` (a slot, a `poly`) on `drills`, `hole: "pad"`;
-  an unplated hole `hole: "npth"`.
+  custom: the hull of its primitives) as a `poly` on every copper layer they flash on, with `ref`
+  and `net`: a pad through the board whose unused copper is removed keeps it on the outer layers
+  (when it keeps its end layers), where a zone connects it (`zone_layer_connections`) and where a
+  track ends on it, as KiCad's `FlashLayer` decides. A front-copper pad carries its `clearance` (its
+  own, its footprint's, else its net class's): KiCad outlines it there, a hairline that far out. A
+  pad's number and net name are `label`s fitted to it as KiCad fits them (`pcb_painter.cpp`): the
+  number above the net, centred, turned to read upwards on a pad taller than wide, `x` for a
+  no-connect pin and `*` for a free one; a surface pad's on its copper (in that copper's name
+  colour), a through pad's on `names`. A through-hole pad's hole is a `circle` (a slot, a `poly`) on
+  `drills`, `hole: "pad"`, its wall 30 µm (KiCad's 20 µm of plating, painted 1.5 times); an
+  unplated hole `hole: "npth"`, with copper only where its pad is larger than the hole.
 - **Tracks and arcs** are `path`s of their width on their layer, with `net`; an arc is sampled.
-- **Vias** are a filled `circle` on `vias` (`via` kind, `net`) and their hole on `drills`
-  (`hole: "via"`).
+  A track's net name is not in the payload: where KiCad writes it (`renderNetNameForSegment`)
+  depends on the size of the view, so the renderer lays it out from the track as it draws it
+  (`plot2d/trackNames.js`; the engine's `labels.py` `track_labels`, by the same rule): the short
+  net name, 0.55 of the width tall, along the track at its middle (one per view a long segment
+  spans), once the view shows 4 mm over its width at KiCad's zoom 1, on top of its copper.
+- **Vias** are a ring on each copper layer they flash on (`circle`, `w` the annular width, `via`
+  and `net`; the same unused-copper rules as a pad's), their hole on `vias` (`hole: "via"`, golden in
+  a white wall; a blind or buried via's hole the two colours of its end layers), and their net (a
+  blind via's layer pair too, `2-3`) a `label` on `names`. A via that names no drill (KiCad 5) takes
+  its net class's.
 - **Pours** are the fills KiCad saved, `poly` with `pour: true` and `net`, and their drawn outline
-  as a closed hairline `path`. The author must refill changed zones in KiCad and save them; the reader does not repair stale fills.
+  as a closed hairline `path` with KiCad's border hatch (`pairs`: an edge hatch's short strokes or a
+  full hatch's lines, every pitch). A teardrop has no outline. A rule area (keepout) is its outline
+  and hatch on every layer it keeps out of, and no fill. The author must refill changed zones in
+  KiCad and save them; the reader does not repair stale fills.
 - **Graphics** (`gr_*`, `fp_*`: lines, rectangles, circles, arcs, polygons, curves) are `path`s of
   their stroke width, or a `poly` with that width when filled; a footprint's carry `ref`.
+- **Dimensions** (aligned, orthogonal, leader, centre, radial, and KiCad 5's) are the lines KiCad
+  builds for them (`pcb_dimension.cpp`: extension lines, crossbar, arrowheads, leader), `path`s of
+  the dimension's line width, its crossbar stopped at its text's box, and the text KiCad last wrote
+  for it where it wrote it.
 - **Text** (footprint fields and `fp_text` that are not hidden, `gr_text`) is its strokes in Hershey
-  Simplex (`cad.engine.formats.kicad.stroke_font`: public domain; KiCad's own font is GPL) at KiCad's position,
-  size, thickness, angle, justification and mirroring. `${REFERENCE}` and `${VALUE}` are
-  substituted. Same places, different glyphs.
+  Simplex (`cad.engine.formats.kicad.stroke_font`: public domain; KiCad's own font is GPL) at KiCad's
+  position, size, thickness, angle, justification, mirroring and slant; a footprint's kept upright
+  unless unlocked, as KiCad keeps it. `${REFERENCE}`, `${VALUE}`, a footprint's fields and the
+  title block's variables are substituted, and KiCad 5's `%R` and `%V`. Same places, different glyphs.
 - **Mask** openings and **paste** are derived from the pads: a pad's outline grown by its mask
   margin (the pad's, its footprint's, else the board's `pad_to_mask_clearance`), as a `poly`
   with `w` = twice the margin; a pad's outline for paste, grown by a positive paste margin or
@@ -101,8 +145,15 @@ What each thing becomes:
   the pieces of copper that touch on a shared layer form a cluster, and the clusters that hold a
   pad are joined by their shortest tree, one hairline `path` per line between the nearest pads.
   No DRC, no clearance: touching copper is joined.
+- **The board's area** is a `poly` on `area`: the outline's largest closed loop, the loops inside it
+  (cutouts) its `holes`, drawn in KiCad's board-area shadow.
+- **The drawing sheet** is KiCad's default one (`cad.engine.formats.kicad.drawing_sheet`), on `sheet`:
+  the page's grey edge (`page`), the frame 10 mm in and the one 2 mm inside it, the grid references
+  every 50 mm, and the title block (title, date, revision, company, comments, the file's name and
+  the paper's) as `path`s and `text`. A project's own drawing sheet file is not read.
 
-Not drawn: dimensions, text boxes, images, rule areas (keepouts) and a zone's hatch.
+Not drawn: text boxes, tables, images, barcodes, targets, points, locked-item shadows, and the
+clearance outlines of tracks.
 
 ## The board index
 

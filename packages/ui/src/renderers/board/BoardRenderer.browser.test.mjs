@@ -85,20 +85,12 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
   const canvas = await canvasOf(pane).boundingBox();
   const transform = fitPlotTransform(layoutPlot(BOARD), Math.round(canvas.width), Math.round(canvas.height));
   const at = ([x, y]) => pageToScreen(transform, x, y);
-  // The sheet on KiCad's board background, the surround the theme's; the VBUS track (y = 15) red.
+  // The board on KiCad's canvas: its background off the page as on it, the board's area shadowed over it;
+  // the VBUS track (y = 15) red.
+  const background = hex(BOARD.sheets[0].background);
+  assert.ok(near(pixel(fitted, 2, 2), background, 12), `KiCad's canvas round the board: ${pixel(fitted, 2, 2)}`);
   const [cornerX, cornerY] = at([1, 1]);
-  assert.ok(near(pixel(fitted, cornerX, cornerY), hex(BOARD.sheets[0].background), 12), `board background: ${pixel(fitted, cornerX, cornerY)}`);
-  const surround = await canvasOf(pane).evaluate(element => {
-    const style = getComputedStyle(element.closest('[data-cad-flat-view]') || element);
-    const probe = document.createElement('canvas');
-    probe.width = probe.height = 1;
-    const context = probe.getContext('2d');
-    context.fillStyle = style.getPropertyValue('--background');
-    context.fillRect(0, 0, 1, 1);
-    const rgb = [...context.getImageData(0, 0, 1, 1).data].slice(0, 3);
-    return rgb;
-  });
-  assert.ok(near(pixel(fitted, 2, 2), surround, 12), `theme surround: ${pixel(fitted, 2, 2)}`);
+  assert.ok(near(pixel(fitted, cornerX, cornerY), [35, 45, 58], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
   const [trackX, trackY] = at([30, 15]);
   assert.ok(red(pixel(fitted, trackX, trackY)), `the track: ${pixel(fitted, trackX, trackY)}`);
   // R1 pad 2 (35.825, 15): drawn as the board draws it, until a press selects it and lights it.

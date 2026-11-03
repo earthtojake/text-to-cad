@@ -1,6 +1,6 @@
 /**
  * Plots: a KiCad board drawn from its file, shared by the CAD Viewer's board view and the headless
- * snapshot bundle. Payload in (`GET /api/v1/documents/kicad_pcb/<id>/plot`, schema 3: geometry per layer), Canvas 2D out in
+ * snapshot bundle. Payload in (`GET /api/v1/documents/kicad_pcb/<id>/plot`, schema 4: geometry per layer), Canvas 2D out in
  * KiCad's default colours, the view maths drawing2d's; and the board's Display contract
  * (`boardDisplay.js`), which both read the same way.
  */
@@ -19,7 +19,8 @@ export {
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
-export { HOLE_COLORS, VIA_COLORS, itemColor, layerColor } from "./theme.js";
+export { HOLE_COLORS, NAME_COLORS, PAGE_LIMITS_COLOR, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
+export { GLYPHS, glyphStrokes, textStrokes } from "./strokeFont.js";
 export { boardMirrorX, boardPlanProjection, marksInPlan, planToSheet, sheetToPlan } from "./boardView.js";
 export {
   BOARD_DISPLAY_DEFAULTS,

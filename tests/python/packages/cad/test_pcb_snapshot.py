@@ -103,8 +103,11 @@ class BoardJobReplayTest(unittest.TestCase):
 
     def test_the_window_is_the_camera_s(self) -> None:
         top = self.images["top"]
-        # The plan view frames the sheet with a millimetre to spare above and below: the corners are the surround.
-        self.assertTrue(near(top.getpixel((2, 2)), (255, 255, 255), 30), f"the light surround: {top.getpixel((2, 2))}")
+        # The plan view frames the sheet with a millimetre to spare above and below: the corners are the
+        # surround, KiCad's canvas (the board's background), off the page the board is drawn on.
+        self.assertTrue(near(top.getpixel((2, 2)), (0, 16, 35), 30), f"KiCad's canvas: {top.getpixel((2, 2))}")
+        # On the board, where nothing is drawn, the board's area shadow lies over that canvas (KiCad's 35% grey).
+        self.assertTrue(near(top.getpixel(on_screen(30, 26)), (35, 45, 58), 30), f"the board's area: {top.getpixel(on_screen(30, 26))}")
 
 
 if __name__ == "__main__":
