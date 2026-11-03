@@ -1,7 +1,9 @@
-# Migrating from 0.10 to the next release
+# Migrating from 0.10 to 0.11
 
-Draft: this guide is renamed for its release when it ships. It covers the document types and
-integrations: the library's imports and the `cad` command's.
+It covers the document types and integrations: the library's imports and the `cad` command's.
+0.11 is a minor release, so it never installs itself: update with the update button or `cad update`
+when you are ready. Its patch releases (0.11.1 and on) then install themselves, with automatic
+updates on.
 
 ## The library's imports
 

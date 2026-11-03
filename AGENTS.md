@@ -113,7 +113,7 @@ which points both at the checkout.
   `docs/contributing/`: [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
-  ([0.10 to next, a draft](docs/migrations/migrating-0.10-to-next.md),
+  ([0.10 to 0.11](docs/migrations/migrating-0.10-to-0.11.md),
   [0.8 to 0.10](docs/migrations/migrating-0.8-to-0.10.md),
   [0.7 to 0.8](docs/migrations/migrating-0.7-to-0.8.md), 0.4 to 0.5).
 - `apps/web/` ([README](apps/web/README.md)): the CAD Viewer's React client (the server
