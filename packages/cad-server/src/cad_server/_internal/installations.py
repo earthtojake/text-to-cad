@@ -54,9 +54,10 @@ FOLDER = "installations"  # ``cad.engine.places.INSTALLATIONS``, which clients r
 WINDOWS = os.name == "nt"
 # The line that makes a file the proxy, and the proxy's revision: a later one is never replaced by an
 # earlier, so an older installation's server starting never undoes a newer one's proxy. 8: its line with
-# no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII.
+# no installation names cad-server. 9: the cmd reads a record whose paths are not ASCII. 10: the cmd reads
+# the state folder in the user's own folder, out of the local application data (``cad.engine.places``).
 MARK = "cad proxy: "
-REVISION = 9
+REVISION = 10
 # The file that names the current installation's version, in the state folder.
 CURRENT = f"{FOLDER}/current"
 # A release's version, as a wheel reports it of itself (``cad_server.__version__``). Any other version a
@@ -92,9 +93,9 @@ def state():
 def packaged() -> str | None:
     """The Windows app package this process runs inside, by its full name, else None. Every process an
     MSIX-packaged app starts (the Claude desktop app's shell among them) inherits its package, and what it
-    creates under ``%LOCALAPPDATA%`` -- the state folder, the cache -- Windows writes into the package's own
-    ``LocalCache`` instead, which only that app's processes see: an installation made there is one no
-    terminal and no other app can run."""
+    creates under ``AppData`` Windows writes into the package's own ``LocalCache`` instead, which only that
+    app's processes see. CAD keeps its own folders out of it (``cad.engine.places``), but uv installs its
+    Python there: a first install made inside a package is one no terminal and no other app can run."""
     if not WINDOWS:
         return None
     import ctypes
@@ -112,9 +113,9 @@ def packaged() -> str | None:
 
 
 def packaged_words(package: str) -> str:
-    """What ``cad setup`` and ``cad doctor`` say of an installation made inside ``package``."""
-    return (f"this shell runs inside the Windows app package {package}, so what it installs under "
-            "%LOCALAPPDATA% is seen only inside that app: no terminal and no other agent app could run it")
+    """What ``cad setup`` says of a first install made inside ``package``."""
+    return (f"this shell runs inside the Windows app package {package}, which keeps what it installs under "
+            "AppData, uv's Python among it, to itself: no terminal and no other agent app could run it")
 
 
 def targets() -> tuple[str, str, str] | None:
@@ -269,7 +270,17 @@ EARLIER_PROXY, EARLIER_MARK = "cadgen", "cadgen proxy: "
 EARLIER_CONSOLE = "cadgen"
 
 
-def earlier(folder: Path | None = None) -> list[dict]:
+def appdata() -> list[dict]:
+    """0.10.0's installations on Windows, each by its record in the state folder it kept in the local
+    application data (``cad.engine.places.appdata_state_dir``), as ``earlier`` reads 0.8's: read only so
+    ``cad setup`` stops the engine 0.10.0 runs from there by its own ``cad stop``, once."""
+    from cad.engine.places import appdata_state_dir
+
+    folder = appdata_state_dir()
+    return earlier(folder, console="cad") if folder is not None else []
+
+
+def earlier(folder: Path | None = None, console: str = EARLIER_CONSOLE) -> list[dict]:
     """0.8's installations, each by its record where 0.8 left it: ``installations/<version>.json`` in 0.8's
     state folder (``folder``; by default where what 0.8 left is looked for,
     ``cad.engine.places.earlier_state_dir``), its ``version``, ``python``, console script
@@ -292,7 +303,7 @@ def earlier(folder: Path | None = None) -> list[dict]:
         except (OSError, ValueError):
             continue
         if isinstance(record, dict) and record.get("version") == name[:-5] and all(
-                isinstance(record.get(key), str) for key in ("python", EARLIER_CONSOLE, "prefix")):
+                isinstance(record.get(key), str) for key in ("python", console, "prefix")):
             found.append({**record, "path": str(where / name)})
     return found
 
@@ -494,7 +505,7 @@ rem in the console's code page, UTF-8 while the records are read, the person's o
 set "codepage="\r
 for /f "tokens=*" %%a in ('chcp') do for %%b in (%%a) do set "codepage=%%~nb"\r
 if defined codepage chcp 65001 >nul 2>&1\r
-if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined LOCALAPPDATA (set "state=!LOCALAPPDATA!\\cad-state") else (set "state=!USERPROFILE!\\AppData\\Local\\cad-state")\r
+if defined CAD_STATE_DIR (set "state=!CAD_STATE_DIR!") else if defined XDG_STATE_HOME (set "state=!XDG_STATE_HOME!\\cad") else (set "state=!USERPROFILE!\\.local\\state\\cad")\r
 set "current="\r
 if exist "!state!\\installations\\current" set /p current=<"!state!\\installations\\current"\r
 if defined current if exist "!state!\\installations\\!current!.json" (\r

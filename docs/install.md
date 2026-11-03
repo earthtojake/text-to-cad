@@ -9,11 +9,12 @@ curl -fsSL https://texttocad.dev/install.sh | sh
 
 On Windows, in PowerShell: `irm https://www.texttocad.dev/install.ps1 | iex`. It names
 `www.texttocad.dev` because `texttocad.dev` redirects there with a 308, which Windows
-PowerShell 5.1's `irm` does not follow. Run it in a terminal of its own (Windows
-Terminal or PowerShell), not in a Windows Store app's shell such as the Claude
-desktop app's: Windows keeps what such an app's commands write under
-`%LOCALAPPDATA%` inside that app, where no terminal and no other agent app finds
-it, so the command installs nothing there and says so.
+PowerShell 5.1's `irm` does not follow. Run it the first time in a terminal of
+its own (Windows Terminal or PowerShell), not in a Windows Store app's shell such
+as the Claude desktop app's: Windows keeps what such an app's commands write under
+`AppData` inside that app, uv's Python among it, where no terminal and no other
+agent app finds it, so a first install there installs nothing and says so. Once
+installed, updating from any app works.
 
 This page is the long way round: what that command does, step by step, each agent
 app's own commands to install, update or reinstall text-to-cad one app at a time,
@@ -109,8 +110,8 @@ with the same options.
 The install command gives every app the same plugin, from one folder on your computer
 that the release writes: `plugin` in text-to-cad's state folder
 (`~/Library/Application Support/cad/plugin` on macOS,
-`~/.local/state/cad/plugin` on Linux, `%LOCALAPPDATA%\cad-state\plugin` on
-Windows); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
+`~/.local/state/cad/plugin` on Linux and on Windows, where it is
+`%USERPROFILE%\.local\state\cad\plugin`); `cad plugin` prints its path. It holds the plugin as the `latest` branch does
 -- each app's manifest, its config for CAD's server, and the skills -- at the release
 your computer runs, and is written again in place when an update moves your computer to
 another release. Each app takes it the way it takes a local plugin:

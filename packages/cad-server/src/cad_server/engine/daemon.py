@@ -1660,12 +1660,56 @@ def let_go(held: Any, *, failed: bool = False) -> None:
     while it is still held, so no daemon starting meanwhile can take a lock on a file that is gone
     (``lock`` takes the one the name names); on Windows, where a file open is never removed,
     once it is let go. The door is gone already (``Door.close``)."""
+    _unmirror()
     for path in (port_path(), *(() if failed else (failure_path(),))):
         try:
             path.unlink(missing_ok=True)
         except OSError:
             pass
     _drop_lock(held, lock_path())
+
+
+def _mirrored() -> Path | None:
+    """The port file 0.10.0's clients read on Windows (``places.appdata_engine_dir``), else None."""
+    from cad.engine.places import appdata_engine_dir
+
+    folder = appdata_engine_dir()
+    return folder / f"{NAME}.port" if folder is not None else None
+
+
+def _mirror(port: int, token: str) -> None:
+    """For one release, this engine's port file written where 0.10.0's clients look for it too, on
+    Windows: a CAD app's server of 0.10.0 still running in an app not restarted since the update finds
+    this engine there, and starts none of its own beside it. Never over a 0.10.0 engine's own that
+    answers. Quiet: a client of this release never reads it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        held = int(path.read_text(encoding="utf-8").split()[0])
+    except (OSError, ValueError, IndexError):
+        held = None
+    if held is not None and held != port and _answers("127.0.0.1", held):
+        return
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(f"{port} {token}\n", encoding="utf-8")
+        replace_atomic(temporary, path)
+    except OSError:
+        pass
+
+
+def _unmirror() -> None:
+    """The mirrored port file removed before this engine's own (``_mirror``), when it is a copy of it."""
+    path = _mirrored()
+    if path is None:
+        return
+    try:
+        if path.read_text(encoding="utf-8") == port_path().read_text(encoding="utf-8"):
+            path.unlink()
+    except OSError:
+        pass
 
 
 def _drop_lock(held: Any, path: Path) -> None:
@@ -1787,6 +1831,7 @@ def main(argv: list[str] | None = None, *, port: int | None = None, rotate: bool
             temporary = port_path().with_suffix(".tmp")
             temporary.write_text(f"{port} {daemon.token}\n", encoding="utf-8")
             replace_atomic(temporary, port_path())
+            _mirror(port, daemon.token)
             daemon.reached_by(port_path())
             listener.settimeout(0.5)
             while not daemon.stopping.is_set():

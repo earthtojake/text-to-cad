@@ -27,7 +27,9 @@ current installation's
    uses it. A stop that fails is said, and the run goes on. With 0.8's server stopped, this release's
    engine takes the port as it would on a computer that never had 0.8; a 0.8 server that still holds the
    port (an app not yet restarted started it again) keeps it, and this release's serves on the next free
-   port and says so.
+   port and says so. On Windows 0.10.0's installations, kept in the local application data
+   (``installations.appdata``), are stopped the same way, by 0.10.0's own ``cad stop``: this release keeps
+   its folders in the user's own (``cad.engine.places``), and moves what 0.10.0 kept there into them first.
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
    becomes the current one.
@@ -78,12 +80,15 @@ Never done here: restarting an app, anything that needs sudo or a password, remo
 command that is not text-to-cad's, editing a config that is not plain JSON, removing a store's copy no
 command of the app's removes (an administrator's or claude.ai's in Claude Code, the Cursor Marketplace's).
 
-Run inside a Windows app package (an MSIX app's shell, the Claude desktop app's among them), it
-installs nothing and says so (``installations.packaged``): what it would write under ``%LOCALAPPDATA%``
-Windows keeps inside that app's package, where no terminal and no other app finds it; ``--dry-run``
+The first install never runs inside a Windows app package (an MSIX app's shell, the Claude desktop
+app's among them): it installs nothing and says so (``installations.packaged``). What such a process
+creates under ``AppData`` Windows keeps inside that app's package, where no terminal and no other app
+finds it, and the first install is the one that may make uv install its Python there. An update, with an
+installation current already -- its Python installed outside --, runs there as anywhere. ``--dry-run``
 says it before the plan.
 
-Exit status: 0 done, or nothing to do; 1 a step failed, or nothing was installed inside an app package; 2 bad arguments.
+Exit status: 0 done, or nothing to do; 1 a step failed, or nothing was installed inside an app package; 2 bad
+arguments.
 """
 
 from __future__ import annotations
@@ -231,23 +236,25 @@ def port_held(port: int) -> str | None:
     return daemon._who(port)
 
 
-# The switch that keeps 0.8's ``cadgen`` from counting, sending or telling its telemetry notice: set for its
-# stop, which runs on the person's behalf, its words read by no one -- a notice it told there would read to
-# it as told, so as their yes.
-NO_TELEMETRY = {"CADGEN_TELEMETRY": "0"}
+# The switch that keeps 0.8's ``cadgen`` (and 0.10.0's ``cad``) from counting, sending or telling its telemetry
+# notice: set for its stop, which runs on the person's behalf, its words read by no one -- a notice it told
+# there would read to it as told, so as their yes.
+NO_TELEMETRY = {"CADGEN_TELEMETRY": "0", "CAD_TELEMETRY": "0"}
 
 
 def stop_earlier(record: dict[str, Any]) -> tuple[bool, list[str] | None, str]:
-    """0.8's own stop, ``cadgen stop --json``, run by the console script of the 0.8 installation ``record``
-    names (``installations.earlier``) in its own environment -- no import path of this release's -- with
-    telemetry off for it (``NO_TELEMETRY``): whether it ran, the servers it says it stopped (None when it
-    said nothing this reads), and what it said."""
+    """0.8's own stop, ``cadgen stop --json`` -- or on Windows 0.10.0's, ``cad stop --json`` --, run by the
+    console script of the installation ``record`` names (``installations.earlier``, ``installations.appdata``)
+    in its own environment -- no import path of this release's -- with telemetry off for it
+    (``NO_TELEMETRY``): whether it ran, the servers it says it stopped (None when it said nothing this
+    reads), and what it said."""
     from cad_server._internal import installations
 
     environment = {key: value for key, value in os.environ.items() if key not in ("PYTHONPATH", "PYTHONHOME")}
     environment.update(NO_TELEMETRY)
+    console = record.get(installations.EARLIER_CONSOLE) or record["cad"]
     try:
-        done = subprocess.run([record[installations.EARLIER_CONSOLE], "stop", "--json"], env=environment,
+        done = subprocess.run([console, "stop", "--json"], env=environment,
                               stdin=subprocess.DEVNULL, capture_output=True, text=True, encoding="utf-8",
                               errors="replace", timeout=STOP_SECONDS)
     except (OSError, subprocess.SubprocessError) as error:
@@ -456,17 +463,21 @@ class Installer:
     def _earlier(self) -> list[dict[str, Any]]:
         """Step 3's rows: each 0.8 installation still here (``installations.earlier``: its Python and console
         script there), whose own ``cadgen stop`` stops its server (``_stop_earlier``) if it runs -- which no
-        process of this release asks it."""
+        process of this release asks it --; and on Windows each 0.10.0 one in the local application data
+        (``installations.appdata``), whose own ``cad stop`` stops the engine it serves from the temporary
+        folder, so this release's takes the port as it would on a computer that never had it."""
         from cad_server._internal import installations
 
         rows: list[dict[str, Any]] = []
-        for record in installations.earlier():
-            console = record[installations.EARLIER_CONSOLE]
-            if not (os.path.isfile(record["python"]) and os.path.isfile(console)):
-                continue
-            rows.append({"app": "0.8", "label": "0.8", "action": "stop", "release": record["version"],
-                         "record": record, "subject": f"text-to-cad {record['version']}'s server, if it runs: "
-                                                      f"`{self.providers.shown(console, self.machine)} stop`"})
+        for label, records, key in (("0.8", installations.earlier(), installations.EARLIER_CONSOLE),
+                                    ("0.10", installations.appdata(), "cad")):
+            for record in records:
+                console = record[key]
+                if not (os.path.isfile(record["python"]) and os.path.isfile(console)):
+                    continue
+                rows.append({"app": label, "label": label, "action": "stop", "release": record["version"],
+                             "record": record, "subject": f"text-to-cad {record['version']}'s server, if it runs: "
+                                                          f"`{self.providers.shown(console, self.machine)} stop`"})
         return rows
 
     def _engine(self, earlier: list[dict[str, Any]] | None = None) -> dict[str, Any]:
@@ -485,7 +496,7 @@ class Installer:
             then = ("the engine serves on the next free port, and says so" if self.source == "default"
                     else "stop it, or set another CAD_ENGINE_PORT")
             if earlier:
-                then = f"if 0.8's stop above does not free it, {then}"
+                then = f"if the stop above does not free it, {then}"
             return {**row, "subject": f"port {port} is held by {held}: {then}"}
         name = status.get("installation") or status.get("version") or "?"
         who = f"text-to-cad {name}'s engine (pid {status.get('pid')}) on port {port}"
@@ -553,18 +564,19 @@ class Installer:
     def _stop_earlier(self, row: dict[str, Any]) -> None:
         """Step 3: a 0.8 installation's server stopped by its own ``cadgen stop`` (``stop_earlier``), and what
         it did said; a stop that fails is said, and the run goes on."""
-        release = row["release"]
+        release, label = row["release"], row["label"].ljust(8)
+        verb = "cadgen stop" if row["label"] == "0.8" else "cad stop"
         ok, stopped, said = stop_earlier(row["record"])
         last = f": {said.splitlines()[-1]}" if said else ""
         if not ok:
-            self.say(f"0.8      text-to-cad {release}'s `cadgen stop` failed{last}; its server may still run")
+            self.say(f"{label} text-to-cad {release}'s `{verb}` failed{last}; its server may still run")
         elif stopped is None:
-            self.say(f"0.8      ran text-to-cad {release}'s `cadgen stop`{last}")
+            self.say(f"{label} ran text-to-cad {release}'s `{verb}`{last}")
         elif not stopped:
-            self.say(f"0.8      text-to-cad {release}'s server was not running")
+            self.say(f"{label} text-to-cad {release}'s server was not running")
         else:
             self.stopped.append({"release": release, "servers": stopped, "at": self.providers.stamp()})
-            self.say(f"0.8      stopped text-to-cad {release}'s server (its own `cadgen stop`)")
+            self.say(f"{label} stopped text-to-cad {release}'s server (its own `{verb}`)")
 
     # --- the cad command -------------------------------------------------------------------
 
@@ -779,7 +791,7 @@ class Installer:
         providers = self.providers
         where = f"engine port {self.port}" if self.port else "engine on any free port"
         title = f"text-to-cad {self.release} for this machine ({where}):"
-        if not self.engine_update and (package := installations.packaged()):
+        if not self.engine_update and (package := installations.packaged()) and installations.current() is None:
             from cad_server.updates import command
 
             self.say(f"Not installed: {installations.packaged_words(package)}. Run the install command from "

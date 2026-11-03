@@ -461,5 +461,32 @@ class PortHolderTest(unittest.TestCase):
             self.assertEqual(daemon.port_holder(3245), (None, None, None))
 
 
+
+class MirroredPortFileTest(unittest.TestCase):
+    def test_on_windows_the_port_file_is_mirrored_where_0_10_s_clients_look_and_goes_with_the_engine(self) -> None:
+        """0.10.0's clients look for the engine in the temporary folder (``places.appdata_engine_dir``): for
+        one release the engine's port file is written there too, never over a 0.10.0 engine's that answers,
+        and removed with its own (#759)."""
+        from cad_server.engine import daemon
+
+        root = Path(tempfile.mkdtemp(prefix="mirror-"))
+        self.addCleanup(shutil.rmtree, root, True)
+        own, old = root / "engine" / "engine.port", root / "temp" / "cad-engine"
+        own.parent.mkdir()
+        own.write_text("3245 tok\n", encoding="utf-8")
+        with mock.patch.object(daemon, "port_path", return_value=own), \
+                mock.patch("cad.engine.places.appdata_engine_dir", return_value=old):
+            daemon._mirror(3245, "tok")
+            self.assertEqual((old / "engine.port").read_text(encoding="utf-8"), "3245 tok\n")
+            daemon._unmirror()
+            self.assertFalse((old / "engine.port").exists())
+            (old / "engine.port").write_text("3999 theirs\n", encoding="utf-8")
+            with mock.patch.object(daemon, "_answers", return_value=True):
+                daemon._mirror(3245, "tok")
+                daemon._unmirror()
+            self.assertEqual((old / "engine.port").read_text(encoding="utf-8"), "3999 theirs\n", "a 0.10 engine's own")
+        with mock.patch("cad.engine.places.appdata_engine_dir", return_value=None):
+            daemon._mirror(3245, "tok")  # elsewhere: nothing
+
 if __name__ == "__main__":
     unittest.main()
