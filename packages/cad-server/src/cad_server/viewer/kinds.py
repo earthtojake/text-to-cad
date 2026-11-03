@@ -32,11 +32,13 @@ ENGINE_KINDS = frozenset({"model", *(entry.wire for entry in DOCUMENT_TYPES.valu
 ROBOT_KINDS = frozenset(entry.wire for entry in DOCUMENT_TYPES.values() if entry.view == "robot")
 
 # What each kind's Export offers (``packages/ui``'s ``export/formats.ts``), by its format name
-# (``exports.FORMATS``); ``dxf`` only where the view draws the document flat.
+# (``exports.FORMATS``); ``dxf`` only where the view draws the document flat. A KiCad board's are KiCad's
+# (``cad kicad_pcb export --to``, ``exports.BOARD``).
 _SOLID = ["step", "stl", "threemf", "glb", "dxf"]
 EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID, "original"],
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
-           "dxf": [], "urdf": [], "srdf": [], "sdf": [], "kicad_pcb": []}
+           "dxf": [], "urdf": [], "srdf": [], "sdf": [],
+           "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
 
 
 def file_kind(path) -> str | None:

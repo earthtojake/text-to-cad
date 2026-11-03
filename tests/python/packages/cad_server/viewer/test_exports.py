@@ -306,5 +306,75 @@ class MeshFileExportTest(unittest.TestCase):
         self.assertFalse((self.downloads / "late.glb").exists())
 
 
+class BoardExportTest(unittest.TestCase):
+    """A KiCad board's page: each of KiCad's exports is a job that runs ``cad.kicad_pcb.export`` where kicode
+    is (``integration_env``, stood in for here) on the board the page shows, never on a request's thread;
+    one file downloads as it is, a folder of them as one .zip."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.board = Path(self.tmp.name).resolve() / "blinky.kicad_pcb"
+        self.board.write_text("(kicad_pcb (version 20260901))\n", encoding="utf-8")
+        self.downloads = Path(self.tmp.name) / "downloads"
+        self.downloads.mkdir()
+        self.jobs = ExportJobs(SimpleNamespace(touch=lambda: None), root=self.downloads)
+        self.addCleanup(self.jobs.close)
+        self.called = []
+
+    def kicad(self, args):
+        board, to, out = args
+        self.called.append((to, threading.current_thread().name))
+        out = Path(out)
+        names = {"gerbers": ["blinky-F_Cu.gtl", "blinky-Edge_Cuts.gm1"], "bom": ["blinky-bom.csv"]}[to]
+        out.mkdir(parents=True, exist_ok=True)
+        for name in names:
+            (out / name).write_text(name, encoding="utf-8")
+        return {"path": board, "to": to, "written": [str(out / name) for name in names], "warnings": []}
+
+    def exported(self, kind, source=None):
+        from cad_server.viewer.scanner import asset_for_path
+
+        source = source or {"doc": str(self.board), "revision": asset_for_path(str(self.board))["hash"]}
+        with patch("cad_server._internal.integration_env.environment", lambda *_a, **_k: "python"), \
+                patch("cad_server._internal.integration_env.call",
+                      lambda _python, _type, operation, args, _kwargs: self.kicad(args)):
+            ident = self.jobs.create({"requestId": f"board-request-{kind:0>8}-{len(self.called)}", "epoch": self.jobs.epoch,
+                                      "source": source, "format": kind})["id"]
+            with self.jobs.changed:
+                self.assertTrue(self.jobs.changed.wait_for(lambda: self.jobs.jobs[ident]["state"] in
+                                                           ("ready", "failed") and not self.jobs.executing, 30))
+        return self.jobs.get(ident)
+
+    def test_a_folder_of_files_is_one_zip_and_one_file_is_itself(self):
+        import zipfile
+
+        job = self.exported("gerbers")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "blinky-gerbers.zip"), job)
+        with self.jobs.artifact(job["id"]) as path:
+            self.assertEqual(sorted(zipfile.ZipFile(path).namelist()), ["blinky-Edge_Cuts.gm1", "blinky-F_Cu.gtl"])
+        job = self.exported("bom")
+        self.assertEqual((job["state"], job["filename"]), ("ready", "blinky-bom.csv"), job)
+        with self.jobs.artifact(job["id"]) as path:
+            self.assertEqual("blinky-bom.csv", path.read_text(encoding="utf-8"))
+        # KiCad ran on the job's own thread, never the request's.
+        self.assertEqual({"cad-operation"}, {thread for _to, thread in self.called})
+
+    def test_a_board_offers_kicads_kinds_alone_and_a_changed_board_is_refused(self):
+        from cad.kicad._export import EXPORTS
+        from cad_server.viewer.exports import BOARD
+        from cad_server.viewer.kinds import EXPORTS as OFFERED
+
+        self.assertEqual(list(EXPORTS), OFFERED["kicad_pcb"])
+        self.assertEqual(list(EXPORTS), list(BOARD))
+        for kind in ("xbf", "threemf", "original"):
+            with self.subTest(kind=kind), self.assertRaisesRegex(ExportError, "Invalid export format"):
+                self.exported(kind)
+        stale = self.exported("bom", {"doc": str(self.board), "revision": "0" * 64})
+        self.assertEqual(stale["state"], "failed")
+        self.assertIn("The source changed", stale["error"])
+        self.assertEqual([], self.called, "KiCad never ran for a board the page no longer shows")
+
+
 if __name__ == "__main__":
     unittest.main()
