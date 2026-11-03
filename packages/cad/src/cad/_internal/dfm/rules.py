@@ -10,8 +10,9 @@ A rule reads ``report[family]``: a family's ``items`` (one record per feature, e
 a ref in ``cad xbf inspect``'s grammar -- and ``xyz``), or the family itself where it has none (one figure
 for the whole part). The limit is a number, or one number per value of a ``context`` key (``by``: the
 material's class, a printing technology), times another (``scale_by``: a sheet's thickness), and the rule
-applies only where the context matches ``when`` and to the items matching ``item_when``. A figure that was
-not measured is no verdict: it is counted (``not_evaluated``), never passed.
+applies only where the context matches ``when`` (elsewhere it is recorded ``not_applicable``, never dropped)
+and to the items matching ``item_when``. A figure that was not measured is no verdict: it is counted
+(``not_evaluated``), never passed.
 
 The standard library alone: the command resolves a rule set before it starts an environment.
 """
@@ -186,6 +187,11 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     outcomes: list[dict[str, Any]] = []
     for rule in rule_set.rules:
         if not rule.applies(context):
+            # Recorded, never dropped: a rule that does not apply here is not a pass either.
+            outcomes.append({"rule": rule.id, "family": rule.family, "field": rule.field, "op": rule.op,
+                             "unit": rule.unit, "severity": rule.severity, "source": rule.source,
+                             "status": "not_applicable", "reason": "applies only where " + ", ".join(
+                                 f"{key} is {value}" for key, value in rule.when.items())})
             continue
         limit = rule.limit_for(context)
         items = _items(report, rule) if limit is not None else None
@@ -224,7 +230,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
     record = {
         "set": rule_set.name, "title": rule_set.title, "version": rule_set.version, "generic": rule_set.generic,
         "note": rule_set.note, "context": {key: value for key, value in context.items() if _plain(value)},
-        "evaluated": sum(1 for outcome in outcomes if outcome["status"] != "not_evaluated"),
+        "evaluated": sum(1 for outcome in outcomes if outcome["status"] in ("passed", "failed")),
         "failed": [outcome["rule"] for outcome in outcomes if outcome["status"] == "failed"],
         "outcomes": outcomes,
         "sources": [source.as_data() for source in rule_set.sources],

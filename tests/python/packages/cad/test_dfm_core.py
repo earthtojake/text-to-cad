@@ -55,8 +55,11 @@ class RulesTest(unittest.TestCase):
         report = {"walls": {"items": [{"t": 1.0}]}, "holes": {"items": [{"d": 1.5, "kind": "blind"}]},
                   "turned": {"items": [{"d": 1.0}]}}
         rules = _set(by_class, scaled, only_turning, only_blind)
-        found, _ = evaluate(report, rules, {"material_class": "plastic", "thickness": 2.0, "turning": False})
+        found, record = evaluate(report, rules, {"material_class": "plastic", "thickness": 2.0, "turning": False})
         self.assertEqual(sorted(f.code for f in found), ["blind", "hole", "wall"])
+        # A rule that does not apply here is recorded as such, never dropped: no silent pass.
+        turn = next(o for o in record["outcomes"] if o["rule"] == "turn")
+        self.assertEqual((turn["status"], turn["reason"]), ("not_applicable", "applies only where turning is True"))
         self.assertEqual(next(f for f in found if f.code == "blind").severity, "warning")
         found, record = evaluate(report, rules, {"material_class": "metal", "thickness": 1.0, "turning": True})
         self.assertEqual(sorted(f.code for f in found), ["blind", "turn"])
