@@ -11,8 +11,8 @@ interpreter -- makes a second installation with an engine of its own, and its do
 release that is not the one running.
 
 Stated as a criterion rather than a list: "uses the server" is what the skill's docs TEACH (a `cad`
-command in a code block) or what its own Python imports. Skills that never touch it (bambu-labs,
-dfam-check, dfm, gcode, sendcutsend) carry no setup block; a `cad <type> export` such a skill
+command in a code block) or what its own Python imports. Skills that never touch it (print3d,
+sendcutsend) carry no setup block; a `cad <type> export` such a skill
 mentions in its prose is how a text-to-cad model's file was made, not a command it runs.
 """
 
@@ -56,7 +56,7 @@ def _teaches_the_server(skill: Path) -> bool:
 
 class SkillLaunchCommand(unittest.TestCase):
     def test_skills_were_found(self) -> None:
-        self.assertGreaterEqual(len(SKILLS), 8, "the skills/ glob found almost nothing")
+        self.assertGreaterEqual(len(SKILLS), 6, "the skills/ glob found almost nothing")
 
     def test_every_skill_that_uses_the_server_says_how_to_get_the_cad_command(self) -> None:
         from tests.python.support.paths import add_sources

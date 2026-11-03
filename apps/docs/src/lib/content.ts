@@ -129,30 +129,13 @@ export const skillGroups = [
   {
     name: "SendCutSend",
     path: "skills/sendcutsend",
-    summary: "Checks DXF and STEP files before upload to SendCutSend.",
+    summary:
+      "Checks DXF and STEP files before upload to SendCutSend.",
   },
   {
-    name: "DfAM Check",
-    path: "skills/dfam-check",
+    name: "3D Printing",
+    path: "skills/print3d",
     summary:
-      "Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.",
-  },
-  {
-    name: "DFM",
-    path: "skills/dfm",
-    summary:
-      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh.",
-  },
-  {
-    name: "G-code",
-    path: "skills/gcode",
-    summary:
-      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.",
-  },
-  {
-    name: "Bambu Labs",
-    path: "skills/bambu-labs",
-    summary:
-      "Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.",
+      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets, and sends prints to Bambu Lab printers.",
   },
 ];

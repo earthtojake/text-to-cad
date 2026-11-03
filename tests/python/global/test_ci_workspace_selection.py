@@ -213,7 +213,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "LICENSE", ".claude-plugin/plugin.json",
                      "claude.mcp.json", "skills.sh.json", "skills/simulation/SKILL.md", "skills/simulation/references/urdf-frames.md",
                      "skills/cad/SKILL.md", "skills/cad/references/snapshot-review.md", "skills/dxf/SKILL.md",
-                     "skills/gcode/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
+                     "skills/print3d/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",
                      ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
                      "scripts/release/bump-version.sh", "scripts/release/plugin_branch.py"):
@@ -223,8 +223,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_a_skill_script_runs_its_suite(self):
         # Every skill suite is light, so it already runs on every change.
-        self.assertEqual(jobs_for("skills/gcode/scripts/orca_presets.py"), {"skills"})
-        self.assertEqual(tests_for("skills/gcode/scripts/orca_presets.py")["skills_tests"], [])
+        self.assertEqual(jobs_for("skills/print3d/scripts/orca_presets.py"), {"skills"})
+        self.assertEqual(tests_for("skills/print3d/scripts/orca_presets.py")["skills_tests"], [])
 
     def test_the_manufacturing_check_runs_the_package_suites(self):
         # Its measurements are the library's trimesh integration: no skill suite reads them.

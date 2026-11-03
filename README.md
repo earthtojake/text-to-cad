@@ -75,11 +75,8 @@ robot description files, simulation, and local review.
 | DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
 | PCB          | Edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP. | [skills/pcb](skills/pcb/SKILL.md)                   |
 | Simulation   | Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF. | [skills/simulation](skills/simulation/SKILL.md)     |
-| SendCutSend  | Checks DXF and STEP files before upload to SendCutSend.                                                                                            | [skills/sendcutsend](skills/sendcutsend/SKILL.md)   |
-| DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
-| DFM | Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh. | [skills/dfm](skills/dfm/SKILL.md) |
-| G-code       | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.                                                           | [skills/gcode](skills/gcode/SKILL.md)               |
-| Bambu Labs   | Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.                                               | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
+| SendCutSend | Checks DXF and STEP files before upload to SendCutSend. | [skills/sendcutsend](skills/sendcutsend/SKILL.md) |
+| 3D Printing | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets, and sends prints to Bambu Lab printers. | [skills/print3d](skills/print3d/SKILL.md) |
 
 ## 🛠️ Contributing
 

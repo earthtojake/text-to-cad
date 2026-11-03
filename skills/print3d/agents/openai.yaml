@@ -1,0 +1,4 @@
+interface:
+  display_name: "3D Printing"
+  short_description: "Slice with OrcaSlicer and print on Bambu Lab printers."
+  default_prompt: "Use $print3d to slice this model for my printer with OrcaSlicer and hand it to my Bambu Lab printer."
