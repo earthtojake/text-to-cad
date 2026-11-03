@@ -28,7 +28,7 @@ TYPES = {
     "stl": ("export", "snapshot", "check"),
     "glb": ("export", "snapshot", "inspect", "check"),
     "threemf": ("export", "snapshot", "check"),
-    "dxf": ("snapshot",),
+    "dxf": ("snapshot", "check"),
     "urdf": ("snapshot", "check"),
     "srdf": ("snapshot", "check"),
     "sdf": ("snapshot", "check"),

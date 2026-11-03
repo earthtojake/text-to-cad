@@ -4,7 +4,7 @@ import test from "node:test";
 import { createBoardIndex } from "@cad/core/lib/board2d/boardIndex.js";
 import { layoutPlot } from "@cad/core/lib/plot2d/index.js";
 import { describeBoardReference } from "./boardFacts.js";
-import { boardPickKinds, boardPointing, boardWorkingLayer, BOARD_SELECT_KINDS } from "./boardPick.js";
+import { boardPickKinds, boardWorkingLayer, readBoardFilter, BOARD_DEFAULT_FILTER, BOARD_SELECT_KINDS } from "./boardPick.js";
 
 // The committed payload (`__fixtures__/README.md`): the Python suite's test board as the engine plots it,
 // every item with the uuid KiCad saves it with. What each kind's card says, read as its chip's hover box shows it.
@@ -35,16 +35,25 @@ test("each kind's card says what it is, in KiCad's millimetres", () => {
   assert.equal(card("#@x0.2y0.2..x1y1")["Parts inside"], "Nothing");
 });
 
-test("Select's filter: All takes everything but whole nets; each kind alone, its own; Point or area, nothing", () => {
-  assert.deepEqual(boardPickKinds(BOARD_SELECT_KINDS), { pads: true, tracks: true, vias: true, zones: true, texts: true, dimensions: true, shapes: true, parts: true, nets: false });
-  assert.deepEqual(boardPickKinds(["graphics"]), { shapes: true, footprintShapes: true });
-  assert.deepEqual(boardPickKinds(["zones"]), { zones: true, zoneFill: true });
-  assert.equal(boardPickKinds(["nets"]).nets, true);
-  assert.equal(boardPickKinds(["points"]), null);
-  assert.ok(boardPointing(["points"]) && !boardPointing(BOARD_SELECT_KINDS));
+test("Select's filter is KiCad's grid: its boxes are the index's kinds, All items as KiCad picks, Locked items off as a board opens", () => {
+  // All items: the most specific thing, a footprint's graphics its part's, a pour by its outline; no locked items.
+  assert.deepEqual(boardPickKinds(BOARD_DEFAULT_FILTER), { parts: true, pads: true, tracks: true, vias: true, texts: true, dimensions: true,
+    shapes: true, footprintShapes: false, zones: true, ruleAreas: true, zoneFill: false, nets: false, locked: false });
+  assert.equal(boardPickKinds([...BOARD_SELECT_KINDS, "locked"]).locked, true);
+  // Graphics without Footprints takes a footprint's own graphics; the zones alone, a zone anywhere inside it.
+  assert.equal(boardPickKinds(["graphics", "pads"]).footprintShapes, true);
+  assert.equal(boardPickKinds(["graphics", "parts"]).footprintShapes, false);
+  assert.deepEqual([boardPickKinds(["zones"]).zoneFill, boardPickKinds(["zones", "ruleAreas"]).zoneFill, boardPickKinds(["zones", "vias"]).zoneFill],
+    [true, true, false]);
+  assert.equal(boardPickKinds([]), null);
+  assert.equal(boardPickKinds(["locked"]), null, "Locked items is no kind");
+  // The earlier filter's Nets and Point or area are dropped; the rest keeps the grid's order.
+  assert.deepEqual(readBoardFilter(["nets"]), []);
+  assert.deepEqual(readBoardFilter(["points", "vias", "parts", "locked"]), ["parts", "vias", "locked"]);
+  assert.equal(readBoardFilter(undefined), BOARD_DEFAULT_FILTER);
 });
 
-test("a point's layer is the working layer: the copper nearest the eye, else what is printed", () => {
+test("an area's layer is the working layer: the copper nearest the eye, else what is printed", () => {
   const ids = SHEET.layers.map((layer) => layer.id);
   assert.equal(boardWorkingLayer(SHEET, ids, "top"), "F.Cu");
   assert.equal(boardWorkingLayer(SHEET, ids, "bottom"), "B.Cu");

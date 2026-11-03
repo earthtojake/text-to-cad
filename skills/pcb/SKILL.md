@@ -163,10 +163,15 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 
 ## Board views
 
-The board view supports layers, selection, Measure, annotations and Quick Edit. Select picks
-parts, pads, nets, tracks, vias, zones, texts, dimensions and graphics, or, as Point or area, a
-point or a box on the layer the person works on; each arrives as a reference
-([checks](references/checks.md#references) says what each names and how to resolve it).
+The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
+KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
+Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
+area, a box on the layer the person works on. The sidebar's **Circuit** lists the parts in the
+schematic blocks their footprints record (by kind on a board that records none) and the nets: a
+block picks every part in it, a net picks the whole net. Each arrives as a reference
+([checks](references/checks.md#references) says what each names and how to resolve it). The
+**Layers** tab sets the active layer (drawn on top), Dim other layers, and the zones' and tracks'
+opacity; they are the display, so a Quick Edit's packet draws the same.
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:
@@ -175,12 +180,13 @@ Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","dim":true,"zones":0.3}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
-at 60%, pad numbers and net names on pads, vias and tracks, dimensions, the drawing sheet); they approximate mask/paste openings
+at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.
