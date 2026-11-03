@@ -22,8 +22,10 @@ revision: parts, pads, tracks, vias, zones, holes, nets, outline, texts, dimensi
 Project netclass names are read from the sibling `.kicad_pro` when present. Refresh the index
 after an edit. `part.pads_numbered(number)` includes all shapes for a shared pin number.
 `from cad.kicad_pcb import inside` tests whether a point lies in a polygon (a pour's fill, the
-outline) by the even-odd rule, in the same millimetres. DRC is not a Python name: run
-`cad kicad_pcb check`, which finds and runs `kicad-cli`.
+outline) by the even-odd rule, in the same millimetres. DRC is `cad kicad_pcb check` (`--json`: each
+finding's items with their uuids and positions under `measurements.drc`), and
+`cad.kicad_pcb.check(path)` in a script run with `cad run` whose header names `cad[kicad]` (a
+`# /// script` block's `dependencies`); both run kicode's `kicad-cli`.
 
 ## References
 
@@ -53,7 +55,7 @@ isolated): put what they ask for there unless the note says otherwise. A `<uuid>
 board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it
 still names the item after you move it: find it in the file by that uuid (case-insensitive), or
 in a `@kicad_pcb` script with `board.get_items_by_id(KIID(value=uuid))` (`from
-kipy.proto.common.types import KIID`). Copies of one footprint can share their items' uuids; such
+kicode.proto.common.types import KIID`). Copies of one footprint can share their items' uuids; such
 an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
 item is gone raises `ValueError`.
 Quote a path containing spaces before its reference, such as `"my board.kicad_pcb"#U1.3`.

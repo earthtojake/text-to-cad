@@ -54,7 +54,7 @@ class TheTableIsTheSource(unittest.TestCase):
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 self.assertTrue(integration.modules and integration.distributions)
-        self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kipy", "os"]))
+        self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         self.assertEqual("kicad", registry.DOCUMENT_TYPES["kicad_pcb"].decorator_integration)
         self.assertEqual("build123d", registry.DOCUMENT_TYPES["step"].decorator_integration)
         self.assertIsNone(registry.DOCUMENT_TYPES["urdf"].decorator_integration)

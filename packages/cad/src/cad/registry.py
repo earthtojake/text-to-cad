@@ -215,8 +215,8 @@ _TYPES = (
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
-        (Operation("export", "write its fabrication outputs with KiCad: gerbers, drill, pos or step, into a folder",
-                   "kicad"),
+        (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
+                             "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
          Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
@@ -236,16 +236,19 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                        "ezdxf", "pillow"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
     "kicad": Integration(
-        "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
-                 "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
-        process="separate",
-        # A check or an export runs kicad-cli 9 or newer; a board script its headless api-server, a nightly's
-        # alone for now (cad.kicad._program.check_api_server refuses one without it before starting it).
-        probe=Probe("kicad-cli", "9.0", "a check or an export needs KiCad 9 or newer, a @kicad_pcb board script a "
-                                        "KiCad nightly (10.99, for kicad-cli's api-server): install one from "
-                                        "https://www.kicad.org/download/, or set CAD_KICAD_CLI to its kicad-cli",
+        "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
+                 "its fabrication exports run kicad-cli, headless, and a board script edits through the API",
+        extra="kicad", process="separate",
+        # kicad-cli is kicode's (the extra's), or the one CAD_KICAD_CLI names: a check or an export runs 9 or
+        # newer, a board script needs its headless api-server (kicode's has it; another's is asked,
+        # cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
+        probe=Probe("kicad-cli", "9.0", "kicad-cli comes with cad's kicad integration, cad[kicad] (kicode), which the "
+                                        "cad command installs on first need (a script run with cad run: name "
+                                        "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
+                                        "KiCad 9 or newer (a nightly's, 10.99, for a @kicad_pcb board script)",
                     "CAD_KICAD_CLI"),
-        modules=("kipy",), distributions=("kicad-python",), identity=("kicad-python",)),
+        modules=("kicode",), distributions=("kicode", "kicode-pcb", "kicode-sch"),
+        identity=("kicode", "kicode-pcb", "kicode-sch")),
     "trimesh": Integration(
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "

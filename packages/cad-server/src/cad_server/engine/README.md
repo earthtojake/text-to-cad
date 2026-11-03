@@ -410,7 +410,7 @@ verbosity) key nothing. What it adds is two things:
   core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
   folder, its package, its project, following absolute and relative imports and the imports inside
   function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
-  build123d integration; `kipy`: the kicad integration), and each of cad's decorators it applies
+  build123d integration; `kicode`: the kicad integration), and each of cad's decorators it applies
   (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
   (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
@@ -495,7 +495,7 @@ Because ...` -- and a package its cache lacks where the network cannot be reache
 environment of the model's packages needs the network once, for pandas, which uv's cache does not
 hold: ...`. A program that stops importing a module of an integration its environment lacks -- one
 the scan could not see, imported by name at run time -- is said as Python says it, then in one line
-naming the extra (`cad._internal.program`, `integrations.missing`): `kipy comes with cad's kicad
+naming the extra (`cad._internal.program`, `integrations.missing`): `kicode comes with cad's kicad
 integration: add `cad[kicad]` to the script's header`; nothing runs again. The record of a document a
 `cad run` built names the options and requirements its command line was given (`with`), and the
 command that builds it again gives them again (**The rebuild command**); a header's are its
@@ -840,7 +840,7 @@ build123d `Shape` for every type with a decorator, and the engine's writers -- t
 (`document.py`) and its translations (`export.translate`) -- make the files, as before. A producer that
 declares (`Producer.declare`) decides what its type's decorator does with what it decorates, found by
 `registry.declarer_for`: the kicad integration's `@kicad_pcb` makes a board script, which runs in the
-caller's process through KiCad's headless `api-server` and kipy (`cad.kicad._session`), never in a
+caller's process through kicode's headless `api-server` and KiPy (`cad.kicad._session`), never in a
 worker, and a `@step` stacked on one is written from the saved board by `kicad-cli`. Every other
 decorated function is the engine's model.
 
@@ -868,6 +868,15 @@ holds trimesh (`cad_server._internal.integration_env.carries`: a checkout's, one
 extra); else in the environment of `cad[trimesh]` at the installation's release, made once by the engine
 as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
 (`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
+
+**The KiCad board's check and export.** `cad kicad_pcb check` and `cad kicad_pcb export` are the library's
+`cad.kicad_pcb.check` and `export`, the `kicad` integration's (`cad.kicad._check`, `_export`), run the same
+way: in the command's own process where it runs KiCad itself (`cad.kicad._program.carried`: `CAD_KICAD_CLI`
+names a `kicad-cli`, or kicode is installed there), else in the environment of `cad[kicad]` at the
+installation's release, made once by the engine (some 100 MB of kicode from PyPI, the first time). kicad-cli
+is found by the library's helper (`cad._internal.programs`: the override, then `kicode.executable()`; never
+`PATH` or KiCad's installation folders) and run headless in a private folder, with `kicode.environment(root)`
+for kicode's. An export's result is a `cad.results.ExportResult` (the files written, the warnings).
 
 ## Profiling
 
@@ -1747,7 +1756,8 @@ the index after creating the plot payload. `render/board.py` paints the same lay
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved
 plan cameras, annotation and measurements. Its render-service handle holds only a path; no
 board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
-No KiCad installation is required to view a board; KiCad's own CLI performs DRC and exports.
+No KiCad is required to view a board; KiCad's own CLI (kicode's, the `kicad` integration's) performs DRC
+and exports.
 
 **The OCCT stills.** A document is drawn by OCCT's own OpenGL renderer from the engine's meshes
 (`render/`): one presentation per part and look, each

@@ -40,11 +40,6 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
-  kicad/                 # the kicad integration: the installed kicad-cli found and checked
-                         #   (install, on the one helper for external programs,
-                         #   the library's cad._internal.programs), KiCad's design rule check (`cad kicad_pcb
-                         #   check`: check, cli) and its fabrication exports (`cad kicad_pcb
-                         #   export`: export), each run headless in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
@@ -87,12 +82,13 @@ are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
 `check` and `export` are the `kicad` integration's: `cad kicad_pcb check` is KiCad's design rule check
 (it fails on errors or unconnected items, says the warnings, and answers `kicad_failed` when KiCad refuses
-the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|step -o DIR` its fabrication outputs,
-each by the installed `kicad-cli`, found by the one helper for the external programs our code runs
-(the library's `cad._internal.programs`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
-PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
-headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
-`.kicad_*` file, and viewing a board needs no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
+the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|bom|step|glb|odb|ipc2581|pdf|dxf -o DIR`
+its fabrication, assembly and 3D outputs, each the library's function (`cad.kicad_pcb.check`, `export`)
+run by kicode's `kicad-cli`: in this process where it runs KiCad itself (`CAD_KICAD_CLI` names a
+`kicad-cli`, or kicode is installed here), else in the environment of `cad[kicad]` the engine makes once,
+as it makes the trimesh integration's. It runs headless with no display and private homes; a person's own
+KiCad is never run, the server never starts KiCad's app, Open in never opens a `.kicad_*` file, and
+viewing a board needs no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
 check SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
 molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
 support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs

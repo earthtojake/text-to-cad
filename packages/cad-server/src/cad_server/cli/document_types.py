@@ -9,7 +9,9 @@ location; ``--json`` the ``cad.results.CheckResult``). A type's own options live
 A 3D type's ``check`` (``stl``, ``threemf``, ``glb``, ``step``, ``xbf``) is the manufacturing check, the
 trimesh integration's: ``cad stl check part.stl --process molding --pull -z``, ``cad xbf check <id>
 --process printing --candidates``. It runs here when this environment holds trimesh, else in the
-environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``).
+environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``). A KiCad
+board's ``check`` and ``export`` are the kicad integration's, run the same way: here when this process
+runs KiCad itself (``CAD_KICAD_CLI``, or kicode installed here), else in the environment of ``cad[kicad]``.
 
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
@@ -171,7 +173,8 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST
 
     descriptions = {
-        "export": "Write a saved KiCad board's fabrication outputs with KiCad's kicad-cli, headless, into a folder.",
+        "export": "Write a saved KiCad board's fabrication, assembly or 3D output with KiCad's kicad-cli, headless, "
+                  "into a folder.",
         "inspect": "What a saved KiCad board holds: its format, thickness, size, layers, parts and nets.",
     }
     parser = argparse.ArgumentParser(prog=prog, description=descriptions[operation])
@@ -179,7 +182,10 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     if operation == "export":
         from cad.kicad._export import EXPORTS
 
-        parser.add_argument("--to", required=True, choices=EXPORTS, help="what to write: " + ", ".join(EXPORTS))
+        parser.add_argument("--to", required=True, choices=EXPORTS,
+                            help="what to write: gerbers and drill (a folder of files), pos (placement CSV), bom (the "
+                                 "schematic's parts CSV), step and glb (3D), odb (ODB++ zip), ipc2581, pdf (a front and "
+                                 "a back fabrication drawing) or dxf (the outline and holes)")
         parser.add_argument("-o", "--out", required=True, type=Path, metavar="DIR",
                             help="the folder to write into, made when missing")
     parser.add_argument("--json", dest=JSON_FLAG_DEST, action="store_true",
@@ -187,8 +193,41 @@ def _board_parser(prog: str, operation: str) -> argparse.ArgumentParser:
     return parser
 
 
+def _runs_kicad_here() -> bool:
+    """Whether this process runs KiCad itself (``CAD_KICAD_CLI`` names one, or kicode is installed here);
+    else a board's check and export run in the environment of ``cad[kicad]``."""
+    from cad.kicad._program import carried
+
+    return carried()
+
+
+def _kicad_elsewhere(operation: str, args: list, kwargs: dict, prog: str) -> dict:
+    """``cad.kicad_pcb.<operation>`` run in the environment of ``cad[kicad]``, made first when it is not."""
+    from cad_server._internal import integration_env
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    return integration_env.call(integration_env.environment("kicad", said), "kicad_pcb", operation, args, kwargs)
+
+
 def _board_check(argv: list[str], prog: str) -> int:
-    return _checked("kicad_pcb", ("cad_server.kicad.check", "check"), argv, prog)
+    target = ("cad.kicad_pcb", "check")
+    if _runs_kicad_here():
+        return _checked("kicad_pcb", target, argv, prog)
+    from cad.results import CheckFinding, CheckResult
+    from cad_server._internal.cli_from_function import JSON_FLAG_DEST, emit, generated_parser
+
+    parsed = generated_parser(target, prog=prog).parse_args(argv)
+    _refuse_other_type("kicad_pcb", "check", str(parsed.board))
+
+    def checked() -> CheckResult:
+        found = _kicad_elsewhere("check", [str(Path(parsed.board).expanduser().resolve())], {}, prog)
+        return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                           findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+    return emit(checked, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
 
 
 def _checked(document_type: str, target: tuple[str, str], argv: list[str], prog: str) -> int:
@@ -232,15 +271,26 @@ def _board_export(argv: list[str], prog: str) -> int:
     args = _board_parser(prog, "export").parse_args(argv)
     _refuse_other_type("kicad_pcb", "export", str(args.board))
     as_json = bool(getattr(args, JSON_FLAG_DEST))
-    from cad.kicad._export import export
-    from cad.kicad._program import KicadMissingError
-    from cad_server.kicad.cli import KicadRunError
-
+    board, out = Path(args.board).expanduser().resolve(), Path(args.out).expanduser().resolve()
     try:
-        written = export(args.board, args.to, args.out)
-    except (KicadMissingError, KicadRunError) as error:
+        if _runs_kicad_here():
+            from cad.kicad_pcb import export
+
+            done = export(board, args.to, out)
+            written, warnings = [str(path) for path in done.written], list(done.warnings)
+        else:
+            from cad_server._internal.integration_env import Failed
+
+            try:
+                found = _kicad_elsewhere("export", [str(board), args.to, str(out)], {}, prog)
+            except Failed as error:
+                raise RuntimeError(str(error)) from None
+            written, warnings = [str(path) for path in found.get("written") or ()], list(found.get("warnings") or ())
+    except (RuntimeError, OSError, ValueError) as error:
         return _failed(as_json, prog, str(error))
-    return _answer(as_json, {"ok": True, "written": [str(path) for path in written]},
+    for line in warnings:
+        print(f"{prog}: warning: {line}", file=sys.stderr)
+    return _answer(as_json, {"ok": True, "to": args.to, "written": written, "warnings": warnings},
                    [f"wrote {path}" for path in written])
 
 
@@ -305,7 +355,7 @@ def build_parser(document_type: str, operation: str, prog: str | None = None) ->
     if (document_type, operation) == ("kicad_pcb", "check"):
         from cad_server._internal.cli_from_function import generated_parser
 
-        return generated_parser(("cad_server.kicad.check", "check"), prog=prog)
+        return generated_parser(("cad.kicad_pcb", "check"), prog=prog)
     if document_type == "kicad_pcb" and operation in ("export", "inspect"):
         return _board_parser(prog, operation)
     if operation in _ENGINE_SOURCES:

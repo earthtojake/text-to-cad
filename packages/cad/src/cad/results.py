@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-__all__ = ["CheckFinding", "CheckResult"]
+__all__ = ["CheckFinding", "CheckResult", "ExportResult"]
 
 
 def _display(path: Path | None) -> str:
@@ -87,6 +87,21 @@ class CheckResult:
             blocking = sum(1 for finding in self.findings if finding.severity == "error")
             lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
         return lines
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    """The outcome of an ``export`` that writes files of its own kinds (``cad.kicad_pcb.export``): the
+    source, what it was exported as, the files written, and what was said beside (a part without its 3D
+    model), one line each."""
+
+    path: Path
+    to: str
+    written: tuple[Path, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+    def human_lines(self) -> list[str]:
+        return [*(f"warning: {line}" for line in self.warnings), *(f"wrote {path}" for path in self.written)]
 
 
 class _ValidationIssue(CheckFinding):

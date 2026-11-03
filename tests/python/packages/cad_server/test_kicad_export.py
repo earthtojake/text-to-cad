@@ -14,7 +14,7 @@ from pathlib import Path
 from unittest import mock
 
 from cad.kicad import _export as export
-from cad_server.kicad.cli import KicadRunError
+from cad.kicad._program import KicadRunError
 
 CLI = Path("/opt/kicad/bin/kicad-cli")
 
@@ -31,9 +31,9 @@ class Commands(unittest.TestCase):
         return command
 
     def test_the_list_is_fixed(self) -> None:
-        self.assertEqual(export.EXPORTS, ("gerbers", "drill", "pos", "step"))
-        for to in ("pdf", "stl", "", "Gerbers"):
-            with self.subTest(to=to), self.assertRaisesRegex(ValueError, "choose one of gerbers, drill, pos, step"):
+        self.assertEqual(export.EXPORTS, ("gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"))
+        for to in ("svg", "stl", "", "Gerbers"):
+            with self.subTest(to=to), self.assertRaisesRegex(ValueError, "choose one of gerbers, drill, pos, bom, step"):
                 export.commands(CLI, self.board, to, self.out)
 
     def test_gerbers_and_drill_write_a_folder(self) -> None:
@@ -46,10 +46,39 @@ class Commands(unittest.TestCase):
         self.assertEqual(self.command("pos")[4:-1], ["--format", "csv", "--units", "mm", "--side", "both",
                                                      "-o", str(self.out / "uart-pos.csv")])
 
-    def test_step_substitutes_step_models_for_vrml_ones(self) -> None:
-        command = self.command("step")
-        self.assertIn("--subst-models", command)
-        self.assertEqual(command[command.index("-o") + 1], str(self.out / "uart.step"))
+    def test_step_and_glb_substitute_step_models_for_vrml_ones(self) -> None:
+        for to in ("step", "glb"):
+            command = self.command(to)
+            self.assertIn("--subst-models", command)
+            self.assertEqual(command[command.index("-o") + 1], str(self.out / f"uart.{to}"))
+
+    def test_odb_ipc2581_and_the_outline_are_millimetres(self) -> None:
+        self.assertEqual(self.command("odb")[4:-1], ["--units", "mm", "--compression", "zip",
+                                                     "-o", str(self.out / "uart-odb.zip")])
+        self.assertEqual(self.command("ipc2581")[4:-1], ["--units", "mm", "--version", "C",
+                                                         "-o", str(self.out / "uart-ipc2581.xml")])
+        dxf = self.command("dxf")
+        self.assertEqual(dxf[dxf.index("--layers") + 1], "Edge.Cuts")
+        self.assertEqual(dxf[dxf.index("--output-units") + 1], "mm")
+        self.assertEqual(dxf[dxf.index("-o") + 1], str(self.out / "uart-outline.dxf"))
+
+    def test_the_pdf_is_a_page_a_side_the_back_mirrored(self) -> None:
+        front, back = export.commands(CLI, self.board, "pdf", self.out)
+        self.assertEqual(front[front.index("--layers") + 1], "F.Cu,F.Silkscreen,F.Fab,Edge.Cuts")
+        self.assertEqual(back[back.index("--layers") + 1], "B.Cu,B.Silkscreen,B.Fab,Edge.Cuts")
+        self.assertNotIn("--mirror", front)
+        self.assertIn("--mirror", back)
+        self.assertEqual([front[front.index("-o") + 1], back[back.index("-o") + 1]],
+                         [str(self.out / "uart-front.pdf"), str(self.out / "uart-back.pdf")])
+
+    def test_the_bom_reads_the_schematic_grouped_by_value_and_footprint(self) -> None:
+        (command,) = export.commands(CLI, self.board, "bom", self.out, Path("scratch"))
+        self.assertEqual(command[:4], [str(CLI), "sch", "export", "bom"])
+        self.assertEqual(command[-1], str(self.board.with_suffix(".kicad_sch")))
+        self.assertEqual(command[command.index("--group-by") + 1], "Value,Footprint")
+        self.assertEqual(command[command.index("--ref-range-delimiter") + 1], "")
+        self.assertIn("--exclude-dnp", command)
+        self.assertEqual(command[command.index("-o") + 1], str(Path("scratch") / "uart-bom-kicad.csv"))
 
 
 class Run(unittest.TestCase):
@@ -101,6 +130,28 @@ class Run(unittest.TestCase):
     def test_a_run_that_writes_nothing_is_an_error(self) -> None:
         with self.fake(files=()), self.assertRaisesRegex(KicadRunError, "wrote no file"):
             export.export(self.board, "drill", self.out, cli=CLI)
+
+    def test_the_bom_keeps_its_columns_and_the_part_numbers_any_part_has(self) -> None:
+        import csv
+
+        raw, out = self.root / "raw.csv", self.root / "bom.csv"
+        header = ["Reference", "Value", "Footprint", "${QUANTITY}", *(name for names in export.BOM_FIELDS.values()
+                                                                    for name in names)]
+        rows = [["C1,C2", "100nF", "C_0603", "2", *[""] * (len(header) - 4)],
+                ["R1", "10k", "R_0603", "1", *[""] * (len(header) - 4)]]
+        rows[1][header.index("LCSC Part")] = "C25804"
+        with raw.open("w", newline="", encoding="utf-8") as file:
+            csv.writer(file).writerows([header, *rows])
+        export._bom(raw, out)
+        with out.open(newline="", encoding="utf-8") as file:
+            read = list(csv.reader(file))
+        self.assertEqual(read, [["Reference", "Value", "Footprint", "Quantity", "LCSC"],
+                                ["C1,C2", "100nF", "C_0603", "2", ""], ["R1", "10k", "R_0603", "1", "C25804"]])
+
+    def test_a_bom_without_a_schematic_is_refused_in_one_line(self) -> None:
+        with self.fake(), self.assertRaisesRegex(KicadRunError, "no uart.kicad_sch beside uart.kicad_pcb"):
+            export.export(self.board, "bom", self.out, cli=CLI)
+        self.assertEqual(self.seen, [])
 
     def test_only_a_saved_board_is_exported(self) -> None:
         with self.fake():

@@ -1,6 +1,6 @@
-"""``@kicad_pcb``: a board script's lifecycle, with kicad-cli's api-server and kipy stood in for.
+"""``@kicad_pcb``: a board script's lifecycle, with kicad-cli's api-server and KiPy (kicode's) stood in for.
 
-The board is saved when the function returns and not when it raises; the api-server is ready when kipy's
+The board is saved when the function returns and not when it raises; the api-server is ready when KiPy's
 connection answers, never when a file appears (the fake server never makes one, as Windows' named pipe
 does not); a kicad-cli without api-server is refused before one starts; the api-server it started is
 stopped and its private folder removed either way; a ``@step`` stacked on it is written from the saved
@@ -58,10 +58,10 @@ class _Board:
         _Board.saved += 1
 
 
-def _kipy() -> types.ModuleType:
-    module = types.ModuleType("kipy")
+def _kicode() -> types.ModuleType:
+    module = types.ModuleType("kicode")
 
-    class ConnectionError(Exception):  # kipy.errors.ConnectionError: its own class, no OSError
+    class ConnectionError(Exception):  # kicode.errors.ConnectionError (KiPy's): its own class, no OSError
         pass
 
     class KiCad:
@@ -81,7 +81,7 @@ def _kipy() -> types.ModuleType:
                 raise RuntimeError("KiCad returned error: KiCad is not ready to reply")
             return _Board()
 
-        def check_version(self):  # the PyPI client calls a nightly a future version: never asked
+        def check_version(self):  # never asked: a CAD_KICAD_CLI nightly may be another build
             raise AssertionError("check_version is never called")
 
     module.KiCad = KiCad
@@ -96,7 +96,7 @@ class BoardScriptTest(unittest.TestCase):
         self.board.write_text("(kicad_pcb)\n", encoding="utf-8")
         _Server.started.clear()
         _Board.saved, _Board.loading, _Board.dialing = 0, 2, 3
-        patches = [mock.patch.object(_session.subprocess, "Popen", _Server), mock.patch.dict(sys.modules, {"kipy": _kipy()}),
+        patches = [mock.patch.object(_session.subprocess, "Popen", _Server), mock.patch.dict(sys.modules, {"kicode": _kicode()}),
                    mock.patch.object(_session, "check_api_server", lambda cli: cli)]
         for patch in patches:
             patch.start()
@@ -168,7 +168,7 @@ class BoardScriptTest(unittest.TestCase):
         self.assertTrue(server.stopped)
 
     def test_a_kicad_cli_without_api_server_is_refused_before_one_starts(self) -> None:
-        """A stable kicad-cli (9, 10) checks and exports but has no api-server: refused up front, saying what
+        """A stable kicad-cli (9, 10) CAD_KICAD_CLI names checks and exports but has no api-server: refused up front, saying what
         a board script needs; a nightly's, which lists ``--socket``, is taken."""
         def answering(text, code):
             return lambda command, **options: subprocess.CompletedProcess(command, code, stdout=text, stderr="")
@@ -178,7 +178,7 @@ class BoardScriptTest(unittest.TestCase):
                     self.assertRaises(_program.KicadMissingError) as caught:
                 _session.run(self.script(lambda board: None), cli=Path("kicad-cli"))
             self.assertEqual([], _Server.started, "no server is started")
-            for words in ("has no api-server", "KiCad nightly (10.99)", "KiCad 9 or newer", "CAD_KICAD_CLI"):
+            for words in ("has no api-server", "KiCad nightly's (10.99)", "kicode", "KiCad 9 or newer", "CAD_KICAD_CLI"):
                 self.assertIn(words, str(caught.exception))
             with mock.patch.object(_program.subprocess, "run", answering("Usage: api-server [--socket PATH] board\n", 0)):
                 _session.run(self.script(lambda board: None), cli=Path("kicad-cli"))
@@ -195,8 +195,8 @@ class BoardScriptTest(unittest.TestCase):
         self.assertEqual([], _Server.started)
 
 
-    def test_no_kipy_is_refused_before_a_server_starts(self) -> None:
-        with mock.patch.dict(sys.modules, {"kipy": None}), self.assertRaisesRegex(ImportError, "cad\\[kicad\\]"):
+    def test_no_kicode_is_refused_before_a_server_starts(self) -> None:
+        with mock.patch.dict(sys.modules, {"kicode": None}), self.assertRaisesRegex(ImportError, "cad\\[kicad\\]"):
             _session.run(self.script(lambda board: None), cli=Path("kicad-cli"))
         self.assertEqual([], _Server.started)
 

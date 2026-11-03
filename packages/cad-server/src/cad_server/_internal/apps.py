@@ -50,7 +50,7 @@ KINDS = {"script": ("vscode", "cursor", "zed", "pycharm", "sublime"),
 
 # Files no app is started on, the operating system's default handler included: a KiCad file's handler is
 # KiCad, and the server never launches KiCad (it runs its command line alone, headless:
-# ``cad_server.kicad``). The file manager still reveals such a file's folder.
+# ``cad.kicad``, kicode's). The file manager still reveals such a file's folder.
 NEVER_OPENED = (".kicad_",)
 
 REFRESH_SECONDS = 300.0

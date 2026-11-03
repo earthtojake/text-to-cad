@@ -1,7 +1,10 @@
-"""Real exports of a board by an installed kicad-cli (9 or newer); no samples, IPC server or user state."""
+"""Real exports of a board by kicode's kicad-cli, run where the ``cad`` command runs them: in the environment
+of ``cad[kicad]`` (``tests/python/support/kicode.py``). No samples, IPC server or user state."""
 import tempfile
 import unittest
 from pathlib import Path
+
+from tests.python.support import kicode
 
 # Stable KiCad 9 syntax, so the same file loads in 9, 10 and the nightly: a 40 x 30 mm board, one 0603-like
 # resistor R1 at (20, 15) and a mounting hole H1 at (5, 5) that the placement file leaves out.
@@ -27,17 +30,13 @@ BOARD = '''(kicad_pcb (version 20241229) (generator "pcbnew")
 
 class NativeExports(unittest.TestCase):
     def test_gerbers_drill_pos_and_step_of_a_saved_board(self):
-        from cad.kicad._export import EXPORTS, export
-        from cad.kicad._program import check_version, find_kicad_cli, kicad_version
-
-        cli = find_kicad_cli()
-        check_version(cli, kicad_version(cli))
         with tempfile.TemporaryDirectory(prefix="kicad-export-") as folder:
             root = Path(folder)
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
             original = board.read_bytes()
-            made = {to: export(board, to, root / "fab" / to) for to in EXPORTS}
+            made = {to: [Path(path) for path in kicode.call(self, "export", board, to, root / "fab" / to)["written"]]
+                    for to in ("gerbers", "drill", "pos", "step")}
             self.assertEqual(board.read_bytes(), original)
             # The board's folder as found: kicad-cli's local settings (.kicad_prl) and project are not left.
             self.assertEqual(["board.kicad_pcb", "fab"], sorted(path.name for path in root.iterdir()))
@@ -66,28 +65,81 @@ class NativeExports(unittest.TestCase):
 
 
 class SharedTestBoard(unittest.TestCase):
-    """The test board the reader, plot and command suites share is in the nightly's format (20260901)."""
+    """The test board the reader, plot and command suites share is in the nightly's format (20260901), with its
+    schematic: kicode's kicad-cli checks it and writes each of the newer exports of it."""
 
-    def test_a_nightly_checks_and_exports_it(self):
-        from cad.kicad._export import export
-        from cad.kicad._program import find_kicad_cli, kicad_version, version_tuple
-        from cad_server.kicad.check import check as drc
-        from tests.python.support.kicad_board import write_board
+    @classmethod
+    def setUpClass(cls):
+        from tests.python.support.kicad_board import write_board, write_schematic
 
-        cli = find_kicad_cli()
-        if version_tuple(kicad_version(cli) or "0")[:2] < (10, 99):
-            self.skipTest("the shared test board is in the format of a KiCad nightly (10.99)")
-        with tempfile.TemporaryDirectory(prefix="kicad-shared-") as folder:
-            board = write_board(Path(folder))
-            result = drc(board)
-            # No .kicad_pro beside it: checked against KiCad's defaults, and said so; nothing left beside it.
-            self.assertIn("no_project", {issue.code for issue in result.issues}, result)
-            self.assertEqual([board.name], sorted(path.name for path in Path(folder).iterdir()))
-            # KiCad read it (a refusal is one issue, `kicad_failed`) and found the unrouted LED net's ratsnest line.
-            codes = {issue.code for issue in result.issues}
-            self.assertNotIn("kicad_failed", codes, result)
-            self.assertIn("unconnected_items", codes, result)
-            self.assertTrue(export(board, "step", Path(folder) / "fab")[0].is_file())
+        cls._folder = tempfile.TemporaryDirectory(prefix="kicad-shared-")
+        cls.root = Path(cls._folder.name)
+        cls.board = write_board(cls.root)
+        write_schematic(cls.root)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls._folder.cleanup()
+
+    def exported(self, to):
+        found = kicode.call(self, "export", self.board, to, self.root / "fab" / to)
+        self.assertEqual(to, found["to"])
+        written = [Path(path) for path in found["written"]]
+        self.assertTrue(written and all(path.is_file() and path.parent.name == to for path in written), written)
+        return written, found["warnings"]
+
+    def test_a_nightly_checks_it(self):
+        result = kicode.call(self, "check", self.board)
+        codes = {finding["code"] for finding in result["findings"]}
+        # No .kicad_pro beside it: checked against KiCad's defaults, and said so.
+        self.assertIn("no_project", codes, result)
+        # KiCad read it (a refusal is one finding, `kicad_failed`) and found the unrouted LED net's ratsnest line.
+        self.assertNotIn("kicad_failed", codes, result)
+        self.assertIn("unconnected_items", codes, result)
+        # Each finding as KiCad reported it: its items' uuids and positions in board millimetres.
+        (unrouted,) = [found for found in result["measurements"]["drc"] if found["type"] == "unconnected_items"]
+        self.assertTrue(all(item["uuid"] and len(item["pos"]) == 2 for item in unrouted["items"]), unrouted)
+
+    def test_bom(self):
+        import csv
+
+        (bom,), _ = self.exported("bom")
+        self.assertEqual("blinky-bom.csv", bom.name)
+        with bom.open(newline="", encoding="utf-8") as file:
+            rows = list(csv.reader(file))
+        self.assertEqual(["Reference", "Value", "Footprint", "Quantity", "LCSC"], rows[0])
+        self.assertIn(["R1", "1k", "Resistor_SMD:R_0603_1608Metric", "1", "C21190"], rows[1:])
+        self.assertEqual({"D1", "J1", "R1"}, {row[0] for row in rows[1:]})
+
+    def test_glb(self):
+        (glb,), _ = self.exported("glb")
+        self.assertEqual("blinky.glb", glb.name)
+        self.assertEqual(b"glTF", glb.read_bytes()[:4])
+
+    def test_odb(self):
+        import zipfile
+
+        (odb,), _ = self.exported("odb")
+        self.assertEqual("blinky-odb.zip", odb.name)
+        self.assertTrue(any(name.endswith("matrix/matrix") for name in zipfile.ZipFile(odb).namelist()))
+
+    def test_ipc2581(self):
+        (xml,), _ = self.exported("ipc2581")
+        self.assertIn("<IPC-2581", xml.read_text(encoding="utf-8", errors="replace")[:2000])
+
+    def test_pdf(self):
+        written, _ = self.exported("pdf")
+        self.assertEqual(["blinky-back.pdf", "blinky-front.pdf"], [path.name for path in written])
+        self.assertTrue(all(path.read_bytes()[:5] == b"%PDF-" for path in written))
+
+    def test_dxf(self):
+        (dxf,), _ = self.exported("dxf")
+        text = dxf.read_text(encoding="utf-8", errors="replace")
+        self.assertIn("Edge.Cuts", text)
+        # J1's two drilled holes beside the outline (a via is no hole an enclosure sees: not drawn).
+        self.assertEqual(2, text.count("\nCIRCLE\n"))
+        self.assertEqual([self.board.name, "blinky.kicad_sch", "fab"],
+                         sorted(path.name for path in self.root.iterdir()), "the board's folder as found")
 
 
 class StepWithoutModels(unittest.TestCase):
@@ -95,11 +147,6 @@ class StepWithoutModels(unittest.TestCase):
     warning naming it, not a failure, although kicad-cli exits 2 for it."""
 
     def test_missing_and_vrml_only_models_are_a_warning(self):
-        import contextlib
-        import io
-
-        from cad.kicad._export import export
-
         with tempfile.TemporaryDirectory(prefix="kicad-step-models-") as folder:
             root = Path(folder)
             (root / "only.wrl").write_text("#VRML V2.0 utf8\nShape { geometry Box { size 1 1 1 } }\n", encoding="utf-8")
@@ -109,25 +156,24 @@ class StepWithoutModels(unittest.TestCase):
             self.assertEqual(board.count("(model "), 2)
             path = root / "board.kicad_pcb"
             path.write_text(board, encoding="utf-8")
-            said = io.StringIO()
-            with contextlib.redirect_stderr(said):
-                (step,) = export(path, "step", root / "fab")
+            found = kicode.call(self, "export", path, "step", root / "fab")
+            (step,) = [Path(written) for written in found["written"]]
             self.assertTrue(step.read_text(encoding="utf-8", errors="replace").startswith("ISO-10303-21"))
-            self.assertIn("board.step is written", said.getvalue())
-            self.assertIn("R1", said.getvalue())
-            self.assertIn("VRML", said.getvalue())
+            said = " ".join(found["warnings"])
+            self.assertIn("board.step is written", said)
+            self.assertIn("R1", said)
+            self.assertIn("VRML", said)
 
     def test_an_output_folder_that_cannot_be_made_is_the_exports_error(self):
-        from cad.kicad._export import export
-        from cad.kicad._program import KicadRunError
+        from cad_server._internal.integration_env import Failed
 
         with tempfile.TemporaryDirectory(prefix="kicad-export-out-") as folder:
             root = Path(folder)
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
             (root / "taken").write_text("a file, not a folder", encoding="utf-8")
-            with self.assertRaisesRegex(KicadRunError, "cannot write the drill into"):
-                export(board, "drill", root / "taken")
+            with self.assertRaisesRegex(Failed, "cannot write the drill into"):
+                kicode.call(self, "export", board, "drill", root / "taken")
 
     def test_a_failed_export_still_fails(self):
         import subprocess

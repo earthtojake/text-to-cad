@@ -197,12 +197,14 @@ def _shim_change(path: str) -> Select:
 # (``cad_server.viewer.xbf``), the CAD app's views open them through the viewer's routes, and the
 # library's root names are its. A change to it reaches whatever the packages reach.
 ENGINE_CODE = (f"{LIBRARY_SRC}/engine/**", f"{SERVER_SRC}/engine/**")
-# Native KiCad boards: the library's reader, its flat still and its document type (cad.kicad_pcb), and the
-# server's kicad integration (kicad-cli found and run, by the one helper for external programs). Each also reaches what its package reaches (the rules below); the KiCad
-# job, which installs KiCad, runs on these, on its own suite and runner, and on a full run.
+# Native KiCad boards: the library's reader, its flat still, its document type (cad.kicad_pcb) and the kicad
+# integration (kicode's kicad-cli found and run, by the one helper for external programs), and the server's
+# command and the environment of cad[kicad] it runs them in. Each also reaches what its package reaches (the
+# rules below); the KiCad job, which makes that environment, runs on these, its own suite and runner, and a
+# full run.
 KICAD_CODE = (f"{LIBRARY_SRC}/engine/formats/kicad/**", f"{LIBRARY_SRC}/engine/render/board.py",
               f"{LIBRARY_SRC}/kicad_pcb/**", f"{LIBRARY_SRC}/kicad/**", f"{LIBRARY_SRC}/_internal/programs.py",
-              f"{SERVER_SRC}/kicad/**",
+              f"{SERVER_SRC}/_internal/integration_env.py",
               f"{SERVER_SRC}/cli/kicad_pcb.py")
 KICAD_SUITE = "tests/python/packages/kicad"
 # The packages' projects, and the alias distribution (a one-file project, a pin of the library).
