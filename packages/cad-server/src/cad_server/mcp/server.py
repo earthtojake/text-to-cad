@@ -91,10 +91,12 @@ TITLE = "CAD"
 PROTOCOL = 9
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
-EXTENSIONS = sorted(VIEWER_EXTENSIONS)
-# The formats every surface opens, as the agent is told them: a cadgen engine document (XBF) among them. A
-# KiCad schematic has no view in the CAD app yet (``cad kicad_sch snapshot`` draws it), so none is offered.
+# The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
+# cadgen engine document (XBF) among them. A KiCad schematic has no view in the CAD app yet (``cad kicad_sch
+# snapshot`` draws it), so neither offers one.
 _NO_VIEW_YET = frozenset({"kicad_sch"})
+EXTENSIONS = sorted(set(VIEWER_EXTENSIONS) - {suffix for entry in DOCUMENT_TYPES.values() if entry.id in _NO_VIEW_YET
+                                              for suffix in entry.extensions})
 FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.id not in _NO_VIEW_YET)
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
