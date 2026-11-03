@@ -7,7 +7,9 @@ import type { ExportView } from './context.js';
  * whether the file carries the animations the document's code made (an engine document's GLB).
  */
 export interface ExportChoice {
-  format: ExportFormat; label: string; extension: string; animations?: true;
+  /** `label`: a format's own name, as it is written everywhere (STEP, Gerbers); `labelKey`: a word the
+   * page's language says (Drill), which the menu says in it. */
+  format: ExportFormat; label: string; labelKey?: string; extension: string; animations?: true;
   /** The usage count's name where it is not `export_<format>` (a control's name is letters and underscores). */
   control?: string;
 }
@@ -25,8 +27,8 @@ const ORIGINAL: ExportChoice = { format: 'original', label: 'XBF', extension: '.
 // the download: a folder of files (the Gerbers, the drill files, the two PDF pages) is one .zip.
 const BOARD: ExportChoice[] = [
   { format: 'gerbers', label: 'Gerbers', extension: '-gerbers.zip' },
-  { format: 'drill', label: 'Drill', extension: '-drill.zip' },
-  { format: 'pos', label: 'Position', extension: '-pos.csv' },
+  { format: 'drill', label: '', labelKey: 'export.format.drill', extension: '-drill.zip' },
+  { format: 'pos', label: '', labelKey: 'export.format.position', extension: '-pos.csv' },
   { format: 'bom', label: 'BOM', extension: '-bom.csv' },
   { format: 'step', label: 'STEP', extension: '.step' },
   { format: 'glb', label: 'GLB', extension: '.glb' },

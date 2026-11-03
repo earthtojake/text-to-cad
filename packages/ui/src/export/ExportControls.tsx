@@ -169,7 +169,7 @@ export function ExportControls({ service, downloads, file, children }: {
   const menu = enabled && choices.length ? <DropdownMenuSub>
     <DropdownMenuSubTrigger data-export-menu="">{label}</DropdownMenuSubTrigger>
     <DropdownMenuSubContent aria-label={label}>
-      {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.label}</DropdownMenuItem>)}
+      {choices.map(choice => <DropdownMenuItem key={choice.format} onSelect={() => begin(choice)} data-export-format={choice.format}>{choice.labelKey ? t(choice.labelKey as Parameters<typeof t>[0]) : choice.label}</DropdownMenuItem>)}
     </DropdownMenuSubContent>
   </DropdownMenuSub> : null;
   const overlay = enabled ? <ExportToaster /> : null;
