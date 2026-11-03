@@ -34,7 +34,6 @@ export default {
   "board.text.drills": "钻孔",
   "board.text.unconnected_pins": "未连接引脚",
   "board.text.names": "名称",
-  "board.text.drawing_sheet": "图框",
   "board.text.board_area": "板区域",
   "board.text.couldn_t_open_the_board": "无法打开电路板",
   "board.text.message_the_existing_board_remains_visible": "{message} 仍显示现有电路板。",

@@ -11,7 +11,8 @@ a mismatch is refused by name on both sides.
 The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
 front copper the active layer, KiCad's drawing order for that (`pcbnew/pcb_draw_panel_gal.cpp`), its
 colours, zones at its 60% opacity, a plated hole seen through to the board's background, a pad's
-number and net name over it, and the board on its page, KiCad's drawing sheet round it.
+number and net name over it. No drawing sheet (KiCad's page border and title block) is drawn: the
+board is the board alone, which the fit frames.
 
 ```jsonc
 {
@@ -21,8 +22,7 @@ number and net name over it, and the board on its page, KiCad's drawing sheet ro
   "unrouted": 1,                   // connections still to make: the ratsnest's lines
   "sheets": [{
     "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
-    "page": [0.0, 0.0, 297.0, 210.0],  // the paper KiCad draws the board on, in sheet millimetres
-    "layers": [ { "id": "sheet", "kind": "sheet", "side": "both", "items": [ ... ] }, ... ]
+    "layers": [ { "id": "area", "kind": "area", "side": "both", "items": [ ... ] }, ... ]
   }],
   "board": { ... }                 // the board's index, in sheet millimetres
 }
@@ -34,15 +34,12 @@ One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outlin
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
 decimals. The sheet is what the renderer frames; the whole canvas is its background, KiCad's. It
-clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one, the drawing
-sheet — is drawn where it falls (`layoutPlot`'s `extent` is the box of everything drawn). `page` is
-the paper's box (`(paper "A4")`, `(paper "User" w h)`, portrait turned): KiCad's page origin is its
-top-left corner.
+clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
+where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
 
 ## The layers
 
-Bottom to top, as KiCad draws them with the front copper active: `sheet` (the drawing sheet),
-`area` (the board's area), the back side (`B.Fab`, `B.CrtYd`, `B.Adhes`, `B.Paste`, `B.SilkS`,
+Bottom to top, as KiCad draws them with the front copper active: `area` (the board's area), the back side (`B.Fab`, `B.CrtYd`, `B.Adhes`, `B.Paste`, `B.SilkS`,
 `B.Mask`, `B.Cu`), the inner coppers deepest first (`In4.Cu` … `In1.Cu`), the user layers and the
 outline (`User.N` … `User.1`, `Margin`, `Edge.Cuts`, `Eco2.User`, `Eco1.User`, `Cmts.User`,
 `Dwgs.User`), the front side in the back's order (`F.Fab` … `F.Mask`, `F.Cu`), then four layers of
@@ -57,16 +54,15 @@ surface pad's).
 
 | field | meaning |
 | --- | --- |
-| `id` | KiCad's layer name, or `sheet`, `area`, `drills`, `vias`, `ratsnest`, `names` |
-| `kind` | `sheet`, `area`, `copper`, `silk`, `fab`, `courtyard`, `mask`, `paste`, `adhesive`, `user`, `margin`, `outline`, `drill`, `via`, `ratsnest`, `names` |
-| `side` | `front` (`F.*`), `back` (`B.*`) or `both` (inner copper, the outline, the user layers, the page and the board's area, and what goes through the board) |
+| `id` | KiCad's layer name, or `area`, `drills`, `vias`, `ratsnest`, `names` |
+| `kind` | `area`, `copper`, `silk`, `fab`, `courtyard`, `mask`, `paste`, `adhesive`, `user`, `margin`, `outline`, `drill`, `via`, `ratsnest`, `names` |
+| `side` | `front` (`F.*`), `back` (`B.*`) or `both` (inner copper, the outline, the user layers and the board's area, and what goes through the board) |
 | `items` | what the layer draws, bottom to top |
 
 A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: without one, every layer
-(KiCad's default); seen from below, the board's stack reverses while `sheet` and `area` stay under
-it and the `drill`, `via`, `ratsnest` and `names` kinds stay on top, each layer mirrored about the
-sheet's vertical centre line — the drawing sheet's page moved where the mirrored board lies and
-read the right way round, as KiCad draws its title block in a flipped view. A via's copper is drawn
+(KiCad's default); seen from below, the board's stack reverses while `area` stays under it and the
+`drill`, `via`, `ratsnest` and `names` kinds stay on top, each layer mirrored about the sheet's
+vertical centre line. A via's copper is drawn
 while `vias` is, and a name while `names` is, so a view hides a via, or every name, as one. The
 board's Display (`plot2d/boardDisplay.js`: `{ mode, side, poured, layers }`, the viewer's and
 `cad <type> snapshot --display`'s one contract) is a view over these ids: a mode is a set of layer
@@ -94,7 +90,7 @@ graphics and text, `#R1.2` for a pad and its mask and paste); `net`, the net of 
 KiCad's zone opacity, and `teardrop: true` on a teardrop's, drawn opaque as KiCad draws teardrops;
 `via` (`through`, `blind`, `micro`) on a via's copper and its hole; `hole` (`pad`, `via`, `npth`) on
 a hole, whose `w` is then its plated wall's width and `span` (a blind or buried via's) its top and
-bottom copper; `clearance` on a front-copper pad; `page` on the page's own edge. A graphic (`gr_*`,
+bottom copper; `clearance` on a front-copper pad. A graphic (`gr_*`,
 `fp_*`) carries `id`, the uuid KiCad saved it with (`<footprint uuid>/<uuid>` where copies of a
 footprint share its items' uuids), which the viewer picks it by (`#shape:<id>`), and `shape` when it
 is not a line (`rect`, `circle`, `arc`, `poly`, `curve`), and `locked: true` when KiCad saved it
@@ -151,12 +147,7 @@ What each thing becomes:
   No DRC, no clearance: touching copper is joined.
 - **The board's area** is a `poly` on `area`: the outline's largest closed loop, the loops inside it
   (cutouts) its `holes`, drawn in KiCad's board-area shadow.
-- **The drawing sheet** is KiCad's default one (`cad.engine.formats.kicad.drawing_sheet`), on `sheet`:
-  the page's grey edge (`page`), the frame 10 mm in and the one 2 mm inside it, the grid references
-  every 50 mm, and the title block (title, date, revision, company, comments, the file's name and
-  the paper's) as `path`s and `text`. A project's own drawing sheet file is not read.
-
-Not drawn: text boxes, tables, images, barcodes, targets, points, locked-item shadows, and the
+Not drawn: the drawing sheet (the page's border and title block), text boxes, tables, images, barcodes, targets, points, locked-item shadows, and the
 clearance outlines of tracks.
 
 ## The board index

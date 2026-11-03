@@ -10,7 +10,8 @@
  * ```
  *
  * **Modes** are presets, as a 3D view's are (`ui/docs/render-mode.md`): each names the layer
- * KINDS it draws, the drawing sheet and the board's area under them all. **Board** is KiCad's own
+ * KINDS it draws, the board's area under them all. No drawing sheet (KiCad's page border and title
+ * block) is drawn: a board is the board alone, which the fit frames. **Board** is KiCad's own
  * view of a board it opens (`plot2d`'s default view): every layer. **Copper** is the copper, vias,
  * holes, outline, ratsnest and the pads' and vias' names. **Assembly** is the silkscreen, fab and
  * courtyards with the holes, outline and ratsnest. **Placement** is the board before it is wired:
@@ -19,8 +20,8 @@
  *
  * `layers` is the ids drawn, or null for the mode's own set (resolved against the sheet, so a
  * rebuild that adds a layer draws it under the mode). A display whose layers differ from its
- * mode's reads as Custom; the mode is kept as what choosing it again returns to. The pours and
- * the side are switches of their own, kept through a change of mode, as a 3D view's Grid is.
+ * mode's reads as Custom; the mode is kept as what choosing it again returns to. The pours and the
+ * side are switches of their own, kept through a change of mode, as a 3D view's Grid is.
  *
  * Nothing here is React or canvas: pure functions over the payload's sheet (`layoutPlot`'s, or
  * the raw `payload.sheets[0]`: only `layers[].id`, `kind` and `side` are read).
@@ -28,18 +29,20 @@
 
 /** What each mode draws, by layer kind (the outline always), and whether the overlay draws airwires. */
 export const BOARD_DISPLAY_MODES = Object.freeze({
-  board: Object.freeze({ kinds: Object.freeze(["sheet", "area", "copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
-  copper: Object.freeze({ kinds: Object.freeze(["sheet", "area", "copper", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
-  assembly: Object.freeze({ kinds: Object.freeze(["sheet", "area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"]), airwires: false }),
-  placement: Object.freeze({ kinds: Object.freeze(["sheet", "area", "fab", "courtyard", "outline"]), airwires: true }),
+  board: Object.freeze({ kinds: Object.freeze(["area", "copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
+  copper: Object.freeze({ kinds: Object.freeze(["area", "copper", "via", "drill", "outline", "ratsnest", "names"]), airwires: false }),
+  assembly: Object.freeze({ kinds: Object.freeze(["area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"]), airwires: false }),
+  placement: Object.freeze({ kinds: Object.freeze(["area", "fab", "courtyard", "outline"]), airwires: true }),
 });
 /** The mode ids, in the order a menu lists them. */
 export const BOARD_DISPLAY_MODE_IDS = Object.freeze(["board", "copper", "assembly", "placement"]);
 export const BOARD_DISPLAY_SIDES = Object.freeze(["top", "bottom"]);
 export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null });
+/** What a set stored when a board still had a drawing sheet may name: no layer now, dropped as it is read. */
+const GONE = new Set(["sheet"]);
 /** The ids of what is not a board layer — the canvas under it, what goes through it — and how the Display names them. */
 export const BOARD_THROUGH_LAYER_LABELS = Object.freeze({
-  area: "Board area", sheet: "Drawing sheet", vias: "Vias", drills: "Drills", ratsnest: "Ratsnest", names: "Names"
+  area: "Board area", vias: "Vias", drills: "Drills", ratsnest: "Ratsnest", names: "Names"
 });
 const INNER_COPPER = /^In\d+\.Cu$/;
 // The sides' layers as the Layers section lists them, whatever order they are drawn in: the front
@@ -60,7 +63,8 @@ const sameSet = (left, right) => left.length === right.length && left.every((id)
 
 /**
  * A stored or requested display, read leniently: the defaults where it says nothing usable.
- * `layers` keeps unknown ids (a stored set outlives a rebuild; a snapshot's is checked by the engine).
+ * `layers` keeps unknown ids (a stored set outlives a rebuild; a snapshot's is checked by the engine),
+ * but not the drawing sheet a set stored before it was dropped names.
  *
  * @param {unknown} raw
  * @returns {{ mode: string, side: "top"|"bottom", poured: boolean, layers: string[]|null }}
@@ -69,7 +73,7 @@ export function readBoardDisplay(raw) {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const mode = BOARD_DISPLAY_MODES[value.mode] ? value.mode : BOARD_DISPLAY_DEFAULTS.mode;
   const layers = Array.isArray(value.layers)
-    ? [...new Set(value.layers.filter((id) => typeof id === "string" && id))]
+    ? [...new Set(value.layers.filter((id) => typeof id === "string" && id && !GONE.has(id)))]
     : null;
   return {
     mode,
@@ -96,9 +100,9 @@ export function boardDisplayIsCustom(display, sheet = null) {
   return !sameSet(display.layers, boardModeLayers(display.mode, sheet));
 }
 
-/** The display's mode chosen: the preset's layers, the pours and the side kept. */
+/** The display's mode chosen: the preset's layers, its switches (the pours, the side) kept. */
 export const selectBoardMode = (display, mode) => ({
-  mode: BOARD_DISPLAY_MODES[mode] ? mode : BOARD_DISPLAY_DEFAULTS.mode, side: display.side, poured: display.poured, layers: null,
+  ...display, mode: BOARD_DISPLAY_MODES[mode] ? mode : BOARD_DISPLAY_DEFAULTS.mode, layers: null,
 });
 
 /**
@@ -131,7 +135,7 @@ export function boardDrawView(display, sheet) {
  * A sheet's layers as the Display lists them, in four groups: Front (outermost first, down to
  * the copper), Inner (the inner coppers, `In1.Cu` first), Back (the copper first, outwards) and
  * Other (the user layers, the outline and the margin as KiCad lists them, then the board's area,
- * the drawing sheet, the vias, the drills, the ratsnest and the names). A group with no layers is
+ * the vias, the drills, the ratsnest and the names). A group with no layers is
  * left out. The order is a list's, not the drawing's.
  *
  * @returns {{ id: "front"|"inner"|"back"|"other", label: string, layers: { id: string, label: string }[] }[]}

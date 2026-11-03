@@ -12,9 +12,8 @@ outline, then the front side, then what goes through the board on top).
 
 The board is one SHEET: millimetres, y down, KiCad's frame moved so the
 board's outline sits with its top-left corner at (0, 0) -- its ``width`` and
-``height`` are the outline's; ``page`` is the box of the paper KiCad draws it on.
-The sheet is a stack of LAYERS, bottom to top in that order: the drawing sheet
-(``sheet``), the board's area (``area``), the back side's fabrication, courtyard,
+``height`` are the outline's.
+The sheet is a stack of LAYERS, bottom to top in that order: the board's area (``area``), the back side's fabrication, courtyard,
 adhesive, paste, silkscreen and mask, the back copper, the inner coppers deepest
 first, the user layers and ``Edge.Cuts``, the front side's in the same order up to
 its copper, then four layers of what goes through the board: the pads' holes
@@ -45,9 +44,8 @@ millimetres:
 - the ratsnest is the engine's connectivity over the copper
   (:mod:`cad.engine.formats.kicad.connectivity`): one line per connection still to make,
   no DRC;
-- the board's area is its outline filled, cutouts left open; the drawing sheet is
-  KiCad's default one (:mod:`cad.engine.formats.kicad.drawing_sheet`) with the board's
-  title block.
+- the board's area is its outline filled, cutouts left open. No drawing sheet (the page's
+  border and title block) is drawn: a board is the board alone.
 
 ``board`` beside the sheet is the board's index (:mod:`cad.engine.formats.kicad.board_index`)
 in sheet millimetres, which the viewer's tools point with (its ``origin`` is where
@@ -72,12 +70,12 @@ from cad.engine.formats.kicad.board_index import (
 )
 from cad.engine.formats.kicad.connectivity import Copper, ratsnest
 from cad.engine.formats.kicad.dimensions import dimension_shapes
-from cad.engine.formats.kicad.drawing_sheet import drawing_sheet, title_variables
 from cad.engine.formats.kicad.geometry import XY, area, box, inside, polygon_distance, rotate
 from cad.engine.formats.kicad.labels import is_track, pad_labels, via_labels
 from cad.engine.formats.kicad.naming import netclass_of, project_netclasses
 from cad.engine.formats.kicad.sexpr import Sym
 from cad.engine.formats.kicad.stroke_font import text_strokes
+from cad.engine.formats.kicad.text_variables import title_variables
 from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION, PlotError
 
 __all__ = ["BOARD_BACKGROUND", "build_plot", "payload_bytes", "plot_payload_bytes"]
@@ -103,7 +101,7 @@ _VIA_DRILL, _MICROVIA_DRILL = 0.3, 0.1
 _TIERS = ("pour", "main", "via", "pad", "label")
 # The layers of what goes through the board, and what is drawn under everything: (id, kind).
 _THROUGH = (("drills", "drill"), ("vias", "via"), ("ratsnest", "ratsnest"), ("names", "names"))
-_UNDER = (("sheet", "sheet"), ("area", "area"))
+_UNDER = (("area", "area"),)
 
 
 # --- the stack ----------------------------------------------------------------------------
@@ -448,8 +446,7 @@ class _Builder:
 
     def _board_variables(self) -> dict[str, str]:
         """What a board text's ``${...}`` names: its title block, its file and the project's text variables."""
-        variables = title_variables(self.tree, file_name=self.path.name, project=self.path.with_suffix(".kicad_pro"))
-        return {key: value for key, value in variables.items() if key not in ("#", "##", "SHEETNAME", "SHEETPATH")}
+        return title_variables(self.tree, file_name=self.path.name, project=self.path.with_suffix(".kicad_pro"))
 
     # -- footprints --------------------------------------------------------------------
 
@@ -848,17 +845,6 @@ class _Builder:
                 item["id"] = f"{owner}/{uid}"
         return self.sheet
 
-    def drawing_sheet(self) -> tuple[float, float, float, float]:
-        """KiCad's default drawing sheet on the ``sheet`` layer, the page's edge among its lines; the page's box."""
-        lines, texts, page = drawing_sheet(self.tree, file_name=self.path.name, project=self.path.with_suffix(".kicad_pro"))
-        for line in lines:
-            self.sheet.path("sheet", [line.start, line.end], line.width, framed=False, **({"page": True} if line.page else {}))
-        for text in texts:
-            strokes = text_strokes(text.text, size=(text.size, text.size), at=text.at, justify=() if text.centred else ("left",),
-                                   italic=text.italic)
-            self.sheet.text("sheet", text.text, strokes, text.width, framed=False)
-        return page
-
     def board_area(self, outline: Sequence[Sequence[XY]]) -> None:
         """The board's area on the ``area`` layer: the outline's largest closed loop filled, the loops inside it open."""
         loops = [list(line[:-1]) for line in outline if len(line) >= 4 and math.dist(line[0], line[-1]) <= 0.011]
@@ -963,7 +949,6 @@ def _build(path: Path, tree: list) -> dict:
     for start, end in lines:
         sheet.path("ratsnest", [start, end], _HAIRLINE)
     left, top, right, bottom = _frame(index, sheet.points)
-    page = builder.drawing_sheet()
     builder.board_area(index.outline)
     declared = [str(entry[1]) for entry in (sexpr.find(tree, "layers") or [])[1:] if isinstance(entry, list) and len(entry) >= 2]
     stack = list(_UNDER) + [(layer, _kind(layer)) for layer in _stack(declared, copper_layers(tree))] + list(_THROUGH)
@@ -975,7 +960,7 @@ def _build(path: Path, tree: list) -> dict:
         items = sheet.items(layer)
         if not items and not _COPPER.match(layer) and not (layer == "names" and named):
             continue
-        layers.append({"id": layer, "kind": kind, "side": _side(layer) if kind not in ("sheet", "area", "names") else "both",
+        layers.append({"id": layer, "kind": kind, "side": _side(layer) if kind not in ("area", "names") else "both",
                        "items": [_shifted(item, left, top) for item in items]})
     moved = index.mapped(lambda x, y: (x - left, y - top))
     return {
@@ -984,8 +969,7 @@ def _build(path: Path, tree: list) -> dict:
         "generator": _generator(tree),
         "unrouted": len(lines),
         "sheets": [{
-            "name": path.stem, "width": _num(right - left), "height": _num(bottom - top), "background": BOARD_BACKGROUND,
-            "page": [_num(page[0] - left), _num(page[1] - top), _num(page[2] - left), _num(page[3] - top)], "layers": layers,
+            "name": path.stem, "width": _num(right - left), "height": _num(bottom - top), "background": BOARD_BACKGROUND, "layers": layers,
         }],
         "board": moved.as_json(_DIGITS),
     }

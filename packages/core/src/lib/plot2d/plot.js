@@ -25,10 +25,9 @@
  * **A frame** (`drawPlot`) is the canvas filled with the sheet's background, then the layers a
  * `view` chooses, in its order: every layer by default (KiCad's default view), or the layers the
  * view names; the copper with or without its pours; from the top, or from below, each layer
- * mirrored about the sheet's vertical centre line and the board's stack reversed (the drawing sheet
- * stays readable: its page is moved, not mirrored). Nothing is clipped to the sheet: the sheet is
- * the outline's box, which the fit frames (`bounds`), and what the file draws past it (a fab note
- * off the edge, the drawing sheet's page) is drawn where it falls; `extent` is the box of
+ * mirrored about the sheet's vertical centre line and the board's stack reversed. Nothing is
+ * clipped to the sheet: the sheet is the outline's box, which the fit frames (`bounds`), and what
+ * the file draws past it (a fab note off the edge) is drawn where it falls; `extent` is the box of
  * everything drawn. A label is drawn only once the view is close enough for it to read (its
  * `lod`), as KiCad's level of detail decides, and so is a track's net name, which the payload does
  * not carry: it is laid out along the track as it is drawn (`trackNames.js`), since where KiCad
@@ -54,7 +53,7 @@ export const PLOT_ITEM_TYPES = Object.freeze(["poly", "path", "circle", "text", 
 /** Layer kinds drawn only when a view names them: none, as KiCad shows every layer of a board it opens. */
 export const OPTIONAL_LAYER_KINDS = Object.freeze([]);
 /** Layer kinds drawn under the stack from either side: the drawing sheet and the board's area. */
-const UNDERLAY_KINDS = new Set(["sheet", "area"]);
+const UNDERLAY_KINDS = new Set(["area"]);
 /** Layer kinds drawn over the stack from either side: what goes through the board. */
 const OVERLAY_KINDS = new Set(["drill", "via", "ratsnest", "names"]);
 /** A path of width 0 is drawn this many CSS pixels wide at every zoom: a hairline. */
@@ -87,7 +86,6 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {"through"|"blind"|"micro"} [via]
  * @property {"pad"|"via"|"npth"} [hole]
  * @property {readonly [string, string]} [span] A blind or buried via's hole: its top and bottom copper.
- * @property {boolean} [page] The page's own edge around the drawing sheet.
  * @property {number} [clearance] A front-copper pad's clearance: KiCad outlines it, a hairline that far out.
  * @property {readonly (readonly [number, number])[]} [knockout] Knocked-out text's box: filled, the letters cut from it.
  * @property {readonly [number, number, number, number]} box The item's page box, computed at layout.
@@ -107,7 +105,6 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {string} background The colour the board is drawn on, `#rrggbb`.
  * @property {number} x Page position of the sheet's top-left corner, millimetres.
  * @property {number} y
- * @property {readonly [number, number, number, number]} page The paper the board is drawn on, `[minX, minY, maxX, maxY]`.
  *
  * @typedef {object} PlotLayout
  * @property {number} schemaVersion
@@ -255,11 +252,9 @@ export function layoutPlot(payload) {
         + `${describe(sheet.background)}.`
       );
     }
-    const page = Array.isArray(sheet.page) && sheet.page.length === 4 && sheet.page.every(finite) && sheet.page[2] > sheet.page[0] && sheet.page[3] > sheet.page[1]
-      ? Object.freeze([...sheet.page]) : Object.freeze([0, 0, sheet.width, sheet.height]);
     return Object.freeze({
       index, name: String(sheet.name ?? ""), layers: layoutLayers(sheet, where),
-      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0, page
+      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0
     });
   });
   const [sheet] = placed;
@@ -629,11 +624,11 @@ function drawHole(ctx, item, background, PathCtor) {
   fill(ctx, path);
 }
 
-/** Draw in page millimetres from here on: the view's transform, its mirror (or its shift) and the pixel ratio. */
-function pageSpace(ctx, transform, pixelRatio, mirrorX, shiftX = 0) {
+/** Draw in page millimetres from here on: the view's transform, its mirror and the pixel ratio. */
+function pageSpace(ctx, transform, pixelRatio, mirrorX) {
   const { scale, offsetX, offsetY } = transform;
   const s = scale * pixelRatio;
-  if (mirrorX == null) ctx.setTransform(s, 0, 0, s, (offsetX + shiftX * scale) * pixelRatio, offsetY * pixelRatio);
+  if (mirrorX == null) ctx.setTransform(s, 0, 0, s, offsetX * pixelRatio, offsetY * pixelRatio);
   else ctx.setTransform(-s, 0, 0, s, (2 * mirrorX * scale + offsetX) * pixelRatio, offsetY * pixelRatio);
 }
 
@@ -664,7 +659,7 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
       stroke(ctx, pathOf(ctx, item, PathCtor, mirrored));
       continue;
     }
-    const paint = item.page ? itemColor(layer.id, item) : color;
+    const paint = color;
     if (item.knockout) {
       drawKnockout(ctx, item, paint, background, PathCtor);
       continue;
@@ -755,19 +750,15 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     const mirrorX = view?.side === "bottom" ? sheet.x + sheet.width / 2 : null;
     // What the canvas shows, mirrored back into the board's own coordinates.
     const shown = visible && mirrorX != null ? [2 * mirrorX - visible[2], visible[1], 2 * mirrorX - visible[0], visible[3]] : visible;
-    // From below the drawing sheet's page is moved where the mirrored board lies, and reads as it is.
-    const shiftX = mirrorX != null ? 2 * mirrorX - (sheet.page[0] + sheet.page[2]) : 0;
-    const paper = visible && shiftX ? [visible[0] - shiftX, visible[1], visible[2] - shiftX, visible[3]] : visible;
-    if (shown && !rectsOverlap(shown, layout.extent) && !(paper && rectsOverlap(paper, layout.extent))) continue;
+    if (shown && !rectsOverlap(shown, layout.extent)) continue;
     pageSpace(ctx, transform, pixelRatio, null);
     ctx.fillStyle = sheet.background;
     if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
     else ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
     for (const layer of viewedLayers(sheet, view)) {
-      const flat = layer.kind === "sheet" && mirrorX != null;
-      pageSpace(ctx, transform, pixelRatio, flat ? null : mirrorX, flat ? shiftX : 0);
+      pageSpace(ctx, transform, pixelRatio, mirrorX);
       drawLayer(ctx, layer, {
-        hairline, poured, visible: flat ? paper : shown, PathCtor, detail: scale, background: sheet.background, mirrored: mirrorX != null, vias, names,
+        hairline, poured, visible: shown, PathCtor, detail: scale, background: sheet.background, mirrored: mirrorX != null, vias, names,
         viewport: across ?? [sheet.width, sheet.height]
       });
     }

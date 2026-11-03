@@ -33,7 +33,6 @@ export default {
   "board.text.drills": "드릴 구멍",
   "board.text.unconnected_pins": "연결되지 않은 핀",
   "board.text.names": "이름",
-  "board.text.drawing_sheet": "도면 양식",
   "board.text.board_area": "보드 영역",
   "board.text.couldn_t_open_the_board": "기판을 열 수 없습니다",
   "board.text.message_the_existing_board_remains_visible": "{message} 기존 기판이 계속 표시됩니다.",

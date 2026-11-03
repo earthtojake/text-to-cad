@@ -8,7 +8,7 @@
  * frame, so a capture of the canvas holds it too.
  *
  * The whole pane is the board's background, KiCad's canvas colour, whatever the theme: KiCad draws
- * a board on its page on one dark canvas, and the drawing sheet's page reaches past the board.
+ * a board on one dark canvas, which reaches past the board.
  *
  * The pane says whether what it shows is final — drawn at the scale it is shown at — as
  * `data-board-settled` on its element, written as it paints (no render): a zoom is `false` until

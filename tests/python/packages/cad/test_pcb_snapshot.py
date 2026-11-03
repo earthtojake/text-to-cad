@@ -125,5 +125,19 @@ class BoardJobReplayTest(unittest.TestCase):
         self.assertTrue(near(top.getpixel(on_screen(30, 26)), (35, 45, 58), 30), f"the board's area: {top.getpixel(on_screen(30, 26))}")
 
 
+class BoardDisplayTest(unittest.TestCase):
+    """The Display a snapshot reads, as the viewer's `plot2d/boardDisplay.js` reads it."""
+
+    LAYERS = [{"id": "area", "kind": "area"}, {"id": "B.Cu", "kind": "copper"},
+              {"id": "Edge.Cuts", "kind": "outline"}, {"id": "F.Cu", "kind": "copper"}, {"id": "vias", "kind": "via"}]
+
+    def test_a_set_naming_the_old_drawing_sheet_draws_the_rest(self) -> None:
+        from cad.engine.render.board import display_options, viewed_layers
+
+        drawn = lambda value: [layer["id"] for layer in viewed_layers(self.LAYERS, display_options(value))]
+        self.assertEqual(["area", "B.Cu", "Edge.Cuts", "F.Cu", "vias"], drawn({}))
+        # A set saved when a board had a drawing sheet still draws what else it names, and is not refused.
+        self.assertEqual(["F.Cu"], drawn({"layers": ["sheet", "F.Cu"]}))
+
 if __name__ == "__main__":
     unittest.main()

@@ -36,7 +36,6 @@ export default {
   "board.text.drills": "Drills",
   "board.text.unconnected_pins": "Unconnected pins",
   "board.text.names": "Names",
-  "board.text.drawing_sheet": "Drawing sheet",
   "board.text.board_area": "Board area",
   "board.text.couldn_t_open_the_board": "Couldn’t open the board",
   "board.text.message_the_existing_board_remains_visible": "{message} The existing board remains visible.",

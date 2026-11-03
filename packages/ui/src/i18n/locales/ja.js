@@ -33,7 +33,6 @@ export default {
   "board.text.drills": "ドリル穴",
   "board.text.unconnected_pins": "未接続ピン",
   "board.text.names": "名前",
-  "board.text.drawing_sheet": "図枠",
   "board.text.board_area": "基板領域",
   "board.text.couldn_t_open_the_board": "基板を開けませんでした",
   "board.text.message_the_existing_board_remains_visible": "{message} 既存の基板を引き続き表示しています。",

@@ -19,7 +19,7 @@ export {
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
-export { HOLE_COLORS, NAME_COLORS, PAGE_LIMITS_COLOR, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
+export { HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
 export { GLYPHS, glyphStrokes, textStrokes } from "./strokeFont.js";
 export { boardMirrorX, boardPlanProjection, marksInPlan, planToSheet, sheetToPlan } from "./boardView.js";
 export {

@@ -16,15 +16,14 @@ import {
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
-import { HOLE_COLORS, NAME_COLORS, PAGE_LIMITS_COLOR, ZONE_OPACITY, layerColor, netnameColor } from "./theme.js";
+import { HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, layerColor, netnameColor } from "./theme.js";
 
-// A tiny board in the payload's own shape (`docs/plot-payload.md`): a 40 x 30 mm sheet on a page, its
+// A tiny board in the payload's own shape (`docs/plot-payload.md`): a 40 x 30 mm sheet, its
 // area, a courtyard, one pad on each copper layer, a track, a pour with its fill and outline, a via's
 // rings and hole, a pad's hole, text, a pad's names.
 const square = (cx, cy, w, h) => [[cx - w / 2, cy - h / 2], [cx + w / 2, cy - h / 2], [cx + w / 2, cy + h / 2], [cx - w / 2, cy + h / 2]];
 const layer = (id, kind, side, items) => ({ id, kind, side, items });
 const LAYERS = [
-  layer("sheet", "sheet", "both", [{ t: "path", pts: [[-10, 1], [60, 1]], w: 0, page: true }, { t: "path", pts: [[0, -5], [50, -5]], w: 0.15 }]),
   layer("area", "area", "both", [{ t: "poly", pts: [[0, 0], [40, 0], [40, 30], [0, 30]], holes: [square(30, 25, 2, 2)] }]),
   layer("B.CrtYd", "courtyard", "back", [{ t: "path", pts: square(30, 10, 4, 3), w: 0.05, closed: true, ref: "#U1" }]),
   layer("B.Cu", "copper", "back", [
@@ -52,7 +51,7 @@ const NOTE = layer("F.Fab", "fab", "front", [{ t: "text", text: "REV A", w: 0.15
 const INDEX = { origin: [20, 15], parts: [], pads: [] };
 const BOARD = {
   schemaVersion: 4, kind: "board", generator: "pcbnew 10.99", unrouted: 1,
-  sheets: [{ name: "blinky", width: 40, height: 30, background: "#001023", page: [-10, -10, 60, 40], layers: LAYERS }], board: INDEX
+  sheets: [{ name: "blinky", width: 40, height: 30, background: "#001023", layers: LAYERS }], board: INDEX
 };
 const index = (id) => LAYERS.findIndex((entry) => entry.id === id);
 
@@ -62,9 +61,9 @@ test("a board is one sheet of layers at the page's origin, its index beside it",
   assert.deepEqual(layout.bounds, [0, 0, 40, 30]);
   // drawing2d's model space is the page with y negated: the same box, flipped.
   assert.deepEqual(layout.modelBounds, [0, -30, 40, 0]);
-  // The extent is everything drawn: the drawing sheet's lines reach past the sheet.
-  assert.deepEqual(layout.extent.map((v) => Math.round(v * 1000) / 1000), [-10, -5.075, 60, 30.05]);
-  assert.deepEqual(layout.sheets.map(({ x, y, background, name, page }) => [x, y, background, name, page]), [[0, 0, "#001023", "blinky", [-10, -10, 60, 40]]]);
+  // The extent is everything drawn: the outline's stroke reaches a shade past the sheet.
+  assert.deepEqual(layout.extent.map((v) => Math.round(v * 1000) / 1000), [-0.05, -0.05, 40.05, 30.05]);
+  assert.deepEqual(layout.sheets.map(({ x, y, background, name }) => [x, y, background, name]), [[0, 0, "#001023", "blinky"]]);
   assert.deepEqual(layout.sheets[0].layers.map(({ id, kind, side }) => [id, kind, side]), LAYERS.map(({ id, kind, side }) => [id, kind, side]));
   assert.equal(layout.board, INDEX);
   assert.equal(layout.unrouted, 1);
@@ -79,8 +78,7 @@ test("a board is one sheet of layers at the page's origin, its index beside it",
 });
 
 test("the fit frames the sheet the right way up, whatever is drawn past it: its top-left corner is the picture's", () => {
-  const layers = LAYERS.filter(({ id }) => id !== "sheet");
-  const layout = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: [...layers, NOTE] }] });
+  const layout = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: [...LAYERS, NOTE] }] });
   // The note lies outside the sheet: in the extent, not in what the fit frames.
   assert.deepEqual(layout.bounds, [0, 0, 40, 30]);
   assert.deepEqual(layout.extent.map((v) => Math.round(v * 1000) / 1000), [-0.05, -0.05, 46.075, 30.05]);
@@ -137,8 +135,8 @@ test("a view chooses and orders the layers: every layer, named layers, or the bo
   assert.deepEqual(ids(null), LAYERS.map(({ id }) => id));
   assert.deepEqual(ids({ side: "top" }), ids(null));
   assert.deepEqual(ids({ layers: ["F.Mask", "B.CrtYd", "F.Cu"] }), ["B.CrtYd", "F.Mask", "F.Cu"]);
-  // From below the board's stack reverses; the page and the board's area stay under it, what goes through on top.
-  assert.deepEqual(ids({ side: "bottom" }), ["sheet", "area", "F.Cu", "F.SilkS", "F.Mask", "Edge.Cuts", "B.Cu", "B.CrtYd", "drills", "vias", "ratsnest", "names"]);
+  // From below the board's stack reverses; the board's area stays under it, what goes through on top.
+  assert.deepEqual(ids({ side: "bottom" }), ["area", "F.Cu", "F.SilkS", "F.Mask", "Edge.Cuts", "B.Cu", "B.CrtYd", "drills", "vias", "ratsnest", "names"]);
 });
 
 /** A 2D context that records what it is asked to do, on a canvas of a given device size; `Path2D` is a recording double. */
@@ -181,8 +179,7 @@ test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", (
   const drawn = painted(calls);
   const find = (name, color, test = () => true) => drawn.filter(([kind, , style]) => kind === name && (name === "fill" ? style.fill : style.stroke) === color && test(style));
   const hairline = PLOT_HAIRLINE_CSS_PX / 10;
-  // The page's edge is grey; the board's area is filled with its cutout left open.
-  assert.equal(find("stroke", PAGE_LIMITS_COLOR, (style) => style.width === hairline).length, 1);
+  // The board's area is filled with its cutout left open.
   assert.equal(drawn.find(([kind, , style]) => kind === "fill" && style.fill === layerColor("area"))[3], "evenodd");
   // A pour at KiCad's zone opacity, everything else opaque.
   assert.deepEqual(find("fill", layerColor("B.Cu")).map(([, , style]) => style.alpha), [ZONE_OPACITY, 1]);
@@ -234,11 +231,9 @@ test("a view draws the layers it names, the copper without its pours, or the boa
   assert.ok(!copperOnly.some(([name, , style]) => name === "stroke" && style.width === 0.15), "no via ring without the vias layer");
   assert.ok(!copperOnly.some(([name, , style]) => name === "stroke" && style.stroke === netnameColor("F.Cu")), "no names without the names layer");
   assert.ok(painted(draw({ layers: ["F.Cu", "vias", "names"] })).some(([name, , style]) => name === "stroke" && style.width === 0.15));
-  // From below, the board is mirrored about the sheet's vertical centre line (x -> 40 - x); the drawing sheet is
-  // not: its page (x -10..60) is moved, unmirrored, to where the mirrored board lies (x -20..50).
+  // From below, the board is mirrored about the sheet's vertical centre line (x -> 40 - x).
   const below = draw({ side: "bottom" });
   assert.ok(below.some(([name, a, , , d, e]) => name === "setTransform" && a === -10 && d === 10 && e === 400), "mirrored about x = 20");
-  assert.ok(below.some(([name, a, , , d, e]) => name === "setTransform" && a === 10 && d === 10 && e === -100), "the page moved 10 mm left");
   // What the canvas does not show is not drawn: zoomed onto the top-left corner, the via at (20, 15) is off it.
   const { ctx, calls, Path2D } = recorder(100, 100);
   drawPlot(ctx, layout, { transform: { scale: 100, offsetX: 0, offsetY: 0 }, Path2D });

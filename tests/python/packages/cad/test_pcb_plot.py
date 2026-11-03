@@ -5,7 +5,7 @@ headless API saves) without KiCad: the sheet and its layers in the order KiCad's
 them (the front copper active), pads on every copper layer they flash on with their numbers and
 nets, tracks, the via's rings and the holes, the pour's saved fill and border hatch, text in the
 permissive stroke font, mask and paste derived from the pads, the outline, the board's area, the
-drawing sheet, and the ratsnest from the engine's own connectivity. The payload is a function of
+ratsnest from the engine's own connectivity (no drawing sheet). The payload is a function of
 the file's bytes, and the store caches it by them. The JavaScript renderer's fixture
 (`packages/ui/src/renderers/board/__fixtures__/board.plot.json`) is this same board's payload.
 """
@@ -59,13 +59,11 @@ class PlotPayloadTest(unittest.TestCase):
         # side, the user layers and the outline, the front side up to its copper, what goes through on top.
         self.assertEqual(
             [(layer["id"], layer["kind"], layer["side"]) for layer in self.sheet["layers"]],
-            [("sheet", "sheet", "both"), ("area", "area", "both"), ("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"),
+            [("area", "area", "both"), ("B.Mask", "mask", "back"), ("B.Cu", "copper", "back"),
              ("Edge.Cuts", "outline", "both"), ("F.Fab", "fab", "front"), ("F.CrtYd", "courtyard", "front"), ("F.Paste", "paste", "front"),
              ("F.SilkS", "silk", "front"), ("F.Mask", "mask", "front"), ("F.Cu", "copper", "front"),
              ("drills", "drill", "both"), ("vias", "via", "both"), ("ratsnest", "ratsnest", "both"), ("names", "names", "both")],
         )
-        # The board's paper, A4, its corner on KiCad's origin, which is the board's corner here.
-        self.assertEqual(self.sheet["page"], [0.0, 0.0, 297.0, 210.0])
         # The board's index rides beside the picture, in sheet millimetres; KiCad's origin is the sheet's corner here.
         self.assertEqual(self.payload["board"]["origin"], [0.0, 0.0])
         self.assertEqual([part["ref"] for part in self.payload["board"]["parts"]], ["D1", "J1", "R1"])
@@ -131,19 +129,10 @@ class PlotPayloadTest(unittest.TestCase):
         self.assertEqual({item.get("clearance") for item in self.items("F.Cu", t="poly")}, {0.2})
         self.assertFalse(any("clearance" in item for item in self.items("B.Cu", t="poly")))
 
-    def test_the_board_is_drawn_on_kicads_default_drawing_sheet(self) -> None:
-        items = self.layers["sheet"]["items"]
-        texts = [item["text"] for item in items if item["t"] == "text"]
-        # The grid's references along each side, every 50 mm in from the 10 mm frame, and the title block.
-        self.assertEqual(texts[:20], [*"123456123456", *"ABCDABCD"])
-        self.assertIn("Size: A4", texts)
-        self.assertIn("File: blinky.kicad_pcb", texts)
-        self.assertIn("KiCad E.D.A. 10.99", texts)
-        # The page's edge is grey, its own line; the frames are 0.15 mm lines.
-        page = [item for item in items if item.get("page")]
-        self.assertEqual(len(page), 4)
-        self.assertEqual(sorted({tuple(point) for item in page for point in item["pts"]}), [(0.0, 0.0), (0.0, 210.0), (297.0, 0.0), (297.0, 210.0)])
-        self.assertTrue(all(item["w"] == 0.15 for item in items if item["t"] == "path" and not item.get("page")))
+    def test_no_drawing_sheet_is_drawn_the_board_is_the_board_alone(self) -> None:
+        # KiCad's page border and title block are not drawn: no sheet layer, and no page to frame.
+        self.assertNotIn("sheet", self.layers)
+        self.assertNotIn("page", self.sheet)
 
     def test_mask_and_paste_are_derived_from_the_pads(self) -> None:
         self.assertEqual(sorted(item["ref"] for item in self.layers["F.Mask"]["items"]), ["#D1.1", "#D1.2", "#J1.1", "#J1.2", "#R1.1", "#R1.2"])
