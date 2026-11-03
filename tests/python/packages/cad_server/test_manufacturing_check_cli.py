@@ -2,7 +2,7 @@
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
 command: its options, its one result shape, its refusals before anything is read, a STEP measured
-through the engine's tessellation, and the run in the environment of the trimesh integration when the
+on its exact geometry, and the run in the environment of the trimesh integration when the
 command's own environment lacks it.
 """
 
@@ -52,10 +52,10 @@ class ManufacturingCheckCommand(unittest.TestCase):
     def test_printing_says_its_findings_then_its_summary(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "printing", "--angle-limit", "30")
         self.assertEqual(code, 0)
-        self.assertRegex(out.splitlines()[-1], r"^OK .*box\.stl: printing: 6000 mm3, 1 body\(ies\); overhangs under 30 deg")
+        self.assertRegex(out.splitlines()[-1], r"^OK .*box\.stl: printing fdm: 6000 mm3, 1 body\(ies\); overhangs under 30 deg")
 
     def test_a_mistake_is_refused_before_anything_is_read(self) -> None:
-        for argv, words in (((str(self.box),), "give --process molding or printing"),
+        for argv, words in (((str(self.box),), "give --process cnc, sheet, molding or printing"),
                             ((str(self.box), "--process", "casting"), "not 'casting'"),
                             ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's"),
                             ((str(self.box), "--process", "printing", "--pull", "z"), "--pull is not printing's"),
@@ -78,7 +78,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "molding", "--json")
         self.assertEqual((code, json.loads(out)["findings"][0]["code"]), (1, "invalid_target"))
 
-    def test_a_step_is_measured_as_the_engine_tessellates_it(self) -> None:
+    def test_a_step_is_measured_on_its_exact_geometry(self) -> None:
         from build123d import Box, export_step
 
         step = self.folder / "box.step"
@@ -86,7 +86,8 @@ class ManufacturingCheckCommand(unittest.TestCase):
         code, out, _ = _run("step", str(step), "--process", "printing", "--json")
         payload = json.loads(out)
         self.assertEqual(code, 0, out)
-        self.assertAlmostEqual(payload["measurements"]["mesh"]["volume_mm3"], 6000.0, delta=1.0)
+        self.assertAlmostEqual(payload["measurements"]["solid"]["volume_mm3"], 6000.0, delta=1e-6)
+        self.assertEqual(payload["measurements"]["source"]["measured_as"], "brep")
         self.assertEqual(payload["path"], str(step.resolve()))
 
     def test_without_trimesh_here_it_runs_in_the_integrations_environment(self) -> None:

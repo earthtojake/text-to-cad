@@ -211,7 +211,7 @@ class CheckTest(unittest.TestCase):
             result = cad.stl.check(path, process="printing", candidates=True)
 
         self.assertEqual(len(result.measurements["orientations"]["candidates"]), 6)
-        self.assertIn("orientations by support area", result.summary)
+        self.assertIn("orientations ranked", result.summary)
 
     def test_an_overhang_is_said_where_it_is(self) -> None:
         with tempfile.TemporaryDirectory() as td:
