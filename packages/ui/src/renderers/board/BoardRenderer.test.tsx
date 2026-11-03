@@ -286,7 +286,7 @@ it('a locked footprint is no pick until Locked items is ticked, but for its pads
   dispose();
 });
 
-it("a drag under Select draws the box and names the area on the working layer; the middle button and Space held pan; a jittered click is a click", async () => {
+it("a drag under Select draws the box and names the area on the working layer; the other drags pan as the 3D views' do; a jittered click is a click", async () => {
   const promptFiles = { create: vi.fn(async () => ({ snapshot: '/tmp/board.snapshot.json' })), read: vi.fn(), save: vi.fn() };
   const view = await open('blinky.kicad_pcb', { promptFiles });
   const { pane, dispose } = view;
@@ -315,16 +315,22 @@ it("a drag under Select draws the box and names the area on the working layer; t
   fireEvent.pointerMove(canvas, { ...middle, ...at([25, 15]) });
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).toBeGreaterThan(before.offsetX));
-  // Space held, a left drag pans too (a trackpad's way), its hand the cursor; let go, a drag is a box again.
-  const panned = { ...frames.at(-1)! };
-  fireEvent.keyDown(window, { key: ' ', code: 'Space' });
-  await waitFor(() => expect(canvas.className).toContain('cursor-grab'));
-  fireEvent.pointerDown(canvas, { ...press, ...at([20, 15]) });
-  fireEvent.pointerMove(canvas, { ...press, ...at([20, 20]) });
-  fireEvent.pointerUp(canvas, { ...press, ...at([20, 20]) });
-  fireEvent.keyUp(window, { key: ' ', code: 'Space' });
-  await waitFor(() => expect(frames.at(-1)!.offsetY).toBeGreaterThan(panned.offsetY));
-  await waitFor(() => expect(canvas.className).not.toContain('cursor-grab'));
+  // The 3D views' drags: the right button's (a trackpad's two-finger click and drag) pans, and keeps the
+  // browser's menu off; a left drag with Ctrl, Cmd or Shift pans; a right press that does not travel picks nothing.
+  const pans = async (init: Record<string, unknown>, [dx, dy]: [number, number]) => {
+    const was = { ...frames.at(-1)! };
+    fireEvent.pointerDown(canvas, { ...press, ...init, ...at([20, 15]) });
+    fireEvent.pointerMove(canvas, { ...press, ...init, ...at([20 + dx, 15 + dy]) });
+    fireEvent.pointerUp(canvas, { ...press, ...init, ...at([20 + dx, 15 + dy]) });
+    await waitFor(() => expect([frames.at(-1)!.offsetX, frames.at(-1)!.offsetY]).not.toEqual([was.offsetX, was.offsetY]));
+  };
+  expect(fireEvent.contextMenu(canvas)).toBe(false);
+  await pans({ button: 2, pointerId: 3 }, [0, 5]);
+  await pans({ ctrlKey: true }, [5, 0]);
+  await pans({ metaKey: true }, [0, -5]);
+  await pans({ shiftKey: true }, [-5, 0]);
+  fireEvent.pointerDown(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
+  fireEvent.pointerUp(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
   expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
   const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
   expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))

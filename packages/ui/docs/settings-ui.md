@@ -283,7 +283,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the middle button, or Space held, and a drag pans), Pencil, Shapes, Measure; Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits), Pencil, Shapes, Measure; Display |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -394,7 +394,11 @@ Other items have no box: the board's index holds none of them. A whole net is pi
 section's Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
 everything", "Selection filter: Pads, Vias"). Select on a board has no modes: a click picks and a
 drag draws a box, the area it names (KiCad's window selection, a translucent rectangle as it is
-dragged); the view pans under the middle button or Space held, as KiCad's.
+dragged); every other drag is the 3D views' (`useViewerRuntime.js`'s OrbitControls, the left
+button's orbit being the box): the right button's drag pans (a Mac trackpad's two-finger click and
+drag), as does the middle button's and a left drag with Ctrl, Cmd or Shift held (a Shift click still
+adds); the wheel, a trackpad's two-finger scroll and a pinch zoom; the browser's menu is kept off
+the board, as off a 3D view.
 
 The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
 `selectGeometryMode`): All, a press takes the face or edge it lands on where the part's

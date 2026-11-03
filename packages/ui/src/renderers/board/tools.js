@@ -6,8 +6,9 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // Quick Edit names (`blinky.kicad_pcb#R1.2`, the pad 2 of R1; a track, a via, a zone, a rule area, a
 // text, a dimension or a graphic by the uuid KiCad saved it with), a click on nothing clearing; a
 // drag the box between its ends, an area on the view's working layer, as KiCad's window selection —
-// and the view moves under it as KiCad's does: the middle button, or Space held, and a drag pans,
-// the wheel or a pinch zooms, a double-click fits; Pencil and Shapes draw on the board; Measure takes
+// and the view moves under it as the 3D views' does: a right or middle drag, or a drag with Ctrl, Cmd
+// or Shift, pans, the wheel, a trackpad's two-finger scroll or a pinch zooms, a double-click fits;
+// Pencil and Shapes draw on the board; Measure takes
 // distances between points snapped to its pad, via and hole centres, its track ends and its
 // outline's corners, in millimetres (a drag pans under it). Its one view control is its Display.
 export const BOARD_TOOL = FLAT_TOOL;

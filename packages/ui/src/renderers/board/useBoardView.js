@@ -1,8 +1,9 @@
 /**
  * The canvas a board is painted on: every flat view's (`kit/viewport/useFlatCanvasView.js` —
- * wheel or pinch to zoom about the pointer, double-click to fit, a tap, a drag and the pointer
- * resting over it for the tool in hand, and a pan with the middle button or with Space held, as
- * KiCad's; a drag the tool does not take pans too), painting the board from the rasters kept of it
+ * wheel, a trackpad's two-finger scroll or a pinch to zoom about the pointer, double-click to fit,
+ * a tap, a drag and the pointer resting over it for the tool in hand, and the 3D views' pans: the
+ * middle or the right button's drag, or a drag with Ctrl, Cmd or Shift; a drag the tool does not
+ * take pans too), painting the board from the rasters kept of it
  * (`boardRasters.js`) on KiCad's canvas, then what the tools draw over it (`overlay`), in the same
  * frame, so a capture of the canvas holds it too.
  *
@@ -35,7 +36,7 @@ const surroundColor = (plot) => plot?.layout.sheets[0]?.background || KICAD_CANV
  * @param {(point: { x: number, y: number }, event: PointerEvent) => void} [options.onTap]
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's box: a drag is the area it names,
- *   and the middle button, or Space held, pans.
+ *   and the middle or right button, or a modified drag, pans.
  */
 export function useBoardView({ plot, restored = null, colorScheme = "light", onViewMoved, drawView = null, overlay = null, onTap = null, onHover = null,
   onDrag = null }) {
@@ -56,7 +57,7 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     if (element) element.dataset.boardSettled = final ? "true" : "false";
   }, []);
   const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
-    onDrag, middlePan: true, spacePan: true });
+    onDrag, middlePan: true, orbitPan: true });
   const { containerRef, schemeRef, requestPaint, paintNow, encode } = view;
 
   // One raster cache per board and Display: a new revision or a new set of layers starts afresh.
@@ -101,6 +102,6 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef: view.canvasRef, dragging: view.dragging, panReady: view.panReady, fit: view.fit, capture, thumbnail,
+  return { containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, capture, thumbnail,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

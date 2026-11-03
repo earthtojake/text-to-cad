@@ -46,8 +46,9 @@ import { useBoardView } from "./useBoardView.js";
  * specific thing under the pointer that its filter (KiCad's Selection Filter, `BoardSelectFilter.jsx`)
  * ticks, on a layer the Display draws (a pad, a via, a track, a text, a dimension, a graphic, a pour
  * or a rule area by its outline, then a part), Shift adds, and a click on nothing clears; a drag
- * draws a box and names the area, on the view's working layer (`tools.js`); the middle button or
- * Space held and a drag pans, the wheel or a pinch zooms, a double-click fits — Annotate, which
+ * draws a box and names the area, on the view's working layer (`tools.js`); the rest are the 3D
+ * views' drags (a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans; the wheel, a
+ * trackpad's two-finger scroll or a pinch zooms), a double-click fits — Annotate, which
  * draws on the board, and Measure, between points snapped to pad, via and hole centres, track ends
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
@@ -412,9 +413,8 @@ function BoardSurface({ view, data }) {
   </> : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
-  // over what a press would pick; Space held, the open hand, closed while it pans. Measure keeps a
-  // crosshair (Annotate's layer has its own).
-  const cursor = boardView.panReady ? (dragging ? "cursor-grabbing" : "cursor-grab") : measuring ? "cursor-crosshair"
+  // over what a press would pick. Measure keeps a crosshair (Annotate's layer has its own).
+  const cursor = measuring ? "cursor-crosshair"
     : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
