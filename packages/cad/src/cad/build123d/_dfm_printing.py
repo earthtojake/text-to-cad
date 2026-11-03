@@ -120,14 +120,6 @@ class Context:
         self.angle_limit = rules.angle_limit(options)
         self.layer = rules.layer_height(options)
         self.parts = document.parts
-        boxes = [part.shape.bounding_box() for part in self.parts]
-        self.lo = np.array([min(box.min.X for box in boxes), min(box.min.Y for box in boxes),
-                            min(box.min.Z for box in boxes)])
-        self.hi = np.array([max(box.max.X for box in boxes), max(box.max.Y for box in boxes),
-                            max(box.max.Z for box in boxes)])
-        self.z0 = float(self.lo[2])
-        self.diag = float(np.linalg.norm(self.hi - self.lo))
-        self.tol = max(1e-4, 1e-6 * self.diag)
         self.faces: list[list[FaceInfo]] = []
         self.rounds: list[Round] = []
         self._rays: dict[int, brep.Rays] = {}
@@ -159,6 +151,16 @@ class Context:
                 infos.append(info)
             self.faces.append(infos)
             self._group_rounds(index)
+        # the document's box from points on its surface -- every vertex, every sample, every node of the faces'
+        # triangulations -- not from a box the kernel pads with each face's tolerance: the plate is its lowest
+        V, _, _ = self.mesh()
+        points = [V] + [np.array([s.point for s in info.samples]) for infos in self.faces for info in infos
+                        if info.samples]
+        every = np.vstack(points)
+        self.lo, self.hi = every.min(axis=0), every.max(axis=0)
+        self.z0 = float(self.lo[2])
+        self.diag = float(np.linalg.norm(self.hi - self.lo))
+        self.tol = max(1e-4, 1e-6 * self.diag)
 
     # the part's pieces, made on first use
     def rays(self, part: int) -> brep.Rays:
@@ -233,7 +235,10 @@ class Context:
         """Every part triangulated together: vertices, triangles, and each triangle's owner (part << 20 |
         face ordinal)."""
         if self._mesh is None:
-            deflection = min(0.25, max(0.005, 5e-4 * self.diag))
+            size = max(float(np.linalg.norm([p.shape.bounding_box(optimal=False).size.X,
+                                             p.shape.bounding_box(optimal=False).size.Y,
+                                             p.shape.bounding_box(optimal=False).size.Z])) for p in self.parts)
+            deflection = min(0.25, max(0.005, 5e-4 * size))
             Vs, Fs, Os, offset = [], [], [], 0
             for index, part in enumerate(self.parts):
                 V, F, O = brep.triangles(part.shape, deflection)
@@ -313,7 +318,7 @@ def _solid(ctx: Context) -> dict[str, Any]:
         except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
             sound = None
         items.append({"part": part.name or part.owner or f"part {index + 1}", "location": ctx.ref(index, 1),
-                      "xyz": _xyz(part.shape.bounding_box().center()), "solids": len(solids), "shells": shells,
+                      "xyz": _xyz(part.shape.bounding_box(optimal=False).center()), "solids": len(solids), "shells": shells,
                       "closed": bool(solids) and closed == shells, "inner_shells": inner, "sound": sound,
                       "issues": issues, "volume_mm3": _r(float(part.shape.volume), 3),
                       "area_mm2": _r(float(part.shape.area), 3), "occurrences": part.occurrences})
@@ -657,7 +662,7 @@ def _clearances(ctx: Context) -> dict[str, Any]:
     from cad.build123d import _geometry
 
     items, reach = [], 5.0
-    boxes = [part.shape.bounding_box() for part in ctx.parts]
+    boxes = [part.shape.bounding_box(optimal=False) for part in ctx.parts]
     for a in range(len(ctx.parts)):
         for b in range(a + 1, len(ctx.parts)):
             ba, bb = boxes[a], boxes[b]
@@ -692,7 +697,7 @@ def _grid(ctx: Context, part: int) -> tuple[Any, list[mo.Cavity], np.ndarray, fl
     if part in ctx._grids:
         return ctx._grids[part]
     shape = ctx.parts[part].shape
-    box = shape.bounding_box()
+    box = shape.bounding_box(optimal=False)
     size = np.array([box.size.X, box.size.Y, box.size.Z])
     if size.min() <= 0:
         ctx._grids[part] = None
