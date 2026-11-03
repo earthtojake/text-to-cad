@@ -2,9 +2,10 @@
 
 The board file is the source; the decorated function edits it::
 
-    from cad import kicad_pcb, step
+    from cad import dxf, kicad_pcb, step
 
     @step("board.step")                    # the saved board's STEP, by kicad-cli (--subst-models)
+    @dxf("board.dxf")                      # its outline and holes (a @glb stacks the same way)
     @kicad_pcb("board.kicad_pcb")          # beside the script, as the engine's decorators' paths are
     def board(b):                          # b: KiPy's open Board (kicode.board.Board)
         ...
@@ -18,8 +19,8 @@ without ``api-server``, any stable KiCad's for now, refused before it starts; ``
 path, KiPy the ``ipc://`` form), KiPy (kicode's, ``kicode.KiCad``) connected to it (ready
 when it answers, never when a path appears: Windows serves a named pipe, no file), the function handed the
 open board, the board saved when the function returns and nothing saved when it raises; then the server
-stopped and its folder removed, whatever happened. The files stacked on it (``@step``) are written from
-the saved board afterwards, each by its producer (``cad.registry``).
+stopped and its folder removed, whatever happened. The files stacked on it (``@step``, ``@glb``, ``@dxf``)
+are written from the saved board afterwards, each by its producer (``cad.registry``).
 
 KiPy's ``KiCad.check_version()`` is never called: kicode's KiPy is the one built with its kicad-cli, and a
 kicad-cli ``CAD_KICAD_CLI`` names may be another nightly's, which KiPy still reads and edits. Upstream
@@ -107,7 +108,13 @@ def declare(out: Any, *, name: str | None = None) -> Callable[[Callable[[Any], A
 
 
 def declare_output(kind: str, script: BoardScript, out: Any) -> BoardScript:
-    """A file stacked on a board script (``@step("board.step")``), written from its saved board."""
+    """A file stacked on a board script (``@step("board.step")``, ``@glb``, ``@dxf``), written from its saved
+    board. Its path ends in its type's extension, as the engine's decorators check theirs."""
+    from cad.registry import DOCUMENT_TYPES
+
+    extensions = DOCUMENT_TYPES[kind].extensions
+    if Path(os.fspath(out)).suffix.lower() not in extensions:
+        raise ValueError(f"@{kind}(out=...): the file must end in {' or '.join(extensions)}, not {os.fspath(out)!r}")
     path = _beside(script.function, out)
     if any(existing == kind for existing, _ in script.outputs):
         raise TypeError(f"board script {script.__name__!r} declares @{kind} twice")
@@ -266,13 +273,31 @@ def _write_outputs(script: BoardScript, cli: Path, folder: Path) -> list[Path]:
     return written
 
 
-def write_step(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's STEP (``kicad-cli pcb export step --subst-models``), moved into place at ``out``."""
+def _write(to: str, suffix: str, board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's ``to`` export (``cad.kicad._export``: what is said beside it, a part without its 3D
+    model, said on stderr), moved into place at ``out``."""
     from ._export import export
 
-    made = export(board, "step", scratch / "step", cli=cli)
-    step = next(path for path in made if path.suffix.lower() == ".step")
+    made = export(board, to, scratch / to, cli=cli)
+    written = next(path for path in made if path.suffix.lower() == suffix)
     out.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(step, out)
+    shutil.move(written, out)
     print(f"wrote {out}", file=sys.stderr)
     return out
+
+
+def write_step(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's STEP (``kicad-cli pcb export step --subst-models``), moved into place at ``out``."""
+    return _write("step", ".step", board, out, cli=cli, scratch=scratch)
+
+
+def write_glb(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's GLB (``kicad-cli pcb export glb --subst-models``), moved into place at ``out``; the
+    parts written without a 3D model named, as the STEP's are."""
+    return _write("glb", ".glb", board, out, cli=cli, scratch=scratch)
+
+
+def write_dxf(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's outline and drilled holes (``kicad-cli pcb export dxf``, Edge.Cuts, millimetres, as
+    ``cad kicad_pcb export --to dxf`` writes them), moved into place at ``out``."""
+    return _write("dxf", ".dxf", board, out, cli=cli, scratch=scratch)

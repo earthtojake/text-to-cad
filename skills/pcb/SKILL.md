@@ -49,13 +49,15 @@ extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a `kicad-
 from `kicode` (`from kicode.proto.common.types import KIID`), never from `kipy`: the two cannot share a
 process. Saving writes the board in the nightly's format: a board from an older KiCad is upgraded,
 which the run says, and that older KiCad can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
-step --subst-models`); parts whose 3D model is missing or only in VRML have no body in it, which the run
-names:
+step --subst-models`), and a `@glb` its GLB the same way; parts whose 3D model is missing (or, in a STEP,
+only in VRML) have no body in it, which the run names. A `@dxf` writes its outline and drilled holes, for
+an enclosure (`cad kicad_pcb export --to dxf`'s file):
 
 ```python
-from cad import kicad_pcb, step
+from cad import dxf, kicad_pcb, step
 
 @step("STEP/board.step")
+@dxf("DXF/board-outline.dxf")
 @kicad_pcb("board.kicad_pcb")          # the board file is the source; the function edits it
 def board(b):
     for footprint in b.get_footprints():

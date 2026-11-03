@@ -1,4 +1,5 @@
-"""The kicad integration's producers: a board script makes its ``kicad_pcb``, and the ``step`` stacked on it.
+"""The kicad integration's producers: a board script makes its ``kicad_pcb``, and the files stacked on it --
+a ``step`` and a ``glb`` (the board and its parts in 3D) and a ``dxf`` (its outline and holes).
 
 A board script is what ``@kicad_pcb`` makes of a function (``_session.BoardScript``); its matcher reads the
 value's type name and module alone, importing nothing. Each producer here also DECLARES: it says what
@@ -12,7 +13,7 @@ from typing import Any
 
 from cad.registry import Producer
 
-__all__ = ["PRODUCERS", "declare_board", "declare_step", "is_board_script"]
+__all__ = ["PRODUCERS", "declare_board", "declare_file", "is_board_script"]
 
 
 def is_board_script(value: Any) -> bool:
@@ -27,7 +28,8 @@ def declare_board(kind: str, out: Any, name: str | None) -> Any:
     return declare(out, name=name)
 
 
-def declare_step(kind: str, out: Any, name: str | None) -> Any:
+def declare_file(kind: str, out: Any, name: str | None) -> Any:
+    """``@step``, ``@glb`` or ``@dxf`` stacked on a board script: a file written from its saved board."""
     if name is not None:
         raise TypeError(f"@{kind} on a board script takes no name=: the board names it")
     from cad.kicad._session import declare_output
@@ -43,5 +45,11 @@ PRODUCERS: tuple[Producer, ...] = (
              declare="cad.kicad._producers.declare_board"),
     Producer("step", "kicad", "a @kicad_pcb board script's saved board", is_board_script,
              "cad.kicad._session.write_step", ("geometry", "assembly", "names", "colours"),
-             decorates=is_board_script, declare="cad.kicad._producers.declare_step"),
+             decorates=is_board_script, declare="cad.kicad._producers.declare_file"),
+    Producer("glb", "kicad", "a @kicad_pcb board script's saved board", is_board_script,
+             "cad.kicad._session.write_glb", ("triangles", "assembly", "names", "colours"),
+             decorates=is_board_script, declare="cad.kicad._producers.declare_file"),
+    Producer("dxf", "kicad", "a @kicad_pcb board script's saved board: its outline and holes", is_board_script,
+             "cad.kicad._session.write_dxf", ("2D geometry",),
+             decorates=is_board_script, declare="cad.kicad._producers.declare_file"),
 )

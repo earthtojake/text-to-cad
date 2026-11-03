@@ -861,7 +861,8 @@ build123d `Shape` for every type with a decorator, and the engine's writers -- t
 declares (`Producer.declare`) decides what its type's decorator does with what it decorates, found by
 `registry.declarer_for`: the kicad integration's `@kicad_pcb` makes a board script, which runs in the
 caller's process through kicode's headless `api-server` and KiPy (`cad.kicad._session`), never in a
-worker, and a `@step` stacked on one is written from the saved board by `kicad-cli`. Every other
+worker, and a `@step`, `@glb` or `@dxf` stacked on one is written from the saved board by `kicad-cli` (the
+board and its parts in 3D, or its outline and holes). Every other
 decorated function is the engine's model.
 
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:

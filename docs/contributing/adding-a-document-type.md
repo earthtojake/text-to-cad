@@ -153,13 +153,15 @@ that runs KiCad's own command, `kicad-cli`. Each step names the checklist it bel
    returns and saves nothing when it raises, then stops the server and removes its folder. KiPy's
    `check_version()` is never called. Upstream `kipy` is never imported: it and kicode register the same
    protobuf files and cannot share a process. A `@step` stacked on the script is the integration's second
-   producer: the saved board's STEP, by `kicad-cli pcb export step --subst-models`. Which producer a
+   producer: the saved board's STEP, by `kicad-cli pcb export step --subst-models`; a `@glb` is its GLB
+   the same way, and a `@dxf` its outline and holes (`kicad-cli pcb export dxf`, Edge.Cuts). Which producer a
    decorator uses is the registry's (`declarer_for`), by what it decorates:
 
    ```python
-   from cad import kicad_pcb, step
+   from cad import dxf, kicad_pcb, step
 
    @step("STEP/board.step")
+   @dxf("DXF/board.dxf")
    @kicad_pcb("board.kicad_pcb")
    def board(b):                 # KiPy's open Board (kicode's); the file is the source
        ...

@@ -159,14 +159,22 @@ class RootExports(unittest.TestCase):
     def test_a_board_script_takes_no_decorator_but_its_own(self):
         """A @kicad_pcb board script is never made a model: a decorator no producer of its type declares for
         it is refused at decoration, naming the ones that take it."""
-        from cad import glb, kicad_pcb, step, stl, xbf
+        from cad import dxf, glb, kicad_pcb, step, stl, threemf, xbf
 
         script = kicad_pcb("board.kicad_pcb")(lambda board: None)
-        for decorator in (xbf, glb, stl):
+        for decorator in (xbf, stl, threemf):
             with self.subTest(decorator=decorator), self.assertRaises(TypeError) as caught:
                 decorator(f"board{decorator.entry.suffix}")(script)
-            self.assertIn("one takes @step", str(caught.exception))
-        self.assertIs(script, step("board.step")(script))
+            self.assertIn("one takes @step, @glb, @dxf", str(caught.exception))
+        # The board's STEP and GLB (the board and its parts) and its DXF (outline and holes), each written by
+        # kicad-cli from the saved board, in the order they are stacked, innermost first.
+        self.assertIs(script, step("board.step")(glb("board.glb")(dxf("board.dxf")(script))))
+        self.assertEqual([(kind, path.name) for kind, path in script.outputs],
+                         [("step", "board.step"), ("glb", "board.glb"), ("dxf", "board.dxf")])
+        with self.assertRaises(TypeError):
+            glb("again.glb")(script)  # declared twice
+        with self.assertRaisesRegex(ValueError, r"must end in \.glb"):
+            glb("board.step")(kicad_pcb("other.kicad_pcb")(lambda board: None))
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

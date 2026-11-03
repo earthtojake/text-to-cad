@@ -89,7 +89,8 @@ class TheTableIsTheSource(unittest.TestCase):
         # A board script's step is the kicad integration's, a shape's the build123d one's: one producer each,
         # and @step declared on a board script by the kicad producer (``declarer_for``).
         self.assertEqual("kicad", registry.producer_for("step", script).integration)
-        self.assertEqual("kicad", registry.declarer_for("step", script).integration)
+        for kind in ("step", "glb", "dxf"):
+            self.assertEqual("kicad", registry.declarer_for(kind, script).integration)
         self.assertIsNone(registry.declarer_for("step", lambda: None), "a function under @step is the engine's model")
         self.assertEqual("kicad", registry.declarer_for("kicad_pcb", lambda board: None).integration)
 

@@ -3,7 +3,7 @@
 The board is the test's own (``tests/python/support/kicad_board.py``, in a KiCad nightly's format), written
 into a temporary folder; the script, run by the Python of the environment of ``cad[kicad]`` as ``cad run``
 runs one (``tests/python/support/kicode.py``), reads it through KiPy, the board is saved, and the ``@step``
-stacked on it is written from the saved board. Runs in the KiCad job; anywhere the environment cannot be
+stacked on it is written from the saved board, as a ``@glb`` and a ``@dxf`` are. Runs in the KiCad job; anywhere the environment cannot be
 made it says why it skips.
 """
 
@@ -80,6 +80,44 @@ class BoardScriptRoundTrip(unittest.TestCase):
             from cad.kicad_pcb import inspect
 
             self.assertEqual(3, inspect(board)["counts"]["parts"], "the saved board reads as it did")
+
+    def test_a_glb_and_a_dxf_stacked_on_a_board_script_are_written_from_its_saved_board(self):
+        """``@glb`` and ``@dxf`` on a board script, as ``@step``: kicad-cli's GLB of the board and its parts, and
+        its outline and holes, written from the board the script saved."""
+        from tests.python.support.kicad_board import write_board
+
+        with tempfile.TemporaryDirectory(prefix="kicad-script-files-") as folder:
+            board = write_board(Path(folder))
+            done = kicode.run_python(self, FILES, str(board), cwd=folder)
+            self.assertEqual(0, done.returncode, done.stderr)
+            written = [Path(path) for path in json.loads(done.stdout.strip().splitlines()[-1])]
+            self.assertEqual(["board.glb", "board.dxf"], [path.name for path in written])
+            glb, dxf = written
+            self.assertEqual(b"glTF", glb.read_bytes()[:4])
+            drawing = dxf.read_text(encoding="utf-8", errors="replace")
+            self.assertIn("ENTITIES", drawing)
+            self.assertIn("Edge.Cuts", drawing.replace("Edge_Cuts", "Edge.Cuts"))
+            self.assertEqual(["board.dxf", "board.glb"], sorted(path.name for path in (Path(folder) / "out").iterdir()),
+                             "each file where it was declared, and nothing of kicad-cli's beside it")
+
+
+# Two files stacked on a script that edits nothing: written from the board it saved.
+FILES = textwrap.dedent("""
+    import json, sys
+    from pathlib import Path
+    from cad import dxf, glb, kicad_pcb
+    from cad.kicad._session import run
+
+    out = Path(sys.argv[1]).parent / "out"
+
+    @glb(str(out / "board.glb"))
+    @dxf(str(out / "board.dxf"))
+    @kicad_pcb(sys.argv[1])
+    def script(opened):
+        pass
+
+    print(json.dumps([str(path) for path in run(script).written]))
+""")
 
 
 @unittest.skipIf(sys.platform.startswith("win"), "POSIX signals and Unix socket paths")
