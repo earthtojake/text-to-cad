@@ -1,0 +1,18 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/pulley_hub_review.step",
+  "sha256": "bcce4a38d1031c017575b81b23e7e55fea8efb8f44fa5b3e1f6488ee844004c5",
+  "bodies": [
+    {
+      "name": "middle_pip_negative_turned_hub_collar",
+      "frame": "middle_pip",
+      "system": "middle",
+      "kind": "hub_spacer"
+    },
+    {
+      "name": "middle_pip_positive_turned_hub_collar",
+      "frame": "middle_pip",
+      "system": "middle",
+      "kind": "hub_spacer"
+    }
+  ]
+}

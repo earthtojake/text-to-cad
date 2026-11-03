@@ -1,0 +1,9 @@
+terminal index clear
+terminal middle clear
+terminal ring clear
+terminal little clear
+terminal thumb clear
+cup 0.0 True []
+cup 10.0 True []
+cup 20.0 True []
+cup 25.0 True []

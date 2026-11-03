@@ -1,0 +1,14 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.038}
+CMC_MOUNT_FACTORY make_cmc_parent_comb wrist_flexion
+CMC_MOUNT_FACTORY make_cmc_child_four_comb thumb_cmc_flexion
+CMC_MOUNT_FACTORY <lambda> thumb_cmc_flexion
+CMC_MOUNT_FACTORY <lambda> thumb_cmc_flexion
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":29.233}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,2],"elapsed":29.302}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,2],"elapsed":29.911}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,2],"elapsed":30.111}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":30.115}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_cmc_mounts_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":31.341}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_mounts_review.step
+built models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_mounts_review.step

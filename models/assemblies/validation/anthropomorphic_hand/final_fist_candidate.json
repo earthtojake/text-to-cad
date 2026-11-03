@@ -1,0 +1,97 @@
+{
+  "label": "anatomical_fist",
+  "pose": {
+    "index_mcp_abduction": -20.0,
+    "index_mcp_flexion": 90,
+    "index_pip": 90,
+    "index_dip": 60,
+    "middle_mcp_abduction": -5.0,
+    "middle_mcp_flexion": 90,
+    "middle_pip": 90,
+    "middle_dip": 60,
+    "ring_mcp_abduction": 5.0,
+    "ring_mcp_flexion": 90,
+    "ring_pip": 90,
+    "ring_dip": 60,
+    "little_mcp_abduction": 25.0,
+    "little_mcp_flexion": 90,
+    "little_pip": 90,
+    "little_dip": 60,
+    "thumb_cmc_abduction": -15.0,
+    "thumb_cmc_flexion": 45.0,
+    "thumb_mcp_abduction": -10.0,
+    "thumb_mcp_flexion": 55.0,
+    "thumb_ip": 60.0
+  },
+  "scope": "Candidate only. The known fifth-ray and two index/thumb contacts clear. Complete assembly and tendon checks remain required; independent joint limits are unchanged.",
+  "rejected_maximum_angle_fist": {
+    "index_mcp_abduction": -20.0,
+    "index_mcp_flexion": 90.0,
+    "index_pip": 110.0,
+    "index_dip": 80.0,
+    "middle_mcp_abduction": -5.0,
+    "middle_mcp_flexion": 90.0,
+    "middle_pip": 110.0,
+    "middle_dip": 80.0,
+    "ring_mcp_abduction": 5.0,
+    "ring_mcp_flexion": 90.0,
+    "ring_pip": 110.0,
+    "ring_dip": 80.0,
+    "little_mcp_abduction": 25.0,
+    "little_mcp_flexion": 90.0,
+    "little_pip": 110.0,
+    "little_dip": 80.0,
+    "thumb_cmc_abduction": -20.0,
+    "thumb_cmc_flexion": 45.0,
+    "thumb_mcp_abduction": -10.0,
+    "thumb_mcp_flexion": 55.0,
+    "thumb_ip": 60.0
+  },
+  "local_thumb_clearance_evidence": {
+    "path": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fist_thumb_variant_check.json",
+    "sha256": "552a78317c1ee38f2812ce0a60e675d0c2179f0f605dc623146fc14df299cfef",
+    "row": {
+      "thumb_mcp_flexion": 55.0,
+      "thumb_mcp_abduction": -10.0,
+      "thumb_cmc_abduction": -15.0,
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "index_distal_frame",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        },
+        {
+          "a": "index_fingernail_conformal_saddle",
+          "b": "thumb_proximal_frame",
+          "intersection_mm3": 0.0,
+          "pass_": true
+        }
+      ],
+      "known_pairs_pass": true
+    }
+  }
+}

@@ -1,0 +1,403 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/palm_guide_mounts_review.step",
+  "sha256": "5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01",
+  "body_count": 66,
+  "bodies": [
+    {
+      "name": "index_palm_bank_structural_body",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_01_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_02_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_03_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_04_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_05_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_06_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_07_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_08_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_front_cap",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "index_palm_bank_row_01_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_02_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_03_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_04_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_04_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_05_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_06_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_07_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_08_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_row_08_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_left_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_right_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_structural_body",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_01_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_02_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_03_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_04_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_05_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_06_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_07_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_08_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_front_cap",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "middle_palm_bank_row_01_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_02_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_03_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_04_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_04_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_05_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_06_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_07_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_08_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_row_08_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_structural_body",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_01_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_02_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_03_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_04_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_05_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_06_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_07_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_08_upper_jaw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_front_cap",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "ring_palm_bank_row_01_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_02_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_03_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_04_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_04_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_05_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_06_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_07_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_08_left_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_row_08_right_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+      "frame": "wrist_flexion",
+      "system": "wrist",
+      "kind": "fastener"
+    }
+  ]
+}

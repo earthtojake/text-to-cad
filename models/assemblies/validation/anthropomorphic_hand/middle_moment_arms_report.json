@@ -1,0 +1,67 @@
+{
+  "tendons": [
+    "middle_mcp_abduction_positive",
+    "middle_mcp_abduction_negative",
+    "middle_mcp_flexion_positive",
+    "middle_mcp_flexion_negative",
+    "middle_pip_positive",
+    "middle_pip_negative",
+    "middle_dip_positive",
+    "middle_dip_negative"
+  ],
+  "columns": [
+    {
+      "joint": "middle_mcp_abduction",
+      "d_length_d_radian": [
+        -5.500000000271913,
+        5.499999999864802,
+        2.0355549961366505e-09,
+        -2.442665995363981e-09,
+        0.0,
+        0.0,
+        -3.256887993818641e-09,
+        -3.256887993818641e-09
+      ]
+    },
+    {
+      "joint": "middle_mcp_flexion",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        -5.500000000271913,
+        5.499999999864802,
+        8.142219984546603e-10,
+        -1.6284439969093205e-09,
+        -6.513775987637282e-09,
+        -4.885331990727962e-09
+      ]
+    },
+    {
+      "joint": "middle_pip",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -4.4999999993712425,
+        4.4999999993712425,
+        3.256887993818641e-09,
+        4.885331990727962e-09
+      ]
+    },
+    {
+      "joint": "middle_dip",
+      "d_length_d_radian": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        -3.499999998877682,
+        3.5000000005061263
+      ]
+    }
+  ],
+  "method": "Independent adaptive quadrature, finite difference epsilon .001 degree. Reaction liners held at exactly 24.5/30mm; the reported effective moment includes liner compression reaction."
+}

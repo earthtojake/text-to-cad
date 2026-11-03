@@ -1,0 +1,803 @@
+{
+  "inlets": [
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "point": [
+        -29.19760439792409,
+        66.22964748420202,
+        -9.5
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -5.5,
+        -35.0,
+        -9.5
+      ]
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "point": [
+        -18.860985569279098,
+        69.99186906078438,
+        -12.0
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        5.5,
+        -35.0,
+        -12.0
+      ]
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "point": [
+        -23.183571624894277,
+        68.41857640148632,
+        5.5
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        0.9,
+        -35.0,
+        5.5
+      ]
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "point": [
+        -24.875018342308913,
+        67.80294014350011,
+        -5.5
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -0.9,
+        -35.0,
+        -5.5
+      ]
+    },
+    {
+      "tendon": "index_pip_positive",
+      "point": [
+        -21.210217121243872,
+        69.13681870247021,
+        0.0
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "index_pip_negative",
+      "point": [
+        -26.848372845959318,
+        67.08469784251619,
+        0.0
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "index_dip_positive",
+      "point": [
+        -20.082585976300777,
+        69.547242874461,
+        0.0
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "index_dip_negative",
+      "point": [
+        -27.976003990902413,
+        66.6742736705254,
+        0.0
+      ],
+      "tangent": [
+        -0.3420201433256687,
+        0.9396926207859084,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "point": [
+        -14.428619843336566,
+        69.65382898167678,
+        -9.5
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -5.5,
+        -35.0,
+        -9.5
+      ]
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "point": [
+        -3.470478164327364,
+        70.61254215190101,
+        -12.0
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        5.5,
+        -35.0,
+        -12.0
+      ]
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "point": [
+        -8.052973775549393,
+        70.2116257352618,
+        5.5
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        0.9,
+        -35.0,
+        5.5
+      ]
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "point": [
+        -9.846124232114537,
+        70.05474539831602,
+        -5.5
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -0.9,
+        -35.0,
+        -5.5
+      ]
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "point": [
+        -5.960964909556728,
+        70.39465279503187,
+        0.0
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "point": [
+        -11.938133098107201,
+        69.87171833854592,
+        0.0
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "point": [
+        -4.7655312718466325,
+        70.49923968632908,
+        0.0
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "point": [
+        -13.133566735817297,
+        69.76713144724874,
+        0.0
+      ],
+      "tangent": [
+        -0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "point": [
+        3.470478164327364,
+        65.61254215190101,
+        -9.5
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -5.5,
+        -35.0,
+        -9.5
+      ]
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "point": [
+        14.428619843336566,
+        64.65382898167678,
+        -12.0
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        5.5,
+        -35.0,
+        -12.0
+      ]
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "point": [
+        9.846124232114537,
+        65.05474539831602,
+        5.5
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        0.9,
+        -35.0,
+        5.5
+      ]
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "point": [
+        8.052973775549393,
+        65.2116257352618,
+        -5.5
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -0.9,
+        -35.0,
+        -5.5
+      ]
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "point": [
+        11.938133098107201,
+        64.87171833854592,
+        0.0
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "point": [
+        5.960964909556728,
+        65.39465279503187,
+        0.0
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "point": [
+        13.133566735817297,
+        64.76713144724874,
+        0.0
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "point": [
+        4.7655312718466325,
+        65.49923968632908,
+        0.0
+      ],
+      "tangent": [
+        0.08715574274765817,
+        0.9961946980917455,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "point": [
+        16.22366801037394,
+        59.603627893291105,
+        -9.5
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        -5.5,
+        -35.0,
+        -9.5
+      ]
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "point": [
+        26.193053667777093,
+        54.954827014143405,
+        -12.0
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        5.5,
+        -35.0,
+        -12.0
+      ]
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "point": [
+        22.0240378474085,
+        56.89887101815063,
+        5.5
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        0.9,
+        -35.0,
+        5.5
+      ]
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "point": [
+        20.392683830742534,
+        57.65958388928388,
+        -5.5
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        -0.9,
+        -35.0,
+        -5.5
+      ]
+    },
+    {
+      "tendon": "little_pip_positive",
+      "point": [
+        23.92728420018547,
+        56.011372668495156,
+        0.0
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "little_pip_negative",
+      "point": [
+        18.489437477965566,
+        58.54708223893935,
+        0.0
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        -3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "little_dip_positive",
+      "point": [
+        25.014853544629446,
+        55.50423075440632,
+        0.0
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "little_dip_negative",
+      "point": [
+        17.40186813352159,
+        59.05422415302819,
+        0.0
+      ],
+      "tangent": [
+        0.42261826174069944,
+        0.9063077870366499,
+        0.0
+      ],
+      "frame": "palm_cup",
+      "local_point": [
+        -4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "point": [
+        -15.20101012677667,
+        6.301515190165009,
+        -11.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -7.0,
+        -35.0,
+        -11.0
+      ]
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "point": [
+        -5.301515190165009,
+        16.20101012677667,
+        -13.5
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        7.0,
+        -35.0,
+        -13.5
+      ]
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "point": [
+        -9.614866555402944,
+        11.887658761538734,
+        7.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        0.9,
+        -35.0,
+        7.0
+      ]
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "point": [
+        -10.887658761538734,
+        10.614866555402944,
+        -7.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -0.9,
+        -35.0,
+        -7.0
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "point": [
+        -8.129942314911194,
+        13.372583002030485,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "point": [
+        -12.372583002030485,
+        9.129942314911194,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -3.0,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "point": [
+        -7.281414177487338,
+        14.22111113945434,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "point": [
+        -13.22111113945434,
+        8.281414177487338,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -4.2,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "point": [
+        -6.432886040063483,
+        15.069639276878195,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        5.4,
+        -35.0,
+        0.0
+      ]
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "point": [
+        -14.069639276878195,
+        7.432886040063483,
+        0.0
+      ],
+      "tangent": [
+        -0.7071067811865475,
+        0.7071067811865475,
+        0.0
+      ],
+      "frame": "wrist_flexion",
+      "local_point": [
+        -5.4,
+        -35.0,
+        0.0
+      ]
+    }
+  ],
+  "scope": "42 finger/thumb tendons; palm-cup and wrist target pairs are separate."
+}

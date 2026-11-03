@@ -1,0 +1,3 @@
+valid False
+BOPAlgo_CheckStatus.BOPAlgo_SelfIntersect
+GetFaultyShapes1 TopAbs_ShapeEnum.TopAbs_FACE bbox: 1.8232232047033616 <= x <= 18.006866005827472, 43.3799999 <= y <= 53.24024378045697, 5.982391117793724 <= z <= 10.895349735031566

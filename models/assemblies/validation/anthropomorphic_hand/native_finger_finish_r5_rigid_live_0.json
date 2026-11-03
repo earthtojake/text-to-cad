@@ -1,0 +1,16 @@
+{
+  "body_count": 3041,
+  "processed": 3041,
+  "exact_booleans": 0,
+  "native_distance_separations": 0,
+  "congruent_proof_reuse": 735,
+  "collisions": [],
+  "complete": true,
+  "pass": true,
+  "pair_scope": {
+    "any_endpoint_in": [
+      ""
+    ],
+    "unchanged_pair_gate": "separate frozen baseline certificate required"
+  }
+}

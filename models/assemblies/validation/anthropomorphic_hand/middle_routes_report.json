@@ -1,0 +1,62 @@
+{
+  "rows": [
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "length_mm": 49.39896632895322,
+      "minimum_bend_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "length_mm": 49.39896632895322,
+      "minimum_bend_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "length_mm": 53.898966328953236,
+      "minimum_bend_radius_mm": 4.5185166747818295,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "length_mm": 53.898966328953236,
+      "minimum_bend_radius_mm": 4.5185166747818295,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "length_mm": 97.7725292154003,
+      "minimum_bend_radius_mm": 3.6458983003208143,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.0014830212433605e-16
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "length_mm": 97.77252921540038,
+      "minimum_bend_radius_mm": 3.645898300334838,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "length_mm": 129.1931068407885,
+      "minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "length_mm": 129.1931068407885,
+      "minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.482534153247273e-16
+    }
+  ],
+  "tendon_collisions_or_unresolved_clearance": [],
+  "limitations": "Neutral full paths only; no body collisions yet."
+}

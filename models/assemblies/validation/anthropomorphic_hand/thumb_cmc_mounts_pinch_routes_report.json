@@ -1,0 +1,40 @@
+{
+  "scope": "actual tendon-to-mount distances only; assembled-body overlaps checked separately",
+  "body_count": 24,
+  "rows": [
+    {
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "route_distance_checks": 72,
+      "route_conflicts": [
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_cmc_reaction",
+          "centerline_distance": -1.999999998223643e-06,
+          "radius": 0.45
+        },
+        {
+          "mount": "thumb_cmc_parent_inlet_comb_palm_rib_cap",
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_cmc_reaction",
+          "centerline_distance": -1.9999999928945726e-06,
+          "radius": 0.45
+        }
+      ],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": false
+    }
+  ],
+  "pass": false
+}

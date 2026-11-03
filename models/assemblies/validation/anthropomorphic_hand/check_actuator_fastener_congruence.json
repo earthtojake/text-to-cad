@@ -1,0 +1,348 @@
+{
+  "ok": true,
+  "station_count": 48,
+  "occurrences_proven": 768,
+  "proof": "TopoDS_Shape.IsPartner proves each paired occurrence references the identical TShape; inverse station transforms then prove identical local translation and orientation to1e-8. Rigid transformation preserves intersections and distances against co-transformed drive prototypes.",
+  "sources": {
+    "models/assemblies/src/anthropomorphic_hand/lib/actuator_fasteners.py": "0e0abbad45f6f037ffeb8be9b95a218f92dcb142745f9497dc696d045abcc68f",
+    "models/assemblies/src/anthropomorphic_hand/lib/layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af"
+  },
+  "stations": [
+    {
+      "station": "actuator_thumb_cmc_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_cmc_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_cmc_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_mcp_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_mcp_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_ip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_thumb_ip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_mcp_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_mcp_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_mcp_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_mcp_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_pip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_pip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_dip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_index_dip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_mcp_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_mcp_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_pip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_pip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_dip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_middle_dip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_mcp_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_mcp_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_pip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_pip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_dip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_ring_dip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_mcp_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_mcp_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_mcp_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_mcp_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_pip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_pip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_dip_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_little_dip_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_wrist_abduction_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_wrist_abduction_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_wrist_flexion_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_wrist_flexion_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_palm_cup_positive",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    },
+    {
+      "station": "actuator_palm_cup_negative",
+      "count": 16,
+      "identical_topology_objects": 16,
+      "max_local_pose_delta": 0.0,
+      "errors": []
+    }
+  ]
+}

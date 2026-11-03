@@ -1,0 +1,11 @@
+{
+  "complete": true,
+  "sample_count": 225,
+  "body_count": 26,
+  "unique_body_poses": 397,
+  "native_intersections": 37,
+  "failures": [],
+  "pass": true,
+  "main_step_sha256": "6c2e669df4f176c530c5b1c8623c861b942ca60d1e75cb346bd2548f6a32adf4",
+  "rib_parameter_sha256": "66b6609a6fa35d05ba03b4bc2f68cc77fc3989474397a6a487add1d12b88f894"
+}

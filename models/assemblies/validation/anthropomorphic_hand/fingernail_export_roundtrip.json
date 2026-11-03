@@ -1,0 +1,754 @@
+{
+  "pass": true,
+  "scope": "Native dorsal-nail geometry and all 75 within-system rigid contacts.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingernail_export_repair_review.step": "6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingernail_export_repair_frames.json": "9fae8ef7b3de487692294a77aaf4ad699a74b954159f7b2b78fae788715210a2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_nail_export_roundtrip.py": "059034ec2913d936c9f71f9203a6453fe6fa45695fe0e87f34daba7dbb957d98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/fingernail.py": "76fc99fbb2cfb588fc2cbf5189f3bf9b0762823b9fceeab40e3aea1ec507e607"
+  },
+  "bodies": [
+    {
+      "name": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "native_volume_mm3": 2.8834387620360715,
+      "authored_volume_mm3": 2.883437956149781,
+      "roundtrip_volume_relative_difference": 2.7948799413918244e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingernail_radial_M0p8_captive_insert",
+      "native_volume_mm3": 2.8834376877916568,
+      "authored_volume_mm3": 2.8834381186761124,
+      "roundtrip_volume_relative_difference": 1.4943426490765506e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994657,
+      "authored_volume_mm3": 3.6108076669947144,
+      "roundtrip_volume_relative_difference": 1.5865566198472885e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingernail_radial_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994667,
+      "authored_volume_mm3": 3.6108076669947136,
+      "roundtrip_volume_relative_difference": 1.2913832952245374e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingernail_conformal_saddle",
+      "native_volume_mm3": 31.647902845482204,
+      "authored_volume_mm3": 31.647903770339774,
+      "roundtrip_volume_relative_difference": 2.9223343725865665e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_dorsal_fingernail",
+      "native_volume_mm3": 77.68294067849942,
+      "authored_volume_mm3": 77.68294067848973,
+      "roundtrip_volume_relative_difference": 1.247610200015434e-13,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "z_bounds_mm": [
+        -4.720000100000001,
+        -3.3599999
+      ]
+    },
+    {
+      "name": "little_fingernail_ulnar_M0p8_captive_insert",
+      "native_volume_mm3": 2.9337566517882214,
+      "authored_volume_mm3": 2.9337561355549227,
+      "roundtrip_volume_relative_difference": 1.7596326174448795e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingernail_radial_M0p8_captive_insert",
+      "native_volume_mm3": 2.933756119088095,
+      "authored_volume_mm3": 2.933756395598203,
+      "roundtrip_volume_relative_difference": 9.425121598863961e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingernail_ulnar_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994673,
+      "authored_volume_mm3": 3.6108076669947238,
+      "roundtrip_volume_relative_difference": 1.4020732919580653e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingernail_radial_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994658,
+      "authored_volume_mm3": 3.6108076669947216,
+      "roundtrip_volume_relative_difference": 1.7587410592105566e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingernail_conformal_saddle",
+      "native_volume_mm3": 24.092939628697305,
+      "authored_volume_mm3": 24.092939565027926,
+      "roundtrip_volume_relative_difference": 2.642657153995137e-09,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_dorsal_fingernail",
+      "native_volume_mm3": 50.02888360663108,
+      "authored_volume_mm3": 50.028883606624966,
+      "roundtrip_volume_relative_difference": 1.2214279206357643e-13,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "z_bounds_mm": [
+        -4.720000100000002,
+        -3.3599998999999987
+      ]
+    },
+    {
+      "name": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "native_volume_mm3": 2.9207323646658154,
+      "authored_volume_mm3": 2.9207319369961593,
+      "roundtrip_volume_relative_difference": 1.4642550749564101e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingernail_radial_M0p8_captive_insert",
+      "native_volume_mm3": 2.920732361193097,
+      "authored_volume_mm3": 2.9207321911783346,
+      "roundtrip_volume_relative_difference": 5.820963756349457e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994665,
+      "authored_volume_mm3": 3.6108076669947184,
+      "roundtrip_volume_relative_difference": 1.475866623113755e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingernail_radial_M0p8_socket_screw",
+      "native_volume_mm3": 3.6108076669946687,
+      "authored_volume_mm3": 3.610807666994719,
+      "roundtrip_volume_relative_difference": 1.3897744034321192e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingernail_conformal_saddle",
+      "native_volume_mm3": 25.78722395294253,
+      "authored_volume_mm3": 25.787223493312677,
+      "roundtrip_volume_relative_difference": 1.7823937211381497e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_dorsal_fingernail",
+      "native_volume_mm3": 55.60794222001342,
+      "authored_volume_mm3": 55.607942220006755,
+      "roundtrip_volume_relative_difference": 1.198550170236623e-13,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "z_bounds_mm": [
+        -4.720000100000002,
+        -3.3599998999999987
+      ]
+    },
+    {
+      "name": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "native_volume_mm3": 2.9207323646609904,
+      "authored_volume_mm3": 2.920731936991297,
+      "roundtrip_volume_relative_difference": 1.4642552026785238e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingernail_radial_M0p8_captive_insert",
+      "native_volume_mm3": 2.920732361147895,
+      "authored_volume_mm3": 2.9207321909521973,
+      "roundtrip_volume_relative_difference": 5.82715861668253e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "native_volume_mm3": 3.6108076669946643,
+      "authored_volume_mm3": 3.6108076669947184,
+      "roundtrip_volume_relative_difference": 1.500464400165651e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingernail_radial_M0p8_socket_screw",
+      "native_volume_mm3": 3.6108076669946643,
+      "authored_volume_mm3": 3.610807666994719,
+      "roundtrip_volume_relative_difference": 1.512763288691599e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingernail_conformal_saddle",
+      "native_volume_mm3": 27.142911585085177,
+      "authored_volume_mm3": 27.14291074167041,
+      "roundtrip_volume_relative_difference": 3.1073114279703567e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_dorsal_fingernail",
+      "native_volume_mm3": 58.04505020092969,
+      "authored_volume_mm3": 58.045050200922724,
+      "roundtrip_volume_relative_difference": 1.199640414875253e-13,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "z_bounds_mm": [
+        -4.720000100000002,
+        -3.3599998999999987
+      ]
+    },
+    {
+      "name": "index_fingernail_ulnar_M0p8_captive_insert",
+      "native_volume_mm3": 2.920732431098192,
+      "authored_volume_mm3": 2.9207333731300524,
+      "roundtrip_volume_relative_difference": 3.225326451172967e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingernail_radial_M0p8_captive_insert",
+      "native_volume_mm3": 2.920732288160196,
+      "authored_volume_mm3": 2.9207303032002105,
+      "roundtrip_volume_relative_difference": 6.796108435939728e-07,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingernail_ulnar_M0p8_socket_screw",
+      "native_volume_mm3": 3.610807666994669,
+      "authored_volume_mm3": 3.6108076669947207,
+      "roundtrip_volume_relative_difference": 1.4266710690099623e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingernail_radial_M0p8_socket_screw",
+      "native_volume_mm3": 3.6108076669946656,
+      "authored_volume_mm3": 3.6108076669947198,
+      "roundtrip_volume_relative_difference": 1.5004644001656503e-14,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingernail_conformal_saddle",
+      "native_volume_mm3": 27.142911585085198,
+      "authored_volume_mm3": 27.14291074167043,
+      "roundtrip_volume_relative_difference": 3.107311427970354e-08,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_dorsal_fingernail",
+      "native_volume_mm3": 58.04505020092969,
+      "authored_volume_mm3": 58.04505020092274,
+      "roundtrip_volume_relative_difference": 1.1971921691306092e-13,
+      "valid_single_closed_solid": true,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "z_bounds_mm": [
+        -4.720000100000002,
+        -3.3599998999999987
+      ]
+    }
+  ],
+  "pairs": [
+    {
+      "a": "index_fingernail_ulnar_M0p8_captive_insert",
+      "b": "index_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_captive_insert",
+      "b": "index_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_captive_insert",
+      "b": "index_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_captive_insert",
+      "b": "index_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_captive_insert",
+      "b": "index_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_captive_insert",
+      "b": "index_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_captive_insert",
+      "b": "index_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_captive_insert",
+      "b": "index_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_captive_insert",
+      "b": "index_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_socket_screw",
+      "b": "index_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_socket_screw",
+      "b": "index_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_ulnar_M0p8_socket_screw",
+      "b": "index_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_socket_screw",
+      "b": "index_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_radial_M0p8_socket_screw",
+      "b": "index_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "index_fingernail_conformal_saddle",
+      "b": "index_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "b": "middle_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "b": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "b": "middle_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "b": "middle_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "b": "middle_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_captive_insert",
+      "b": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_captive_insert",
+      "b": "middle_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_captive_insert",
+      "b": "middle_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_captive_insert",
+      "b": "middle_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "b": "middle_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "b": "middle_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "b": "middle_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_socket_screw",
+      "b": "middle_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_radial_M0p8_socket_screw",
+      "b": "middle_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "middle_fingernail_conformal_saddle",
+      "b": "middle_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "b": "ring_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "b": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "b": "ring_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "b": "ring_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_captive_insert",
+      "b": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_captive_insert",
+      "b": "ring_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_captive_insert",
+      "b": "ring_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_captive_insert",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "b": "ring_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "b": "ring_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_socket_screw",
+      "b": "ring_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_radial_M0p8_socket_screw",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "ring_fingernail_conformal_saddle",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_captive_insert",
+      "b": "little_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_captive_insert",
+      "b": "little_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_captive_insert",
+      "b": "little_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_captive_insert",
+      "b": "little_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_captive_insert",
+      "b": "little_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_captive_insert",
+      "b": "little_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_captive_insert",
+      "b": "little_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_captive_insert",
+      "b": "little_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_captive_insert",
+      "b": "little_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_socket_screw",
+      "b": "little_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_socket_screw",
+      "b": "little_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_ulnar_M0p8_socket_screw",
+      "b": "little_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_socket_screw",
+      "b": "little_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_radial_M0p8_socket_screw",
+      "b": "little_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "little_fingernail_conformal_saddle",
+      "b": "little_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "b": "thumb_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "b": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "b": "thumb_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "b": "thumb_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "b": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_captive_insert",
+      "b": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_captive_insert",
+      "b": "thumb_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_captive_insert",
+      "b": "thumb_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_captive_insert",
+      "b": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "b": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_socket_screw",
+      "b": "thumb_fingernail_conformal_saddle",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_radial_M0p8_socket_screw",
+      "b": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "thumb_fingernail_conformal_saddle",
+      "b": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0.0,
+      "pass_": true
+    }
+  ]
+}

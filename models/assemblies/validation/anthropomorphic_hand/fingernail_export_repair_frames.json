@@ -1,0 +1,182 @@
+[
+  {
+    "name": "index_dorsal_fingernail",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fingernail"
+  },
+  {
+    "name": "index_fingernail_conformal_saddle",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "nail_mount"
+  },
+  {
+    "name": "index_fingernail_radial_M0p8_socket_screw",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingernail_ulnar_M0p8_socket_screw",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingernail_radial_M0p8_captive_insert",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "index_fingernail_ulnar_M0p8_captive_insert",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_dorsal_fingernail",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fingernail"
+  },
+  {
+    "name": "middle_fingernail_conformal_saddle",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "nail_mount"
+  },
+  {
+    "name": "middle_fingernail_radial_M0p8_socket_screw",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingernail_ulnar_M0p8_socket_screw",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingernail_radial_M0p8_captive_insert",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "middle_fingernail_ulnar_M0p8_captive_insert",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_dorsal_fingernail",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fingernail"
+  },
+  {
+    "name": "ring_fingernail_conformal_saddle",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "nail_mount"
+  },
+  {
+    "name": "ring_fingernail_radial_M0p8_socket_screw",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingernail_ulnar_M0p8_socket_screw",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingernail_radial_M0p8_captive_insert",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "ring_fingernail_ulnar_M0p8_captive_insert",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_dorsal_fingernail",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fingernail"
+  },
+  {
+    "name": "little_fingernail_conformal_saddle",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "nail_mount"
+  },
+  {
+    "name": "little_fingernail_radial_M0p8_socket_screw",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingernail_ulnar_M0p8_socket_screw",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingernail_radial_M0p8_captive_insert",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "little_fingernail_ulnar_M0p8_captive_insert",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_dorsal_fingernail",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fingernail"
+  },
+  {
+    "name": "thumb_fingernail_conformal_saddle",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "nail_mount"
+  },
+  {
+    "name": "thumb_fingernail_radial_M0p8_socket_screw",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingernail_ulnar_M0p8_socket_screw",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingernail_radial_M0p8_captive_insert",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  },
+  {
+    "name": "thumb_fingernail_ulnar_M0p8_captive_insert",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "fastener"
+  }
+]

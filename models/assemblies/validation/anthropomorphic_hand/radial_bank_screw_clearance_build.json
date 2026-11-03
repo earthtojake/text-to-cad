@@ -1,0 +1,22 @@
+{
+  "scope": "Local screw clearance in the rerouted splice bank, preserving its guide mouths.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/radial_bank_screw_clearance_candidate.py": "323b43ee7b09702453747da929cfa15ebaba7f25cf69d3411eebf022a964bb8c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd"
+  },
+  "original_contact_mm3": 0.011714470262560428,
+  "removed_material_mm3": 0.021963581329634607,
+  "pocket_bounds_mm": [
+    -31.02513749145742,
+    21.49229043880574,
+    -0.5400050000000003,
+    -30.707227193374077,
+    21.83705041484329,
+    -0.31887292200334943
+  ],
+  "clearance_mm": 0.025,
+  "remaining_contact_mm3": 0.0,
+  "pass_": true
+}

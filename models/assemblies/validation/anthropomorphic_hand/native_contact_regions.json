@@ -1,0 +1,933 @@
+{
+  "complete": true,
+  "rows": [
+    {
+      "a": "fifth_metacarpal_cupping_truss",
+      "b": "little_cup_fixed_bank_-1_structural_1",
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "cached_intersection_mm3": 0.6236893065979362,
+      "native_intersection_mm3": 0.623689202468079,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 1345.630873118978,
+      "b_volume_mm3": 19.299451807639972,
+      "a_rest_contact_bounds_mm": [
+        [
+          25.846245970642563,
+          38.79439753956576,
+          -7.356046493300131
+        ],
+        [
+          27.48925509557163,
+          40.900203396274954,
+          -4.9275982007675365
+        ]
+      ],
+      "local_common_mm3": 0.6236892024680936
+    },
+    {
+      "a": "fifth_metacarpal_cupping_truss",
+      "b": "little_fingernail_conformal_saddle",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 1.097381365818201,
+      "native_intersection_mm3": 1.097309602593056,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 1345.630873118978,
+      "b_volume_mm3": 24.09215954203656,
+      "a_rest_contact_bounds_mm": [
+        [
+          36.996040394818614,
+          67.75052325227767,
+          10.393830011350326
+        ],
+        [
+          39.80513201237924,
+          68.86002567761722,
+          13.344345745488713
+        ]
+      ],
+      "local_common_mm3": 1.097309602593056
+    },
+    {
+      "a": "fifth_metacarpal_cupping_truss",
+      "b": "little_fingertip_conformal_bridge",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 0.9568545793672697,
+      "native_intersection_mm3": 0.9568546120782725,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 1345.630873118978,
+      "b_volume_mm3": 29.314468940017193,
+      "a_rest_contact_bounds_mm": [
+        [
+          36.83568266714611,
+          75.12316713926627,
+          11.395123760893705
+        ],
+        [
+          39.38581638528929,
+          76.02354311740461,
+          13.697670503421582
+        ]
+      ],
+      "local_common_mm3": 0.9568546120782725
+    },
+    {
+      "a": "fifth_metacarpal_cupping_truss",
+      "b": "little_fingertip_silicone_pad",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 15.766347885853984,
+      "native_intersection_mm3": 1.072015728230829,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 1345.630873118978,
+      "b_volume_mm3": 22.111105443410896,
+      "a_rest_contact_bounds_mm": [
+        [
+          36.835682669089195,
+          75.11065012989938,
+          11.306923099370833
+        ],
+        [
+          39.45526835010668,
+          76.03909527385765,
+          13.697670503421582
+        ]
+      ],
+      "local_common_mm3": 1.072015728230829
+    },
+    {
+      "a": "little_cup_child_bank_rib_cap",
+      "b": "little_fingernail_conformal_saddle",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 0.4847257959688072,
+      "native_intersection_mm3": 0.484723532664719,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 5.465903722494453,
+      "b_volume_mm3": 24.09215954203656,
+      "a_rest_contact_bounds_mm": [
+        [
+          34.09475088182123,
+          67.98172362608588,
+          11.678581790836
+        ],
+        [
+          36.76352192453694,
+          68.58040904056139,
+          13.668581990836
+        ]
+      ],
+      "local_common_mm3": 0.484723532664719
+    },
+    {
+      "a": "little_cup_child_bank_rib_host_M0p6_screw",
+      "b": "little_fingernail_conformal_saddle",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 0.1520941637580311,
+      "native_intersection_mm3": 0.15209233528229257,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 0.6461361731615194,
+      "b_volume_mm3": 24.09215954203656,
+      "a_rest_contact_bounds_mm": [
+        [
+          34.11516155048575,
+          68.09526129312384,
+          11.018581790835999
+        ],
+        [
+          35.06686584218039,
+          68.48150539284187,
+          12.718581990836
+        ]
+      ],
+      "local_common_mm3": 0.15209233528229257
+    },
+    {
+      "a": "little_cup_child_bank_structural",
+      "b": "little_fingernail_conformal_saddle",
+      "sample": "full_fist_candidate",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90.0,
+        "index_pip": 110.0,
+        "index_dip": 80.0,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90.0,
+        "middle_pip": 110.0,
+        "middle_dip": 80.0,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90.0,
+        "ring_pip": 110.0,
+        "ring_dip": 80.0,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90.0,
+        "little_pip": 110.0,
+        "little_dip": 80.0,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "cached_intersection_mm3": 0.1769019608711741,
+      "native_intersection_mm3": 0.17690203832381807,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "little_dip",
+      "a_volume_mm3": 38.59853357052974,
+      "b_volume_mm3": 24.09215954203656,
+      "a_rest_contact_bounds_mm": [
+        [
+          34.08397373890927,
+          68.2326972035765,
+          9.668581790836
+        ],
+        [
+          36.11566971806986,
+          68.54347795394861,
+          11.658581990836002
+        ]
+      ],
+      "local_common_mm3": 0.17690203832381807
+    },
+    {
+      "a": "little_cup_child_bank_structural",
+      "b": "palm_cup_keyed_shaft",
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "cached_intersection_mm3": 0.08713371295242567,
+      "native_intersection_mm3": 0.08713370987833048,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "palm_cup",
+      "a_volume_mm3": 38.59853357052974,
+      "b_volume_mm3": 130.5949609028156,
+      "a_rest_contact_bounds_mm": [
+        [
+          22.09307144482957,
+          61.64390481483162,
+          -0.9956595196027024
+        ],
+        [
+          22.7500001,
+          62.30097588568948,
+          -0.07929571781876299
+        ]
+      ],
+      "local_common_mm3": 0.08713370963951424
+    },
+    {
+      "a": "little_cup_child_bank_structural",
+      "b": "palm_metacarpal_truss",
+      "sample": "palm_cup_20",
+      "pose": {
+        "palm_cup": 20.0
+      },
+      "cached_intersection_mm3": 0.004440900103036907,
+      "native_intersection_mm3": 0.00444090010266254,
+      "native_collision": true,
+      "a_frame": "palm_cup",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 38.59853357052974,
+      "b_volume_mm3": 4093.9425940674178,
+      "a_rest_contact_bounds_mm": [
+        [
+          25.24160858766517,
+          75.90451662611365,
+          1.9014297366619926
+        ],
+        [
+          25.55459034428224,
+          76.20000010000001,
+          2.3238987073220123
+        ]
+      ],
+      "local_common_mm3": 0.004440900102662498
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "thumb_cmc_abduction_palmar_stub_keyed_shaft",
+      "sample": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "cached_intersection_mm3": 0.009531727286753765,
+      "native_intersection_mm3": 0.009531728015316406,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 4093.9425940674178,
+      "b_volume_mm3": 14.099929918358761,
+      "a_rest_contact_bounds_mm": [
+        [
+          -34.39699166896072,
+          36.53279256596519,
+          7.818847991368615
+        ],
+        [
+          -33.50137027070728,
+          37.469218487621575,
+          8.352915126771673
+        ]
+      ],
+      "local_common_mm3": 0.009531728015316406
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "thumb_cmc_abduction_positive_bushing",
+      "sample": "wrist_abduction_20",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "cached_intersection_mm3": 0.04295591161240021,
+      "native_intersection_mm3": 0.04295591192933629,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 4093.9425940674178,
+      "b_volume_mm3": 6.896851511612661,
+      "a_rest_contact_bounds_mm": [
+        [
+          -34.45914312927133,
+          36.478847099844984,
+          8.4199999
+        ],
+        [
+          -33.347332049957764,
+          37.61947298941776,
+          8.600000099999999
+        ]
+      ],
+      "local_common_mm3": 0.042955911752396166
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "thumb_cmc_flexion_positive_drive_pulley",
+      "sample": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "cached_intersection_mm3": 0.2013011810099013,
+      "native_intersection_mm3": 0.20130142357334666,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "thumb_cmc_flexion",
+      "a_volume_mm3": 4093.9425940674178,
+      "b_volume_mm3": 108.63517680980571,
+      "a_rest_contact_bounds_mm": [
+        [
+          -31.398181632855998,
+          36.24999989999561,
+          4.70392405799171
+        ],
+        [
+          -29.1610007988695,
+          37.55000010000753,
+          6.521519989927223
+        ]
+      ],
+      "local_common_mm3": 0.20130142357334666
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "sample": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "cached_intersection_mm3": 0.5232774488200042,
+      "native_intersection_mm3": 0.5232774712887734,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 4093.9425940674178,
+      "b_volume_mm3": 3.8426688164763587,
+      "a_rest_contact_bounds_mm": [
+        [
+          -31.34919665698262,
+          31.9773577107684,
+          -16.301066471028612
+        ],
+        [
+          -29.324859460953633,
+          33.75098530501977,
+          -14.399999900000001
+        ]
+      ],
+      "local_common_mm3": 0.5232774712887734
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw",
+      "sample": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "cached_intersection_mm3": 0.008521834720362506,
+      "native_intersection_mm3": 0.008521834720711451,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 4093.9425940674178,
+      "b_volume_mm3": 0.21908608433602217,
+      "a_rest_contact_bounds_mm": [
+        [
+          -32.045000101185714,
+          37.51933005048004,
+          7.6299999
+        ],
+        [
+          -31.606092143914324,
+          37.72500010000441,
+          8.091544420169035
+        ]
+      ],
+      "local_common_mm3": 0.008521834720711451
+    },
+    {
+      "a": "ring_mcp_negative_yaw_outlet_structural_jaw_1",
+      "b": "ring_palm_bank_structural_body",
+      "sample": "ring_mcp_abduction_15",
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "cached_intersection_mm3": 0.01921346407637637,
+      "native_intersection_mm3": 0.01921346437043534,
+      "native_collision": true,
+      "a_frame": "ring_mcp_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 3.843596391391611,
+      "b_volume_mm3": 112.34491169612271,
+      "a_rest_contact_bounds_mm": [
+        [
+          12.877663748442629,
+          93.93998648737632,
+          -14.717123879958695
+        ],
+        [
+          13.226788763887114,
+          94.9122913121317,
+          -14.015258870494632
+        ]
+      ],
+      "local_common_mm3": 0.01921346437042963
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_bushing",
+      "b": "thumb_cmc_yaw_drive_1_host_cap",
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "cached_intersection_mm3": 0.17036264863429185,
+      "native_intersection_mm3": 0.17036264863489023,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 36.05908786217811,
+      "b_volume_mm3": 6.194258396625336,
+      "a_rest_contact_bounds_mm": [
+        [
+          -36.53183054564064,
+          33.58895738712834,
+          -17.9900001
+        ],
+        [
+          -35.660964347701615,
+          34.202626197108906,
+          -16.99999989999997
+        ]
+      ],
+      "local_common_mm3": 0.17036264863488265
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_bushing",
+      "b": "thumb_radial_shared_guide_bank_structural",
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "cached_intersection_mm3": 0.24653156331558773,
+      "native_intersection_mm3": 0.24653154780037123,
+      "native_collision": true,
+      "a_frame": "wrist_flexion",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 36.05908786217811,
+      "b_volume_mm3": 13.868405455037502,
+      "a_rest_contact_bounds_mm": [
+        [
+          -36.70988770738538,
+          33.36269826554044,
+          -19.180000100000004
+        ],
+        [
+          -35.646370895724395,
+          34.20262629710891,
+          -18.0099999
+        ]
+      ],
+      "local_common_mm3": 0.24653154780036557
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_drive_pulley",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "sample": "flat_open",
+      "pose": {},
+      "cached_intersection_mm3": 0.11926013079936748,
+      "native_intersection_mm3": 0.11925725832848026,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63516644227043,
+      "b_volume_mm3": 3.8426688164763587,
+      "a_rest_contact_bounds_mm": [
+        [
+          -29.39317707562978,
+          32.22330790916472,
+          -14.150000100000002
+        ],
+        [
+          -28.720122630015045,
+          32.87558837363236,
+          -12.8499999
+        ]
+      ],
+      "local_common_mm3": 0.11925725832848026
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_drive_pulley",
+      "b": "thumb_cmc_yaw_drive_-1_liner_cap",
+      "sample": "wrist_flexion_35",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "cached_intersection_mm3": 0.0013400419513873983,
+      "native_intersection_mm3": 0.0013399907583737842,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 108.63516644227043,
+      "b_volume_mm3": 0.16642450681240803,
+      "a_rest_contact_bounds_mm": [
+        [
+          -28.130457720772768,
+          38.40851827994312,
+          -14.055826408152958
+        ],
+        [
+          -27.91207420860794,
+          38.73923528025085,
+          -13.92435234785
+        ]
+      ],
+      "local_common_mm3": 0.0013399907583734807
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_drive_pulley",
+      "b": "thumb_cmc_yaw_drive_-1_structural_2",
+      "sample": "wrist_flexion_-15",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "cached_intersection_mm3": 0.0013399917910607497,
+      "native_intersection_mm3": 0.001340044895183978,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 108.63516644227043,
+      "b_volume_mm3": 0.18389004011071644,
+      "a_rest_contact_bounds_mm": [
+        [
+          -28.130457720772554,
+          38.40851827994376,
+          -13.075647652146
+        ],
+        [
+          -27.91207420860816,
+          38.73923528025086,
+          -12.944173591847099
+        ]
+      ],
+      "local_common_mm3": 0.00134004489518498
+    },
+    {
+      "a": "thumb_cmc_abduction_negative_drive_pulley",
+      "b": "thumb_radial_shared_guide_bank_structural",
+      "sample": "wrist_flexion_-25",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "cached_intersection_mm3": 0.07932363563083203,
+      "native_intersection_mm3": 0.07932359025607115,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 108.63516644227043,
+      "b_volume_mm3": 13.868405455037502,
+      "a_rest_contact_bounds_mm": [
+        [
+          -35.44793395982113,
+          28.501261823609067,
+          -14.150000100000002
+        ],
+        [
+          -34.363533541744516,
+          29.1943225587627,
+          -12.849999899994023
+        ]
+      ],
+      "local_common_mm3": 0.07932359031547073
+    },
+    {
+      "a": "thumb_cmc_abduction_positive_drive_pulley",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "sample": "flat_open",
+      "pose": {},
+      "cached_intersection_mm3": 0.11627509775447446,
+      "native_intersection_mm3": 0.11627542853608805,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63517680980566,
+      "b_volume_mm3": 3.8426688164763587,
+      "a_rest_contact_bounds_mm": [
+        [
+          -29.387927513031865,
+          32.205623524543334,
+          -11.6500001
+        ],
+        [
+          -28.708996719993042,
+          32.83531956625643,
+          -10.349999899999998
+        ]
+      ],
+      "local_common_mm3": 0.11627542853608805
+    },
+    {
+      "a": "thumb_cmc_abduction_positive_drive_pulley",
+      "b": "thumb_cmc_yaw_drive_1_liner_cap",
+      "sample": "wrist_flexion_60",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "cached_intersection_mm3": 0.0013400443274106367,
+      "native_intersection_mm3": 0.0013399912232683964,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 108.63517680980566,
+      "b_volume_mm3": 0.1838900400125384,
+      "a_rest_contact_bounds_mm": [
+        [
+          -37.73923528025085,
+          28.912074208608136,
+          -10.575647652145998
+        ],
+        [
+          -37.40851827994368,
+          29.130457720772597,
+          -10.444173591847099
+        ]
+      ],
+      "local_common_mm3": 0.0013399912232671322
+    },
+    {
+      "a": "thumb_cmc_abduction_positive_drive_pulley",
+      "b": "thumb_radial_shared_guide_bank_structural",
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "cached_intersection_mm3": 0.0013399904495432031,
+      "native_intersection_mm3": 0.0013400416424596702,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_abduction",
+      "b_frame": "wrist_flexion",
+      "a_volume_mm3": 108.63517680980566,
+      "b_volume_mm3": 13.868405455037502,
+      "a_rest_contact_bounds_mm": [
+        [
+          -41.24848967674234,
+          31.57538046937816,
+          -11.555826408152956
+        ],
+        [
+          -41.03840981382409,
+          31.879529327930474,
+          -11.42435234784932
+        ]
+      ],
+      "local_common_mm3": 0.0013400416424535879
+    },
+    {
+      "a": "thumb_cmc_flexion_negative_drive_pulley",
+      "b": "thumb_cmc_negative_yaw_outlet_outer_jaw",
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "cached_intersection_mm3": 0.0013400419513859966,
+      "native_intersection_mm3": 0.0013399907585990793,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63516644227033,
+      "b_volume_mm3": 0.18389004001253825,
+      "a_rest_contact_bounds_mm": [
+        [
+          -33.908104835429505,
+          32.67484785285236,
+          -6.873863642442734
+        ],
+        [
+          -33.645744635681254,
+          32.94222115988179,
+          -6.714999899999879
+        ]
+      ],
+      "local_common_mm3": 0.0013399907585984036
+    },
+    {
+      "a": "thumb_cmc_flexion_negative_drive_pulley",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "sample": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      },
+      "cached_intersection_mm3": 0.0013399918531501293,
+      "native_intersection_mm3": 0.001340037581929572,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63516644227033,
+      "b_volume_mm3": 3.8426688164763587,
+      "a_rest_contact_bounds_mm": [
+        [
+          -30.206909440690513,
+          30.480911609524696,
+          -1.4852301217727666
+        ],
+        [
+          -30.037983413684998,
+          30.606401135005594,
+          -1.1411220940867508
+        ]
+      ],
+      "local_common_mm3": 0.0013400375819351072
+    },
+    {
+      "a": "thumb_cmc_flexion_positive_drive_pulley",
+      "b": "thumb_cmc_positive_yaw_outlet_outer_jaw",
+      "sample": "wrist_flexion_35",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "cached_intersection_mm3": 0.0013400443274114104,
+      "native_intersection_mm3": 0.0013399912232637712,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63517680980571,
+      "b_volume_mm3": 0.18389004001253825,
+      "a_rest_contact_bounds_mm": [
+        [
+          -31.94222115988179,
+          34.645744635690335,
+          6.714999899999879
+        ],
+        [
+          -31.674847852861433,
+          34.90810483542928,
+          6.873863642440879
+        ]
+      ],
+      "local_common_mm3": 0.0013399912232642276
+    },
+    {
+      "a": "thumb_cmc_flexion_positive_drive_pulley",
+      "b": "thumb_cmc_positive_yaw_outlet_structural_jaw_1",
+      "sample": "thumb_cmc_flexion_25",
+      "pose": {
+        "thumb_cmc_flexion": 25.0
+      },
+      "cached_intersection_mm3": 0.0013399904497086548,
+      "native_intersection_mm3": 0.0013400346983810266,
+      "native_collision": true,
+      "a_frame": "thumb_cmc_flexion",
+      "b_frame": "thumb_cmc_abduction",
+      "a_volume_mm3": 108.63517680980571,
+      "b_volume_mm3": 1.098226743014891,
+      "a_rest_contact_bounds_mm": [
+        [
+          -34.888167520387185,
+          36.17353741525164,
+          7.3537114751731485
+        ],
+        [
+          -34.598849785809016,
+          36.43240335603181,
+          7.499483104739069
+        ]
+      ],
+      "local_common_mm3": 0.0013400346983806848
+    },
+    {
+      "a": "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw",
+      "b": "thumb_metacarpal_frame",
+      "sample": "thumb_mcp_flexion_70",
+      "pose": {
+        "thumb_mcp_flexion": 70.0
+      },
+      "cached_intersection_mm3": 0.011635728723619362,
+      "native_intersection_mm3": 0.011635728723617391,
+      "native_collision": true,
+      "a_frame": "thumb_mcp_flexion",
+      "b_frame": "thumb_cmc_flexion",
+      "a_volume_mm3": 2.5669875301950795,
+      "b_volume_mm3": 354.24225042407477,
+      "a_rest_contact_bounds_mm": [
+        [
+          -69.58208057761398,
+          69.54767346695597,
+          0.4600925178381144
+        ],
+        [
+          -68.54767346682937,
+          70.58208057777706,
+          0.5250001
+        ]
+      ],
+      "local_common_mm3": 0.011635728723625076
+    }
+  ]
+}

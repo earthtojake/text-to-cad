@@ -1,0 +1,38 @@
+{
+  "body_count": 2723,
+  "processed": 2723,
+  "exact_booleans": 4189,
+  "congruent_proof_reuse": 3950,
+  "collisions": [],
+  "complete": true,
+  "pass": true,
+  "deferred_palm_labels": [
+    "fifth_metacarpal_cupping_truss",
+    "palm_metacarpal_truss",
+    "palm_radial_dorsal_clamp_1",
+    "palm_radial_dorsal_clamp_2",
+    "palm_radial_dorsal_socket_screw_1",
+    "palm_radial_dorsal_socket_screw_2",
+    "palm_radial_dorsal_washer_1",
+    "palm_radial_dorsal_washer_2",
+    "palm_radial_palmar_clamp_1",
+    "palm_radial_palmar_clamp_2",
+    "palm_radial_palmar_socket_screw_1",
+    "palm_radial_palmar_socket_screw_2",
+    "palm_radial_palmar_washer_1",
+    "palm_radial_palmar_washer_2",
+    "palm_ring_mcp_dorsal_bearing_node",
+    "palm_ring_mcp_dorsal_conformal_spacer",
+    "palm_ring_mcp_dorsal_retaining_cap",
+    "palm_ring_mcp_dorsal_socket_screw",
+    "palm_ring_mcp_palmar_bearing_node",
+    "palm_ring_mcp_palmar_conformal_spacer",
+    "palm_ring_mcp_palmar_retaining_cap",
+    "palm_ring_mcp_palmar_socket_screw"
+  ],
+  "input_sha256": {
+    "models/assemblies/STEP/anthropomorphic_hand/imported/palm_frame_integration.step": "837d9ce43887d20648854c611275befb79389930a4fbf085921fc5c09cfd6e74",
+    "models/assemblies/STEP/anthropomorphic_hand/palm_little_review.step": "22a73cf25b02ac7b5d2a43d9a53983bfd7e6c302b726b6df377510690998ac0c"
+  },
+  "scope": "Every current rigid body except the explicitly deferred main and cupping palm frames; not final assembly acceptance."
+}

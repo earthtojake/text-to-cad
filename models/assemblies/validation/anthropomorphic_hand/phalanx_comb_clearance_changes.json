@@ -1,0 +1,50 @@
+[
+  {
+    "original": "index_mcp_outlet_comb_structural_lower_jaw_1",
+    "original_volume": 3.1109308412134786,
+    "revised_volume": 1.777180781239792,
+    "pieces": 2
+  },
+  {
+    "original": "index_mcp_outlet_comb_scalloped_upper_jaw",
+    "original_volume": 2.24138014900921,
+    "revised_volume": 0.9076301407104939,
+    "pieces": 2
+  },
+  {
+    "original": "middle_mcp_outlet_comb_structural_lower_jaw_1",
+    "original_volume": 3.0866718294654127,
+    "revised_volume": 1.7529218612781086,
+    "pieces": 2
+  },
+  {
+    "original": "middle_mcp_outlet_comb_scalloped_upper_jaw",
+    "original_volume": 2.241380149009209,
+    "revised_volume": 0.9076301407104947,
+    "pieces": 2
+  },
+  {
+    "original": "ring_mcp_outlet_comb_structural_lower_jaw_1",
+    "original_volume": 3.110010889948365,
+    "revised_volume": 1.7762608999037728,
+    "pieces": 2
+  },
+  {
+    "original": "ring_mcp_outlet_comb_scalloped_upper_jaw",
+    "original_volume": 2.241380149010045,
+    "revised_volume": 0.9076301407100784,
+    "pieces": 2
+  },
+  {
+    "original": "little_mcp_outlet_comb_structural_lower_jaw_1",
+    "original_volume": 3.128510708743521,
+    "revised_volume": 1.7947607748074095,
+    "pieces": 2
+  },
+  {
+    "original": "little_mcp_outlet_comb_scalloped_upper_jaw",
+    "original_volume": 2.2413801490100416,
+    "revised_volume": 0.9076301407100756,
+    "pieces": 2
+  }
+]

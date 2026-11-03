@@ -1,0 +1,1882 @@
+{
+  "scope": "Native material-subset proof and all225 rigid-pair transfer for the bank.\n\nThe prior all-neighbour bank sweep has exactly one failing pair, a screw in\nthe same rigid frame. Check that pair on the new native solid, and require\nzero added faces in the directed new-minus-old Boolean difference. Every\nother bank pair inherits clearance from the containing old solid.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_radial_bank_screw_clearance.py": "4c064c18668cc38c37b7bba2325082a67cdf3ca563292286eef7442368538b98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_reroute_supports_r10_gate.json": "0592c6e47df2e582112353ad50a6923f222bf42b748924989b16a7d064863032",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/radial_bank_screw_clearance_strict.json": "773176618aaf59ca0d83910ff456c43f42f8a50cd11be8f8e0afd2844ac8c5f4",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/phalanx_r5_boolean.py": "fb3ba6f83751543d7afd0ac9b40b3a7a6d43caefe9103e9acce8b7f444cb715c"
+  },
+  "body": "thumb_radial_shared_guide_bank_structural",
+  "frame": "wrist_flexion",
+  "old_minus_new_mm3": 0.021961040674275623,
+  "new_minus_old_faces": 0,
+  "screw_intersection_mm3": 0,
+  "screw_gap_mm": 0.019999965468013765,
+  "bores": [
+    {
+      "name": "thumb_mcp_abduction_positive_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_ip_positive_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_ip_negative_wrist_guide_outlet",
+      "intersection_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "sample_count": 225,
+  "rows": [
+    {
+      "sample": "flat_open",
+      "pose": {},
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_-10",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-45",
+      "pose": {
+        "wrist_flexion": -45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-5",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_25",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_60",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_10",
+      "pose": {
+        "index_mcp_abduction": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_0",
+      "pose": {
+        "index_mcp_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_35",
+      "pose": {
+        "index_mcp_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_75",
+      "pose": {
+        "index_mcp_flexion": 75.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_10",
+      "pose": {
+        "index_pip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_50",
+      "pose": {
+        "index_pip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_90",
+      "pose": {
+        "index_pip": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_10",
+      "pose": {
+        "index_dip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_50",
+      "pose": {
+        "index_dip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_15",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_45",
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_20",
+      "pose": {
+        "middle_pip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_100",
+      "pose": {
+        "middle_pip": 100.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_60",
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_-5",
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_-15",
+      "pose": {
+        "ring_mcp_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_15",
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_55",
+      "pose": {
+        "ring_mcp_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_90",
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_30",
+      "pose": {
+        "ring_pip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_70",
+      "pose": {
+        "ring_pip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_110",
+      "pose": {
+        "ring_pip": 110.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_30",
+      "pose": {
+        "ring_dip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_70",
+      "pose": {
+        "ring_dip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_25",
+      "pose": {
+        "little_mcp_abduction": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_45",
+      "pose": {
+        "little_mcp_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_20",
+      "pose": {
+        "little_pip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_100",
+      "pose": {
+        "little_pip": 100.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_60",
+      "pose": {
+        "little_dip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_15",
+      "pose": {
+        "thumb_cmc_abduction": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_-15",
+      "pose": {
+        "thumb_cmc_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_15",
+      "pose": {
+        "thumb_cmc_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_0",
+      "pose": {
+        "thumb_mcp_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_10",
+      "pose": {
+        "thumb_mcp_flexion": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_50",
+      "pose": {
+        "thumb_mcp_flexion": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_10",
+      "pose": {
+        "thumb_ip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_50",
+      "pose": {
+        "thumb_ip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_85",
+      "pose": {
+        "thumb_ip": 85.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_0",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-35",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_0",
+      "pose": {
+        "wrist_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_35",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_0",
+      "pose": {
+        "palm_cup": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_-20",
+      "pose": {
+        "index_mcp_abduction": -20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_20",
+      "pose": {
+        "index_mcp_abduction": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_5",
+      "pose": {
+        "index_mcp_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_45",
+      "pose": {
+        "index_mcp_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_85",
+      "pose": {
+        "index_mcp_flexion": 85.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_20",
+      "pose": {
+        "index_pip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_60",
+      "pose": {
+        "index_pip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_100",
+      "pose": {
+        "index_pip": 100.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_20",
+      "pose": {
+        "index_dip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_60",
+      "pose": {
+        "index_dip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_-5",
+      "pose": {
+        "middle_mcp_abduction": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_-15",
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_15",
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_55",
+      "pose": {
+        "middle_mcp_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_90",
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_30",
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_70",
+      "pose": {
+        "middle_pip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_110",
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_30",
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_70",
+      "pose": {
+        "middle_dip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_0",
+      "pose": {
+        "ring_mcp_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_-5",
+      "pose": {
+        "ring_mcp_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_25",
+      "pose": {
+        "ring_mcp_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_65",
+      "pose": {
+        "ring_mcp_flexion": 65.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_0",
+      "pose": {
+        "ring_pip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_40",
+      "pose": {
+        "ring_pip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_80",
+      "pose": {
+        "ring_pip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_0",
+      "pose": {
+        "ring_dip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_40",
+      "pose": {
+        "ring_dip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_80",
+      "pose": {
+        "ring_dip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_0",
+      "pose": {
+        "little_mcp_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_-15",
+      "pose": {
+        "little_mcp_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_15",
+      "pose": {
+        "little_mcp_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_55",
+      "pose": {
+        "little_mcp_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "pose": {
+        "little_mcp_flexion": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_30",
+      "pose": {
+        "little_pip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_70",
+      "pose": {
+        "little_pip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_110",
+      "pose": {
+        "little_pip": 110.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_30",
+      "pose": {
+        "little_dip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_70",
+      "pose": {
+        "little_dip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_25",
+      "pose": {
+        "thumb_cmc_abduction": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_-5",
+      "pose": {
+        "thumb_cmc_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_25",
+      "pose": {
+        "thumb_cmc_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_65",
+      "pose": {
+        "thumb_cmc_flexion": 65.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_5",
+      "pose": {
+        "thumb_mcp_abduction": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_20",
+      "pose": {
+        "thumb_mcp_flexion": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_60",
+      "pose": {
+        "thumb_mcp_flexion": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_20",
+      "pose": {
+        "thumb_ip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_60",
+      "pose": {
+        "thumb_ip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-25",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_5",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_45",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_10",
+      "pose": {
+        "palm_cup": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_-10",
+      "pose": {
+        "index_mcp_abduction": -10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_-15",
+      "pose": {
+        "index_mcp_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_15",
+      "pose": {
+        "index_mcp_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_55",
+      "pose": {
+        "index_mcp_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_90",
+      "pose": {
+        "index_mcp_flexion": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_30",
+      "pose": {
+        "index_pip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_70",
+      "pose": {
+        "index_pip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_110",
+      "pose": {
+        "index_pip": 110.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_30",
+      "pose": {
+        "index_dip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_70",
+      "pose": {
+        "index_dip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_0",
+      "pose": {
+        "middle_mcp_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_5",
+      "pose": {
+        "ring_mcp_abduction": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_0",
+      "pose": {
+        "ring_mcp_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_35",
+      "pose": {
+        "ring_mcp_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_75",
+      "pose": {
+        "ring_mcp_flexion": 75.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_10",
+      "pose": {
+        "ring_pip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_50",
+      "pose": {
+        "ring_pip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_90",
+      "pose": {
+        "ring_pip": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_10",
+      "pose": {
+        "ring_dip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_50",
+      "pose": {
+        "ring_dip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-25",
+      "pose": {
+        "little_mcp_abduction": -25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_5",
+      "pose": {
+        "little_mcp_abduction": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_-5",
+      "pose": {
+        "little_mcp_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_25",
+      "pose": {
+        "little_mcp_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_65",
+      "pose": {
+        "little_mcp_flexion": 65.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_0",
+      "pose": {
+        "little_pip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_40",
+      "pose": {
+        "little_pip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_80",
+      "pose": {
+        "little_pip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_0",
+      "pose": {
+        "little_dip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_40",
+      "pose": {
+        "little_dip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_80",
+      "pose": {
+        "little_dip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_0",
+      "pose": {
+        "thumb_cmc_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_0",
+      "pose": {
+        "thumb_cmc_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_35",
+      "pose": {
+        "thumb_cmc_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_-15",
+      "pose": {
+        "thumb_mcp_abduction": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_15",
+      "pose": {
+        "thumb_mcp_abduction": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_30",
+      "pose": {
+        "thumb_mcp_flexion": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_70",
+      "pose": {
+        "thumb_mcp_flexion": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_30",
+      "pose": {
+        "thumb_ip": 30.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_70",
+      "pose": {
+        "thumb_ip": 70.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_-20",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_20",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-15",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_15",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_55",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_20",
+      "pose": {
+        "palm_cup": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_0",
+      "pose": {
+        "index_mcp_abduction": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_-5",
+      "pose": {
+        "index_mcp_flexion": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_25",
+      "pose": {
+        "index_mcp_flexion": 25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_65",
+      "pose": {
+        "index_mcp_flexion": 65.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_0",
+      "pose": {
+        "index_pip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_40",
+      "pose": {
+        "index_pip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_80",
+      "pose": {
+        "index_pip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_0",
+      "pose": {
+        "index_dip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_40",
+      "pose": {
+        "index_dip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_80",
+      "pose": {
+        "index_dip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_5",
+      "pose": {
+        "middle_mcp_abduction": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_0",
+      "pose": {
+        "middle_mcp_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_35",
+      "pose": {
+        "middle_mcp_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_75",
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_10",
+      "pose": {
+        "middle_pip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_50",
+      "pose": {
+        "middle_pip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_90",
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_10",
+      "pose": {
+        "middle_dip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_50",
+      "pose": {
+        "middle_dip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_-15",
+      "pose": {
+        "ring_mcp_abduction": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_15",
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_5",
+      "pose": {
+        "ring_mcp_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_45",
+      "pose": {
+        "ring_mcp_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_85",
+      "pose": {
+        "ring_mcp_flexion": 85.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_20",
+      "pose": {
+        "ring_pip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_60",
+      "pose": {
+        "ring_pip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_100",
+      "pose": {
+        "ring_pip": 100.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_20",
+      "pose": {
+        "ring_dip": 20.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_60",
+      "pose": {
+        "ring_dip": 60.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-15",
+      "pose": {
+        "little_mcp_abduction": -15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_15",
+      "pose": {
+        "little_mcp_abduction": 15.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_0",
+      "pose": {
+        "little_mcp_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_35",
+      "pose": {
+        "little_mcp_flexion": 35.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "pose": {
+        "little_mcp_flexion": 75.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_10",
+      "pose": {
+        "little_pip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_50",
+      "pose": {
+        "little_pip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_90",
+      "pose": {
+        "little_pip": 90.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_10",
+      "pose": {
+        "little_dip": 10.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_50",
+      "pose": {
+        "little_dip": 50.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_5",
+      "pose": {
+        "thumb_cmc_abduction": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_5",
+      "pose": {
+        "thumb_cmc_flexion": 5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_45",
+      "pose": {
+        "thumb_cmc_flexion": 45.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_-5",
+      "pose": {
+        "thumb_mcp_abduction": -5.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_0",
+      "pose": {
+        "thumb_mcp_flexion": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_40",
+      "pose": {
+        "thumb_mcp_flexion": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_0",
+      "pose": {
+        "thumb_ip": 0.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_40",
+      "pose": {
+        "thumb_ip": 40.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_80",
+      "pose": {
+        "thumb_ip": 80.0
+      },
+      "prior_contact_count": 1,
+      "pass_": true
+    }
+  ],
+  "complete": true,
+  "pass": true
+}

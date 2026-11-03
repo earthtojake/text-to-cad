@@ -1,0 +1,72 @@
+{
+  "scope": "Replace the splice bank's drum-crossing rib while keeping every interface.",
+  "pass": true,
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/rigid_clearance_inputs.step": "8ba620fb8780d163945e4ef40623beb9778670e58953c79440ad5786bda808f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/remaining_support_paths.json": "2c430dbe4d4da2d9afacc30f1c95f733ca655517d048256877c2347be3a36487",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/radial_bank_arm_search.json": "278d62781ab55a46bcdaf95697fbc442b07c9f3996897d75488d6f3149427559",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/radial_bank_arm_repair_review.py": "cc26c9c85eb1e3e1b53558c5ba1f746102ca4728404400e74750105b19083de1"
+  },
+  "original_volume_mm3": 13.868393842011146,
+  "repaired_volume_mm3": 14.235714447093429,
+  "original_arm": {
+    "root": [
+      -7.343576436351046,
+      -13.069152044288993,
+      -0.36
+    ],
+    "end": [
+      -5.849409804117317,
+      -0.8138819608234618,
+      -18.85
+    ],
+    "controls": [
+      [
+        -4.553536960880839,
+        -9.384705262791316,
+        -5.52358409613986
+      ],
+      [
+        -4.68988697837011,
+        -5.257907392600313,
+        -15.574671301219874
+      ]
+    ],
+    "clearance": 1.1501419642370598,
+    "score": 1.136572447737996
+  },
+  "replacement_arm": {
+    "root": [
+      -7.343576436351046,
+      -13.069152044288993,
+      -0.36
+    ],
+    "end": [
+      -5.849409804117317,
+      -0.8138819608234618,
+      -18.85
+    ],
+    "controls": [
+      [
+        -7.954009028441391,
+        -11.338939534652992,
+        -7.853611606739649
+      ],
+      [
+        -7.039814271214915,
+        -7.9755390334920095,
+        -13.77892987213343
+      ]
+    ],
+    "sampled_route_distance_mm": 1.1501419642370598,
+    "sampled_drum_radial_distance_mm": 8.807904564739033,
+    "length_mm": 22.84429809436153,
+    "score": 0.9216989832934446
+  },
+  "removed_original_parameter_interval": [
+    0.07,
+    0.93
+  ],
+  "removal_radius_mm": 0.275,
+  "rib_radius_mm": 0.25
+}

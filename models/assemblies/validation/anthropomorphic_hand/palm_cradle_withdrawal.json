@@ -1,0 +1,7 @@
+{
+  "head_withdrawal_gap_mm": 0.019999999999999574,
+  "head_withdrawal_intersection_mm3": 0,
+  "valid": true,
+  "solids": 1,
+  "relief_inner_limit_x_mm": -21.2
+}

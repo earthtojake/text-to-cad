@@ -1,0 +1,5767 @@
+{
+  "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525": {
+    "wrist_palm_cradle": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    }
+  },
+  "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d": {
+    "palm_contact_1_silicone_pad": {
+      "color": [
+        0.8468732,
+        0.8069523,
+        0.7011019,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.04,
+        "metalness": 0.01,
+        "roughness": 0.67
+      }
+    },
+    "palm_contact_1_carrier": {
+      "color": [
+        0.0085681,
+        0.017642,
+        0.0262412,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "palm_contact_1_M1p6_top_socket_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_contact_2_silicone_pad": {
+      "color": [
+        0.8468732,
+        0.8069523,
+        0.7011019,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.04,
+        "metalness": 0.01,
+        "roughness": 0.67
+      }
+    },
+    "palm_contact_2_carrier": {
+      "color": [
+        0.0085681,
+        0.017642,
+        0.0262412,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "palm_contact_2_M1p6_top_socket_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_contact_3_silicone_pad": {
+      "color": [
+        0.8468732,
+        0.8069523,
+        0.7011019,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.04,
+        "metalness": 0.01,
+        "roughness": 0.67
+      }
+    },
+    "palm_contact_3_carrier": {
+      "color": [
+        0.0085681,
+        0.017642,
+        0.0262412,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "palm_contact_3_M1p6_top_socket_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_radial_M3_low_head_socket_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_radial_0p4mm_seat_spacer": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_radial_M3_flanged_thread_insert": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_ulnar_M3_low_head_socket_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_ulnar_0p4mm_seat_spacer": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_wrist_ulnar_M3_flanged_thread_insert": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "074592457b000ef471b1d96088d4de782587ba8218c10cab39269b7d5d9aee3a": {
+    "wrist_abduction_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803": {
+    "index_proximal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "index_middle_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "index_distal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "middle_proximal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_middle_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_distal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "ring_proximal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "ring_middle_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_distal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "little_proximal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_middle_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "little_distal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "thumb_metacarpal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "thumb_proximal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    },
+    "thumb_distal_frame": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ]
+    }
+  },
+  "815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d": {
+    "little_cup_child_bank_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_01_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_02_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_03_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_04_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_05_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_06_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_07_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_rib_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_child_bank_row_01_right_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_02_left_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_03_left_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_04_right_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_05_left_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_06_right_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_07_left_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_row_07_right_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_child_bank_rib_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_-1_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_-1_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_-1_structural_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_-1_palm_rib_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_row_01_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_row_02_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_row_03_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_row_04_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_row_05_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "little_cup_fixed_bank_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_row_01_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_row_02_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_row_03_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_row_04_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_cup_fixed_bank_row_05_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd": {
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_hub_right_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_outer_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_structural_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_structural_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_hub_right_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_hub_right_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_outer_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_yaw_drive_-1_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_mcp_yaw_drive_-1_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_yaw_drive_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_yaw_drive_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_yaw_drive_1_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_mcp_yaw_drive_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_mcp_yaw_drive_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_mcp_yaw_drive_1_M0p4_pinch_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_fixed_flex_shared_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_24_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_23_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_24_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_fixed_flex_-1_23_liner_M0p4_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_fixed_flex_1_24_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_1_23_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_fixed_flex_1_24_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_fixed_flex_1_23_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_radial_shared_guide_bank_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_wrist_splice_outlet_comb_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_wrist_splice_outlet_comb_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "3ce6c336866136d55eab1d9176dcb0ff70d6cf6b9a3afa562adf056a42dd1931": {
+    "wrist_abduction_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7": {
+    "index_mcp_outlet_comb_structural_lower_jaw_1_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_structural_lower_jaw_1_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_scalloped_upper_jaw_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_scalloped_upper_jaw_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_mcp_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_mcp_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_mcp_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_mcp_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_inlet_comb_structural_lower_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_inlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_inlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_inlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_inlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_outlet_comb_structural_lower_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_outlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "index_pip_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "index_pip_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_mcp_outlet_comb_structural_lower_jaw_1_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_structural_lower_jaw_1_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_scalloped_upper_jaw_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_scalloped_upper_jaw_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_mcp_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_mcp_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_mcp_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_mcp_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_inlet_comb_structural_lower_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_inlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_inlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_inlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_inlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_outlet_comb_structural_lower_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_outlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "middle_pip_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "middle_pip_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_mcp_outlet_comb_structural_lower_jaw_1_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_structural_lower_jaw_1_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_scalloped_upper_jaw_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_scalloped_upper_jaw_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_mcp_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_mcp_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_mcp_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_mcp_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_inlet_comb_structural_lower_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_inlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_inlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_inlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_inlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_outlet_comb_structural_lower_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_outlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "ring_pip_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "ring_pip_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_mcp_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_mcp_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_mcp_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_mcp_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_inlet_comb_structural_lower_jaw_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_structural_lower_jaw_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_structural_lower_jaw_3": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_inlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_inlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_inlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_inlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_outlet_comb_structural_lower_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_outlet_comb_scalloped_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_outlet_comb_rail_left_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_outlet_comb_rail_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_outlet_comb_liner_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_outlet_comb_rail_right_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    },
+    "little_pip_outlet_comb_rail_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    },
+    "little_pip_outlet_comb_liner_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.16,
+        "metalness": 0.68,
+        "roughness": 0.32
+      }
+    }
+  },
+  "141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0": {
+    "index_mcp_abduction_positive_bushing": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "middle_mcp_abduction_positive_bushing": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "ring_mcp_abduction_positive_bushing": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_mcp_abduction_positive_bushing": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572": {
+    "thumb_cmc_abduction_positive_bushing": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_abduction_palmar_stub_keyed_shaft": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "thumb_cmc_abduction_palmar_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99": {
+    "thumb_cmc_abduction_dorsal_drive_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72": {
+    "thumb_cmc_parent_inlet_comb_structural_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_parent_inlet_comb_scalloped_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_parent_inlet_comb_host_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_parent_inlet_comb_liner_-1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_parent_inlet_comb_liner_+1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_structural_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_scalloped_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_rail_-1_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_-1_host_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_rail_+1_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_+1_host_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_liner_-1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_four_liner_comb_liner_+1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_flexion_negative_clamp_structural_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_negative_clamp_scalloped_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_negative_clamp_rail_lower_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_negative_clamp_host_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_flexion_negative_clamp_liner_+1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_flexion_positive_clamp_structural_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_positive_clamp_scalloped_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_positive_clamp_rail_upper_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "thumb_cmc_child_flexion_positive_clamp_host_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    },
+    "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw": {
+      "color": [
+        0.6307571,
+        0.6866853,
+        0.7379104,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.98,
+        "roughness": 0.14
+      }
+    }
+  },
+  "ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0": {
+    "index_mcp_abduction_dorsal_drive_stub_keyed_shaft": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "index_mcp_abduction_dorsal_drive_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "middle_mcp_abduction_dorsal_drive_stub_keyed_shaft": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "middle_mcp_abduction_dorsal_drive_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "ring_mcp_abduction_dorsal_drive_stub_keyed_shaft": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "ring_mcp_abduction_dorsal_drive_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_mcp_abduction_dorsal_drive_stub_keyed_shaft": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "little_mcp_abduction_dorsal_drive_stub_retaining_ring": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173": {
+    "thumb_cmc_carrier": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    }
+  },
+  "6c2e669df4f176c530c5b1c8623c861b942ca60d1e75cb346bd2548f6a32adf4": {
+    "palm_metacarpal_truss": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    }
+  },
+  "0cbb95eaad8463d34ce50a9eae879d01cb4c02adb56ae2531b01c2278477f015": {
+    "fifth_metacarpal_cupping_truss": {
+      "color": [
+        0.3967552,
+        0.4735315,
+        0.5332764,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.12,
+        "metalness": 0.86,
+        "roughness": 0.34
+      }
+    }
+  },
+  "5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01": {
+    "index_palm_bank_structural_body": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_01_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_02_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_03_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_04_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_05_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_06_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_07_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_08_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_boss_clamp_front_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_01_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_02_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_03_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_04_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_04_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_05_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_06_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_07_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_08_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_row_08_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_boss_clamp_left_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "index_palm_bank_boss_clamp_right_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_structural_body": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_01_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_02_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_03_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_04_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_05_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_06_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_07_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_08_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_boss_clamp_front_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_01_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_02_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_03_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_04_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_04_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_05_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_06_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_07_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_08_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_row_08_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_boss_clamp_left_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "middle_palm_bank_boss_clamp_right_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_structural_body": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_01_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_02_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_03_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_04_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_05_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_06_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_07_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_08_upper_jaw": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_boss_clamp_front_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_01_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_02_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_03_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_04_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_04_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_05_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_06_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_07_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_08_left_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_row_08_right_M0p6_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_boss_clamp_left_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "ring_palm_bank_boss_clamp_right_M0p8_screw": {
+      "color": [
+        0.1589608,
+        0.2086369,
+        0.2345506,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    }
+  },
+  "36e887943f357a170fb6a57ac0b7b82fdb997e91c060a0b8aff134b9d7b61cca": {
+    "wrist_abduction_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_+1_M0p4_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  },
+  "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65": {
+    "wrist_abduction_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_-1_liner_+1_M0p4_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_abduction_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_abduction_drive_mouth_1_liner_-1_M0p4_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_-1_liner_-1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_structural": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "wrist_flexion_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "wrist_flexion_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_shared_drive_mouth_structural_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_cap": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_1": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_cap_2": {
+      "color": [
+        0.3371636,
+        0.4178851,
+        0.462077,
+        1.0
+      ],
+      "material": {
+        "metalness": 0.85,
+        "roughness": 0.28
+      }
+    },
+    "palm_cup_drive_mouth_1_host_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    },
+    "palm_cup_drive_mouth_1_liner_+1_M0p6_screw": {
+      "color": [
+        0.6514056,
+        0.7083758,
+        0.7529422,
+        1.0
+      ],
+      "material": {
+        "clearcoat": 0.25,
+        "metalness": 0.98,
+        "roughness": 0.12
+      }
+    }
+  }
+}

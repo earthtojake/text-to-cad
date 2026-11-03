@@ -1,0 +1,13 @@
+{
+  "parts": 32,
+  "solids": 32,
+  "all_valid": true,
+  "boolean_pairs_tested": 116,
+  "collisions": [
+    {
+      "a": "middle_mcp_abduction_negative",
+      "b": "middle_mcp_carrier",
+      "intersection_mm3": 0.31657302426579925
+    }
+  ]
+}

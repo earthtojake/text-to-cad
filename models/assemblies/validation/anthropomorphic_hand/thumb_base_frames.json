@@ -1,0 +1,319 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_base_mounts_review.step",
+  "sha256": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+  "body_count": 52,
+  "bodies": [
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_structural_jaw_2",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_2",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_outer_jaw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_M0p4_pinch_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_structural_jaw_1",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_structural_jaw_2",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_hub_right_jaw_1",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_hub_right_jaw_2",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_outer_jaw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+      "frame": "thumb_cmc_abduction",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_structural_1",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_structural_2",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_host_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_-1_M0p4_pinch_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_structural_1",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_structural_2",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_liner_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_host_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_-1_M0p4_pinch_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_1_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_1_host_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_1_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_yaw_drive_1_M0p4_pinch_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_1_structural",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_1_liner_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_1_host_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_1_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_mcp_yaw_drive_1_M0p4_pinch_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_shared_structural",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_host_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_24_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_23_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_24_liner_-1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_-1_23_liner_M0p4_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_1_24_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_1_23_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_1_24_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_fixed_flex_1_23_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_radial_shared_guide_bank_structural",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_wrist_splice_outlet_comb_liner_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_wrist_splice_outlet_comb_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    }
+  ]
+}

@@ -1,0 +1,654 @@
+{
+  "sample_count": 225,
+  "checks": 288,
+  "rows": [
+    {
+      "angle": 0,
+      "minimum_gap": -0.19420446975598055,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 5,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 10,
+      "minimum_gap": -0.19420446975598776,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 15,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 20,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 25,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 30,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 35,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 40,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 45,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 50,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 55,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 60,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 65,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 70,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 75,
+      "minimum_gap": -0.19420446975597894,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 80,
+      "minimum_gap": -0.19420446975598776,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 85,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 90,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 95,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 100,
+      "minimum_gap": -0.19420446975598055,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 105,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 110,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 115,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 120,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 125,
+      "minimum_gap": -0.19420446975598055,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 130,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 135,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 140,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 145,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 150,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 155,
+      "minimum_gap": -0.19420446975598776,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 160,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 165,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 170,
+      "minimum_gap": -0.1942044697559826,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 175,
+      "minimum_gap": -0.1942044697559826,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 180,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 185,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 190,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 195,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 200,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 205,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 210,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 215,
+      "minimum_gap": -0.19420446975598055,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 220,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 225,
+      "minimum_gap": -0.19420446975598055,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 230,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 235,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 240,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 245,
+      "minimum_gap": -0.19420446975598776,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 250,
+      "minimum_gap": -0.1942044697559826,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 255,
+      "minimum_gap": -0.19391286073254815,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 260,
+      "minimum_gap": -0.1867620274179207,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 265,
+      "minimum_gap": -0.17006897301275742,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 270,
+      "minimum_gap": -0.1439131228772545,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 275,
+      "minimum_gap": -0.11407618541198544,
+      "worst": {
+        "sample": "thumb_cmc_flexion_-15",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 280,
+      "minimum_gap": -0.13003899486239806,
+      "worst": {
+        "sample": "thumb_cmc_flexion_-15",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 285,
+      "minimum_gap": -0.13530482709101982,
+      "worst": {
+        "sample": "thumb_cmc_flexion_-15",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 290,
+      "minimum_gap": -0.14184730355661584,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 295,
+      "minimum_gap": -0.16870174316616993,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 300,
+      "minimum_gap": -0.18602833338263725,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 305,
+      "minimum_gap": -0.19375786378689014,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 310,
+      "minimum_gap": -0.1942044697559826,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 315,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 320,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 325,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 330,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 335,
+      "minimum_gap": -0.19420446975598776,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 340,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 345,
+      "minimum_gap": -0.19420446975597894,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 350,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    },
+    {
+      "angle": 355,
+      "minimum_gap": -0.19420446975598415,
+      "worst": {
+        "sample": "thumb_cmc_abduction_-25",
+        "tendon": "thumb_mcp_abduction_positive",
+        "group": "thumb_mcp_abduction_positive_cmc_reaction"
+      }
+    }
+  ]
+}

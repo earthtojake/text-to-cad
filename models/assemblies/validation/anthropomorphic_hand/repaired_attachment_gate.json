@@ -1,0 +1,3393 @@
+{
+  "scope": "Native same-frame attachment graph from repaired supports to their hosts.\n\nA0.025mm seating/fastener clearance matches the existing attachment contract.\nThis graph is complementary to strict solids and zero-interference checks.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/hand_native_body_frames.json": "e271a0db0204688720137722a7d4402a85e0dc39ab20dfe91985973f589aac70",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_hand_registry.py": "7a52403700e6691cb6bcd8244e1cb74f9224d093f6c3b2db71caccfbbd5a71d7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_roundtrip.json": "97c3d7a5e5ea62cd5edc98d5b57c68751b2ec9d05b4c2afa9038c534ec49905d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_repair_frames.json": "6aba61dbcb3acf563e3c7af5b17c6d7edeb36eede4d5e30a5a62405f4f4eca98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingernail_export_roundtrip.json": "e0c6714b728866ea6bbeb100875d57d3c946442697b9c3c44b5b591bbd9ee8f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingernail_export_repair_frames.json": "9fae8ef7b3de487692294a77aaf4ad699a74b954159f7b2b78fae788715210a2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_clearance_relief_build.json": "578fd85ae4d63c2ce4bc52ddbadc841437f9ccf6ddedb3775d6cb9189df171bc",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0.step": "141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d.step": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01.step": "5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7.step": "5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingernail_export_repair_review.step": "6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65.step": "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803.step": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173.step": "7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72.step": "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d.step": "815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525.step": "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0.step": "ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99.step": "b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572.step": "fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_repaired_attachments.py": "d118ef912c3d20c1acc2de9717ace9a25e543041eb4a3325818dc33ca0597538"
+  },
+  "rows": [
+    {
+      "frame": "palm_cup",
+      "anchors": [
+        "palm_cup_keyed_shaft"
+      ],
+      "repaired_supports": [
+        "fifth_metacarpal_cupping_truss",
+        "little_cup_child_bank_structural"
+      ],
+      "unattached": [],
+      "contact_edges": [
+        {
+          "a": "little_cup_child_bank_rib_cap",
+          "b": "little_cup_child_bank_rib_host_M0p6_screw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              34.871654658952664,
+              68.32919495661717,
+              12.318581890836
+            ],
+            [
+              34.85352850321193,
+              68.33764732185199,
+              12.318581890836
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_rib_cap",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              35.11349942160056,
+              67.66473193222846,
+              11.678581890836
+            ],
+            [
+              35.113499421601,
+              67.664731932228,
+              11.658581890836
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_rib_host_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.020000000000374142,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              34.85352850321193,
+              68.33764732185199,
+              11.018581890836
+            ],
+            [
+              34.871654658953,
+              68.329194956617,
+              11.018581890836
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_01_right_M0p6_screw",
+          "b": "little_cup_child_bank_row_01_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              27.353127635179703,
+              54.413875639116384,
+              -11.45
+            ],
+            [
+              27.371253790920434,
+              54.40542327388157,
+              -11.45
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_01_right_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.01999999999942341,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              27.353127635179703,
+              54.413875639116384,
+              -12.55
+            ],
+            [
+              27.37125379092,
+              54.405423273882,
+              -12.55
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_02_left_M0p6_screw",
+          "b": "little_cup_child_bank_row_02_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              15.607378715185401,
+              59.89100831127731,
+              -8.95
+            ],
+            [
+              15.625504870926132,
+              59.882555946042494,
+              -8.95
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_02_left_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.020000000000088867,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              15.607378715185401,
+              59.89100831127731,
+              -10.05
+            ],
+            [
+              15.625504870926,
+              59.882555946042,
+              -10.05
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_03_left_M0p6_screw",
+          "b": "little_cup_child_bank_row_03_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              19.77639453555375,
+              57.946964307269575,
+              -4.95
+            ],
+            [
+              19.79452069129448,
+              57.93851194203476,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_03_left_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.01999999999946263,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              19.77639453555375,
+              57.946964307269575,
+              -6.05
+            ],
+            [
+              19.794520691294,
+              57.938511942035,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_04_right_M0p6_screw",
+          "b": "little_cup_child_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000002627,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              23.184111814811352,
+              56.35791964312412,
+              6.05
+            ],
+            [
+              23.202237970552087,
+              56.3494672778893,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_04_right_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.020000000000054478,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              23.184111814811352,
+              56.35791964312412,
+              4.95
+            ],
+            [
+              23.202237970552,
+              56.349467277889,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_05_left_M0p6_screw",
+          "b": "little_cup_child_bank_row_05_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              24.847813676443494,
+              68.82265775170875,
+              -4.95
+            ],
+            [
+              24.865939832184225,
+              68.81420538647393,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_05_left_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.01999999999976653,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              24.847813676443494,
+              68.82265775170875,
+              -6.05
+            ],
+            [
+              24.865939832184,
+              68.814205386474,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_06_right_M0p6_screw",
+          "b": "little_cup_child_bank_row_06_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000002627,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              28.2555309557011,
+              67.23361308756328,
+              6.05
+            ],
+            [
+              28.273657111441835,
+              67.22516072232847,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_06_right_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.020000000000348933,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              28.2555309557011,
+              67.23361308756328,
+              4.95
+            ],
+            [
+              28.273657111442,
+              67.225160722328,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_07_left_M0p6_screw",
+          "b": "little_cup_child_bank_row_07_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              26.400144292936453,
+              79.96010672609684,
+              0.55
+            ],
+            [
+              26.418270448677184,
+              79.95165436086202,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_07_right_M0p6_screw",
+          "b": "little_cup_child_bank_row_07_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999999407,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              35.789492966635606,
+              75.58178153446202,
+              0.55
+            ],
+            [
+              35.80761912237634,
+              75.57332916922721,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_child_bank_row_07_right_M0p6_screw",
+          "b": "little_cup_child_bank_structural",
+          "distance_upper_bound_mm": 0.019999999999786827,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              35.789492966635606,
+              75.58178153446202,
+              -0.55
+            ],
+            [
+              35.807619122376,
+              75.573329169227,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_negative_drive_pulley",
+          "b": "palm_cup_negative_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              25.904660708962,
+              46.72,
+              4.75143396754
+            ],
+            [
+              25.904660708962,
+              46.72,
+              4.75143396754
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_negative_drive_terminal_bond_line",
+          "b": "palm_cup_negative_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              25.983876700171,
+              47.0,
+              5.3744605718
+            ],
+            [
+              25.983876700171,
+              47.0,
+              5.3744605718
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_negative_drive_terminal_cover",
+          "b": "palm_cup_negative_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.00999999999999801,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              25.569397075549,
+              46.75,
+              5.282239230553
+            ],
+            [
+              25.559397075549,
+              46.75,
+              5.282239230553
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_positive_drive_pulley",
+          "b": "palm_cup_positive_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              24.647467767727,
+              44.72,
+              -5.55098319389
+            ],
+            [
+              24.647467767727,
+              44.72,
+              -5.55098319389
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_positive_drive_terminal_bond_line",
+          "b": "palm_cup_positive_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              26.353085004223,
+              45.0,
+              -5.87254211956
+            ],
+            [
+              26.353085004223,
+              45.0,
+              -5.87254211956
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_positive_drive_terminal_cover",
+          "b": "palm_cup_positive_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.00999999999999801,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              25.569397075549,
+              44.75,
+              -5.282239230553
+            ],
+            [
+              25.559397075549,
+              44.75,
+              -5.282239230553
+            ]
+          ]
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "palm_cup_keyed_shaft",
+          "distance_mm": 0.0,
+          "method": "native_single_solid_distance"
+        },
+        {
+          "a": "little_cup_child_bank_structural",
+          "b": "fifth_metacarpal_cupping_truss",
+          "distance_mm": 9.592326932761353e-14,
+          "method": "native_single_solid_distance"
+        }
+      ],
+      "exact_distance_checks": 3,
+      "pass_": true
+    },
+    {
+      "frame": "thumb_cmc_abduction",
+      "anchors": [
+        "thumb_cmc_carrier"
+      ],
+      "repaired_supports": [
+        "thumb_cmc_negative_yaw_outlet_outer_jaw",
+        "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+        "thumb_cmc_positive_yaw_outlet_outer_jaw",
+        "thumb_cmc_positive_yaw_outlet_structural_jaw_1"
+      ],
+      "unattached": [],
+      "contact_edges": [
+        {
+          "a": "thumb_cmc_abduction_negative_drive_pulley",
+          "b": "thumb_cmc_abduction_negative_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -41.12078324434734,
+              35.40124088673207,
+              -13.22
+            ],
+            [
+              -41.12078324434734,
+              35.40124088673207,
+              -13.22
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_abduction_negative_drive_terminal_bond_line",
+          "b": "thumb_cmc_abduction_negative_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -41.61734374564151,
+              35.01670871456249,
+              -13.5
+            ],
+            [
+              -41.61734374564151,
+              35.01670871456249,
+              -13.5
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_abduction_negative_drive_terminal_cover",
+          "b": "thumb_cmc_abduction_negative_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.010000000002058433,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -41.259052056641764,
+              34.78883769709449,
+              -13.25
+            ],
+            [
+              -41.251980988827306,
+              34.78176662928231,
+              -13.25
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_abduction_positive_drive_pulley",
+          "b": "thumb_cmc_abduction_positive_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -32.9469045528804,
+              41.797180270184754,
+              -10.72
+            ],
+            [
+              -32.9469045528804,
+              41.797180270184754,
+              -10.72
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_abduction_positive_drive_terminal_bond_line",
+          "b": "thumb_cmc_abduction_positive_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -33.925581570023056,
+              43.23061028111205,
+              -11.0
+            ],
+            [
+              -33.925581570023056,
+              43.23061028111205,
+              -11.0
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_abduction_positive_drive_terminal_cover",
+          "b": "thumb_cmc_abduction_positive_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.010000000003470262,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -33.78883769709449,
+              42.259052056641764,
+              -10.75
+            ],
+            [
+              -33.78176662927731,
+              42.25198098883031,
+              -10.75
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_carrier",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -34.97979404287,
+              38.816316301429,
+              -15.47629241581
+            ],
+            [
+              -34.97979404287,
+              38.816316301429,
+              -15.47629241581
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_carrier",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_2",
+          "distance_upper_bound_mm": 4.930844067037599e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -36.14207951047,
+              38.559247660479,
+              -15.47160804424
+            ],
+            [
+              -36.14207951047488,
+              38.5592476604797,
+              -15.47160804424
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_M0p4_pinch_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_outer_jaw",
+          "distance_upper_bound_mm": 0.02000000000000036,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -33.69185245480294,
+              32.67659812842306,
+              -7.75
+            ],
+            [
+              -33.69185245877,
+              32.676598124456,
+              -7.73
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -37.93449314192126,
+              38.01525432638174,
+              -15.5
+            ],
+            [
+              -37.93449314192417,
+              38.01525432638166,
+              -15.52
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_2",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -37.015254326378745,
+              38.93449314192426,
+              -15.5
+            ],
+            [
+              -37.01525432638166,
+              38.93449314192417,
+              -15.52
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_hub_clamp_posterior_M0p6_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_2",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -32.98474567361126,
+              33.06550685807574,
+              -15.5
+            ],
+            [
+              -32.98474567361834,
+              33.06550685807583,
+              -15.52
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_outer_jaw",
+          "distance_upper_bound_mm": 0.02000000000000036,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -31.676598128417062,
+              34.69185245480494,
+              7.75
+            ],
+            [
+              -31.67659812445,
+              34.691852458772,
+              7.73
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_M0p4_pinch_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_structural_jaw_1",
+          "distance_upper_bound_mm": 0.02000000000000036,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -32.41906024866294,
+              33.94939033455906,
+              7.75
+            ],
+            [
+              -32.4190602447,
+              33.949390338527,
+              7.73
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_hub_right_jaw_1",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -37.015254326378745,
+              38.93449314192426,
+              10.7
+            ],
+            [
+              -37.01525432638166,
+              38.93449314192417,
+              10.68
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_hub_clamp_anterior_M0p6_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_structural_jaw_2",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -37.93449314192126,
+              38.01525432638174,
+              10.7
+            ],
+            [
+              -37.93449314192417,
+              38.01525432638166,
+              10.68
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_hub_right_jaw_2",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -32.065506858068744,
+              33.98474567361826,
+              10.7
+            ],
+            [
+              -32.06550685807583,
+              33.98474567361834,
+              10.68
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_hub_clamp_posterior_M0p6_screw",
+          "b": "thumb_cmc_positive_yaw_outlet_structural_jaw_1",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -32.98474567361126,
+              33.06550685807574,
+              10.7
+            ],
+            [
+              -32.98474567361,
+              33.065506858076,
+              10.68
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_negative_yaw_outlet_M0p4_pinch_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "distance_mm": 0.019999999356755168,
+          "method": "native_single_solid_distance"
+        },
+        {
+          "a": "thumb_cmc_positive_yaw_outlet_hub_right_jaw_2",
+          "b": "thumb_cmc_carrier",
+          "distance_mm": 2.0666902247866384e-13,
+          "method": "native_single_solid_distance"
+        }
+      ],
+      "exact_distance_checks": 3,
+      "pass_": true
+    },
+    {
+      "frame": "thumb_mcp_flexion",
+      "anchors": [
+        "thumb_proximal_frame"
+      ],
+      "repaired_supports": [
+        "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw"
+      ],
+      "unattached": [],
+      "contact_edges": [
+        {
+          "a": "thumb_ip_drive_guide_negative_liner_cap",
+          "b": "thumb_ip_drive_guide_negative_right_M0p6_screw",
+          "distance_upper_bound_mm": 0.020000000000012973,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -78.72009991463074,
+              76.59128729637408,
+              -4.035533435151294
+            ],
+            [
+              -78.70515275413817,
+              76.60457572717722,
+              -4.035533435151294
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_negative_rail_M0p6_screw",
+          "b": "thumb_ip_drive_guide_negative_rail_cap",
+          "distance_upper_bound_mm": 0.019999999999996947,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -78.29261267814066,
+              71.90334681474724,
+              -2.76479885502
+            ],
+            [
+              -78.27847054251693,
+              71.91748895037097,
+              -2.76479885502
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_negative_rail_cap",
+          "b": "thumb_ip_drive_guide_negative_structural_jaw",
+          "distance_upper_bound_mm": 0.020000000000000018,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -78.62848839920427,
+              70.93107499061574,
+              -3.39479885502
+            ],
+            [
+              -78.62848839920427,
+              70.93107499061574,
+              -3.41479885502
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_negative_structural_jaw",
+          "b": "thumb_proximal_frame",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -78.90022211878984,
+              70.63712328525207,
+              -4.144797113809
+            ],
+            [
+              -78.90022211878984,
+              70.63712328525207,
+              -4.144797113809
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_positive_liner_cap",
+          "b": "thumb_ip_drive_guide_positive_right_M0p6_screw",
+          "distance_upper_bound_mm": 0.020000000000012973,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -75.59128729637408,
+              79.72009991463874,
+              4.035533435151294
+            ],
+            [
+              -75.60457572717722,
+              79.70515275414617,
+              4.035533435151294
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_positive_rail_M0p6_screw",
+          "b": "thumb_ip_drive_guide_positive_rail_cap",
+          "distance_upper_bound_mm": 0.019999999999996947,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -70.4790827460293,
+              79.71687674685859,
+              4.04479885502
+            ],
+            [
+              -70.46494061040558,
+              79.73101888248232,
+              4.04479885502
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_positive_rail_cap",
+          "b": "thumb_ip_drive_guide_positive_structural_jaw",
+          "distance_upper_bound_mm": 0.020000000000000018,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -70.56747109367763,
+              80.26488450227816,
+              3.41479885502
+            ],
+            [
+              -70.56747109367763,
+              80.26488450227816,
+              3.39479885502
+            ]
+          ]
+        },
+        {
+          "a": "thumb_ip_drive_guide_positive_right_M0p6_screw",
+          "b": "thumb_ip_drive_guide_positive_structural_jaw",
+          "distance_upper_bound_mm": 0.020000000003617457,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -75.65561067218127,
+              79.75052420349706,
+              2.937655087622646
+            ],
+            [
+              -75.64232224137267,
+              79.7654713639896,
+              2.937655087623
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_negative_drive_pulley",
+          "b": "thumb_mcp_flexion_negative_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -63.09353095834005,
+              63.21671854967251,
+              3.456707886074
+            ],
+            [
+              -63.09353095834005,
+              63.21671854967251,
+              3.456707886074
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_negative_drive_terminal_bond_line",
+          "b": "thumb_mcp_flexion_negative_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -63.368462708851304,
+              63.0956705027193,
+              4.071083690508
+            ],
+            [
+              -63.368462708851304,
+              63.0956705027193,
+              4.071083690508
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_negative_drive_terminal_cover",
+          "b": "thumb_mcp_flexion_negative_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.00999999999788827,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -62.903282529809545,
+              62.98404371427082,
+              3.986396304804
+            ],
+            [
+              -62.89621146200067,
+              62.97697264645895,
+              3.986396304804
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_positive_drive_pulley",
+          "b": "thumb_mcp_flexion_positive_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -60.97298928745074,
+              63.64176129105921,
+              -4.239012504314
+            ],
+            [
+              -60.97298928745074,
+              63.64176129105921,
+              -4.239012504314
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_positive_drive_terminal_bond_line",
+          "b": "thumb_mcp_flexion_positive_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -62.36758918084342,
+              64.64038138698741,
+              -4.55741738764
+            ],
+            [
+              -62.36758918084342,
+              64.64038138698741,
+              -4.55741738764
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_flexion_positive_drive_terminal_cover",
+          "b": "thumb_mcp_flexion_positive_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.009999999997893293,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -61.63049032366954,
+              64.25683592040683,
+              -3.986396304804
+            ],
+            [
+              -61.62341925586067,
+              64.24976485259495,
+              -3.986396304804
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_liner_left_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000001584625,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -72.56858328443556,
+              66.66722110006086,
+              0.55
+            ],
+            [
+              -72.55444114881,
+              66.681363235685,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_liner_left_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "distance_upper_bound_mm": 0.019999999999996947,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -72.56858328443556,
+              66.66722110006086,
+              -0.55
+            ],
+            [
+              -72.55444114881183,
+              66.68136323568459,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_liner_right_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_scalloped_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000006337608,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -65.24295703134293,
+              73.9928473531535,
+              0.55
+            ],
+            [
+              -65.22881489571,
+              74.006989488777,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_rail_left_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_rail_left_cap",
+          "distance_upper_bound_mm": 0.020000000000006995,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -72.81253512394491,
+              66.42326926055149,
+              -3.237721961913
+            ],
+            [
+              -72.79839298832118,
+              66.43741139617524,
+              -3.237721961913
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_rail_left_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -73.18730171797378,
+              66.04850266652262,
+              -2.837721961913
+            ],
+            [
+              -73.18730171797378,
+              66.04850266652262,
+              -2.837721961913
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_rail_left_cap",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -73.74945160901709,
+              65.48635277547932,
+              -3.768894643294
+            ],
+            [
+              -73.74945160901709,
+              65.48635277547932,
+              -3.768894643294
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_rail_right_M0p6_screw",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -65.04850266651663,
+              74.18730171797979,
+              -2.837721961913
+            ],
+            [
+              -65.04850266651663,
+              74.18730171797979,
+              -2.837721961913
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_rail_right_cap",
+          "b": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -64.7919447236935,
+              74.17400786224032,
+              -3.237721961913
+            ],
+            [
+              -64.7919447236935,
+              74.17400786224032,
+              -3.237721961913
+            ]
+          ]
+        },
+        {
+          "a": "thumb_mcp_ip_outlet_comb_structural_lower_jaw",
+          "b": "thumb_proximal_frame",
+          "distance_mm": 0.0,
+          "method": "native_single_solid_distance"
+        }
+      ],
+      "exact_distance_checks": 1,
+      "pass_": true
+    },
+    {
+      "frame": "wrist_flexion",
+      "anchors": [
+        "wrist_palm_cradle"
+      ],
+      "repaired_supports": [
+        "palm_metacarpal_truss",
+        "ring_palm_bank_structural_body",
+        "thumb_cmc_yaw_drive_-1_liner_cap",
+        "thumb_cmc_yaw_drive_-1_structural_2",
+        "thumb_cmc_yaw_drive_1_host_cap",
+        "thumb_cmc_yaw_drive_1_liner_cap",
+        "thumb_radial_shared_guide_bank_structural"
+      ],
+      "unattached": [],
+      "contact_edges": [
+        {
+          "a": "index_palm_bank_boss_clamp_front_cap",
+          "b": "index_palm_bank_boss_clamp_left_M0p8_screw",
+          "distance_upper_bound_mm": 0.019999999999182963,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -40.47488855219804,
+              100.19601153900884,
+              -16.5
+            ],
+            [
+              -40.493682404613274,
+              100.18917113614339,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_boss_clamp_front_cap",
+          "b": "index_palm_bank_boss_clamp_right_M0p8_screw",
+          "distance_upper_bound_mm": 0.019999999993473412,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -31.265900868497074,
+              103.54780894360296,
+              -16.5
+            ],
+            [
+              -31.284694720903275,
+              103.54096854072938,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.022360679773885995,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -39.96013098102482,
+              98.72325064771752,
+              -16.5
+            ],
+            [
+              -39.94475733004285,
+              98.73948797679083,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.022360679773579542,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -30.75114329731482,
+              102.07504805230352,
+              -16.5
+            ],
+            [
+              -30.73576964634188,
+              102.09128538138495,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_01_right_M0p6_screw",
+          "b": "index_palm_bank_row_01_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -17.658179014664576,
+              70.42965484424637,
+              -11.45
+            ],
+            [
+              -17.63938516224886,
+              70.43649524711289,
+              -11.45
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_01_upper_jaw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -17.63938516224886,
+              70.43649524711289,
+              -11.91
+            ],
+            [
+              -17.63938516224886,
+              70.43649524711289,
+              -11.91
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_02_left_M0p6_screw",
+          "b": "index_palm_bank_row_02_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999485,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -29.836595380048706,
+              65.9970737867423,
+              -8.95
+            ],
+            [
+              -29.817801527632994,
+              66.00391418960882,
+              -8.95
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_02_left_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999485,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -29.836595380048706,
+              65.9970737867423,
+              -10.05
+            ],
+            [
+              -29.817801527632994,
+              66.00391418960882,
+              -10.05
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_03_left_M0p6_screw",
+          "b": "index_palm_bank_row_03_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000001524,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -25.51400932443397,
+              67.57036644604159,
+              -4.95
+            ],
+            [
+              -25.495215472018252,
+              67.5772068489081,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_03_left_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000001524,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -25.51400932443397,
+              67.57036644604159,
+              -6.05
+            ],
+            [
+              -25.495215472018252,
+              67.5772068489081,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_04_left_M0p6_screw",
+          "b": "index_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.61499497302715,
+              66.44169997306601,
+              0.55
+            ],
+            [
+              -28.596201120611436,
+              66.44854037593252,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_04_left_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.61499497302715,
+              66.44169997306601,
+              -0.55
+            ],
+            [
+              -28.596201120611436,
+              66.44854037593252,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_04_right_M0p6_screw",
+          "b": "index_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -18.879779421686134,
+              69.98502865792267,
+              0.55
+            ],
+            [
+              -18.86098556927042,
+              69.99186906078918,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_05_right_M0p6_screw",
+          "b": "index_palm_bank_row_05_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -21.980765070279315,
+              68.85636218494709,
+              6.05
+            ],
+            [
+              -21.9619712178636,
+              68.8632025878136,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_05_right_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.019999999999998186,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -21.980765070279315,
+              68.85636218494709,
+              4.95
+            ],
+            [
+              -21.9619712178636,
+              68.8632025878136,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_06_left_M0p6_screw",
+          "b": "index_palm_bank_row_06_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000003047,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -29.61825104434515,
+              78.84667789547133,
+              -4.95
+            ],
+            [
+              -29.599457191929435,
+              78.85351829833786,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_06_left_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000003047,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -29.61825104434515,
+              78.84667789547133,
+              -6.05
+            ],
+            [
+              -29.599457191929435,
+              78.85351829833786,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_07_right_M0p6_screw",
+          "b": "index_palm_bank_row_07_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000006384,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -26.085006790190498,
+              80.13267363437683,
+              6.05
+            ],
+            [
+              -26.06621293777478,
+              80.13951403724336,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_07_right_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000006384,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -26.085006790190498,
+              80.13267363437683,
+              4.95
+            ],
+            [
+              -26.06621293777478,
+              80.13951403724336,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_08_left_M0p6_screw",
+          "b": "index_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999485,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -36.3959532336921,
+              87.81970709594324,
+              0.55
+            ],
+            [
+              -36.377159381276385,
+              87.82654749880976,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_08_left_M0p6_screw",
+          "b": "index_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999485,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -36.3959532336921,
+              87.81970709594324,
+              -0.55
+            ],
+            [
+              -36.377159381276385,
+              87.82654749880976,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_row_08_right_M0p6_screw",
+          "b": "index_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000001524,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -26.660737682351083,
+              91.3630357807999,
+              0.55
+            ],
+            [
+              -26.641943829935364,
+              91.36987618366642,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "index_palm_bank_structural_body",
+          "b": "palm_metacarpal_truss",
+          "distance_upper_bound_mm": 1.6017341753928771e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -31.68364400720926,
+              65.75047417420342,
+              -6.65
+            ],
+            [
+              -31.68364400721,
+              65.750474174202,
+              -6.65
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_host_M0p6_screw",
+          "b": "little_cup_fixed_bank_-1_palm_rib_cap",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              22.049993372803,
+              35.670261950808,
+              -15.7227100801
+            ],
+            [
+              22.069993372803,
+              35.670261950808,
+              -15.7227100801
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_host_M0p6_screw",
+          "b": "little_cup_fixed_bank_-1_structural_1",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              21.979993372803,
+              35.670261950808,
+              -15.3227100801
+            ],
+            [
+              21.979993372803,
+              35.670261950808,
+              -15.3227100801
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_palm_rib_cap",
+          "b": "little_cup_fixed_bank_-1_structural_1",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              21.029993372803,
+              35.270261950808,
+              -16.3627100801
+            ],
+            [
+              21.029993372803,
+              35.270261950808,
+              -16.3827100801
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_palm_rib_cap",
+          "b": "little_cup_fixed_bank_-1_structural_3",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              17.429993372802,
+              35.270261950808,
+              -16.3627100801
+            ],
+            [
+              17.429993372802,
+              35.270261950808,
+              -16.3827100801
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_structural_1",
+          "b": "little_cup_fixed_bank_row_02_liner_+1_M0p6_screw",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              13.37,
+              31.0,
+              4.96
+            ],
+            [
+              13.35,
+              31.0,
+              4.96
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_-1_structural_1",
+          "b": "little_cup_fixed_bank_row_05_liner_-1_M0p6_screw",
+          "distance_upper_bound_mm": 0.02000000000100144,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              30.286433588123,
+              43.0,
+              -0.54
+            ],
+            [
+              30.266433588122,
+              43.0,
+              -0.54
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_row_01_liner_+1_M0p6_screw",
+          "b": "little_cup_fixed_bank_row_01_liner_cap",
+          "distance_upper_bound_mm": 0.02000000000000135,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              13.35,
+              31.0,
+              -4.96
+            ],
+            [
+              13.370000000000001,
+              31.0,
+              -4.96
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_row_03_liner_+1_M0p6_screw",
+          "b": "little_cup_fixed_bank_row_03_liner_cap",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              27.543053667777002,
+              35.0,
+              -11.46
+            ],
+            [
+              27.563053667777,
+              35.0,
+              -11.46
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_row_04_liner_+1_M0p6_screw",
+          "b": "little_cup_fixed_bank_row_04_liner_cap",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              17.573668010374,
+              35.0,
+              -8.96
+            ],
+            [
+              17.593668010374,
+              35.0,
+              -8.96
+            ]
+          ]
+        },
+        {
+          "a": "little_cup_fixed_bank_row_05_liner_-1_M0p6_screw",
+          "b": "little_cup_fixed_bank_row_05_liner_cap",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              30.266433588122,
+              43.0,
+              0.54
+            ],
+            [
+              30.286433588121998,
+              43.0,
+              0.54
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_front_cap",
+          "b": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+          "distance_upper_bound_mm": 0.020000000001006716,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -16.53049794808045,
+              105.38159316351168,
+              -16.5
+            ],
+            [
+              -16.55042184204272,
+              105.37985004865017,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_front_cap",
+          "b": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+          "distance_upper_bound_mm": 0.019999999999862354,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -6.7677899067813225,
+              106.23571944243854,
+              -16.5
+            ],
+            [
+              -6.78771380074272,
+              106.23397632758017,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02236067977880585,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -16.414458883356406,
+              103.82578631962704,
+              -16.5
+            ],
+            [
+              -16.39540654682161,
+              103.83749138146948,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02236067977641795,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -6.651750842056406,
+              104.67991259855704,
+              -16.5
+            ],
+            [
+              -6.632698505522484,
+              104.69161766039633,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_01_right_M0p6_screw",
+          "b": "middle_palm_bank_row_01_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -2.195348950770626,
+              70.72410150261783,
+              -11.45
+            ],
+            [
+              -2.175425056808791,
+              70.72584461747277,
+              -11.45
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_02_left_M0p6_screw",
+          "b": "middle_palm_bank_row_02_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -15.106032238039672,
+              69.59456307660844,
+              -8.95
+            ],
+            [
+              -15.086108344077838,
+              69.59630619146338,
+              -8.95
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_02_left_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -15.106032238039672,
+              69.59456307660844,
+              -10.05
+            ],
+            [
+              -15.086108344077838,
+              69.59630619146338,
+              -10.05
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_03_left_M0p6_screw",
+          "b": "middle_palm_bank_row_03_upper_jaw",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -10.523536626817634,
+              69.99547949324757,
+              -4.95
+            ],
+            [
+              -10.5036127328558,
+              69.99722260810253,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_03_left_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -10.523536626817634,
+              69.99547949324757,
+              -6.05
+            ],
+            [
+              -10.5036127328558,
+              69.99722260810253,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_04_left_M0p6_screw",
+          "b": "middle_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -13.810979130520401,
+              69.70786554218037,
+              0.55
+            ],
+            [
+              -13.791055236558567,
+              69.70960865703532,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_04_left_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -13.810979130520401,
+              69.70786554218037,
+              -0.55
+            ],
+            [
+              -13.791055236558567,
+              69.70960865703532,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_04_right_M0p6_screw",
+          "b": "middle_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -3.490402058289897,
+              70.6107990370459,
+              0.55
+            ],
+            [
+              -3.470478164328062,
+              70.61254215190084,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_05_right_M0p6_screw",
+          "b": "middle_palm_bank_row_05_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -6.777844561992664,
+              70.3231850859787,
+              6.05
+            ],
+            [
+              -6.757920668030829,
+              70.32492820083364,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_05_right_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -6.777844561992664,
+              70.3231850859787,
+              4.95
+            ],
+            [
+              -6.757920668030829,
+              70.32492820083364,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_06_left_M0p6_screw",
+          "b": "middle_palm_bank_row_06_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -11.56940553978929,
+              81.94981587034854,
+              -4.95
+            ],
+            [
+              -11.549481645827456,
+              81.95155898520349,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_06_left_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -11.56940553978929,
+              81.94981587034854,
+              -6.05
+            ],
+            [
+              -11.549481645827456,
+              81.95155898520349,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_07_right_M0p6_screw",
+          "b": "middle_palm_bank_row_07_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -7.823713474964319,
+              82.27752146307967,
+              6.05
+            ],
+            [
+              -7.803789581002484,
+              82.27926457793461,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_07_right_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -7.823713474964319,
+              82.27752146307967,
+              4.95
+            ],
+            [
+              -7.803789581002484,
+              82.27926457793461,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_08_left_M0p6_screw",
+          "b": "middle_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -15.793772278029163,
+              92.37129492376762,
+              0.55
+            ],
+            [
+              -15.773848384067328,
+              92.37303803862258,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_08_left_M0p6_screw",
+          "b": "middle_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -15.793772278029163,
+              92.37129492376762,
+              -0.55
+            ],
+            [
+              -15.773848384067328,
+              92.37303803862258,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "middle_palm_bank_row_08_right_M0p6_screw",
+          "b": "middle_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -5.4731952057986595,
+              93.27422841863316,
+              0.55
+            ],
+            [
+              -5.453271311836825,
+              93.2759715334881,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw",
+          "b": "palm_cup_shared_drive_mouth_structural_1",
+          "distance_upper_bound_mm": 0.01999999999999602,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              2.0000000000000004,
+              45.65,
+              -7.54
+            ],
+            [
+              2.0,
+              45.63,
+              -7.54
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_-1_liner_cap",
+          "b": "palm_cup_shared_drive_mouth_structural_1",
+          "distance_upper_bound_mm": 3.078773031569561e-10,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              1.6829624302,
+              45.906558318279,
+              -6.46
+            ],
+            [
+              1.682962429895,
+              45.906558318237,
+              -6.46
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_host_M0p6_screw",
+          "b": "palm_cup_drive_mouth_1_host_cap_2",
+          "distance_upper_bound_mm": 0.020000000000000018,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              0.475170347,
+              67.040070426,
+              7.650320874
+            ],
+            [
+              0.495170347,
+              67.040070426,
+              7.650320874
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_host_M0p6_screw",
+          "b": "palm_cup_shared_drive_mouth_structural_1",
+          "distance_upper_bound_mm": 0.020000000000000018,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              0.475170347,
+              67.040070426,
+              6.350320874
+            ],
+            [
+              0.495170347,
+              67.040070426,
+              6.350320874
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_host_cap_1",
+          "b": "palm_cup_shared_drive_mouth_structural_2",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -4.744829653,
+              66.640070426,
+              7.010320874
+            ],
+            [
+              -4.744829653,
+              66.640070426,
+              6.990320874
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_host_cap_1",
+          "b": "palm_metacarpal_truss",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -3.966300501702,
+              66.799289899733,
+              8.0
+            ],
+            [
+              -3.966300501702,
+              66.799289899733,
+              8.0
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_host_cap_2",
+          "b": "palm_cup_shared_drive_mouth_structural_1",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -0.644829653,
+              67.540070426,
+              7.010320874
+            ],
+            [
+              -0.644829653,
+              67.540070426,
+              6.990320874
+            ]
+          ]
+        },
+        {
+          "a": "palm_cup_drive_mouth_1_liner_+1_M0p6_screw",
+          "b": "palm_cup_drive_mouth_1_liner_cap",
+          "distance_upper_bound_mm": 0.01999999999999602,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              2.0000000000000004,
+              43.65,
+              7.54
+            ],
+            [
+              2.000000000000001,
+              43.63,
+              7.54
+            ]
+          ]
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 9.983125437429408e-13,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              17.317584467803,
+              64.401077327709,
+              -12.8
+            ],
+            [
+              17.317584467804,
+              64.401077327709,
+              -12.8
+            ]
+          ]
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+          "distance_upper_bound_mm": 0.020003469552625157,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -26.06662186839,
+              34.109405409009,
+              -17.97
+            ],
+            [
+              -26.06635843515,
+              34.109141975771,
+              -17.99
+            ]
+          ]
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -26.06662186839,
+              34.109405409009,
+              -17.97
+            ],
+            [
+              -26.06662186839,
+              34.109405409009,
+              -17.97
+            ]
+          ]
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "thumb_cmc_yaw_drive_-1_structural_1",
+          "distance_upper_bound_mm": 3.540107601909131e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -31.58224244754,
+              38.354024917588,
+              -18.8
+            ],
+            [
+              -31.58224244754354,
+              38.35402491758789,
+              -18.8
+            ]
+          ]
+        },
+        {
+          "a": "palm_wrist_radial_M3_flanged_thread_insert",
+          "b": "wrist_palm_cradle",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -22.35,
+              14.0,
+              -12.2
+            ],
+            [
+              -22.35,
+              14.0,
+              -12.2
+            ]
+          ]
+        },
+        {
+          "a": "palm_wrist_ulnar_M3_flanged_thread_insert",
+          "b": "wrist_palm_cradle",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              22.536279318861,
+              14.761591601586,
+              -14.6
+            ],
+            [
+              22.536279318861,
+              14.761591601586,
+              -14.6
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_front_cap",
+          "b": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+          "distance_upper_bound_mm": 0.02000000000013725,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              7.60459345317839,
+              101.16250861853052,
+              -16.5
+            ],
+            [
+              7.584669559216119,
+              101.16425173338206,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_front_cap",
+          "b": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+          "distance_upper_bound_mm": 0.019999999999515558,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              17.367301494477516,
+              100.30838233960367,
+              -16.5
+            ],
+            [
+              17.34737760051612,
+              100.31012545445806,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.022360679776964456,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              7.448706600529803,
+              99.61018800435893,
+              -16.5
+            ],
+            [
+              7.46950205192,
+              99.618406836488,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02236067977529541,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              17.211414641829805,
+              98.75606172543493,
+              -16.5
+            ],
+            [
+              17.232210093219,
+              98.764280557562,
+              -16.5
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_01_right_M0p6_screw",
+          "b": "ring_palm_bank_row_01_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              15.703749056894722,
+              64.54226963095985,
+              -11.45
+            ],
+            [
+              15.723672950856557,
+              64.5405265161049,
+              -11.45
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_02_left_M0p6_screw",
+          "b": "ring_palm_bank_row_02_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              2.7930657696256755,
+              65.67180805696924,
+              -8.95
+            ],
+            [
+              2.8129896635875102,
+              65.6700649421143,
+              -8.95
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_02_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02000000000051316,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              2.7930657696256755,
+              65.67180805696924,
+              -10.05
+            ],
+            [
+              2.812989663588,
+              65.670064942114,
+              -10.05
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_03_left_M0p6_screw",
+          "b": "ring_palm_bank_row_03_upper_jaw",
+          "distance_upper_bound_mm": 0.020000000000001305,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              7.375561380847713,
+              65.2708916403301,
+              -4.95
+            ],
+            [
+              7.395485274809548,
+              65.26914852547515,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_03_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000464053,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              7.375561380847713,
+              65.2708916403301,
+              -6.05
+            ],
+            [
+              7.39548527481,
+              65.269148525475,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_04_left_M0p6_screw",
+          "b": "ring_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              4.088118877144947,
+              65.5585055913973,
+              0.55
+            ],
+            [
+              4.108042771106781,
+              65.55676247654236,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_04_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000247806,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              4.088118877144947,
+              65.5585055913973,
+              -0.55
+            ],
+            [
+              4.108042771107,
+              65.556762476542,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_04_right_M0p6_screw",
+          "b": "ring_palm_bank_row_04_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999997412,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              14.408695949375451,
+              64.65557209653178,
+              0.55
+            ],
+            [
+              14.428619843337284,
+              64.65382898167684,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_05_right_M0p6_screw",
+          "b": "ring_palm_bank_row_05_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              11.121253445672684,
+              64.94318604759899,
+              6.05
+            ],
+            [
+              11.141177339634519,
+              64.94144293274404,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_05_right_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000482458,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              11.121253445672684,
+              64.94318604759899,
+              4.95
+            ],
+            [
+              11.141177339635,
+              64.941442932744,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_06_left_M0p6_screw",
+          "b": "ring_palm_bank_row_06_upper_jaw",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              8.421430293819368,
+              77.22522801743108,
+              -4.95
+            ],
+            [
+              8.441354187781203,
+              77.22348490257612,
+              -4.95
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_06_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000804877,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              8.421430293819368,
+              77.22522801743108,
+              -6.05
+            ],
+            [
+              8.441354187782,
+              77.223484902576,
+              -6.05
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_07_right_M0p6_screw",
+          "b": "ring_palm_bank_row_07_upper_jaw",
+          "distance_upper_bound_mm": 0.01999999999999918,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              12.167122358644338,
+              76.89752242469996,
+              6.05
+            ],
+            [
+              12.187046252606173,
+              76.89577930984501,
+              6.05
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_07_right_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.020000000000825052,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              12.167122358644338,
+              76.89752242469996,
+              4.95
+            ],
+            [
+              12.187046252607,
+              76.895779309845,
+              4.95
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_08_left_M0p6_screw",
+          "b": "ring_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.02000000000000042,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              6.070912024653708,
+              88.22193497298457,
+              0.55
+            ],
+            [
+              6.090835918615543,
+              88.22019185812961,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_08_left_M0p6_screw",
+          "b": "ring_palm_bank_structural_body",
+          "distance_upper_bound_mm": 0.02000000000050935,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              6.070912024653708,
+              88.22193497298457,
+              -0.55
+            ],
+            [
+              6.090835918616,
+              88.220191858129,
+              -0.55
+            ]
+          ]
+        },
+        {
+          "a": "ring_palm_bank_row_08_right_M0p6_screw",
+          "b": "ring_palm_bank_row_08_upper_jaw",
+          "distance_upper_bound_mm": 0.019999999999995643,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              16.391489096884214,
+              87.31900147811903,
+              0.55
+            ],
+            [
+              16.411412990846046,
+              87.31725836326409,
+              0.55
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_23_liner_M0p4_screw",
+          "b": "thumb_cmc_fixed_flex_-1_23_liner_cap",
+          "distance_upper_bound_mm": 0.020000000003421003,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -19.83255954354874,
+              18.640528521870444,
+              -6.460000000000003
+            ],
+            [
+              -19.81841740792,
+              18.654670657494,
+              -6.46
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_23_liner_M0p4_screw",
+          "b": "thumb_cmc_fixed_flex_shared_structural",
+          "distance_upper_bound_mm": 0.020000000003421003,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -19.83255954354874,
+              18.640528521870444,
+              -7.540000000000003
+            ],
+            [
+              -19.81841740792,
+              18.654670657494,
+              -7.54
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_24_liner_-1_M0p6_screw",
+          "b": "thumb_cmc_fixed_flex_-1_24_liner_cap",
+          "distance_upper_bound_mm": 0.019999999999996947,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -19.19616344048066,
+              17.862711062565054,
+              -6.46
+            ],
+            [
+              -19.18202130485693,
+              17.876853198188783,
+              -6.46
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_24_liner_-1_M0p6_screw",
+          "b": "thumb_cmc_fixed_flex_shared_structural",
+          "distance_upper_bound_mm": 0.020000000005051387,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -19.19616344048066,
+              17.862711062565054,
+              -7.54
+            ],
+            [
+              -19.18202130485,
+              17.876853198189,
+              -7.54
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_M0p6_screw",
+          "b": "thumb_cmc_fixed_flex_-1_host_cap",
+          "distance_upper_bound_mm": 0.02000000000000197,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.48656454533649,
+              30.61824626173957,
+              -14.350175788
+            ],
+            [
+              -27.472422409712756,
+              30.632388397363304,
+              -14.350175788
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_cap",
+          "b": "thumb_cmc_fixed_flex_shared_structural",
+          "distance_upper_bound_mm": 1.0664060582004449e-13,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.196650765050002,
+              30.285906074581895,
+              -14.405175788
+            ],
+            [
+              -27.19665076505,
+              30.285906074582,
+              -14.405175788
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_1_23_liner_+1_M0p6_screw",
+          "b": "thumb_cmc_fixed_flex_1_23_liner_cap",
+          "distance_upper_bound_mm": 0.01999999999999946,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -17.145553775039676,
+              21.32753429037914,
+              7.54
+            ],
+            [
+              -17.131411639415944,
+              21.34167642600287,
+              7.54
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_1_24_liner_+1_M0p6_screw",
+          "b": "thumb_cmc_fixed_flex_1_24_liner_cap",
+          "distance_upper_bound_mm": 0.02000000000000197,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -16.438446993853127,
+              20.620427509192588,
+              7.54
+            ],
+            [
+              -16.424304858229394,
+              20.63456964481632,
+              7.54
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_parent_inlet_comb_host_M0p6_screw",
+          "b": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+          "distance_upper_bound_mm": 0.020000000006792307,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.947165953043154,
+              30.739125547972087,
+              -18.63
+            ],
+            [
+              -28.93302381741,
+              30.753267683596,
+              -18.63
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_parent_inlet_comb_host_M0p6_screw",
+          "b": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "distance_upper_bound_mm": 0.020000000006792307,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.947165953043154,
+              30.739125547972087,
+              -17.33
+            ],
+            [
+              -28.93302381741,
+              30.753267683596,
+              -17.33
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+          "b": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "distance_upper_bound_mm": 0.019999999999999574,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.93302381741,
+              31.460374464782,
+              -17.99
+            ],
+            [
+              -28.93302381741,
+              31.460374464782,
+              -17.97
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_M0p4_pinch_screw",
+          "b": "thumb_cmc_yaw_drive_-1_liner_cap",
+          "distance_upper_bound_mm": 0.02015451219971615,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.20414773741731,
+              39.164302845809694,
+              -14.025
+            ],
+            [
+              -27.21888852423,
+              39.150558262653,
+              -14.02500000561
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_M0p4_pinch_screw",
+          "b": "thumb_cmc_yaw_drive_-1_structural_1",
+          "distance_upper_bound_mm": 1.0075185313749393e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.097925771314166,
+              39.43709011442254,
+              -14.325
+            ],
+            [
+              -27.097925771315168,
+              39.437090114422645,
+              -14.325
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_M0p4_pinch_screw",
+          "b": "thumb_cmc_yaw_drive_-1_structural_2",
+          "distance_upper_bound_mm": 0.019999999999239064,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.20414773741731,
+              39.164302845809694,
+              -12.975
+            ],
+            [
+              -27.21828987304,
+              39.150160710186,
+              -12.97500000561
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_host_M0p6_screw",
+          "b": "thumb_cmc_yaw_drive_-1_host_cap",
+          "distance_upper_bound_mm": 0.020000000005820105,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -28.678674428872753,
+              40.88459569957906,
+              -17.38592455387
+            ],
+            [
+              -28.66453229324,
+              40.898737835202,
+              -17.38592455387
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_host_cap",
+          "b": "thumb_cmc_yaw_drive_-1_structural_1",
+          "distance_upper_bound_mm": 0.020000000000003126,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -31.72346000997,
+              38.546916899661,
+              -18.02592455387
+            ],
+            [
+              -31.723460009977234,
+              38.54691689966113,
+              -18.04592455387
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_-1_liner_cap",
+          "b": "thumb_cmc_yaw_drive_-1_structural_1",
+          "distance_upper_bound_mm": 1.8109677016663198e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -27.26550812711,
+              39.102942456116,
+              -13.95677669529
+            ],
+            [
+              -27.26550812711178,
+              39.10294245611633,
+              -13.95677669529
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_1_M0p4_pinch_screw",
+          "b": "thumb_cmc_yaw_drive_1_liner_cap",
+          "distance_upper_bound_mm": 0.019999999999231532,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -38.16430284580269,
+              28.20414773741831,
+              -10.475
+            ],
+            [
+              -38.15016071018,
+              28.218289873042,
+              -10.47499999438
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_1_M0p4_pinch_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "distance_upper_bound_mm": 7.318014995526701e-12,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -38.16430284580269,
+              28.20414773741831,
+              -11.525
+            ],
+            [
+              -38.16430284581,
+              28.204147737418,
+              -11.525
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_1_host_M0p6_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "distance_upper_bound_mm": 0.020000000002418656,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -38.942493546687594,
+              30.90650354614571,
+              -18.65
+            ],
+            [
+              -38.92835141106,
+              30.920645681769,
+              -18.65
+            ]
+          ]
+        },
+        {
+          "a": "thumb_cmc_yaw_drive_1_host_cap",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "distance_upper_bound_mm": 0.020000000000003126,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -38.22124462987,
+              30.920645681769,
+              -17.99
+            ],
+            [
+              -38.22124462987,
+              30.920645681769,
+              -18.01
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_negative_drive_pulley",
+          "b": "wrist_flexion_negative_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -13.72,
+              5.964588947064,
+              8.21256224893
+            ],
+            [
+              -13.72,
+              5.964588947064,
+              8.21256224893
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_negative_drive_terminal_bond_line",
+          "b": "wrist_flexion_negative_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -14.0,
+              6.003572697219,
+              8.844954203907
+            ],
+            [
+              -14.0,
+              6.003572697219,
+              8.844954203907
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_negative_drive_terminal_cover",
+          "b": "wrist_flexion_negative_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.009999999999999787,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              -13.75,
+              5.580391881159,
+              8.742224604915
+            ],
+            [
+              -13.75,
+              5.570391881159,
+              8.742224604915
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_positive_drive_pulley",
+          "b": "wrist_flexion_positive_drive_terminal_cover",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              14.28,
+              4.629332784483,
+              -9.032816724063
+            ],
+            [
+              14.28,
+              4.629332784483,
+              -9.032816724063
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_positive_drive_terminal_bond_line",
+          "b": "wrist_flexion_positive_drive_terminal_ferrule",
+          "distance_upper_bound_mm": 0.0,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              14.0,
+              6.351768681529,
+              -9.357944999643
+            ],
+            [
+              14.0,
+              6.351768681529,
+              -9.357944999643
+            ]
+          ]
+        },
+        {
+          "a": "wrist_flexion_positive_drive_terminal_cover",
+          "b": "wrist_flexion_positive_drive_terminal_cover_screw",
+          "distance_upper_bound_mm": 0.009999999999999787,
+          "method": "native_vertex_pair",
+          "points_mm": [
+            [
+              14.25,
+              5.580391881159,
+              -8.742224604915
+            ],
+            [
+              14.25,
+              5.570391881159,
+              -8.742224604915
+            ]
+          ]
+        },
+        {
+          "a": "palm_metacarpal_truss",
+          "b": "palm_wrist_radial_0p4mm_seat_spacer",
+          "distance_mm": 1.7763568394002505e-15,
+          "method": "native_single_solid_distance"
+        },
+        {
+          "a": "palm_wrist_radial_0p4mm_seat_spacer",
+          "b": "palm_wrist_radial_M3_flanged_thread_insert",
+          "distance_mm": 0.0,
+          "method": "native_single_solid_distance"
+        },
+        {
+          "a": "thumb_radial_shared_guide_bank_structural",
+          "b": "palm_metacarpal_truss",
+          "distance_mm": 0.0,
+          "method": "native_single_solid_distance"
+        }
+      ],
+      "exact_distance_checks": 7,
+      "pass_": true
+    }
+  ],
+  "contact_tolerance_mm": 0.025,
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

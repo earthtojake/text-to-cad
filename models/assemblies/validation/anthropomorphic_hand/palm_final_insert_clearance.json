@@ -1,0 +1,34 @@
+{
+  "step_sha256": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+  "rows": [
+    {
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "route": "little_mcp_abduction_negative",
+      "native_liner_gap_mm": 0.2564598975195412
+    },
+    {
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "route": "little_mcp_abduction_negative",
+      "native_liner_gap_mm": 0.20696555294273483
+    },
+    {
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "route": "little_mcp_abduction_negative",
+      "native_liner_gap_mm": 0.15968599992341187
+    },
+    {
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "route": "little_mcp_abduction_negative",
+      "native_liner_gap_mm": 0.14063987233694003
+    }
+  ],
+  "failures": []
+}

@@ -1,0 +1,169 @@
+{
+  "scope": "Search arm centerlines only; candidates still require full native solid gates.",
+  "rows": [
+    {
+      "bow_x": 6.0,
+      "bow_y": -18.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 1.497443529182562e-14,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 1.497443529182562e-14
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 6.0,
+      "bow_y": -22.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 5.617333549722722e-15,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 5.617333549722722e-15
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 6.0,
+      "bow_y": -26.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 1.990490868221337e-14,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 1.990490868221337e-14
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 6.0,
+      "bow_y": -14.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 8.848414820926143e-15,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 8.848414820926143e-15
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 6.0,
+      "bow_y": -10.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 0.1781023256505218,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": -5.0,
+          "gap": 0.1781023256505218
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 6.0,
+      "bow_y": -6.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 3.3232593448441795e-15,
+      "failures": [
+        {
+          "body": "thumb_cmc_abduction_negative_drive_pulley",
+          "yaw": 0.0,
+          "gap": 3.3232593448441795e-15
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -18.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 2.4697908716370043e-14,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 2.4697908716370043e-14
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -22.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 2.763362727283444e-14,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 2.763362727283444e-14
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -26.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 1.3322676295501878e-15,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 1.3322676295501878e-15
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -14.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 1.9860273225978185e-14,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": 0.0,
+          "gap": 1.9860273225978185e-14
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -10.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 0.1338424456345967,
+      "failures": [
+        {
+          "body": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "yaw": -5.0,
+          "gap": 0.1338424456345967
+        }
+      ],
+      "pass_": false
+    },
+    {
+      "bow_x": 8.0,
+      "bow_y": -6.0,
+      "tendon_gap_mm": 0.9368964257806895,
+      "minimum_tested_obstacle_distance_mm": 0.5891223102555139,
+      "failures": [],
+      "pass_": true
+    }
+  ],
+  "complete": true,
+  "found": true
+}

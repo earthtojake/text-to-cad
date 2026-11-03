@@ -1,0 +1,41 @@
+{
+  "status": "strict-valid representative; fresh beauty verdict and working-seat verification pending",
+  "changed_occurrence": "middle_proximal_frame",
+  "frame": "middle_mcp_flexion",
+  "native_local_step": "models/assemblies/STEP/anthropomorphic_hand/phalanx_sculpt_early_probe_r4.step",
+  "native_local_sha256": "6febf9f503557bdaa5c0f4d64e7a78b4de00b4d93282b450c0a15e418208841b",
+  "context_step": "models/assemblies/STEP/anthropomorphic_hand/phalanx_sculpt_representative_context.step",
+  "context_sha256": "860e559bee39cac9b72786418ca66654aee9a210fab6b07d7f5bbe9dac23ab93",
+  "context_tree": "01806c4f12b843cdfad318d1a60e9d617eb74c13df07699dc44cf59358ac8851",
+  "source_factory_snapshot": "models/assemblies/validation/anthropomorphic_hand/phalanx_early_sculpt_r4.py",
+  "generator_script": "models/assemblies/validation/anthropomorphic_hand/probe_phalanx_sculpt_early_r4.py",
+  "strict": "models/assemblies/validation/anthropomorphic_hand/phalanx_sculpt_representative_strict.json",
+  "native_windows": [
+    [
+      4.4,
+      11.45
+    ],
+    [
+      13.05,
+      29.2
+    ],
+    [
+      33.55,
+      37.2
+    ]
+  ],
+  "minimum_rail_thickness": 0.58,
+  "perimeter_fillet": 0.2,
+  "source_production_mutated": false,
+  "active_contacts_session": 25262,
+  "active_contacts_script": "models/assemblies/validation/anthropomorphic_hand/check_phalanx_sculpt_contacts_r4.py",
+  "active_contacts_log": "tmp/anthropomorphic_hand/phalanx_sculpt_contacts_r4.log",
+  "contact_status": "First broad cosmetic bearing band old-minus-new has 0.0007783488506712203 mm3 slivers. Working-seat preservation is not yet certified. Do not claim broad subset pass.",
+  "obsolete_global_session": 88621,
+  "obsolete_global_note": "Started before correction from bd.Shape.cast to bd.Compound. Will throw on result wrapping; do not use as a certificate.",
+  "images": [
+    "tmp/anthropomorphic_hand/phalanx_sculpt_representative_r4_palm.png",
+    "tmp/anthropomorphic_hand/phalanx_sculpt_representative_r4_joint_macro.png"
+  ],
+  "overall_pass": false
+}

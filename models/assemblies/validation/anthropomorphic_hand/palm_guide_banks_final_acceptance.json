@@ -1,0 +1,10 @@
+{
+  "scope": "all48 full neutral routes; actual palm frame; mutual mount solids",
+  "collisions": [],
+  "host_interferences": [],
+  "mutual_interferences": [],
+  "tested": 302,
+  "pass": true,
+  "route_scope": "302 exact distances on narrowed revision; final cap/screw relief removes material only, so clearance is conservative",
+  "final_geometry_strict_report": "palm_guide_mounts_validate.json"
+}

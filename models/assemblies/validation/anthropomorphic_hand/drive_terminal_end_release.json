@@ -1,0 +1,433 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "family": 3.5,
+      "retraction_mm": 0.85,
+      "bond_distance": 0.04571273082247379,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    },
+    {
+      "family": 4.5,
+      "retraction_mm": 0.85,
+      "bond_distance": 0.04666570645311518,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    },
+    {
+      "family": 5.5,
+      "retraction_mm": 0.85,
+      "bond_distance": 0.0472720761359219,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    },
+    {
+      "family": 7.0,
+      "retraction_mm": 0.85,
+      "bond_distance": 0.047856735909686685,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    },
+    {
+      "family": 11.0,
+      "retraction_mm": 0.85,
+      "bond_distance": 0.048636196155950925,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    },
+    {
+      "family": "capstan",
+      "retraction_mm": 0.85,
+      "bond_distance": 0.04786122679742691,
+      "rope_bond_overlap": 0,
+      "rope_ferrule_overlap": 0
+    }
+  ],
+  "per_route": {
+    "thumb_cmc_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_cmc_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_ip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "thumb_ip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "index_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "middle_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "ring_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_mcp_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -8.85480228838545,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_pip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_pip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -10.822536130248883,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_dip_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "little_dip_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -13.914689310319993,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_abduction_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_abduction_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_flexion_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "wrist_flexion_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -4.427401144192725,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "palm_cup_positive": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": 6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    },
+    "palm_cup_negative": {
+      "driven_end_retraction_mm": 0.85,
+      "driven_sweep_delta_deg": -6.9573446551599964,
+      "capstan_start_advance_mm": 0.85,
+      "minimum_sleeve_clearance_mm": 0.05,
+      "blind_cap_extra_travel_mm": 0.0,
+      "blind_cap_reason": "both tips move away from the cap"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "body_count": 3039,
+  "processed": 3039,
+  "exact_booleans": 0,
+  "native_distance_separations": 0,
+  "congruent_proof_reuse": 58,
+  "collisions": [
+    {
+      "a": "thumb_cmc_negative_yaw_outlet_hub_right_jaw_1",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.008320072573146792
+    },
+    {
+      "a": "thumb_cmc_abduction_dorsal_drive_stub_keyed_shaft",
+      "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "intersection_mm3": 0.28333121344287343
+    }
+  ],
+  "complete": true,
+  "pass": false,
+  "pair_scope": {
+    "any_endpoint_in": [
+      "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "thumb_radial_shared_guide_bank_structural"
+    ],
+    "unchanged_pair_gate": "separate frozen baseline certificate required"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "scope": "Reaction arm moved around the guide clamp, retaining prior mouth machining.",
+  "bow_x_mm": 8.0,
+  "bow_y_mm": -6.0,
+  "inherited_machining_mm3": 0.004471441145488969,
+  "raw_volume_mm3": 4.8346992785405325,
+  "final_volume_mm3": 4.8302282809724,
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_reaction_arm_clearance_r2.py": "6c7c60cd4f82583219a3efc8235aa17a4ff127adf73fa437eda753fe2b8e80e8",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_negative_jaw_repair_review.step": "0fe5b9cca48ed3c3087e12f943c2ba8a977f76de78fb7053a8e60a2917e95ea2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f"
+  },
+  "pass_": true
+}

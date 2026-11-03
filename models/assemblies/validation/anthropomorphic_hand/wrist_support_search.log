@@ -1,0 +1,17 @@
+cloud pose 0
+cloud pose 25
+cloud pose 50
+cloud pose 75
+cloud pose 100
+cloud pose 125
+cloud pose 150
+cloud pose 175
+cloud pose 200
+{'palm': 43363, 'forearm': 2548}
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/search_wrist_support_paths.py", line 62, in <module>
+    path=bezier([root,c1,c2,end],np.linspace(0,1,65));clear=tree.query(path)[0].min();score=min(clear,clampclear+.2)
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/search_wrist_support_paths.py", line 17, in bezier
+    out.append(b[0])
+    ~~~~~~~~~~^^^^^^
+KeyboardInterrupt

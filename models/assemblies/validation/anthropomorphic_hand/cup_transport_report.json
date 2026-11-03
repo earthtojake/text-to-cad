@@ -1,0 +1,48 @@
+{
+  "scope": [
+    "palm",
+    "little_metacarpal",
+    "cup_shaft",
+    "cup_drive_45.0",
+    "cup_drive_47.0"
+  ],
+  "rows": [
+    {
+      "angle_deg": 0.0,
+      "minimum_radius_mm": 3.646209977565224,
+      "maximum_length_error_mm": 7.105427357601002e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.09497395205043135,
+      "collisions": [],
+      "exact_body_distances": 25,
+      "pass": true
+    },
+    {
+      "angle_deg": 10.0,
+      "minimum_radius_mm": 3.645704327426166,
+      "maximum_length_error_mm": 7.105427357601002e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.09523830795291377,
+      "collisions": [],
+      "exact_body_distances": 24,
+      "pass": true
+    },
+    {
+      "angle_deg": 20.0,
+      "minimum_radius_mm": 3.6461210480455746,
+      "maximum_length_error_mm": 7.105427357601002e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.09499069882350164,
+      "collisions": [],
+      "exact_body_distances": 24,
+      "pass": true
+    },
+    {
+      "angle_deg": 25.0,
+      "minimum_radius_mm": 3.6459937575172376,
+      "maximum_length_error_mm": 7.105427357601002e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.09499028004282173,
+      "collisions": [],
+      "exact_body_distances": 24,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

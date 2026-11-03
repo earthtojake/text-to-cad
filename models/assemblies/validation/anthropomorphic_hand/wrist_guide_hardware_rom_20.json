@@ -1,0 +1,321 @@
+{
+  "pass": false,
+  "guide_step_sha256": "36e887943f357a170fb6a57ac0b7b82fdb997e91c060a0b8aff134b9d7b61cca",
+  "guide_count": 29,
+  "hardware_count": 15,
+  "poses": 13,
+  "rows": [
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -45
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.02554943891724871
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.5816166578422785e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076671775
+        }
+      ],
+      "new_exact_pairs": 62
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -35
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.02554943956785824
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657844102e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076672824
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -25
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549439345220012
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657842039e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076673965
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -15
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549441267748746
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657846166e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076678033
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": -5
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549438722296803
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657842394e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.003237438707667392
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 0
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549438741910208
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.5816166578393295e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076669394
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 5
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549438822366367
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657842658e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.003237438707667387
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 15
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.02554943897005438
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657846708e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076678354
+        }
+      ],
+      "new_exact_pairs": 15
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 25
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549439085520494
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657842382e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.003237438707667399
+        }
+      ],
+      "new_exact_pairs": 13
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 35
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.02554943915483713
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657843046e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076674663
+        }
+      ],
+      "new_exact_pairs": 13
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 45
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549439169643633
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657842076e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.003237438707667407
+        }
+      ],
+      "new_exact_pairs": 12
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 55
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.02554944022192758
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657840895e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076672647
+        }
+      ],
+      "new_exact_pairs": 13
+    },
+    {
+      "pose": {
+        "wrist_abduction": 20,
+        "wrist_flexion": 60
+      },
+      "interferences": [
+        {
+          "guide": "wrist_abduction_drive_mouth_1_structural",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.025549439520282113
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_cap",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 3.581616657840347e-05
+        },
+        {
+          "guide": "wrist_abduction_drive_mouth_1_liner_-1_M0p6_screw",
+          "hardware": "wrist_flexion_negative_drive_pulley",
+          "volume_mm3": 0.0032374387076670712
+        }
+      ],
+      "new_exact_pairs": 13
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+{
+  "scope": [
+    "frame_0",
+    "shaft_0",
+    "carrier_0",
+    "frame_1",
+    "shaft_1",
+    "carrier_1",
+    "frame_2",
+    "shaft_2",
+    "thumb_cmc_abduction_-1_pulley",
+    "thumb_cmc_abduction_1_pulley",
+    "thumb_cmc_flexion_-1_pulley",
+    "thumb_cmc_flexion_1_pulley",
+    "thumb_mcp_abduction_-1_pulley",
+    "thumb_mcp_abduction_1_pulley",
+    "thumb_mcp_flexion_-1_pulley",
+    "thumb_mcp_flexion_1_pulley",
+    "thumb_ip_-1_pulley",
+    "thumb_ip_1_pulley"
+  ],
+  "rows": [
+    {
+      "label": "neutral",
+      "pose": {},
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 4.0137287898923056e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.049977397849362615,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 180,
+      "pass": true
+    },
+    {
+      "label": "cmc_yaw45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 5.611862350736564e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.020020243752973954,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 142,
+      "pass": true
+    },
+    {
+      "label": "cmc_flex50",
+      "pose": {
+        "thumb_cmc_flexion": 50.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 7.32410687763558e-15,
+      "maximum_tangent_error": 4.227694437384436e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.02492086769496671,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 191,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

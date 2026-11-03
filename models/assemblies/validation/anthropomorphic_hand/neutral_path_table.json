@@ -1,0 +1,750 @@
+{
+  "routing_scheme": "48 independently actuated antagonistic tendons for24DOF",
+  "tendon_count": 48,
+  "actuator_count": 48,
+  "source_sha256": "13fff4084865d875435333e17658a27e84bb27638c8f2abb8e7cbf12333557d5",
+  "rows": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "length_mm": 471.3647338756357,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction"
+      ],
+      "minimum_bend_radius_mm": 6.946683349019714,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "length_mm": 456.91223294006977,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction"
+      ],
+      "minimum_bend_radius_mm": 6.946683349019714,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "length_mm": 434.58185449479834,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.9243494194630753,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "length_mm": 430.6854568710414,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.8639997773139325,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "length_mm": 432.09497422513334,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.549226688387044,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "length_mm": 429.61681750987486,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.548463398263117,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.814132380686913e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "length_mm": 388.6558371357263,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction",
+        "thumb_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.7651859612466567,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.38374992562561e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "length_mm": 385.90947116611653,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction",
+        "thumb_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.8186731928989555,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.897756505132699e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "length_mm": 370.9706299730325,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction",
+        "thumb_mcp_flexion",
+        "thumb_ip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "length_mm": 370.19618625500084,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "thumb_cmc_abduction",
+        "thumb_cmc_flexion",
+        "thumb_mcp_abduction",
+        "thumb_mcp_flexion",
+        "thumb_ip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "length_mm": 314.0178969710658,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.79997071018517,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "length_mm": 307.9024811390777,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 5.499999999999997,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "length_mm": 522.670977719255,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.518516674781746,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 2.864289338439558e-14,
+      "maximum_tangent_error": 2.9499359079002526e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "length_mm": 518.0436375240998,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.518516674781824,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 2.9499359079002526e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_pip_positive",
+      "length_mm": 523.516309353211,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion",
+        "index_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983003101464,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.5888218580782548e-14,
+      "maximum_tangent_error": 2.6656914905538386e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_pip_negative",
+      "length_mm": 519.6733686851247,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion",
+        "index_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983002344842,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_dip_positive",
+      "length_mm": 510.32276826695335,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion",
+        "index_pip",
+        "index_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.897149936107019e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "index_dip_negative",
+      "length_mm": 508.14638190653767,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "index_mcp_abduction",
+        "index_mcp_flexion",
+        "index_pip",
+        "index_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 1.897149936107019e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "length_mm": 397.2288322401691,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 5.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "length_mm": 388.77927009783934,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 5.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "length_mm": 352.04983666031393,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.518516674781811,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.1111946021038246e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "length_mm": 354.8247708296884,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.5185166747818215,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "length_mm": 356.6053905520925,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion",
+        "middle_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983003100056,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4458497151625688e-14,
+      "maximum_tangent_error": 2.6021081501853116e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "length_mm": 361.25528055931505,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion",
+        "middle_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983002345513,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "length_mm": 602.3245970846334,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion",
+        "middle_pip",
+        "middle_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "length_mm": 598.4548242276657,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "middle_mcp_abduction",
+        "middle_mcp_flexion",
+        "middle_pip",
+        "middle_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "length_mm": 480.0239584361594,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 5.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "length_mm": 465.94742581417887,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 5.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "length_mm": 432.57119308309615,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.5185166747818055,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "length_mm": 431.7609193667243,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.51851667478182,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "length_mm": 432.0988378381624,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion",
+        "ring_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983002867593,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "length_mm": 433.74180171928407,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion",
+        "ring_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983002930627,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.895329075674257e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "length_mm": 418.9735310865147,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion",
+        "ring_pip",
+        "ring_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.517719948885615e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "length_mm": 423.4166471880848,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "ring_mcp_abduction",
+        "ring_mcp_flexion",
+        "ring_pip",
+        "ring_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.432144669219779e-14,
+      "maximum_tangent_error": 4.1111946021038246e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "length_mm": 313.81749014813414,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.8255801886839484,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "length_mm": 300.33823561698637,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.648006035533232,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.6021081501853116e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "length_mm": 523.5334490986894,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.6499923292338368,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "length_mm": 519.3423073568057,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion"
+      ],
+      "minimum_bend_radius_mm": 4.510314224540535,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.0411201962889075e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_pip_positive",
+      "length_mm": 509.4708174113917,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion",
+        "little_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983002110235,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_pip_negative",
+      "length_mm": 508.2497415263449,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion",
+        "little_pip"
+      ],
+      "minimum_bend_radius_mm": 3.6458983001812704,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_dip_positive",
+      "length_mm": 492.1618756914465,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion",
+        "little_pip",
+        "little_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.732067169519928e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "little_dip_negative",
+      "length_mm": 493.5856571798846,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup",
+        "little_mcp_abduction",
+        "little_mcp_flexion",
+        "little_pip",
+        "little_dip"
+      ],
+      "minimum_bend_radius_mm": 3.5,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.237726045655905e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "length_mm": 346.17350278476454,
+      "joints_crossed": [
+        "wrist_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.799823841632288,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.055591628835943e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "length_mm": 334.44330808627933,
+      "joints_crossed": [
+        "wrist_abduction"
+      ],
+      "minimum_bend_radius_mm": 3.7999562100054347,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.85268467234323e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "length_mm": 281.8020797109205,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.799889882606279,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "length_mm": 443.98295800608213,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion"
+      ],
+      "minimum_bend_radius_mm": 3.79996861833533,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 4.109641071118486e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "length_mm": 287.59048263316737,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup"
+      ],
+      "minimum_bend_radius_mm": 3.799734476351213,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "length_mm": 294.11853741768164,
+      "joints_crossed": [
+        "wrist_abduction",
+        "wrist_flexion",
+        "palm_cup"
+      ],
+      "minimum_bend_radius_mm": 3.799846463479884,
+      "required_minimum_bend_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.5996529580536524e-15,
+      "geometry_clearance": "PENDING COMPLETE ASSEMBLY GATE"
+    }
+  ]
+}

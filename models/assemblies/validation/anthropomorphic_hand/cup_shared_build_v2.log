@@ -1,0 +1,27 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.224}
+GROUP 0
+GROUP 1
+GROUP 2
+GROUP 3
+GROUP 4
+GROUP 5
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":47.859}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,13],"elapsed":47.946}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,13],"elapsed":60.732}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,13],"elapsed":60.881}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,13],"elapsed":61.079}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,13],"elapsed":61.188}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[5,13],"elapsed":61.209}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[6,13],"elapsed":61.209}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[7,13],"elapsed":61.364}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[8,13],"elapsed":61.437}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[9,13],"elapsed":61.506}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[10,13],"elapsed":61.618}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[11,13],"elapsed":61.628}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[12,13],"elapsed":62.224}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[13,13],"elapsed":63.496}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":65.947}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":67.833}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/cup_guide_mounts_review.step
+built models/assemblies/STEP/anthropomorphic_hand/cup_guide_mounts_review.step

@@ -1,0 +1,25 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.006}
+THUMB_MOUNT_FACTORY thumb_cmc_flexion 0
+THUMB_MOUNT_FACTORY thumb_mcp_abduction 36
+THUMB_MOUNT_FACTORY thumb_mcp_flexion 36
+THUMB_MOUNT_FACTORY thumb_mcp_flexion 36
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":52.98}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,13],"elapsed":52.999}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,13],"elapsed":68.814}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,13],"elapsed":71.978}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,13],"elapsed":73.422}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,13],"elapsed":73.561}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[5,13],"elapsed":74.387}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[6,13],"elapsed":74.452}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[7,13],"elapsed":74.609}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[8,13],"elapsed":74.642}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[9,13],"elapsed":74.665}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[10,13],"elapsed":74.869}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[11,13],"elapsed":75.087}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[12,13],"elapsed":75.394}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[13,13],"elapsed":76.348}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":81.964}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/thumb_downstream_mounts_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":83.417}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/thumb_downstream_mounts_review.step
+built models/assemblies/STEP/anthropomorphic_hand/thumb_downstream_mounts_review.step

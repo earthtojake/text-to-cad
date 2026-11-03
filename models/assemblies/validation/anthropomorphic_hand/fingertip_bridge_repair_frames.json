@@ -1,0 +1,32 @@
+[
+  {
+    "name": "index_fingertip_conformal_bridge",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "middle_fingertip_conformal_bridge",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "ring_fingertip_conformal_bridge",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "little_fingertip_conformal_bridge",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "pad_mount"
+  },
+  {
+    "name": "thumb_fingertip_conformal_bridge",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "pad_mount"
+  }
+]

@@ -1,0 +1,75 @@
+{
+  "scope": "CMC mounts versus moving thumb hardware and each other; palm host certificate explicitly pending palm rebuild",
+  "body_count": 24,
+  "rows": [
+    {
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "route_distance_checks": 70,
+      "route_conflicts": [],
+      "solid_conflicts": [
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "other_mount": "thumb_cmc_child_four_liner_comb_rail_-1_cap",
+          "overlap_volume_mm3": 0.11825974832990382
+        },
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "other_mount": "thumb_cmc_child_four_liner_comb_-1_host_M0p6_screw",
+          "overlap_volume_mm3": 0.02571643969602078
+        },
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "other_mount": "thumb_cmc_child_four_liner_comb_rail_+1_cap",
+          "overlap_volume_mm3": 0.11825986316375052
+        },
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "other_mount": "thumb_cmc_child_four_liner_comb_+1_host_M0p6_screw",
+          "overlap_volume_mm3": 0.025716535017893796
+        }
+      ],
+      "host_contacts": [
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_structural_jaw",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_rail_-1_cap",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_four_liner_comb_rail_+1_cap",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_flexion_negative_clamp_structural_jaw",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_flexion_negative_clamp_rail_lower_cap",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+          "hardware": "frame_0"
+        },
+        {
+          "mount": "thumb_cmc_child_flexion_positive_clamp_rail_upper_cap",
+          "hardware": "frame_0"
+        }
+      ],
+      "pass": false
+    }
+  ],
+  "pass": false
+}

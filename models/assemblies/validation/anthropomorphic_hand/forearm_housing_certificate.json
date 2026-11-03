@@ -1,0 +1,31 @@
+{
+  "ok": true,
+  "occurrences": 42,
+  "prototypeCount": 7,
+  "housing_step_sha256": "2fbce0facb5d5f45c513414f000727a197b44c8a9b2070016546bab0a56f5636",
+  "neutral_mutual_pairs": 861,
+  "frame_and_fastener_pairs": 39228,
+  "actual_actuator_pairs": 42336,
+  "neutral_routes": 48,
+  "sampled_capstan_routes": 1008,
+  "continuous_capstan_range_rad": [
+    -15.707963267948966,
+    15.707963267948966
+  ],
+  "continuous_capstan_minimum_clearance_lower_bound_mm": 2.2203731382709266,
+  "wrist_route_packets": 18,
+  "wrist_hardware_poses": 18,
+  "bearing_seats": 28,
+  "initial_removal_samples": 240,
+  "corrected_cap_crossbrace_samples": 42,
+  "proof_files": [
+    "forearm_housing_strict.json",
+    "forearm_housing_check.json",
+    "forearm_housing_actuators.json",
+    "forearm_housing_seats.json",
+    "forearm_housing_cap_relief.json",
+    "forearm_housing_continuous_capstan.json",
+    "forearm_housing_presentation_certificate.json"
+  ],
+  "failures": []
+}

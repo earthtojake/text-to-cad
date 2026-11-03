@@ -1,0 +1,722 @@
+[
+  {
+    "name": "index_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_structural_lower_jaw_2",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_structural_lower_jaw_3",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_rail_left_cap",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_rail_left_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_liner_left_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_rail_right_cap",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_rail_right_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_mcp_outlet_comb_liner_right_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_structural_lower_jaw_1",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_structural_lower_jaw_2",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_structural_lower_jaw_3",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_scalloped_upper_jaw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_rail_left_cap",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_rail_left_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_liner_left_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_rail_right_cap",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_rail_right_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_inlet_comb_liner_right_M0p6_screw",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_structural_lower_jaw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_scalloped_upper_jaw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_rail_left_cap",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_rail_left_M0p6_screw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_liner_left_M0p6_screw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_rail_right_cap",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_rail_right_M0p6_screw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "index_pip_outlet_comb_liner_right_M0p6_screw",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_structural_lower_jaw_2",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_structural_lower_jaw_3",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_rail_left_cap",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_rail_left_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_liner_left_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_rail_right_cap",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_rail_right_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_mcp_outlet_comb_liner_right_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_structural_lower_jaw_1",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_structural_lower_jaw_2",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_structural_lower_jaw_3",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_scalloped_upper_jaw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_rail_left_cap",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_rail_left_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_liner_left_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_rail_right_cap",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_rail_right_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_inlet_comb_liner_right_M0p6_screw",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_structural_lower_jaw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_scalloped_upper_jaw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_rail_left_cap",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_rail_left_M0p6_screw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_liner_left_M0p6_screw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_rail_right_cap",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_rail_right_M0p6_screw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "middle_pip_outlet_comb_liner_right_M0p6_screw",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_structural_lower_jaw_2",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_structural_lower_jaw_3",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_rail_left_cap",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_rail_left_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_liner_left_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_rail_right_cap",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_rail_right_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_mcp_outlet_comb_liner_right_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_structural_lower_jaw_1",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_structural_lower_jaw_2",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_structural_lower_jaw_3",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_scalloped_upper_jaw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_rail_left_cap",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_rail_left_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_liner_left_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_rail_right_cap",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_rail_right_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_inlet_comb_liner_right_M0p6_screw",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_structural_lower_jaw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_scalloped_upper_jaw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_rail_left_cap",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_rail_left_M0p6_screw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_liner_left_M0p6_screw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_rail_right_cap",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_rail_right_M0p6_screw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "ring_pip_outlet_comb_liner_right_M0p6_screw",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_structural_lower_jaw_2",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_structural_lower_jaw_3",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_rail_left_cap",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_rail_left_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_liner_left_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_rail_right_cap",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_rail_right_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_mcp_outlet_comb_liner_right_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_structural_lower_jaw_1",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_structural_lower_jaw_2",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_structural_lower_jaw_3",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_scalloped_upper_jaw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_rail_left_cap",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_rail_left_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_liner_left_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_rail_right_cap",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_rail_right_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_inlet_comb_liner_right_M0p6_screw",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_structural_lower_jaw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_scalloped_upper_jaw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_rail_left_cap",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_rail_left_M0p6_screw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_liner_left_M0p6_screw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_rail_right_cap",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_rail_right_M0p6_screw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  },
+  {
+    "name": "little_pip_outlet_comb_liner_right_M0p6_screw",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "guide_mount"
+  }
+]

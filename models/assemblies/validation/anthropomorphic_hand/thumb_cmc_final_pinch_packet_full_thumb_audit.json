@@ -1,0 +1,47 @@
+{
+  "scope": [
+    "frame_0",
+    "shaft_0",
+    "carrier_0",
+    "frame_1",
+    "shaft_1",
+    "carrier_1",
+    "frame_2",
+    "shaft_2",
+    "thumb_cmc_abduction_-1_pulley",
+    "thumb_cmc_abduction_1_pulley",
+    "thumb_cmc_flexion_-1_pulley",
+    "thumb_cmc_flexion_1_pulley",
+    "thumb_mcp_abduction_-1_pulley",
+    "thumb_mcp_abduction_1_pulley",
+    "thumb_mcp_flexion_-1_pulley",
+    "thumb_mcp_flexion_1_pulley",
+    "thumb_ip_-1_pulley",
+    "thumb_ip_1_pulley"
+  ],
+  "rows": [
+    {
+      "label": "cmc_37.474289981694746_-21.046825109125002",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "minimum_radius_mm": 3.4999999999999916,
+      "maximum_join_gap_mm": 1.6280579355608324e-14,
+      "maximum_tangent_error": 5.4787565871501995e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.019995522251501807,
+      "mutual_conflicts": [],
+      "collisions": [],
+      "exact_distances_tested": 180,
+      "pass": true
+    }
+  ],
+  "pass": true
+}

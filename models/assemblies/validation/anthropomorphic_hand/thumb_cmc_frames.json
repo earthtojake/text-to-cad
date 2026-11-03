@@ -1,0 +1,151 @@
+{
+  "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_cmc_mounts_review.step",
+  "sha256": "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72",
+  "body_count": 24,
+  "bodies": [
+    {
+      "name": "thumb_cmc_parent_inlet_comb_structural_jaw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_scalloped_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_host_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_liner_-1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_liner_+1_M0p6_screw",
+      "frame": "wrist_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_structural_jaw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_scalloped_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_rail_-1_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_-1_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_rail_+1_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_+1_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_liner_-1_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_liner_+1_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_structural_jaw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_scalloped_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_rail_lower_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_liner_+1_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_scalloped_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_rail_upper_cap",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "guide_mount"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_host_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "fastener"
+    }
+  ]
+}

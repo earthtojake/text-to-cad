@@ -1,0 +1,23 @@
+{
+  "source_sha256": "a360633b13dd88ded3630d2d313483edc1f5c2bc68622e1f6ba1273f58d616a8",
+  "parts": [
+    {
+      "factory": "make_wrist_fixed_fork",
+      "volume_mm3": 833.8071848201234,
+      "solid_count": 1,
+      "valid": true
+    },
+    {
+      "factory": "make_wrist_yaw_carrier",
+      "volume_mm3": 537.8838100044735,
+      "solid_count": 1,
+      "valid": true
+    },
+    {
+      "factory": "make_wrist_palm_cradle",
+      "volume_mm3": 526.0683580096804,
+      "solid_count": 1,
+      "valid": true
+    }
+  ]
+}

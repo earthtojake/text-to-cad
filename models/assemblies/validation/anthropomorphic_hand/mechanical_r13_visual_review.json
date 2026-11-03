@@ -1,0 +1,31 @@
+{
+  "scope": "All six corrected native R13 whole-hand views rendered and inspected. Visual QA only; no independent blind aesthetic verdict.",
+  "document_sha256": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/mechanical_candidate_r13_render_job.json": "d791dbb81c5a3385b4208a2ecf544b8053e6b317ccaa9bcd13acb23a267c3de8"
+  },
+  "image_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_palm.png": "0172a0953fb0b8dd949f38968efc935a64a862c5a09afd37f0f4480b92cba57b",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_dorsal.png": "035030efde405d319cc8f0f518420544b38b6d0d2c550822dd3c432821986ac2",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_forearm.png": "ffcf4dd59ce44d228e0f33c43cfd4e4d144f1c90167607638a48b40be27be6c5",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_joint_macro.png": "1c93a644a02bb4350439147cdbfe8cff3cc03b26aa429a622d884abb9f79114e",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_cmc_macro.png": "0cf9a4f204c0cfdc4ed47d56ccc62c67dcb141694565ee8a7ec23badd5b7b56d",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_palm_relief_macro.png": "4662d96124271bee0734b93b43ca7d88ca8d829328face762a2454a4ed759f26"
+  },
+  "all_six_rendered": true,
+  "all_six_inspected": true,
+  "open_findings": [
+    "Independent aesthetic reviews remain pending; no blind verdict is inferred from local QA."
+  ],
+  "accepted": false,
+  "native_palm_comparison": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/palm_relief_native_occt_diagnostic.json": "b5b949747c84880037fa08fb04471b5a690e11f88df5f51d2b5b08ecaf33d159",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/palm_relief_native_occt_macro.png": "f087743f72710df0ad2a000e871db39cfaa2a6d50c5b45e750888446ddb70258"
+  },
+  "observations": [
+    "All six native R13 views render with the repaired bank, thumb arm and bridges.",
+    "The faceted relief patches on the main palm branch also appear in independent native OCCT triangulation from the same camera. They are modeled clearance cuts.",
+    "Braided tendons, hardware and the revised middle phalanx/collars remain visible in context."
+  ]
+}

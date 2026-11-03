@@ -1,0 +1,19 @@
+{
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "exact_distances_tested": 88,
+      "collisions": [
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "group": "middle_mcp_abduction_negative_palm_run",
+          "solid": "mcp_carrier",
+          "centerline_distance_mm": 1.9860273225978185e-15,
+          "outer_radius_mm": 0.3,
+          "clearance_mm": -0.299999999999998
+        }
+      ]
+    }
+  ]
+}

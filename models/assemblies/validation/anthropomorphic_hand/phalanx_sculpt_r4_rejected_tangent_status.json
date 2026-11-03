@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "reason": "cadgen strict native inspection reports selfIntersecting",
+  "outer_entry": 1.451,
+  "waist_floor": 0.58,
+  "perimeter_fillet": 0.2,
+  "replacement_outer_entry": 1.7,
+  "replacement_validation": "pending"
+}

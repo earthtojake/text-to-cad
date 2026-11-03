@@ -1,0 +1,10 @@
+{
+  "pass": true,
+  "scope": "exact final pinch: all24 CMC mounts versus thumb hardware, each other and thumb10 routes; palm host pending",
+  "method": "23 unchanged bodies retain original checks; only revised child four-liner structural jaw rechecked against all other mounts, thumb hardware and all thumb routes",
+  "original_report": "thumb_cmc_mounts_pinch_thumb_bodies_report.json",
+  "revised_body_report": "thumb_cmc_changed_strut_pinch_report.json",
+  "remaining_original_conflicts": [],
+  "parent_host_certificate": "pending palm rebuild",
+  "animation_certificate": false
+}

@@ -1,0 +1,4 @@
+index_mcp_abduction unattached ['index_mcp_positive_yaw_outlet_outer_jaw', 'index_mcp_positive_yaw_outlet_M0p4_pinch_screw'] host_interferences []
+little_mcp_abduction unattached ['little_mcp_positive_yaw_outlet_outer_jaw', 'little_mcp_positive_yaw_outlet_M0p4_pinch_screw'] host_interferences []
+middle_mcp_abduction unattached ['middle_mcp_positive_yaw_outlet_outer_jaw', 'middle_mcp_positive_yaw_outlet_M0p4_pinch_screw'] host_interferences []
+ring_mcp_abduction unattached ['ring_mcp_positive_yaw_outlet_outer_jaw', 'ring_mcp_positive_yaw_outlet_M0p4_pinch_screw'] host_interferences []

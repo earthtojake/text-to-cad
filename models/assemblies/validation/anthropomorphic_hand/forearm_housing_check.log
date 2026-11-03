@@ -1,0 +1,6 @@
+Mutual 861 failures 0
+Host forearm_mount_system_review.step failures 0
+Host actuator_fasteners_review.step failures 0
+Neutral paths failures 0
+Capstan range done
+{"ok": true, "partial": false, "occurrences": 42, "mutual_pairs": 861, "host_pairs": 39228, "route_segments": 17930, "exact_curve_distances": 1, "minimum_route_clearance": 3.2499999999999973, "wrist_hardware_poses": 18, "failures": [], "elapsed_seconds": 346.0182388331741, "capstan_rotations": 21, "capstan_routes": 1008, "wrist_route_packets": 18}

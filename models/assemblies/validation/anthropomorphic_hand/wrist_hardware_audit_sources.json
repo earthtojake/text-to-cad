@@ -1,0 +1,6 @@
+{
+  "models/assemblies/src/anthropomorphic_hand/lib/wrist.py": "327371cf6a9e117d13aabef78df36fa06e40ba0740e97ff901070ba21a139263",
+  "models/assemblies/STEP/anthropomorphic_hand/joint_hardware_review.step": "3154b67ffabba89c33e0800c18fcba0e8248ec72ad0714dd89c285b176230678",
+  "models/assemblies/STEP/anthropomorphic_hand/drive_terminal_placements.step": "d78418617c5ee40aa3897a43a96b987702aa6183f8c917c3f6dde97ca64f9246",
+  "models/assemblies/STEP/anthropomorphic_hand/wrist_guide_mounts_review.step": "36e887943f357a170fb6a57ac0b7b82fdb997e91c060a0b8aff134b9d7b61cca"
+}

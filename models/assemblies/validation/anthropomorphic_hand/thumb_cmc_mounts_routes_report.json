@@ -1,0 +1,282 @@
+{
+  "scope": "actual tendon-to-mount distances only; assembled-body overlaps checked separately",
+  "body_count": 24,
+  "rows": [
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 101,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 65.0,
+        "thumb_cmc_abduction": 45.0
+      },
+      "route_distance_checks": 90,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 55.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 100,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 45.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 95,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 35.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 92,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 25.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 94,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 15.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 99,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 5.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 101,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": -5.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 97,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": -15.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 98,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": -5.0
+      },
+      "route_distance_checks": 101,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": -15.0
+      },
+      "route_distance_checks": 100,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": -25.0
+      },
+      "route_distance_checks": 92,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 5.0
+      },
+      "route_distance_checks": 102,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 15.0
+      },
+      "route_distance_checks": 100,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 25.0
+      },
+      "route_distance_checks": 91,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 35.0
+      },
+      "route_distance_checks": 91,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 0.0,
+        "thumb_cmc_abduction": 45.0
+      },
+      "route_distance_checks": 94,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": -15.0,
+        "thumb_cmc_abduction": -25.0
+      },
+      "route_distance_checks": 97,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": -15.0,
+        "thumb_cmc_abduction": 45.0
+      },
+      "route_distance_checks": 89,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 39.17,
+        "thumb_cmc_abduction": -25.0
+      },
+      "route_distance_checks": 90,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 65.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 99,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 65.0,
+        "thumb_cmc_abduction": -25.0
+      },
+      "route_distance_checks": 95,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 60.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 99,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    },
+    {
+      "pose": {
+        "thumb_cmc_flexion": 50.0,
+        "thumb_cmc_abduction": 0.0
+      },
+      "route_distance_checks": 100,
+      "route_conflicts": [],
+      "solid_conflicts": [],
+      "host_contacts": [],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

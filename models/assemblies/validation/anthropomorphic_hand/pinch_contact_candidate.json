@@ -1,0 +1,45 @@
+{
+  "pose": {
+    "index_mcp_abduction": -17.40900758070954,
+    "index_mcp_flexion": 74.68469201675903,
+    "index_pip": 57.94830222639836,
+    "index_dip": 21.90864380435607,
+    "thumb_mcp_abduction": -11.484462068625563,
+    "thumb_mcp_flexion": 7.697863149475799,
+    "thumb_ip": 31.564732218590134,
+    "thumb_cmc_abduction": -21.046825109125002,
+    "thumb_cmc_flexion": 37.474289981694746
+  },
+  "pad_contact_points_mm": [
+    [
+      -41.17869827432695,
+      82.31604541716565,
+      59.05617457259341
+    ],
+    [
+      -41.178609498684224,
+      82.31604397736133,
+      59.05621644052076
+    ]
+  ],
+  "surface_gap_mm": 9.81636955165781e-05,
+  "palmar_contact_normal_cosines": [
+    0.36155926180087355,
+    0.3499997728317503
+  ],
+  "pad_native_ellipsoids": {
+    "center_y_fraction": 0.71,
+    "center_z_mm": 5.4,
+    "index_radii_mm": [
+      6.25,
+      6.5,
+      2.0
+    ],
+    "thumb_radii_mm": [
+      6.75,
+      7.0,
+      2.0
+    ]
+  },
+  "scope": "Ellipsoidal pad contact candidate only; native pads must match this interface and all actual solids/routes must clear."
+}

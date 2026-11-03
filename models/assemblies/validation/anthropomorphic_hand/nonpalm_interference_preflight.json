@@ -1,0 +1,260 @@
+{
+  "body_count": 2429,
+  "processed": 2429,
+  "exact_booleans": 3030,
+  "congruent_proof_reuse": 3833,
+  "collisions": [
+    {
+      "a": "index_pip_outlet_comb_rail_left_cap",
+      "b": "index_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.19869886825621794
+    },
+    {
+      "a": "index_dip_drive_guide_negative_liner_cap",
+      "b": "index_dip_drive_guide_negative_structural_jaw",
+      "intersection_mm3": 5.871846776376117e-05
+    },
+    {
+      "a": "index_pip_outlet_comb_rail_left_M0p6_screw",
+      "b": "index_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 2.4773746248980062e-05
+    },
+    {
+      "a": "index_pip_inlet_comb_rail_left_cap",
+      "b": "index_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.02636454572140934
+    },
+    {
+      "a": "index_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "index_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.1533448456918326
+    },
+    {
+      "a": "index_pip_outlet_comb_rail_right_M0p6_screw",
+      "b": "index_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 2.4773988432676373e-05
+    },
+    {
+      "a": "index_pip_outlet_comb_rail_right_cap",
+      "b": "index_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.19945557527852267
+    },
+    {
+      "a": "index_mcp_outlet_comb_rail_left_cap",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.02636454572143382
+    },
+    {
+      "a": "index_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.15334484569083062
+    },
+    {
+      "a": "index_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "index_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.15334446034684956
+    },
+    {
+      "a": "index_pip_inlet_comb_rail_right_cap",
+      "b": "index_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.026364687956281756
+    },
+    {
+      "a": "index_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.15334446034688337
+    },
+    {
+      "a": "index_mcp_outlet_comb_rail_right_cap",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.026364687956276955
+    },
+    {
+      "a": "middle_pip_outlet_comb_rail_left_cap",
+      "b": "middle_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.19850066234970734
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_cap",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.023258792459296237
+    },
+    {
+      "a": "middle_pip_outlet_comb_rail_left_M0p6_screw",
+      "b": "middle_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 3.973854469246285e-05
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_cap",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.023258792459299293
+    },
+    {
+      "a": "wrist_flexion_keyed_shaft",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0.14369944522310446
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.16000203513864233
+    },
+    {
+      "a": "middle_dip_drive_guide_negative_liner_cap",
+      "b": "middle_dip_drive_guide_negative_structural_jaw",
+      "intersection_mm3": 1.2995848932646562e-05
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.16000203518663417
+    },
+    {
+      "a": "wrist_fixed_bearing_fork",
+      "b": "forearm_monolithic_24_seat_open_reaction_chassis",
+      "intersection_mm3": 1.992382469344254
+    },
+    {
+      "a": "middle_pip_outlet_comb_rail_right_M0p6_screw",
+      "b": "middle_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 3.973903561316173e-05
+    },
+    {
+      "a": "middle_pip_outlet_comb_rail_right_cap",
+      "b": "middle_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.19936908509648898
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.16000059529109587
+    },
+    {
+      "a": "middle_pip_inlet_comb_rail_right_cap",
+      "b": "middle_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.023261145474730037
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.16000059529112282
+    },
+    {
+      "a": "middle_mcp_outlet_comb_rail_right_cap",
+      "b": "middle_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.023261145474727296
+    },
+    {
+      "a": "ring_mcp_outlet_comb_rail_left_cap",
+      "b": "ring_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.053498797662347226
+    },
+    {
+      "a": "ring_pip_inlet_comb_rail_left_cap",
+      "b": "ring_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.05459650127079062
+    },
+    {
+      "a": "ring_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "ring_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.10900065120515327
+    },
+    {
+      "a": "ring_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "ring_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.10776827145544915
+    },
+    {
+      "a": "ring_pip_outlet_comb_rail_left_cap",
+      "b": "ring_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.194272171362193
+    },
+    {
+      "a": "ring_dip_drive_guide_negative_liner_cap",
+      "b": "ring_dip_drive_guide_negative_structural_jaw",
+      "intersection_mm3": 8.391391666583354e-05
+    },
+    {
+      "a": "ring_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "ring_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.10900043223722913
+    },
+    {
+      "a": "ring_mcp_outlet_comb_rail_right_cap",
+      "b": "ring_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.053501330086553264
+    },
+    {
+      "a": "ring_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "ring_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.1077678159503052
+    },
+    {
+      "a": "ring_pip_inlet_comb_rail_right_cap",
+      "b": "ring_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.05459651485553864
+    },
+    {
+      "a": "ring_pip_outlet_comb_rail_right_cap",
+      "b": "ring_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.1957385531617189
+    },
+    {
+      "a": "little_mcp_outlet_comb_rail_left_cap",
+      "b": "little_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.0883254190545976
+    },
+    {
+      "a": "little_mcp_outlet_comb_rail_left_M0p6_screw",
+      "b": "little_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.08132261432469697
+    },
+    {
+      "a": "little_pip_inlet_comb_rail_left_cap",
+      "b": "little_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.0883254197571902
+    },
+    {
+      "a": "little_pip_inlet_comb_rail_left_M0p6_screw",
+      "b": "little_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.08132261868326067
+    },
+    {
+      "a": "little_mcp_outlet_comb_rail_right_M0p6_screw",
+      "b": "little_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.08132223094182975
+    },
+    {
+      "a": "little_mcp_outlet_comb_rail_right_cap",
+      "b": "little_mcp_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.0883249294406686
+    },
+    {
+      "a": "little_pip_outlet_comb_rail_left_cap",
+      "b": "little_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.1652213919323646
+    },
+    {
+      "a": "little_pip_inlet_comb_rail_right_M0p6_screw",
+      "b": "little_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.08132223094181801
+    },
+    {
+      "a": "little_pip_inlet_comb_rail_right_cap",
+      "b": "little_pip_inlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.08832492528550104
+    },
+    {
+      "a": "little_dip_drive_guide_negative_liner_cap",
+      "b": "little_dip_drive_guide_negative_structural_jaw",
+      "intersection_mm3": 0.00010329139395097142
+    },
+    {
+      "a": "little_pip_outlet_comb_rail_right_cap",
+      "b": "little_pip_outlet_comb_structural_lower_jaw",
+      "intersection_mm3": 0.1652210945436829
+    }
+  ],
+  "complete": true,
+  "pass": false
+}

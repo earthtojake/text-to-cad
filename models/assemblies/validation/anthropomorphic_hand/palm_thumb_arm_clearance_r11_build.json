@@ -1,0 +1,269 @@
+{
+  "scope": "Local palm pockets for the context-clearing R2 thumb arm across225 poses.",
+  "changes": [
+    {
+      "sample": "flat_open",
+      "pose": {},
+      "contact_mm3": 0.044601479922975945,
+      "contact_bounds_mm": [
+        -31.042231305549663,
+        34.36292775005247,
+        -16.300823773270814,
+        -29.56164001376863,
+        35.247006128704854,
+        -15.909475844924586
+      ],
+      "clearance_mm": 0.025
+    },
+    {
+      "sample": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "contact_mm3": 5.835018822594946e-06,
+      "contact_bounds_mm": [
+        -31.322547552045844,
+        33.506270452109,
+        -16.240984446498082,
+        -30.915084658149997,
+        33.90980070042081,
+        -16.100493253887304
+      ],
+      "clearance_mm": 0.025
+    },
+    {
+      "sample": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "contact_mm3": 0.00038331774622305973,
+      "contact_bounds_mm": [
+        -31.351117130881512,
+        33.16367457800277,
+        -16.26371205797449,
+        -31.31742607680916,
+        33.48127545210901,
+        -16.131372097989935
+      ],
+      "clearance_mm": 0.025
+    },
+    {
+      "sample": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "contact_mm3": 0.00038421062953795726,
+      "contact_bounds_mm": [
+        -31.350510037560355,
+        32.865453657392955,
+        -16.282613030271097,
+        -31.317426072155072,
+        33.13867957933948,
+        -16.089836566559516
+      ],
+      "clearance_mm": 0.025
+    },
+    {
+      "sample": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "contact_mm3": 0.008372174897165553,
+      "contact_bounds_mm": [
+        -31.162215648153026,
+        34.245265887126145,
+        -16.26822116238288,
+        -29.24854199183419,
+        35.10005359309323,
+        -15.86715982907
+      ],
+      "clearance_mm": 0.025
+    },
+    {
+      "sample": "thumb_cmc_abduction_5",
+      "pose": {
+        "thumb_cmc_abduction": 5.0
+      },
+      "contact_mm3": 0.0016994626577526075,
+      "contact_bounds_mm": [
+        -30.550897977993493,
+        35.27200106535668,
+        -16.301065970937128,
+        -29.855877330767026,
+        35.55689055280887,
+        -16.15480290267809
+      ],
+      "clearance_mm": 0.025
+    }
+  ],
+  "construction_unique_relative_poses": 10,
+  "removed_material_mm3": 0.11567387632516571,
+  "protected_zones": [
+    {
+      "zone": "bearing_-36_101_12.5",
+      "intersection_mm3": 0,
+      "gap_mm": 67.44217690064049,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_-36_101_-16.5",
+      "intersection_mm3": 0,
+      "gap_mm": 61.47936638314132,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_-12_105_12.5",
+      "intersection_mm3": 0,
+      "gap_mm": 72.94912250200579,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_-12_105_-16.5",
+      "intersection_mm3": 0,
+      "gap_mm": 67.47473408312099,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_12_100_12.5",
+      "intersection_mm3": 0,
+      "gap_mm": 77.72449977340612,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_12_100_-16.5",
+      "intersection_mm3": 0,
+      "gap_mm": 72.6110400063341,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_-35_36_14.0",
+      "intersection_mm3": 0,
+      "gap_mm": 28.768215336878413,
+      "pass_": true
+    },
+    {
+      "zone": "bearing_-35_36_-18.0",
+      "intersection_mm3": 0,
+      "gap_mm": 0.5741762267291897,
+      "pass_": true
+    },
+    {
+      "zone": "wrist_mount_0",
+      "intersection_mm3": 0,
+      "gap_mm": 17.404748129516786,
+      "pass_": true
+    },
+    {
+      "zone": "wrist_mount_1",
+      "intersection_mm3": 0,
+      "gap_mm": 54.01409556015191,
+      "pass_": true
+    },
+    {
+      "zone": "pad_mount_0",
+      "intersection_mm3": 0,
+      "gap_mm": 32.0294737034882,
+      "pass_": true
+    },
+    {
+      "zone": "pad_mount_1",
+      "intersection_mm3": 0,
+      "gap_mm": 52.45412990425083,
+      "pass_": true
+    },
+    {
+      "zone": "pad_mount_2",
+      "intersection_mm3": 0,
+      "gap_mm": 45.88624699689697,
+      "pass_": true
+    },
+    {
+      "zone": "cup_seat_35.0",
+      "intersection_mm3": 0,
+      "gap_mm": 49.53273575484983,
+      "pass_": true
+    },
+    {
+      "zone": "cup_seat_75.0",
+      "intersection_mm3": 0,
+      "gap_mm": 62.8758276800955,
+      "pass_": true
+    },
+    {
+      "zone": "cmc_parent_comb_seating_rail",
+      "intersection_mm3": 0,
+      "gap_mm": 0.3741762267291904,
+      "pass_": true
+    }
+  ],
+  "nearest_guide_ends": [
+    {
+      "name": "thumb_cmc_abduction_negative_wrist_guide_outlet",
+      "bbox_gap_mm": 4.221312853021621
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_wrist_guide_outlet",
+      "bbox_gap_mm": 8.993475452305503
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_cmc_reaction_inlet",
+      "bbox_gap_mm": 16.97847525468883
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_cmc_reaction_inlet",
+      "bbox_gap_mm": 17.10168341454496
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_wrist_guide_outlet",
+      "bbox_gap_mm": 17.25303318051603
+    },
+    {
+      "name": "thumb_ip_positive_cmc_reaction_inlet",
+      "bbox_gap_mm": 17.307412552099276
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_wrist_guide_outlet",
+      "bbox_gap_mm": 17.33463365975716
+    },
+    {
+      "name": "thumb_ip_positive_wrist_guide_outlet",
+      "bbox_gap_mm": 17.498339758616662
+    }
+  ],
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/palm_thumb_arm_clearance_r11.py": "b302a500132a592ddd106ac1d465226aab0d78643bf12b4859b336f2e837908b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_reaction_arm_clearance_r2.step": "6f5b115a376b58435cf91c375e1f559e5c61cf0c0631e6cdff6bd7098bb84eca",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_static_route_packet_manifest.json": "723c68d60117cab8fee8f4dce74455e455b6d469cb996f0afae2d09474e7629e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/palm_seating_zones.py": "8b049c9c00bb7e6a7488314949ff52aac383fb344f5462d6971c19262485a320"
+  },
+  "pass_": true
+}

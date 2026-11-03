@@ -1,0 +1,255 @@
+{
+  "finger": "little",
+  "scope": "body_only",
+  "rows": [
+    {
+      "pose": {},
+      "collisions": [],
+      "label": "neutral",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 0.0
+      },
+      "collisions": [],
+      "label": "little_pip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 15.0
+      },
+      "collisions": [],
+      "label": "little_pip15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 30.0
+      },
+      "collisions": [],
+      "label": "little_pip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 45.0
+      },
+      "collisions": [],
+      "label": "little_pip45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 60.0
+      },
+      "collisions": [],
+      "label": "little_pip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 75.0
+      },
+      "collisions": [],
+      "label": "little_pip75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 90.0
+      },
+      "collisions": [],
+      "label": "little_pip90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 105.0
+      },
+      "collisions": [],
+      "label": "little_pip105.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_pip": 110.0
+      },
+      "collisions": [],
+      "label": "little_pip110.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 0.0
+      },
+      "collisions": [],
+      "label": "little_dip0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 15.0
+      },
+      "collisions": [],
+      "label": "little_dip15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 30.0
+      },
+      "collisions": [],
+      "label": "little_dip30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 45.0
+      },
+      "collisions": [],
+      "label": "little_dip45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 60.0
+      },
+      "collisions": [],
+      "label": "little_dip60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 75.0
+      },
+      "collisions": [],
+      "label": "little_dip75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_dip": 80.0
+      },
+      "collisions": [],
+      "label": "little_dip80.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": -15.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion-15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 0.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion0.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 15.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion15.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 30.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion30.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 45.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion45.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 60.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion60.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 75.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion75.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 90.0
+      },
+      "collisions": [],
+      "label": "little_mcp_flexion90.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_abduction": -25.0
+      },
+      "collisions": [],
+      "label": "little_mcp_abduction-25.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_abduction": -10.0
+      },
+      "collisions": [],
+      "label": "little_mcp_abduction-10.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_abduction": 5.0
+      },
+      "collisions": [],
+      "label": "little_mcp_abduction5.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_abduction": 20.0
+      },
+      "collisions": [],
+      "label": "little_mcp_abduction20.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_abduction": 25.0
+      },
+      "collisions": [],
+      "label": "little_mcp_abduction25.0",
+      "body_interferences": []
+    },
+    {
+      "pose": {
+        "little_mcp_flexion": 90,
+        "little_pip": 110,
+        "little_dip": 80
+      },
+      "collisions": [],
+      "label": "fist",
+      "body_interferences": []
+    }
+  ],
+  "pass": true
+}

@@ -1,0 +1,10 @@
+{
+  "scope": "Old R10 strict inspection stopped incomplete after its daemon disappeared; never an acceptance gate.",
+  "partial_report_sha256": "c69ce3fc7bad52a56b79f421f4c14f3c0ffb217e255c2109d5c05a9c533e63f5",
+  "checked_prototypes": 863,
+  "expected_prototypes": 864,
+  "reported_failures": 5,
+  "reason": "The client remained idle for over an hour; cadgen daemon status reported no running daemon. Known bridge defects have isolated replacements; final integrated native STEP still requires a complete strict run.",
+  "complete": false,
+  "pass": false
+}

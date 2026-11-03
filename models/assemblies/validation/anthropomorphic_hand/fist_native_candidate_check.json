@@ -1,0 +1,155 @@
+{
+  "scope": "Compare fist candidates against the known fifth-ray contacts only.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/rigid_clearance_inputs.step": "8ba620fb8780d163945e4ef40623beb9778670e58953c79440ad5786bda808f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_repair_frames.json": "6aba61dbcb3acf563e3c7af5b17c6d7edeb36eede4d5e30a5a62405f4f4eca98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/rigid_clearance_inputs.json": "f659c39103c257a96e40f777c51d06b8921f1c350c077c1180d3f36f6d840b64",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_contact_regions.json": "9da5a3bbec8f0cb8ecb37136ae96f87a3b2d6469cd7c5e8691d5a1d8c01519a4",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fist_candidate.py": "a872d936fb31eb484836bb43b17a103983094bd6833eea74d51a1f83f5b83575"
+  },
+  "candidates": [
+    {
+      "label": "maximum_joint_angles",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 110,
+        "index_dip": 80,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 110,
+        "ring_dip": 80,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 110,
+        "little_dip": 80,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 1.0973600231499485,
+          "gap_mm": 0.0,
+          "pass_": false
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingertip_conformal_bridge",
+          "intersection_mm3": 0.9568546042160755,
+          "gap_mm": 1.7763568394002505e-15,
+          "pass_": false
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingertip_silicone_pad",
+          "intersection_mm3": 15.748119115610697,
+          "gap_mm": 7.32410687763558e-15,
+          "pass_": false
+        },
+        {
+          "a": "little_cup_child_bank_rib_cap",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.484724241974968,
+          "gap_mm": 0.0,
+          "pass_": false
+        },
+        {
+          "a": "little_cup_child_bank_rib_host_M0p6_screw",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.1520922372294368,
+          "gap_mm": 0.0,
+          "pass_": false
+        },
+        {
+          "a": "little_cup_child_bank_structural",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.1769020446718846,
+          "gap_mm": 0.0,
+          "pass_": false
+        }
+      ],
+      "known_contact_pairs_pass": false
+    },
+    {
+      "label": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -20.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pairs": [
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.0,
+          "gap_mm": 8.633690184166237,
+          "pass_": true
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingertip_conformal_bridge",
+          "intersection_mm3": 0.0,
+          "gap_mm": 4.707280181149296,
+          "pass_": true
+        },
+        {
+          "a": "fifth_metacarpal_cupping_truss",
+          "b": "little_fingertip_silicone_pad",
+          "intersection_mm3": 0.0,
+          "gap_mm": 2.804353303972103,
+          "pass_": true
+        },
+        {
+          "a": "little_cup_child_bank_rib_cap",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.0,
+          "gap_mm": 11.86818871998567,
+          "pass_": true
+        },
+        {
+          "a": "little_cup_child_bank_rib_host_M0p6_screw",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.0,
+          "gap_mm": 13.765167392023566,
+          "pass_": true
+        },
+        {
+          "a": "little_cup_child_bank_structural",
+          "b": "little_fingernail_conformal_saddle",
+          "intersection_mm3": 0.0,
+          "gap_mm": 13.54371448341956,
+          "pass_": true
+        }
+      ],
+      "known_contact_pairs_pass": true
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.021}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py","parent":null,"state":"failed","phase":"Building geometry","progress":null,"elapsed":36.283}
+[python cup_guide_mounts_review.py] FAILED: ValueError: Dimensions of objects to subtract from are inconsistent
+[python cup_guide_mounts_review.py]   models/assemblies/src/anthropomorphic_hand/cup_guide_mounts_review.py:5 in cup_guide_mounts_review
+[python cup_guide_mounts_review.py]       return bd.Compound(label='eighteen_cup_guide_mounts',children=[s for s,f,y,k in cup_guide_mounts()])
+[python cup_guide_mounts_review.py]   models/assemblies/src/anthropomorphic_hand/lib/cup_guide_mounts.py:113 in cup_guide_mounts
+[python cup_guide_mounts_review.py]       def cup_guide_mounts():return make_cup_child_bank()+make_cup_parent_bank()
+[python cup_guide_mounts_review.py]   models/assemblies/src/anthropomorphic_hand/lib/cup_guide_mounts.py:58 in make_cup_child_bank
+[python cup_guide_mounts_review.py]       body=backbone[0].fuse(*backbone[1:]).cut(*cutters,*caps,*screws)-host
+[python cup_guide_mounts_review.py] re-run with --verbose for the full traceback

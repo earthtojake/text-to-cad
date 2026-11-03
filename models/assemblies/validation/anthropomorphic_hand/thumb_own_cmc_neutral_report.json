@@ -1,0 +1,13 @@
+{
+  "rows": [
+    {
+      "flex_deg": 0.0,
+      "yaw_deg": 0.0,
+      "minimum_radius_mm": 4.518516674781826,
+      "mutual_gap_lower_bound_mm": 0.8700099955609332,
+      "collisions": [],
+      "pass": true
+    }
+  ],
+  "pass": true
+}

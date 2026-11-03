@@ -1,0 +1,19 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.031}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":27.773}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,12],"elapsed":27.831}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,12],"elapsed":35.747}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,12],"elapsed":35.851}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,12],"elapsed":35.958}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,12],"elapsed":35.97}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[5,12],"elapsed":36.023}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[6,12],"elapsed":36.061}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[7,12],"elapsed":36.126}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[8,12],"elapsed":36.208}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[9,12],"elapsed":36.825}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[10,12],"elapsed":36.91}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[11,12],"elapsed":37.08}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[12,12],"elapsed":37.181}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":38.729}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/fingernail_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":40.643}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/fingernail_review.step

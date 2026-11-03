@@ -1,0 +1,83 @@
+{
+  "scope": "all 17 full-radius frame ribs versus18 moving CMC mounts over5751 yaw/flex poses, with1.1mm surface/voxel/angular reserve plus0.015mm rib sampling reserve",
+  "mesh_chord_tolerance_mm": 0.08,
+  "max_mesh_edge_mm": 0.3,
+  "base_vertex_quantization_mm": 0.08,
+  "voxel_spacing_mm": 0.3,
+  "angle_step_degrees": 1,
+  "point_count": 501281,
+  "radial_extent_mm": 24.62092605894425,
+  "bound_mm": 1.1,
+  "rows": [
+    {
+      "branch": "radial_root",
+      "conservative_swept_mount_gap_mm": 2.9318890833825026
+    },
+    {
+      "branch": "ulnar_root",
+      "conservative_swept_mount_gap_mm": 42.346717217709916
+    },
+    {
+      "branch": "dorsal_radial_arch",
+      "conservative_swept_mount_gap_mm": 3.543327554319921
+    },
+    {
+      "branch": "dorsal_ulnar_arch",
+      "conservative_swept_mount_gap_mm": 28.360963083089555
+    },
+    {
+      "branch": "index_-16.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 3.5355912174799844
+    },
+    {
+      "branch": "index_12.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 1.5203764786802714
+    },
+    {
+      "branch": "middle_-16.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 28.360963083089555
+    },
+    {
+      "branch": "middle_12.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 25.939045991999166
+    },
+    {
+      "branch": "ring_-16.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 42.346717217709916
+    },
+    {
+      "branch": "ring_12.5_bearing_branch",
+      "conservative_swept_mount_gap_mm": 42.346717217709916
+    },
+    {
+      "branch": "thumb_-18_bearing_branch",
+      "conservative_swept_mount_gap_mm": 2.2181211668949383
+    },
+    {
+      "branch": "thumb_14_bearing_branch",
+      "conservative_swept_mount_gap_mm": 1.6501784739567646
+    },
+    {
+      "branch": "cup_35_branch",
+      "conservative_swept_mount_gap_mm": 42.44671721770992
+    },
+    {
+      "branch": "cup_75_branch",
+      "conservative_swept_mount_gap_mm": 42.44671721770992
+    },
+    {
+      "branch": "pad_0",
+      "conservative_swept_mount_gap_mm": 0.08449775155815055
+    },
+    {
+      "branch": "pad_1",
+      "conservative_swept_mount_gap_mm": 39.92156369472954
+    },
+    {
+      "branch": "pad_2",
+      "conservative_swept_mount_gap_mm": 26.496670101197527
+    }
+  ],
+  "failures": [],
+  "final_geometry_note": "Final geometry additionally removes a radius0.55, height4 mm fixed CMC screw-head clearance cylinder. A subtraction preserves every previously proven separation. Final connected-solid/self-intersection validation is palm_accepted_strict.json."
+}

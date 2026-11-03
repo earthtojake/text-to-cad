@@ -1,0 +1,95 @@
+{
+  "scope": "Primary-agent image inspection; not independent aesthetic acceptance.",
+  "input": "models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step",
+  "document_sha256": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+  "job_sha256": "f1858dd81fdbcad6317cb02c8d1200aac05a1ea60d1adca1c19d7c272d867309",
+  "images": [
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_context_universal_macro.png",
+      "sha256": "460cc143587b651ba1c325eed8bca7688c40531843a7cf78fa7de42b0c22fec6",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Target detail and neighbouring parts visible.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_context_fingernail_macro.png",
+      "sha256": "4e365b474a41d93da1217d085689db31086e95532a0b104cee4aeb046df154df",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Target detail and neighbouring parts visible.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_context_palm_frame_macro.png",
+      "sha256": "52d6ec67b087ca95b6b128ef89ecbc8a3c8d7059c35ae77f70911d55a814ca5a",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Target detail and neighbouring parts visible.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_context_wrist_macro.png",
+      "sha256": "77d5df07753331d079df9f80ece70e290fc7139d380cae32fecc9a7243fe54e8",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": false,
+      "finding": "Forearm structure obstructs the wrist; reframe before blind review.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_context_actuator_macro.png",
+      "sha256": "6c8c6ddd55fb3bc8278e0a4dcb3bcb3d9472f3304f3478f2db9e173275b14f37",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Target detail and neighbouring parts visible.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_wrist_dorsal_retry.png",
+      "sha256": "5597dd34842a9ac28880f969feb2ced90e249af42f675004b29f1b16aaa11f4c",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Opposed close views reveal the wrist forks and their attachments amid the tendons.",
+      "aesthetic_accepted": false
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/mechanical_r13_wrist_palmar_retry.png",
+      "sha256": "759903fe168a5885a171c2c728e446ffe199c24a106dff04b31d93a5ecf9f3a0",
+      "size": [
+        2800,
+        1800
+      ],
+      "visually_inspected": true,
+      "review_ready": true,
+      "finding": "Opposed close views reveal the wrist forks and their attachments amid the tendons.",
+      "aesthetic_accepted": false
+    }
+  ],
+  "complete": true,
+  "wrist_retry_job_sha256": "d2cd5ef9f4a002d0c1148fb556196ece4c494f8aa175fb7b82ba329bbccb8f76",
+  "wrist_reframing_complete": true
+}

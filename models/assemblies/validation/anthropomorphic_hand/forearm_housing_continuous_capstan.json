@@ -1,0 +1,191 @@
+{
+  "ok": true,
+  "rotation_range_rad": [
+    -15.707963267948966,
+    15.707963267948966
+  ],
+  "route_count": 48,
+  "bernstein_dot_coefficients": [
+    0.0,
+    0.5769701298480641,
+    -1.4424253246200998,
+    1.442425324620098,
+    -0.5769701298480641,
+    0.0
+  ],
+  "radial_unit_tangent_bound": 0.03553390593273733,
+  "forearm_control_abs_x_max": 35.52962686172907,
+  "forearm_control_abs_z_min": 30.6,
+  "minimum_surface_clearance_bound_mm": 2.2203731382709266,
+  "bodies": [
+    {
+      "body": "left_forearm_open_side_frame",
+      "continuous_surface_clearance_lower_bound_mm": 2.2203731382709266
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "continuous_surface_clearance_lower_bound_mm": 21.799999999999994
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 22.000000000000004
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 21.999999999999996
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "continuous_surface_clearance_lower_bound_mm": 21.799999999999994
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 22.000000000000004
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 21.999999899999995
+    },
+    {
+      "body": "left_forearm_cable_exit_1_silicone_grommet",
+      "continuous_surface_clearance_lower_bound_mm": 6.270373138270931
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_1",
+      "continuous_surface_clearance_lower_bound_mm": 8.4703730128488
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270931
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270931
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_2",
+      "continuous_surface_clearance_lower_bound_mm": 8.4703730128488
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270931
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270931
+    },
+    {
+      "body": "left_forearm_cable_exit_2_silicone_grommet",
+      "continuous_surface_clearance_lower_bound_mm": 6.270373138270917
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_1",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848786
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270917
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270917
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_2",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848786
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270917
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270917
+    },
+    {
+      "body": "right_forearm_open_side_frame",
+      "continuous_surface_clearance_lower_bound_mm": 2.2203731382709266
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "continuous_surface_clearance_lower_bound_mm": 21.8
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 21.999999900000002
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 22.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "continuous_surface_clearance_lower_bound_mm": 21.8
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 21.999999900000002
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 21.999999900000002
+    },
+    {
+      "body": "right_forearm_cable_exit_1_silicone_grommet",
+      "continuous_surface_clearance_lower_bound_mm": 6.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_1",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848793
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_2",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848793
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_cable_exit_2_silicone_grommet",
+      "continuous_surface_clearance_lower_bound_mm": 6.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_1",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848793
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_2",
+      "continuous_surface_clearance_lower_bound_mm": 8.470373012848793
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_1",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_2",
+      "continuous_surface_clearance_lower_bound_mm": 7.270373138270924
+    }
+  ],
+  "scope": "Entire stored helix and external forearm lead/trunk at every rotation in range; wrist and hand spans are checked separately."
+}

@@ -1,0 +1,27 @@
+{
+  "host_interferences": [],
+  "mutual_interferences": [
+    [
+      "index_palm_bank_structural_body",
+      "index_palm_bank_row_01_upper_jaw",
+      0.025182551383410176
+    ],
+    [
+      "index_palm_bank_structural_body",
+      "index_palm_bank_row_01_right_M0p6_screw",
+      0.025568706439340207
+    ],
+    [
+      "middle_palm_bank_structural_body",
+      "middle_palm_bank_row_02_upper_jaw",
+      0.025182551383409475
+    ],
+    [
+      "middle_palm_bank_structural_body",
+      "middle_palm_bank_row_02_left_M0p6_screw",
+      0.02556870644031631
+    ]
+  ],
+  "part_count": 67,
+  "pass": false
+}

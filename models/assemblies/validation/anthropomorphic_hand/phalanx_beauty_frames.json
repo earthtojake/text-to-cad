@@ -1,0 +1,92 @@
+[
+  {
+    "name": "index_proximal_frame",
+    "frame": "index_mcp_flexion",
+    "system": "index",
+    "kind": "phalanx"
+  },
+  {
+    "name": "index_middle_frame",
+    "frame": "index_pip",
+    "system": "index",
+    "kind": "phalanx"
+  },
+  {
+    "name": "index_distal_frame",
+    "frame": "index_dip",
+    "system": "index",
+    "kind": "phalanx"
+  },
+  {
+    "name": "middle_proximal_frame",
+    "frame": "middle_mcp_flexion",
+    "system": "middle",
+    "kind": "phalanx"
+  },
+  {
+    "name": "middle_middle_frame",
+    "frame": "middle_pip",
+    "system": "middle",
+    "kind": "phalanx"
+  },
+  {
+    "name": "middle_distal_frame",
+    "frame": "middle_dip",
+    "system": "middle",
+    "kind": "phalanx"
+  },
+  {
+    "name": "ring_proximal_frame",
+    "frame": "ring_mcp_flexion",
+    "system": "ring",
+    "kind": "phalanx"
+  },
+  {
+    "name": "ring_middle_frame",
+    "frame": "ring_pip",
+    "system": "ring",
+    "kind": "phalanx"
+  },
+  {
+    "name": "ring_distal_frame",
+    "frame": "ring_dip",
+    "system": "ring",
+    "kind": "phalanx"
+  },
+  {
+    "name": "little_proximal_frame",
+    "frame": "little_mcp_flexion",
+    "system": "little",
+    "kind": "phalanx"
+  },
+  {
+    "name": "little_middle_frame",
+    "frame": "little_pip",
+    "system": "little",
+    "kind": "phalanx"
+  },
+  {
+    "name": "little_distal_frame",
+    "frame": "little_dip",
+    "system": "little",
+    "kind": "phalanx"
+  },
+  {
+    "name": "thumb_metacarpal_frame",
+    "frame": "thumb_cmc_flexion",
+    "system": "thumb",
+    "kind": "phalanx"
+  },
+  {
+    "name": "thumb_proximal_frame",
+    "frame": "thumb_mcp_flexion",
+    "system": "thumb",
+    "kind": "phalanx"
+  },
+  {
+    "name": "thumb_distal_frame",
+    "frame": "thumb_ip",
+    "system": "thumb",
+    "kind": "phalanx"
+  }
+]

@@ -1,0 +1,284 @@
+{
+  "ok": true,
+  "checks": [
+    {
+      "kind": "D_contact",
+      "length": 26,
+      "span": [
+        0.16999999999999998,
+        1.9999999999999996
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.006848700697717728,
+      "negative_1deg_intersection_mm3": 0.006848700697717832,
+      "ok": true
+    },
+    {
+      "kind": "D_contact",
+      "length": 26,
+      "span": [
+        4.0,
+        22.0
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.06736426915787931,
+      "negative_1deg_intersection_mm3": 0.06736426915788032,
+      "ok": true
+    },
+    {
+      "kind": "D_contact",
+      "length": 26,
+      "span": [
+        24.0,
+        25.099999999999998
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.004116705337425952,
+      "negative_1deg_intersection_mm3": 0.004116705337426013,
+      "ok": true
+    },
+    {
+      "kind": "round_bearing_fit",
+      "length": 26,
+      "span": [
+        2.05,
+        3.95
+      ],
+      "intersection_mm3": 0,
+      "radial_clearance_mm": 0.03,
+      "ok": true
+    },
+    {
+      "kind": "round_bearing_fit",
+      "length": 26,
+      "span": [
+        22.05,
+        23.95
+      ],
+      "intersection_mm3": 0,
+      "radial_clearance_mm": 0.03,
+      "ok": true
+    },
+    {
+      "kind": "D_contact",
+      "length": 20,
+      "span": [
+        1.85,
+        17.15
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.05725962878419741,
+      "negative_1deg_intersection_mm3": 0.05725962878419828,
+      "ok": true
+    },
+    {
+      "kind": "D_contact",
+      "length": 20,
+      "span": [
+        18.85,
+        19.099999999999998
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.0009356148494149782,
+      "negative_1deg_intersection_mm3": 0.0009356148494149921,
+      "ok": true
+    },
+    {
+      "kind": "round_bearing_fit",
+      "length": 20,
+      "span": [
+        0.2,
+        1.8
+      ],
+      "intersection_mm3": 0,
+      "radial_clearance_mm": 0.03,
+      "ok": true
+    },
+    {
+      "kind": "round_bearing_fit",
+      "length": 20,
+      "span": [
+        17.2,
+        18.8
+      ],
+      "intersection_mm3": 0,
+      "radial_clearance_mm": 0.03,
+      "ok": true
+    },
+    {
+      "kind": "D_contact",
+      "length": 6,
+      "span": [
+        1.75,
+        5.1
+      ],
+      "neutral_intersection_mm3": 0,
+      "positive_1deg_intersection_mm3": 0.012537238982160871,
+      "negative_1deg_intersection_mm3": 0.01253723898216106,
+      "ok": true
+    },
+    {
+      "kind": "round_bearing_fit",
+      "length": 6,
+      "span": [
+        0.2,
+        1.7
+      ],
+      "intersection_mm3": 0,
+      "radial_clearance_mm": 0.03,
+      "ok": true
+    },
+    {
+      "kind": "actual_proximal_phalanx_drive_bores",
+      "intersection_mm3": 0,
+      "key_normal": [
+        0,
+        1,
+        0
+      ],
+      "ok": true
+    }
+  ],
+  "fits": [
+    {
+      "journal_radius": 1.0,
+      "bore_radius": 1.03,
+      "journal_start": 0.0,
+      "journal_end": 26,
+      "groove_center": 25.4,
+      "groove_width": 0.32,
+      "groove_root_radius": 0.8200000000000001,
+      "groove_root_fillet": 0.04,
+      "ring_inner_radius": 0.83,
+      "ring_outer_radius": 1.3,
+      "ring_thickness": 0.24,
+      "radial_running_clearance": 0.03,
+      "flat_plane_x": 0.75,
+      "key_regions": [
+        [
+          0.12,
+          2.05
+        ],
+        [
+          3.95,
+          22.05
+        ],
+        [
+          23.95,
+          25.15
+        ]
+      ],
+      "journal_bands": [
+        [
+          2.05,
+          3.95
+        ],
+        [
+          22.05,
+          23.95
+        ]
+      ],
+      "flat_contact_regions": [
+        [
+          0.16,
+          2.01
+        ],
+        [
+          3.99,
+          22.01
+        ],
+        [
+          23.99,
+          25.11
+        ]
+      ],
+      "transition_radius": 0.04,
+      "key_long_edge_break": 0.015,
+      "minimum_hub_end_clearance": 0.05
+    },
+    {
+      "journal_radius": 1.0,
+      "bore_radius": 1.03,
+      "journal_start": 0.0,
+      "journal_end": 20,
+      "groove_center": 19.4,
+      "groove_width": 0.32,
+      "groove_root_radius": 0.8200000000000001,
+      "groove_root_fillet": 0.04,
+      "ring_inner_radius": 0.83,
+      "ring_outer_radius": 1.3,
+      "ring_thickness": 0.24,
+      "radial_running_clearance": 0.03,
+      "flat_plane_x": 0.75,
+      "key_regions": [
+        [
+          1.8,
+          17.2
+        ],
+        [
+          18.8,
+          19.15
+        ]
+      ],
+      "journal_bands": [
+        [
+          0.2,
+          1.8
+        ],
+        [
+          17.2,
+          18.8
+        ]
+      ],
+      "flat_contact_regions": [
+        [
+          1.84,
+          17.16
+        ],
+        [
+          18.84,
+          19.11
+        ]
+      ],
+      "transition_radius": 0.04,
+      "key_long_edge_break": 0.015,
+      "minimum_hub_end_clearance": 0.05
+    },
+    {
+      "journal_radius": 1.0,
+      "bore_radius": 1.03,
+      "journal_start": 0.0,
+      "journal_end": 6,
+      "groove_center": 5.4,
+      "groove_width": 0.32,
+      "groove_root_radius": 0.8200000000000001,
+      "groove_root_fillet": 0.04,
+      "ring_inner_radius": 0.83,
+      "ring_outer_radius": 1.3,
+      "ring_thickness": 0.24,
+      "radial_running_clearance": 0.03,
+      "flat_plane_x": 0.75,
+      "key_regions": [
+        [
+          1.7,
+          5.15
+        ]
+      ],
+      "journal_bands": [
+        [
+          0.2,
+          1.7
+        ]
+      ],
+      "flat_contact_regions": [
+        [
+          1.74,
+          5.11
+        ]
+      ],
+      "transition_radius": 0.04,
+      "key_long_edge_break": 0.015,
+      "minimum_hub_end_clearance": 0.05
+    }
+  ]
+}

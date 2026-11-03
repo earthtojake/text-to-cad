@@ -1,0 +1,10 @@
+{
+  "complete": true,
+  "sample_count": 225,
+  "unique_body_poses": 660,
+  "method": "direct native solid Boolean after conservative bounds; completed checkpoint results retained",
+  "rows": [],
+  "pass": true,
+  "step_sha256": "6c2e669df4f176c530c5b1c8623c861b942ca60d1e75cb346bd2548f6a32adf4",
+  "static_manifest_sha256": "9ef364376d40701e3e2530f70162da82782c09d84fe6e9830f1ef003a4d6d04a"
+}

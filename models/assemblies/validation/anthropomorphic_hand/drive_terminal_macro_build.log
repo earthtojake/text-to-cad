@@ -1,0 +1,9 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.001}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":3.92}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,2],"elapsed":3.926}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,2],"elapsed":4.007}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,2],"elapsed":4.012}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":4.028}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/drive_terminal_macro.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":4.138}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/drive_terminal_macro.step

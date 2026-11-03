@@ -1,0 +1,29 @@
+{
+  "rows": [
+    {
+      "name": "index_palm_bank_structural_body",
+      "intersection_mm3": 3.873604055150927
+    },
+    {
+      "name": "middle_palm_bank_structural_body",
+      "intersection_mm3": 0.03019665701394243
+    },
+    {
+      "name": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 1.4299250182948695
+    },
+    {
+      "name": "ring_palm_bank_structural_body_2",
+      "intersection_mm3": 0.4996532328145059
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_structural_jaw",
+      "intersection_mm3": 0
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+      "intersection_mm3": 0
+    }
+  ],
+  "pass": false
+}

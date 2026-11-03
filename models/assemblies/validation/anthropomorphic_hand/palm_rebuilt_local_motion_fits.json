@@ -1,0 +1,2801 @@
+{
+  "rows": [
+    {
+      "name": "wrist_palm_cradle",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 5
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 10
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 15
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 20
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "fifth_metacarpal",
+      "pose": {
+        "palm_cup": 25
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_carrier",
+      "pose": {
+        "index_mcp_abduction": -20.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_carrier",
+      "pose": {
+        "index_mcp_abduction": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_carrier",
+      "pose": {
+        "index_mcp_abduction": 20.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_carrier",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_carrier",
+      "pose": {
+        "middle_mcp_abduction": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_carrier",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_carrier",
+      "pose": {
+        "ring_mcp_abduction": -15.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_carrier",
+      "pose": {
+        "ring_mcp_abduction": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_carrier",
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "CMC_carrier",
+      "pose": {
+        "thumb_cmc_abduction": -25
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "CMC_carrier",
+      "pose": {
+        "thumb_cmc_abduction": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "CMC_carrier",
+      "pose": {
+        "thumb_cmc_abduction": 45
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": -15
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": -25,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": -15
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 0,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": -15
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": 0
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_metacarpal",
+      "pose": {
+        "thumb_cmc_abduction": 45,
+        "thumb_cmc_flexion": 65
+      },
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_palm_bank_structural_body",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_palm_bank_row_01_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_02_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_03_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_04_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_05_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_06_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_07_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_08_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_front_cap",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_palm_bank_row_01_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_02_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_03_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_04_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_04_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_05_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_06_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_07_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_08_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_row_08_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_left_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_palm_bank_boss_clamp_right_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_palm_bank_structural_body",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_palm_bank_row_01_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_02_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_03_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_04_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_palm_bank_row_05_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_06_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_07_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_08_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_front_cap",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_palm_bank_row_01_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_02_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_03_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_04_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_04_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_05_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_06_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_07_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_08_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_row_08_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_left_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_palm_bank_boss_clamp_right_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_structural_body_1",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_structural_body_2",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_row_01_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_row_02_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_03_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_04_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_05_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_06_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_07_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_08_upper_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_front_cap",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_row_01_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_row_02_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_03_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_04_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_04_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_05_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_06_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_07_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_08_left_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_row_08_right_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_left_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_palm_bank_boss_clamp_right_M0p8_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_structural_jaw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_scalloped_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_palm_rib_lower_cap",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_host_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "exact native Boolean after final 0.05 mm head-clearance subtraction",
+      "distance_mm": 0.04999997468833594
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_liner_-1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_parent_inlet_comb_liner_+1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_structural_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_scalloped_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_rail_-1_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_-1_host_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_rail_+1_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_+1_host_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_liner_-1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_four_liner_comb_liner_+1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_structural_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_scalloped_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_rail_lower_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_host_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_negative_clamp_liner_+1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_structural_jaw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_scalloped_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_rail_upper_cap",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_host_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_child_flexion_positive_clamp_liner_-1_M0p6_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_cmc_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "thumb_ip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_mcp_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_pip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "index_dip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_mcp_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_pip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "middle_dip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0,
+      "method": "exact native Boolean"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_mcp_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_pip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "ring_dip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_mcp_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_pip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "little_dip_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_abduction_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "wrist_flexion_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_positive_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_pulley",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_terminal_cover",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_terminal_cover_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_terminal_ferrule",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "palm_cup_negative_drive_pulley_grub_screw",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_cmc_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_cmc_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_cmc_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_cmc_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_mcp_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_mcp_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_mcp_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_mcp_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_ip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_thumb_ip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_mcp_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_mcp_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_mcp_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_mcp_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_pip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_pip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_dip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_index_dip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_mcp_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_mcp_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_mcp_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_mcp_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_pip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_pip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_dip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_middle_dip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_mcp_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_mcp_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_mcp_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_mcp_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_pip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_pip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_dip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_ring_dip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_mcp_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_mcp_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_mcp_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_mcp_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_pip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_pip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_dip_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_little_dip_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_wrist_abduction_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_wrist_abduction_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_wrist_flexion_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_wrist_flexion_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_palm_cup_positive_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    },
+    {
+      "name": "actuator_palm_cup_negative_capstan_terminal_bond_line",
+      "pose": {},
+      "intersection_mm3": 0.0,
+      "method": "conservative swept-branch/eye envelope"
+    }
+  ],
+  "failures": [],
+  "final_change": "Only a radius0.55 mm, height4 mm cylindrical subtraction around the fixed CMC clamp screw. Prior zero-overlap checks are preserved by this monotone removal; the one failing screw pair is explicitly retested.",
+  "step_sha256": "875dbd5b7cf67b65b081bebb787ef9da98716ad0914f87a562895cbd5e8b6e8a"
+}

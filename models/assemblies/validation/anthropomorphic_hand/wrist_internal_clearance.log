@@ -1,0 +1,23 @@
+Built wrist frames
+Palm omitted explicitly for internal gate
+{"yaw_degrees": -20.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": -10.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 10.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 20.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": -45.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": -40.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": -30.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": -20.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": -10.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 0.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 10.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 20.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 30.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 40.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 50.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 0.0, "flex_degrees": 60.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": -20.0, "flex_degrees": -45.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": -20.0, "flex_degrees": 60.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 20.0, "flex_degrees": -45.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}
+{"yaw_degrees": 20.0, "flex_degrees": 60.0, "pairs": 36, "max_intersection_volume": 0, "clashes": [], "clear": true}

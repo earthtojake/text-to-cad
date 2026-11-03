@@ -1,0 +1,39 @@
+loading native
+native loaded 74
+thumb made
+all bounds ready
+subset index 0.0
+mount index {'finger': 'index', 'added_material_mm3': 0.0, 'removed_material_mm3': 4.938129376303607, 'pad_region_volume_difference_mm3': 3.746265520021552e-10, 'pass': True} {'finger': 'index', 'contacts_mm': {'nail_saddle_gap': 0.0, 'saddle_host_gap': 0.0, 'radial_screw_saddle_gap': 0.0, 'radial_screw_insert_gap': 4.440892098500626e-16, 'radial_insert_host_gap': 0.0, 'ulnar_screw_saddle_gap': 0.0, 'ulnar_screw_insert_gap': 0.0, 'ulnar_insert_host_gap': 0.0}, 'pass': True}
+subset middle 0.0
+mount middle {'finger': 'middle', 'added_material_mm3': 0.0, 'removed_material_mm3': 4.938129376303607, 'pad_region_volume_difference_mm3': 3.746265520021552e-10, 'pass': True} {'finger': 'middle', 'contacts_mm': {'nail_saddle_gap': 0.0, 'saddle_host_gap': 0.0, 'radial_screw_saddle_gap': 0.0, 'radial_screw_insert_gap': 4.440892098500626e-16, 'radial_insert_host_gap': 0.0, 'ulnar_screw_saddle_gap': 0.0, 'ulnar_screw_insert_gap': 4.440892098500626e-16, 'ulnar_insert_host_gap': 0.0}, 'pass': True}
+subset ring 0.0
+mount ring {'finger': 'ring', 'added_material_mm3': 0.0, 'removed_material_mm3': 4.938116210788166, 'pad_region_volume_difference_mm3': 6.684643949483871e-10, 'pass': True} {'finger': 'ring', 'contacts_mm': {'nail_saddle_gap': 0.0, 'saddle_host_gap': 0.0, 'radial_screw_saddle_gap': 0.0, 'radial_screw_insert_gap': 4.440892098500626e-16, 'radial_insert_host_gap': 0.0, 'ulnar_screw_saddle_gap': 0.0, 'ulnar_screw_insert_gap': 4.440892098500626e-16, 'ulnar_insert_host_gap': 0.0}, 'pass': True}
+subset little 0.0
+mount little {'finger': 'little', 'added_material_mm3': 0.0, 'removed_material_mm3': 4.9608440837162675, 'pad_region_volume_difference_mm3': 7.293010639841668e-11, 'pass': True} {'finger': 'little', 'contacts_mm': {'nail_saddle_gap': 0.0, 'saddle_host_gap': 0.0, 'radial_screw_saddle_gap': 4.440892098500626e-16, 'radial_screw_insert_gap': 0.0, 'radial_insert_host_gap': 0.0, 'ulnar_screw_saddle_gap': 0.0, 'ulnar_screw_insert_gap': 0.0, 'ulnar_insert_host_gap': 0.0}, 'pass': True}
+Timeout (0:01:30)!
+Thread 0x00000001f09a1e80 (most recent call first):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingernails.py", line 63 in <module>
+subset thumb 0.0
+mount thumb {'finger': 'thumb', 'added_material_mm3': 0.0, 'removed_material_mm3': 3.5288507989370146, 'pad_region_volume_difference_mm3': 2.397229081907426e-10, 'pass': True} {'finger': 'thumb', 'contacts_mm': {'nail_saddle_gap': 4.440892098500626e-16, 'saddle_host_gap': 0.0, 'radial_screw_saddle_gap': 0.0, 'radial_screw_insert_gap': 4.440892098500626e-16, 'radial_insert_host_gap': 0.0, 'ulnar_screw_saddle_gap': 0.0, 'ulnar_screw_insert_gap': 4.440892098500626e-16, 'ulnar_insert_host_gap': 0.0}, 'pass': True}
+Timeout (0:01:30)!
+Thread 0x00000001f09a1e80 (most recent call first):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingertip_pads.py", line 26 in common_volume
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingernails.py", line 89 in <module>
+Timeout (0:01:30)!
+Thread 0x00000001f09a1e80 (most recent call first):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingertip_pads.py", line 26 in common_volume
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingernails.py", line 89 in <module>
+flat_open {'sample': 'flat_open', 'exact_body_pairs': 104, 'body_collisions': [], 'exact_route_distances': 23, 'minimum_nearby_route_gap_mm': 5.166832401883324, 'route_collisions': [], 'pass': True}
+full_fist_candidate {'sample': 'full_fist_candidate', 'exact_body_pairs': 36, 'body_collisions': [], 'exact_route_distances': 63, 'minimum_nearby_route_gap_mm': 3.867710556589731, 'route_collisions': [], 'pass': True}
+precision_pinch_candidate {'sample': 'precision_pinch_candidate', 'exact_body_pairs': 78, 'body_collisions': [], 'exact_route_distances': 39, 'minimum_nearby_route_gap_mm': 5.166832401883324, 'route_collisions': [], 'pass': True}
+Timeout (0:01:30)!
+Thread 0x00000001f09a1e80 (most recent call first):
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1046 in __deepcopy__
+  File "/Users/jakefitzgerald/.local/share/uv/python/cpython-3.13.13-macos-aarch64-none/lib/python3.13/copy.py", line 144 in deepcopy
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1051 in __deepcopy__
+  File "/Users/jakefitzgerald/.local/share/uv/python/cpython-3.13.13-macos-aarch64-none/lib/python3.13/copy.py", line 144 in deepcopy
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1683 in moved
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1087 in __rmul__
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingernails.py", line 82 in <module>
+wrist_abduction_-20 {'sample': 'wrist_abduction_-20', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 44, 'minimum_nearby_route_gap_mm': 5.0493944022753015, 'route_collisions': [], 'pass': True}
+wrist_abduction_-10 {'sample': 'wrist_abduction_-10', 'exact_body_pairs': 0, 'body_collisions': [], 'exact_route_distances': 30, 'minimum_nearby_route_gap_mm': 5.049394402275305, 'route_collisions': [], 'pass': True}

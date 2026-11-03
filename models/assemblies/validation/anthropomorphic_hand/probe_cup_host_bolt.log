@@ -1,0 +1,5 @@
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/probe_cup_host_bolt.py", line 10, in <module>
+    common=p&host;print('V',common.volume,'BB',common.bounding_box(),flush=True)
+                            ^^^^^^^^^^^^^
+AttributeError: 'NoneType' object has no attribute 'volume'

@@ -1,0 +1,31 @@
+{
+  "scope": "Native full-hand snapshot transport and component-buffer allocation regression; not mechanical or aesthetic acceptance.",
+  "input_sha256": {
+    "packages/cadgen-js/src/lib/assembly/meshData.js": "f6147f92f9ab9f556bac59f226830882a718bf680c9886930375b6084b657444",
+    "packages/cadgen-js/src/lib/render/meshCost.js": "c822a4b7cb2e065f593c7b6678c1b8ec731559b8ada2df54a8995542de8a6544",
+    "packages/cadgen-js/src/common/renderMeshScene.js": "d99a7627de496457c25849726a5d8590247cd4ec20f92daa76d051d70be50bdb",
+    "apps/viewer/src/client/components/CadViewer.js": "ff80560b4bb00d415475e65b2a89e1e38b6cc996ad4807a390c59680a01d3d28",
+    "packages/cadgen/src/cadgen/snapshot_core.py": "f518ba93bbef05f8ae271626ae940c1ae3a87b1771e2b39100e2174b05b47353",
+    "packages/cadgen/src/cadgen/_runtime/browser/snapshot-render.js": "22b9c3b9a0a98f6bb0c15105e57cfc5e503ebd0e670756e89a4b5d538217cdc4",
+    "models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate.step": "15b665ebf51764ffc1b091ed20c5651f216ff98eb9a0aa5bc6b8bb9d9d60d96b",
+    "models/assemblies/src/anthropomorphic_hand/mechanical_candidate_render_job.json": "b8253fbefb4ba2dc8d0ce1dc3f229594a100f51d8221d59129a65e0828d6f8e9"
+  },
+  "image_sha256": {
+    "tmp/anthropomorphic_hand/mechanical_r10_palm.png": "70f21b90611500b951ca0788d4a9ca93ec0bacd62c348b6bfccc6dd8d8ece9d7",
+    "tmp/anthropomorphic_hand/mechanical_r10_dorsal.png": "48dd7cf4ce63884f2ff0a4d91036b12b93506f3e2010f6950402493ce1665fee",
+    "tmp/anthropomorphic_hand/mechanical_r10_forearm.png": "303557ad31aae552353983b44d270d95142347371324b7794403fb982209cd34",
+    "tmp/anthropomorphic_hand/mechanical_r10_joint_macro.png": "00559229673c825fde8fc0c94bf9421c31e38a8f6640f17d9ed8fdb7c410d388",
+    "tmp/anthropomorphic_hand/mechanical_r10_cmc_macro.png": "9a42ed8a32a6281a47f04ba15b1c111134b4dfba7b732f6bb0dca9e66244e075",
+    "tmp/anthropomorphic_hand/mechanical_r10_palm_relief_macro.png": "94077d8a1fabe580ecd61940c84b4ebc5b799d0333927d5f623faca01d217239"
+  },
+  "occurrences": 3257,
+  "shared_js_tests": 806,
+  "viewer_tests": 347,
+  "snapshot_transport_tests": 5,
+  "production_bundle_pass": true,
+  "bundle_freshness_pass": true,
+  "all_six_images_rendered": true,
+  "all_six_images_visually_inspected": true,
+  "observations": "Complete hand/forearm and six native views render; fine braided tendons and metal hardware are visible. Original mechanical and aesthetic blockers remain.",
+  "pass": true
+}

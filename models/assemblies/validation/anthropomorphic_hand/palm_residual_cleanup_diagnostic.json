@@ -1,0 +1,27 @@
+{
+  "scope": "Focused native R8 palm cleanup diagnostic; not a complete support or assembly certificate.",
+  "input_step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/9c6fe8d4f2734b80e1d7fb4262a7537699d4f66d05ad82cb078740f2376209c6.step",
+  "input_step_sha256": "9c6fe8d4f2734b80e1d7fb4262a7537699d4f66d05ad82cb078740f2376209c6",
+  "sample": {
+    "thumb_cmc_abduction": -5
+  },
+  "pair": [
+    "palm_metacarpal_truss",
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1"
+  ],
+  "original_intersection_mm3": 0.00019531331307861402,
+  "clearance_mm": 0.025,
+  "planar_pocket": {
+    "remaining_intersection_mm3": 0.0,
+    "removed_volume_mm3": 0.005531355565381091,
+    "solid_count": 1,
+    "valid": true
+  },
+  "rounded_pocket": {
+    "remaining_intersection_mm3": 0.00019531331307861402,
+    "removed_volume_mm3": 0.0029066166207485367,
+    "solid_count": 1,
+    "valid": true
+  },
+  "log": "tmp/anthropomorphic_hand/palm_pocket_diagnostic.log"
+}

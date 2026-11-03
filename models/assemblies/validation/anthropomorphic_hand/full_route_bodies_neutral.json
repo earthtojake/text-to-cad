@@ -1,0 +1,1682 @@
+{
+  "pose": {},
+  "body_count": 1306,
+  "exact_distances_tested": 1789,
+  "tendon_table": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "exact_distances_tested": 19,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "exact_distances_tested": 21,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "exact_distances_tested": 32,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "group": "thumb_cmc_flexion_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999643
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999899514082e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999998994
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+          "body": "palm_radial_palmar_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        },
+        {
+          "tendon": "thumb_cmc_flexion_positive",
+          "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+          "body": "palm_radial_palmar_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "exact_distances_tested": 36,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "group": "thumb_cmc_flexion_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999949757042e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450000999999995
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "group": "thumb_cmc_flexion_negative_wrist_guide",
+          "body": "palm_radial_dorsal_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.2909090111746119,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.15909098882538814
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.17827359549508606,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.2717264045049139
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+          "body": "palm_radial_dorsal_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.038345210909226345,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4116547890907737
+        },
+        {
+          "tendon": "thumb_cmc_flexion_negative",
+          "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+          "body": "palm_radial_dorsal_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999643
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "exact_distances_tested": 39,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_mcp_abduction_positive",
+          "group": "thumb_mcp_abduction_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "exact_distances_tested": 33,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_mcp_abduction_negative",
+          "group": "thumb_mcp_abduction_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999928945726e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999929
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "exact_distances_tested": 45,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999643
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999982
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999975
+        },
+        {
+          "tendon": "thumb_mcp_flexion_positive",
+          "group": "thumb_mcp_flexion_positive_cmc_reaction",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999928945726e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999929
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "exact_distances_tested": 37,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_mcp_flexion_negative",
+          "group": "thumb_mcp_flexion_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999958104708e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999958
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "exact_distances_tested": 55,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_ip_positive",
+          "group": "thumb_ip_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999956488322e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999565
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "group": "thumb_ip_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999975
+        },
+        {
+          "tendon": "thumb_ip_positive",
+          "group": "thumb_ip_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999975
+        }
+      ]
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "exact_distances_tested": 51,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "thumb_ip_negative",
+          "group": "thumb_ip_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999948978034e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999493
+        }
+      ]
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "exact_distances_tested": 32,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "group": "index_mcp_abduction_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999982
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "group": "index_mcp_abduction_positive_wrist_guide",
+          "body": "palm_radial_palmar_clamp_2",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.015338750973931944,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.43466124902606806
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "group": "index_mcp_abduction_positive_wrist_guide",
+          "body": "thumb_cmc_carrier",
+          "body_kind": "carrier",
+          "centerline_distance_lower_bound_mm": 0.035493973960811234,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4145060260391888
+        },
+        {
+          "tendon": "index_mcp_abduction_positive",
+          "group": "index_mcp_abduction_positive_wrist_guide",
+          "body": "thumb_cmc_flexion_positive_bushing",
+          "body_kind": "bushing",
+          "centerline_distance_lower_bound_mm": 0.36312468897433403,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.08687531102566598
+        }
+      ]
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "exact_distances_tested": 23,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_mcp_abduction_negative",
+          "group": "index_mcp_abduction_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999897956068e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999898
+        }
+      ]
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "exact_distances_tested": 33,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_mcp_flexion_positive",
+          "group": "index_mcp_flexion_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999891948432e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999892
+        }
+      ]
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "exact_distances_tested": 38,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_mcp_flexion_negative",
+          "group": "index_mcp_flexion_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999999643
+        }
+      ]
+    },
+    {
+      "tendon": "index_pip_positive",
+      "exact_distances_tested": 51,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_pip_positive",
+          "group": "index_pip_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999935952543e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999936
+        }
+      ]
+    },
+    {
+      "tendon": "index_pip_negative",
+      "exact_distances_tested": 58,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_pip_negative",
+          "group": "index_pip_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.10059166563844597,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.34940833436155405
+        }
+      ]
+    },
+    {
+      "tendon": "index_dip_positive",
+      "exact_distances_tested": 74,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_dip_positive",
+          "group": "index_dip_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "index_dip_negative",
+      "exact_distances_tested": 82,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "index_dip_negative",
+          "group": "index_dip_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        },
+        {
+          "tendon": "index_dip_negative",
+          "group": "index_dip_negative_wrist_guide",
+          "body": "palm_radial_dorsal_clamp_1",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.15272845369157345,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.29727154630842656
+        }
+      ]
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "exact_distances_tested": 23,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "exact_distances_tested": 16,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "group": "middle_mcp_abduction_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        },
+        {
+          "tendon": "middle_mcp_abduction_negative",
+          "group": "middle_mcp_abduction_negative_palm_run",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.3,
+          "surface_gap_lower_bound_mm": -0.30000099999999996
+        }
+      ]
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "exact_distances_tested": 25,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "middle_mcp_flexion_positive",
+          "group": "middle_mcp_flexion_positive_yaw_reaction",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "exact_distances_tested": 30,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "middle_mcp_flexion_negative",
+          "group": "middle_mcp_flexion_negative_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": 0.241905771989277,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.208094228010723
+        }
+      ]
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "exact_distances_tested": 41,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "exact_distances_tested": 38,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "exact_distances_tested": 55,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "exact_distances_tested": 58,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "exact_distances_tested": 23,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "ring_mcp_abduction_positive",
+          "group": "ring_mcp_abduction_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999923467051e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999924
+        }
+      ]
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "exact_distances_tested": 17,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "ring_mcp_abduction_negative",
+          "group": "ring_mcp_abduction_negative_palm_run",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+          "path_outer_radius_mm": 0.3,
+          "surface_gap_lower_bound_mm": -0.3000009999999982
+        }
+      ]
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "exact_distances_tested": 27,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "ring_mcp_flexion_positive",
+          "group": "ring_mcp_flexion_positive_yaw_reaction",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999856785532e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.45000099999998566
+        }
+      ]
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "exact_distances_tested": 27,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "exact_distances_tested": 36,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "ring_pip_positive",
+          "group": "ring_pip_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.999999918597103e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999919
+        }
+      ]
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "exact_distances_tested": 39,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "exact_distances_tested": 52,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "ring_dip_positive",
+          "group": "ring_dip_positive_wrist_guide",
+          "body": "palm_metacarpal_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "exact_distances_tested": 57,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "exact_distances_tested": 22,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "exact_distances_tested": 20,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "exact_distances_tested": 33,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "little_mcp_flexion_positive",
+          "group": "little_mcp_flexion_positive_yaw_reaction",
+          "body": "fifth_metacarpal_cupping_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -9.99999992675893e-07,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.4500009999999927
+        }
+      ]
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "exact_distances_tested": 41,
+      "clear": false,
+      "collisions": [
+        {
+          "tendon": "little_mcp_flexion_negative",
+          "group": "little_mcp_flexion_negative_yaw_reaction",
+          "body": "fifth_metacarpal_cupping_truss",
+          "body_kind": "frame",
+          "centerline_distance_lower_bound_mm": -1e-06,
+          "path_outer_radius_mm": 0.45,
+          "surface_gap_lower_bound_mm": -0.450001
+        }
+      ]
+    },
+    {
+      "tendon": "little_pip_positive",
+      "exact_distances_tested": 45,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_pip_negative",
+      "exact_distances_tested": 50,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_dip_positive",
+      "exact_distances_tested": 65,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "little_dip_negative",
+      "exact_distances_tested": 67,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "exact_distances_tested": 19,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "exact_distances_tested": 17,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "exact_distances_tested": 12,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "exact_distances_tested": 32,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "exact_distances_tested": 21,
+      "clear": true,
+      "collisions": []
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "exact_distances_tested": 22,
+      "clear": true,
+      "collisions": []
+    }
+  ],
+  "collisions": [
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999643
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999899514082e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999998994
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+      "body": "palm_radial_palmar_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "group": "thumb_cmc_flexion_positive_cmc_yaw_reaction",
+      "body": "palm_radial_palmar_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999949757042e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450000999999995
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_wrist_guide",
+      "body": "palm_radial_dorsal_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.2909090111746119,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.15909098882538814
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.17827359549508606,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.2717264045049139
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+      "body": "palm_radial_dorsal_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.038345210909226345,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4116547890907737
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "group": "thumb_cmc_flexion_negative_cmc_yaw_reaction",
+      "body": "palm_radial_dorsal_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999643
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "group": "thumb_mcp_abduction_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "group": "thumb_mcp_abduction_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999928945726e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999929
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999643
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999982
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999975
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "group": "thumb_mcp_flexion_positive_cmc_reaction",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999928945726e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999929
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "group": "thumb_mcp_flexion_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999958104708e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999958
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "group": "thumb_ip_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999956488322e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999565
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "group": "thumb_ip_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999975
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "group": "thumb_ip_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.99999997487852e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999975
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "group": "thumb_ip_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999948978034e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999493
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "group": "index_mcp_abduction_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999982
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "group": "index_mcp_abduction_positive_wrist_guide",
+      "body": "palm_radial_palmar_clamp_2",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.015338750973931944,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.43466124902606806
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "group": "index_mcp_abduction_positive_wrist_guide",
+      "body": "thumb_cmc_carrier",
+      "body_kind": "carrier",
+      "centerline_distance_lower_bound_mm": 0.035493973960811234,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4145060260391888
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "group": "index_mcp_abduction_positive_wrist_guide",
+      "body": "thumb_cmc_flexion_positive_bushing",
+      "body_kind": "bushing",
+      "centerline_distance_lower_bound_mm": 0.36312468897433403,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.08687531102566598
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "group": "index_mcp_abduction_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999897956068e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999898
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "group": "index_mcp_flexion_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999891948432e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999892
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "group": "index_mcp_flexion_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999964472863e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999999643
+    },
+    {
+      "tendon": "index_pip_positive",
+      "group": "index_pip_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999935952543e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999936
+    },
+    {
+      "tendon": "index_pip_negative",
+      "group": "index_pip_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.10059166563844597,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.34940833436155405
+    },
+    {
+      "tendon": "index_dip_positive",
+      "group": "index_dip_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "index_dip_negative",
+      "group": "index_dip_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "index_dip_negative",
+      "group": "index_dip_negative_wrist_guide",
+      "body": "palm_radial_dorsal_clamp_1",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.15272845369157345,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.29727154630842656
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "group": "middle_mcp_abduction_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "group": "middle_mcp_abduction_negative_palm_run",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.3,
+      "surface_gap_lower_bound_mm": -0.30000099999999996
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "group": "middle_mcp_flexion_positive_yaw_reaction",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "group": "middle_mcp_flexion_negative_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": 0.241905771989277,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.208094228010723
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "group": "ring_mcp_abduction_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999923467051e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999924
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "group": "ring_mcp_abduction_negative_palm_run",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999982236431e-07,
+      "path_outer_radius_mm": 0.3,
+      "surface_gap_lower_bound_mm": -0.3000009999999982
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "group": "ring_mcp_flexion_positive_yaw_reaction",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999856785532e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.45000099999998566
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "group": "ring_pip_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.999999918597103e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999919
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "group": "ring_dip_positive_wrist_guide",
+      "body": "palm_metacarpal_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "group": "little_mcp_flexion_positive_yaw_reaction",
+      "body": "fifth_metacarpal_cupping_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -9.99999992675893e-07,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.4500009999999927
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "group": "little_mcp_flexion_negative_yaw_reaction",
+      "body": "fifth_metacarpal_cupping_truss",
+      "body_kind": "frame",
+      "centerline_distance_lower_bound_mm": -1e-06,
+      "path_outer_radius_mm": 0.45,
+      "surface_gap_lower_bound_mm": -0.450001
+    }
+  ],
+  "stored_rope_solid_proofs": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "body": "actuator_thumb_cmc_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "body": "actuator_thumb_cmc_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "body": "actuator_thumb_cmc_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "body": "actuator_thumb_cmc_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "body": "actuator_thumb_cmc_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "body": "actuator_thumb_cmc_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "body": "actuator_thumb_cmc_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "body": "actuator_thumb_cmc_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "body": "actuator_thumb_mcp_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "body": "actuator_thumb_mcp_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "body": "actuator_thumb_mcp_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "body": "actuator_thumb_mcp_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "body": "actuator_thumb_mcp_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "body": "actuator_thumb_mcp_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "body": "actuator_thumb_mcp_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "body": "actuator_thumb_mcp_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "body": "actuator_thumb_ip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "body": "actuator_thumb_ip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "body": "actuator_thumb_ip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "body": "actuator_thumb_ip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "body": "actuator_index_mcp_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "body": "actuator_index_mcp_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "body": "actuator_index_mcp_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "body": "actuator_index_mcp_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "body": "actuator_index_mcp_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "body": "actuator_index_mcp_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "body": "actuator_index_mcp_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "body": "actuator_index_mcp_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_pip_positive",
+      "body": "actuator_index_pip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_pip_positive",
+      "body": "actuator_index_pip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_pip_negative",
+      "body": "actuator_index_pip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_pip_negative",
+      "body": "actuator_index_pip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_dip_positive",
+      "body": "actuator_index_dip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_dip_positive",
+      "body": "actuator_index_dip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_dip_negative",
+      "body": "actuator_index_dip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "index_dip_negative",
+      "body": "actuator_index_dip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "body": "actuator_middle_mcp_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "body": "actuator_middle_mcp_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "body": "actuator_middle_mcp_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "body": "actuator_middle_mcp_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "body": "actuator_middle_mcp_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "body": "actuator_middle_mcp_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "body": "actuator_middle_mcp_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "body": "actuator_middle_mcp_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "body": "actuator_middle_pip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "body": "actuator_middle_pip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "body": "actuator_middle_pip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "body": "actuator_middle_pip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "body": "actuator_middle_dip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "body": "actuator_middle_dip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "body": "actuator_middle_dip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "body": "actuator_middle_dip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "body": "actuator_ring_mcp_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "body": "actuator_ring_mcp_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "body": "actuator_ring_mcp_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "body": "actuator_ring_mcp_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "body": "actuator_ring_mcp_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "body": "actuator_ring_mcp_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "body": "actuator_ring_mcp_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "body": "actuator_ring_mcp_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "body": "actuator_ring_pip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "body": "actuator_ring_pip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "body": "actuator_ring_pip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "body": "actuator_ring_pip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "body": "actuator_ring_dip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "body": "actuator_ring_dip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "body": "actuator_ring_dip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "body": "actuator_ring_dip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "body": "actuator_little_mcp_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "body": "actuator_little_mcp_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "body": "actuator_little_mcp_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "body": "actuator_little_mcp_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "body": "actuator_little_mcp_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "body": "actuator_little_mcp_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "body": "actuator_little_mcp_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "body": "actuator_little_mcp_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_pip_positive",
+      "body": "actuator_little_pip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_pip_positive",
+      "body": "actuator_little_pip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_pip_negative",
+      "body": "actuator_little_pip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_pip_negative",
+      "body": "actuator_little_pip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_dip_positive",
+      "body": "actuator_little_dip_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_dip_positive",
+      "body": "actuator_little_dip_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_dip_negative",
+      "body": "actuator_little_dip_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "little_dip_negative",
+      "body": "actuator_little_dip_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "body": "actuator_wrist_abduction_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "body": "actuator_wrist_abduction_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "body": "actuator_wrist_abduction_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "body": "actuator_wrist_abduction_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "body": "actuator_wrist_flexion_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "body": "actuator_wrist_flexion_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "body": "actuator_wrist_flexion_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "body": "actuator_wrist_flexion_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "body": "actuator_palm_cup_positive_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "body": "actuator_palm_cup_positive_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "body": "actuator_palm_cup_negative_capstan",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "body": "actuator_palm_cup_negative_terminal_ferrule",
+      "intersection_mm3": 0.0,
+      "method": "exact swept-solid Boolean; congruent actuator copies share canonical path/geometry proof"
+    }
+  ],
+  "pass": false,
+  "input_sha256": {
+    "models/assemblies/STEP/anthropomorphic_hand/imported/palm_frame_integration.step": "837d9ce43887d20648854c611275befb79389930a4fbf085921fc5c09cfd6e74",
+    "models/assemblies/STEP/anthropomorphic_hand/palm_little_review.step": "0fbfb78409d907b22ae8099049a1cc808d6229d42d6cbe416df0896e8cead77d",
+    "models/assemblies/validation/anthropomorphic_hand/wrist_transport_neutral.json": "31abdc2b913be8cf9dc9f8846948e8faa4121d25b141ae9314fb5153a0192f2a"
+  },
+  "scope": "all48 full tendon paths versus every body in the current integration registry; future added hardware must be rechecked"
+}

@@ -1,0 +1,9 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.123}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":2.761}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,1],"elapsed":2.781}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,1],"elapsed":3.708}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":3.72}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/ring_palm_guide_mounts.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":4.426}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/ring_palm_guide_mounts.step
+built models/assemblies/STEP/anthropomorphic_hand/ring_palm_guide_mounts.step

@@ -1,0 +1,60 @@
+{
+  "scope": "Native rib continuity, unchanged splice bores and source/export equality.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_arm_repair_review.step": "47041ce9d0cdf77fc0c19c758c1c1e3c6f6893ab03e2977c4c3135ec464ed822",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/rigid_clearance_inputs.step": "8ba620fb8780d163945e4ef40623beb9778670e58953c79440ad5786bda808f9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_radial_bank_arm_repair.py": "3aa87e039c6b850624fd50582f68a125011de36b4bbe3e163cef33bd75e7fd94"
+  },
+  "native_volume_mm3": 14.235721230050324,
+  "source_volume_mm3": 14.235714447093429,
+  "source_minus_native_mm3": 0,
+  "native_minus_source_mm3": 0,
+  "source_native_equal": true,
+  "bores": [
+    {
+      "name": "thumb_mcp_abduction_positive_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_mcp_flexion_negative_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_ip_positive_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    },
+    {
+      "name": "thumb_ip_negative_wrist_guide_outlet",
+      "obstruction_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "remaining_interface_contacts": [
+    {
+      "body": "thumb_cmc_abduction_negative_drive_pulley",
+      "intersection_mm3": 0
+    },
+    {
+      "body": "thumb_cmc_abduction_positive_drive_pulley",
+      "intersection_mm3": 0.0013400423170440241
+    },
+    {
+      "body": "thumb_cmc_abduction_negative_bushing",
+      "intersection_mm3": 0.24653154780441502
+    }
+  ],
+  "pass": true
+}

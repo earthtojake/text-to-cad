@@ -1,0 +1,41 @@
+{
+  "claim": "fixed inlet plus +Y tangent at yaw45 necessarily intersects filled carrier bearing/shaft envelope for minimum bend radius3.5",
+  "inlet_local": [
+    -5.4,
+    -12.25,
+    0
+  ],
+  "yaw": 45,
+  "minimum_radius": 3.5,
+  "hardware_inner_envelope": {
+    "axis": "X",
+    "center_x": -10.5,
+    "radius": 3.56,
+    "half_thickness": 0.76
+  },
+  "tendon_envelope_radius": 0.45,
+  "bound": "|p(s)-p(0)-s*t(0)| <= s\u00b2/(2*R)",
+  "best": {
+    "arclength": 2.450000000000001,
+    "straight_reference": [
+      -10.74802307403552,
+      -3.111269837220809,
+      0.0
+    ],
+    "covered_ball_radius": 0.8987301627791908,
+    "maximum_position_deviation": 0.8575000000000007,
+    "infeasibility_margin": 0.041230162779190116
+  },
+  "status": "proven local carrier collision under stated curvature bound",
+  "annular_carrier_certificate": {
+    "inner_radius": 2.53,
+    "outer_radius": 3.56,
+    "half_thickness": 0.76,
+    "max_ball_to_annular_core_distance": 0.40876983722080906,
+    "sampling_lipschitz_bound": 2.693915700453248e-05,
+    "liner_radius": 0.45,
+    "positive_coverage_margin": 0.04120322362218642,
+    "statement": "Guaranteed solid annular core from carrier ring3.75/2.53 radii,1.9thickness,.19fillets; .45 dilation covers every reachable centerline position at s2.45.",
+    "core_outside_actual_carrier_volume_mm3": 0
+  }
+}

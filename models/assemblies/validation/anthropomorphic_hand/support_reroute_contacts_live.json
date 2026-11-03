@@ -1,0 +1,127 @@
+{
+  "scope": "Diagnostic copy of current live native delta rows; not a complete gate.",
+  "rows": [
+    {
+      "sample": "flat_open",
+      "pose": {},
+      "collisions": [
+        {
+          "a": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "intersection_mm3": 0.01171447026256043
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_cap",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.00893120780542664
+        },
+        {
+          "a": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.09689243373446343
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_shared_structural",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.6971281852911247
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_M0p6_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.004283416216329853
+        }
+      ],
+      "partial": true
+    },
+    {
+      "sample": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "collisions": [
+        {
+          "a": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "intersection_mm3": 0.01171447026256043
+        }
+      ],
+      "partial": true
+    },
+    {
+      "sample": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "collisions": [
+        {
+          "a": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "intersection_mm3": 0.01171447026256043
+        }
+      ],
+      "partial": true
+    },
+    {
+      "sample": "wrist_abduction_-20",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "collisions": [
+        {
+          "a": "thumb_cmc_fixed_flex_shared_structural",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.6971281846228782
+        },
+        {
+          "a": "thumb_wrist_splice_outlet_comb_liner_-1_M0p6_screw",
+          "b": "thumb_radial_shared_guide_bank_structural",
+          "intersection_mm3": 0.01171447026255941
+        },
+        {
+          "a": "thumb_cmc_parent_inlet_comb_structural_jaw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.09689243281648896
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_cap",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.008931207799504995
+        },
+        {
+          "a": "thumb_cmc_fixed_flex_-1_host_M0p6_screw",
+          "b": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+          "intersection_mm3": 0.004283416216326516
+        }
+      ],
+      "partial": true
+    }
+  ]
+}

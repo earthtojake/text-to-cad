@@ -1,0 +1,80 @@
+{
+  "scope": "Compare repaired bridge material and datums against the native prior export.\n\nBoth directed native Boolean differences must be empty. This is a geometry\nequivalence check; strict self-intersection validation is a separate gate.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingertip_bridge_equivalence.py": "cd9bd026a78a15579057f2398acfd45d89467ed800684f22fb73afe53295cc71",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_bridge_repair_review.step": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/phalanx_r5_boolean.py": "fb3ba6f83751543d7afd0ac9b40b3a7a6d43caefe9103e9acce8b7f444cb715c"
+  },
+  "rows": [
+    {
+      "body": "index_fingertip_conformal_bridge",
+      "old_volume_mm3": 38.25623692014777,
+      "new_volume_mm3": 38.250761080333696,
+      "old_minus_new_solids": 0,
+      "new_minus_old_solids": 0,
+      "old_minus_new_faces": 0,
+      "new_minus_old_faces": 0,
+      "old_minus_new_mm3": 0,
+      "new_minus_old_mm3": 0,
+      "maximum_bounds_error_mm": 7.970299975568196e-10,
+      "pass_": true
+    },
+    {
+      "body": "little_fingertip_conformal_bridge",
+      "old_volume_mm3": 29.344707516355857,
+      "new_volume_mm3": 29.317676497707758,
+      "old_minus_new_solids": 0,
+      "new_minus_old_solids": 0,
+      "old_minus_new_faces": 0,
+      "new_minus_old_faces": 0,
+      "old_minus_new_mm3": 0,
+      "new_minus_old_mm3": 0,
+      "maximum_bounds_error_mm": 1.1895025409103255e-08,
+      "pass_": true
+    },
+    {
+      "body": "middle_fingertip_conformal_bridge",
+      "old_volume_mm3": 38.256236920147806,
+      "new_volume_mm3": 38.25076108033372,
+      "old_minus_new_solids": 0,
+      "new_minus_old_solids": 0,
+      "old_minus_new_faces": 0,
+      "new_minus_old_faces": 0,
+      "old_minus_new_mm3": 0,
+      "new_minus_old_mm3": 0,
+      "maximum_bounds_error_mm": 7.083826858433895e-10,
+      "pass_": true
+    },
+    {
+      "body": "ring_fingertip_conformal_bridge",
+      "old_volume_mm3": 36.56252542874055,
+      "new_volume_mm3": 36.56215154403641,
+      "old_minus_new_solids": 0,
+      "new_minus_old_solids": 0,
+      "old_minus_new_faces": 0,
+      "new_minus_old_faces": 0,
+      "old_minus_new_mm3": 0,
+      "new_minus_old_mm3": 0,
+      "maximum_bounds_error_mm": 9.653035704104695e-09,
+      "pass_": true
+    },
+    {
+      "body": "thumb_fingertip_conformal_bridge",
+      "old_volume_mm3": 44.06688141604333,
+      "new_volume_mm3": 44.04259782299689,
+      "old_minus_new_solids": 0,
+      "new_minus_old_solids": 0,
+      "old_minus_new_faces": 0,
+      "new_minus_old_faces": 0,
+      "old_minus_new_mm3": 0,
+      "new_minus_old_mm3": 0,
+      "maximum_bounds_error_mm": 7.864286999392789e-11,
+      "pass_": true
+    }
+  ],
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

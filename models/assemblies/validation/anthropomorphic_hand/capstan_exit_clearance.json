@@ -1,0 +1,142 @@
+[
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": -15.707963267948966,
+    "group": "thumb_cmc_abduction_positive_capstan_lead",
+    "centerline_distance_mm": 0.30655687780880136,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": -15.707963267948966,
+    "group": "thumb_cmc_abduction_positive_exit_guide",
+    "centerline_distance_mm": 1.148503272931932,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": -2.1,
+    "group": "thumb_cmc_abduction_positive_capstan_lead",
+    "centerline_distance_mm": 0.3326661732682218,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": -2.1,
+    "group": "thumb_cmc_abduction_positive_exit_guide",
+    "centerline_distance_mm": 1.515365335441492,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 0.0,
+    "group": "thumb_cmc_abduction_positive_capstan_lead",
+    "centerline_distance_mm": 0.3329914737105937,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 0.0,
+    "group": "thumb_cmc_abduction_positive_exit_guide",
+    "centerline_distance_mm": 1.5190972549758825,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 1.2,
+    "group": "thumb_cmc_abduction_positive_capstan_lead",
+    "centerline_distance_mm": 0.33302717216843675,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 1.2,
+    "group": "thumb_cmc_abduction_positive_exit_guide",
+    "centerline_distance_mm": 1.5188874724221215,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 15.707963267948966,
+    "group": "thumb_cmc_abduction_positive_capstan_lead",
+    "centerline_distance_mm": 0.3329913445092523,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_positive",
+    "rotation_rad": 15.707963267948966,
+    "group": "thumb_cmc_abduction_positive_exit_guide",
+    "centerline_distance_mm": 1.2065506285853984,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": -15.707963267948966,
+    "group": "thumb_cmc_abduction_negative_capstan_lead",
+    "centerline_distance_mm": 0.30655687780880087,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": -15.707963267948966,
+    "group": "thumb_cmc_abduction_negative_exit_guide",
+    "centerline_distance_mm": 1.148503272931929,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": -2.1,
+    "group": "thumb_cmc_abduction_negative_capstan_lead",
+    "centerline_distance_mm": 0.3326661732682218,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": -2.1,
+    "group": "thumb_cmc_abduction_negative_exit_guide",
+    "centerline_distance_mm": 1.515365335441492,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 0.0,
+    "group": "thumb_cmc_abduction_negative_capstan_lead",
+    "centerline_distance_mm": 0.3329914737105937,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 0.0,
+    "group": "thumb_cmc_abduction_negative_exit_guide",
+    "centerline_distance_mm": 1.5190972549758799,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 1.2,
+    "group": "thumb_cmc_abduction_negative_capstan_lead",
+    "centerline_distance_mm": 0.33302717216843675,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 1.2,
+    "group": "thumb_cmc_abduction_negative_exit_guide",
+    "centerline_distance_mm": 1.5188874724221157,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 15.707963267948966,
+    "group": "thumb_cmc_abduction_negative_capstan_lead",
+    "centerline_distance_mm": 0.3329913445092518,
+    "clear": true
+  },
+  {
+    "tendon": "thumb_cmc_abduction_negative",
+    "rotation_rad": 15.707963267948966,
+    "group": "thumb_cmc_abduction_negative_exit_guide",
+    "centerline_distance_mm": 1.2065506285853833,
+    "clear": true
+  }
+]

@@ -1,0 +1,62 @@
+{
+  "protected_bands": [
+    {
+      "y_min": -4,
+      "y_max": 4.3,
+      "new_minus_old": {
+        "done": true,
+        "solids": 0,
+        "volume": 0
+      },
+      "old_minus_new": {
+        "done": true,
+        "solids": 8,
+        "volume": 0.0007783488506712203
+      }
+    },
+    {
+      "y_min": 11.5,
+      "y_max": 13.0,
+      "new_minus_old": {
+        "done": true,
+        "solids": 0,
+        "volume": 0
+      },
+      "old_minus_new": {
+        "done": true,
+        "solids": 2,
+        "volume": 1.4777143459593703e-05
+      }
+    },
+    {
+      "y_min": 29.25,
+      "y_max": 33.5,
+      "new_minus_old": {
+        "done": true,
+        "solids": 0,
+        "volume": 0
+      },
+      "old_minus_new": {
+        "done": true,
+        "solids": 0,
+        "volume": 0
+      }
+    },
+    {
+      "y_min": 37.25,
+      "y_max": 49.0,
+      "new_minus_old": {
+        "done": true,
+        "solids": 0,
+        "volume": 0
+      },
+      "old_minus_new": {
+        "done": true,
+        "solids": 4,
+        "volume": 0.0005644228396739625
+      }
+    }
+  ],
+  "complete": true,
+  "pass": false
+}

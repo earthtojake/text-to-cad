@@ -1,0 +1,2 @@
+palm_cup unattached ['little_cup_child_bank_structural_1', 'little_cup_child_bank_row_01_upper_jaw', 'little_cup_child_bank_row_01_right_M0p6_screw'] host_interferences []
+wrist_flexion unattached ['little_cup_fixed_bank_-1_structural_3', 'little_cup_fixed_bank_row_03_liner_cap', 'little_cup_fixed_bank_row_03_liner_+1_M0p6_screw'] host_interferences [{'body': 'little_cup_fixed_bank_row_04_liner_+1_M0p6_screw', 'host': 'palm_metacarpal_truss', 'volume_mm3': 0.0017162238604610516}]

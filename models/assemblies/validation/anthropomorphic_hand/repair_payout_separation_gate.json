@@ -1,0 +1,2134 @@
+{
+  "scope": "Native separation of the seven final repairs from rotating actuators.\n\nThis complements the global physical-payout rigid audit, whose input still\ncontains the previous thumb arm, bank and bridges. Conservative native boxes\nprove these distant body pairs disjoint at all 225 authored static poses.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/hand_native_body_frames.json": "e271a0db0204688720137722a7d4402a85e0dc39ab20dfe91985973f589aac70",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_hand_registry.py": "7a52403700e6691cb6bcd8244e1cb74f9224d093f6c3b2db71caccfbbd5a71d7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_roundtrip.json": "97c3d7a5e5ea62cd5edc98d5b57c68751b2ec9d05b4c2afa9038c534ec49905d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_repair_frames.json": "6aba61dbcb3acf563e3c7af5b17c6d7edeb36eede4d5e30a5a62405f4f4eca98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingernail_export_roundtrip.json": "e0c6714b728866ea6bbeb100875d57d3c946442697b9c3c44b5b591bbd9ee8f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingernail_export_repair_frames.json": "9fae8ef7b3de487692294a77aaf4ad699a74b954159f7b2b78fae788715210a2",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_clearance_relief_build.json": "578fd85ae4d63c2ce4bc52ddbadc841437f9ccf6ddedb3775d6cb9189df171bc",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0.step": "141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d.step": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01.step": "5197d6f9ee6017416b44f41a7bcb26b612cb5e36dc7aa23b05be0c19f6916b01",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7.step": "5b0c28e93e903292cc15b72c51576871f6b47a43962cbff3e68140c6477fdeb7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingernail_export_repair_review.step": "6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65.step": "66d67434bc744fdf80eddec71a6776a9dceeacb721915dbe9d448dd548a93c65",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803.step": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173.step": "7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72.step": "7e07b6a808078bf7c6f3343da565b7164a75a9e64a2106d9a4e9f1146cd42b72",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d.step": "815e69d771c985320c4814d18db5bcbf33db645e3a362aef652fb86f877dd99d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd.step": "851b66ea1dbcce1eb5d7a664a8a3e6130168d3fe606f35f8b4d1ea510dee18dd",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525.step": "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0.step": "ac473c6bb5232953145594bb57164eac1a5ded80024f391645e5d7335861faf0",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99.step": "b5ef1d4e1e4059a68223a49775810006c6311196064722e75830fdd0d41f8d99",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572.step": "fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_reaction_arm_clearance_r6.step": "9857785fe29900c52ef2fe59398f26c14145577c6601f419156981b6b0c439d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_bridge_repair_review.step": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/generate_payout_static_packets.py": "bef85ba0e75c13075c0a8c0e268f4e2bc4493b5ee8f9028ffbc8070821e5288f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_static_route_packet_manifest.json": "723c68d60117cab8fee8f4dce74455e455b6d469cb996f0afae2d09474e7629e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/actuator_payout.py": "232611f2b37510eb9a5684fadc3ae411632a28c66f9a96d0327faba833501466",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/forearm_routing.py": "ff8e20b3463c9b85340545d54db3a1131907342799e1ccdb141edfe1b86a2819",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/capstan_path.py": "f6462bb55f711b974696fdd8548ce0c4a32ee35a48495faa0b8aa0ad6dd49b4a",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/layout.py": "02673623c92ef1b6e6cd208e49a5f79d278408f33b558c6b2f5955d1e817e0af",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/path_analysis.py": "c4ee07eb874cda5208620fd4492afaf13e6e2a01485892fb140b5784ad08fcd6",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_repair_payout_separation.py": "1166a2c9fb207882cf5785ba446b3bb126e706ade7e5ccbf4a150052b3bb7d86",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/payout_static_route_packet_manifest.json": "1a6559791f769343cfc363bc1723571ae99ec3be26503fcd38453849d23249ed",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_full_route_bodies.py": "6a1c240eeaba6fb5496d1987f52a02e6fc3b90c081f96c57ab0d17cd7f00f6ef",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/assembly.py": "9e8d9a4b8997d25ee811b21de285a714a42d43d665140c0ddc63d9a755a7fe6e",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/actuator_kinematics.py": "f972bedfb11fe8e56a3f0519a0e55eee0a468252e6b565d9ec8cdf5986c1c83c"
+  },
+  "rows": [
+    {
+      "sample": "flat_open",
+      "pose": {},
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "pair_count": 4116,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "pair_count": 1764,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_-20",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "pair_count": 4704,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_-10",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "pair_count": 4704,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_0",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "pair_count": 4704,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_abduction_20",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "pair_count": 4704,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-45",
+      "pose": {
+        "wrist_flexion": -45.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-35",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-25",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-15",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_-5",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_0",
+      "pose": {
+        "wrist_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_5",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_15",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_25",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_35",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_45",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_55",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "wrist_flexion_60",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "pair_count": 4508,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_0",
+      "pose": {
+        "palm_cup": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_10",
+      "pose": {
+        "palm_cup": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_20",
+      "pose": {
+        "palm_cup": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_-20",
+      "pose": {
+        "index_mcp_abduction": -20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_-10",
+      "pose": {
+        "index_mcp_abduction": -10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_0",
+      "pose": {
+        "index_mcp_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_10",
+      "pose": {
+        "index_mcp_abduction": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_abduction_20",
+      "pose": {
+        "index_mcp_abduction": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_-15",
+      "pose": {
+        "index_mcp_flexion": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_-5",
+      "pose": {
+        "index_mcp_flexion": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_0",
+      "pose": {
+        "index_mcp_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_5",
+      "pose": {
+        "index_mcp_flexion": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_15",
+      "pose": {
+        "index_mcp_flexion": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_25",
+      "pose": {
+        "index_mcp_flexion": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_35",
+      "pose": {
+        "index_mcp_flexion": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_45",
+      "pose": {
+        "index_mcp_flexion": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_55",
+      "pose": {
+        "index_mcp_flexion": 55.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_65",
+      "pose": {
+        "index_mcp_flexion": 65.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_75",
+      "pose": {
+        "index_mcp_flexion": 75.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_85",
+      "pose": {
+        "index_mcp_flexion": 85.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_mcp_flexion_90",
+      "pose": {
+        "index_mcp_flexion": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_0",
+      "pose": {
+        "index_pip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_10",
+      "pose": {
+        "index_pip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_20",
+      "pose": {
+        "index_pip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_30",
+      "pose": {
+        "index_pip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_40",
+      "pose": {
+        "index_pip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_50",
+      "pose": {
+        "index_pip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_60",
+      "pose": {
+        "index_pip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_70",
+      "pose": {
+        "index_pip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_80",
+      "pose": {
+        "index_pip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_90",
+      "pose": {
+        "index_pip": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_100",
+      "pose": {
+        "index_pip": 100.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_pip_110",
+      "pose": {
+        "index_pip": 110.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_0",
+      "pose": {
+        "index_dip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_10",
+      "pose": {
+        "index_dip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_20",
+      "pose": {
+        "index_dip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_30",
+      "pose": {
+        "index_dip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_40",
+      "pose": {
+        "index_dip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_50",
+      "pose": {
+        "index_dip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_60",
+      "pose": {
+        "index_dip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_70",
+      "pose": {
+        "index_dip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "index_dip_80",
+      "pose": {
+        "index_dip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_-5",
+      "pose": {
+        "middle_mcp_abduction": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_0",
+      "pose": {
+        "middle_mcp_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_5",
+      "pose": {
+        "middle_mcp_abduction": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_abduction_15",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_-15",
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_0",
+      "pose": {
+        "middle_mcp_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_15",
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_35",
+      "pose": {
+        "middle_mcp_flexion": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_45",
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_55",
+      "pose": {
+        "middle_mcp_flexion": 55.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_75",
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_mcp_flexion_90",
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_10",
+      "pose": {
+        "middle_pip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_20",
+      "pose": {
+        "middle_pip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_30",
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_50",
+      "pose": {
+        "middle_pip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_70",
+      "pose": {
+        "middle_pip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_90",
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_100",
+      "pose": {
+        "middle_pip": 100.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_pip_110",
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_10",
+      "pose": {
+        "middle_dip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_30",
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_50",
+      "pose": {
+        "middle_dip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_60",
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_70",
+      "pose": {
+        "middle_dip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_-15",
+      "pose": {
+        "ring_mcp_abduction": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_-5",
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_0",
+      "pose": {
+        "ring_mcp_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_5",
+      "pose": {
+        "ring_mcp_abduction": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_abduction_15",
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_-15",
+      "pose": {
+        "ring_mcp_flexion": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_-5",
+      "pose": {
+        "ring_mcp_flexion": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_0",
+      "pose": {
+        "ring_mcp_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_5",
+      "pose": {
+        "ring_mcp_flexion": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_15",
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_25",
+      "pose": {
+        "ring_mcp_flexion": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_35",
+      "pose": {
+        "ring_mcp_flexion": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_45",
+      "pose": {
+        "ring_mcp_flexion": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_55",
+      "pose": {
+        "ring_mcp_flexion": 55.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_65",
+      "pose": {
+        "ring_mcp_flexion": 65.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_75",
+      "pose": {
+        "ring_mcp_flexion": 75.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_85",
+      "pose": {
+        "ring_mcp_flexion": 85.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_mcp_flexion_90",
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_0",
+      "pose": {
+        "ring_pip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_10",
+      "pose": {
+        "ring_pip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_20",
+      "pose": {
+        "ring_pip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_30",
+      "pose": {
+        "ring_pip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_40",
+      "pose": {
+        "ring_pip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_50",
+      "pose": {
+        "ring_pip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_60",
+      "pose": {
+        "ring_pip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_70",
+      "pose": {
+        "ring_pip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_80",
+      "pose": {
+        "ring_pip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_90",
+      "pose": {
+        "ring_pip": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_100",
+      "pose": {
+        "ring_pip": 100.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_pip_110",
+      "pose": {
+        "ring_pip": 110.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_0",
+      "pose": {
+        "ring_dip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_10",
+      "pose": {
+        "ring_dip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_20",
+      "pose": {
+        "ring_dip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_30",
+      "pose": {
+        "ring_dip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_40",
+      "pose": {
+        "ring_dip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_50",
+      "pose": {
+        "ring_dip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_60",
+      "pose": {
+        "ring_dip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_70",
+      "pose": {
+        "ring_dip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "ring_dip_80",
+      "pose": {
+        "ring_dip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-25",
+      "pose": {
+        "little_mcp_abduction": -25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-15",
+      "pose": {
+        "little_mcp_abduction": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_0",
+      "pose": {
+        "little_mcp_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_5",
+      "pose": {
+        "little_mcp_abduction": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_15",
+      "pose": {
+        "little_mcp_abduction": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_abduction_25",
+      "pose": {
+        "little_mcp_abduction": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_-15",
+      "pose": {
+        "little_mcp_flexion": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_-5",
+      "pose": {
+        "little_mcp_flexion": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_0",
+      "pose": {
+        "little_mcp_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_15",
+      "pose": {
+        "little_mcp_flexion": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_25",
+      "pose": {
+        "little_mcp_flexion": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_35",
+      "pose": {
+        "little_mcp_flexion": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_45",
+      "pose": {
+        "little_mcp_flexion": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_55",
+      "pose": {
+        "little_mcp_flexion": 55.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_65",
+      "pose": {
+        "little_mcp_flexion": 65.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "pose": {
+        "little_mcp_flexion": 75.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "pose": {
+        "little_mcp_flexion": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_0",
+      "pose": {
+        "little_pip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_10",
+      "pose": {
+        "little_pip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_20",
+      "pose": {
+        "little_pip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_30",
+      "pose": {
+        "little_pip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_40",
+      "pose": {
+        "little_pip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_50",
+      "pose": {
+        "little_pip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_70",
+      "pose": {
+        "little_pip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_80",
+      "pose": {
+        "little_pip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_90",
+      "pose": {
+        "little_pip": 90.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_100",
+      "pose": {
+        "little_pip": 100.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_pip_110",
+      "pose": {
+        "little_pip": 110.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_0",
+      "pose": {
+        "little_dip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_10",
+      "pose": {
+        "little_dip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_30",
+      "pose": {
+        "little_dip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_40",
+      "pose": {
+        "little_dip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_50",
+      "pose": {
+        "little_dip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_60",
+      "pose": {
+        "little_dip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_70",
+      "pose": {
+        "little_dip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "little_dip_80",
+      "pose": {
+        "little_dip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_0",
+      "pose": {
+        "thumb_cmc_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_5",
+      "pose": {
+        "thumb_cmc_abduction": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_15",
+      "pose": {
+        "thumb_cmc_abduction": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_25",
+      "pose": {
+        "thumb_cmc_abduction": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_-15",
+      "pose": {
+        "thumb_cmc_flexion": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_-5",
+      "pose": {
+        "thumb_cmc_flexion": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_0",
+      "pose": {
+        "thumb_cmc_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_5",
+      "pose": {
+        "thumb_cmc_flexion": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_15",
+      "pose": {
+        "thumb_cmc_flexion": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_25",
+      "pose": {
+        "thumb_cmc_flexion": 25.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_35",
+      "pose": {
+        "thumb_cmc_flexion": 35.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_45",
+      "pose": {
+        "thumb_cmc_flexion": 45.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_cmc_flexion_65",
+      "pose": {
+        "thumb_cmc_flexion": 65.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_-15",
+      "pose": {
+        "thumb_mcp_abduction": -15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_-5",
+      "pose": {
+        "thumb_mcp_abduction": -5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_0",
+      "pose": {
+        "thumb_mcp_abduction": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_5",
+      "pose": {
+        "thumb_mcp_abduction": 5.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_abduction_15",
+      "pose": {
+        "thumb_mcp_abduction": 15.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_0",
+      "pose": {
+        "thumb_mcp_flexion": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_10",
+      "pose": {
+        "thumb_mcp_flexion": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_20",
+      "pose": {
+        "thumb_mcp_flexion": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_30",
+      "pose": {
+        "thumb_mcp_flexion": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_40",
+      "pose": {
+        "thumb_mcp_flexion": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_50",
+      "pose": {
+        "thumb_mcp_flexion": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_60",
+      "pose": {
+        "thumb_mcp_flexion": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_mcp_flexion_70",
+      "pose": {
+        "thumb_mcp_flexion": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_0",
+      "pose": {
+        "thumb_ip": 0.0
+      },
+      "pair_count": 0,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_10",
+      "pose": {
+        "thumb_ip": 10.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_20",
+      "pose": {
+        "thumb_ip": 20.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_30",
+      "pose": {
+        "thumb_ip": 30.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_40",
+      "pose": {
+        "thumb_ip": 40.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_50",
+      "pose": {
+        "thumb_ip": 50.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_60",
+      "pose": {
+        "thumb_ip": 60.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_70",
+      "pose": {
+        "thumb_ip": 70.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_80",
+      "pose": {
+        "thumb_ip": 80.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    },
+    {
+      "sample": "thumb_ip_85",
+      "pose": {
+        "thumb_ip": 85.0
+      },
+      "pair_count": 196,
+      "unresolved_native_pairs": [],
+      "pass_": true
+    }
+  ],
+  "sample_count": 225,
+  "body_revisions": {
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1": {
+      "step_sha256": "9857785fe29900c52ef2fe59398f26c14145577c6601f419156981b6b0c439d9",
+      "frame": "thumb_cmc_abduction"
+    },
+    "thumb_radial_shared_guide_bank_structural": {
+      "step_sha256": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+      "frame": "wrist_flexion"
+    },
+    "thumb_fingertip_conformal_bridge": {
+      "step_sha256": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+      "frame": "thumb_ip"
+    },
+    "little_fingertip_conformal_bridge": {
+      "step_sha256": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+      "frame": "little_dip"
+    },
+    "ring_fingertip_conformal_bridge": {
+      "step_sha256": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+      "frame": "ring_dip"
+    },
+    "middle_fingertip_conformal_bridge": {
+      "step_sha256": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+      "frame": "middle_dip"
+    },
+    "index_fingertip_conformal_bridge": {
+      "step_sha256": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+      "frame": "index_dip"
+    }
+  },
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

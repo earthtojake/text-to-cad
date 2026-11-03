@@ -1,0 +1,404 @@
+{
+  "scope": "All60 native bridge/mount pairs, plus five retained pad bond contacts.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_bridge_repair_review.step": "bee7c1738bbbfee3d50ebb53458c99d2554cb5baa7447bf5becdcfe1503e9fd5",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingernail_export_repair_review.step": "6035f54a390f367a3b1c66bc75cdf3f779c9be0c2af526668dd0a22a7c58195f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_review.step": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_fingertip_bridge_fit.py": "9feec0a4e3ff1151c18ba00d4edee69ef5209a74c56a4cd59545f5da743363c7",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_native_reported_contacts.py": "7e4f2aadf5fcefaad08f726adad2cb48297124ad019828402e0d59d8dd1d28d9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/phalanx_r5_boolean.py": "fb3ba6f83751543d7afd0ac9b40b3a7a6d43caefe9103e9acce8b7f444cb715c"
+  },
+  "pairs": [
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingertip_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingertip_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingertip_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingernail_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_fingernail_conformal_saddle",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_dorsal_fingernail",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "index_fingertip_conformal_bridge",
+      "other": "index_distal_frame",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingertip_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingertip_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingertip_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingertip_silicone_pad",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingernail_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_fingernail_conformal_saddle",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_dorsal_fingernail",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "little_fingertip_conformal_bridge",
+      "other": "little_distal_frame",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingertip_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingertip_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingertip_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingertip_silicone_pad",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingernail_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_fingernail_conformal_saddle",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_dorsal_fingernail",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "middle_fingertip_conformal_bridge",
+      "other": "middle_distal_frame",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingertip_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingertip_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingertip_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingertip_silicone_pad",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingernail_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_fingernail_conformal_saddle",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_dorsal_fingernail",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "ring_fingertip_conformal_bridge",
+      "other": "ring_distal_frame",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingertip_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingertip_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingernail_ulnar_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingernail_radial_M0p8_captive_insert",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingernail_ulnar_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_fingernail_conformal_saddle",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_dorsal_fingernail",
+      "intersection_mm3": 0,
+      "pass_": true
+    },
+    {
+      "bridge": "thumb_fingertip_conformal_bridge",
+      "other": "thumb_distal_frame",
+      "intersection_mm3": 0,
+      "pass_": true
+    }
+  ],
+  "bond_contacts": [
+    {
+      "finger": "index",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "finger": "little",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "finger": "middle",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "finger": "ring",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "finger": "thumb",
+      "gap_mm": 0.0,
+      "pass_": true
+    }
+  ],
+  "complete": true,
+  "changed_during_audit": [],
+  "pass": true
+}

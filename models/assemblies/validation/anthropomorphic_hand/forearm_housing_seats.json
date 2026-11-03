@@ -1,0 +1,1320 @@
+{
+  "seats": [
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "approach_overlap": 0.00259697082181582
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "approach_overlap": 0.0025969705356574703
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "approach_overlap": 0.0839999932592825
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "approach_overlap": 0.0025969708218158164
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "approach_overlap": 0.0025969705356575176
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "approach_overlap": 0.08399999325973109
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633327747
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_2",
+      "approach_overlap": 0.000927250963363868
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633324963
+    },
+    {
+      "body": "left_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633638646
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633328629
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633638669
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633327498
+    },
+    {
+      "body": "left_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633638633
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "approach_overlap": 0.002596970821822482
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "approach_overlap": 0.0025969705356523524
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "approach_overlap": 0.08399843086647618
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "approach_overlap": 0.0025969708218224487
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "approach_overlap": 0.0025969705356523203
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "approach_overlap": 0.08399843086647618
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633148952
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_1_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633589806
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633146162
+    },
+    {
+      "body": "right_forearm_edge_1_tie_anchor_2_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633589767
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633149811
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_1_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633589806
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_1",
+      "approach_overlap": 0.0009272510633148716
+    },
+    {
+      "body": "right_forearm_edge_2_tie_anchor_2_M1p2_socket_screw_2",
+      "approach_overlap": 0.0009272509633589765
+    }
+  ],
+  "removal": [
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.05,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.1,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.15000000000000002,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.2,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.25,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.30000000000000004,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.35000000000000003,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.4,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.45,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.5,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.55,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.6000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.65,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.7000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.75,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.8,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.8500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.9,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.9500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_1_removable_cap",
+      "distance": 1.0,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.05,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.1,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.15000000000000002,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.2,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.25,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.30000000000000004,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.35000000000000003,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.4,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.45,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.5,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.55,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.6000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.65,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.7000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.75,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.8,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.8500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.9,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.9500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "left_forearm_rail_clamp_2_removable_cap",
+      "distance": 1.0,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_1",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_M1p6_socket_screw_2",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.05,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.1,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.15000000000000002,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.2,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.25,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.30000000000000004,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.35000000000000003,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.4,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.45,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.5,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.55,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.6000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.65,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.7000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.75,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.8,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.8500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.9,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 0.9500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_1_removable_cap",
+      "distance": 1.0,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_1",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.05,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.1,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.15000000000000002,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.2,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.25,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.30000000000000004,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.35000000000000003,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.4,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.45,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.5,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.55,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.6000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.65,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.7000000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.75,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.8,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.8500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.9,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 0.9500000000000001,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_M1p6_socket_screw_2",
+      "distance": 1.0,
+      "overlap": 0.0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.05,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.1,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.15000000000000002,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.2,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.25,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.30000000000000004,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.35000000000000003,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.4,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.45,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.5,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.55,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.6000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.65,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.7000000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.75,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.8,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.8500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.9,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 0.9500000000000001,
+      "overlap": 0
+    },
+    {
+      "body": "right_forearm_rail_clamp_2_removable_cap",
+      "distance": 1.0,
+      "overlap": 0
+    }
+  ],
+  "failures": [],
+  "ok": true
+}

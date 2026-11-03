@@ -1,0 +1,54 @@
+{
+  "rows": [
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_1",
+      "intersection_mm3": 0,
+      "distance_mm": 0.0
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_2",
+      "intersection_mm3": 0,
+      "distance_mm": 4.095481061088614
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_3",
+      "intersection_mm3": 0,
+      "distance_mm": 5.773159728050814e-15
+    },
+    {
+      "name": "palm_cup_shared_drive_mouth_structural_4",
+      "intersection_mm3": 0,
+      "distance_mm": 0.0
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_cap",
+      "intersection_mm3": 0,
+      "distance_mm": 15.641459925145323
+    },
+    {
+      "name": "palm_cup_drive_mouth_-1_liner_+1_M0p6_screw",
+      "intersection_mm3": 0,
+      "distance_mm": 16.033662764862573
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_cap",
+      "intersection_mm3": 0,
+      "distance_mm": 12.721901280134515
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_cap",
+      "intersection_mm3": 0,
+      "distance_mm": 0.21002472250173554
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_host_M0p6_screw",
+      "intersection_mm3": 0,
+      "distance_mm": 0.11915195084513606
+    },
+    {
+      "name": "palm_cup_drive_mouth_1_liner_+1_M0p6_screw",
+      "intersection_mm3": 0,
+      "distance_mm": 13.12262218152818
+    }
+  ]
+}

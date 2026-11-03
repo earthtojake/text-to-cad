@@ -1,0 +1,17 @@
+index mcp_outlet unattached [] interference []
+index pip_inlet unattached [] interference []
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 27, in <module>
+    d=0.025 if point_contact(p,allp[k]) or point_contact(allp[k],p) else 1.
+               ~~~~~~~~~~~~~^^^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 26, in point_contact
+    return any(any(s.is_inside(v.center(),tolerance=.025) for s in solids) for v in a.vertices())
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 26, in <genexpr>
+    return any(any(s.is_inside(v.center(),tolerance=.025) for s in solids) for v in a.vertices())
+               ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_phalanx_guide_attachments.py", line 26, in <genexpr>
+    return any(any(s.is_inside(v.center(),tolerance=.025) for s in solids) for v in a.vertices())
+                   ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/three_d.py", line 546, in is_inside
+    solid_classifier = BRepClass3d_SolidClassifier(self.wrapped)
+KeyboardInterrupt

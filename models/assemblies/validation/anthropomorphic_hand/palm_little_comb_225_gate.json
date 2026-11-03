@@ -1,0 +1,92 @@
+{
+  "complete": true,
+  "sample_count": 225,
+  "unique_body_poses": 240,
+  "rows": [
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+      "volume": 0.11326044576197895,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+      "volume": 0.11318642669926783,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0.11526044830156236,
+      "gap": 0.0
+    },
+    {
+      "sample": "full_fist_candidate",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0.02894714087676491,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0.0058084320197506565,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_75",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0.005808432079823371,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+      "volume": 0.053972043965165306,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+      "volume": 0.015134240922161485,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0.09740230938734931,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_85",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0.09505390821985558,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_1",
+      "volume": 0.11062993258827745,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "part": "little_mcp_outlet_comb_structural_lower_jaw_1_lateral_2",
+      "volume": 0.11113864901657321,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_1",
+      "volume": 0.11522709501789552,
+      "gap": 0.0
+    },
+    {
+      "sample": "little_mcp_flexion_90",
+      "part": "little_mcp_outlet_comb_scalloped_upper_jaw_lateral_2",
+      "volume": 0.11462093277982953,
+      "gap": 0.0
+    }
+  ],
+  "pass": false
+}

@@ -1,0 +1,2285 @@
+{
+  "scope": "224 immutable original samples plus the independently generated fist candidate. No joint ranges changed.",
+  "baseline_manifest_sha256": "9ef364376d40701e3e2530f70162da82782c09d84fe6e9830f1ef003a4d6d04a",
+  "sample_count": 225,
+  "complete": true,
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/44136fa355b3678a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d395771e9a6f07966f9acdf304030a4ccb2b8b44987cd43649c090d3db938619",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "anatomical_fist",
+      "pose": {
+        "index_mcp_abduction": -20.0,
+        "index_mcp_flexion": 90,
+        "index_pip": 90,
+        "index_dip": 60,
+        "middle_mcp_abduction": -5.0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 90,
+        "middle_dip": 60,
+        "ring_mcp_abduction": 5.0,
+        "ring_mcp_flexion": 90,
+        "ring_pip": 90,
+        "ring_dip": 60,
+        "little_mcp_abduction": 25.0,
+        "little_mcp_flexion": 90,
+        "little_pip": 90,
+        "little_dip": 60,
+        "thumb_cmc_abduction": -15.0,
+        "thumb_cmc_flexion": 45.0,
+        "thumb_mcp_abduction": -10.0,
+        "thumb_mcp_flexion": 55.0,
+        "thumb_ip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/anatomical_fist_d6015e294b9a10b3.json.gz",
+      "file_sha256": "f911a87fa4119deac8ec71b72748b85233383c084bacf4730cff17cc0873cc38",
+      "source_sha256": "9833938caf52724d26212d4a7e08d5062f534de36f6a07f5f0c8d6d54b42b14a",
+      "tendon_count": 48
+    },
+    {
+      "label": "precision_pinch_candidate",
+      "pose": {
+        "index_mcp_abduction": -17.40900758070954,
+        "index_mcp_flexion": 74.68469201675903,
+        "index_pip": 57.94830222639836,
+        "index_dip": 21.90864380435607,
+        "thumb_mcp_abduction": -11.484462068625563,
+        "thumb_mcp_flexion": 7.697863149475799,
+        "thumb_ip": 31.564732218590134,
+        "thumb_cmc_abduction": -21.046825109125002,
+        "thumb_cmc_flexion": 37.474289981694746
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ed190441e7d3b567.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "469153c2544ecaf26b63a86370bf883e9f87ef18ea8dca9506882d0a3a12e743",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_abduction_-20",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9544c48cb7a58c34.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bdbe1a00515036c614537aa0a57ccd19d477d0d5377f3fcaeaa1db8f9e74ef0a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_abduction_-10",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e1e65a6e99a4ea8f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a16b688caeb8e650adca766c75bfc094bd0fb6508b2f7d23899044c501db55da",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_abduction_0",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9291120846bd996b.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0abe327ef196ba5f59ce3c5e5f2f75808b6a0405310168216d6c39c0e4857367",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_abduction_10",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/87d9feb4dfcdf165.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "4101db24eb64e66919048340e336b36d1f338b4f460a43c17e6fe0dc1fd63844",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_abduction_20",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/16f1efb6cd61a9bd.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "4f56197fafa4bd3241ece0696517ca69395502c333ef7ec26e54473955409025",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_-45",
+      "pose": {
+        "wrist_flexion": -45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/203bd310a4d7504d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "483aea0dd505f8da79d79a67646e1c633e914513403db89b511a94aced1a0d2e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_-35",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/764a56a9c03fe16d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a854b1387c0cdcbdca2b1ec2cf6f7cdd715b840723414fbd47fcadd590eb252f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_-25",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/057148c0a3f466a3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "26910c725b6b130ee1cc3da6514f8379019ad5e381611a3e0d6d4a88369ecb0c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_-15",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/981952d458f5cfb6.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "eda0a105332446ac416af3236e93ac7730af2a31fcc819fe6e984f8c3fa59d0c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_-5",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e2125ac5d5cc4548.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c4da3e63352d9dbc6fcd5e86764dc0492615b852995fddda607e79ef92f23c2d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_0",
+      "pose": {
+        "wrist_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a961a97a7b6d21b9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "dddeedacb21ae52531e8da131c5ee6184548d71d4634f14ed2d2e7e5f226989d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_5",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/bcdde587231988a1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "929b355eef5210ec69ede035b79416b4c15393dff7158abb872aac2749a3b634",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_15",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5687668b254e8f19.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "085e9403ae69590d392d9b139542071c77292684a8f4e4b8752fc9aefb016315",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_25",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/23344855880d11cb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c535b5546069d3032f282f29e7be4e01455401c396de12c75587a8efa9eaa63e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_35",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/4e38ced0edfe93a7.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "cc9524f82d34fc02a2450c0e65da994d0ae9bc5be326e66702ef7ec1e8e15793",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_45",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a182901307470b90.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c5c406237cde1e77e61ba45dee68bf635924e1bf03892b66cc4472895c166c7a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_55",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/783e37a8b9906623.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "11eab55e69a54816ad6e81d5ab3023ffb52ba4c64abac4fde51ec7f9911a5cc4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "wrist_flexion_60",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a75e2c9ab2dfe775.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f71fb47409e6cc6a228259207df63f89a53a8f315741170dba11e48ddc1b0a71",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "palm_cup_0",
+      "pose": {
+        "palm_cup": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e015c62555c75815.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8fc308194f0f62c6deaffe1ff44300ed6af41bb24d1e355baa30bbaabf6ce0d1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "palm_cup_10",
+      "pose": {
+        "palm_cup": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f987927ed2bec362.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "54e301fdcdf668c31d69307d7da5828b1852cbd00c8ae622b0697d2655694689",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "palm_cup_20",
+      "pose": {
+        "palm_cup": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5ba2d196c97b5173.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b093755e2abff107a6791d4a18662f3c600542ef520df1e454654de7d0ce5726",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "palm_cup_25",
+      "pose": {
+        "palm_cup": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6a0d6d61a98dd946.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ac755d834b81c5d9bb23e7ec3d694f67519959a31959f5c55266610f225639d2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_abduction_-20",
+      "pose": {
+        "index_mcp_abduction": -20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/383766d05cb94846.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "7fcea94b7569d7c16e6eb830c220d37c663ce3b1d2518485cef9e5cd659c0076",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_abduction_-10",
+      "pose": {
+        "index_mcp_abduction": -10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/69f36870aff4a062.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "29cbc168decdfac86a8acce8f74b4b323f58b6f04680707d89542aa681cdbc9f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_abduction_0",
+      "pose": {
+        "index_mcp_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6b408b15965fa220.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3f9fd635bedf94e12c28b0e555539d819872a9ac4a0d0be4ef373c69a41cb74a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_abduction_10",
+      "pose": {
+        "index_mcp_abduction": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ed31c09a39892220.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "99e8dd86114bef4500c6112cc32f8846a037a0ccdc549c4c2478183cb361b022",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_abduction_20",
+      "pose": {
+        "index_mcp_abduction": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9cf2b739886dfe37.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a91eda2b765f2c62a9facbaadc5b2ab34315c366576c5c57141485b791840e23",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_-15",
+      "pose": {
+        "index_mcp_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1c132359dd233998.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "042e035b9c8f25d7c1e35dc92c7b0aac7e46482ab5e07a088c6c4ce519be3083",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_-5",
+      "pose": {
+        "index_mcp_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/005354a60c4e93d8.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f67d26d284de987481738e29a79e9d87a22eedd206fece62d5ad86f43bf217a8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_0",
+      "pose": {
+        "index_mcp_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7e7765c34c832560.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b4555a06b3d907585686bc1c1e508bb65ea46f7cd5d7187250dc5ec9dde570f3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_5",
+      "pose": {
+        "index_mcp_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a39e2c41db0533f1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a2dada648bb07009d9f8b1b86d0ae14425537fbe1fd3984bef07407429761c0c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_15",
+      "pose": {
+        "index_mcp_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/61848c7be539dff3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a1fe90fa924eae81b8f7d84898b37180f4f14f0508cca62428e250bdbd1ce98c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_25",
+      "pose": {
+        "index_mcp_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ae0deb64d425a326.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fea9cb57a2687e14ba649a0697694eea0d0fa8c411f33e3732a77507f8823176",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_35",
+      "pose": {
+        "index_mcp_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/19875e2020521c36.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f4beb6c50ab71a3b7ac955d40c91bb12374b729deff720ae347632f955177187",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_45",
+      "pose": {
+        "index_mcp_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e90617795bc50f2d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f9d9366d2ed00cccf503c87b24eb9903e46ef19b9e2afde16b407f11343a4d07",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_55",
+      "pose": {
+        "index_mcp_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/38480534783d0c2f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a313bb861cc44ce5f8cdeb3553843251a7f75e383753af8d271884e8a57a557d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_65",
+      "pose": {
+        "index_mcp_flexion": 65.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a907b3e9db5a9930.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "4f6c3312b65c4d15b5d52982fa6837d81cc3e497fadbf530225553b2ff535043",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_75",
+      "pose": {
+        "index_mcp_flexion": 75.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/dfc1e64307af3c11.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8b5b5f8c3faecc2caac7eb8bb81800e5d4de35503b0213a343824c9fc6663a9a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_85",
+      "pose": {
+        "index_mcp_flexion": 85.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3077ea6e0f37641d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a6d38454b56223047edc28edebd6b399068654b3a1164dc980140f332bd87712",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_mcp_flexion_90",
+      "pose": {
+        "index_mcp_flexion": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5435f4bbda1bb7d2.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "1435fcb5011f476cd1aae30840a491b098c86e86c90a3f353bfb1bf02a71181c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_0",
+      "pose": {
+        "index_pip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/edabbd775ca62504.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ef34d0263318fa0d14ed047dce0da263d78cdbc02f8e00987b50bed084fba231",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_10",
+      "pose": {
+        "index_pip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f1d3969b6562197f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5075276ad47a8b74597dc53b41fdf5dd91345078bdc65722b753b6a723ddc169",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_20",
+      "pose": {
+        "index_pip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ea535fbb36280318.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "722ba76add79a1db3ddc83ebf388fb75bc135705857b45714bc698c1676e4cd8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_30",
+      "pose": {
+        "index_pip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/570c01b105e2c66f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d838814dc54ce108fc6fbf3bd87c724808fc2e31ee5f0f03242560565f0eba0c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_40",
+      "pose": {
+        "index_pip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/11ea5f9bd5740504.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5a4e5a1cedf019f666bf0376d31b462c2e4a8f97942138cf4ca75d0a21a5232c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_50",
+      "pose": {
+        "index_pip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/cf4cfd994d794c70.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "140dee36a54879f2944fc9f8fd2263dca6d5023a0ed964f86fef4a60bb8287c4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_60",
+      "pose": {
+        "index_pip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c0baf3b04abb2853.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "15d2e037c48b3923f22b14bfe4a6063e442bd635e4bc944841a3cc879dcf9315",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_70",
+      "pose": {
+        "index_pip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f2eda0b5d0465831.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "92ab85115145c393391756fe9a9d7e8ddf7df9dd872b28eeb22153c878caa8e8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_80",
+      "pose": {
+        "index_pip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c85528f60c981d25.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "409556cb7c77d4ce2166bf11a1f6e39627981ed58aef4ced881491579809a486",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_90",
+      "pose": {
+        "index_pip": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/be2699a6107ec819.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "91e3d2489fdc290286dada8d3fae5d4b6b7d202bf8d734a0784a4cdc1310aeb9",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_100",
+      "pose": {
+        "index_pip": 100.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7279addfcbcc11cd.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "39455d7a61e539ba6f3c70e9891c71b6a1beb2ec0d7cb0473817b506a9d6ced3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_pip_110",
+      "pose": {
+        "index_pip": 110.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1399e23463bba2c2.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8537a9a5ca9858076028f1ae2b4e6510dbefbbe3dd793705c1a71c0e90e92f9d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_0",
+      "pose": {
+        "index_dip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/52da713949c26530.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9989919ad3ac3a0a7b5844cd4356bb55956cd2d8a59b1ec4d55a8481bb826f5b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_10",
+      "pose": {
+        "index_dip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f50e416122809e8a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "dfb9b5ea16167438bc53e5ac492245946cc18bcf2f9ee85e2e8e77da5f51d129",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_20",
+      "pose": {
+        "index_dip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8c6f253d81feda6d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "139dbfe876f3c9d8ede1301fc3cd386637eee76b6d8a633b6bc94f40ab040483",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_30",
+      "pose": {
+        "index_dip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0f2217ba476ee2fb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "36b7bd34abcd1e842f0cb68c732516207958f0fd18820188ef1aab708a2a3a8a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_40",
+      "pose": {
+        "index_dip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/325aa783802a0848.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f063c4d0e5e606dfc8eb1fbb4e5c8a4d543e0788d87e5153bf129cd054ef556d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_50",
+      "pose": {
+        "index_dip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/bddec0a720298aa9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "264a18a25c865f2405df9efd84a2ec26c811fd929d666d1610f4bf1542b972a8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_60",
+      "pose": {
+        "index_dip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9e5ac6a84b94cac1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3ce57ddb844fef04dc2f9323e97d4897a99ee0ccdf60ecf276823d3db00b88a3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_70",
+      "pose": {
+        "index_dip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2117270754cbf658.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "281e672e84e8eab06e4c5a76b5c37ae5532087ca7028df33db23e5f030f59acf",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "index_dip_80",
+      "pose": {
+        "index_dip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/242b38ca69205959.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a4420e31358bb756710bc81a4f7b5ec4ecdcf7b3672468cd59b09b33309f7d16",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/628b8252b89c279b.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5e3a165555ef21ab9f8c109ef0b2c4980e1856a6c772abd4da8890cad22e5cc8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_abduction_-5",
+      "pose": {
+        "middle_mcp_abduction": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/75c9bbe46deb9dbd.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0d70365a83dc555465e19407bcec89e937c111d8136687e483ab8138f6066c89",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_abduction_0",
+      "pose": {
+        "middle_mcp_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/4736c94b54f63596.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ddc7b4214901135579e05d2754424fed02efd1fd4ce879f1bb5af64bfc0600e2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_abduction_5",
+      "pose": {
+        "middle_mcp_abduction": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/228aa94f22d1a334.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0ec3d3e817e4234a360ae2f7f6734417690c230eccecbc3cd82306e64b2d0838",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_abduction_15",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6de00b16add524b7.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "31c067a7a45572b2002efddbe4f9066dff40996d26ecfd9001a3fde158f456dd",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_-15",
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5a410239d73d638b.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "984c56275cc12805eba95238c8e04bc6ec7e7abeb10d599dfdfdbf520974440a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1b9d836827dc18cb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a64dfa2724af066d4052d19348658799f48b564572651909e8972ab5b893065a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_0",
+      "pose": {
+        "middle_mcp_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6838a9eb6db16996.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b788ec8350900963fd4357975e88da839446f0ef0c9e1b7b3d4c1effbc26ca2f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/24c891de605c3a92.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b2e330dbed5c2c7b2000e6da5061e5ae21a7e70b7ad813afd8effd9dc1ed8c7d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_15",
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6522dae0885fcd13.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "21940a0e8324780846db3d61390b6ca53b3ae1f11efe49af6fd4352428149d6c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/58ee4f144a727cd9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e82f1052cb3aac81876201d63313b4c7ceaea436255a2592baab8e02c3c2efdb",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_35",
+      "pose": {
+        "middle_mcp_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/81cf672472fe3fd2.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e60dcd808168a904b743f422bd528d96ab76444aac0629d3de98a99f18eb8cb8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_45",
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e590541d83d0433c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f20441054a232aadbeec5bb56cf89ed88cc2c8ffda90f050e361ebedf731bf15",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_55",
+      "pose": {
+        "middle_mcp_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9bb6d6cb1877dae3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "29b597efc51ee9740f063edc264358a7cea53c8f47cf2eced7361de844f21d4a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/410a2e1334825785.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b91825b04c7da2ace9d432b16e29f5b1dc1a22d739416859d07eefc3d12dbc8c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_75",
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/825940f83641042a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e5412453c87989bb93dde29b06a8be461fa2fd10ee8977622821cad0f94ffdf5",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3ef946f9806ea834.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "cd5186ea243246492bca597c1146bb76f243002a4bb07481959b21d91e7620f9",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_mcp_flexion_90",
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/04f82a8592fea620.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e4c94fd17cad549fc6596620068c7fb5da75fe3a5c2c4c56636414a3efebbfac",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c4d3da64a5c1861c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6f83f4823ff8ffd3d0e9ecf902c2d77c98e0f1c1edd22712c004b007852ff47b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_10",
+      "pose": {
+        "middle_pip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c137b317bd91aa42.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "40e151a0e2eb51d42a057c3774c4a99ba00185a3d2ae701022d03ee39a1746ce",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_20",
+      "pose": {
+        "middle_pip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/dc4081b2d28dbfc0.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6cc961162c8c8fcdb4a105cf9fd73c55776c4f137e0e8ce4d20ff4c388519993",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_30",
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/d47a82e4e7998376.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6be6dc2454f3e82fcddd461f5db609ecdcbaf5e70e15909be2c3d7191bdd4d99",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6a5aafd337167b91.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f982b7678ece02cda177b74241078dfcfd607c717cba15435c3b06288749f399",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_50",
+      "pose": {
+        "middle_pip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/43f55440cc324e84.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5746dcd00cb50c0129e0bb2b1fd2c1b4a428bd1a2d1c9252f03c151136f1d9e3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5d63c2d3aed9335f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0edc8889b77b9af0a7a4c90c51815600a80e0b1865af37606c1eefc6bbc083e8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_70",
+      "pose": {
+        "middle_pip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9b2beae2dba2b6ca.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d26339a6f80564a0b42e099bf50bae27ebdfd4cc86bf5bacff1ab90d2fb6161b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9b9aeb70531e5159.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e8935c5ccfbc281a65d0d952364f5da64c1c21bb81ddbd8db3187f8fdb4cddfc",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_90",
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9f37ebcf7343ccab.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3f80516eb00f50e75effb649b9de4f20f5d0d05e6f2ba0acad5f46f3caaf6508",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_100",
+      "pose": {
+        "middle_pip": 100.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b60e56d4924e5fb7.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6ea2279602f27fa517a0edd40e4369ae5e2ebbe9dbf6391b10cbd272e796d4d1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_pip_110",
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9bbb58a1d319f815.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "93553280b7d46e8b7e5fbac3929bfad6ad23919e2895deaf8f738165590ef3ea",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/64cca64e7b69ca9d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9d7169fa9bbb0d88fca2896cfbfc7b7b5ca0356453baa2fcb887e656810abe73",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_10",
+      "pose": {
+        "middle_dip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/815d12bf8c67a0e4.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bf0636ccd27eb9c34a486c2e29d00ea9d54bf8ad272e63aaca6f7154e0f42ea0",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2c6fc09e4e801016.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8f5f460a6aba14818920d4ace09ceda03c7f58bc188379682f6cdbf24b7efece",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_30",
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/fdf1ed7a1a136809.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5d1217a62120c1cd458123be69d0ff2f0081ebe7752f731fc31ec6eb9e9ed1c1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2fb3934d7d607737.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "2f94b6c32f33e3e804956449c61f6e6373c6cf3ef08c063279ac8043d51c7e42",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_50",
+      "pose": {
+        "middle_dip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7e05b89ba459749f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "60d999495d56958a835aedeb821c7ec566530bfcbf707f57cb692af3ae6d7e15",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_60",
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f4efa6e5c02ad002.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "61c174056a7e3128d65d012c218ddc5747aff6f77e4573c6d1aa4dec019eee22",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_70",
+      "pose": {
+        "middle_dip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a8603299b25972a3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d944342fc034bf7f427a23d246e95e103dfbcf462d6f6cb7f6fb6c2f4289f561",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f98c43ea1a964499.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "de210dfbff3779b1cf04e13311f62642bab304ea59275c97c7cfcb350ae04d64",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_abduction_-15",
+      "pose": {
+        "ring_mcp_abduction": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e2d64e1e6c430684.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "799d81377e9d45db938be38d3d69cdf3b4ecb8f57e8b6803f5deb12298414774",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_abduction_-5",
+      "pose": {
+        "ring_mcp_abduction": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/784121df681684f7.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fc2f4504e39ad9aafa091fe0d64bbf9fa201edd4089aae7cb0a6824079fd1841",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_abduction_0",
+      "pose": {
+        "ring_mcp_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8a3acc1fbca9ee71.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "1ad777780976d8c1b415ca43325252784d5185785b6e0e8fee50462bdaeaefad",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_abduction_5",
+      "pose": {
+        "ring_mcp_abduction": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0e5b21808c9d73ea.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a9e556f8ec0eeb38de926d33ae86a1b7f5f10f61906646af2b068e49caa9523b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_abduction_15",
+      "pose": {
+        "ring_mcp_abduction": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8fafc629625d8725.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e16c66740c8d97de935edcd740ff6fe637abdb21344152fe965e4497d54a9f68",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_-15",
+      "pose": {
+        "ring_mcp_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/67eccafba8c2d955.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "caae83cf67507d369790ebe2881eb82caa00c47dc02addeebb67262e77423c57",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_-5",
+      "pose": {
+        "ring_mcp_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a672d9e6a80f295f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a030e085f61f89d806f33dbcb42a0450c704e9dcefef80cf382cdc9ee5efa3ae",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_0",
+      "pose": {
+        "ring_mcp_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b513244e16df3284.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ffe64998c4bd8f672ff637f91d01eea70ab8aee5ee9a21d5de0077ad134d049c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_5",
+      "pose": {
+        "ring_mcp_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/310891c01cb9f3fb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3d7b935e1b63729d70f4e788018ebf9fb32bcd06a3e674c0055b138b07063cda",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_15",
+      "pose": {
+        "ring_mcp_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a92b8a003b765187.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "2dfc415cc4a68bea556b770f474e22791b93766de728ad99291db1893c7a586a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_25",
+      "pose": {
+        "ring_mcp_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/d98b2b2747be49e9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d3d7e6cbcde4c59718d1c002d8dcd4b80ce8f81f859d9bd172e80ed9c081b35f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_35",
+      "pose": {
+        "ring_mcp_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/046c1328195f247a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bc0aa2103b856a6d5d452c81c883565683184d30a2fc4e6e3e1c3b4af4bb9892",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_45",
+      "pose": {
+        "ring_mcp_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/bc9bf806bdd06e3f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8a0dd93dbb448a5da333e26130e1ed16b44eee13004b61b18a4d60992c34b3d9",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_55",
+      "pose": {
+        "ring_mcp_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b693100bd885e47a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b0c0b651b3bddab8561a1966995fcf235eba7183e932a41a9db207fed84f68b8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_65",
+      "pose": {
+        "ring_mcp_flexion": 65.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8e20dba37a13652f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "49ddb098ba235cd6f6befc279a12645c5b894717ed054f75dddd692cd04976ec",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_75",
+      "pose": {
+        "ring_mcp_flexion": 75.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7d1aff63d53755b5.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5ac04df15baed0bd2f118f990360c5bea9603115bf95cf2467dccc293ef93f41",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_85",
+      "pose": {
+        "ring_mcp_flexion": 85.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/16d8b9ef8b150fa3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "23ff1288cb946933d6d93f50c6cc47de16e9bf8de1417f93fdc1021d3e1ca166",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_mcp_flexion_90",
+      "pose": {
+        "ring_mcp_flexion": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f236759732ac1b37.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f1c7ad89be0daae56bbde314fc8be6a09d04ae3d9d66f6c27dea3b3a8f53a036",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_0",
+      "pose": {
+        "ring_pip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/338d223e8d823162.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e2b0f3dafd79b998a7ab511046a0d9aa42fd5d7c8ced2b5145c3f7a703c0ebe3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_10",
+      "pose": {
+        "ring_pip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/94d0d775c077c3ee.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "1b2f0265cf402c845e02c0fa4933d4b1a58484a706971bdce597615698b9ae3a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_20",
+      "pose": {
+        "ring_pip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1e213b4fddb1d4be.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9595c76e5cac8f8e808f10d06dfa26b03bd2dcc977935113a0b2a1f9cb574423",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_30",
+      "pose": {
+        "ring_pip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0133d25c9fcf932c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0f90a5b01d83acb2589f7097b52ebf629fed29a3ac8795267a14c9bfcd67a458",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_40",
+      "pose": {
+        "ring_pip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0ba8c9f1f3be5947.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "407516dfe7b93b3a9f7e4312015da000572bad0434157b637b5a115c082cae7b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_50",
+      "pose": {
+        "ring_pip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f22e4a601f797e9e.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bcb21c4bdea5fb5856c53c5ff1d5c64831cb569e771193399b9c6203eeceebf5",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_60",
+      "pose": {
+        "ring_pip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/08b37e02b8a759bb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d1c19ed7d739cb54198f77117823bd70406452284920c7e47429f563e6431cda",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_70",
+      "pose": {
+        "ring_pip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b71afa3a5dcb9aec.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9686aed7f045015107db16c3e1fd3713b387407353a4d9da14e110f19c1866d0",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_80",
+      "pose": {
+        "ring_pip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/40e407d027282460.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d432db658c0b90e13e7471cf3d6443c828e38c08287c3e76194a740a092cb11c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_90",
+      "pose": {
+        "ring_pip": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9564a4f70e69c1bc.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bcc690f55383b5698680f360f87e6e05cef5801aa035885646e3a54c6adf0200",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_100",
+      "pose": {
+        "ring_pip": 100.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9ee8a07eae72ad35.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0e6036eb6ca9adce2b8bd82c9ebffdfba91e73792939138f699ac0de9e5c5df7",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_pip_110",
+      "pose": {
+        "ring_pip": 110.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/130a827e3415ae6c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "50574184a7f974ea931e277c1887a029069b67201444ffd0bf0911d905a4f988",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_0",
+      "pose": {
+        "ring_dip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2826031a00c83d33.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "618bae7241f55b988dac4bdd16935ae12e6118fa1cdf0246c603c215b0511e9b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_10",
+      "pose": {
+        "ring_dip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/fec0d9dc2461c70a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fbd7976300bb24a41b22e52335a2be8036830f29ec3400630dc39757db9c016a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_20",
+      "pose": {
+        "ring_dip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/73a50327d4541644.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5be1b6683d11d84bb72c6dc6d3743b2b1a446772117650fbe53ac58b47c4b1cb",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_30",
+      "pose": {
+        "ring_dip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1c6682f774bfcfad.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "23bd7e837afe3cdc6081902a289b2803db4f268681f294ba7a7cf3e8311d00b2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_40",
+      "pose": {
+        "ring_dip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0a018f748e59073a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "841f8b8c93f255edf3c188caccaba1f4b5a85151bd1ec4735770311b645cd7fc",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_50",
+      "pose": {
+        "ring_dip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/1ba6f9d4fbe17d16.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fcd80da2a2a0f8785efd0c375f4cde39eff05c109ebaa5ffd539cb2f711dabf0",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_60",
+      "pose": {
+        "ring_dip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/401ef345801f4559.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "2220117da0abf36954f1d53e2eea18adbd568de2be3818d7b9845be81ddcfc45",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_70",
+      "pose": {
+        "ring_dip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/362512cb6cf7b3b3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ab3c802dad06b8f981efd39e68385ad37fc88afe00d72d9161104047e6b0aa5b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "ring_dip_80",
+      "pose": {
+        "ring_dip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/d379faed6497ee82.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f873f0440e97ead9421be17cd0e0ae7d798b05560ef83f4d8c593b56aed5b20a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_-25",
+      "pose": {
+        "little_mcp_abduction": -25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5fdcc29ec0273e45.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "05b1474172c498d4e12e86734e97ef045600d1013b2c780f6612eacf7a4e00ee",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_-15",
+      "pose": {
+        "little_mcp_abduction": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/18759e996b791b14.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "474a2259402e52a5f11e49b452538410ab25fc94ee56e84e3cbaeb1405fc9fbc",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_-5",
+      "pose": {
+        "little_mcp_abduction": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f9c2e0326c165bbe.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "486240f1ecd85646beeaea6056d99cffb9b41fec77596c0fb8964ab16f61e32b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_0",
+      "pose": {
+        "little_mcp_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0faa9865a9049f12.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3e4699aebf250c1adb4925e48918304ca4868dcba148d63504e228536ff89771",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_5",
+      "pose": {
+        "little_mcp_abduction": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2099bf894b195603.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5ad48c6e581325c25b7793d3aaf1bab8b354097207b6ab6e726d1efbeda33235",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_15",
+      "pose": {
+        "little_mcp_abduction": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/bfeed56f953a669d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6570d6155eda912df2b34fbae981e5bbad94a02149fee43778925241568df3d5",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_abduction_25",
+      "pose": {
+        "little_mcp_abduction": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/36ad323c5a1d55a2.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6239400ad7ce4b8b9f9c45b32107de7ec534e0de917b4018af4e5dfb4de731f2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_-15",
+      "pose": {
+        "little_mcp_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5fb6aa0a031f6e51.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e679735645ad91ec4ec9c52712a0f1963bd012c9b718d93c15ec6187a0a0dc93",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_-5",
+      "pose": {
+        "little_mcp_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/03a49bc1449fb09c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "bb72d0b2d6cdaf74d645e053dfd0a8901c87b9a5cc3988fe445c76f8601027c9",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_0",
+      "pose": {
+        "little_mcp_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/52ff35e715aa9226.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "aab379a63c38774fcd26b6c9143dcc81cbbb81b7a2ca82f79d19dc9bc7d8a08f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_5",
+      "pose": {
+        "little_mcp_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/15abc53b9774ef84.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "59df73c0b6f064ba025e088f2208af4a62862dc80b62b7b7ca969c8e5fd29d4f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_15",
+      "pose": {
+        "little_mcp_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2ac29b3463fd0c0a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "421aa1501aa90dae660d4cd67f0e37a69225876b523f7134b4a4b3b5aa4536f5",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_25",
+      "pose": {
+        "little_mcp_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e1b7abb27a6618d9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e29920ad6408f52c5fde0bedf01bab3aa70b93bd13b31c65af0c767ed7ef16c1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_35",
+      "pose": {
+        "little_mcp_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a6f5a9e7ac017bc4.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b0c527954a49421c3a891ca3e9ead767e4c2ce401e885a13640af3cdde7b1b7e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_45",
+      "pose": {
+        "little_mcp_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3532fcccd5f68055.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "138d6a9a56f9f457b66360487abf1423d93819887d87e2943d655313a26d6de8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_55",
+      "pose": {
+        "little_mcp_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/211bc3b52dfbe611.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fd70e175e9bd787f503b8faa824cbcc4e063926aad36ea9776716ba03e864ef1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_65",
+      "pose": {
+        "little_mcp_flexion": 65.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8474e0da1aee175a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9671342b88fde19c15564ad11c1587887e68fa9e636ebd8bfccd1814e40677d4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_75",
+      "pose": {
+        "little_mcp_flexion": 75.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/cdaa2614c4e5b446.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "445dbb5232c99f295599cf385c8030842a74a42eb72a4542733b5d11d3f90acf",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_85",
+      "pose": {
+        "little_mcp_flexion": 85.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/bfc67774da658b28.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e57c23e7bf7e36d8f2841aab532efb4485cec58989a2d7cb355a29bd9c423386",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_mcp_flexion_90",
+      "pose": {
+        "little_mcp_flexion": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9399b9d3e4a80189.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "7c319af33008133336a2e2488433ccdb7e523f542f122630c96422c617de35cb",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_0",
+      "pose": {
+        "little_pip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/afa5485e2daf9ecb.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c200c336799d45efc3e2378ab2f26ed4b475811227483d1c682a0aa9e0b220e1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_10",
+      "pose": {
+        "little_pip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/db6fb860500b8719.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "dc6c6afac01fc8a23beaba4fac1865d647959bc3ee3028d632ba47870b591ab6",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_20",
+      "pose": {
+        "little_pip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8b9146a305fe7e49.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c915d7c9711dcc38942a68cbbb0421ba63c858f7538b25dd09ca530aaa761e0e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_30",
+      "pose": {
+        "little_pip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b924168c628125a5.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "40a830fede6ead307d8b5e8dbb88bd9df9056a5de92fdb7e839fe98937007c9d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_40",
+      "pose": {
+        "little_pip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9d82d85754d1e019.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "fcffe4d12f17acb657ec2855e728819e2199f93355662f9ed0fc7a7e6a3012d8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_50",
+      "pose": {
+        "little_pip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3f8eb0caef1a67ab.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9bd81b9247aba319cd2e9fcb8a0b9b1e2ee843d7edb7dc5dfeea8e8ecc5dc505",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_60",
+      "pose": {
+        "little_pip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f11e99a13c5187d0.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d1838b2c784e869ce100bb9381045c730976eed6e0e12e1ed98badccf12fa5d7",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_70",
+      "pose": {
+        "little_pip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3a0bb9930f1b40d1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "827e41f2c229ec57812a8ebb50024fd788876bbad5aace97298f68529ff528ac",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_80",
+      "pose": {
+        "little_pip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/4181832c5fe01e5b.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e770dc6db5c98d8f9e6dae8fd13ed8f7aa50390981e629931310ccb47779bf6b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_90",
+      "pose": {
+        "little_pip": 90.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a8571e5c4db55bb1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "de5c64cd32685c472240e61a01572b3ac70c23d180589bbae701003bdbf4ecc4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_100",
+      "pose": {
+        "little_pip": 100.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/f0babf3e6e0d3c2d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c52653c301e36834eb87f2cd0d36058df021032476e2ecd914ddfd79aa4e0293",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_pip_110",
+      "pose": {
+        "little_pip": 110.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0a199f81079449cf.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "ec76a63c36846ae0d3b408c45ebf51aff42dd3638f7837feebd0baf1e413baa6",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_0",
+      "pose": {
+        "little_dip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/2227a61dc32ec877.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "23c7dcae6fda78f0c6e76f3bba0ffcc83adf1033ca575fb3c8beb07eba0b5778",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_10",
+      "pose": {
+        "little_dip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/10e6d841161853b8.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "77ca5c1f88afd54cc4716dd30cfe2691a44481b6a1fdd7187c8c82248cbe80cc",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_20",
+      "pose": {
+        "little_dip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/71ae010ca51b55d3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f2dc3d39235961ce7274bce0e5a3a2267414786452ab56429972e46a8d08aceb",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_30",
+      "pose": {
+        "little_dip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/878a097116605fb4.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "3d8d0a3a9e69bd5570b4bf80eac4bbe39e48d1c181cda491f1a497e06a317bc4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_40",
+      "pose": {
+        "little_dip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c411ab573ce5da2f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "d4c677df49ec2fdd85df0689052860684a06170ceb0fde34a62391d15a0e0767",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_50",
+      "pose": {
+        "little_dip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/a82edd46f7d144d0.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "7f5757cf88c79f95ad4bfebb3fef8629bf8d803466faa156386deb77241e8eae",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_60",
+      "pose": {
+        "little_dip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e6d0a952929ecb2e.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "be1f7f3af4ebad6116a8451610b4aee291cc786d126d28e519f65834e97b288e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_70",
+      "pose": {
+        "little_dip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6a54f04c57d81129.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a121fb8732936d8a6adc0bf64e4536ba57b15fae3d136efcf4a8edde190ceda3",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "little_dip_80",
+      "pose": {
+        "little_dip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3aa03f61295509e6.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "14fe8ed3d49a10701fc4f2324261682f9f301c9386d016dba75470242941ff1c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_-25",
+      "pose": {
+        "thumb_cmc_abduction": -25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/edfc278fa4f237a6.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "49d8b05b185867c5a0802ecef498ae16d7b69adb729c56a8d49c425203a3cc7c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_-15",
+      "pose": {
+        "thumb_cmc_abduction": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/6337354acff3ae26.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "710a41b36dd9ccedecf353ca0bf19c873b0342c38f5cf8bbdb226a245e04e62b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_-5",
+      "pose": {
+        "thumb_cmc_abduction": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/689e668dc3b644a6.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "7020c9926fd6a44adc393340413397b57d7bad66c77ce9a1edb25dd9f3fef87d",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_0",
+      "pose": {
+        "thumb_cmc_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ac7657ffe29e09d1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "29975eae7a29683b9395020930a3f7263ee183432fdbdfe81bca998b1123fc16",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_5",
+      "pose": {
+        "thumb_cmc_abduction": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/45eb0b1922785ad7.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "88b0ac773253d666b2d967e119fc32e135b46d817657ddf563836d320174154a",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_15",
+      "pose": {
+        "thumb_cmc_abduction": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/12dc45d494febc85.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8d5dc3ae310103b48fcf2f84857d6772c98f7bb26076ea1c8608021df8cecd12",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_25",
+      "pose": {
+        "thumb_cmc_abduction": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/d9e878d0d764e4a3.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0ad56cf6c0d765733fc9a9025e846a7b87adec2401de23bd0e2550f7db4b84b2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_35",
+      "pose": {
+        "thumb_cmc_abduction": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/0ae29bcc5cf9624f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "28653ac28111696ba563837064dbce6e1f3a3b60e1a69dfa5f2d083a2f9faa92",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_abduction_45",
+      "pose": {
+        "thumb_cmc_abduction": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/c1a14ab2c888ed33.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "63dafc6f0bdaa6939d0e75d31ecc46b8f0226eb22f326d940d6ccf049869d548",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_-15",
+      "pose": {
+        "thumb_cmc_flexion": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ed63f66bf28fba32.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c8f42fba265610c074d3b0c9e1d88159f789166822aa8cc8fcc37eba959c4628",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_-5",
+      "pose": {
+        "thumb_cmc_flexion": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/58988ced3517cf26.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "4698be5ee96aa973a2cc6cff08f4ed00d1c689e1788d704c1ceafceb2d87eb45",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_0",
+      "pose": {
+        "thumb_cmc_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/69a26f4326188f51.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "7bdb0f15a175e641d20c1137fcad7799d9521b3f0237c62a052e7400566b9986",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_5",
+      "pose": {
+        "thumb_cmc_flexion": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/02347f043be26457.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9988e2f03e3f94979b3903a0b4a49bee8413a8a7940314709353c1dc2bee3dc4",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_15",
+      "pose": {
+        "thumb_cmc_flexion": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/ca8fcdea2d84dffc.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "36c01e95884c512ae384422927b2909ab494c9899542f0894fa73177676c1ba2",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_25",
+      "pose": {
+        "thumb_cmc_flexion": 25.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7f671bb25adb74c6.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c43a62a20212740c93fc96cce96dbef9a83d4750f6600117a063bec6eb234226",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_35",
+      "pose": {
+        "thumb_cmc_flexion": 35.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/18039a017db82c24.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "348e973eec722ac070314446e5d8aff1cf66693ec2b6376ae779c84af48aa9e8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_45",
+      "pose": {
+        "thumb_cmc_flexion": 45.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/91306e879b51d47a.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "87d015a521e660d17cba634ec83fc7ae4be4b2fcd9e0700354b6020dfeffe4f8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_55",
+      "pose": {
+        "thumb_cmc_flexion": 55.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/7ae81cf816d414f4.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6fc1d9405ac85a23a698042e2614d1b630fb1d6ca30220788d537961b1f4cac8",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_cmc_flexion_65",
+      "pose": {
+        "thumb_cmc_flexion": 65.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/e1efa0a27a9934f0.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "aa29afb11a2cea1cb18d1f7171c027430654ed4cb43907b029b9e29780c43637",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_abduction_-15",
+      "pose": {
+        "thumb_mcp_abduction": -15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/4bc6f20893a80930.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "b5001b7a2594b5dfbc35beffdfb884faa06b6abbe9a7c4d81ae3c65ea3352563",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_abduction_-5",
+      "pose": {
+        "thumb_mcp_abduction": -5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/3c241753dc1c89e8.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "da96218e2595d1cb549a087e8fde62194392e3c89a32f00f18aefbd8070a635f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_abduction_0",
+      "pose": {
+        "thumb_mcp_abduction": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/346fdf8b593c98b9.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "37c38c1d7e8f9417844630d5c39181e0076daa3c156c77afb6108386039217d1",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_abduction_5",
+      "pose": {
+        "thumb_mcp_abduction": 5.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/8a348c11f9c25767.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "f4293221293a7e67ee20e83c7ea790d5a17c2d39059662822394317daa8f3974",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_abduction_15",
+      "pose": {
+        "thumb_mcp_abduction": 15.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/75fa14ae9401934f.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "87c3c2c33d534bf4b2cfa23287d067ec2ce3bc84a5aeb4d8df051459ecc33cd6",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_0",
+      "pose": {
+        "thumb_mcp_flexion": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b3e9bb8a87215bcd.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "5e74f29ba0cc04834105403ece592cb628fd565a5250c98dd34bc5ebe0ad00be",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_10",
+      "pose": {
+        "thumb_mcp_flexion": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/09120508ed84024e.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "6453a613d89ed1180b698bf8f0fbcdd4fbe4b5be018f5c71bd6bd33347d0336b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_20",
+      "pose": {
+        "thumb_mcp_flexion": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/59c77e2a80f15c5c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "02da062a374aaa7326380d1033d820e8bc7778c641d0f410ab25e2e898c77720",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_30",
+      "pose": {
+        "thumb_mcp_flexion": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b36971052fd267b5.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "1bfec3e653b3c4807f5e0eecfb01dbc2b1dff34b0f8d31a248f6cbbcd2c42280",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_40",
+      "pose": {
+        "thumb_mcp_flexion": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/75d70c5633cc6233.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "8d0d3f9d2acb9ca77caf589d190a3ee3f7ab71f51d1fe55bb018111c41ac9414",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_50",
+      "pose": {
+        "thumb_mcp_flexion": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/b0aaad4d07db2815.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "129913708a431427c6e360caaa536f4bf6d1144efb186a90e17974ff019c433c",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_60",
+      "pose": {
+        "thumb_mcp_flexion": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/9d1427caa1fd5fef.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "88d8e90022d1e5fdeb4e162e7cf4bf0bd41745f9eab7df68685eb65b15416686",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_mcp_flexion_70",
+      "pose": {
+        "thumb_mcp_flexion": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/afa03d80a790a67c.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "2f3b6174fcdac7b63e2558f2018fdf7e65e5ce0201f44515d1cfadaf8712315f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_0",
+      "pose": {
+        "thumb_ip": 0.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/485a7c206f29909b.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "117e5acbd7c070c7ce2267005fcc8c2dee98d979653ef5eb4572d9890db2654f",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_10",
+      "pose": {
+        "thumb_ip": 10.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/52544c1f49f889d1.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "a671af0b371c49c59cd28ebb525dd8daaf3b61794814afb638712a1dfdab0ec6",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_20",
+      "pose": {
+        "thumb_ip": 20.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/606f89d409e79257.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "0b80df4409d479e736cb10a1a67d0bd2e7e4bb4d2413e7affd5665769356121e",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_30",
+      "pose": {
+        "thumb_ip": 30.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/5be2d3d16fbae33d.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "e406b8ca80b3cd2a4f22001642dddf499c4dcc427f691c49f10e7eaa53d78379",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_40",
+      "pose": {
+        "thumb_ip": 40.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/90e736bc65a007ce.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "9bb531f38ea0ea075a63489a250cab6c46cb23a1bded4de35ec83c2853efc250",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_50",
+      "pose": {
+        "thumb_ip": 50.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/19730f6ba8ba7341.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "05999732c65f37df6d558f75fa9af93b299fa0b699f94f1a07cf580ef6d15b18",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_60",
+      "pose": {
+        "thumb_ip": 60.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/de4ac671f63d8308.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "c6afcb81e0d5b6b7dec68ab5174f90e875e7ef38f89e331ba8966c6a51618f46",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_70",
+      "pose": {
+        "thumb_ip": 70.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/16dcca8afbd2c537.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "519140fa3186248dc1387bffabddaa1124434022dc396cc70a6dfb2d97832a51",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_80",
+      "pose": {
+        "thumb_ip": 80.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/174aee12fccdf0f0.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "32b04dc0eb3fba4d52bce951cda30fe3ac4ea84f19d4a819de0b91eecb3eda0b",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    },
+    {
+      "label": "thumb_ip_85",
+      "pose": {
+        "thumb_ip": 85.0
+      },
+      "file": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/static_route_packets/845530ede54bc4a8.json.gz",
+      "tendon_count": 48,
+      "file_sha256": "4a2095575190d2ce640dc7ef65bfd445650b7d90751ef1e98692aed15c563902",
+      "source_sha256": "2512eea4ea7ec67076c60c5ebe4d297a6102fa51f1f0b191dda9fb6d23a9aaff"
+    }
+  ],
+  "source_sha256": "b8dd2e6ebe75c16fd7ea7eace32804619fae7d2361c56140f55dc154d3f585c7"
+}

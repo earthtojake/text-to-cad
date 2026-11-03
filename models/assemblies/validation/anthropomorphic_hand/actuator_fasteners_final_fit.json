@@ -1,0 +1,28 @@
+{
+  "ok": true,
+  "final_body_count": 824,
+  "strict_occurrences": 824,
+  "strict_failures": 0,
+  "remaining_collisions": [],
+  "proof": {
+    "all48_actuator_and_wrist_external_frame_checks": "Full baseline checks actual motor/sensor bodies at all48 stations and actual forearm frame/fork. All non-rear-chassis hardware passed.",
+    "rear_revision": "The only eight baseline structural intersections were four removed front washers and four relocated nuts, all rear_chassis_mount_*; the four screw shanks were shortened. Every final rear chassis body is checked against the final complete frame and all final hardware in check_rear_captive_nuts.json.",
+    "unchanged_hardware": "The remainder of the final hardware is unchanged from the baseline. Chassis changes consist solely of four cavity/side-access subtractions; material removal cannot introduce an intersection with unchanged hardware.",
+    "all48_complete_drives": "Both bank orientations pass exact complete gearbox/capstan intersections. Identical TShape and local poses prove congruence of all768 actuator hardware occurrences; common rigid placement preserves all relative intersections and contact distances.",
+    "nut_capture": "All four relocated nuts have zero frame intersection, zero seat distance, positive finite seat contact on a0.001mm rearward approach, and six clear side-entry insertion samples each."
+  },
+  "evidence": [
+    "check_actuator_fasteners.json",
+    "check_rear_captive_nuts.json",
+    "check_actuator_fastener_drives.json",
+    "check_actuator_fastener_congruence.json",
+    "actuator_fasteners_validate.json",
+    "forearm_frame_fastener_revision_validate.json"
+  ],
+  "current_step_sha256": {
+    "actuator_fasteners_review.step": "9d046c44de78e46c11f3f0d28bc147198f3c202739c7ef924ec07c23aff72d0d",
+    "motor_review.step": "750376098e7507685b995e104eccaecce5bf7e4a0b7673fcc216440462eedb8a",
+    "forearm_frame_review.step": "508571143a3a1ce179c63665ed16ef6297e880e7f0aad5434d904cf49fc348e9",
+    "forearm_mount_system_review.step": "1a340f7186e6295905d38050db7e5d22a00e2923c134b9a3f694538f85363315"
+  }
+}

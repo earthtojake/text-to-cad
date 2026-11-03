@@ -1,0 +1,26 @@
+{
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/final_rigid_delta_gate.json": "58affb76760d64105402186425147ad1566a5972b11c3a08753788c1fb8b99f3",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803.step": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803"
+  },
+  "step_sha256": "74820b311845d8894a619d14392e6c85fe8d248ebe581c158f7bce0e7bfffe5b",
+  "bodies": {
+    "index_fingernail_conformal_saddle": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "index_dip"
+    },
+    "index_distal_frame": {
+      "step_sha256": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+      "frame": "index_dip"
+    },
+    "thumb_mcp_ip_outlet_comb_structural_lower_jaw": {
+      "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+      "frame": "thumb_mcp_flexion"
+    },
+    "thumb_proximal_frame": {
+      "step_sha256": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+      "frame": "thumb_mcp_flexion"
+    }
+  }
+}

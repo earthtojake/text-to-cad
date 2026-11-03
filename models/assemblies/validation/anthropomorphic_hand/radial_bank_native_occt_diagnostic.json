@@ -1,0 +1,8 @@
+{
+  "source": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step",
+  "source_sha256": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+  "stl": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STL/anthropomorphic_hand/radial_bank_native_occt_diagnostic.stl",
+  "stl_sha256": "04e1b967c8ea4c58a464e2391360c39a2f37aa2df35d4bbed185cee7e9a68d0f",
+  "chord_tolerance_mm": 0.003,
+  "angle_tolerance": 0.18
+}

@@ -1,0 +1,12 @@
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"generate","progress":null,"elapsed":0.0}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Building geometry","progress":null,"elapsed":0.001}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Collecting parts","progress":null,"elapsed":10.118}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[0,4],"elapsed":10.207}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[1,4],"elapsed":10.986}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[2,4],"elapsed":11.523}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[3,4],"elapsed":12.127}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Meshing components","progress":[4,4],"elapsed":13.027}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"building","phase":"Writing outputs","progress":null,"elapsed":13.083}
+{"model":"/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/phalanx_beauty_review.py","parent":null,"state":"done","phase":"Writing outputs","progress":null,"elapsed":14.759}
+[cadgen] wrote STEP: models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_review.step
+built models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_review.step

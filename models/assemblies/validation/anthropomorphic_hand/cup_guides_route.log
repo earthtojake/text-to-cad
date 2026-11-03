@@ -1,0 +1,7 @@
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_remaining_guide_routes.py", line 53, in <module>
+    parts=[p for f in files for p in leaves(read_step(f))];frames=[frame(p.label) for p in parts];bounds=np.array([corners(p) for p in parts]);manifest=json.loads((HERE/'static_route_packet_manifest.json').read_text())
+                                                                   ~~~~~^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_remaining_guide_routes.py", line 26, in frame
+    raise ValueError(name)
+ValueError: part_o1.33

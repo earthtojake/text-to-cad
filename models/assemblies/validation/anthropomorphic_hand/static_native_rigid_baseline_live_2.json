@@ -1,0 +1,85 @@
+{
+  "body_count": 2933,
+  "processed": 876,
+  "exact_booleans": 2401,
+  "congruent_proof_reuse": 717,
+  "collisions": [
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_conformal_bridge",
+      "intersection_mm3": 34.88752429540597
+    },
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.0018409109775196681
+    },
+    {
+      "a": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409089536745213
+    },
+    {
+      "a": "index_palm_bank_boss_clamp_front_cap",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.015719833707081174
+    },
+    {
+      "a": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "b": "index_palm_bank_boss_clamp_front_cap",
+      "intersection_mm3": 0.07328832988790918
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093817046
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.009968179409260656
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "index_mcp_outlet_comb_structural_lower_jaw_1",
+      "intersection_mm3": 0.5576290425936309
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "intersection_mm3": 1.213749571129507
+    },
+    {
+      "a": "index_palm_bank_boss_clamp_right_M0p8_screw",
+      "b": "index_mcp_outlet_comb_scalloped_upper_jaw",
+      "intersection_mm3": 0.00010737022088609911
+    },
+    {
+      "a": "index_mcp_outlet_comb_liner_right_M0p6_screw",
+      "b": "index_palm_bank_boss_clamp_front_cap",
+      "intersection_mm3": 0.0019995258092283695
+    },
+    {
+      "a": "index_mcp_outlet_comb_liner_right_M0p6_screw",
+      "b": "index_palm_bank_boss_clamp_right_M0p8_screw",
+      "intersection_mm3": 0.04529447042660691
+    },
+    {
+      "a": "index_fingertip_ulnar_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968167555159498
+    },
+    {
+      "a": "middle_fingertip_silicone_pad",
+      "b": "middle_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093816595
+    },
+    {
+      "a": "middle_fingertip_silicone_pad",
+      "b": "middle_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.009968179394908051
+    }
+  ],
+  "complete": false,
+  "pass": false
+}

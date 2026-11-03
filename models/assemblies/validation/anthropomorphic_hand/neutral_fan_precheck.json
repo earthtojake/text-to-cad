@@ -1,0 +1,172 @@
+{
+  "scope": "Phalanx-to-phalanx independent abduction sweeps only. All original joint ranges preserved.",
+  "neutral_angles": {
+    "index": 20.0,
+    "middle": 5.0,
+    "ring": -5.0,
+    "little": -25.0
+  },
+  "rows": [
+    {
+      "joint": "",
+      "angle": 0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "index",
+      "angle": -20.0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "index",
+      "angle": -10,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "index",
+      "angle": 0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "index",
+      "angle": 10,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "index",
+      "angle": 20.0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "middle",
+      "angle": -15.0,
+      "exact_pairs": 3,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "middle",
+      "angle": -5,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "middle",
+      "angle": 0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "middle",
+      "angle": 5,
+      "exact_pairs": 2,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "middle",
+      "angle": 15.0,
+      "exact_pairs": 4,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "ring",
+      "angle": -15.0,
+      "exact_pairs": 2,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "ring",
+      "angle": -5,
+      "exact_pairs": 1,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "ring",
+      "angle": 0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "ring",
+      "angle": 5,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "ring",
+      "angle": 15.0,
+      "exact_pairs": 3,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": -25.0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": -15,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": -5,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": 0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": 5,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": 15,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    },
+    {
+      "joint": "little",
+      "angle": 25.0,
+      "exact_pairs": 0,
+      "failures": [],
+      "clear": true
+    }
+  ]
+}

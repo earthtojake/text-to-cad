@@ -1,0 +1,9 @@
+{
+  "angle": 275,
+  "minimum_gap": 0.051981205870048064,
+  "worst": {
+    "sample": "thumb_cmc_flexion_-15",
+    "tendon": "thumb_mcp_abduction_positive",
+    "group": "thumb_mcp_abduction_positive_cmc_reaction"
+  }
+}

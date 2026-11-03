@@ -1,0 +1,376 @@
+{
+  "pass": true,
+  "scope": "Check the actual STEP pads against the authored contact envelope and mounts.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/fingertip_pad_export_repair.step": "145c8cad54b3f8583becc95f7ba2680ab9d0b7faa960f7e88da4b2a4926fdca1",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/fingertip_pad_export_repair_frames.json": "6aba61dbcb3acf563e3c7af5b17c6d7edeb36eede4d5e30a5a62405f4f4eca98",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/lib/fingertip_pad.py": "225acd44106cfce7a15b34196f842660725c0d69ae4f73dbe149f871dbb6582f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_pad_export_roundtrip.py": "fa5325d1ce7d186e3687b811d6c74e591c9855b5c0bb7eb3d8c053f3b4099b63",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/pinch_contact_candidate.json": "2884fe16d39eee3f1f1a7a7fc422270f85c2f47e551f2d4c5d61df7b40fd21c9"
+  },
+  "bodies": [
+    {
+      "name": "thumb_fingertip_ulnar_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8810299520646537,
+      "native_volume_mm3": 0.8810304189690519,
+      "integration_relative_error": 9.463000400178169e-12,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.299529227696071e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingertip_radial_M0p8_captive_insert",
+      "authored_volume_mm3": 0.881030763206994,
+      "native_volume_mm3": 0.881030413855453,
+      "integration_relative_error": 3.291159724194266e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 3.9652592805891576e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "authored_volume_mm3": 1.795994761732096,
+      "native_volume_mm3": 1.795994761732084,
+      "integration_relative_error": 7.979865426985804e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.6761935621615525e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingertip_radial_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320955,
+      "native_volume_mm3": 1.7959947617320835,
+      "integration_relative_error": 7.979865426985799e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.676193562161554e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingertip_conformal_bridge",
+      "authored_volume_mm3": 44.0392279789093,
+      "native_volume_mm3": 44.03922789201999,
+      "integration_relative_error": 2.3195223089894202e-11,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 1.9729981492848556e-09,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "thumb_fingertip_silicone_pad",
+      "authored_volume_mm3": 359.3104607870851,
+      "native_volume_mm3": 359.31046078688047,
+      "integration_relative_error": 3.122730483394846e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.69525049314301e-13,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "analytic_pad_volume_mm3": 359.3104558696052,
+      "analytic_volume_relative_difference": 1.368531076118142e-08,
+      "bond_plane_z_mm": 4.1499999,
+      "palmar_tip_z_mm": 7.400000100000001
+    },
+    {
+      "name": "little_fingertip_ulnar_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8842906542647473,
+      "native_volume_mm3": 0.8842906545853005,
+      "integration_relative_error": 1.3118617644887318e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 3.6249761214158347e-10,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingertip_radial_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8842906541625126,
+      "native_volume_mm3": 0.8842906545837689,
+      "integration_relative_error": 3.562864858416155e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 4.763775915988611e-10,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingertip_ulnar_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617321002,
+      "native_volume_mm3": 1.7959947617320848,
+      "integration_relative_error": 1.1616940908837108e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 8.530691773873075e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingertip_radial_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320986,
+      "native_volume_mm3": 1.7959947617320862,
+      "integration_relative_error": 7.260588068023191e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.9234599903897485e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingertip_conformal_bridge",
+      "authored_volume_mm3": 29.31447243423727,
+      "native_volume_mm3": 29.314470397157653,
+      "integration_relative_error": 3.0936634294124333e-11,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.949057747663802e-08,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "little_fingertip_silicone_pad",
+      "authored_volume_mm3": 217.48739002138905,
+      "native_volume_mm3": 217.4873900212842,
+      "integration_relative_error": 3.123106988155323e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 4.820862767190734e-13,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "analytic_pad_volume_mm3": 217.48738704488275,
+      "analytic_volume_relative_difference": 1.3685397978832793e-08,
+      "bond_plane_z_mm": 4.1499999,
+      "palmar_tip_z_mm": 7.400000100000001
+    },
+    {
+      "name": "ring_fingertip_ulnar_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8838537962757155,
+      "native_volume_mm3": 0.8838535556701467,
+      "integration_relative_error": 3.4234866233666108e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 2.72223267938484e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingertip_radial_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8838533025261149,
+      "native_volume_mm3": 0.8838535740926877,
+      "integration_relative_error": 2.178582396738245e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 3.0725299323843004e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingertip_ulnar_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320977,
+      "native_volume_mm3": 1.7959947617320884,
+      "integration_relative_error": 5.808470454418547e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.192594992792314e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingertip_radial_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320984,
+      "native_volume_mm3": 1.7959947617320873,
+      "integration_relative_error": 5.808470454418549e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.181660705705133e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "ring_fingertip_conformal_bridge",
+      "authored_volume_mm3": 36.54602401382386,
+      "native_volume_mm3": 36.56218653162193,
+      "integration_relative_error": 4.763073136589994e-11,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 0.0004422510583356157,
+      "roundtrip_geometry_equal": true,
+      "symmetric_difference": {
+        "source_minus_native_solids": 0,
+        "native_minus_source_solids": 0,
+        "source_minus_native_faces": 0,
+        "native_minus_source_faces": 0
+      },
+      "pass": true
+    },
+    {
+      "name": "ring_fingertip_silicone_pad",
+      "authored_volume_mm3": 296.5737136655306,
+      "native_volume_mm3": 296.57371366537296,
+      "integration_relative_error": 3.1225579187129604e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.314928236653796e-13,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "analytic_pad_volume_mm3": 296.57370960665827,
+      "analytic_volume_relative_difference": 1.3685348912058642e-08,
+      "bond_plane_z_mm": 4.1499999,
+      "palmar_tip_z_mm": 7.400000100000001
+    },
+    {
+      "name": "middle_fingertip_ulnar_M0p8_captive_insert",
+      "authored_volume_mm3": 0.883853796275713,
+      "native_volume_mm3": 0.8838535556701459,
+      "integration_relative_error": 6.2245211333944024e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 2.722232660543105e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingertip_radial_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8838533025261207,
+      "native_volume_mm3": 0.88385357409269,
+      "integration_relative_error": 1.556126280773793e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 3.072529893444658e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingertip_ulnar_M0p8_socket_screw",
+      "authored_volume_mm3": 1.795994761732098,
+      "native_volume_mm3": 1.7959947617320882,
+      "integration_relative_error": 7.979865426985796e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.439861421020518e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingertip_radial_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320982,
+      "native_volume_mm3": 1.7959947617320888,
+      "integration_relative_error": 1.0164823295232453e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.192594992792312e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingertip_conformal_bridge",
+      "authored_volume_mm3": 38.25075107833466,
+      "native_volume_mm3": 38.25074852168801,
+      "integration_relative_error": 4.777549891684208e-11,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.683912281405163e-08,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "middle_fingertip_silicone_pad",
+      "authored_volume_mm3": 308.93095173492776,
+      "native_volume_mm3": 308.9309517347574,
+      "integration_relative_error": 3.120576876164917e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.514492004414485e-13,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "analytic_pad_volume_mm3": 308.93094750693575,
+      "analytic_volume_relative_difference": 1.3685328978681642e-08,
+      "bond_plane_z_mm": 4.1499999,
+      "palmar_tip_z_mm": 7.400000100000001
+    },
+    {
+      "name": "index_fingertip_ulnar_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8838537962757105,
+      "native_volume_mm3": 0.8838535556701492,
+      "integration_relative_error": 2.1785823966876448e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 2.722232593968957e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingertip_radial_M0p8_captive_insert",
+      "authored_volume_mm3": 0.8838533025261208,
+      "native_volume_mm3": 0.8838535740926935,
+      "integration_relative_error": 1.8673563400611354e-15,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 3.0725299311281627e-07,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingertip_ulnar_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617320995,
+      "native_volume_mm3": 1.795994761732085,
+      "integration_relative_error": 4.3563528408139147e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 8.036158917416668e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingertip_radial_M0p8_socket_screw",
+      "authored_volume_mm3": 1.7959947617321002,
+      "native_volume_mm3": 1.7959947617320846,
+      "integration_relative_error": 7.979865426985803e-16,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 8.654324987987178e-15,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingertip_conformal_bridge",
+      "authored_volume_mm3": 38.25075107833464,
+      "native_volume_mm3": 38.25074852168804,
+      "integration_relative_error": 4.7775583902733285e-11,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 6.683912151373755e-08,
+      "roundtrip_geometry_equal": true,
+      "pass": true
+    },
+    {
+      "name": "index_fingertip_silicone_pad",
+      "authored_volume_mm3": 308.9309517349277,
+      "native_volume_mm3": 308.9309517347573,
+      "integration_relative_error": 3.1252154148139926e-13,
+      "single_closed_valid_solid": true,
+      "roundtrip_volume_relative_difference": 5.516332008419962e-13,
+      "roundtrip_geometry_equal": true,
+      "pass": true,
+      "analytic_pad_volume_mm3": 308.93094750693575,
+      "analytic_volume_relative_difference": 1.3685328610680836e-08,
+      "bond_plane_z_mm": 4.1499999,
+      "palmar_tip_z_mm": 7.400000100000001
+    }
+  ],
+  "mounts": [
+    {
+      "system": "index",
+      "pad_bridge_gap_mm": 0.0,
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "system": "middle",
+      "pad_bridge_gap_mm": 0.0,
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "system": "ring",
+      "pad_bridge_gap_mm": 0.0,
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "system": "little",
+      "pad_bridge_gap_mm": 0.0,
+      "intersection_mm3": 0.0,
+      "pass_": true
+    },
+    {
+      "system": "thumb",
+      "pad_bridge_gap_mm": 0.0,
+      "intersection_mm3": 0.0,
+      "pass_": true
+    }
+  ],
+  "pinch": {
+    "gap_mm": 7.105427357601002e-15,
+    "intersection_mm3": 2.1169114141521807e-08,
+    "pass_": true
+  }
+}

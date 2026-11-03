@@ -1,0 +1,16 @@
+{
+  "exact_native_pad_gap_mm": 7.105427357601002e-15,
+  "intersection_mm3": 0.0,
+  "analytic_target_gap_mm": 9.81636955165781e-05,
+  "pose": {
+    "index_mcp_abduction": -17.40900758070954,
+    "index_mcp_flexion": 74.68469201675903,
+    "index_pip": 57.94830222639836,
+    "index_dip": 21.90864380435607,
+    "thumb_mcp_abduction": -11.484462068625563,
+    "thumb_mcp_flexion": 7.697863149475799,
+    "thumb_ip": 31.564732218590134,
+    "thumb_cmc_abduction": -21.046825109125002,
+    "thumb_cmc_flexion": 37.474289981694746
+  }
+}

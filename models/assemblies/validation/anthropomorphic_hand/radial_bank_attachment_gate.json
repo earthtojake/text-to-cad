@@ -1,0 +1,49 @@
+{
+  "scope": "Verify the repaired bank's native attachment chain to the wrist cradle.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_radial_bank_attachment.py": "1def6cb49da52f1c37fd513a0914bd243d1274793224cc20f7041f0d5622597d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_reroute_supports_r10_gate.json": "0592c6e47df2e582112353ad50a6923f222bf42b748924989b16a7d064863032",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/radial_bank_screw_clearance_candidate.step": "63b3a431f37ada7918e7696cf188f19acabb2b683489886644dfe1b623985586",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/static_clearance_relief_review.step": "682e19de1a2c055d04d662317a45236e2f45351876ec62275f5bdbc08f144d7f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d.step": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525.step": "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525"
+  },
+  "chain": [
+    "thumb_radial_shared_guide_bank_structural",
+    "palm_metacarpal_truss",
+    "palm_wrist_radial_0p4mm_seat_spacer",
+    "palm_wrist_radial_M3_flanged_thread_insert",
+    "wrist_palm_cradle"
+  ],
+  "rows": [
+    {
+      "a": "thumb_radial_shared_guide_bank_structural",
+      "b": "palm_metacarpal_truss",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "palm_metacarpal_truss",
+      "b": "palm_wrist_radial_0p4mm_seat_spacer",
+      "gap_mm": 1.7763568394002505e-15,
+      "pass_": true
+    },
+    {
+      "a": "palm_wrist_radial_0p4mm_seat_spacer",
+      "b": "palm_wrist_radial_M3_flanged_thread_insert",
+      "gap_mm": 0.0,
+      "pass_": true
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "wrist_palm_cradle",
+      "gap_mm": 0.0,
+      "pass_": true
+    }
+  ],
+  "frame": "wrist_flexion",
+  "contact_tolerance_mm": 0.025,
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

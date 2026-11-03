@@ -1,0 +1,327 @@
+{
+  "pass": true,
+  "covered_count": 32,
+  "total": 254,
+  "covered": [
+    {
+      "mount": "index_mcp_outlet_comb",
+      "point": [
+        -44.13645576304025,
+        111.07475000265956,
+        0.0
+      ],
+      "end": "index_dip_negative_mcp_reaction_outlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_mcp_outlet_comb",
+      "point": [
+        -43.00882461809716,
+        111.48517417465037,
+        0.0
+      ],
+      "end": "index_pip_negative_mcp_reaction_outlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_mcp_outlet_comb",
+      "point": [
+        -37.370668893381705,
+        113.53729503460437,
+        0.0
+      ],
+      "end": "index_pip_positive_mcp_reaction_outlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_mcp_outlet_comb",
+      "point": [
+        -36.24303774843862,
+        113.94771920659518,
+        0.0
+      ],
+      "end": "index_dip_positive_mcp_reaction_outlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_pip_inlet_comb",
+      "point": [
+        -50.12180827123946,
+        127.51937086641296,
+        0.0
+      ],
+      "end": "index_dip_negative_pip_reaction_inlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_pip_inlet_comb",
+      "point": [
+        -42.22839025663782,
+        130.39234007034858,
+        0.0
+      ],
+      "end": "index_dip_positive_pip_reaction_inlet",
+      "frame": "index_mcp_flexion"
+    },
+    {
+      "mount": "index_pip_outlet_comb",
+      "point": [
+        -58.50130178271834,
+        150.54184007566772,
+        0.0
+      ],
+      "end": "index_dip_negative_pip_reaction_outlet",
+      "frame": "index_pip"
+    },
+    {
+      "mount": "index_pip_outlet_comb",
+      "point": [
+        -50.60788376811671,
+        153.41480927960333,
+        0.0
+      ],
+      "end": "index_dip_positive_pip_reaction_outlet",
+      "frame": "index_pip"
+    },
+    {
+      "mount": "middle_mcp_outlet_comb",
+      "point": [
+        -17.25167558064414,
+        116.83733093208372,
+        0.0
+      ],
+      "end": "middle_dip_negative_mcp_reaction_outlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_mcp_outlet_comb",
+      "point": [
+        -16.056241942934047,
+        116.9419178233809,
+        0.0
+      ],
+      "end": "middle_pip_negative_mcp_reaction_outlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_mcp_outlet_comb",
+      "point": [
+        -10.079073754383574,
+        117.46485227986686,
+        0.0
+      ],
+      "end": "middle_pip_positive_mcp_reaction_outlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_mcp_outlet_comb",
+      "point": [
+        -8.88364011667348,
+        117.56943917116405,
+        0.0
+      ],
+      "end": "middle_dip_positive_mcp_reaction_outlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_pip_inlet_comb",
+      "point": [
+        -19.038368306971133,
+        137.25932224296452,
+        0.0
+      ],
+      "end": "middle_dip_negative_pip_reaction_inlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_pip_inlet_comb",
+      "point": [
+        -10.670332843000473,
+        137.99143048204482,
+        0.0
+      ],
+      "end": "middle_dip_positive_pip_reaction_inlet",
+      "frame": "middle_mcp_flexion"
+    },
+    {
+      "mount": "middle_pip_outlet_comb",
+      "point": [
+        -21.17368400428876,
+        161.66609234621228,
+        0.0
+      ],
+      "end": "middle_dip_negative_pip_reaction_outlet",
+      "frame": "middle_pip"
+    },
+    {
+      "mount": "middle_pip_outlet_comb",
+      "point": [
+        -12.805648540318096,
+        162.39820058529259,
+        0.0
+      ],
+      "end": "middle_dip_positive_pip_reaction_outlet",
+      "frame": "middle_pip"
+    },
+    {
+      "mount": "ring_mcp_outlet_comb",
+      "point": [
+        8.88364011667348,
+        112.56943917116405,
+        0.0
+      ],
+      "end": "ring_dip_negative_mcp_reaction_outlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_mcp_outlet_comb",
+      "point": [
+        10.079073754383574,
+        112.46485227986686,
+        0.0
+      ],
+      "end": "ring_pip_negative_mcp_reaction_outlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_mcp_outlet_comb",
+      "point": [
+        16.056241942934047,
+        111.9419178233809,
+        0.0
+      ],
+      "end": "ring_pip_positive_mcp_reaction_outlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_mcp_outlet_comb",
+      "point": [
+        17.25167558064414,
+        111.83733093208372,
+        0.0
+      ],
+      "end": "ring_dip_positive_mcp_reaction_outlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_pip_inlet_comb",
+      "point": [
+        10.32170987200984,
+        129.00665168967782,
+        0.0
+      ],
+      "end": "ring_dip_negative_pip_reaction_inlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_pip_inlet_comb",
+      "point": [
+        18.6897453359805,
+        128.27454345059752,
+        0.0
+      ],
+      "end": "ring_dip_positive_pip_reaction_inlet",
+      "frame": "ring_mcp_flexion"
+    },
+    {
+      "mount": "ring_pip_outlet_comb",
+      "point": [
+        12.457025569327463,
+        153.4134217929256,
+        0.0
+      ],
+      "end": "ring_dip_negative_pip_reaction_outlet",
+      "frame": "ring_pip"
+    },
+    {
+      "mount": "ring_pip_outlet_comb",
+      "point": [
+        20.825061033298127,
+        152.68131355384529,
+        0.0
+      ],
+      "end": "ring_dip_positive_pip_reaction_outlet",
+      "frame": "ring_pip"
+    },
+    {
+      "mount": "little_mcp_outlet_comb",
+      "point": [
+        37.37058100076964,
+        101.8772670905099,
+        0.0
+      ],
+      "end": "little_dip_negative_mcp_reaction_outlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_mcp_outlet_comb",
+      "point": [
+        38.45815034521362,
+        101.37012517642106,
+        0.0
+      ],
+      "end": "little_pip_negative_mcp_reaction_outlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_mcp_outlet_comb",
+      "point": [
+        43.89599706743352,
+        98.83441560597686,
+        0.0
+      ],
+      "end": "little_pip_positive_mcp_reaction_outlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_mcp_outlet_comb",
+      "point": [
+        44.9835664118775,
+        98.32727369188802,
+        0.0
+      ],
+      "end": "little_dip_positive_mcp_reaction_outlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_pip_inlet_comb",
+      "point": [
+        40.96283622556558,
+        109.58088328032143,
+        0.0
+      ],
+      "end": "little_dip_negative_pip_reaction_inlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_pip_inlet_comb",
+      "point": [
+        48.57582163667344,
+        106.03088988169955,
+        0.0
+      ],
+      "end": "little_dip_positive_pip_reaction_inlet",
+      "frame": "little_mcp_flexion"
+    },
+    {
+      "mount": "little_pip_outlet_comb",
+      "point": [
+        50.36609254929615,
+        129.74623154188689,
+        0.0
+      ],
+      "end": "little_dip_negative_pip_reaction_outlet",
+      "frame": "little_pip"
+    },
+    {
+      "mount": "little_pip_outlet_comb",
+      "point": [
+        57.979077960404005,
+        126.196238143265,
+        0.0
+      ],
+      "end": "little_dip_positive_pip_reaction_outlet",
+      "frame": "little_pip"
+    }
+  ]
+}

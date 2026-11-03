@@ -1,0 +1,8 @@
+{
+  "pass": true,
+  "poses": 225,
+  "frame_pairs": 325,
+  "unique_relative_poses": 11547,
+  "exact_symbolic_reuses": 61578,
+  "largest_floating_point_matrix_residual": 4.263256414560601e-14
+}

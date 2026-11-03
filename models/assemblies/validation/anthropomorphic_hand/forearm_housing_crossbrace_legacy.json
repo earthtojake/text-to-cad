@@ -1,0 +1,27 @@
+{
+  "ok": false,
+  "partial": true,
+  "occurrences": 42,
+  "mutual_pairs": 861,
+  "host_pairs": 39228,
+  "route_segments": 17930,
+  "exact_curve_distances": 1,
+  "minimum_route_clearance": 3.2499999999999973,
+  "wrist_hardware_poses": 0,
+  "failures": [
+    {
+      "a": "left_forearm_rail_clamp_2_removable_cap",
+      "host": "forearm_monolithic_24_seat_open_reaction_chassis",
+      "overlap": 12.224866776461644
+    },
+    {
+      "a": "right_forearm_rail_clamp_2_removable_cap",
+      "host": "forearm_monolithic_24_seat_open_reaction_chassis",
+      "overlap": 12.224866776461608
+    }
+  ],
+  "elapsed_seconds": 181.27389662479982,
+  "capstan_rotations": 21,
+  "capstan_routes": 1008,
+  "wrist_route_packets": 18
+}

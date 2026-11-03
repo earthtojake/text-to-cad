@@ -1,0 +1,10 @@
+{
+  "body_count": 2594,
+  "processed": 2594,
+  "exact_booleans": 22,
+  "native_distance_separations": 0,
+  "congruent_proof_reuse": 7231,
+  "collisions": [],
+  "complete": true,
+  "pass": true
+}

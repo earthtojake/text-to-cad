@@ -1,0 +1,1637 @@
+{
+  "input_step_sha256": {
+    "imported/palm_frame_integration": "7ffa42469c8f6d6cf7807dd587e0c3f510f514eddcdb244125ca8fe64bbcef3d",
+    "palm_cradle_clearance_review": "8f5f9beb5456a6df38ad07609f71f596935806e2309a6b5befc56159f389e525",
+    "palm_little_review": "22a73cf25b02ac7b5d2a43d9a53983bfd7e6c302b726b6df377510690998ac0c",
+    "palm_guide_mounts_review": "01ebc43d8ee07b850a8b3179f9dfc84b9711a8eb36853ebaa90eedf20548d7f9",
+    "thumb_cmc_mounts_review": "fedf2fe2aa14ffb578fe1eb4d79881aef9d7067bc9a118a6333448eed1f59c6b",
+    "drive_terminal_placements": "d78418617c5ee40aa3897a43a96b987702aa6183f8c917c3f6dde97ca64f9246",
+    "wrist_guide_mounts_review": "5d731a96ee067c34961533972b007b990bf1d94de3cc561477705f0f100ab703"
+  },
+  "body_count": 15,
+  "body_native_near_checks": 57,
+  "route_screened_pairs": 18930,
+  "route_native_near_checks": 167,
+  "body_rows": [
+    {
+      "a": "palm_contact_1_silicone_pad",
+      "b": "palm_contact_1_carrier",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_1_silicone_pad",
+      "b": "palm_contact_1_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_1_carrier",
+      "b": "palm_contact_1_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_silicone_pad",
+      "b": "palm_contact_2_carrier",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_silicone_pad",
+      "b": "palm_contact_2_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_carrier",
+      "b": "palm_contact_2_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "palm_contact_3_carrier",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "palm_contact_3_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_carrier",
+      "b": "palm_contact_3_M1p6_top_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_low_head_socket_screw",
+      "b": "palm_wrist_radial_0p4mm_seat_spacer",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_low_head_socket_screw",
+      "b": "palm_wrist_radial_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_low_head_socket_screw",
+      "b": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_0p4mm_seat_spacer",
+      "b": "palm_wrist_radial_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_0p4mm_seat_spacer",
+      "b": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "b": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "b": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "b": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_1_silicone_pad",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_1_carrier",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_1_M1p6_top_socket_screw",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_silicone_pad",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_carrier",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_M1p6_top_socket_screw",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_carrier",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_M1p6_top_socket_screw",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_low_head_socket_screw",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_0p4mm_seat_spacer",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "b": "palm_metacarpal_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_low_head_socket_screw",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_0p4mm_seat_spacer",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_0p4mm_seat_spacer",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "b": "wrist_palm_cradle",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_silicone_pad",
+      "b": "fifth_metacarpal_cupping_truss",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "middle_palm_bank_structural_body",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_carrier",
+      "b": "middle_palm_bank_structural_body",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_M1p6_top_socket_screw",
+      "b": "middle_palm_bank_structural_body",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_silicone_pad",
+      "b": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_carrier",
+      "b": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_2_M1p6_top_socket_screw",
+      "b": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "wrist_flexion_positive_drive_pulley",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "b": "wrist_flexion_positive_drive_pulley",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_radial_M3_flanged_thread_insert",
+      "b": "wrist_flexion_negative_drive_pulley",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "b": "wrist_flexion_negative_drive_pulley",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "palm_cup_shared_drive_mouth_structural_2",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_M1p6_top_socket_screw",
+      "b": "palm_cup_shared_drive_mouth_structural_2",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_silicone_pad",
+      "b": "palm_cup_drive_mouth_1_host_cap_1",
+      "intersection_mm3": 0
+    },
+    {
+      "a": "palm_contact_3_M1p6_top_socket_screw",
+      "b": "palm_cup_drive_mouth_1_host_cap_1",
+      "intersection_mm3": 0
+    }
+  ],
+  "route_rows": [
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 3.5103588732586704
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 39.04783753584296
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 0.4430186580113857
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 0.37323877550305146
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 35.403091876417434
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative_wrist_guide",
+      "pose": {},
+      "surface_gap_mm": 7.960093606045963
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 4.070964649795587
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 0.4323122987366495
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 0.37054354227552394
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 35.51291219533538
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 7.800085730482272
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 26.682233728261604
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "surface_gap_mm": 7.280894206807941
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "surface_gap_mm": 3.157682117185777
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "surface_gap_mm": 38.915867876224794
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "surface_gap_mm": 35.52657099739732
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "surface_gap_mm": 8.393769700259243
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 0.4158930425047452
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 0.36498482215817857
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 2.459630696963392
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 43.82759855824113
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 2.4883277931344256
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 35.1515466261482
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 7.375198595068508
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 25.275037231698636
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "surface_gap_mm": 8.892245396098412
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "surface_gap_mm": 3.041858842243095
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "surface_gap_mm": 38.49786251829734
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "surface_gap_mm": 3.373538951149086
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "surface_gap_mm": 38.061634264244134
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "surface_gap_mm": 0.4796240961103994
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "surface_gap_mm": 0.373917683863826
+    },
+    {
+      "body": "palm_contact_1_M1p6_top_socket_screw",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "surface_gap_mm": 0.8681314930712547
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 0.4022372617952233
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 0.37360642786942483
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 1.9074104236829832
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 3.256072739344398
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 40.96457897449498
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 3.0020251855514655
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 39.68129580363533
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 15.605379861076813
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 27.659636217895322
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 16.644554127437463
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 26.477590559717044
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 30.03189987808248
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 13.512330815072868
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 28.444949592423132
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_dip_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 14.835026613586987
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 43.930409954666054
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 0.9001250927995916
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 35.09502130007974
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 7.619730556137767
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 24.69398055861376
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "surface_gap_mm": 9.81962913422338
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 0.40188219950421195
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 0.36106804906691153
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 3.97377411206625
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 41.07208710124544
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 1.3771344612479433
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 2.45243448665272
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 42.97020728238976
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 2.171345425934518
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 40.77323970989911
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 14.494927872397563
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 28.476534149046298
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 15.447794632858006
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 27.299675126495128
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_dip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 17.28871607361604
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_dip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 24.896301597199212
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 29.324727675701208
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 14.098066408963998
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 29.788095748872166
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 13.204909298976846
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_dip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 28.153310567254973
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_dip_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 14.725419624925822
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 44.10164649457934
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 0.2564598975195412,
+      "final_native_retest": true
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 35.119063439655385
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 8.066412716129259
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 24.460340043138554
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "palm_cup_negative",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "surface_gap_mm": 11.32314832603372
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "surface_gap_mm": 3.9459842399095626
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "surface_gap_mm": 37.6403553336986
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.4516501637089189
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.36393246199093215
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 2.20454269803446
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 41.07154516201432
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.882787633620592
+    },
+    {
+      "body": "palm_wrist_radial_M3_low_head_socket_screw",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.7369910124159311
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.09398300938915666
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 43.20591189783041
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 15.857203830499042
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 27.447540755393764
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 14.756374100722196
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 28.703572145671398
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 15.774167878015625
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_pip_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 27.673456113112202
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 30.8550905423266
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 12.22037013596625
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 29.21489844765931
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 13.834819412178573
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 29.942256926148254
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_pip_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 13.559714548087367
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 44.262335369756556
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.28885132902962246
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "surface_gap_mm": 0.20696555294273483,
+      "final_native_retest": true
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -45.0
+      },
+      "surface_gap_mm": 4.704114607544166
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_flexion": -45.0
+      },
+      "surface_gap_mm": 37.156069456964715
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.5894305004359985
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.4145870361817246
+    },
+    {
+      "body": "palm_contact_1_M1p6_top_socket_screw",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.8346747241947363
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 2.549146252015384
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 41.09946413693599
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.5170815142705723
+    },
+    {
+      "body": "palm_wrist_radial_M3_low_head_socket_screw",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.4499934851209925
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.7016267129568075
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 43.42031485389198
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 15.742148434241312
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 27.301285789727746
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 30.937896440207247
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 11.940581819429806
+    },
+    {
+      "body": "palm_contact_2_silicone_pad",
+      "route": "ring_pip_positive",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 1.3021445343436686
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 44.40115635110987
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.2273340333233897
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "surface_gap_mm": 0.15968599992341187,
+      "final_native_retest": true
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.765174882153169
+    },
+    {
+      "body": "palm_contact_1_M1p6_top_socket_screw",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.7418304712507904
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_flexion_positive",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.4342585248792559
+    },
+    {
+      "body": "palm_wrist_radial_M3_low_head_socket_screw",
+      "route": "index_mcp_flexion_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.49980632257252805
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 15.95068433902388
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "middle_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 27.385352632559375
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 31.099770594025834
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "ring_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 12.05621421418023
+    },
+    {
+      "body": "palm_contact_2_silicone_pad",
+      "route": "ring_pip_positive",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 1.1396045146408655
+    },
+    {
+      "body": "palm_contact_2_carrier",
+      "route": "ring_pip_positive",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 1.083278742838428
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 44.485241569476216
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_low_head_socket_screw",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.20250496587039374
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_abduction_negative",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "surface_gap_mm": 0.14063987233694003,
+      "final_native_retest": true
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 3.5103588732586704
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 39.04783753584296
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 0.44301857066774003
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 0.3732389259637186
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 35.403091876417434
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "surface_gap_mm": 7.960093606045963
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 3.028965111012203
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 38.8211067984678
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 0.45304784435253403
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 0.3759267172465854
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 35.4091082601141
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "surface_gap_mm": 8.004047040106519
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "surface_gap_mm": 0.4413402565266426
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "surface_gap_mm": 0.3677302635736787
+    },
+    {
+      "body": "palm_contact_1_M1p6_top_socket_screw",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "surface_gap_mm": 0.9461743331288879
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "surface_gap_mm": 35.47295361009216
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "surface_gap_mm": 8.322698472410545
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "surface_gap_mm": 35.44428093699525
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "surface_gap_mm": 8.944339189927058
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "wrist_flexion_negative",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "surface_gap_mm": 5.472855540550969
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "wrist_flexion_negative",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "surface_gap_mm": 24.97042602265554
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 3.0194095358208495
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "thumb_cmc_flexion_negative",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 38.49691818579341
+    },
+    {
+      "body": "palm_contact_1_silicone_pad",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 0.4483673783151641
+    },
+    {
+      "body": "palm_contact_1_carrier",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 0.36590814210847095
+    },
+    {
+      "body": "palm_contact_1_M1p6_top_socket_screw",
+      "route": "index_mcp_abduction_positive",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 0.9168682328461799
+    },
+    {
+      "body": "palm_wrist_radial_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 35.36019982985913
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_mcp_flexion_negative",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 8.137960995140498
+    },
+    {
+      "body": "palm_wrist_ulnar_M3_flanged_thread_insert",
+      "route": "little_dip_negative",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "surface_gap_mm": 1.360562915336829
+    }
+  ],
+  "failures": [],
+  "step_sha256": "39d5cfa215f13f86478b86260190fe3190d1bccb108d59cc8aaf7e5baabeb67d",
+  "wrist_packets_sha256": "6c266b0c22aa04e9b687a4d0ff833241acae5ced70c2d673c0372c825530bd28",
+  "preceding_full_audit_step_sha256": "5b8dac9d61d51d123d07e7bffe493f5eb094cbe18b0c761af790ae351551167f",
+  "final_change": "Only the ulnar insert flange underside moved from Z\u221215.0 to\u221214.8, reducing its thickness from0.4 to0.2 mm. This monotone subtraction preserves all preceding body/tendon clearance passes. All four limiting wrist packets were explicitly retested on the final native geometry."
+}

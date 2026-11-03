@@ -1,0 +1,136 @@
+{
+  "pass": true,
+  "cases": [
+    {
+      "case": "clear",
+      "expected_separated": true,
+      "proven_separated": true,
+      "method": "connected wire separated from all boundary faces with outside-box vertex",
+      "outside_vertex_mm": [
+        -3.0,
+        2.0,
+        0.0
+      ],
+      "solid_bounds_mm": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "boundary_distance_mm": 1.0,
+      "surface_gap_lower_bound_mm": 0.6999989999999999
+    },
+    {
+      "case": "tube_overlaps",
+      "expected_separated": false,
+      "proven_separated": false,
+      "method": "connected wire separated from all boundary faces with outside-box vertex",
+      "outside_vertex_mm": [
+        -3.0,
+        1.2,
+        0.0
+      ],
+      "solid_bounds_mm": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "boundary_distance_mm": 0.19999999999999996,
+      "surface_gap_lower_bound_mm": -0.10000100000000003
+    },
+    {
+      "case": "crosses_solid",
+      "expected_separated": false,
+      "proven_separated": false,
+      "method": "connected wire separated from all boundary faces with outside-box vertex",
+      "outside_vertex_mm": [
+        -3.0,
+        0.0,
+        0.0
+      ],
+      "solid_bounds_mm": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "boundary_distance_mm": 0.0,
+      "surface_gap_lower_bound_mm": -0.30000099999999996
+    },
+    {
+      "case": "starts_inside",
+      "expected_separated": false,
+      "proven_separated": false,
+      "method": "connected wire separated from all boundary faces with outside-box vertex",
+      "outside_vertex_mm": [
+        3.0,
+        0.0,
+        0.0
+      ],
+      "solid_bounds_mm": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "boundary_distance_mm": 0.0,
+      "surface_gap_lower_bound_mm": -0.30000099999999996
+    },
+    {
+      "case": "fully_contained",
+      "expected_separated": false,
+      "proven_separated": false,
+      "reason": "no outside-box witness"
+    },
+    {
+      "case": "tangent",
+      "expected_separated": false,
+      "proven_separated": false,
+      "method": "connected wire separated from all boundary faces with outside-box vertex",
+      "outside_vertex_mm": [
+        -3.0,
+        1.0,
+        0.0
+      ],
+      "solid_bounds_mm": [
+        [
+          -1.0,
+          -1.0,
+          -1.0
+        ],
+        [
+          1.0,
+          1.0,
+          1.0
+        ]
+      ],
+      "boundary_distance_mm": 0.0,
+      "surface_gap_lower_bound_mm": -0.30000099999999996
+    }
+  ]
+}

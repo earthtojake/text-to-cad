@@ -1,0 +1,215 @@
+{
+  "cases": [
+    {
+      "channels": 2,
+      "angle_range_deg": [
+        -25,
+        110
+      ],
+      "angle_samples": 64,
+      "pitch_mm": 5.8,
+      "minimum_centerline_distance_lower_bound_mm": 1.3332479412933775,
+      "minimum_tendon_surface_clearance_lower_bound_mm": 0.7332479412933776,
+      "minimum_guide_envelope_clearance_lower_bound_mm": 0.23324794129337745,
+      "worst_angle_deg": -25.0,
+      "length_variation_mm": 1.7763568394002505e-15,
+      "max_tangent_or_position_join_error": 4.440892098500626e-16,
+      "envelope": {
+        "minimum": [
+          -7.3999999999999995,
+          -4.05,
+          -4.05
+        ],
+        "maximum": [
+          7.3999999999999995,
+          4.05,
+          4.05
+        ],
+        "size": [
+          14.799999999999999,
+          8.1,
+          8.1
+        ],
+        "body_envelope_radius": 0.55
+      },
+      "clear_at_every_requested_sample": true,
+      "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+    },
+    {
+      "channels": 4,
+      "angle_range_deg": [
+        -25,
+        110
+      ],
+      "angle_samples": 64,
+      "pitch_mm": 5.8,
+      "minimum_centerline_distance_lower_bound_mm": 1.3332429120747007,
+      "minimum_tendon_surface_clearance_lower_bound_mm": 0.7332429120747007,
+      "minimum_guide_envelope_clearance_lower_bound_mm": 0.2332429120747006,
+      "worst_angle_deg": -25.0,
+      "length_variation_mm": 3.552713678800501e-15,
+      "max_tangent_or_position_join_error": 4.440892098500626e-16,
+      "envelope": {
+        "minimum": [
+          -13.2,
+          -4.05,
+          -4.05
+        ],
+        "maximum": [
+          13.2,
+          4.05,
+          4.05
+        ],
+        "size": [
+          26.4,
+          8.1,
+          8.1
+        ],
+        "body_envelope_radius": 0.55
+      },
+      "clear_at_every_requested_sample": true,
+      "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+    },
+    {
+      "channels": 6,
+      "angle_range_deg": [
+        -20,
+        20
+      ],
+      "angle_samples": 53,
+      "pitch_mm": 5.8,
+      "minimum_centerline_distance_lower_bound_mm": 1.5037600759200775,
+      "minimum_tendon_surface_clearance_lower_bound_mm": 0.9037600759200776,
+      "minimum_guide_envelope_clearance_lower_bound_mm": 0.40376007592007745,
+      "worst_angle_deg": -20.0,
+      "length_variation_mm": 3.552713678800501e-15,
+      "max_tangent_or_position_join_error": 4.440892098500626e-16,
+      "envelope": {
+        "minimum": [
+          -19.0,
+          -4.05,
+          -4.05
+        ],
+        "maximum": [
+          19.0,
+          4.05,
+          4.05
+        ],
+        "size": [
+          38.0,
+          8.1,
+          8.1
+        ],
+        "body_envelope_radius": 0.55
+      },
+      "clear_at_every_requested_sample": true,
+      "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+    },
+    {
+      "channels": 8,
+      "angle_range_deg": [
+        -20,
+        20
+      ],
+      "angle_samples": 53,
+      "pitch_mm": 5.8,
+      "minimum_centerline_distance_lower_bound_mm": 1.5037600759200775,
+      "minimum_tendon_surface_clearance_lower_bound_mm": 0.9037600759200776,
+      "minimum_guide_envelope_clearance_lower_bound_mm": 0.40376007592007745,
+      "worst_angle_deg": -20.0,
+      "length_variation_mm": 3.552713678800501e-15,
+      "max_tangent_or_position_join_error": 4.440892098500626e-16,
+      "envelope": {
+        "minimum": [
+          -24.8,
+          -4.05,
+          -4.05
+        ],
+        "maximum": [
+          24.8,
+          4.05,
+          4.05
+        ],
+        "size": [
+          49.6,
+          8.1,
+          8.1
+        ],
+        "body_envelope_radius": 0.55
+      },
+      "clear_at_every_requested_sample": true,
+      "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+    },
+    {
+      "channels": 16,
+      "angle_range_deg": [
+        -20,
+        20
+      ],
+      "angle_samples": 53,
+      "pitch_mm": 5.8,
+      "minimum_centerline_distance_lower_bound_mm": 1.5037701343574295,
+      "minimum_tendon_surface_clearance_lower_bound_mm": 0.9037701343574295,
+      "minimum_guide_envelope_clearance_lower_bound_mm": 0.40377013435742937,
+      "worst_angle_deg": -20.0,
+      "length_variation_mm": 1.0658141036401503e-14,
+      "max_tangent_or_position_join_error": 4.440892098500626e-16,
+      "envelope": {
+        "minimum": [
+          -48.0,
+          -4.05,
+          -4.05
+        ],
+        "maximum": [
+          48.0,
+          4.05,
+          4.05
+        ],
+        "size": [
+          96.0,
+          8.1,
+          8.1
+        ],
+        "body_envelope_radius": 0.55
+      },
+      "clear_at_every_requested_sample": true,
+      "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+    }
+  ],
+  "requested_initial_pitch_audit": {
+    "channels": 2,
+    "angle_range_deg": [
+      -25,
+      110
+    ],
+    "angle_samples": 64,
+    "pitch_mm": 2.2,
+    "minimum_centerline_distance_lower_bound_mm": 0.07531923739465982,
+    "minimum_tendon_surface_clearance_lower_bound_mm": -0.5246807626053401,
+    "minimum_guide_envelope_clearance_lower_bound_mm": -1.0246807626053402,
+    "worst_angle_deg": -25.0,
+    "length_variation_mm": 1.7763568394002505e-15,
+    "max_tangent_or_position_join_error": 2.220446049250313e-16,
+    "envelope": {
+      "minimum": [
+        -5.6,
+        -4.05,
+        -4.05
+      ],
+      "maximum": [
+        5.6,
+        4.05,
+        4.05
+      ],
+      "size": [
+        11.2,
+        8.1,
+        8.1
+      ],
+      "body_envelope_radius": 0.55
+    },
+    "clear_at_every_requested_sample": false,
+    "limitations": "Array envelopes only; excludes mount supports, bearings, outside leads, and whole-joint parts. Angular checks are requested samples, not a continuous-angle proof."
+  },
+  "method": "Exact circular routes; nearest point sampling with along-curve Lipschitz error subtracted. Translation symmetry exhausts all channel pair offsets."
+}

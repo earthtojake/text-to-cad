@@ -1,0 +1,106 @@
+{
+  "body_count": 2933,
+  "processed": 2876,
+  "exact_booleans": 5250,
+  "native_distance_separations": 141,
+  "congruent_proof_reuse": 3665,
+  "collisions": [
+    {
+      "a": "thumb_fingertip_silicone_pad",
+      "b": "thumb_fingertip_conformal_bridge",
+      "intersection_mm3": 34.88750516236889
+    },
+    {
+      "a": "thumb_fingertip_radial_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409109115513818
+    },
+    {
+      "a": "thumb_fingertip_ulnar_M0p8_socket_screw",
+      "b": "thumb_fingertip_silicone_pad",
+      "intersection_mm3": 0.0018409091565612218
+    },
+    {
+      "a": "index_fingertip_silicone_pad",
+      "b": "index_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093814137
+    },
+    {
+      "a": "index_fingertip_radial_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968179437662789
+    },
+    {
+      "a": "index_fingertip_ulnar_M0p8_socket_screw",
+      "b": "index_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968167601617733
+    },
+    {
+      "a": "middle_fingertip_silicone_pad",
+      "b": "middle_fingertip_conformal_bridge",
+      "intersection_mm3": 29.974010093816595
+    },
+    {
+      "a": "middle_fingertip_silicone_pad",
+      "b": "middle_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.009968179394908051
+    },
+    {
+      "a": "wrist_flex_bushing_-1",
+      "b": "wrist_flexion_drive_mouth_-1_host_cap",
+      "intersection_mm3": 0.6264110012298322
+    },
+    {
+      "a": "middle_fingertip_ulnar_M0p8_socket_screw",
+      "b": "middle_fingertip_silicone_pad",
+      "intersection_mm3": 0.009968167503440014
+    },
+    {
+      "a": "ring_fingertip_silicone_pad",
+      "b": "ring_fingertip_conformal_bridge",
+      "intersection_mm3": 28.73780125003858
+    },
+    {
+      "a": "ring_fingertip_silicone_pad",
+      "b": "ring_fingertip_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.01725428084801721
+    },
+    {
+      "a": "ring_dorsal_fingernail",
+      "b": "ring_fingernail_radial_M0p8_socket_screw",
+      "intersection_mm3": 0.002525311035759933
+    },
+    {
+      "a": "wrist_flex_bushing_1",
+      "b": "wrist_flexion_drive_mouth_1_structural",
+      "intersection_mm3": 0.6264111821184637
+    },
+    {
+      "a": "fifth_metacarpal_cupping_truss",
+      "b": "ring_palm_bank_structural_body_1",
+      "intersection_mm3": 0.0011501279348093074
+    },
+    {
+      "a": "ring_fingertip_ulnar_M0p8_socket_screw",
+      "b": "ring_fingertip_silicone_pad",
+      "intersection_mm3": 0.017254254819850687
+    },
+    {
+      "a": "ring_fingernail_ulnar_M0p8_socket_screw",
+      "b": "ring_dorsal_fingernail",
+      "intersection_mm3": 0.0025253062466395497
+    },
+    {
+      "a": "little_mcp_abduction_negative_bushing",
+      "b": "fifth_metacarpal_cupping_truss",
+      "intersection_mm3": 0.07257057074216702
+    },
+    {
+      "a": "little_mcp_abduction_positive_bushing",
+      "b": "fifth_metacarpal_cupping_truss",
+      "intersection_mm3": 0.06035908011933021
+    }
+  ],
+  "complete": false,
+  "pass": false
+}

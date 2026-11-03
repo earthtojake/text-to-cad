@@ -1,0 +1,26 @@
+{
+  "motor_envelope_mm": {
+    "radius": 6.8,
+    "length": 18
+  },
+  "pairs": [
+    {
+      "a": "motor_dark_anodized_case",
+      "b": "motor_polished_front_endcap",
+      "common_volume_mm3": 0,
+      "clear": true
+    },
+    {
+      "a": "motor_dark_anodized_case",
+      "b": "motor_polished_output_shaft",
+      "common_volume_mm3": 0,
+      "clear": true
+    },
+    {
+      "a": "motor_polished_front_endcap",
+      "b": "motor_polished_output_shaft",
+      "common_volume_mm3": 0,
+      "clear": true
+    }
+  ]
+}

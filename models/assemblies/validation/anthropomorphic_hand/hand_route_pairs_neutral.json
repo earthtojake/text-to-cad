@@ -1,0 +1,346 @@
+{
+  "scope": "all48 hand-side routes; wrist/forearm prefix excluded",
+  "tendon_table": [
+    {
+      "tendon": "thumb_cmc_abduction_positive",
+      "hand_side_length_mm": 21.325957145940457,
+      "minimum_radius_mm": 6.9999999999999964,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.5700924586837752e-16
+    },
+    {
+      "tendon": "thumb_cmc_abduction_negative",
+      "hand_side_length_mm": 21.325957145940457,
+      "minimum_radius_mm": 6.9999999999999964,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.5700924586837752e-16
+    },
+    {
+      "tendon": "thumb_cmc_flexion_positive",
+      "hand_side_length_mm": 46.82595714594052,
+      "minimum_radius_mm": 4.518516674781799,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.671119018262734e-16
+    },
+    {
+      "tendon": "thumb_cmc_flexion_negative",
+      "hand_side_length_mm": 46.82595714594052,
+      "minimum_radius_mm": 4.518516674781799,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.671119018262734e-16
+    },
+    {
+      "tendon": "thumb_mcp_abduction_positive",
+      "hand_side_length_mm": 79.32129444090327,
+      "minimum_radius_mm": 3.6500000001204302,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.6651134375294657e-15
+    },
+    {
+      "tendon": "thumb_mcp_abduction_negative",
+      "hand_side_length_mm": 80.51353072073923,
+      "minimum_radius_mm": 3.6474138542493573,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.347931402919179e-15
+    },
+    {
+      "tendon": "thumb_mcp_flexion_positive",
+      "hand_side_length_mm": 82.89896632895321,
+      "minimum_radius_mm": 3.650000000064096,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.3092278833360677e-15
+    },
+    {
+      "tendon": "thumb_mcp_flexion_negative",
+      "hand_side_length_mm": 82.89896632895362,
+      "minimum_radius_mm": 3.6499999999998716,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 3.887762621811037e-15
+    },
+    {
+      "tendon": "thumb_ip_positive",
+      "hand_side_length_mm": 103.59567894729857,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 3.595927369485638e-15
+    },
+    {
+      "tendon": "thumb_ip_negative",
+      "hand_side_length_mm": 103.59567894729857,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 4.0137287898923056e-15
+    },
+    {
+      "tendon": "index_mcp_abduction_positive",
+      "hand_side_length_mm": 49.39896632895322,
+      "minimum_radius_mm": 5.499999999999998,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 9.155133597044475e-16
+    },
+    {
+      "tendon": "index_mcp_abduction_negative",
+      "hand_side_length_mm": 49.39896632895322,
+      "minimum_radius_mm": 5.499999999999997,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.7554167342883505e-15
+    },
+    {
+      "tendon": "index_mcp_flexion_positive",
+      "hand_side_length_mm": 53.89896632895323,
+      "minimum_radius_mm": 4.518516674781746,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.9499359079002526e-15
+    },
+    {
+      "tendon": "index_mcp_flexion_negative",
+      "hand_side_length_mm": 53.89896632895323,
+      "minimum_radius_mm": 4.518516674781824,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.9499359079002526e-15
+    },
+    {
+      "tendon": "index_pip_positive",
+      "hand_side_length_mm": 94.82617956092206,
+      "minimum_radius_mm": 3.6458983003101464,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.6656914905538386e-15
+    },
+    {
+      "tendon": "index_pip_negative",
+      "hand_side_length_mm": 94.82617956092204,
+      "minimum_radius_mm": 3.6458983002344842,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.5982970556924734e-15
+    },
+    {
+      "tendon": "index_dip_positive",
+      "hand_side_length_mm": 124.36057745771626,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.897149936107019e-15
+    },
+    {
+      "tendon": "index_dip_negative",
+      "hand_side_length_mm": 124.36057745771626,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.897149936107019e-15
+    },
+    {
+      "tendon": "middle_mcp_abduction_positive",
+      "hand_side_length_mm": 49.39896632895322,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.0371267395744221e-15
+    },
+    {
+      "tendon": "middle_mcp_abduction_negative",
+      "hand_side_length_mm": 49.39896632895322,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.0371267395744221e-15
+    },
+    {
+      "tendon": "middle_mcp_flexion_positive",
+      "hand_side_length_mm": 53.89896632895322,
+      "minimum_radius_mm": 4.518516674781811,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 5.214799211354908e-16
+    },
+    {
+      "tendon": "middle_mcp_flexion_negative",
+      "hand_side_length_mm": 53.89896632895322,
+      "minimum_radius_mm": 4.5185166747818215,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 6.38378239159465e-16
+    },
+    {
+      "tendon": "middle_pip_positive",
+      "hand_side_length_mm": 97.77252921540027,
+      "minimum_radius_mm": 3.6458983003100056,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 9.742167503148516e-16
+    },
+    {
+      "tendon": "middle_pip_negative",
+      "hand_side_length_mm": 97.7725292154003,
+      "minimum_radius_mm": 3.6458983002345513,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.4054300946555646e-15
+    },
+    {
+      "tendon": "middle_dip_positive",
+      "hand_side_length_mm": 129.19310684078843,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.3507158977068525e-15
+    },
+    {
+      "tendon": "middle_dip_negative",
+      "hand_side_length_mm": 129.19310684078846,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.4087150935148696e-15
+    },
+    {
+      "tendon": "ring_mcp_abduction_positive",
+      "hand_side_length_mm": 49.39896632895323,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.0130785099704553e-15
+    },
+    {
+      "tendon": "ring_mcp_abduction_negative",
+      "hand_side_length_mm": 49.39896632895323,
+      "minimum_radius_mm": 5.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.0130785099704553e-15
+    },
+    {
+      "tendon": "ring_mcp_flexion_positive",
+      "hand_side_length_mm": 53.89896632895323,
+      "minimum_radius_mm": 4.5185166747818055,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 3.191891195797325e-16
+    },
+    {
+      "tendon": "ring_mcp_flexion_negative",
+      "hand_side_length_mm": 53.89896632895323,
+      "minimum_radius_mm": 4.51851667478182,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 6.38378239159465e-16
+    },
+    {
+      "tendon": "ring_pip_positive",
+      "hand_side_length_mm": 93.84672332411287,
+      "minimum_radius_mm": 3.6458983002867593,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.5700924586837751e-15
+    },
+    {
+      "tendon": "ring_pip_negative",
+      "hand_side_length_mm": 93.84672332411286,
+      "minimum_radius_mm": 3.6458983002930627,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 7.832041159795668e-16
+    },
+    {
+      "tendon": "ring_dip_positive",
+      "hand_side_length_mm": 123.36057745771629,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.0929710123431638e-15
+    },
+    {
+      "tendon": "ring_dip_negative",
+      "hand_side_length_mm": 123.36057745771627,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.915386110178114e-15
+    },
+    {
+      "tendon": "little_mcp_abduction_positive",
+      "hand_side_length_mm": 78.00259422224433,
+      "minimum_radius_mm": 3.8255801886839484,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 4.710277376051325e-16
+    },
+    {
+      "tendon": "little_mcp_abduction_negative",
+      "hand_side_length_mm": 73.35379334309661,
+      "minimum_radius_mm": 3.648006035533232,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 9.43689570931383e-16
+    },
+    {
+      "tendon": "little_mcp_flexion_positive",
+      "hand_side_length_mm": 85.67004579628903,
+      "minimum_radius_mm": 3.6499923292338368,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.0411201962889075e-15
+    },
+    {
+      "tendon": "little_mcp_flexion_negative",
+      "hand_side_length_mm": 85.84839485678849,
+      "minimum_radius_mm": 4.510314224540535,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 2.0411201962889075e-15
+    },
+    {
+      "tendon": "little_pip_positive",
+      "hand_side_length_mm": 101.2053973965124,
+      "minimum_radius_mm": 3.6458983002110235,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.790180836524724e-15
+    },
+    {
+      "tendon": "little_pip_negative",
+      "hand_side_length_mm": 103.72459107398745,
+      "minimum_radius_mm": 3.6458983001812704,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 1.787596980229968e-15
+    },
+    {
+      "tendon": "little_dip_positive",
+      "hand_side_length_mm": 127.74590302489186,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 3.732067169519928e-15
+    },
+    {
+      "tendon": "little_dip_negative",
+      "hand_side_length_mm": 131.27274546514784,
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 2.237726045655905e-15
+    },
+    {
+      "tendon": "wrist_abduction_positive",
+      "hand_side_length_mm": 34.79793265790644,
+      "minimum_radius_mm": 11.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "wrist_abduction_negative",
+      "hand_side_length_mm": 34.79793265790644,
+      "minimum_radius_mm": 11.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "wrist_flexion_positive",
+      "hand_side_length_mm": 34.79793265790644,
+      "minimum_radius_mm": 11.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "wrist_flexion_negative",
+      "hand_side_length_mm": 34.79793265790644,
+      "minimum_radius_mm": 11.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "palm_cup_positive",
+      "hand_side_length_mm": 38.325957145940464,
+      "minimum_radius_mm": 7.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    },
+    {
+      "tendon": "palm_cup_negative",
+      "hand_side_length_mm": 38.325957145940464,
+      "minimum_radius_mm": 7.0,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 0.0
+    }
+  ],
+  "minimum_checked_gap_lower_bound_mm": 0.05494186998388345,
+  "group_pairs_tested": 232,
+  "conflicts": [],
+  "pass": true,
+  "pose": {}
+}

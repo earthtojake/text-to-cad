@@ -1,0 +1,824 @@
+{
+  "scope": [
+    "phalanx_1",
+    "phalanx_2",
+    "phalanx_3",
+    "mcp_abduction_1_pulley",
+    "mcp_abduction_-1_pulley",
+    "mcp_flexion_1_pulley",
+    "mcp_flexion_-1_pulley",
+    "mcp_flexion_shaft_envelope",
+    "pip_1_pulley",
+    "pip_-1_pulley",
+    "pip_shaft_envelope",
+    "dip_1_pulley",
+    "dip_-1_pulley",
+    "dip_shaft_envelope"
+  ],
+  "source_sha256": {
+    "finger_routing.py": "a93d68cdcb6a7fc4976e3ebdf66dc54226c870113c5347b1372dc1de85ccad8c",
+    "bowden_mcp.py": "565426dfb5c6a3e6849ec1ad21f387aab397b19eb387e9058b95528a28d6e3b0",
+    "yaw_transport.py": "72f9838c8fc28b7d3dd062dd7e766b524503953876344d767d47b2c42e866ce0",
+    "pip_transport.py": "7bd2dea49dcded900f6480698cf7936e9ee3969bcc6cc1a1eb94502fad225301",
+    "phalanx.py": "4dfc5a0f722b483e248d52264bc6f2391a0610ef3c0aa79a36dcb625a2bd59da",
+    "pulley.py": "f2c462979714d392e4d5daa6520e03696c33f22d169a5b2914aa5bb86619643e",
+    "universal_carrier.py": "9763c4630dd6250c2908f4e3837f1a3c1dcda77539e02842d1671ab831ac72e9",
+    "layout.py": "501ef1d3fe88559febe10eb395d727111df96821e492b80bd5ce8e166dc54af0"
+  },
+  "rows": [
+    {
+      "label": "flat_open",
+      "pose": {},
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {},
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_abduction_-15",
+      "pose": {
+        "middle_mcp_abduction": -15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 3.204296758965566e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08983491855625536,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": -15.0
+        },
+        "exact_distances_tested": 103,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_abduction_-5",
+      "pose": {
+        "middle_mcp_abduction": -5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 1.1962500143901049e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.25186089070467454,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": -5.0
+        },
+        "exact_distances_tested": 81,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_abduction_5",
+      "pose": {
+        "middle_mcp_abduction": 5.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 1.4054300946555646e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.25186053143221276,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": 5.0
+        },
+        "exact_distances_tested": 81,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_abduction_15",
+      "pose": {
+        "middle_mcp_abduction": 15.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.464821375527116e-14,
+      "maximum_tangent_error": 3.204296758965566e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.09000671208898625,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": 15.0
+        },
+        "exact_distances_tested": 103,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_-15",
+      "pose": {
+        "middle_mcp_flexion": -15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.659300627039741e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.0899103175005197,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": -15.0
+        },
+        "exact_distances_tested": 80,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_-5",
+      "pose": {
+        "middle_mcp_flexion": -5.0
+      },
+      "minimum_radius_mm": 3.4999999999999982,
+      "maximum_join_gap_mm": 1.3322676295501878e-15,
+      "maximum_tangent_error": 3.6650236557393156e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699838580607913,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": -5.0
+        },
+        "exact_distances_tested": 79,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_5",
+      "pose": {
+        "middle_mcp_flexion": 5.0
+      },
+      "minimum_radius_mm": 3.4999999999999982,
+      "maximum_join_gap_mm": 1.3322676295501878e-15,
+      "maximum_tangent_error": 3.6650236557393156e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.27000626188330334,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 5.0
+        },
+        "exact_distances_tested": 75,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_15",
+      "pose": {
+        "middle_mcp_flexion": 15.0
+      },
+      "minimum_radius_mm": 3.4999999999999956,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.659300627039741e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700018490282242,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 15.0
+        },
+        "exact_distances_tested": 73,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_25",
+      "pose": {
+        "middle_mcp_flexion": 25.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 1.4238583238573986e-14,
+      "maximum_tangent_error": 6.955527313080394e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700023804552306,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 25.0
+        },
+        "exact_distances_tested": 69,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_35",
+      "pose": {
+        "middle_mcp_flexion": 35.0
+      },
+      "minimum_radius_mm": 3.4999999999999987,
+      "maximum_join_gap_mm": 1.5888218580782548e-14,
+      "maximum_tangent_error": 6.86724770124419e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.27000482918296853,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 35.0
+        },
+        "exact_distances_tested": 69,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_45",
+      "pose": {
+        "middle_mcp_flexion": 45.0
+      },
+      "minimum_radius_mm": 3.4999999999999933,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.632437998758358e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.27000252954627013,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 45.0
+        },
+        "exact_distances_tested": 68,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_55",
+      "pose": {
+        "middle_mcp_flexion": 55.0
+      },
+      "minimum_radius_mm": 3.4999999999999907,
+      "maximum_join_gap_mm": 8.881784197001252e-15,
+      "maximum_tangent_error": 2.9893669801409084e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999999999999946,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 55.0
+        },
+        "exact_distances_tested": 69,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_65",
+      "pose": {
+        "middle_mcp_flexion": 65.0
+      },
+      "minimum_radius_mm": 3.5000000000000013,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 1.0530159589964839e-14,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700021918283936,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 65.0
+        },
+        "exact_distances_tested": 69,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_75",
+      "pose": {
+        "middle_mcp_flexion": 75.0
+      },
+      "minimum_radius_mm": 3.500000000000006,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 5.521057726179437e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700024807657603,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 75.0
+        },
+        "exact_distances_tested": 71,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_85",
+      "pose": {
+        "middle_mcp_flexion": 85.0
+      },
+      "minimum_radius_mm": 3.4999999999999942,
+      "maximum_join_gap_mm": 1.7763568394002505e-15,
+      "maximum_tangent_error": 4.82220677164838e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700050319925943,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 85.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_mcp_flexion_90",
+      "pose": {
+        "middle_mcp_flexion": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 1.4210854715202004e-14,
+      "maximum_tangent_error": 2.2758250851991904e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999700126964987,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_flexion": 90.0
+        },
+        "exact_distances_tested": 73,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_0",
+      "pose": {
+        "middle_pip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 0.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_10",
+      "pose": {
+        "middle_pip": 10.0
+      },
+      "minimum_radius_mm": 3.4999999999999996,
+      "maximum_join_gap_mm": 2.8508313657667433e-14,
+      "maximum_tangent_error": 2.1210781103223385e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 10.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_20",
+      "pose": {
+        "middle_pip": 20.0
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 1.7028447152542777e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 20.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_30",
+      "pose": {
+        "middle_pip": 30.0
+      },
+      "minimum_radius_mm": 3.500000000000001,
+      "maximum_join_gap_mm": 8.881784197001252e-16,
+      "maximum_tangent_error": 1.0532500405730103e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 30.0
+        },
+        "exact_distances_tested": 71,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_40",
+      "pose": {
+        "middle_pip": 40.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 3.00540469234687e-14,
+      "maximum_tangent_error": 9.694605782913358e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 40.0
+        },
+        "exact_distances_tested": 70,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_50",
+      "pose": {
+        "middle_pip": 50.0
+      },
+      "minimum_radius_mm": 3.5000000000000044,
+      "maximum_join_gap_mm": 7.105427357601002e-15,
+      "maximum_tangent_error": 4.407459562045625e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700025295462666,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 50.0
+        },
+        "exact_distances_tested": 70,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_60",
+      "pose": {
+        "middle_pip": 60.0
+      },
+      "minimum_radius_mm": 3.499999999999992,
+      "maximum_join_gap_mm": 3.552713678800501e-15,
+      "maximum_tangent_error": 1.9899025015462835e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 60.0
+        },
+        "exact_distances_tested": 71,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_70",
+      "pose": {
+        "middle_pip": 70.0
+      },
+      "minimum_radius_mm": 3.500000000000004,
+      "maximum_join_gap_mm": 3.260957681782951e-14,
+      "maximum_tangent_error": 6.938893903907228e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2700025295462666,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 70.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_80",
+      "pose": {
+        "middle_pip": 80.0
+      },
+      "minimum_radius_mm": 3.499999999999991,
+      "maximum_join_gap_mm": 2.4868995751603507e-14,
+      "maximum_tangent_error": 2.9940020596445738e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 80.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_90",
+      "pose": {
+        "middle_pip": 90.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 90.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_100",
+      "pose": {
+        "middle_pip": 100.0
+      },
+      "minimum_radius_mm": 3.499999999999991,
+      "maximum_join_gap_mm": 2.4868995751603507e-14,
+      "maximum_tangent_error": 9.391438513943436e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 100.0
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_pip_110",
+      "pose": {
+        "middle_pip": 110.0
+      },
+      "minimum_radius_mm": 3.5000000000000027,
+      "maximum_join_gap_mm": 1.2434497875801753e-14,
+      "maximum_tangent_error": 4.8469850251071806e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_pip": 110.0
+        },
+        "exact_distances_tested": 73,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_0",
+      "pose": {
+        "middle_dip": 0.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 0.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_10",
+      "pose": {
+        "middle_dip": 10.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 10.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_20",
+      "pose": {
+        "middle_dip": 20.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 20.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_30",
+      "pose": {
+        "middle_dip": 30.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 30.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_40",
+      "pose": {
+        "middle_dip": 40.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 40.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_50",
+      "pose": {
+        "middle_dip": 50.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 50.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_60",
+      "pose": {
+        "middle_dip": 60.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 60.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_70",
+      "pose": {
+        "middle_dip": 70.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 70.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "middle_dip_80",
+      "pose": {
+        "middle_dip": 80.0
+      },
+      "minimum_radius_mm": 3.5,
+      "maximum_join_gap_mm": 0.0,
+      "maximum_tangent_error": 8.968100940422724e-16,
+      "minimum_mutual_gap_lower_bound_mm": 0.2699999999999957,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_dip": 80.0
+        },
+        "exact_distances_tested": 74,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "full_fist",
+      "pose": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "minimum_radius_mm": 3.4999999999999973,
+      "maximum_join_gap_mm": 2.929642751054232e-14,
+      "maximum_tangent_error": 3.742373919797964e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999700126964987,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": 0,
+          "middle_mcp_flexion": 90,
+          "middle_pip": 110,
+          "middle_dip": 80
+        },
+        "exact_distances_tested": 71,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "precision_pinch",
+      "pose": {
+        "middle_mcp_abduction": 0,
+        "middle_mcp_flexion": 40,
+        "middle_pip": 60,
+        "middle_dip": 30
+      },
+      "minimum_radius_mm": 3.4999999999999907,
+      "maximum_join_gap_mm": 1.4888583356622763e-14,
+      "maximum_tangent_error": 9.330002786622952e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.26999990709438204,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": 0,
+          "middle_mcp_flexion": 40,
+          "middle_pip": 60,
+          "middle_dip": 30
+        },
+        "exact_distances_tested": 72,
+        "collisions": []
+      },
+      "pass": true
+    },
+    {
+      "label": "spread_flex",
+      "pose": {
+        "middle_mcp_abduction": 15,
+        "middle_mcp_flexion": 90,
+        "middle_pip": 110,
+        "middle_dip": 80
+      },
+      "minimum_radius_mm": 3.499999999999994,
+      "maximum_join_gap_mm": 2.95110562224397e-14,
+      "maximum_tangent_error": 4.6596312966847435e-15,
+      "minimum_mutual_gap_lower_bound_mm": 0.08994342504940112,
+      "mutual_conflicts": [],
+      "hardware": {
+        "pose": {
+          "middle_mcp_abduction": 15,
+          "middle_mcp_flexion": 90,
+          "middle_pip": 110,
+          "middle_dip": 80
+        },
+        "exact_distances_tested": 90,
+        "collisions": []
+      },
+      "pass": true
+    }
+  ],
+  "pass": true
+}

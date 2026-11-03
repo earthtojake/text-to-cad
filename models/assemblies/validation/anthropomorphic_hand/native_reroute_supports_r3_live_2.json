@@ -1,0 +1,17 @@
+{
+  "body_count": 3039,
+  "processed": 201,
+  "exact_booleans": 7,
+  "native_distance_separations": 0,
+  "congruent_proof_reuse": 0,
+  "collisions": [],
+  "complete": false,
+  "pass": false,
+  "pair_scope": {
+    "any_endpoint_in": [
+      "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "thumb_radial_shared_guide_bank_structural"
+    ],
+    "unchanged_pair_gate": "separate frozen baseline certificate required"
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "scope": "all48 full neutral routes; actual palm frame; mutual mount solids",
+  "collisions": [],
+  "host_interferences": [],
+  "mutual_interferences": [
+    {
+      "a": "index_palm_bank_structural_body",
+      "b": "index_palm_bank_row_01_upper_jaw",
+      "volume": 0.025182551383410284
+    },
+    {
+      "a": "index_palm_bank_structural_body",
+      "b": "index_palm_bank_row_01_right_M0p6_screw",
+      "volume": 0.025568706439736414
+    },
+    {
+      "a": "middle_palm_bank_structural_body",
+      "b": "middle_palm_bank_row_02_upper_jaw",
+      "volume": 0.025182551383409295
+    },
+    {
+      "a": "middle_palm_bank_structural_body",
+      "b": "middle_palm_bank_row_02_left_M0p6_screw",
+      "volume": 0.02556870643972839
+    }
+  ],
+  "tested": 302,
+  "pass": false
+}

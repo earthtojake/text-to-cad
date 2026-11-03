@@ -1,0 +1,8 @@
+{
+  "source_step": "models/assemblies/STEP/anthropomorphic_hand/hand_progress_review.step",
+  "frozen_step": "models/assemblies/STEP/anthropomorphic_hand/imported/integration_native_base.step",
+  "step_sha256": "3bd64acfbde15af5a2b434387fd74a454d63052f9a5d26482414de7a64c1b03b",
+  "metadata_sha256": "21b08001575a26ab90f3a8059fac5672adecd117b818eceb460f29a7c2b306e6",
+  "body_count": 3151,
+  "scope": "Frozen progressive native assembly; final guide and palm hardware overlays still pending."
+}

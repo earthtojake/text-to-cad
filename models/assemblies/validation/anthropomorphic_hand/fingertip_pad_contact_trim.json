@@ -1,0 +1,18 @@
+{
+  "index": {
+    "native_contact_point_mm": [
+      -6.018029716877479,
+      10.507926222896767,
+      5.645761729440089
+    ],
+    "distance_above_trim_plane_mm": 1.4957617294400887
+  },
+  "thumb": {
+    "native_contact_point_mm": [
+      5.823236541676451,
+      18.36664993880126,
+      5.618176754685219
+    ],
+    "distance_above_trim_plane_mm": 1.468176754685219
+  }
+}

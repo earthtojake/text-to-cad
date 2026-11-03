@@ -1,0 +1,43 @@
+{
+  "body_count": 3039,
+  "processed": 3039,
+  "exact_booleans": 69,
+  "native_distance_separations": 8,
+  "congruent_proof_reuse": 24,
+  "collisions": [],
+  "complete": true,
+  "pass": true,
+  "pair_scope": {
+    "any_endpoint_in": [
+      "actuator_thumb_ip_negative_capstan",
+      "actuator_thumb_ip_negative_capstan_retainer_screw",
+      "actuator_thumb_ip_negative_capstan_terminal_bond_line",
+      "actuator_thumb_ip_negative_gearbox_carrier",
+      "actuator_thumb_ip_negative_gearbox_planet_1",
+      "actuator_thumb_ip_negative_gearbox_planet_2",
+      "actuator_thumb_ip_negative_gearbox_planet_3",
+      "actuator_thumb_ip_negative_gearbox_planet_pin_1",
+      "actuator_thumb_ip_negative_gearbox_planet_pin_2",
+      "actuator_thumb_ip_negative_gearbox_planet_pin_3",
+      "actuator_thumb_ip_negative_gearbox_spindle",
+      "actuator_thumb_ip_negative_gearbox_sun",
+      "actuator_thumb_ip_negative_motor_shaft",
+      "actuator_thumb_ip_negative_terminal_ferrule",
+      "actuator_thumb_ip_positive_capstan",
+      "actuator_thumb_ip_positive_capstan_retainer_screw",
+      "actuator_thumb_ip_positive_capstan_terminal_bond_line",
+      "actuator_thumb_ip_positive_gearbox_carrier",
+      "actuator_thumb_ip_positive_gearbox_planet_1",
+      "actuator_thumb_ip_positive_gearbox_planet_2",
+      "actuator_thumb_ip_positive_gearbox_planet_3",
+      "actuator_thumb_ip_positive_gearbox_planet_pin_1",
+      "actuator_thumb_ip_positive_gearbox_planet_pin_2",
+      "actuator_thumb_ip_positive_gearbox_planet_pin_3",
+      "actuator_thumb_ip_positive_gearbox_spindle",
+      "actuator_thumb_ip_positive_gearbox_sun",
+      "actuator_thumb_ip_positive_motor_shaft",
+      "actuator_thumb_ip_positive_terminal_ferrule"
+    ],
+    "unchanged_pair_gate": "separate frozen baseline certificate required"
+  }
+}

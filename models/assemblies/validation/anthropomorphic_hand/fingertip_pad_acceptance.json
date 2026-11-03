@@ -1,0 +1,49 @@
+{
+  "pass": true,
+  "checks": {
+    "body_sweep_complete": true,
+    "body_sweep_clear": true,
+    "route_sweep_complete": true,
+    "all_reference_failures_resolved": true,
+    "repair_and_mounts_pass": true,
+    "strict_final_geometry_pass": true,
+    "terminal_orbits_and_cup_routes_pass": true,
+    "pinch_has_contact_without_overlap": true,
+    "final_pad_source_matches_repair": true,
+    "host_sources_unchanged": true
+  },
+  "body_pose_count": 225,
+  "route_pose_count": 203,
+  "expected_route_pose_count": 203,
+  "exact_body_pair_evaluations": 87,
+  "new_body_count": 30,
+  "strict_review_body_count": 35,
+  "pinch_contact": {
+    "exact_native_pad_gap_mm": 7.105427357601002e-15,
+    "intersection_mm3": 0.0,
+    "analytic_target_gap_mm": 9.81636955165781e-05,
+    "pose": {
+      "index_mcp_abduction": -17.40900758070954,
+      "index_mcp_flexion": 74.68469201675903,
+      "index_pip": 57.94830222639836,
+      "index_dip": 21.90864380435607,
+      "thumb_mcp_abduction": -11.484462068625563,
+      "thumb_mcp_flexion": 7.697863149475799,
+      "thumb_ip": 31.564732218590134,
+      "thumb_cmc_abduction": -21.046825109125002,
+      "thumb_cmc_flexion": 37.474289981694746
+    }
+  },
+  "little_full_fist_liner_clearance_mm": 0.3842641541767453,
+  "minimum_continuous_terminal_clearance_mm": 3.566925407953839,
+  "reference_failures": [
+    {
+      "label": "full_fist_candidate",
+      "tendon": "little_mcp_flexion_positive",
+      "group": "little_mcp_flexion_positive_yaw_reaction",
+      "body": "little_fingertip_silicone_pad",
+      "gap_mm": -0.19420845882384416
+    }
+  ],
+  "scope": "The final little pad/carrier are exact geometric subsets of the conservative reference sweep; all other bodies are unchanged. Every clear reference pair is therefore still clear. The sole reference conflict is remeasured on final geometry. This certificate covers the specified sampled independent ranges, named poses, continuous terminal orbits, and cup route samples; it does not claim arbitrary simultaneous joint combinations or future assembly geometry."
+}

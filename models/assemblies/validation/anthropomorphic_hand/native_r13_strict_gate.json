@@ -1,0 +1,20 @@
+{
+  "scope": "Strict native R13 validity by exact placed-payload reuse and fresh checks.\n\nRequires the complete R11 every-placement audit, byte-identical placed BREP\npayloads for every inherited occurrence, and the bound native strict run for\nevery other occurrence. An incomplete baseline can never produce a pass.\n",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/certify_native_export_validity.py": "2b5456864fe6b69a044f5ab05715f14f21926d3f15e4068f6738448d1ed7a828",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_r13_validity_reuse_plan.json": "d63c0e6a108b4bd4c48f0a823befae3a51add10a22576d684111c7727a26afda",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/mechanical_candidate_r11_strict.json": "738576004e349b5cda94581feedbdeadc2b82bf4af11f4af4d05ee154a86bb6c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_r13_fresh_strict.json": "626546ba8199f2885d5b2b5b3160f7c3277c0e5fff86655d95566544c5afd253",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_r13_fresh_strict_binding.json": "934caf0e24fd95d60a4e0e708880cc67fcd3b05f38ac5286a3a02c9084b1af7c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r11.step": "966957817dc1d9dc5d5a36f6ca0e91746aab38e00ef5a46f6b1e2487e6f7eb87",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/hand_mechanical_candidate_r13.step": "00d1fd2fa41afc7d50893ce492a25345caa267832a42c1ab01c044fe6b3552a9",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/plan_native_validity_reuse.py": "02925193e38d125998e7c50804c2daa9c9566cd1b906db0e3b76a55e7670f103"
+  },
+  "occurrenceCount": 3259,
+  "inherited_occurrence_count": 3230,
+  "fresh_occurrence_count": 29,
+  "selfIntersectionCheck": "every-placement",
+  "failureCount": 0,
+  "complete": true,
+  "ok": true
+}

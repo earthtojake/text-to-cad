@@ -1,0 +1,464 @@
+{
+  "scope": "all neutral groups and 17 wrist span cases versus raw branch/cylinder envelope; exact STEP checks for every near pair",
+  "rows": [
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide",
+      "pose": {},
+      "radius": 0.45,
+      "distance": 0.7002167091674106,
+      "gap": 0.2502167091674106,
+      "risks": [
+        [
+          "foot_-24",
+          -0.051435969852759805
+        ]
+      ]
+    },
+    {
+      "name": "thumb_mcp_flexion_positive_cmc_reaction",
+      "pose": {},
+      "radius": 0.45,
+      "distance": 0.6499944463700543,
+      "gap": 0.1999944463700543,
+      "risks": [
+        [
+          "cmc_14",
+          -1.477569815622752
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {},
+      "radius": 0.45,
+      "distance": 0.8099940661174072,
+      "gap": 0.3599940661174072,
+      "risks": [
+        [
+          "pad_0",
+          -0.7191441780472547
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {},
+      "radius": 0.45,
+      "distance": 3.244316210535442,
+      "gap": 2.7943162105354418,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.5272882551180236
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "radius": 0.45,
+      "distance": 0.782590782422891,
+      "gap": 0.33259078242289103,
+      "risks": [
+        [
+          "pad_0",
+          -0.7076340116179742
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": 5.0
+      },
+      "radius": 0.45,
+      "distance": 2.9160713349006624,
+      "gap": 2.466071334900662,
+      "risks": [
+        [
+          "cmc_patch",
+          -1.3378013817610868
+        ]
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "radius": 0.45,
+      "distance": 0.667878326239886,
+      "gap": 0.21787832623988596,
+      "risks": [
+        [
+          "foot_-24",
+          -0.0621457915539301
+        ]
+      ]
+    },
+    {
+      "name": "index_pip_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": -5.0
+      },
+      "radius": 0.45,
+      "distance": 2.35920834617967,
+      "gap": 1.90920834617967,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.371639816997809
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 15.0
+      },
+      "radius": 0.45,
+      "distance": 0.742982216620604,
+      "gap": 0.29298221662060403,
+      "risks": [
+        [
+          "pad_0",
+          -0.6891930466715284
+        ]
+      ]
+    },
+    {
+      "name": "index_pip_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "radius": 0.45,
+      "distance": 2.4807021440318575,
+      "gap": 2.0307021440318573,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.5182546726972812
+        ]
+      ]
+    },
+    {
+      "name": "index_dip_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": -15.0
+      },
+      "radius": 0.45,
+      "distance": 1.3863381633705347,
+      "gap": 0.9363381633705348,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.9858373563919147
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": -25.0
+      },
+      "radius": 0.45,
+      "distance": 0.7386263551255727,
+      "gap": 0.2886263551255727,
+      "risks": [
+        [
+          "pad_0",
+          -0.784683566859663
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 25.0
+      },
+      "radius": 0.45,
+      "distance": 0.6027891411203812,
+      "gap": 0.15278914112038117,
+      "risks": [
+        [
+          "pad_0",
+          -0.6203219631646082
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 35.0
+      },
+      "radius": 0.45,
+      "distance": 0.6294843194808114,
+      "gap": 0.1794843194808114,
+      "risks": [
+        [
+          "pad_0",
+          -0.6356433042662153
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": -35.0
+      },
+      "radius": 0.45,
+      "distance": 0.9013843398365317,
+      "gap": 0.45138433983653165,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.8252293602185687
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 45.0
+      },
+      "radius": 0.45,
+      "distance": 0.7602566428070674,
+      "gap": 0.3102566428070674,
+      "risks": [
+        [
+          "pad_0",
+          -0.6980181896188693
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "radius": 0.45,
+      "distance": 0.8052280376189832,
+      "gap": 0.3552280376189832,
+      "risks": [
+        [
+          "pad_0",
+          -0.8074137944361408
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": 55.0
+      },
+      "radius": 0.45,
+      "distance": 0.5499934851209936,
+      "gap": 0.09999348512099354,
+      "risks": [
+        [
+          "foot_-24",
+          -1.1366098688811679
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "radius": 0.45,
+      "distance": 0.6957587090024385,
+      "gap": 0.2457587090024385,
+      "risks": [
+        [
+          "pad_0",
+          -0.8356936449732633
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_flexion": 60.0
+      },
+      "radius": 0.45,
+      "distance": 0.5998063225725306,
+      "gap": 0.14980632257253063,
+      "risks": [
+        [
+          "foot_-24",
+          -1.330184136600295
+        ]
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "radius": 0.45,
+      "distance": 0.7002167091674106,
+      "gap": 0.2502167091674106,
+      "risks": [
+        [
+          "foot_-24",
+          -0.051435969852759805
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "radius": 0.45,
+      "distance": 0.8099928107548411,
+      "gap": 0.3599928107548411,
+      "risks": [
+        [
+          "pad_0",
+          -0.7191427839365621
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": 0.0
+      },
+      "radius": 0.45,
+      "distance": 3.244316210535442,
+      "gap": 2.7943162105354418,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.5272882551180236
+        ]
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "radius": 0.45,
+      "distance": 0.6972477752912455,
+      "gap": 0.24724777529124548,
+      "risks": [
+        [
+          "foot_-24",
+          -0.032744125526173146
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_abduction": 10.0
+      },
+      "radius": 0.45,
+      "distance": 0.8002047400328379,
+      "gap": 0.3502047400328379,
+      "risks": [
+        [
+          "pad_0",
+          -0.7273801816298904
+        ]
+      ]
+    },
+    {
+      "name": "thumb_mcp_abduction_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "radius": 0.45,
+      "distance": 0.7935343672219825,
+      "gap": 0.34353436722198244,
+      "risks": [
+        [
+          "foot_-24",
+          0.01768444314300474
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "radius": 0.45,
+      "distance": 0.7852032556013402,
+      "gap": 0.3352032556013402,
+      "risks": [
+        [
+          "pad_0",
+          -0.7348145976823162
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": -10.0
+      },
+      "radius": 0.45,
+      "distance": 3.3198609202822866,
+      "gap": 2.8698609202822865,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.8346126850222857
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_flexion_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": -20.0
+      },
+      "radius": 0.45,
+      "distance": 3.6407981805983396,
+      "gap": 3.1907981805983394,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.6445142964922221
+        ]
+      ]
+    },
+    {
+      "name": "index_mcp_abduction_positive_wrist_guide",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "radius": 0.45,
+      "distance": 0.7645424604207769,
+      "gap": 0.3145424604207769,
+      "risks": [
+        [
+          "pad_0",
+          -0.75414118563919
+        ]
+      ]
+    },
+    {
+      "name": "index_pip_negative_wrist_guide",
+      "pose": {
+        "wrist_abduction": 20.0
+      },
+      "radius": 0.45,
+      "distance": 2.359652098611574,
+      "gap": 1.9096520986115741,
+      "risks": [
+        [
+          "cmc_patch",
+          -0.380864981817691
+        ]
+      ]
+    }
+  ],
+  "failures": [],
+  "final_geometry_note": "Final geometry additionally removes a radius0.55, height4 mm fixed CMC screw-head clearance cylinder. A subtraction preserves every previously proven separation. Final connected-solid/self-intersection validation is palm_accepted_strict.json."
+}

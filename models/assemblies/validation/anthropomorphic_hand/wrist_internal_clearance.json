@@ -1,0 +1,182 @@
+{
+  "scope": "Actual wrist frames, four driven pulleys, full D-shaft envelopes; palm excluded and remains pending; every independent 10-degree wrist range plus simultaneous extrema; invariant rigid-relative pairs cached exactly",
+  "all_clear": true,
+  "poses": [
+    {
+      "yaw_degrees": -20.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": -10.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 10.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 20.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": -45.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": -40.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": -30.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": -20.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": -10.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 0.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 10.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 20.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 30.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 40.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 50.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 0.0,
+      "flex_degrees": 60.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": -20.0,
+      "flex_degrees": -45.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": -20.0,
+      "flex_degrees": 60.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 20.0,
+      "flex_degrees": -45.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    },
+    {
+      "yaw_degrees": 20.0,
+      "flex_degrees": 60.0,
+      "pairs": 78,
+      "max_intersection_volume": 0,
+      "clashes": [],
+      "clear": true
+    }
+  ],
+  "body_count": 13,
+  "body_scope": [
+    "three wrist frame solids",
+    "four actual R11 driven pulleys",
+    "four actual flanged steel bushings",
+    "two full-length R3 D-shaft envelopes"
+  ],
+  "source_sha256": "a360633b13dd88ded3630d2d313483edc1f5c2bc68622e1f6ba1273f58d616a8"
+}

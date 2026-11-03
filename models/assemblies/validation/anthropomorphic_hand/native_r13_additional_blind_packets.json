@@ -1,0 +1,40 @@
+{
+  "scope": "Prepared review inputs only; no independent critic has run.",
+  "packets": [
+    {
+      "subject": "the universal joint carriers at the finger knuckles",
+      "packet": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_universal_carriers_r13",
+      "assignment": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_universal_carriers_r13_assignment.json",
+      "assignment_sha256": "8a7e561029fcdccc44f0a3be5b80cdda439bda5341c12177211aec83f8da5c3f",
+      "reviewer": null,
+      "verdict": null
+    },
+    {
+      "subject": "the palm frame and metacarpal branches",
+      "packet": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_palm_frame_r13",
+      "assignment": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_palm_frame_r13_assignment.json",
+      "assignment_sha256": "3b89e36edd253bd68589a217f7285870502d20119f725035f14e5625d375b2b9",
+      "reviewer": null,
+      "verdict": null
+    },
+    {
+      "subject": "the dorsal fingertip nail structures",
+      "packet": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_fingernails_r13",
+      "assignment": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_fingernails_r13_assignment.json",
+      "assignment_sha256": "a2f9ec1bf9ffbdf564c00f63c5e3611c37b5b95cbf3fe0a6fd7f2dd6dc135457",
+      "reviewer": null,
+      "verdict": null
+    },
+    {
+      "subject": "the forearm capstans and their tendon terminations",
+      "packet": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_capstans_r13",
+      "assignment": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/blind_capstans_r13_assignment.json",
+      "assignment_sha256": "fb9a14d38f6a8c660842296cea7acb4aec63da8e10cda07f29e015edd00a8b3a",
+      "reviewer": null,
+      "verdict": null
+    }
+  ],
+  "complete": true,
+  "aesthetic_accepted": false,
+  "packet_images_visually_inspected": true
+}

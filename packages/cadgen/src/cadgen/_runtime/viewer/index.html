@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head><script>globalThis.__cadChunkIds={"index-CGeq2wDq.js":"7ab4c8a0-8589-4b5c-a7a7-b9bbcfdc7274","DxfRenderer-B_6UOLO6.js":"47693fa8-4e37-4c1a-89e7-10a803cf1c2e","GlbRenderer-HdvK6lug.js":"58a536d0-eff7-4730-a2ab-10c95f630267","MeshRenderer-BVWwgiOy.js":"354da467-2fab-4a54-8c3d-fc50bb25175f","RobotRenderer-6f1kGrWv.js":"dcddc294-8a18-4511-86f3-ac1dc07d1506","SceneMeasure-DVwh6zB7.js":"d398807d-3844-4f3a-be12-99896b57f3ad","VirtualRows-BGWTsfTC.js":"0cd2b72b-3b37-499e-b252-c28e64568dac","XbfRenderer-CP2KJRL1.js":"dfc993b6-0ab5-48a3-878a-f0d69d5ad65c","entryAssets-DazViIb_.js":"dbf41216-4f87-43a4-afce-2ed99b164fb1","environmentMap-D3USY2dy.js":"55ef871a-0acb-4777-8832-3e244089f439","meshObjects-BWMlaivD.js":"90920560-87d3-4ae4-b779-54f8c94b22bc","photographicStudio-WTDfrXpv.js":"6e91b845-46e7-4210-8103-520a95a5de63","sceneExplode-CnxSdhrb.js":"7eafba0e-0979-4650-a489-b84a7b758608","sceneHighlight-DvuKX9PO.js":"c2f3a1ca-794f-44ea-9ac8-ffde4a1dc147","sharedGeometry-DYv4uiUO.js":"fc40eb10-ea0a-4e35-a821-6265a1ebdcc6","toolModes-BT4QmzPK.js":"9147107c-d1fb-4b2d-8549-13c4702282fd","useSceneSelection-CMuLw_VR.js":"2c308dab-6223-4bbf-b7ba-54c1ffd0ebd1","vendor-icons-BjkRjKb2.js":"e850508c-0089-434f-b296-9031c0be1d50","vendor-react-BmFJxwSH.js":"94b8d04e-8703-49c3-9f26-9117128bf5ca","vendor-three-kX55hSI2.js":"55980bd3-d99e-4bbc-8a2a-3aa88d14c6e7","vendor-ui-BEAz7hOp.js":"c397a066-500b-464b-a6c4-7d8141681cd3"}</script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="description" content="Browse cached CAD parts, assemblies, and prompt-ready references" />
+    <title>text-to-cad</title>
+    <script>
+      // First paint in the tab's appearance, read where the app reads it: the tab record in this
+      // tab's sessionStorage (`src/persistence/tabRecord.ts`, key and shape shared with it). A new
+      // tab has none and follows the OS.
+      (function () {
+        const root = document.documentElement;
+        const known = (value) => value === "light" || value === "dark" || value === "system";
+        const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        let preference = "system";
+        try {
+          const record = JSON.parse(window.sessionStorage.getItem("text-to-cad:tab:v1") || "null");
+          const stored = record && record.version === 1 && record.settings ? record.settings.appearance : "system";
+          preference = known(stored) ? stored : "system";
+        } catch {
+          preference = "system";
+        }
+        const mode = preference === "system" ? (prefersDark ? "dark" : "light") : preference;
+        root.classList.toggle("dark", mode === "dark");
+        root.style.colorScheme = mode;
+      })();
+    </script>
+    <script type="module" crossorigin src="./assets/index-CGeq2wDq.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/rolldown-runtime-hePW80VL.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-react-BmFJxwSH.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-icons-BjkRjKb2.js">
+    <link rel="modulepreload" crossorigin href="./assets/vendor-ui-BEAz7hOp.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-FprYPEcA.css">
+  </head>
+  <body>
+    <div id="root"></div>
+  </body>
+</html>

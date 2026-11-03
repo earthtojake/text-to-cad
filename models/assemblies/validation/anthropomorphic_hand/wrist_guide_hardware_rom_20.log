@@ -1,0 +1,18 @@
+{'wrist_abduction': 20, 'wrist_flexion': -45} pairs 62 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': -35} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': -25} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': -15} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': -5} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 0} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 5} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 15} pairs 15 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 25} pairs 13 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 35} pairs 13 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 45} pairs 12 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 55} pairs 13 hits 3
+{'wrist_abduction': 20, 'wrist_flexion': 60} pairs 13 hits 3
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_wrist_guide_hardware_rom.py", line 63, in <module>
+    if bbox_gap(gbs[i],ah.bounding_box())>1e-5:continue
+     ^^^^^^^^^
+AssertionError

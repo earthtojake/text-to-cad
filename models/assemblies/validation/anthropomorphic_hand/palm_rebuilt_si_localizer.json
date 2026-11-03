@@ -1,0 +1,23 @@
+[
+  {
+    "label": "main",
+    "faults": [
+      {
+        "status": "BOPAlgo_CheckStatus.BOPAlgo_SelfIntersect",
+        "faults": [
+          {
+            "type": "TopAbs_ShapeEnum.TopAbs_FACE",
+            "bounds": [
+              -31.598995745131976,
+              15.86962356217773,
+              -23.04184460283512,
+              -23.661962823460875,
+              47.64156748109564,
+              -7.4434787901063615
+            ]
+          }
+        ]
+      }
+    ]
+  }
+]

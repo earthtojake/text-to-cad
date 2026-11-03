@@ -1,0 +1,26 @@
+{
+  "scope": "Verify the repaired thumb arm's native attachment chain to the CMC carrier.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/check_thumb_arm_r5_attachment.py": "ad80a70dbfbf1b645b748808763a1b87f2fd623ab681c23b17876a5b11ded331",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/native_reroute_supports_r10_gate.json": "0592c6e47df2e582112353ad50a6923f222bf42b748924989b16a7d064863032",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/thumb_reaction_arm_clearance_r5.step": "a75e72866aff3c0377f55dfef2712fc856ac8b23ed38776ba66bcf4c4b63d658",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/imported/revisions/7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173.step": "7cb5ef97a37a9fdf06bf779cb4da35c518d63e6a73ed30685944d9efdf3a0173"
+  },
+  "chain": [
+    "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+    "thumb_cmc_carrier"
+  ],
+  "rows": [
+    {
+      "a": "thumb_cmc_negative_yaw_outlet_structural_jaw_1",
+      "b": "thumb_cmc_carrier",
+      "gap_mm": 0.0,
+      "pass_": true
+    }
+  ],
+  "frame": "thumb_cmc_abduction",
+  "contact_tolerance_mm": 0.025,
+  "changed_during_audit": [],
+  "complete": true,
+  "pass": true
+}

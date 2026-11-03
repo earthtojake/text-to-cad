@@ -1,0 +1,136 @@
+{
+  "kind": "exact_boolean_gear_meshing",
+  "carrier_samples_degrees": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "ratio": {
+    "sun": 4,
+    "carrier": 1,
+    "planet_absolute": -2,
+    "ring": 0
+  },
+  "static_interferences": [],
+  "phase_results": [
+    {
+      "carrier_deg": 0,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 0,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 1,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 1,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 2,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 2,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 3,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 3,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 4,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 4,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 5,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 5,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 6,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 6,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 7,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 7,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 8,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 8,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 9,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 9,
+      "pair": "ring",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 10,
+      "pair": "sun",
+      "volume": 0
+    },
+    {
+      "carrier_deg": 10,
+      "pair": "ring",
+      "volume": 0
+    }
+  ],
+  "source_sha256": "f691251901b82c61143acd65621a92a1368ca59023eebfc8c3a462aa37345376"
+}

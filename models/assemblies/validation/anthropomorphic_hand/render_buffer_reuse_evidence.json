@@ -1,0 +1,20 @@
+{
+  "scope": "Full 3257-occurrence hand snapshot regression after immutable attribute sharing. Images visually inspected; not a blind aesthetic verdict.",
+  "input_sha256": {
+    "/Users/jakefitzgerald/robots/text-to-cad/packages/cadgen-js/src/common/cadScene.js": "42b4b65f3d2d55b381d5442c7c9d33461bc78fb973c0ccafc384004b9015f116",
+    "/Users/jakefitzgerald/robots/text-to-cad/packages/cadgen-js/src/common/cadScene.test.js": "b70f10daa021dbe0985dfc09665c6ed56a81dc228c5c745ecfbc1ed40988afaf",
+    "/Users/jakefitzgerald/robots/text-to-cad/packages/cadgen/src/cadgen/_runtime/browser/snapshot-render.js": "25832b5bedacc56512784f530849b07d8805453d5e5740ad4768c4e9f7a03d9c",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/src/anthropomorphic_hand/export_repair_context_render_job.json": "6217c47aab8f222452e141b4f0baa1983a2c19ebe9675a397636c4fab5a7005f",
+    "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/hand_export_repair_context.step": "b2d90a9864deae07e63c4755d14921fd2d58958db051e54cddb888b997e5be9c",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/export_repair_pad_macro.png": "2480c5d2e690a71977951261efb86d57a7bd4bcdd824e7b9a3826450e41b7208",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/export_repair_cmc_macro.png": "6700dc6838088f9bb2fdeda51c6fc6dada71b9441b37f58ae11431102af4bc48",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/shared_js_buffer_reuse.log": "38b65810725a84f3a46a324bb578274e7b2e55a74c5a42945d0063e9c36cb3bd",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/viewer_buffer_reuse.log": "d087c4cc7580f4fca1c0aa80ac03f05eea6189ac7678c4d49a2047bf7f015d4f",
+    "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/bundle_buffer_reuse_check.log": "7f201614064e28139263b4516bf2e4fcff8827085adc4090080effaa34547041"
+  },
+  "shared_js_tests": 803,
+  "viewer_tests": 347,
+  "bundle_freshness_pass": true,
+  "full_context_snapshots_rendered": true,
+  "full_context_snapshots_visually_inspected": true
+}

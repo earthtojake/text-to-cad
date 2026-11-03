@@ -1,0 +1,32 @@
+{
+  "positive_yaw_bushing": {
+    "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/positive_yaw_bushing_review.step",
+    "sha256": "141c50c6ddbb92b8fcd6c2673ab44e9a51521e925a0440905ff480a98f56f0e0",
+    "frames": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/positive_yaw_bushing_frames.json",
+    "strict": {
+      "ok": true,
+      "entry": "models/assemblies/STEP/anthropomorphic_hand/positive_yaw_bushing_review",
+      "occurrenceCount": 4,
+      "prototypeCount": 1,
+      "selfIntersectionCheck": "every-placement",
+      "failureCount": 0,
+      "parts": [],
+      "errors": []
+    }
+  },
+  "compact_cmc_yaw": {
+    "step": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/STEP/anthropomorphic_hand/compact_cmc_yaw_review.step",
+    "sha256": "fe99e4df33c9f7f3a3e4952b969ce757d5b8131bad0a46448f7383bd1cea7572",
+    "frames": "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/compact_cmc_yaw_frames.json",
+    "strict": {
+      "ok": true,
+      "entry": "models/assemblies/STEP/anthropomorphic_hand/compact_cmc_yaw_review",
+      "occurrenceCount": 3,
+      "prototypeCount": 3,
+      "selfIntersectionCheck": "every-placement",
+      "failureCount": 0,
+      "parts": [],
+      "errors": []
+    }
+  }
+}

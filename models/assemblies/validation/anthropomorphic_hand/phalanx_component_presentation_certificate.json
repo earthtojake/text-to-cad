@@ -1,0 +1,75 @@
+{
+  "pass": true,
+  "step": "models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_context.step",
+  "step_sha256": "7099727c20593f32a300c58326c0f04da2aaac076c1c4b95468b38e137c391d9",
+  "tree": "a1327bcc565d3ebdd4d65833a60d3856a6b220ac98d50a0e7bf91cb13c058ee7",
+  "appearance_archive_sha256": "f58aec3952c0572c292ee349bfdf0e065260ac8a4f4d51af0663ba0c0fcd0080",
+  "render_job_sha256": "188c211410782dd23824828bb644c42a64bf9abf77a2c5670d13acf11a5b247c",
+  "display_mode": "solid",
+  "files": [
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/phalanx_beauty_palm.png",
+      "sha256": "b11215cc7ade9d30df277a2472c1b181ce76c3315574548e98f561ef2370d516",
+      "size": [
+        1800,
+        2800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/phalanx_beauty_dorsal.png",
+      "sha256": "2d50d6d1b90483664b0e6f3b5e144ec1092452aae3555e73581a8f9e252c0280",
+      "size": [
+        1800,
+        2800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/phalanx_beauty_joint_macro.png",
+      "sha256": "7430a327fd1c2df5e0b4ceed6598720114157bb577197fe06b9af13dafcb82e1",
+      "size": [
+        2800,
+        1800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/context_universal_macro.png",
+      "sha256": "958c12cdd6637d715478b2e1c88b6653f3e2ec48aed65c235dc2886a24ac1786",
+      "size": [
+        2800,
+        1800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/context_fingernail_macro.png",
+      "sha256": "e32517af2ea73ddc728a5c8ef09d99fa230adcb2a0dedd42cc195b5c0b95b27d",
+      "size": [
+        2800,
+        1800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/context_palm_frame_macro.png",
+      "sha256": "8121c872429d527adaa551eec2321d6cafbd1baff5a9a2876a9e7fa158e30038",
+      "size": [
+        2800,
+        1800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/context_wrist_macro.png",
+      "sha256": "3b14bd9482e76c4836e0bdb75f3031a0068473e2352535d21079a2ff60b9c7ea",
+      "size": [
+        2800,
+        1800
+      ]
+    },
+    {
+      "path": "/Users/jakefitzgerald/robots/text-to-cad/tmp/anthropomorphic_hand/context_actuator_macro.png",
+      "sha256": "c7022677bdfafb6b53fb45c6c3d672922a3d48ab8522388b78c2bf299a12c0b5",
+      "size": [
+        2800,
+        1800
+      ]
+    }
+  ]
+}

@@ -1,0 +1,428 @@
+{
+  "ok": true,
+  "variant_count": 15,
+  "native_sketch_to_finger": "(u,v,w) -> (y,z,x)",
+  "drive_flat_native_sketch": "u=+0.75",
+  "variants": [
+    {
+      "name": "index_0",
+      "length": 42.0,
+      "width": 18.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "index_1",
+      "length": 26.0,
+      "width": 15.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "index_2",
+      "length": 17.0,
+      "width": 12.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": null
+    },
+    {
+      "name": "middle_0",
+      "length": 45.0,
+      "width": 18.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "middle_1",
+      "length": 28.0,
+      "width": 15.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722793,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "middle_2",
+      "length": 17.0,
+      "width": 12.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": null
+    },
+    {
+      "name": "ring_0",
+      "length": 41.0,
+      "width": 17.5,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "ring_1",
+      "length": 26.0,
+      "width": 14.5,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "ring_2",
+      "length": 17.0,
+      "width": 11.5,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": null
+    },
+    {
+      "name": "little_0",
+      "length": 33.0,
+      "width": 17.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "little_1",
+      "length": 21.0,
+      "width": 14.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "little_2",
+      "length": 16.0,
+      "width": 11.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": null
+    },
+    {
+      "name": "thumb_0",
+      "length": 36.0,
+      "width": 19.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722793,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "thumb_1",
+      "length": 27.0,
+      "width": 16.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722793
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": 2.53
+    },
+    {
+      "name": "thumb_2",
+      "length": 21.0,
+      "width": 13.0,
+      "valid": true,
+      "contact_flat_y": 0.75,
+      "contact_face_solid_normal": [
+        0,
+        -1,
+        0
+      ],
+      "shaft_axis": [
+        1,
+        0,
+        0
+      ],
+      "bore_radius": 1.03,
+      "shaft_radius": 1.0,
+      "flat_face_areas": [
+        1.7649362594722804,
+        1.7649362594722804
+      ],
+      "shaft_overlap_volumes": [
+        0.0,
+        0.0
+      ],
+      "distal_bearing_radius": null
+    }
+  ]
+}

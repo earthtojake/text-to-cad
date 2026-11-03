@@ -1,0 +1,50 @@
+[
+  {
+    "name": "index_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+    "frame": "index_mcp_abduction",
+    "system": "index",
+    "kind": "shaft"
+  },
+  {
+    "name": "index_mcp_abduction_dorsal_drive_stub_retaining_ring",
+    "frame": "index_mcp_abduction",
+    "system": "index",
+    "kind": "retaining_ring"
+  },
+  {
+    "name": "middle_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+    "frame": "middle_mcp_abduction",
+    "system": "middle",
+    "kind": "shaft"
+  },
+  {
+    "name": "middle_mcp_abduction_dorsal_drive_stub_retaining_ring",
+    "frame": "middle_mcp_abduction",
+    "system": "middle",
+    "kind": "retaining_ring"
+  },
+  {
+    "name": "ring_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+    "frame": "ring_mcp_abduction",
+    "system": "ring",
+    "kind": "shaft"
+  },
+  {
+    "name": "ring_mcp_abduction_dorsal_drive_stub_retaining_ring",
+    "frame": "ring_mcp_abduction",
+    "system": "ring",
+    "kind": "retaining_ring"
+  },
+  {
+    "name": "little_mcp_abduction_dorsal_drive_stub_keyed_shaft",
+    "frame": "little_mcp_abduction",
+    "system": "little",
+    "kind": "shaft"
+  },
+  {
+    "name": "little_mcp_abduction_dorsal_drive_stub_retaining_ring",
+    "frame": "little_mcp_abduction",
+    "system": "little",
+    "kind": "retaining_ring"
+  }
+]

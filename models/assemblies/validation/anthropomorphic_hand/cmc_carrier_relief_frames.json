@@ -1,0 +1,8 @@
+[
+  {
+    "name": "thumb_cmc_carrier",
+    "frame": "thumb_cmc_abduction",
+    "system": "thumb",
+    "kind": "carrier"
+  }
+]

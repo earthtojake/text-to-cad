@@ -1,0 +1,25 @@
+Building registry
+Registry built 336
+Seat 48 failures 0
+Release family 3.5 failures 0
+Release family 4.5 failures 0
+Release family 5.5 failures 0
+Release family 7.0 failures 0
+Release family 11.0 failures 0
+Mutual pairs 56280 failures 0
+Traceback (most recent call last):
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/drive_terminal_check.py", line 140, in <module>
+    print(row['name'],'done; failures',len(report['failures']),flush=True);save()
+                             ^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/models/assemblies/validation/anthropomorphic_hand/drive_terminal_check.py", line 113, in main
+    return 0 if report['ok'] else 1
+                                ^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/topology/shape_core.py", line 1156, in bounding_box
+    return BoundBox.from_topo_ds(self.wrapped, tolerance=tolerance, optimal=optimal)
+           ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/geometry.py", line 1224, in from_topo_ds
+    return cls(shape, tolerance, optimal)
+  File "/Users/jakefitzgerald/robots/text-to-cad/.venv/lib/python3.13/site-packages/build123d/geometry.py", line 1090, in __init__
+    BRepBndLib.AddOptimal_s(shape, bounding_box)
+    ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

@@ -1,0 +1,3 @@
+thumb_cmc_abduction unattached [] host_interferences []
+thumb_cmc_flexion unattached [] host_interferences []
+wrist_flexion unattached [] host_interferences [{'body': 'thumb_cmc_fixed_flex_-1_host_M0p6_screw', 'host': 'palm_metacarpal_truss', 'volume_mm3': 0.3233181531492963}]

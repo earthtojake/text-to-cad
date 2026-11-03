@@ -1,0 +1,135 @@
+{
+  "native_step": "models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_review.step",
+  "native_sha256": "73e22e401693dc33cd772cb8874923bbd4efd65bcc15c63da192e5fc46cee803",
+  "body_count": 15,
+  "changed": [
+    "middle_proximal_frame",
+    "middle_middle_frame",
+    "ring_middle_frame",
+    "little_proximal_frame"
+  ],
+  "unchanged_count": 11,
+  "strict": {
+    "ok": true,
+    "entry": "models/assemblies/STEP/anthropomorphic_hand/phalanx_beauty_review",
+    "occurrenceCount": 15,
+    "prototypeCount": 15,
+    "selfIntersectionCheck": "every-placement",
+    "failureCount": 0,
+    "parts": [],
+    "errors": []
+  },
+  "frames": [
+    {
+      "name": "index_proximal_frame",
+      "frame": "index_mcp_flexion",
+      "system": "index",
+      "kind": "phalanx"
+    },
+    {
+      "name": "index_middle_frame",
+      "frame": "index_pip",
+      "system": "index",
+      "kind": "phalanx"
+    },
+    {
+      "name": "index_distal_frame",
+      "frame": "index_dip",
+      "system": "index",
+      "kind": "phalanx"
+    },
+    {
+      "name": "middle_proximal_frame",
+      "frame": "middle_mcp_flexion",
+      "system": "middle",
+      "kind": "phalanx"
+    },
+    {
+      "name": "middle_middle_frame",
+      "frame": "middle_pip",
+      "system": "middle",
+      "kind": "phalanx"
+    },
+    {
+      "name": "middle_distal_frame",
+      "frame": "middle_dip",
+      "system": "middle",
+      "kind": "phalanx"
+    },
+    {
+      "name": "ring_proximal_frame",
+      "frame": "ring_mcp_flexion",
+      "system": "ring",
+      "kind": "phalanx"
+    },
+    {
+      "name": "ring_middle_frame",
+      "frame": "ring_pip",
+      "system": "ring",
+      "kind": "phalanx"
+    },
+    {
+      "name": "ring_distal_frame",
+      "frame": "ring_dip",
+      "system": "ring",
+      "kind": "phalanx"
+    },
+    {
+      "name": "little_proximal_frame",
+      "frame": "little_mcp_flexion",
+      "system": "little",
+      "kind": "phalanx"
+    },
+    {
+      "name": "little_middle_frame",
+      "frame": "little_pip",
+      "system": "little",
+      "kind": "phalanx"
+    },
+    {
+      "name": "little_distal_frame",
+      "frame": "little_dip",
+      "system": "little",
+      "kind": "phalanx"
+    },
+    {
+      "name": "thumb_metacarpal_frame",
+      "frame": "thumb_cmc_flexion",
+      "system": "thumb",
+      "kind": "phalanx"
+    },
+    {
+      "name": "thumb_proximal_frame",
+      "frame": "thumb_mcp_flexion",
+      "system": "thumb",
+      "kind": "phalanx"
+    },
+    {
+      "name": "thumb_distal_frame",
+      "frame": "thumb_ip",
+      "system": "thumb",
+      "kind": "phalanx"
+    }
+  ],
+  "subset_inheritance": "REJECTED: near-coincident Boolean inconsistency; require direct225-pose checks instead",
+  "overall_pass": false,
+  "pending": [
+    "root all-hardware delta gate",
+    "fresh blind beauty critique"
+  ],
+  "global_phalanges_225": {
+    "pass": true,
+    "samples": 225,
+    "collisions": 0
+  },
+  "all_tendons_vs_changed_bodies_225": {
+    "pass": true,
+    "poses": 225,
+    "tendons": 48,
+    "bodies": 4,
+    "collisions": 0
+  },
+  "presentation_certificate": "phalanx_component_presentation_certificate.json",
+  "presentation_views": 8,
+  "materials_restored": true
+}

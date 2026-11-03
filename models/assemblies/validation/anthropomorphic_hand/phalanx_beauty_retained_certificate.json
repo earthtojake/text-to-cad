@@ -1,0 +1,66 @@
+{
+  "pass": false,
+  "refined_count": 4,
+  "unchanged_native_count": 11,
+  "rows": [
+    {
+      "name": "middle_proximal_frame",
+      "added_mm3": 0,
+      "removed_mm3": 8.814033416066136,
+      "valid": true,
+      "solids": 1,
+      "subset_pass": true,
+      "baseline_brep_object": "8eb56081ce619cfbe9d7db2758e9e2dcbd47ac2fca98cde686354c5cc825b696",
+      "baseline_volume_mm3": 591.5452984352258,
+      "native_volume_mm3": 582.7316378633155,
+      "volume_conservation_error_mm3": 0.00037284415583194175,
+      "native_sha256": "9fd97dffc0b427913f649f5e684479591131e0fa221498055d3e29ceb366f865",
+      "pass": false
+    },
+    {
+      "name": "middle_middle_frame",
+      "added_mm3": 0,
+      "removed_mm3": 7.2861517401818245,
+      "valid": true,
+      "solids": 1,
+      "subset_pass": true,
+      "baseline_brep_object": "d03fb2889c47e7c627fc8ec800393ab2df284a9649e375602d9bdc783aa58530",
+      "baseline_volume_mm3": 432.71574855619343,
+      "native_volume_mm3": 425.4291334595157,
+      "volume_conservation_error_mm3": 0.0004633564959108938,
+      "native_sha256": "caf2579e89b540f690301fee2cf2978e88a491a31bc1b2fd0ff7ed1bd5d2e814",
+      "pass": false
+    },
+    {
+      "name": "ring_middle_frame",
+      "added_mm3": 0,
+      "removed_mm3": 7.031716614147102,
+      "valid": true,
+      "solids": 1,
+      "subset_pass": true,
+      "baseline_brep_object": "65cf9eb5fe84986db23505c17b409d0f92ed568deb81f58d782d7d41260d5825",
+      "baseline_volume_mm3": 413.8770221505977,
+      "native_volume_mm3": 406.85231950461804,
+      "volume_conservation_error_mm3": 0.007013968167415285,
+      "native_sha256": "cb08e76f40bea7b43827ab60fd30e0fbea377c27f8346eab87429cdfdb1b018e",
+      "pass": false
+    },
+    {
+      "name": "little_proximal_frame",
+      "added_mm3": 0,
+      "removed_mm3": 8.302332646775044,
+      "valid": true,
+      "solids": 1,
+      "subset_pass": true,
+      "baseline_brep_object": "a54955b4ea52e0f90954eebedce01eaf9ab2fefaf3c47a63b051f0742a676b45",
+      "baseline_volume_mm3": 480.5692193157768,
+      "native_volume_mm3": 472.2684333115192,
+      "volume_conservation_error_mm3": 0.0015466425173986664,
+      "native_sha256": "a9c439189243cacf8291b6bdb20058e45beb131a68d636a731ce6649ad9cb701",
+      "pass": false
+    }
+  ],
+  "source_sha256": "e3750b8e01ee8735f774b4a60dc87e73f418f7b86e4cb2b5b3fa3268ab773977",
+  "baseline_source_sha256": "a768036f16980c4e4233b7a6480de9c636825004a5f4042bf9c9dae911d11cba",
+  "proof": "Zero new-minus-old volume from independently constructed baseline/candidate bodies, plus independent cached native baseline versus exported candidate volume conservation. Eleven other actual native bodies are imported unchanged from the frozen integration base. Strict every-placement validation is separate."
+}
