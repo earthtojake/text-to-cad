@@ -642,7 +642,7 @@ export function createXbfScene(THREE, document) {
   // --- element highlights --------------------------------------------------------------
 
   // A STEP's reference highlight (`useStepHighlights.js`): a face filled in the highlight colour,
-  // opaque, and outlined in it; an edge drawn in it, heavy and over everything -- its lines the
+  // opaque, and outlined in its deeper edge blue; an edge drawn in that, heavy and over everything -- its lines the
   // screen-space lines a STEP's are (`renderEdges.js`), so they are as wide at every pixel ratio.
   // A face or edge under the pointer is drawn as a picked one is.
   const fillMaterial = new THREE.MeshBasicMaterial({ color: INK.highlightColor, transparent: INK.highlightOpacity < 0.999, opacity: INK.highlightOpacity,
@@ -660,7 +660,7 @@ export function createXbfScene(THREE, document) {
   };
   const highlightLine = (positions, onTop) => {
     const line = createScreenSpaceLineSegments(lineContext, positions, {
-      color: INK.highlightColor, opacity: INK.highlightOpacity, lineWidth: EDGE_HIGHLIGHT_PIXELS, renderOrder: HIGHLIGHT_ORDER + 1,
+      color: INK.highlightEdgeColor, opacity: INK.highlightOpacity, lineWidth: EDGE_HIGHLIGHT_PIXELS, renderOrder: HIGHLIGHT_ORDER + 1,
       depthTest: !onTop, depthWrite: false, depthBias: topologyLineDepthBiasForWidth(EDGE_HIGHLIGHT_PIXELS)
     }, screenSpaceLineMaterials);
     if (!line) return null;
