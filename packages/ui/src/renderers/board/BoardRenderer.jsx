@@ -53,9 +53,10 @@ import { useBoardView } from "./useBoardView.js";
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
- * Board (parts and nets) and its Layers; its one view control is its Display (the modes, the pours,
- * the side), the contract `cad <type> snapshot --display` shares. A payload without its index
- * (an older server's) is the picture alone: no tools, no Board, no Quick Edit.
+ * Circuit (its parts in their schematic blocks, and its nets) and its Layers (the active layer, Dim
+ * and the zones' and tracks' opacities among them); its one view control is its Display (the modes,
+ * the pours, the side): one contract with `cad <type> snapshot --display`. A payload without its
+ * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  */
 
 const SAVE_DELAY_MS = 180;
@@ -81,7 +82,8 @@ const boardPacketReferences = (references, file) => [...new Set(references
   .filter(reference => reference?.resource?.path === file && reference.target?.kind === "cad-selector")
   .flatMap(reference => reference.target.selectors))];
 /** The board's Display as a view carries it, and a snapshot job reads it. */
-const viewDisplay = display => ({ mode: display.mode, side: display.side, poured: display.poured, ...(display.layers ? { layers: [...display.layers] } : {}) });
+const viewDisplay = display => ({ mode: display.mode, side: display.side, poured: display.poured, ...(display.layers ? { layers: [...display.layers] } : {}),
+  ...(display.active ? { active: display.active } : {}), dim: display.dim, zones: display.zones, tracks: display.tracks });
 
 function BoardSurface({ view, data }) {
   const { t } = useI18n();
@@ -308,6 +310,17 @@ function BoardSurface({ view, data }) {
   viewRef.current = boardView;
   paintRef.current = boardView.requestPaint;
   const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = boardView;
+  // A row of the Circuit pressed: what it picked, framed, from the side looked at (a page box to the plan's model space).
+  const frameSelectors = useCallback(selectors => {
+    const board = indexRef.current;
+    if (!board) return;
+    const boxes = selectors.map(id => board.extent(board.resolve(id))).filter(Boolean);
+    if (!boxes.length) return;
+    let [x0, y0, x1, y1] = [Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))];
+    const mirror = mirrorRef.current;
+    if (mirror != null) [x0, x1] = [2 * mirror - x1, 2 * mirror - x0];
+    viewRef.current?.frame([x0, -y1, x1, -y0]);
+  }, []);
   // Ink put down, picked or let go, a side or an isolation changed: the same view, painted again.
   useEffect(() => { requestPaint(); }, [annotation.items, annotation.selected, display, isolation.resolved, requestPaint]);
   // A tool put down lets go of what it lit under the pointer.
@@ -407,7 +420,7 @@ function BoardSurface({ view, data }) {
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
   const views = layered ? [boardDisplayControl({ t, display, sheet, onChange: setDisplay, disabled: !shown })] : [];
   const sidebar = layered || index ? <>
-    {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle}
+    {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
       onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> : null}
     {layered ? <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} /> : null}
   </> : null;

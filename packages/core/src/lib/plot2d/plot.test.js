@@ -16,7 +16,7 @@ import {
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
-import { HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, layerColor, netnameColor } from "./theme.js";
+import { DIM_OPACITY, HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, layerColor, netnameColor } from "./theme.js";
 
 // A tiny board in the payload's own shape (`docs/plot-payload.md`): a 40 x 30 mm sheet, its
 // area, a courtyard, one pad on each copper layer, a track, a pour with its fill and outline, a via's
@@ -299,4 +299,29 @@ test("without a Path2D the items are drawn into the context afresh", () => {
   const { ctx, calls } = recorder(400, 300);
   drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D: undefined });
   assert.ok(painted(calls).length > 0 && painted(calls).every(([, path]) => path === null));
+});
+
+test("the active layer tops the stack, Dim fades every other but the board's area, and the zones and tracks take their opacities", () => {
+  const layout = layoutPlot(BOARD);
+  const [sheet] = layout.sheets;
+  const ids = (view) => viewedLayers(sheet, view).map((entry) => entry.id);
+  // Active: drawn last of the board's stack, under what goes through the board; from below too.
+  assert.deepEqual(ids({ active: "B.Cu" }).slice(-6), ["F.Cu", "B.Cu", "drills", "vias", "ratsnest", "names"]);
+  assert.deepEqual(ids({ side: "bottom", active: "F.Mask" }).slice(-5), ["F.Mask", "drills", "vias", "ratsnest", "names"]);
+  const alphas = (view) => {
+    const { ctx, calls, Path2D } = recorder(800, 600);
+    drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, view, Path2D });
+    return painted(calls).map(([name, , style]) => [name === "fill" ? style.fill : style.stroke, style.alpha, style.width]);
+  };
+  const at = (list, color, width) => list.filter(([paint, , w]) => paint === color && (width === undefined || w === width)).map(([, alpha]) => alpha);
+  // The pour at the zones' opacity, the 1 mm VIN track at the tracks'.
+  const set = alphas({ zones: 0.25, tracks: 0.5 });
+  assert.deepEqual(at(set, layerColor("B.Cu")).slice(0, 1), [0.25]);
+  assert.deepEqual(at(set, layerColor("F.Cu"), 1), [0.5]);
+  // Dim with F.Cu active: F.Cu as it is, the back copper and the courtyard faded, the board's area not.
+  const dimmed = alphas({ dim: "F.Cu" });
+  assert.deepEqual(at(dimmed, layerColor("F.Cu"), 1), [1]);
+  assert.deepEqual(at(dimmed, layerColor("B.CrtYd")), [DIM_OPACITY]);
+  assert.deepEqual(at(dimmed, layerColor("area")), [1]);
+  assert.deepEqual(at(dimmed, layerColor("B.Cu")).slice(0, 1), [DIM_OPACITY * ZONE_OPACITY]);
 });

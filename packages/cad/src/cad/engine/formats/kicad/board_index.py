@@ -154,6 +154,7 @@ class Part:
     pads: tuple[Pad, ...] = ()
     in_bom: bool = True  # False when the footprint is excluded from the BOM (or on the board only)
     locked: bool = False  # KiCad's lock: its pads, texts and graphics are locked with it
+    sheet: str | None = None  # the schematic sheet that placed it (``(sheetname ...)``), its name alone
 
     kind = "part"
 
@@ -566,6 +567,7 @@ class BoardIndex:
                     "ref": part.ref, "value": part.value, "footprint": part.footprint, "side": part.side,
                     "at": xy(part.at), "rotation": num(part.rotation), "fields": dict(part.fields),
                     "dnp": part.dnp, "outline": path(part.outline), **({"locked": True} if part.locked else {}),
+                    **({"sheet": part.sheet} if part.sheet else {}),
                 }
                 for part in self.parts
             ],
@@ -777,6 +779,24 @@ def item_id(node: list) -> str | None:
         text = (f"{atom:08d}" if atom >= 0 else "") if isinstance(atom, int) else str(atom).strip().lower()
         return text if _ID.fullmatch(text) and not _NIL.fullmatch(text) else None
     return None
+
+
+_SHEET_SUFFIX = re.compile(r"\.(?:kicad_sch|sch)$", re.IGNORECASE)
+
+
+def sheet_name(node: list) -> str | None:
+    """The schematic sheet a footprint was placed from, as KiCad records it on the footprint --
+    ``(sheetname "...")``, or an older board's ``Sheetname`` field -- by its name: no outer path
+    slashes, no ``.sch``/``.kicad_sch`` (``"/power/"`` and ``"power.sch"`` are ``power``, a
+    nested ``"/power/ldo/"`` is ``power/ldo``); ``None``
+    when it records none (the root sheet's own name is a name like any other)."""
+    value = sexpr.value(node, "sheetname")
+    if not isinstance(value, str) or not value.strip("/ "):
+        value = footprint_property(node, "Sheetname")
+    if not isinstance(value, str):
+        return None
+    name = "/".join(_SHEET_SUFFIX.sub("", part.strip()) for part in value.split("/") if part.strip())
+    return name or None
 
 
 def locked(node: list) -> bool:
@@ -1296,6 +1316,7 @@ def _read_footprint(node: list, table, copper: Sequence[str], named: _Named, gra
         pads=_counted(pads),
         in_bom=in_bom,
         locked=locked(node),
+        sheet=sheet_name(node),
     )
     return part, holes, edges
 

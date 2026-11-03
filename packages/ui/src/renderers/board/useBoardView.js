@@ -102,6 +102,6 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, capture, thumbnail,
+  return { containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame, capture, thumbnail,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

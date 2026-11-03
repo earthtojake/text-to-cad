@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   BOARD_DISPLAY_DEFAULTS,
+  boardActiveLayer,
   boardDisplayAirwires,
   boardDisplayDrawsCopper,
   boardDisplayIsCustom,
@@ -28,13 +29,16 @@ const ids = (view) => view.layers;
 
 test("a stored or requested display is read leniently: the defaults wherever it says nothing usable", () => {
   assert.deepEqual(readBoardDisplay(null), BOARD_DISPLAY_DEFAULTS);
-  assert.deepEqual(readBoardDisplay({ mode: "placement", side: "bottom" }), { mode: "placement", side: "bottom", poured: true, layers: null });
-  assert.deepEqual(readBoardDisplay({ layers: "all", poured: false }), { mode: "board", side: "top", poured: false, layers: null });
+  assert.deepEqual(readBoardDisplay({ mode: "placement", side: "bottom" }), { mode: "placement", side: "bottom", poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 });
+  assert.deepEqual(readBoardDisplay({ layers: "all", poured: false }), { mode: "board", side: "top", poured: false, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 });
   assert.equal(readBoardDisplay({ mode: "nonsense" }).mode, "board");
   // An explicit set is kept as given, unknown ids included (the engine checks a snapshot's; a stored set outlives a rebuild), once each.
   assert.deepEqual(readBoardDisplay({ mode: "copper", layers: ["F.Cu", "F.Cu", "In9.Cu", 7, ""] }).layers, ["F.Cu", "In9.Cu"]);
   // A set stored when a board still had a drawing sheet drops it.
-  assert.deepEqual(readBoardDisplay({ layers: ["sheet", "F.Cu"] }), { mode: "board", side: "top", poured: true, layers: ["F.Cu"] });
+  assert.deepEqual(readBoardDisplay({ layers: ["sheet", "F.Cu"] }), { mode: "board", side: "top", poured: true, layers: ["F.Cu"], active: null, dim: false, zones: 0.6, tracks: 1 });
+  // The Layers' own: the active layer, Dim, and the zones' and tracks' opacities, each clamped to 0..1.
+  assert.deepEqual(readBoardDisplay({ active: "B.SilkS", dim: true, zones: 1.4, tracks: -1 }), { ...BOARD_DISPLAY_DEFAULTS, active: "B.SilkS", dim: true, zones: 1, tracks: 0 });
+  assert.deepEqual(readBoardDisplay({ active: 7, dim: "yes", zones: "x" }), BOARD_DISPLAY_DEFAULTS);
 });
 
 test("each mode draws its layers: every one for the board, courtyards for assembly and placement, no copper for placement", () => {
@@ -49,8 +53,14 @@ test("each mode draws its layers: every one for the board, courtyards for assemb
   assert.equal(boardDisplayAirwires({ ...BOARD_DISPLAY_DEFAULTS, mode: "placement" }), true);
   assert.equal(boardDisplayAirwires({ ...BOARD_DISPLAY_DEFAULTS, mode: "copper" }), false);
   assert.equal(boardDisplayAirwires(null), false);
-  assert.deepEqual(boardDrawView({ mode: "copper", side: "bottom", poured: false, layers: null }, SHEET),
-    { layers: boardModeLayers("copper", SHEET), poured: false, side: "bottom" });
+  assert.deepEqual(boardDrawView({ ...BOARD_DISPLAY_DEFAULTS, mode: "copper", side: "bottom", poured: false }, SHEET),
+    { layers: boardModeLayers("copper", SHEET), poured: false, side: "bottom", active: null, dim: null, zones: 0.6, tracks: 1 });
+  // Dim keeps the active layer bright: the one chosen, else the copper facing the eye; the area is no active layer.
+  assert.equal(boardActiveLayer(BOARD_DISPLAY_DEFAULTS, SHEET), "F.Cu");
+  assert.equal(boardActiveLayer({ ...BOARD_DISPLAY_DEFAULTS, side: "bottom" }, SHEET), "B.Cu");
+  assert.equal(boardActiveLayer({ ...BOARD_DISPLAY_DEFAULTS, active: "area" }, SHEET), "F.Cu");
+  assert.deepEqual(boardDrawView({ ...BOARD_DISPLAY_DEFAULTS, active: "In1.Cu", dim: true, zones: 0.2 }, SHEET),
+    { layers: boardModeLayers("board", SHEET), poured: true, side: "top", active: "In1.Cu", dim: "In1.Cu", zones: 0.2, tracks: 1 });
 });
 
 test("an explicit set is what is drawn, and the pours are a choice only while a copper layer is", () => {

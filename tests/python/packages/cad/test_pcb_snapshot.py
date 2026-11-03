@@ -66,6 +66,10 @@ class BoardJobReplayTest(unittest.TestCase):
             job("assembly", {"mode": "assembly"}),
             job("placement", {"mode": "placement"}),
             job("outline", {"layers": ["Edge.Cuts"]}),
+            # The Layers' own: Dim with the front copper active, and the zones' fill at nothing.
+            job("dim", {"mode": "board", "dim": True}),
+            job("nozones", {"mode": "board", "zones": 0}),
+            job("unpoured", {"mode": "board", "poured": False}),
             # What a prompt named, lit as the view lit it: the VBUS track, R1, an area round the text, a point.
             {**job("lit", {"mode": "board", "side": "top", "poured": True}),
              "references": [f"#track:{UUIDS['vbus track']}", "#R1", "#F.SilkS@x14y3..x26y7", "#@x5y25", f"#via:{UUIDS['pour']}"]},
@@ -77,11 +81,11 @@ class BoardJobReplayTest(unittest.TestCase):
         cls.images = {p.stem: Image.open(p).convert("RGB") for p in workspace.glob("*.png")}
 
     def test_each_view_is_written_at_its_size(self) -> None:
-        self.assertEqual(6, len(self.result))
+        self.assertEqual(9, len(self.result))
         # Every key the command line prints a snapshot by, as every other kind's report has it.
         for drawn in self.result:
             self.assertIs(False, drawn.report["preview"])
-        self.assertEqual(["assembly", "below", "lit", "outline", "placement", "top"], sorted(self.images))
+        self.assertEqual(["assembly", "below", "dim", "lit", "nozones", "outline", "placement", "top", "unpoured"], sorted(self.images))
         for name, image in self.images.items():
             self.assertEqual(SIZE, (image.width, image.height), name)
 
@@ -103,6 +107,14 @@ class BoardJobReplayTest(unittest.TestCase):
         pad = on_screen(35.825, 15.3)  # off the airwire through the pin centre
         self.assertTrue(near(self.images["placement"].getpixel(pad), copper, 50))
         self.assertFalse(near(self.images["outline"].getpixel(pad), copper, 50))
+
+    def test_dim_fades_all_but_the_active_layer_and_the_zones_take_their_opacity(self) -> None:
+        pour, track = on_screen(8, 22), on_screen(30, 15)  # the GND pour on B.Cu; the VBUS track on F.Cu, active
+        top, dim = self.images["top"], self.images["dim"]
+        self.assertFalse(near(top.getpixel(pour), dim.getpixel(pour), 30), f"the back pour fades: {top.getpixel(pour)} -> {dim.getpixel(pour)}")
+        self.assertTrue(near(top.getpixel(track), dim.getpixel(track), 25), f"the active copper does not: {dim.getpixel(track)}")
+        # The zones at 0 draw the pour's fill as no fill at all.
+        self.assertTrue(near(self.images["nozones"].getpixel(pour), self.images["unpoured"].getpixel(pour), 10))
 
     def test_what_the_prompt_named_is_lit_and_what_names_nothing_said(self) -> None:
         lit, top = self.images["lit"], self.images["top"]
@@ -138,6 +150,19 @@ class BoardDisplayTest(unittest.TestCase):
         self.assertEqual(["area", "B.Cu", "Edge.Cuts", "F.Cu", "vias"], drawn({}))
         # A set saved when a board had a drawing sheet still draws what else it names, and is not refused.
         self.assertEqual(["F.Cu"], drawn({"layers": ["sheet", "F.Cu"]}))
+
+    def test_the_active_layer_tops_the_stack_and_the_layers_own_are_checked(self) -> None:
+        from cad.engine.render.board import active_layer, display_options, viewed_layers
+        from cad.engine.snapshot import SnapshotRefused
+
+        drawn = lambda value: [layer["id"] for layer in viewed_layers(self.LAYERS, display_options(value))]
+        self.assertEqual(["area", "Edge.Cuts", "F.Cu", "B.Cu", "vias"], drawn({"active": "B.Cu"}))
+        self.assertEqual("F.Cu", active_layer(self.LAYERS, display_options({})))
+        self.assertEqual("B.Cu", active_layer(self.LAYERS, display_options({"side": "bottom"})))
+        self.assertEqual("F.Cu", active_layer(self.LAYERS, display_options({"active": "area"})), "the board's area is no active layer")
+        for wrong in ({"dim": "yes"}, {"zones": 2}, {"tracks": True}, {"active": 3}):
+            with self.assertRaises(SnapshotRefused):
+                display_options(wrong)
 
 if __name__ == "__main__":
     unittest.main()

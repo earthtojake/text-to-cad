@@ -32,6 +32,8 @@ const LAYERS = Object.freeze({
 });
 /** KiCad's zone opacity: a pour's fill is drawn at this share of its layer's colour. */
 export const ZONE_OPACITY = 0.6;
+/** KiCad's "Inactive layers: Dim": every layer but the active one is drawn at this share. */
+export const DIM_OPACITY = 0.3;
 /**
  * A hole's fill and its plated wall, by what was drilled: a pad's hole is the board's background
  * (`null`: seen through) in a golden wall, a via's golden in a white one, an unplated hole cyan.

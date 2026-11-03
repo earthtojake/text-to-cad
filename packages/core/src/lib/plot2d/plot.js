@@ -38,7 +38,7 @@
  */
 import { fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
-import { HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
+import { DIM_OPACITY, HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
 
 /**
@@ -128,6 +128,10 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {readonly string[]|null} [layers] The layer ids to draw (in the sheet's order); null or omitted for the board as it is made.
  * @property {boolean} [poured] False leaves the pours' fills out. Default true.
  * @property {"top"|"bottom"} [side] Bottom: the sheet mirrored left-right, the stack reversed. Default top.
+ * @property {string|null} [active] The active layer, drawn on top of the board's stack (KiCad's); null keeps KiCad's order.
+ * @property {string|null} [dim] With a layer id, every other layer but the board's area is drawn at `DIM_OPACITY` (KiCad's "Inactive layers: Dim").
+ * @property {number} [zones] The pours' fill opacity, 0..1. Default KiCad's 0.6.
+ * @property {number} [tracks] The tracks' opacity, 0..1. Default 1.
  */
 
 function describe(value) {
@@ -361,10 +365,12 @@ export function mirrorPageX(layout, sheetIndex, x) {
 export function viewedLayers(sheet, view) {
   const chosen = Array.isArray(view?.layers) ? new Set(view.layers) : null;
   const kept = sheet.layers.filter((layer) => (chosen ? chosen.has(layer.id) : !OPTIONAL_LAYER_KINDS.includes(layer.kind)));
-  if (view?.side !== "bottom") return kept;
-  // From below, the board's stack reverses — the back layers face the viewer — while the drawing
-  // sheet and the board's area stay under it and what goes through the board stays over it.
-  const stack = kept.filter((layer) => !OVERLAY_KINDS.has(layer.kind) && !UNDERLAY_KINDS.has(layer.kind)).reverse();
+  // From below, the board's stack reverses — the back layers face the viewer — while the board's
+  // area stays under it and what goes through the board stays over it; the active layer tops the stack.
+  const stack = kept.filter((layer) => !OVERLAY_KINDS.has(layer.kind) && !UNDERLAY_KINDS.has(layer.kind));
+  if (view?.side === "bottom") stack.reverse();
+  const active = stack.findIndex((layer) => layer.id === view?.active);
+  if (active >= 0) stack.push(...stack.splice(active, 1));
   return [...kept.filter((layer) => UNDERLAY_KINDS.has(layer.kind)), ...stack, ...kept.filter((layer) => OVERLAY_KINDS.has(layer.kind))];
 }
 
@@ -632,13 +638,15 @@ function pageSpace(ctx, transform, pixelRatio, mirrorX) {
   else ctx.setTransform(-s, 0, 0, s, (2 * mirrorX * scale + offsetX) * pixelRatio, offsetY * pixelRatio);
 }
 
-function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, background, mirrored, vias, names, viewport }) {
+function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, background, mirrored, vias, names, viewport, fade = 1, zones = ZONE_OPACITY,
+  tracks = 1 }) {
   const color = layerColor(layer.id);
   const copper = layer.kind === "copper";
   // The tracks whose net names this frame writes, over everything else on their copper (KiCad's netname layer).
   const named = [];
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  ctx.globalAlpha = fade;
   for (const item of layer.items) {
     if (!poured && item.pour) continue;
     // A via's copper goes with its hole (the vias layer), and every name with the names layer, as KiCad's
@@ -670,9 +678,10 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
       ctx.stroke(clearancePath(item, PathCtor));
     }
     const path = pathOf(ctx, item, PathCtor);
-    // A pour is drawn at KiCad's zone opacity; a teardrop, as KiCad draws it, opaque.
-    const translucent = item.pour && !item.teardrop;
-    if (translucent) ctx.globalAlpha = ZONE_OPACITY;
+    // A pour is drawn at the zones' opacity (KiCad's 60%); a teardrop, as KiCad draws it, opaque; a
+    // track at the tracks' opacity; all of it at the layer's (a dimmed layer's).
+    const alpha = item.pour && !item.teardrop ? zones : copper && isTrack(item) ? tracks : 1;
+    if (alpha !== 1) ctx.globalAlpha = fade * alpha;
     if (item.t === "poly") {
       ctx.fillStyle = paint;
       fill(ctx, path, item.holes ? "evenodd" : undefined);
@@ -693,12 +702,13 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
       ctx.lineWidth = item.w > 0 ? (copper ? item.w : Math.max(item.w, hairline)) : hairline;
       stroke(ctx, path);
     }
-    if (translucent) ctx.globalAlpha = 1;
+    if (alpha !== 1) ctx.globalAlpha = fade;
   }
   if (named.length > 0) {
     ctx.strokeStyle = netnameColor(layer.id);
     for (const item of named) strokeTrackNames(ctx, item, viewport, mirrored, PathCtor);
   }
+  ctx.globalAlpha = 1;
 }
 
 /** What the canvas shows, in page millimetres, when the context has a sized canvas; else null. */
@@ -708,6 +718,8 @@ function shownRect(ctx, transform, pixelRatio) {
     ? visiblePageRect(transform, canvas.width / pixelRatio, canvas.height / pixelRatio)
     : null;
 }
+
+const clampUnit = (value, fallback) => (typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback);
 
 function checkTransform(transform, who) {
   if (!transform || !(transform.scale > 0)) {
@@ -745,6 +757,9 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
   const named = Array.isArray(view?.layers) ? new Set(view.layers) : null;
   const vias = !named || named.has("vias");
   const names = !named || named.has("names");
+  const zones = clampUnit(view?.zones, ZONE_OPACITY);
+  const tracks = clampUnit(view?.tracks, 1);
+  const dimmed = typeof view?.dim === "string" && view.dim ? view.dim : null;
   ctx.save();
   for (const sheet of layout.sheets) {
     const mirrorX = view?.side === "bottom" ? sheet.x + sheet.width / 2 : null;
@@ -758,7 +773,8 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     for (const layer of viewedLayers(sheet, view)) {
       pageSpace(ctx, transform, pixelRatio, mirrorX);
       drawLayer(ctx, layer, {
-        hairline, poured, visible: shown, PathCtor, detail: scale, background: sheet.background, mirrored: mirrorX != null, vias, names,
+        hairline, poured, visible: shown, PathCtor, detail: scale, background: sheet.background, mirrored: mirrorX != null, vias, names, zones, tracks,
+        fade: dimmed && layer.id !== dimmed && !UNDERLAY_KINDS.has(layer.kind) ? DIM_OPACITY : 1,
         viewport: across ?? [sheet.width, sheet.height]
       });
     }

@@ -141,9 +141,9 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
-  // The sidebar's tiles: the Board and its Layers. Nothing is picked yet: no Quick Edit.
+  // The sidebar's tabs: the Circuit and its Layers. Nothing is picked yet: no Quick Edit.
   expect(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getAllByRole('button').map(button => button.getAttribute('aria-label')))
-    .toEqual(['Board', 'Layers']);
+    .toEqual(['Circuit', 'Layers']);
   expect(box(pane)).toBeNull();
   dispose();
 });
@@ -152,12 +152,12 @@ it('a native board uses the host language for its controls, tree and accessible 
   const { pane, dispose } = await open('blinky.kicad_pcb', { locale: 'zh-CN' });
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('电路板：blinky.kicad_pcb');
-  expect(within(pane).getByRole('button', { name: '电路板' })).toBeTruthy();
-  fireEvent.click(within(pane).getByRole('button', { name: '电路板' }));
-  expect(within(pane).getByRole('textbox', { name: '筛选电路板' })).toBeTruthy();
+  expect(within(pane).getByRole('button', { name: '电路' })).toBeTruthy();
+  fireEvent.click(within(pane).getByRole('button', { name: '电路' }));
+  expect(within(pane).getByRole('textbox', { name: '筛选电路' })).toBeTruthy();
   expect(within(pane).getByRole('button', { name: '选择', exact: true })).toBeTruthy();
-  expect(within(pane).getByText('元件')).toBeTruthy();
-  expect(within(pane).queryByText('Parts')).toBeNull();
+  expect(within(pane).getByText('电阻')).toBeTruthy();
+  expect(within(pane).queryByText('Resistors')).toBeNull();
   dispose();
 });
 
@@ -349,25 +349,74 @@ it("a drag under Select draws the box and names the area on the working layer; t
   dispose();
 });
 
-it('the Board section lists parts by kind and nets: a row selects, its eye isolates, and the isolation is the file’s', async () => {
+it('the Circuit tab is the parts in their schematic blocks, then the nets: a block selects its parts, a row selects and frames, an eye isolates', async () => {
+  const board = JSON.parse(JSON.stringify(BOARD));
+  const sheets: Record<string, string> = { J1: 'power', R1: 'led', D1: 'led' };
+  for (const part of board.board.parts) part.sheet = sheets[part.ref];
+  readPlot = () => json(board);
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Board' }));
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Circuit' }));
   const section = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-tool-panel-id="board"]'); expect(found).not.toBeNull(); return found!; });
   const inSection = within(section);
-  expect(inSection.getByRole('textbox', { name: 'Filter board' })).toBeTruthy();
-  // It opens until there is a choice: Parts and Nets, each kind on its one part; a part's pads and a net's stay shut.
-  expect([...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'))).toEqual([
-    'group:parts', 'kind:Diodes', 'part:D1', 'kind:Resistors', 'part:R1', 'kind:Connectors', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']);
-  fireEvent.click(inSection.getByRole('button', { name: 'Select R1' }));
-  expect(selected(controller)).toEqual(['#R1']);
-  // The part's card is what the board says of it, in KiCad's millimetres, y down.
-  expect(box(pane)!.textContent).toContain('R1');
-  fireEvent.click(inSection.getByRole('button', { name: 'Isolate R1' }));
-  expect(inSection.getByRole('button', { name: 'Exit isolate R1' }).getAttribute('aria-pressed')).toBe('true');
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#R1'] }));
+  expect(inSection.getByRole('textbox', { name: 'Filter circuit' })).toBeTruthy();
+  const rows = () => [...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'));
+  // The blocks the footprints record, then the nets, open as a tree opens until there is a choice, a block of several shut.
+  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']);
+  // A block's name selects every part in it, a chip each, and frames them.
+  const fitted = { ...frames.at(-1)! };
+  fireEvent.click(inSection.getByRole('button', { name: 'Select led' }));
+  expect(selected(controller)).toEqual(['#D1', '#R1']);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
+  await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
+    .filter(label => !label!.startsWith('Remove'))).toEqual(['D1', 'R1']));
+  expect(section.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
+  // A part selects as a click on the board does, and frames it.
+  const before = { ...frames.at(-1)! };
+  fireEvent.click(inSection.getByRole('button', { name: 'Select J1' }));
+  expect(selected(controller)).toEqual(['#J1']);
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(before.offsetX));
+  // The filter finds a part by its value and a net by its name.
+  fireEvent.change(inSection.getByRole('textbox', { name: 'Filter circuit' }), { target: { value: 'VBUS' } });
+  await waitFor(() => expect(section.querySelector('[data-search-row="net:VBUS"]')).not.toBeNull());
+  fireEvent.click(within(section.querySelector<HTMLElement>('[data-search-row="net:VBUS"]')!).getByRole('button', { name: 'Select VBUS' }));
+  expect(selected(controller)).toEqual(['#net:VBUS']);
+  fireEvent.change(inSection.getByRole('textbox', { name: 'Filter circuit' }), { target: { value: '' } });
+  fireEvent.click(inSection.getByRole('button', { name: 'Isolate J1' }));
+  expect(inSection.getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
+  dispose();
+});
+
+it("the Layers tab's options draw as KiCad's: Dim other layers, the zones' and tracks' opacity, and a row's press makes it the active layer", async () => {
+  const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Layers' }));
+  const options = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layer-options]'); expect(found).not.toBeNull(); return found!; });
+  const layers = pane.querySelector<HTMLElement>('[data-board-layers]')!;
+  // KiCad's own as a board opens: F.Cu active (its dot), nothing dimmed, the zones at 60%, the tracks at 100%.
+  expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).not.toBeNull();
+  expect(drawn.at(-1)).toMatchObject({ active: null, dim: null, zones: 0.6, tracks: 1 });
+  await user.click(within(options).getByRole('checkbox', { name: 'Dim other layers' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ dim: 'F.Cu' }));
+  // A row's press: B.Cu active, drawn on top, the rest dimmed round it.
+  await user.click(within(layers).getByRole('button', { name: 'Make B.Cu the active layer' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ active: 'B.Cu', dim: 'B.Cu' }));
+  expect(layers.querySelector('[data-layer-row="B.Cu"] [data-layer-active]')).not.toBeNull();
+  expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).toBeNull();
+  // The board's area and what goes through the board are no active layer.
+  expect(within(layers.querySelector<HTMLElement>('[data-layer-row="vias"]')!).queryByRole('button', { name: /active layer/ })).toBeNull();
+  // The zones' opacity, typed into its value.
+  const zones = within(options).getByRole('textbox', { name: 'Zone opacity value' });
+  await user.clear(zones);
+  await user.type(zones, '25{Enter}');
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ zones: 0.25 }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value)
+    .toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: 'B.Cu', dim: true, zones: 0.25, tracks: 1 }));
   dispose();
 });
 
@@ -392,7 +441,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
     ['area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
   // Shown again, the set is the mode's own: stored as the mode's, so a rebuild's new layer follows it.
   fireEvent.click(layers.querySelector('[data-layer-visibility="F.Cu"]')!);
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
   dispose();
 });
 
@@ -413,7 +462,7 @@ it('Display is a stock menu: a mode closes it; View from below and the pours lea
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' })).toBeTruthy();
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(menuShown('Display')).toBeNull());
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
   dispose();
 });
@@ -440,7 +489,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, dim: false, zones: 0.6, tracks: 1 } })]);
   expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });

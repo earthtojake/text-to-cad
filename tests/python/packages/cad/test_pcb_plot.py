@@ -482,6 +482,17 @@ class KiCadDrawingTest(unittest.TestCase):
         self.assertTrue(area.rule)
         self.assertEqual((area.name, area.layers), ("keep", ("F.Cu", "B.Cu")))
 
+    def test_a_part_carries_the_schematic_sheet_that_placed_it(self) -> None:
+        from cad.engine.formats.kicad.board_index import read_index
+        board = _board(
+            _pad("U1", "5 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 5 5)', '(at 5 5) (sheetname "/power/") (sheetfile "power.kicad_sch")', 1)
+            + _pad("U2", "10 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 10 5)', '(at 10 5) (sheetname "buspci.sch")', 1)
+            + _pad("U3", "15 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))').replace('(at 15 5)', '(at 15 5) (sheetname "/power/ldo/")', 1)
+            + _pad("U4", "20 5", '(pad "1" smd rect (at 0 0) (size 1 1) (layers "F.Cu"))'))
+        self.assertEqual({part.ref: part.sheet for part in read_index(board).parts}, {"U1": "power", "U2": "buspci", "U3": "power/ldo", "U4": None})
+        parts = {part["ref"]: part for part in self.plot(board)["board"]["parts"]}
+        self.assertEqual((parts["U1"]["sheet"], "sheet" in parts["U4"]), ("power", False))
+
     def test_footprint_text_reads_upright_unless_unlocked(self) -> None:
         def strokes(angle: str, unlocked: str = "") -> list:
             board = _board(_pad("U1", "15 10", f'(fp_text user "AB" (at 0 2 {angle}) {unlocked}(layer "F.SilkS") '

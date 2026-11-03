@@ -390,8 +390,8 @@ its part, as KiCad's single click), and it is unticked as a board opens, as KiCa
 ticked as a board opens; the filter holds while the file is open. A click takes the most specific
 thing the boxes tick (`board/boardPick.js`): with Footprints ticked a footprint's graphics are its
 part's; with the zones alone a zone is taken anywhere inside it. KiCad's Grid Items, Points and
-Other items have no box: the board's index holds none of them. A whole net is picked from the Board
-section's Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
+Other items have no box: the board's index holds none of them. A whole net is picked from the Circuit's
+Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
 everything", "Selection filter: Pads, Vias"). Select on a board has no modes: a click picks and a
 drag draws a box, the area it names (KiCad's window selection, a translucent rectangle as it is
 dragged); every other drag is the 3D views' (`useViewerRuntime.js`'s OrbitControls, the left
@@ -536,7 +536,20 @@ assembly's **Model tree** (a part file, whose tree would be its one row, has non
 **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**, where a joint can be driven; a drawing's **Layers**, where it has four or more
 layers or any block reference (a flat pattern's CUT and BEND has none): each layer's pen, name,
-entity count and eye, its block references under it; and, after them, the shell's own **Animation** for a
+entity count and eye, its block references under it; a KiCad board's **Circuit** and **Layers**
+(`board/BoardSection.jsx`, `board/LayersSection.jsx`): the Circuit headed by its filter (a part's
+reference, value, footprint name and MPN, a net's name), then the parts in the schematic blocks
+their footprints record (a sheet's name without `.sch`/`.kicad_sch`; on a board that records none,
+the kinds: ICs, Resistors, ...), each part with its pads, then Nets (the `unconnected-(...)` pins
+shut under their own group) — a block's name selects every part in it, a chip each, a part's,
+pad's or net's selects it as a click on the board does, and each frames what it picked; a selected
+net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers
+headed by KiCad's Layer Display Options, **Dim other layers** (the checkbox at its row's right end,
+as every switch in a settings form), then the **Zones** and **Tracks** opacity rows (a slider and
+its committed value; 60% and 100%), then the layer list and its Other group, where a press on a
+board layer's row makes it the active layer (a filled dot after its name), drawn on top, the one
+Dim leaves bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot
+--display` draws too; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
@@ -696,7 +709,8 @@ toggles it and leaves the menu open (`onSelect` prevents the close). Clicking ou
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has Display for its
 layer presets (Board, Copper, Assembly, Placement), copper pours and top/bottom view. Its
-Layers sidebar can override a preset, shown as Custom. It has no 3D Projection or Preview.
+Layers sidebar can override a preset, shown as Custom; its active layer, Dim and the zones' and
+tracks' opacities are kept through a change of mode. It has no 3D Projection or Preview.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

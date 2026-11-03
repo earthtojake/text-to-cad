@@ -50,6 +50,8 @@ const LINE_HEIGHT_PX = 16;
 const PAGE_HEIGHT_PX = 400;
 /** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
 export const TAP_SLOP_PX = 4;
+/** How much closer than the fit framing a thing may bring the view. */
+export const FRAME_ZOOM_CAP = 24;
 function wheelZoomFactor(event) {
   const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
   const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
@@ -161,6 +163,20 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   }, [requestPaint]);
 
   const fit = useCallback(() => refit(true), [refit]);
+
+  /**
+   * Frame a box of the picture (model space, y up), centred, with the fit's margin; never closer
+   * than `FRAME_ZOOM_CAP` times the fit, so a pad or a short track is framed in what is round it.
+   */
+  const frame = useCallback((box) => {
+    const { width, height } = sizeRef.current;
+    if (!box || !fitScaleRef.current || width <= 0 || height <= 0) return;
+    const [minX, minY, maxX, maxY] = box;
+    const fitted = fitTransform([minX, minY, maxX, maxY], width, height);
+    const scale = clampScale(Math.min(fitted.scale, fitScaleRef.current * FRAME_ZOOM_CAP), zoomLimits(fitScaleRef.current));
+    const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+    moveTo({ scale, offsetX: width / 2 - cx * scale, offsetY: height / 2 + cy * scale });
+  }, [moveTo]);
 
   const zoomBy = useCallback((factor, anchor) => {
     const transform = transformRef.current;
@@ -380,5 +396,5 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

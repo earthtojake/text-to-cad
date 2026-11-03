@@ -6,7 +6,8 @@
  * Display shows.
  *
  * ```jsonc
- * { "mode": "board", "side": "top", "poured": true, "layers": ["F.Cu", "Edge.Cuts"] }
+ * { "mode": "board", "side": "top", "poured": true, "layers": ["F.Cu", "Edge.Cuts"],
+ *   "active": "F.Cu", "dim": false, "zones": 0.6, "tracks": 1 }
  * ```
  *
  * **Modes** are presets, as a 3D view's are (`ui/docs/render-mode.md`): each names the layer
@@ -21,7 +22,12 @@
  * `layers` is the ids drawn, or null for the mode's own set (resolved against the sheet, so a
  * rebuild that adds a layer draws it under the mode). A display whose layers differ from its
  * mode's reads as Custom; the mode is kept as what choosing it again returns to. The pours and the
- * side are switches of their own, kept through a change of mode, as a 3D view's Grid is.
+ * side are switches of their own, kept through a change of mode, as a 3D view's Grid is, and so is
+ * what the Layers section sets above its list, as KiCad's Appearance panel does: the **active**
+ * layer (the one a row's press chose, drawn on top of the stack; null for KiCad's own order, its
+ * active layer the copper facing the eye), **dim** (KiCad's "Inactive layers: Dim": every other
+ * layer but the board's area drawn faded), and the opacity of the **zones**' fills (KiCad's 60%)
+ * and of the **tracks** (100%).
  *
  * Nothing here is React or canvas: pure functions over the payload's sheet (`layoutPlot`'s, or
  * the raw `payload.sheets[0]`: only `layers[].id`, `kind` and `side` are read).
@@ -37,7 +43,7 @@ export const BOARD_DISPLAY_MODES = Object.freeze({
 /** The mode ids, in the order a menu lists them. */
 export const BOARD_DISPLAY_MODE_IDS = Object.freeze(["board", "copper", "assembly", "placement"]);
 export const BOARD_DISPLAY_SIDES = Object.freeze(["top", "bottom"]);
-export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null });
+export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 });
 /** What a set stored when a board still had a drawing sheet may name: no layer now, dropped as it is read. */
 const GONE = new Set(["sheet"]);
 /** The ids of what is not a board layer — the canvas under it, what goes through it — and how the Display names them. */
@@ -58,6 +64,7 @@ const rankIn = (order, id) => {
   return user ? order.length + Number(user[1]) : order.length + 100;
 };
 
+const unit = (value, fallback) => (typeof value === "number" && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback);
 const sheetLayers = (sheet) => (Array.isArray(sheet?.layers) ? sheet.layers : []);
 const sameSet = (left, right) => left.length === right.length && left.every((id) => right.includes(id));
 
@@ -67,7 +74,8 @@ const sameSet = (left, right) => left.length === right.length && left.every((id)
  * but not the drawing sheet a set stored before it was dropped names.
  *
  * @param {unknown} raw
- * @returns {{ mode: string, side: "top"|"bottom", poured: boolean, layers: string[]|null }}
+ * @returns {{ mode: string, side: "top"|"bottom", poured: boolean, layers: string[]|null, active: string|null, dim: boolean,
+ *   zones: number, tracks: number }}
  */
 export function readBoardDisplay(raw) {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
@@ -80,6 +88,10 @@ export function readBoardDisplay(raw) {
     side: value.side === "bottom" ? "bottom" : "top",
     poured: typeof value.poured === "boolean" ? value.poured : BOARD_DISPLAY_DEFAULTS.poured,
     layers,
+    active: typeof value.active === "string" && value.active && !GONE.has(value.active) ? value.active : null,
+    dim: typeof value.dim === "boolean" ? value.dim : BOARD_DISPLAY_DEFAULTS.dim,
+    zones: unit(value.zones, BOARD_DISPLAY_DEFAULTS.zones),
+    tracks: unit(value.tracks, BOARD_DISPLAY_DEFAULTS.tracks),
   };
 }
 
@@ -126,9 +138,31 @@ export const boardDisplayDrawsCopper = (display, sheet) => {
   return sheetLayers(sheet).some((layer) => layer.kind === "copper" && drawn.has(layer.id));
 };
 
-/** The drawing's view for a display (`drawPlot`'s `view`): the ids to draw, the pours, the side. */
+// What a press on a row may make active: a board layer, not the board's area or what goes through it.
+const ACTIVE_KINDS = new Set(["copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "outline"]);
+/** Whether a sheet's layer `id` can be the active layer (a board layer, not the area, the vias, the drills, the ratsnest or the names). */
+export const boardLayerActivatable = (sheet, id) => sheetLayers(sheet).some((layer) => layer.id === id && ACTIVE_KINDS.has(layer.kind));
+
+/**
+ * The display's active layer on a sheet: the one chosen, while the sheet has it, else KiCad's — the
+ * copper facing the eye (F.Cu from the top, B.Cu from below) — else null.
+ */
+export function boardActiveLayer(display, sheet) {
+  if (display.active && boardLayerActivatable(sheet, display.active)) return display.active;
+  const facing = display.side === "bottom" ? "B.Cu" : "F.Cu";
+  return sheetLayers(sheet).some((layer) => layer.id === facing) ? facing : null;
+}
+
+/**
+ * The drawing's view for a display (`drawPlot`'s `view`): the ids to draw, the pours, the side, the
+ * active layer chosen (drawn on top), the layer kept bright while the rest is dimmed, and the zones'
+ * and tracks' opacities.
+ */
 export function boardDrawView(display, sheet) {
-  return { layers: boardDisplayLayers(display, sheet), poured: display.poured, side: display.side };
+  return { layers: boardDisplayLayers(display, sheet), poured: display.poured, side: display.side,
+    active: display.active && boardLayerActivatable(sheet, display.active) ? display.active : null,
+    dim: display.dim ? boardActiveLayer(display, sheet) : null, zones: display.zones ?? BOARD_DISPLAY_DEFAULTS.zones,
+    tracks: display.tracks ?? BOARD_DISPLAY_DEFAULTS.tracks };
 }
 
 /**

@@ -166,8 +166,12 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
 KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
 Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
-area, a box on the layer the person works on; the sidebar's Nets pick a whole net. Each arrives as
-a reference ([checks](references/checks.md#references) says what each names and how to resolve it).
+area, a box on the layer the person works on. The sidebar's **Circuit** lists the parts in the
+schematic blocks their footprints record (by kind on a board that records none) and the nets: a
+block picks every part in it, a net picks the whole net. Each arrives as a reference
+([checks](references/checks.md#references) says what each names and how to resolve it). The
+**Layers** tab sets the active layer (drawn on top), Dim other layers, and the zones' and tracks'
+opacity; they are the display, so a Quick Edit's packet draws the same.
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:
@@ -176,6 +180,7 @@ Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","dim":true,"zones":0.3}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan

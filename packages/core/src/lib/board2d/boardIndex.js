@@ -120,7 +120,7 @@ export function createBoardIndex(board, sheet = {}) {
       kind: "part", ref, value: String(entry.value ?? ""), footprint: String(entry.footprint ?? ""),
       side: entry.side === "bottom" ? "bottom" : "top", at: page(entry.at) || [sheetX, sheetY], rotation: Number(entry.rotation) || 0,
       fields: entry.fields && typeof entry.fields === "object" ? { ...entry.fields } : {},
-      dnp: Boolean(entry.dnp), locked: entry.locked === true, script: typeof entry.script === "string" ? entry.script : "",
+      dnp: Boolean(entry.dnp), locked: entry.locked === true, sheet: typeof entry.sheet === "string" ? entry.sheet : "", script: typeof entry.script === "string" ? entry.script : "",
       outline, area: outline.length > 2 ? polygonArea(outline) : Infinity, box: outline.length > 2 ? boxOf(outline) : null, pads: []
     });
   }
