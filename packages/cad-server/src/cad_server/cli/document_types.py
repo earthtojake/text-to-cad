@@ -6,6 +6,11 @@ part.png``, ``cad srdf check robot.srdf --urdf robot.urdf``. Each operation has 
 ``export`` says the files it wrote, ``check`` its findings (each with a severity, a code and a
 location; ``--json`` the ``cad.results.CheckResult``). A type's own options live with the type.
 
+A 3D type's ``check`` (``stl``, ``threemf``, ``glb``, ``step``, ``xbf``) is the manufacturing check, the
+trimesh integration's: ``cad stl check part.stl --process molding --pull -z``, ``cad xbf check <id>
+--process printing --candidates``. It runs here when this environment holds trimesh, else in the
+environment the engine makes for ``cad[trimesh]`` (``cad_server._internal.integration_env``).
+
 ``cad <type> --help`` lists the type's operations, worked out from the registry, and ``cad <type>
 <operation> --help`` that operation's options. A file of another type is refused by name, before
 anything runs: ``part.glb is a glb, not a stl: use cad glb snapshot``.
@@ -93,6 +98,70 @@ def _engine(verb: str, document_type: str) -> Callable[[list[str], str], int]:
         return answered(VERBS[verb][2], args, prog)
 
     return run
+
+
+# --- a 3D type's manufacturing check: the trimesh integration's ---------------------------------------
+
+
+def pull_value(argv: list[str]) -> list[str]:
+    """``--pull -z`` as ``--pull=-z``: argparse reads a value that starts with a dash as an option."""
+    out: list[str] = []
+    index = 0
+    while index < len(argv):
+        token = argv[index]
+        if token == "--pull" and index + 1 < len(argv) and argv[index + 1].startswith("-"):
+            out.append(f"--pull={argv[index + 1]}")
+            index += 2
+            continue
+        out.append(token)
+        index += 1
+    return out
+
+
+def _manufacturing_check(document_type: str) -> Callable[[list[str], str], int]:
+    """``cad <type> check --process molding|printing``: the library's check (``cad.<type>.check``), run here
+    when this environment holds the trimesh integration, else in the environment that holds it
+    (``cad_server._internal.integration_env``), its options refused here first, before one is made."""
+
+    def run(argv: list[str], prog: str) -> int:
+        from cad_server._internal import integration_env
+
+        argv = pull_value(argv)
+        target = (f"cad.{document_type}", "check")
+        integration = "trimesh"
+        if integration_env.carries(integration):
+            return _checked(document_type, target, argv, prog)
+        return _checked_elsewhere(document_type, target, integration, argv, prog)
+
+    return run
+
+
+def _checked_elsewhere(document_type: str, target: tuple[str, str], integration: str, argv: list[str],
+                       prog: str) -> int:
+    from cad._internal.manufacturing import options
+    from cad.results import CheckFinding, CheckResult
+    from cad_server._internal import integration_env
+    from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, _call_arguments, _explicit_option_dests,
+                                                        _verb, emit, generated_parser)
+
+    parser = generated_parser(target, prog=prog)
+    parsed = parser.parse_args(argv)
+    _refuse_other_type(document_type, "check", str(parsed.source))
+    positional, keywords = _call_arguments(_verb(target), parsed, explicit_keywords=_explicit_option_dests(parser, argv))
+
+    def said(line: str) -> None:
+        print(f"{prog}: {line}", file=sys.stderr, flush=True)
+
+    def measured() -> CheckResult:
+        given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
+        options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
+        python = integration_env.environment(integration, said)
+        found = integration_env.call(python, document_type, "check", [str(value) for value in positional], keywords)
+        return CheckResult(ok=bool(found["ok"]), path=Path(found["path"]),
+                           findings=tuple(CheckFinding(**finding) for finding in found.get("findings") or ()),
+                           summary=str(found.get("summary") or ""), measurements=found.get("measurements") or {})
+
+    return emit(measured, prog=prog, as_json=bool(getattr(parsed, JSON_FLAG_DEST)), verbose_hint=False)
 
 
 # --- the KiCad board's own operations: the kicad integration's, and the library's summary ---------------
@@ -221,6 +290,8 @@ for _entry in DOCUMENT_TYPES.values():
             OPERATIONS[(_entry.id, _name)] = _OWN[(_entry.id, _name)]
         elif _name in _ENGINE_SOURCES:
             OPERATIONS[(_entry.id, _name)] = _engine(_name, _entry.id)
+        elif _name == "check" and getattr(_entry.operation(_name), "integration", None) == "trimesh":
+            OPERATIONS[(_entry.id, _name)] = _manufacturing_check(_entry.id)
         elif _name == "check":
             OPERATIONS[(_entry.id, _name)] = _urdf_check if _entry.id == "urdf" else _generated_check(_entry.id)
 del _entry, _name

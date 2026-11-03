@@ -3,6 +3,8 @@
 ``@xbf("XBF/arm.xbf")`` declares a model's XBF file;
 ``xbf.read(path)`` reads one into a model;
 its operations (``xbf.export(source, *destinations)``, ...) are the ``cad xbf <operation>`` commands'.
+``xbf.check(source, process="molding")`` (or ``"printing"``) measures it for manufacturing, with
+the trimesh integration (``cad._internal.manufacturing``).
 Everything loads on first use: ``import cad.xbf`` imports no CAD kernel (``cad._internal.document_type``).
 """
 

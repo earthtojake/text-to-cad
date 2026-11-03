@@ -5,8 +5,10 @@
 # exactly the pinned version. Installing a skill's requirements.txt WITHOUT this file fetches the
 # last published release from PyPI instead of the checkout -- this file is the development door.
 # The library with its build123d extra: this environment runs models itself, so it is its own base
-# environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py).
---editable ./packages/cad[build123d]
+# environment and the server makes none (packages/cad-server/src/cad_server/_internal/base.py). And with
+# its trimesh extra, so `cad <type> check --process` measures in this environment and the server makes no
+# environment of cad[trimesh] for it (packages/cad-server/src/cad_server/_internal/integration_env.py).
+--editable ./packages/cad[build123d,trimesh]
 --editable ./packages/cad-server
 --editable ./packages/cad-mcp
 
@@ -17,20 +19,15 @@
 # names this command when it finds none.
 
 # The packages' own runtime dependencies come with the editable installs above: the library's
-# (numpy) and its build123d extra's (build123d, cadquery-ocp-novtk, bd_materials, threejs-materials,
-# matplotlib, shapely, ezdxf, pillow), and the server's (uv, ezdxf, pillow).
+# (numpy), its build123d extra's (build123d, cadquery-ocp-novtk, bd_materials, threejs-materials,
+# matplotlib, shapely, ezdxf, pillow) and its trimesh extra's (trimesh, rtree, scipy), and the
+# server's (uv, ezdxf, pillow).
 
 # The viewer's browser checks drive a headless Chromium through Python Playwright (the
 # launch smoke test, scripts/test/test-viewer-launch.sh), as does the manual parity bench
 # (scripts/bench/occt_parity.py). Dev tooling only: nothing in the wheel imports it.
 # Pinned exactly: each Playwright release fetches its own browser build.
 playwright==1.63.0
-# - skills/dfam-check/requirements.txt
-rtree
-scipy
 
 # Repo tests only.
-networkx
-lxml
 pyrefly==1.3.2
-trimesh

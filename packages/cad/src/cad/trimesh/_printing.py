@@ -1,32 +1,20 @@
-#!/usr/bin/env python3
-"""Fact-only DfAM geometry measurements for mesh files.
+"""3D printing's measurements of a triangle mesh, with trimesh: the mesh, its scale, overhangs,
+wall thickness, support volume, and the candidate orientations ranked.
 
-Reports measurements as JSON. It never emits pass/fail, verdicts, or
-readiness statuses; comparisons against process limits belong to the
-skill workflow using `references/process-limits.md`.
+Facts, never verdicts: nothing here compares a figure against a process's limit.
+``cad.<type>.check(..., process="printing")`` turns the report into findings
+(``cad.trimesh._check``); ``cad.trimesh.printing`` and ``cad.trimesh.orientations``
+hand it back as data.
 
-Requires the skill's full dependency set (pip install -r requirements.txt).
-Without scipy/networkx the wall-thickness block degrades to an error object
-while the rest of the report still prints.
-
-Usage:
-    python dfam_tool.py measure <mesh> [--samples 2000] [--angle-limit 45]
-    python dfam_tool.py orientations <mesh> [--angle-limit 45]
-
-Exit codes: 0 a complete report, 2 a PARTIAL one (a fact family failed; the
-report carries `"partial": true` and names the families in `partial_sections`),
-1 the mesh could not be loaded at all.
-
-`--angle-limit` only parameterises which faces are *counted* in the
-support-area aggregates; per-face angles are always reported so the
-agent can re-bin against any process limit.
+``angle_limit`` only parameterises which faces are *counted* in the
+support-area aggregates; per-face angles are always reported so a reader can
+re-bin against any process limit. A family that fails leaves an ``error`` field
+where its facts would be, and the report says so (``partial``,
+``partial_sections``): a report missing wall thickness reads differently from one
+whose part has no thin walls.
 """
 
 from __future__ import annotations
-
-import argparse
-import json
-import sys
 
 import numpy as np
 import trimesh
@@ -312,14 +300,14 @@ def _safe(fn, *args) -> dict:
 
 
 def _mark_partial(report: dict) -> bool:
-    """Say, in the report and in the exit code, that a fact family did not compute.
+    """Say, in the report, that a fact family did not compute.
 
     Degrading one family instead of the whole run is deliberate (`_safe`), but a
     caller must be able to SEE it: a report missing wall thickness because scipy
     is not installed reads exactly like one from a part with no thin walls. The
-    families that failed are named in `partial_sections`, and the command exits
-    2, so neither a JSON reader nor a shell caller can take a partial report for
-    a complete one.
+    families that failed are named in `partial_sections`, and the check fails on
+    each of them (an error finding), so neither a JSON reader nor a shell caller
+    can take a partial report for a complete one.
     """
     failed = sorted(
         name for name, value in report.items()
@@ -353,47 +341,24 @@ def _scale_hint(mesh: trimesh.Trimesh) -> dict:
     }
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description=__doc__)
-    sub = ap.add_subparsers(dest="command", required=True)
-
-    m = sub.add_parser("measure", help="full measurement set for one mesh")
-    m.add_argument("mesh")
-    m.add_argument("--samples", type=int, default=2000)
-    m.add_argument("--angle-limit", type=float, default=45.0)
-
-    o = sub.add_parser("orientations", help="candidate orientation measurements")
-    o.add_argument("mesh")
-    o.add_argument("--angle-limit", type=float, default=45.0)
-
-    args = ap.parse_args()
-
-    try:
-        mesh = _load(args.mesh)
-    except Exception as e:
-        print(json.dumps({"error": f"failed to load mesh: {e}"}))
-        return 1
-
-    if args.command == "measure":
-        report = {
-            "file": args.mesh,
-            "mesh": _safe(_mesh_facts, mesh),
-            "scale": _safe(_scale_hint, mesh),
-            "overhangs": _safe(_overhang_facts, mesh, args.angle_limit),
-            "wall_thickness": _safe(_wall_facts, mesh, args.samples),
-            "support_volume": _safe(_support_volume_facts, mesh, args.angle_limit),
-        }
-    else:
-        report = {
-            "file": args.mesh,
-            "scale": _safe(_scale_hint, mesh),
-            "orientations": _safe(_orientation_facts, mesh, args.angle_limit),
-        }
-
-    partial = _mark_partial(report)
-    print(json.dumps(report, indent=2))
-    return 2 if partial else 0
+def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float) -> dict:
+    """Every family: the mesh, its scale, overhangs, wall thickness and support volume."""
+    report = {
+        "mesh": _safe(_mesh_facts, mesh),
+        "scale": _safe(_scale_hint, mesh),
+        "overhangs": _safe(_overhang_facts, mesh, angle_limit),
+        "wall_thickness": _safe(_wall_facts, mesh, samples),
+        "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
+    }
+    _mark_partial(report)
+    return report
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def orientations(mesh: trimesh.Trimesh, angle_limit: float) -> dict:
+    """Its scale and the six axis-aligned candidate orientations ranked."""
+    report = {
+        "scale": _safe(_scale_hint, mesh),
+        "orientations": _safe(_orientation_facts, mesh, angle_limit),
+    }
+    _mark_partial(report)
+    return report

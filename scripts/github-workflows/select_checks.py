@@ -300,10 +300,8 @@ RULES: tuple[Rule, ...] = (
     Rule((f"{SKILL_SUITES}/**",), _test_file(SKILL_SUITES)),
 
     # Skills. Their prose and metadata are read by the policy contracts (light, always): the
-    # commands a skill documents among them; scripts by their skill's suite.
+    # commands a skill documents among them; scripts by their skill's suite, each a light one.
     Rule(("skills/**",), NOTHING),
-    Rule(("skills/dfam-check/**",), select(skills=[f"{SKILL_SUITES}/dfam-check"])),
-    Rule(("skills/dfm/**",), select(skills=[f"{SKILL_SUITES}/dfm"])),
 
     # The test runners and the gates each one feeds.
     Rule(("scripts/test/test-python.sh",), select(cadgen=[CADGEN_SUITE], skills=[SKILL_SUITES])),

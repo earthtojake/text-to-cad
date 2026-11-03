@@ -7,7 +7,8 @@ step`` is one object that is
 * the type's decorator, where it has one: ``@step("out.step")`` declares a model's file;
 * its reader, where it has one: ``step.read(path)``;
 * its operations, one to one with the ``cad`` command's (``cad step export``): ``.export``,
-  ``.snapshot``, ``.inspect`` and ``.check``, each where the type implements it;
+  ``.snapshot``, ``.inspect`` and ``.check``, each where the type implements it (a 3D type's ``check``
+  is the manufacturing check, ``cad._internal.manufacturing``);
 * the vocabulary its own standard defines, where that takes no third-party objects.
 
 Everything loads on first use: ``import cad`` imports no CAD kernel. A file of another type is
@@ -24,6 +25,8 @@ from typing import Any
 
 __all__ = ["DocumentType", "bind"]
 
+# An operation a type does not implement, read as one that needs no integration.
+_NONE = types.SimpleNamespace(integration=None)
 # A type's reader, by id: the function that reads a file of it into a model.
 _READERS = {"step": "cad.engine.model.read_step", "xbf": "cad.engine.model.read_xbf",
             "stl": "cad.engine.reader.read_mesh"}
@@ -93,6 +96,13 @@ class DocumentType(types.ModuleType):
             return value
         if name in ("export", "snapshot", "inspect") and name in entry.operation_names:
             value = _operation(self, name)
+            self.__dict__[name] = value
+            return value
+        if name == "check" and (entry.operation("check") or _NONE).integration == "trimesh":
+            # The manufacturing check every 3D type shares (``cad._internal.manufacturing``).
+            from cad._internal.manufacturing import check_for
+
+            value = check_for(entry.id)
             self.__dict__[name] = value
             return value
         if name.startswith("__"):

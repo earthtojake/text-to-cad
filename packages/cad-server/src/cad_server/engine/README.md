@@ -638,6 +638,12 @@ cad xbf|step|glb inspect DOC [REF] [--query Q] [--json]
                                              closure, geometry (the default with REF) or build
 cad urdf|sdf|srdf check FILE [--strict] [--json] [the type's own options]
                                              its findings, each a severity, a code and a location
+cad xbf|step|stl|glb|threemf check SRC --process molding [--pull AXIS|X,Y,Z] [--wall-limit DEG]
+                [--zero-tol DEG] [--units U] [--candidates] [--json]
+cad xbf|step|stl|glb|threemf check SRC --process printing [--angle-limit DEG] [--samples N]
+                [--units U] [--candidates] [--json]
+                                             the manufacturing check, the trimesh integration's: SRC a
+                                             file or a document id; its findings and every measurement
 cad status [--json] | stop [--json] | server [--port N] [--rotate-token]
 cad delete DOC [DOC ...] [--json]        each document deleted: its record, its document in the engine's
                                              cache and what the engine holds of it (**Delete**); never a
@@ -844,6 +850,24 @@ runners) for `export`, `snapshot` and `inspect`, the type's `check` for `check` 
 function's signature, `cad_server._internal.cli_from_function`, or an adapter's parser where a flag
 repeats). `cad_server.cli.<type>` is each type's module, and the `cad` dispatcher sends `cad <type>
 ...` to it (`TYPE_COMMANDS`); `resolve` and `build_parser_for` give a command line's parser.
+
+**The manufacturing check.** A 3D type's `check` (`xbf`, `step`, `stl`, `glb`, `threemf`: the
+registry's `check` operation of the `trimesh` integration) is one function the library makes for each
+(`cad._internal.manufacturing.check_for`, bound by `DocumentType`): its options belong to a process,
+`molding` or `printing`, and are resolved there, the standard library alone -- an option of the other
+process, a pull beside `--candidates` and a unit for a type that declares its own are refused before
+anything is read. The measuring is `cad.trimesh._check`'s: an STL is read as it is; a 3MF or a GLB is
+written as one STL in a temporary folder by the library's mesh readers (millimetres, Z up, as the viewer
+reads it; no kernel); a STEP, an xbf or a document id is exported to that STL by the engine. The report
+(`_molding`, `_printing`: injection molding's draft, undercuts and projection along a pull, or the pulls
+ranked; 3D printing's mesh, overhangs, walls and support, or the orientations ranked) is the result's
+`measurements`; a family that failed, a mesh that did not read and a figure that is no finite number are
+errors, and what the figures show (zero-draft walls, undercut candidates, overhangs, suspect units) are
+warnings, at the place they were measured. The command runs it in its own process when its environment
+holds trimesh (`cad_server._internal.integration_env.carries`: a checkout's, one installed with the
+extra); else in the environment of `cad[trimesh]` at the installation's release, made once by the engine
+as `cad run` makes a program's (`extras.ensure`), whose Python runs the library's runner of one operation
+(`cad._internal.operation`: the call on stdin, the result on stdout), the result printed as it would be here.
 
 ## Profiling
 

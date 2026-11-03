@@ -104,12 +104,14 @@ focused test, so the file builds on an engine daemon of its own:
 ### Development dependencies
 
 `requirements-dev.txt` installs the source packages from `packages/` and the
-small set of Python extras mirrored from skill runtime requirements. It installs the
+repository's own tooling. It installs the
 library, the server and the shim editable, the library with its `build123d` extra (OCP,
 build123d and the rest; the library's required dependency is numpy alone), so the
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
-(not `cad setup`, `cad doctor` or an update). `cad run` of a program whose imports use another set of
+(not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
+<type> check --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
+it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
 cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
 environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
 uv's cache where it holds it. The editable
@@ -369,11 +371,11 @@ diff content: a comment in a module selects what the module's code would.
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, the release's pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
-| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's, the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
+| cadgen (Linux/Windows) | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `scripts/bundle`, a package test, prose a package test reads | the package suites -- the library's (the trimesh integration's manufacturing measurements among them), the server's (the engine's and the CAD Viewer backend's included) and the shim's (on Linux under Xvfb, the display the engine's OCCT stills draw on); for a change confined to the Viewer's backend or the CAD app's server (`cad_server/viewer`, `cad_server/mcp` and the commands that start them), only the tests that name them or read all of the server; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it) | `@cad/core`'s units, the dependency and kit-boundary checks |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to | the UI's and the client's type checks (`tsc`), the UI's units and browser specs (ui changes only) and the client's units: Node and npm Playwright's Chromium, no Python |
 | mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's type check, its host-adapter units (jsdom) and its one-file build |
-| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`), dfm and dfam-check (their skills) |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode and sendcutsend suites); then, after the full install, the policy tests that load the packages or the server's runtime (`packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `scripts/bundle`) |
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
