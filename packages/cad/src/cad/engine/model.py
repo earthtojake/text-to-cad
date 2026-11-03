@@ -417,7 +417,7 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
 
 
 def _decorator(kind: str) -> Callable[..., Any]:
-    def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
+    def declare(out: Any, name: str | None, tolerance: float | None) -> Any:
         if out is None:
             raise TypeError(f"@{kind} requires an output path")
         check_output(kind, out, f"@{kind}(out=...)")
@@ -437,6 +437,14 @@ def _decorator(kind: str) -> Callable[..., Any]:
             return model.named(name)
 
         return apply
+
+    # An STL and a 3MF take their own mesh tolerance (``export/__init__.py``); no other kind is meshed.
+    if kind in ("stl", "threemf"):
+        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
+            return declare(out, name, tolerance)
+    else:
+        def decorate(out: Any, *, name: str | None = None) -> Any:
+            return declare(out, name, None)
 
     decorate.__name__ = kind
     decorate.__qualname__ = kind

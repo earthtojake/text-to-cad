@@ -98,10 +98,12 @@ class ExportToleranceTest(unittest.TestCase):
         api.export(self.xbf, coarse, daemon=False, progress=False)
         with self.assertRaisesRegex(ExportRefused, "no tolerance meshes it again"):
             api.export(coarse, self.folder / "again.3mf", tolerance=0.01, daemon=False, progress=False)
-        from cad import step
+        from cad import step, stl
 
-        with self.assertRaisesRegex(ExportRefused, "a tolerance meshes an STL or a 3MF"):
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'tolerance'"):
             step("part.step", tolerance=0.01)
+        with self.assertRaisesRegex(ExportRefused, "at least 0.001 mm"):
+            stl("part.stl", tolerance=0)
 
 
 if __name__ == "__main__":
