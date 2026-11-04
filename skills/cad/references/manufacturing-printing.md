@@ -32,13 +32,16 @@ another orientation, turn the part in its model and check again.
 
 ## Read it
 
-The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness`, `gaps`, `holes`,
+The families: `solid` (a mesh's `mesh`), `overhangs`, `bridges`, `wall_thickness`, `knife_edges`, `gaps`, `holes`,
 `pins`, `details`, `clearances`, `trapped_volumes`, `build_volume`, `bed`, `stair_stepping`,
 `support_volume`, `sections`; `orientations` with `--candidates`.
 
 - Report `not_watertight` or `not_sound` first: it blocks slicing for every technology.
 - Walls are `supported` (joined to the part on two sides or more) or not, each with its own minimum.
   A mesh cannot say which, so it is judged against the supported minimum (`printing.wall`).
+- `printing.knife_edge` is a convex edge under 45 degrees of material, which thins to nothing:
+  `thin_depth_mm` says how far in it stays under the minimum wall. Blunt it, chamfer it at 45 degrees
+  or more, or move the cut that made it.
 - The powder processes (SLS, MJF) need no support: their overhangs are facts, not verdicts, and
   trapped powder and its escape holes (`trapped_volumes`) are the check instead. A sealed cavity in
   SLA traps resin; in FDM it prints as infill (`internal_void`).
