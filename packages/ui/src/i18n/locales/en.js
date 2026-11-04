@@ -267,6 +267,15 @@ export default {
   "update.failed": "The update failed: {error}",
   "update.updated": "Updated to {version}.",
   "update.updatedRestart": "Updated to {version}. Restart the app to load its new skills.",
+  // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
+  "whatsNew.gotIt": "Got it",
+  "whatsNew.0.11.title": "What's new in text-to-cad 0.11",
+  "whatsNew.0.11.boards.title": "KiCad boards in the viewer.",
+  "whatsNew.0.11.boards.body": "Open a `.kicad_pcb` and see it drawn the way KiCad's PCB editor shows it, with its layers, nets and schematic sheets in the sidebar.",
+  "whatsNew.0.11.select.title": "Point your agent at any part of a board.",
+  "whatsNew.0.11.select.body": "Click or drag to select parts, pads, tracks, zones or an area, then describe the change in Quick Edit.",
+  "whatsNew.0.11.checks.title": "Checks and fab files, with nothing to install.",
+  "whatsNew.0.11.checks.body": "Your agent runs KiCad's design and electrical rule checks and exports Gerbers, BOMs, STEP and more. text-to-cad brings its own copy of KiCad.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",

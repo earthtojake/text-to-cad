@@ -794,6 +794,12 @@ A release pull request comes one of two ways. Choose the bump deliberately for
 every release; if a release request does not specify one, confirm it rather
 than assuming.
 
+A release with significant user-facing features adds its What's new entry before it ships: its
+minor version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale
+files, user-facing features only, at most three items, each a bold title and one or two sentences
+(the dialog the CAD Viewer and the CAD app's tabs show once after an update; `notes.test.mjs`
+holds the shape). A release with nothing a person would notice adds none.
+
 **Its own pull request**, to release what `main` already has: dispatch
 `Prepare Release` (`release-prepare.yml`).
 

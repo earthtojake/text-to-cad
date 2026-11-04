@@ -252,6 +252,15 @@ export default {
   "update.failed": "アップデートできませんでした: {error}",
   "update.updated": "{version} にアップデートしました。",
   "update.updatedRestart": "{version} にアップデートしました。新しいスキルを読み込むには、アプリを再起動してください。",
+  // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
+  "whatsNew.gotIt": "OK",
+  "whatsNew.0.11.title": "text-to-cad 0.11 の新機能",
+  "whatsNew.0.11.boards.title": "KiCad の基板をビューアーで。",
+  "whatsNew.0.11.boards.body": "`.kicad_pcb` を開くと、KiCad の PCB エディターと同じように描かれ、レイヤー、ネット、回路図シートがサイドバーに並びます。",
+  "whatsNew.0.11.select.title": "基板のどこでもエージェントに指し示せます。",
+  "whatsNew.0.11.select.body": "クリックやドラッグで部品、パッド、配線、ゾーン、範囲を選び、クイック編集で変更を伝えましょう。",
+  "whatsNew.0.11.checks.title": "チェックも製造ファイルも、インストール不要。",
+  "whatsNew.0.11.checks.body": "エージェントが KiCad のデザインルールチェックと電気的ルールチェックを実行し、ガーバー、BOM、STEP などを書き出します。KiCad は text-to-cad に同梱されています。",
 
   "alert.undisplayable": "モデルを表示できませんでした",
   "alert.dismiss": "閉じる",

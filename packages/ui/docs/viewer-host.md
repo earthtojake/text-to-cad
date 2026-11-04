@@ -566,6 +566,17 @@ host owns what each one does and where it is kept.
 `useAnalyticsConsent(consent, locale)`, which turns the host's consent call into its `appSettings` row
 (Telemetry). Nothing asks: the server's telemetry is on by default once a `cad` command
 has said so. The host supplies the call and where the answer is kept.
+`@cad/ui/whats-new` is What's new, the dialog both apps show once after an update to a release
+whose notes say what it brought (`notes.js`: by minor version, at most three items, their words the
+locale files'): `useWhatsNew(whatsNew)` reads the host's call (`/api/v1/settings`' `whats_new`,
+`{ seen, release }`: the releases whose notes the person has seen, kept in the `whats_new` section of
+`settings.json`, and the one the engine runs) and gives the release to show and `dismiss`, which the
+host hands `CadViewer` as `whatsNew`. CadViewer says it, the stock Dialog with one Got it, over the
+home or a file's view once its renderer is up, never over a loading page; every way it closes keeps
+it seen for every view, and a write that fails still closes it. A new person is shown nothing new: the
+server decides, once, whether a device was updated (`cad_server/whats_new.py`). A host leaves
+`whatsNew` out where a dialog has no room (the CAD app's cards) or while its own notice covers the
+view (the engine gone, an update restarting).
 `@cad/ui/update` is the update button both apps share, from the server's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
 first among the navbar's right-hand controls, over every file and over the home; a host with no
