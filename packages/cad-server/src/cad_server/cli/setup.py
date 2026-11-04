@@ -38,7 +38,8 @@ current installation's
 5. **build123d.** The environment the engine's own kernel processes start from, ``cad[build123d]`` at
    this release (``cad_server._internal.base``), is said in the plan and never made here: it is made on
    first need (the first build, or a view or operation that needs the kernel), from uv's cache where it
-   holds it. Nothing is installed at setup, nor after an update.
+   holds it. Nothing is installed at setup, nor after an update the person asks for; an automatic update's
+   first half (``PREPARE_ENV``, below) is the one run that makes it, before the engine switches by itself.
 6. **Apps.** The plugin folder, ``<state>/plugin``, is written from this release
    (``cad_server._internal.plugin``), and each app is pointed at it by its own command, the way it keeps
    a local plugin (``cad_server._internal.providers``): one reads the folder in place, one links it, one
@@ -66,7 +67,11 @@ current installation's
 
 ``--engine-update`` is the engine's own run of it, for its update button (``cad_server._internal.update``):
 steps 2, 4, 6 and 7, from the release's folder, with no switch -- the engine drains and its helper switches --,
-each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr.
+each stage a progress frame on stdout (``{"progress": ...}``) and its words on stderr. An automatic update
+runs it first with ``CAD_UPDATE_PREPARE=1`` in its environment, which registers the release, makes its CAD
+kernel environment (step 5's, the one no other setup makes: left to its first need, it would be made under
+the person's first build after the engine switched by itself) and stops there, no app changed; and again,
+whole, once the engine is idle.
 
 ``cad uninstall`` takes back what the receipt says was done, newest first -- each app's copy of the
 plugin folder the way it was put in: the catalog removed with its plugin, the extension uninstalled,
@@ -123,6 +128,9 @@ STOP_SECONDS = 60.0
 ASK_SECONDS = 5.0
 # The server's install channel in Claude Desktop's config (``cad_server._internal.channel``).
 DESKTOP_CHANNEL = "claude-desktop"
+# An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): named here, so the
+# command's import costs nothing more.
+PREPARE_ENV = "CAD_UPDATE_PREPARE"
 
 
 def build_parser(prog: str = DEFAULT_PROG, *, uninstall: bool = False, update: bool = False) -> argparse.ArgumentParser:
@@ -528,6 +536,22 @@ class Installer:
             return {**row, "subject": f"cad[{base.EXTRA}] {installation.release} in {shown}"}
         return {**row, "subject": f"cad[{base.EXTRA}] {installation.release}, made on first need in {shown}"}
 
+    def _prepare_kernel(self) -> bool:
+        """An automatic update's first half only (``PREPARE_ENV``): this release's CAD kernel environment
+        made now, each line uv's work says as it goes, so that the engine switching to it by itself leaves
+        no making for the person's first build. Every other run leaves it to its first need (``_kernel``).
+        Nothing to make for an installation that carries the kernel itself; False, said in its line, when
+        it cannot be made -- the update then stays where it was."""
+        from cad_server._internal import base
+
+        self.stage("build123d", f"cad[{base.EXTRA}] {self.release}")
+        try:
+            base.ensure(told=lambda line: self.say(f"build123d {line}"))
+        except (base.Refused, OSError) as refused:
+            self.say(f"build123d {refused}")
+            return False
+        return True
+
     def _switch(self) -> tuple[bool, dict[str, Any] | None]:
         """Step 8: the device's engine moved to this release (``switch.handover``), said in its lines:
         ``(failed, what the switch did or None when there was nothing to do)``."""
@@ -603,6 +627,23 @@ class Installer:
         return {"registered": record if recorded and not record_error else None,
                 "record_written": recorded == installations.REGISTERED,
                 "launcher": {"path": proxy, "status": before, "written": wrote, "error": proxy_error}}
+
+    def _done(self, step: Any) -> str | None:
+        """What the app ``step`` installs this release in has of it now, read again, when a command of the step
+        failed (``providers.apply``): this release's copy, ours, in words -- a tool that exits non-zero after
+        doing its work (``gemini extensions link`` once its integrity store warns) did it -- else None."""
+        providers = self.providers
+        if step.action not in ("install", "update") or step.app not in providers.APPS:
+            return None
+        try:
+            app = providers.detect(self.machine, [step.app], folder=self.folder)[step.app]
+        except Exception:  # noqa: BLE001 - a check that cannot read the app finds nothing: the failure stands
+            return None
+        ours = app.ours()
+        if ours is None or ours.version != self.release:
+            return None
+        origin = ours.origin(self.machine)
+        return ours.words(self.machine) + (f", {origin}" if origin else "")
 
     # --- the report ---------------------------------------------------------------------------
 
@@ -837,6 +878,11 @@ class Installer:
             registered = self._register()
             # An app whose command fails fails the run, and the rest goes on: the switch among it.
             failed = False
+            if self.engine_update and os.environ.get(PREPARE_ENV) == "1":
+                # An automatic update's first half (``cad_server._internal.update.PREPARE_ENV``): this release
+                # registered and its CAD kernel environment made now, so the first build after the engine
+                # switches by itself waits on nothing; its apps and the switch once the engine is idle.
+                return 0 if self._prepare_kernel() else 1
             self.stage("apps")
             # The folder the apps are pointed at, this release's, before they are: a folder that cannot be
             # written changes no app that would point at it.
@@ -851,7 +897,7 @@ class Installer:
             for step in work:
                 self.say(f"{step.label}: {step.action} {step.subject}")
                 ok, records = providers.apply(step, self.machine, say=lambda line: self.say(f"  {line}"),
-                                              aside=aside, backed_up=backed_up)
+                                              aside=aside, backed_up=backed_up, done=self._done)
                 self.actions += records
                 failed = failed or not ok
                 # A plugin installed or updated loads in the app's next session; a config, as the app opens.
@@ -911,9 +957,13 @@ class Installer:
         extra: list[dict[str, Any]] = []
         proxy = installations.proxy_path()
         status = installations.proxy_status(proxy)
-        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines carry the
-        # proxy's mark. A file of that name that is not (``uv tool install``'s link) stays.
-        ours = status in (installations.OK, installations.STALE, installations.NEWER)
+        # The cad command goes with a whole uninstall when it is text-to-cad's: its first lines (on Windows,
+        # cad.exe's __main__.py's) carry the proxy's mark, or it is a cad.cmd an earlier revision wrote. A
+        # file of that name that is not (``uv tool install``'s) stays.
+        earlier = installations.earlier_command()
+        ours = status in (installations.OK, installations.STALE, installations.NEWER) or earlier is not None
+        if status == installations.MISSING and earlier is not None:
+            proxy = earlier
         whole = not self.only
         launcher = whole and ours
         if launcher:
@@ -959,14 +1009,7 @@ class Installer:
                     changed.add(step.app)
                     changed.update(step.agents)
             if launcher:
-                try:
-                    os.unlink(proxy)
-                    self.say(f"command  removed {providers.shown(proxy, self.machine)}")
-                    self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": proxy,
-                                         "ok": True, "at": providers.stamp()})
-                except OSError as error:
-                    failed = True
-                    self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+                failed = self._remove_command(proxy) or failed
             if whole:
                 failed = self._stop() or failed
                 failed = self._remove_releases() or failed
@@ -985,6 +1028,26 @@ class Installer:
             self._purge(state, cache)
         restart = self._restart(apps, changed)
         return self._result(steps, extra, None, restart, 1 if failed else 0)
+
+    def _remove_command(self, proxy: str) -> bool:
+        """The cad command removed, with its Python on Windows (``installations.remove_proxy``): True when it
+        could not be. A ``cad.exe`` that runs this uninstall is set aside, no command any more, and said."""
+        from cad_server._internal import installations
+
+        providers = self.providers
+        try:
+            removed, left = installations.remove_proxy()
+        except OSError as error:
+            self.say(f"command  {providers.shown(proxy, self.machine)} could not be removed: {error}")
+            return True
+        for path in removed:
+            self.say(f"command  removed {providers.shown(path, self.machine)}")
+            self.actions.append({"app": "command", "action": "remove", "kind": "remove", "path": path, "ok": True,
+                                 "at": providers.stamp()})
+        for path in left:
+            self.say(f"command  {providers.shown(path, self.machine)} runs this uninstall: set aside, delete it "
+                     "once this ends")
+        return False
 
     def _remove_plugin(self) -> bool:
         """The plugin folder removed, after every app's copy of it: True when it could not be removed whole."""

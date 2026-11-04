@@ -173,6 +173,9 @@ export default {
   "consent.shareUsage": "遥测",
   "consent.shareUsageEnvironment": "遥测（由你的环境设置）",
   "consent.telemetryInfo": "匿名使用数据和崩溃报告，用于改进 text-to-cad。你的提示词、模型和文件绝不会被发送。",
+  "update.automatic": "自动更新",
+  "update.automaticEnvironment": "自动更新（由你的环境关闭）",
+  "update.automaticInfo": "自动安装 text-to-cad 的补丁版本（修复），并在没有任务运行时重启 CAD 服务器。新的次要版本不会自动安装：请通过更新按钮或安装命令更新。",
 
   "appearance.system": "跟随系统",
   "appearance.light": "浅色",
@@ -636,6 +639,7 @@ export default {
   "alert.build.title": "无法构建模型",
   "alert.build.message": "无法构建“{file}”。",
   "alert.build.recovery": "请修正模型源文件中的错误：构建成功后视图会自动更新。",
+  "alert.build.recoveryInternal": "此错误来自 CAD 本身，而不是模型代码。请附上下方的详细信息报告此问题。",
   "alert.empty.summary": "网格不可用",
   "alert.empty.title": "没有可显示的几何体",
   "alert.empty.message": "“{file}”列在文件浏览器中，但加载后没有产生可见的几何体。",

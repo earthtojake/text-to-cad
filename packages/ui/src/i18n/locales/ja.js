@@ -172,6 +172,9 @@ export default {
   "consent.shareUsage": "テレメトリ",
   "consent.shareUsageEnvironment": "テレメトリ（環境で設定済み）",
   "consent.telemetryInfo": "text-to-cad の改善に役立つ匿名の利用データとクラッシュレポートです。プロンプト、モデル、ファイルが送信されることはありません。",
+  "update.automatic": "自動アップデート",
+  "update.automaticEnvironment": "自動アップデート（環境で無効）",
+  "update.automaticInfo": "text-to-cad のパッチリリース（修正）を自動でインストールし、何も実行されていないときに CAD のサーバーを再起動します。新しいマイナーリリースは自動では入りません。アップデートボタンまたはインストールコマンドでアップデートしてください。",
 
   "appearance.system": "システム",
   "appearance.light": "ライト",
@@ -635,6 +638,7 @@ export default {
   "alert.build.title": "モデルをビルドできませんでした",
   "alert.build.message": "「{file}」をビルドできませんでした。",
   "alert.build.recovery": "モデルのソースのエラーを修正してください。ビルドが成功すると表示が更新されます。",
+  "alert.build.recoveryInternal": "このエラーはモデルのコードではなく、CAD 自体で発生しました。下の詳細を添えて報告してください。",
   "alert.empty.summary": "メッシュを利用できません",
   "alert.empty.title": "表示するジオメトリがありません",
   "alert.empty.message": "「{file}」はファイルブラウザーにありますが、読み込んでも表示できるジオメトリがありませんでした。",

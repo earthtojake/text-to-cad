@@ -30,4 +30,7 @@
 playwright==1.63.0
 
 # Repo tests only.
+# The server's Windows dependency (cad.exe's launcher stub), which the tests of the cad command read on
+# every system.
+distlib
 pyrefly==1.3.2

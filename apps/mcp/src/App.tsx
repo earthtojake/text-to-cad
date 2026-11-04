@@ -3,7 +3,7 @@ import { Maximize2 } from 'lucide-react';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { translator, useI18n, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, useUpdate } from '@cad/ui/update';
+import { UpdateButton, useAutomaticUpdates, useUpdate } from '@cad/ui/update';
 import { viewerLinks } from '@cad/ui/links';
 import { Button } from '@cad/ui/primitives/button';
 import { TooltipHint } from '@cad/ui/primitives/tooltip';
@@ -286,7 +286,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // view (`useLanguage`, the same as the browser viewer's).
   const { locale, language } = useLanguage(client.language, { preferred: [context.locale, ...(navigator.languages ?? [navigator.language])] });
   useEffect(() => { document.documentElement.lang = locale; }, [locale]);
-  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
+  // Automatic updates, after Telemetry: the person's, shared with the browser viewer and `cad update auto`.
+  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
+  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
+    [telemetry, automaticUpdates]);
   // What's new, once after an update to a release with notes, where the view has the page (a tab):
   // never in a card, whose few hundred pixels in a chat are no place for a dialog, nor while the
   // card says its server is gone.

@@ -132,6 +132,27 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("first 300", result.stderr)
 
+    def migration_guide(self) -> None:
+        self.git("switch", "feature")
+        (self.root / "docs" / "migrations").mkdir(parents=True)
+        (self.root / "docs" / "migrations" / "migrating-0.5-to-0.6.md").write_text("Renamed.\n", encoding="utf-8")
+        self.commit("A migration guide")
+
+    def test_a_patch_release_may_carry_no_migration_guide_a_minor_may(self) -> None:
+        # A patch release installs itself on every device (automatic updates take patches only).
+        self.migration_guide()
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("is a patch release, which installs itself on every device", result.stderr)
+        self.assertIn("docs/migrations/migrating-0.5-to-0.6.md", result.stderr)
+        self.git("switch", "main")
+        self.git("reset", "--hard", "v0.5.0")
+        self.bump_feature("0.6.0")
+        result = self.check()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("releases 0.6.0", result.stdout)
+
     def test_it_refuses_anything_but_a_merge_commit(self) -> None:
         result = subprocess.run(
             ["bash", str(repo_path("scripts/release/check-pr-version.sh")), REPOSITORY],

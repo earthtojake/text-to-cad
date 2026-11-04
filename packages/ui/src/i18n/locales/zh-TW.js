@@ -173,6 +173,9 @@ export default {
   "consent.shareUsage": "遙測",
   "consent.shareUsageEnvironment": "遙測（由你的環境設定）",
   "consent.telemetryInfo": "匿名使用資料與當機報告，用於改善 text-to-cad。你的提示詞、模型與檔案絕不會被傳送。",
+  "update.automatic": "自動更新",
+  "update.automaticEnvironment": "自動更新（由你的環境關閉）",
+  "update.automaticInfo": "自動安裝 text-to-cad 的修補版本（修正），並在沒有工作執行時重新啟動 CAD 伺服器。新的次要版本不會自動安裝：請透過更新按鈕或安裝指令更新。",
 
   "appearance.system": "跟隨系統",
   "appearance.light": "淺色",
@@ -636,6 +639,7 @@ export default {
   "alert.build.title": "無法建置模型",
   "alert.build.message": "無法建置「{file}」。",
   "alert.build.recovery": "請修正模型原始檔中的錯誤：建置成功後檢視會自動更新。",
+  "alert.build.recoveryInternal": "此錯誤來自 CAD 本身，而非模型程式碼。請附上下方的詳細資訊回報此問題。",
   "alert.empty.summary": "網格無法使用",
   "alert.empty.title": "沒有可顯示的幾何",
   "alert.empty.message": "「{file}」列在檔案瀏覽器中，但載入後沒有產生可見的幾何。",

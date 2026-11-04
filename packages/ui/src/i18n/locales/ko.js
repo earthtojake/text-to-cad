@@ -172,6 +172,9 @@ export default {
   "consent.shareUsage": "원격 분석",
   "consent.shareUsageEnvironment": "원격 분석(환경에서 설정됨)",
   "consent.telemetryInfo": "text-to-cad 개선에 도움이 되는 익명 사용 데이터와 오류 보고서입니다. 프롬프트, 모델, 파일은 절대 전송되지 않습니다.",
+  "update.automatic": "자동 업데이트",
+  "update.automaticEnvironment": "자동 업데이트(환경에서 꺼짐)",
+  "update.automaticInfo": "text-to-cad의 패치 릴리스(수정 사항)를 자동으로 설치하고, 실행 중인 작업이 없을 때 CAD 서버를 다시 시작합니다. 새 마이너 릴리스는 자동으로 설치되지 않으니 업데이트 버튼이나 설치 명령으로 업데이트하세요.",
 
   "appearance.system": "시스템",
   "appearance.light": "라이트",
@@ -635,6 +638,7 @@ export default {
   "alert.build.title": "모델을 빌드할 수 없습니다",
   "alert.build.message": "“{file}”을(를) 빌드할 수 없습니다.",
   "alert.build.recovery": "모델 소스의 오류를 수정하세요. 빌드가 성공하면 화면이 업데이트됩니다.",
+  "alert.build.recoveryInternal": "이 오류는 모델 코드가 아니라 CAD 자체에서 발생했습니다. 아래 세부 정보와 함께 신고해 주세요.",
   "alert.empty.summary": "메시를 사용할 수 없음",
   "alert.empty.title": "표시할 지오메트리가 없습니다",
   "alert.empty.message": "“{file}”은(는) 파일 브라우저에 있지만 로드해도 보이는 지오메트리가 없습니다.",

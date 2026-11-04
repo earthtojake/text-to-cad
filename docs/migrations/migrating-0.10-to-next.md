@@ -2,6 +2,8 @@
 
 Draft: this guide is renamed for its release when it ships. It covers the document types and
 integrations: the library's imports and the `cad` command's.
+The next release is a minor release, so it never installs itself: update with the update button or
+`cad update` when you are ready. Its patch releases then install themselves, with automatic updates on.
 
 ## The library's imports
 

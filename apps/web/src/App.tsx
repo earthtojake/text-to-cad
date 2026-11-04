@@ -11,7 +11,7 @@ import { useUpdateRestart } from './host/useUpdateRestart.js';
 import { followedUpdate, forgetFollowedUpdate, noteFollowedUpdate } from './host/followedUpdate.js';
 import { useAnalyticsConsent } from '@cad/ui/consent';
 import { english, translator, useLanguage } from '@cad/ui/i18n';
-import { UpdateButton, reloadWhenClean, useUpdate, type UpdateNotice } from '@cad/ui/update';
+import { UpdateButton, reloadWhenClean, useAutomaticUpdates, useUpdate, type UpdateNotice } from '@cad/ui/update';
 import { useWhatsNew } from '@cad/ui/whats-new';
 import { createBrowserDownloads } from './host/downloads';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
@@ -135,7 +135,11 @@ export default function App({ client, server, tabStore, notice = null, language:
   // The usage stats cadgen sends (its telemetry), the same as the CAD app's: nothing asks here (a
   // cad command says it once), and the app menu's switch changes it. The answer is the person's,
   // shared with the CAD app.
-  const { appSettings } = useAnalyticsConsent(client.consent, locale);
+  const { appSettings: telemetry } = useAnalyticsConsent(client.consent, locale);
+  // Automatic updates, after Telemetry: the person's, shared with the CAD app and `cad update auto`.
+  const { appSettings: automaticUpdates } = useAutomaticUpdates(client.automaticUpdates, locale);
+  const appSettings = useMemo(() => telemetry || automaticUpdates ? [...(telemetry ?? []), ...(automaticUpdates ?? [])] : undefined,
+    [telemetry, automaticUpdates]);
   // What's new: once after an update to a release with notes, over the home or a file's view, kept
   // seen in the person's settings for every CAD view (`@cad/ui/whats-new`).
   const whatsNew = useWhatsNew(client.whatsNew);

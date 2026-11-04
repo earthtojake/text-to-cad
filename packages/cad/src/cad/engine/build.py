@@ -391,6 +391,37 @@ def _model_traceback(error: BaseException) -> str:
     return "".join(lines).rstrip()
 
 
+# The innermost frames a failed report keeps of its error (``_raised``): enough to find whose code raised it.
+RAISED_FRAMES = 64
+
+
+def _raised(error: BaseException) -> dict[str, Any]:
+    """``raised``: a failed report's error as facts -- its type's name (a built-in's, or ``module.Name``) and its
+    whole traceback's frames, innermost last (each ``{file, line, function}``, the file as Python has it). The
+    error text keeps the model's frames alone (``_model_traceback``); these are every frame, the library's
+    included, so whoever reads the report can tell a mistake in the library's code from the model's own
+    (the server's ``analytics.told_signature``, which decides both a crash report and a page's Report Issue)."""
+    kind = type(error)
+    frames = [{"file": frame.filename, "line": int(frame.lineno or 0), "function": frame.name}
+              for frame in traceback.extract_tb(error.__traceback__)]
+    return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
+            "frames": frames[-RAISED_FRAMES:]}
+
+
+def _failed(error: BaseException) -> dict[str, Any]:
+    """A failed report's error: the model's frames (``_model_traceback``), the error as facts (``_raised``) and
+    the kernel call it was refused at (``_refused``)."""
+    return {"error": _model_traceback(error), "raised": _raised(error), **_refused(error)}
+
+
+def _output_failed(report: dict[str, Any], error: BaseException) -> None:
+    """A file that cannot be written: the report's error, as facts (``_raised``) and its trace."""
+    report["ok"] = False
+    report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
+    report["raised"] = _raised(error)
+    report["trace"] = traceback.format_exc()
+
+
 def _refused(error: BaseException) -> dict[str, str]:
     """``failedAt``: the kernel call an OCCT exception was raised in (``memo.refused_call``),
     which the failure line names; nothing for any other error."""
@@ -495,7 +526,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             except BuildError:
                 raise
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                return [{"ok": False, "model": f"{shown}", "error": _model_traceback(error), **_refused(error)}]
+                return [{"ok": False, "model": f"{shown}", **_failed(error)}]
             finally:
                 _HEARD[0] = None
             context.loaded = set(_first_party_modules())
@@ -573,8 +604,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 result = context.root(model)
             except Exception as error:  # noqa: BLE001 - the model's own error, reported
-                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id,
-                                "error": _model_traceback(error), **_refused(error)})
+                reports.append({"ok": False, "model": f"{shown}::{model.name}", "id": model.id, **_failed(error)})
                 # A child that ran before the error writes its files all the same.
                 results.append((model, None, 0.0, ran(model, before)))
                 continue
@@ -633,9 +663,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             try:
                 _taken_outputs(model, report, log)
             except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-                report["ok"] = False
-                report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-                report["trace"] = traceback.format_exc()
+                _output_failed(report, error)
         if model in own:
             report["source"]["declares"] = declared
         # Each child that ran writes the files it declares, from its own document, after its
@@ -647,6 +675,8 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
             if not row["ok"]:
                 report["ok"] = False
                 report.setdefault("error", f"{identity}: {row['error']}")
+                if "raised" in row:
+                    report.setdefault("raised", row["raised"])
     _keep_load(kept or fresh, reports, context)
     return reports
 
@@ -668,9 +698,7 @@ def _written(model: Any, result: Any, run: Any, report: dict[str, Any], log: Cal
     try:
         _finish(model, result, run, report, log, plan, context)
     except Exception as error:  # noqa: BLE001 - a file that cannot be written is the build's error
-        report["ok"] = False
-        report["error"] = "".join(traceback.format_exception_only(type(error), error)).rstrip()
-        report["trace"] = traceback.format_exc()
+        _output_failed(report, error)
 
 
 def _shown(script: Path, cwd: Path | None) -> str:
