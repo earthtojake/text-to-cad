@@ -2494,15 +2494,27 @@ are sRGB ratios; emission and attenuation floats are linear RGB. Hex strings are
 by the upstream library. Shape colours and plain face paints keep their sRGB hex,
 0–255 integer and build123d `Color` inputs; documents and glTF base factors use linear RGB.
 
-XBF stores the native physical dataclass and the complete resolved PBR data, including
-embedded textures and texture transforms, on the XCAF material label. Native texture maps
+XBF stores the native physical dataclass, the complete resolved PBR data, including
+embedded textures and texture transforms, and the part's declared manufacturing process
+(`process=machined()`, `fdm(layer_height_mm=0.2)`: `bd_materials.processes.AppliedProcess`)
+on the XCAF material label. Native texture maps
 require UV mapping to render; the viewer, GLB export and OCCT snapshots refuse them
 explicitly. Use scalar PBR looks for those paths. Reading returns
-native `FinishedMaterial` objects with that resolved look; it does not recreate a finish's
-recipe. XCAF's standard attributes also carry the name, density and core PBR factors for
+native `FinishedMaterial` objects with that resolved look and an equal `process`; it does not
+recreate a finish's recipe (`finish`, `color`, `thickness_mm`, `opacity`, `roughness`, `scale` and
+`rotation` live on in the look alone, read back as their defaults). A material with no process, a
+document written before processes were kept, and every STEP read `process` as `None`. XCAF's standard attributes also carry the name, density and core PBR factors for
 other readers. STEP carries name, density and colour. The structure serves native physics
 under `material` and `PbrProperties.to_dict()` under `pbr`, with the native physical type
-named by `type`; no flattened material fields of the library's own remain.
+named by `type`, and the process, where there is one, under `process`: the `Process` enum's value
+and the dataclass's fields (`{"process": "fdm", "scale": [1, 1], "rotation": 0, "pitch_mm": 0.2,
+"skin": false, "mm_per_uv": 1}`); no flattened material fields of the library's own remain. Only
+those known dataclasses are rebuilt from it, never a type the data names.
+
+A material's content key covers its process, so a part given one writes other document bytes
+than the same part without. The closure's key does not cover the material (`FORMAT` did not move
+when processes joined the document): a document built before then is taken as current, and reads
+`process` `None`, until its model builds again.
 
 A material edit changes document content without changing geometry keys. Warm document
 patches and cold builds write identical bytes. GLB and the viewer retain clearcoat,
