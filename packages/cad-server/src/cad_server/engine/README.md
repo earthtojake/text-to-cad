@@ -2382,7 +2382,7 @@ mechanism subtree, which stays AP242's alone (law 13), and only a GLB reads it:
 so a GLB exported from the xbf (`cad xbf export model.xbf model.glb`), from a held document by its
 id (**Document lifetime**) and by the build's own worker are byte for byte one GLB, and a model
 taken from the cache after a restart (**Build closure**) writes that GLB too. Every other reader
-ignores it: `read_xbf` imports a part, never a child's record (a parent's GLB bakes its own
+ignores it: `xbf.read` imports a part, never a child's record (a parent's GLB bakes its own
 animations alone), the viewer's page shows the document's structure, and STEP is AP242 with nothing
 of ours. For now a model with an animation declares its GLB beside its xbf, the two decorators
 stacked on one function: the xbf records the animation, the GLB bakes it.
@@ -2511,7 +2511,7 @@ volume and native density, summed over an assembly.
 
 ## Imports
 
-`read_step(path)` reads a `.step`/`.stp`, `read_xbf(path)` an engine document; both copy the
+`step.read(path)` reads a `.step`/`.stp`, `xbf.read(path)` an engine document; both copy the
 file's geometry into the model's document (`reader.py`). The result is a compound tree of the
 file's assembly: an assembly a `Compound` of its components, a part a handle of its own on its
 product's geometry (a move places that occurrence, never its siblings), every node named as the
@@ -2522,7 +2522,7 @@ not imported: a part is a part. Linking between models is done by importing code
 file reference. Both are file reads the memo keys by the file's bytes, so a later build's read
 of the same bytes is the same objects, and both are the build closure's inputs.
 
-`read_mesh(path)` reads an `.stl` as data, never a shape: a `Mesh` of `vertices` (N x 3, the
+`stl.read(path)` reads an `.stl` as data, never a shape: a `Mesh` of `vertices` (N x 3, the
 file's numbers as millimetres; a point the triangles share is one vertex), `triangles` (M x 3
 rows of indices into them), `name` (an ASCII STL's solid's, else the file's stem) and
 `bounding_box()` (build123d's `BoundBox`), its arrays read-only. A mesh has no B-rep -- no
@@ -2533,15 +2533,15 @@ the same object again for the same bytes, and the file is one of the closure's i
 ```python
 @xbf("XBF/enclosure.xbf")
 def enclosure():
-    pcb = read_mesh(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
+    pcb = stl.read(HERE / "scans/pcb.stl").bounding_box()   # keyed by the scan's bytes
     return bd.Box(pcb.size.X + 6, pcb.size.Y + 6, pcb.size.Z + 4)
 ```
 
 A result holding a mesh face -- a triangulation with no surface, as build123d's `import_stl`
-makes, or a face a model builds of `read_mesh`'s triangles -- is refused by the occurrence's
+makes, or a face a model builds of `stl.read`'s triangles -- is refused by the occurrence's
 path before its document is made (`document.mesh_faces`), and the worker builds on: `kit/scan
 is a mesh, not B-rep: face 1 is a triangulation with no surface (as build123d's import_stl
-makes), and a document holds B-rep alone. Read the mesh as data with read_mesh(path) ...`. The
+makes), and a document holds B-rep alone. Read the mesh as data with stl.read(path) ...`. The
 kernel's face modifier, which every part passes through (`document.direct`), crashed the
 process on one.
 
@@ -2559,7 +2559,7 @@ cad step export vendor.step vendor.xbf
 ```
 
 The conversion is the author's: the engine writes no derived file beside an input of its own.
-`read_xbf` of a converted STEP is `read_step` of the STEP: the same geometry, names, colours and
+`xbf.read` of a converted STEP is `step.read` of the STEP: the same geometry, names, colours and
 materials.
 
 **A STEP is parsed in a reader process.** OCCT's XCAF reader works in many times the memory of
@@ -2575,7 +2575,7 @@ document's own retrieval driver.
 **A STEP is the file it is.** A STEP can name other files as its parts (an external document
 reference, `DOCUMENT_FILE`), which the XCAF reader's transfer would open -- beside it, above it or
 anywhere by an absolute path -- and add to the document as the STEP's own. Every STEP read
-(`read_step`'s reader process, and the read behind the viewer, an export and a snapshot) checks
+(`step.read`'s reader process, and the read behind the viewer, an export and a snapshot) checks
 the parsed file before it transfers it and refuses one that names another file
 (`document.refuse_external_files`).
 
@@ -2905,7 +2905,7 @@ placements of one shape labelled apart name their occurrences and pin none of th
 labels on the shape they share, where one placement's label would rename what is made of
 every other.
 
-An element of a shape read from a file (`read_step`, `read_xbf`) is named within its own product,
+An element of a shape read from a file (`step.read`, `xbf.read`) is named within its own product,
 the part of the file it belongs to, however often the file places it: by the name the
 file gives it (`read.stepcaf.subshapes.name`; a STEP this engine wrote names every face,
 and those names come back as they were; `NONE`, the schema's empty name, is none),
@@ -2972,11 +2972,11 @@ an assembly's volume and mass, and its world `bounds` (each part's measured box 
 stands), with a part's `placement`: the origin and the x, y and z axes of its instance's matrix.
 Nothing is built or measured again for them. A model that changes what a person picked reads that answer and
 edits the code `made_by` names, or selects the element from the live shape with build123d
-(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `read_xbf` and walks its
+(`base.faces().sort_by(bd.Axis.Z)[-1]`); a check reads the document with `xbf.read` and walks its
 tree by labels.
 
 **A model never reads a file its own build writes**: its own xbf or export, a child's, a
-sibling's (`reader.refuse_written`: `read_xbf` and `read_step` ask as they read the file). Read,
+sibling's (`reader.refuse_written`: `xbf.read` and `step.read` ask as they read the file). Read,
 the file would be an input the build rewrites -- its key moving on every build, so the model would
 never be taken by its key -- or, kept out of the key, a model depending on its own past. A
 model takes what it makes from the live shape instead: so its own output never invalidates it.
@@ -3003,7 +3003,7 @@ arguments -- is one coarse entry above its calls, kept in the worker's memory
   (`trace._library_roots`), never its whole prefix: a project inside its own
   virtual environment's folder is first-party, and a model script that does lie
   in a library folder is said on the build's log, since its edits rebuild nothing;
-- every file it reads through the engine, by its bytes: `read_step`, `read_xbf`, `read_mesh`,
+- every file it reads through the engine, by its bytes: `step.read`, `xbf.read`, `stl.read`,
   and build123d's importers (`import_step`, `import_brep`, `import_stl`), which the memo keys
   as it keys the engine's readers;
 - every file it reads itself, observed, by its bytes: an audit hook on `open`
@@ -3029,7 +3029,7 @@ readers, `RWStl.ReadFile_s`, `StlAPI`, `BRepTools.Read_s` and `BinTools.Read_s` 
 path, `RWMesh_CafReader.Perform`: glTF's and OBJ's; `kernel/memo.py`, `_READER_TARGETS`).
 A body that calls one is never retained, so any edit runs it whole, and `retention.fallbacks`
 names the call: `reads ../part.brep through OCCT's BRepTools.Read_s: its body is never retained
-(any edit runs it whole); use read_step/read_xbf/read_mesh`. (build123d's `import_step`,
+(any edit runs it whole); use step.read/xbf.read/stl.read`. (build123d's `import_step`,
 `import_brep` and `import_stl` are not on that list: the memo wraps them as operations keyed by
 the file's bytes, as the engine's readers are, so a body that calls one is kept.) The file it named is one of its
 inputs all the same, held to its bytes (a read of what is no regular file leaves its closure with no
@@ -3224,7 +3224,7 @@ Why that holds, checked:
 - **Nothing keys on a document's bytes.** The restart key is digests of the model's code
   and inputs and the toolchain (**Build closure**); a derived file is translated from the
   document, and the write compares bytes only to leave an identical file untouched. The one
-  place a document's bytes count is a document *read as an input* (`read_xbf`, `read_step`
+  place a document's bytes count is a document *read as an input* (`xbf.read`, `step.read`
   of another model's file), which is keyed by its bytes like any input: an order-only rewrite
   of that file builds the reading model once more, to the same result.
 - **Names and refs resolve alike.** On the moonwatch's case (its tachymeter one of these),
@@ -3236,7 +3236,7 @@ Why that holds, checked:
 - **`verify=True` reads it as `same`.** A leaf whose BRep differs only in order measures alike
   (**Memo functions**): a verification reports it `same`, never `differs`.
 
-The snapshot's part listing (0.7's `--mode list`) is gone by decision: `read_xbf` and `read_step`
+The snapshot's part listing (0.7's `--mode list`) is gone by decision: `xbf.read` and `step.read`
 (a document's tree) and `cad xbf inspect DOC REF` (what a ref names) are the facts route.
 
 ## Build closure
@@ -3276,8 +3276,8 @@ functions' code objects with no line tables or docstrings, its classes, the valu
 hold (a path value inside the script's folder relative to it), and, for a module that falls back
 to its bytes (**Body retention**), each file of its import closure by its bytes. A comment or a
 blank line changes no digest; a module the model loads and does not reach holds the empty one.
-`inputs` lists every file a body read -- through the engine (`file`: `read_step`, `read_xbf`,
-`read_mesh`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
+`inputs` lists every file a body read -- through the engine (`file`: `step.read`, `xbf.read`,
+`stl.read`, build123d's importers), itself (`read`, a `null` digest for one it found missing;
 a motion's function's reads too, **Configuration sequences**), or a text's font (`font`) -- by its digest; a file read past the engine's readers leaves the key
 null (**Body retention**). `cad xbf inspect DOC` prints the closure, `cad.inspect(doc)` and
 `document.Loaded.closure` read it.

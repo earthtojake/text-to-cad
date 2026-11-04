@@ -674,7 +674,7 @@ def read_step(path: Any) -> Any:
     from cad.engine.reader import refuse_written
 
     # Before the memo: a read of a file this build writes is refused, whether or not the memo holds it.
-    refuse_written(path, "read_step")
+    refuse_written(path, "step.read")
     return _READ_STEP(os.fspath(path))
 
 
@@ -704,7 +704,7 @@ def read_xbf(path: Any) -> Any:
 
     from cad.engine.reader import refuse_written
 
-    refuse_written(path, "read_xbf")  # before the memo, as read_step's
+    refuse_written(path, "xbf.read")  # before the memo, as read_step's
     return _READ_XBF(os.fspath(path))
 
 
