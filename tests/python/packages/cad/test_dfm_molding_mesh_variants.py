@@ -69,7 +69,7 @@ class MeshVariantsTest(unittest.TestCase):
             for index, (label, tolerance, turn, jitter) in enumerate(_variants(case)):
                 path = root / f"{case.name}.{index}.stl"
                 _export(shape, path, tolerance, turn, jitter)
-                result = cad.stl.check(str(path), process="molding", rules=case.rules, material="abs")
+                result = cad.stl.dfm(str(path), process="molding", rules=case.rules, material="abs")
                 if result.measurements.get("partial"):
                     cls.partial.append(f"{case.name} ({label}): {result.measurements.get('partial_sections')}")
                 _score(f"{case.name} ({label})", result, expect, absent, _Places(None), cls.tallies)
