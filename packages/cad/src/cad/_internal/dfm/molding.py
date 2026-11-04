@@ -6,7 +6,8 @@ Measured along one pull (``pull``), on exact geometry (``cad.build123d._dfm_mold
 - ``draft``: every wall face's draft and which way it opens (``+pull``, ``-pull``, ``none``, ``split``);
 - ``undercuts``: the trapped features, each with what releases it (``side_action`` and its directions and
   stroke, ``lifter``, ``collapsible_core``, ``none``) and whether it faces outside or in;
-- ``thickness``: the nominal wall, each face's (or region's) thin and thick readings, abrupt transitions;
+- ``thickness``: the nominal wall, each face's (or region's) thin and thick readings;
+- ``transitions``: each face's (or region's) steepest change of wall, at the two points it lies between;
 - ``ribs`` and ``bosses``: their thickness, height, fillet and spacing against the wall they stand on;
 - ``corners``: the internal corners, their radius against the wall;
 - ``projection`` and ``envelope``: the projected area along the pull, the part's spans and depths;
@@ -82,15 +83,15 @@ _MOLDED = ("+pull", "-pull", "none")
 _RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
 
 
-def _draft_rules(source: str, least: float, severity: str, preferred: tuple[float, str] | None = None
-                 ) -> tuple[Rule, ...]:
+def _draft_rules(source: str, least: float, severity: str, preferred: tuple[float, str] | None = None,
+                 note: str = "") -> tuple[Rule, ...]:
     rules = [Rule("molding.draft_min", "draft", "draft_deg", "min", least, "deg", "wall draft", source,
                   severity=severity, item_when={"opens": _MOLDED},
                   fix="draft this wall at least {limit:g} deg along the pull (more on tall or textured walls)")]
     if preferred:
         value, cited = preferred
         rules.append(Rule("molding.draft", "draft", "draft_deg", "min", value, "deg", "wall draft", cited,
-                          severity="warning", item_when={"opens": _MOLDED},
+                          severity="warning", item_when={"opens": _MOLDED}, note=note,
                           fix="draft this wall {limit:g} deg if the design allows: it ejects cleanly and wears less"))
     return tuple(rules)
 
@@ -160,20 +161,22 @@ _CORNER = Rule("molding.inside_corner_radius", "corners", "ratio_to_wall", "min"
                "internal corner radius over the wall", "hubs-im", severity="warning",
                fix="round this internal corner to at least half the wall: a sharp one concentrates stress and "
                    "stalls the flow")
-_TRANSITION = Rule("molding.wall_transition", "thickness", "transition_ratio", "min", 3.0, "ratio",
+_TRANSITION = Rule("molding.wall_transition", "transitions", "transition_ratio", "min", 3.0, "ratio",
                    "thickness transition's length over its change", "hubs-im", severity="warning",
                    fix="taper the change in thickness over at least {limit:g} times the change (a chamfer or fillet)")
 
 _GENERIC = RuleSet(
     "generic", "molding", "text-to-cad generic", _VERSION,
-    (*_draft_rules("protolabs-im", 0.5, "error", (2.0, "hubs-im")), *_undercut_rules("hubs-im"), *_wall_rules(),
+    (*_draft_rules("protolabs-im", 0.5, "error", (1.0, "hubs-im"),
+                   note="1 deg, the low end of the 1-2 deg Hubs recommends for most walls (its 2 deg rule of thumb "
+                        "is the hubs set's)"), *_undercut_rules("hubs-im"), *_wall_rules(),
      *_uniform_rules(), _TRANSITION,
      *_rib_rules((0.6, "xometry-ribs"), ("height_ratio", 3.0, "hubs-im"), ("base_fillet_ratio", 0.25, "hubs-im"),
                  ("gap_to_wall", 2.5, "xometry-ribs"), (0.5, "xometry-ribs")),
      _CORNER),
     (HUBS, PROTOLABS, PROTOLABS_WALLS, XOMETRY_RIBS), generic=True,
     note="a starting point drawn from published guides, no shop's limits: Protolabs' 0.5 deg draft minimum and its "
-         "wall table, Hubs' 2 deg, corner, transition and undercut guidance, Xometry's and Protolabs' rib and boss "
+         "wall table, 1 deg recommended (the low end of Hubs' 1-2 deg), Hubs' corner, transition and undercut guidance, Xometry's and Protolabs' rib and boss "
          "proportions")
 
 _PROTOLABS = RuleSet(
@@ -300,11 +303,15 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     draft = report.get("draft") or {}
     if (draft.get("zero_draft_wall_area_mm2") or 0) > 0:
         faces = draft.get("largest_zero_draft_faces") or [{}]
+        most = draft["zero_draft_wall_area_mm2"] >= 0.5 * float(draft.get("wall_area_mm2") or 0.0)
         found.append(CheckFinding(
             "warning", "zero_draft_walls",
             f"{draft['zero_draft_wall_area_mm2']:g} mm2 of wall has no draft along the pull (under "
             f"{draft['zero_tol_deg']:g} deg), {draft['zero_draft_face_count']} faces; the largest is "
-            f"{faces[0].get('area_mm2', 0):g} mm2", _location(faces[0])))
+            f"{faces[0].get('area_mm2', 0):g} mm2", _location(faces[0]),
+            ("most of the wall area reads zero draft along this pull: the pull may be the wrong one -- "
+             "--candidates ranks the pulls; " if most else "")
+            + "draft each of these walls along the pull the part is confirmed to open along"))
     reading = draft.get("min_wall_draft") or {}
     if reading.get("reading_note"):
         found.append(CheckFinding("warning", "coarse_curved_face", reading["reading_note"],

@@ -130,6 +130,44 @@ def dome():
     return bd.revolve(bd.Plane.XZ * profile, bd.Axis.Z)
 
 
+def cone_bossed(outer: float, inner: float, draft: float = 1.0):
+    """A 2 mm plate with a boss drafted ``draft`` deg (a cone, radius ``outer`` at its root, 8 mm tall), cored
+    by a cone of root radius ``inner`` drafted the same way down to the plate: a drafted boss is a boss."""
+    lean = 8.0 * math.tan(math.radians(draft))
+    up = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
+    boss = bd.Pos(0.0, 0.0, 2.0) * bd.Cone(outer, outer - lean, 8.0, align=up)
+    hole = bd.Pos(0.0, 0.0, 2.0) * bd.Cone(inner, inner + lean, 8.0, align=up)
+    return plate() + boss - hole
+
+
+def floor_hole():
+    """A clean tray with a drafted 6 mm hole through its floor along the pull: a shut-off, so the parting
+    stays flat at the rim."""
+    up = (bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN)
+    return tray() - bd.Pos(0.0, 0.0, -0.5) * bd.Cone(3.0, 3.0 + 3.0 * math.tan(math.radians(3.0)), 3.0, align=up)
+
+
+def hooked_lid():
+    """A 60 x 40 x 2 mm lid with two snap hooks 48 mm apart hanging 10 mm below it, each catch pointing in
+    under the lid: two undercuts, each at its own hook."""
+    part = plate(60.0, 40.0, 2.0, draft=1.0)
+    for side in (-1.0, 1.0):
+        arm = bd.Pos(side * 24.0, 0.0, -10.0) * bd.extrude(bd.Rectangle(1.0, 8.0), 10.0)
+        catch = bd.Pos(side * 23.0, 0.0, -10.0) * bd.extrude(bd.Rectangle(1.2, 8.0), 1.2)
+        part = part + arm + catch
+    return part
+
+
+def tray_ribs():
+    """A clean (filleted, drafted) tray with two undrafted 2 mm ribs (as thick as its wall) standing sharp on
+    its floor: a mesh finds them though the floor's fillets join it to the walls."""
+    part = tray()
+    for x in (-10.0, 10.0):
+        part = part + bd.Pos(x, 0.0, 2.0) * bd.Box(2.0, 24.0, 5.0, align=(bd.Align.CENTER, bd.Align.CENTER,
+                                                                          bd.Align.MIN))
+    return part
+
+
 def assembly():
     """Two parts: ``plain`` (no draft) and ``drafted`` (3 deg), side by side."""
     plain = bd.Pos(-30.0, 0.0, 0.0) * bd.Box(20.0, 20.0, 10.0, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
@@ -171,10 +209,12 @@ PAD: Box3 = _box((-12.0, -12.0, -0.5), (12.0, 12.0, 8.5))
 BOSS: Box3 = _box((-5.5, -5.5, 1.5), (5.5, 5.5, 10.5))
 CORNER: Box3 = _box((1.0, 1.0, -0.5), (3.0, 3.0, 20.5))
 INNER_EDGES: list[Box3] = [_box((-29, -19, 1), (29, 19, 21))]
+HOOKS: list[Box3] = [_box((-26.0, -5.0, -11.0), (-20.0, 5.0, 1.0)), _box((20.0, -5.0, -11.0), (26.0, 5.0, 1.0))]
+TRAY_RIBS: list[Box3] = [_box((-11.5, -13, 1.5), (-8.5, 13, 7.5)), _box((8.5, -13, 1.5), (11.5, 13, 7.5))]
 
 CASES = [
     Case("clean_tray", tray, absent=CLEAN, mesh="coarse"),
-    Case("shallow_draft_tray", lambda: tray(draft=1.0), expect={"molding.draft": SIDES + INSIDES},
+    Case("shallow_draft_tray", lambda: tray(draft=0.75), expect={"molding.draft": SIDES + INSIDES},
          absent=tuple(rule for rule in CLEAN if rule != "molding.draft")),
     Case("sealed_void", lambda: bd.Box(30, 30, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
          - bd.Pos(0, 0, 15) * bd.Sphere(6), expect={"molding.undercut_unreleasable": [_box((-7, -7, 8), (7, 7, 22))]},
@@ -201,6 +241,19 @@ CASES = [
          absent=("molding.undercut",), mesh="fine"),
     Case("good_boss", lambda: bossed(2.5, 1.6), absent=("molding.boss_wall", "molding.thick_section",
                                                          "molding.wall_max", "molding.undercut")),
+    Case("thick_cone_boss", lambda: cone_bossed(5.0, 1.5), expect={"molding.boss_wall": [BOSS]},
+         absent=("molding.undercut", "molding.draft_min")),
+    Case("good_cone_boss", lambda: cone_bossed(2.5, 1.6), absent=("molding.boss_wall", "molding.thick_section",
+                                                                   "molding.wall_max", "molding.undercut",
+                                                                   "molding.draft_min")),
+    # extrude(taper=) writes the flaring walls and their fillets as B-splines: the fillets still read
+    Case("small_fillet_tray", lambda: tray(draft=1.0, fillet=0.5),
+         expect={"molding.inside_corner_radius": INNER_EDGES},
+         absent=tuple(rule for rule in CLEAN if rule != "molding.inside_corner_radius")),
+    Case("floor_hole", floor_hole, absent=CLEAN, mesh="fine"),
+    Case("hooked_lid", hooked_lid, expect={"molding.undercut": HOOKS}, absent=("molding.undercut_unreleasable",)),
+    Case("tray_ribs", tray_ribs, expect={"molding.rib_thickness": TRAY_RIBS},
+         absent=("molding.undercut", "molding.wall_max"), mesh="fine"),
     Case("thick_pad", thick_pad, expect={"molding.thick_section": [PAD], "molding.wall_max": [PAD],
                                          "molding.wall_transition": [PAD]},
          absent=("molding.undercut", "molding.wall_min"), mesh="fine"),
@@ -369,6 +422,18 @@ class MoldingCorpusTest(unittest.TestCase):
                                delta=clean["projection"]["area_error_mm2"] + 1.0)
         tons = clean["projection"]["projected_area_mm2"] / 645.16 * 3.25 * 1.15
         self.assertAlmostEqual(clean["clamp"]["tons"], tons, delta=0.05)
+        # a hole through the floor along the pull is a shut-off: the parting stays one flat plane at the rim
+        for name in ("floor_hole", "floor_hole.stl"):
+            with self.subTest(part=name):
+                parting = self.results[name].measurements["parting"]
+                self.assertTrue(parting["flat_parting_possible"], parting.get("items"))
+                self.assertAlmostEqual(parting["parting_plane_height_mm"], 20.0, delta=0.05)
+
+    def test_two_hooks_are_two_undercuts_each_at_its_hook(self) -> None:
+        items = self.results["hooked_lid"].measurements["undercuts"]["items"]
+        self.assertEqual(len(items), 2)
+        for region in HOOKS:
+            self.assertEqual(sum(_inside(item["xyz"], region) for item in items), 1)
 
 
 if __name__ == "__main__":

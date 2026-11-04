@@ -66,13 +66,47 @@ class DraftTest(unittest.TestCase):
         pin = bd.Rotation(0, 90, 0) * bd.Cylinder(5, 30)
         items = _check(pin).measurements["draft"]["items"]
         self.assertEqual([item["opens"] for item in items if item["surface"] == "cylinder"], ["split"])
+        # A loft between squares writes its flat walls as splines: they are read as the planes they are.
         lofted = bd.loft([bd.Rectangle(20, 20), bd.Pos(0, 0, 10) * bd.Rectangle(20 - 2 * 10 * math.tan(math.radians(4)),
                                                                                  20 - 2 * 10 * math.tan(math.radians(4)))])
-        walls = [item for item in _check(lofted).measurements["draft"]["items"] if item["surface"] == "bspline"]
+        walls = [item for item in _check(lofted).measurements["draft"]["items"] if item["surface"] == "plane"
+                 and item["opens"] != "none"]
         self.assertEqual(len(walls), 4)
         for wall in walls:
-            self.assertAlmostEqual(wall["draft_deg"], 4.0, places=2)
+            self.assertAlmostEqual(wall["draft_deg"], 4.0, places=6)
+            self.assertTrue(wall["exact"])
+        # A loft from an ellipse to a larger one is free-form: its draft is the least over its samples.
+        flared = bd.loft([bd.Ellipse(20, 10), bd.Pos(0, 0, 10) * bd.Ellipse(21, 11)])
+        free = [item for item in _check(flared).measurements["draft"]["items"] if item["surface"] == "bspline"]
+        self.assertTrue(free)
+        for wall in free:
             self.assertFalse(wall["exact"])
+            self.assertGreater(wall["draft_deg"], 3.0)
+            self.assertLess(wall["draft_deg"], 6.0)
+
+    def test_splines_that_are_analytic_surfaces_read_as_them(self) -> None:
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_NurbsConvert
+
+        def nurbs(shape: Any) -> list[Any]:
+            return bd.Shape.cast(BRepBuilderAPI_NurbsConvert(shape.wrapped, True).Shape()).faces()
+
+        for shape, kinds in ((bd.Box(10, 10, 10), {"plane"}), (bd.Cylinder(4, 10), {"cylinder", "plane"}),
+                             (bd.Cone(5, 3, 10), {"cone", "plane"}), (bd.Sphere(5), {"sphere"}),
+                             (bd.Torus(10, 2), {"torus"})):
+            with self.subTest(shape=type(shape).__name__):
+                surfaces = [_dfm_brep.surface(face) for face in nurbs(shape)]
+                self.assertEqual({surface.kind for surface in surfaces}, kinds)
+        (torus,) = [_dfm_brep.surface(face) for face in nurbs(bd.Torus(10, 2))]
+        self.assertAlmostEqual(torus.radius, 10.0, places=6)
+        self.assertAlmostEqual(torus.minor_radius, 2.0, places=6)
+        (cone,) = [s for s in (_dfm_brep.surface(face) for face in nurbs(bd.Cone(5, 3, 10))) if s.kind == "cone"]
+        self.assertAlmostEqual(abs(cone.half_angle_deg), math.degrees(math.atan(0.2)), places=6)
+        # extrude(taper=) flaring outward writes B-spline walls: planes all the same.
+        flared = bd.extrude(bd.Rectangle(40, 30), 20, taper=-1)
+        self.assertEqual({_dfm_brep.surface(face).kind for face in flared.faces()}, {"plane"})
+        # a free-form face stays one
+        free = bd.loft([bd.Ellipse(20, 10), bd.Pos(0, 0, 10) * bd.Ellipse(21, 11)])
+        self.assertIn("bspline", {_dfm_brep.surface(face).kind for face in free.faces()})
 
     def test_the_rule_reads_every_wall_at_its_ref(self) -> None:
         result = _check(bd.Box(20, 20, 10))
@@ -140,12 +174,22 @@ class ThicknessTest(unittest.TestCase):
         self.assertAlmostEqual(thickness["nominal_mm"], 2.0, places=3)
         self.assertAlmostEqual(thickness["max_mm"], 8.0, delta=0.05)
         self.assertGreater(thickness["thick_section_count"], 0)
-        self.assertLess(min(item.get("transition_ratio", 99) for item in thickness["items"]), 1.0)
+        # The step is reported where it is (by the pad's edge, on the plate's bottom under it), its two walls
+        # bracketing the change.
+        steps = _check(stepped).measurements["transitions"]["items"]
+        worst = steps[0]
+        self.assertLess(worst["transition_ratio"], 1.0)
+        self.assertGreaterEqual(worst["max_mm"] - worst["min_mm"], 1.0)   # at least half the 2 mm wall
+        self.assertAlmostEqual(worst["max_mm"], 8.0, delta=0.05)          # the pad's full section
+        self.assertAlmostEqual(worst["change_mm"], worst["max_mm"] - worst["min_mm"], places=2)
+        self.assertLess(abs(max(abs(worst["xyz"][0]), abs(worst["xyz"][1])) - 10.0), 3.0, worst["xyz"])
+        for point in worst["at_xyz"]:
+            self.assertLess(abs(max(abs(point[0]), abs(point[1])) - 10.0), 5.0, point)  # within its section
         # The same rise as a ramp ten times its height long: no abrupt transition.
         ramp = bd.extrude(bd.Plane.XZ * bd.Polygon((-40, 0), (40, 0), (40, 2), (35, 2), (5, 8), (-5, 8), (-35, 2),
                                                    (-40, 2), align=None), 30)
-        thickness = _check(ramp).measurements["thickness"]
-        self.assertGreater(min(item.get("transition_ratio", 99) for item in thickness["items"]), 3.0)
+        steps = _check(ramp).measurements["transitions"]["items"]
+        self.assertGreater(min([step["transition_ratio"] for step in steps] or [99]), 3.0)
 
     def test_the_ball_against_its_closed_form(self) -> None:
         # One flat face of a 4 mm slab, from above: the ball is half the slab.
@@ -187,6 +231,41 @@ class FeaturesTest(unittest.TestCase):
         self.assertEqual((boss["od_mm"], boss["id_mm"], boss["height_mm"]), (8.0, 3.0, 8.0))
         self.assertAlmostEqual(boss["wall_ratio"], 2.5 / 2.0, places=3)
         self.assertEqual(boss["hole_floor_above_base_mm"], 0.0)
+
+    def test_a_rib_s_ends_are_its_roots_too(self) -> None:
+        plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
+        part = (plate + bd.Pos(0, 0, 2 + 3) * bd.Box(1.2, 30, 6)).solids()[0]
+        roots = [edge for edge in part.edges() if abs(edge.center().Z - 2) < 1e-6 and abs(edge.center().X) < 1
+                 and abs(edge.center().Y) < 15.5]
+        rounded = part.fillet(0.3, roots)   # all round: sides and ends
+        result = _check(rounded)
+        (rib,) = result.measurements["ribs"]["items"]
+        self.assertAlmostEqual(rib["base_fillet_mm"], 0.3, places=4)
+        # the end fillets are the rib's root, judged by the rib's rule (0.25 of it), not by the corner rule
+        self.assertEqual(result.measurements["corners"]["items"], [])
+        # sides filleted, ends sharp: the rib's root fillet is its sharpest, 0
+        sides = [edge for edge in roots if abs(edge.center().Y) < 14]
+        (rib,) = _check(part.fillet(0.3, sides)).measurements["ribs"]["items"]
+        self.assertEqual(rib["base_fillet_mm"], 0.0)
+
+    def test_a_drafted_boss_is_a_boss(self) -> None:
+        plate = bd.extrude(bd.Rectangle(80, 60), 2, taper=3)
+        lean = 8 * math.tan(math.radians(1.0))
+        part = (plate + bd.Pos(0, 0, 2) * bd.Cone(4, 4 - lean, 8, align=BOTTOM)
+                - bd.Pos(0, 0, 2) * bd.Cone(1.5, 1.5 + lean, 8, align=BOTTOM))
+        (boss,) = _check(part).measurements["bosses"]["items"]
+        self.assertEqual((boss["od_mm"], boss["id_mm"], boss["height_mm"]), (8.0, 3.0, 8.0))
+        self.assertAlmostEqual(boss["wall_ratio"], 2.5 / 2.0, places=3)
+
+    def test_a_free_form_fillet_is_read_by_its_curvature(self) -> None:
+        outer = bd.extrude(bd.Ellipse(30, 20), 20, taper=-2)
+        cavity = bd.loft([bd.Pos(0, 0, 2) * bd.Ellipse(28, 18), bd.Pos(0, 0, 21) * bd.Ellipse(29, 19)])
+        part = (outer - cavity).solids()[0]
+        floor_edge = [edge for edge in part.edges() if abs(edge.center().Z - 2) < 1e-6]
+        corners = _check(part.fillet(1.0, floor_edge)).measurements["corners"]["items"]
+        (corner,) = corners
+        self.assertEqual(corner["sharp"], False)
+        self.assertAlmostEqual(corner["radius_mm"], 1.0, places=3)
 
     def test_internal_corners_sharp_and_rounded(self) -> None:
         profile = bd.Polygon((0, 0), (30, 0), (30, 2), (2, 2), (2, 30), (0, 30), align=None)
@@ -282,6 +361,19 @@ class RuleSetsTest(unittest.TestCase):
         facts = _check(bd.Box(20, 20, 10), rules="none")
         self.assertTrue(facts.ok)
         self.assertNotIn("rules", facts.measurements)
+
+    def test_generic_recommends_one_degree_and_a_zero_draft_pull_points_at_candidates(self) -> None:
+        (draft,) = [rule for rule in type_side.RULE_SETS["generic"].rules if rule.id == "molding.draft"]
+        self.assertEqual(draft.limit, 1.0)
+        self.assertIn("1-2 deg", draft.note)
+        flared = bd.extrude(bd.Rectangle(40, 30), 20, taper=-1)
+        self.assertNotIn("molding.draft", {f.code for f in _check(flared).findings})
+        box = bd.Box(40, 30, 20)
+        (zero,) = [f for f in _check(box).findings if f.code == "zero_draft_walls"]
+        self.assertIn("--candidates", zero.hint)
+        drafted_box = _check(bd.extrude(bd.Rectangle(40, 30), 20, taper=2) - bd.Pos(0, 0, 4) * bd.Box(4, 4, 8))
+        (zero,) = [f for f in drafted_box.findings if f.code == "zero_draft_walls"]
+        self.assertNotIn("--candidates", zero.hint)
 
     def test_a_thin_wall_for_the_resin(self) -> None:
         thin = bd.extrude(bd.Rectangle(40, 30), 0.8, taper=3)

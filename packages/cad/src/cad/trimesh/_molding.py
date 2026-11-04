@@ -105,7 +105,8 @@ def _shells(mesh: trimesh.Trimesh) -> tuple[list, int]:
     """
     if mesh.body_count <= 1:
         return [mesh], 0
-    parts = list(mesh.split(only_watertight=False))
+    # repair=False: the default repairs each piece through networkx, which the library does not require.
+    parts = list(mesh.split(only_watertight=False, repair=False))
     if not parts:
         return [mesh], 0
     solids, voids = [], 0
@@ -1116,9 +1117,10 @@ class _Regions:
                 a, b = int(self.label[fa]), int(self.label[fb])
                 if a == b:
                     continue
-                for x, y in ((a, b), (b, a)):
+                for x, y, far in ((a, b, fb), (b, a, fa)):
                     link = self.links.setdefault(x, {}).setdefault(y, {"concave": 0.0, "convex": 0.0, "turn": 0.0,
-                                                                        "angle": 0.0, "points": []})
+                                                                        "angle": 0.0, "points": [], "far": []})
+                    link["far"].append(int(far))  # the triangles on y's side of the edge
                     length = float(np.linalg.norm(mesh.vertices[edge[0]] - mesh.vertices[edge[1]]))
                     link["concave" if concave else "convex"] += length
                     # the turn across the link, weighted by length: one sliver's crease does not make a corner
@@ -1194,6 +1196,22 @@ class _Regions:
     def faces(self, region: int) -> np.ndarray:
         return self._members[region]
 
+    def root_plane(self, region: int, base: int) -> tuple[np.ndarray, np.ndarray] | None:
+        """The plane ``region`` stands on where it meets ``base``: the base's own if it is flat, else that of
+        the base's triangles along the edge between them, if they lie flat (a floor filleted to its walls
+        elsewhere is one curved region, flat where a rib stands on it). (normal, a point on it), or None."""
+        if self.planar[base]:
+            return self.normal[base], self.centroid[base]
+        far = np.unique(self.links.get(region, {}).get(base, {}).get("far", []))
+        if not len(far):
+            return None
+        normals, areas = self.mesh.face_normals[far], self.mesh.area_faces[far]
+        mean = (normals * areas[:, None]).sum(axis=0)
+        mean /= np.linalg.norm(mean) or 1.0
+        if float((normals @ mean).min()) < np.cos(np.radians(1.0)):
+            return None
+        return mean, (self.mesh.triangles_center[far] * areas[:, None]).sum(axis=0) / max(float(areas.sum()), 1e-12)
+
     def concave_neighbours(self, region: int) -> list[int]:
         return [other for other, link in self.links.get(region, {}).items() if link["concave"] > link["convex"]]
 
@@ -1202,6 +1220,17 @@ class _Regions:
 
     def vertices(self, region: int) -> np.ndarray:
         return self.mesh.vertices[np.unique(self.mesh.faces[self.faces(region)])]
+
+
+def _transition(change: dict) -> dict:
+    """One region's steepest change of wall (``ops.transitions``) as an item: where it is and what it steps."""
+    (a, b), (ta, tb) = change["points"], change["thickness"]
+    if ta > tb:
+        (a, b), (ta, tb) = (b, a), (tb, ta)
+    return {"transition_ratio": round(float(change["ratio"]), 3), "min_mm": round(float(ta), 3),
+            "max_mm": round(float(tb), 3), "change_mm": round(float(tb - ta), 3),
+            "length_mm": round(float(np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "xyz": _xyz((np.asarray(a) + np.asarray(b)) / 2.0), "at_xyz": [_xyz(a), _xyz(b)]}
 
 
 def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
@@ -1259,7 +1288,7 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
         # The nominal wall: the area median of the regions' own walls (a narrow region's from its neighbours).
         nominal = ops.weighted_median(np.array([face["median"] for face in per.values()]),
                                       np.array([float(regions.areas[region]) for region in per]))
-    items, sections = [], []
+    items, sections, steps = [], [], []
     found = ops.transitions(points, values, owner, ~held, spacing, nominal) if nominal else {}
     for region, face in per.items():
         if not nominal:
@@ -1269,8 +1298,7 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
                 "ratio_to_nominal": round(face["max"] / nominal, 3), "thin_ratio": round(face["median"] / nominal, 3),
                 "area_mm2": round(float(regions.areas[region]), 2), "xyz": _xyz(face["at"])}
         if region in found:
-            item["transition_ratio"] = round(found[region]["ratio"], 3)
-            item["transition_mm"] = [round(t, 3) for t in found[region]["thickness"]]
+            steps.append(_transition(found[region]))
         items.append(item)
         if face["max"] > _THICK_RATIO * nominal:
             sections.append({"thickness_mm": item["max_mm"], "ratio_to_nominal": item["ratio_to_nominal"],
@@ -1278,14 +1306,18 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
     sections.sort(key=lambda section: -section["ratio_to_nominal"])
     thin = sorted(items, key=lambda item: item["thickness_mm"])[:100]
     thick = sorted(items, key=lambda item: -item["ratio_to_nominal"])[:100]
-    steep = sorted((i for i in items if "transition_ratio" in i), key=lambda item: item["transition_ratio"])[:100]
+    steps.sort(key=lambda step: step["transition_ratio"])
     chosen, seen = [], set()
-    for item in thin + thick + steep:
+    for item in thin + thick:
         if id(item) not in seen:
             seen.add(id(item))
             chosen.append(item)
     return {
         "_per": {region: face["median"] for region, face in per.items()},
+        "_transitions": {"count": len(steps), "items": steps[:300], "method": (
+            "per region, the steepest change of the rolling-ball wall between two of its points within four sample "
+            "spacings whose walls differ by half the nominal or more: transition_ratio is their distance over the "
+            "change; the item stands between them (xyz), min_mm and max_mm the two walls, at_xyz each one's point")},
         "nominal_mm": round(nominal, 3) if nominal else None,
         "min_mm": round(min(i["thickness_mm"] for i in items), 3) if items else None,
         "min_point_mm": round(min(i["min_mm"] for i in items), 3) if items else None,
@@ -1314,10 +1346,17 @@ def _ribs_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_
         if not regions.planar[a]:
             continue
         na = regions.normal[a]
-        bases_a = [b for b in regions.concave_neighbours(a)
-                   if regions.planar[b] and abs(float(regions.normal[b] @ na)) < np.sin(np.radians(20.0))]
-        if not bases_a:
+        planes_a = {base: plane for base in regions.concave_neighbours(a)
+                    if (plane := regions.root_plane(a, base)) is not None
+                    and abs(float(plane[0] @ na)) < np.sin(np.radians(20.0))}
+        if not planes_a:
             continue
+        scale = max(float(np.linalg.norm(mesh.extents)), 1.0)
+
+        def same(p: tuple[np.ndarray, np.ndarray], q: tuple[np.ndarray, np.ndarray]) -> bool:
+            # One plane either side of the rib: a thousandth of the part apart at most (a floor's triangles
+            # either side, each tilted by the vertices' noise, need not share a plane to a tighter figure).
+            return float(p[0] @ q[0]) >= np.cos(np.radians(0.5)) and abs(float((q[1] - p[1]) @ p[0])) < 1e-3 * scale
         tris = regions.faces(a)
         centers = mesh.triangles_center[tris]
         locations, index_ray, index_tri = mesh.ray.intersects_location(
@@ -1335,20 +1374,21 @@ def _ribs_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_
                 continue
             if (hit_region == b).sum() < 0.5 * len(tris):
                 continue
-            bases_b = regions.concave_neighbours(b)
-            common = [base for base in bases_a if any(regions.coplanar(base, other) for other in bases_b)]
+            planes_b = [plane for other in regions.concave_neighbours(b)
+                        if (plane := regions.root_plane(b, other)) is not None]
+            common = [base for base, plane in planes_a.items() if any(same(plane, other) for other in planes_b)]
             if not common:
                 continue
 
             def standing(base: int) -> float:
-                origin = regions.centroid[base]
-                return float(((regions.vertices(a) - origin) @ regions.normal[base]).max())
+                normal, origin = planes_a[base]
+                return float(((regions.vertices(a) - origin) @ normal).max())
 
             base = min(common, key=standing)
             height = standing(base)
             across = distance[hit_region == b]
             root, tip = float(across.max()), float(across.min())
-            along = np.cross(regions.normal[base], na)
+            along = np.cross(planes_a[base][0], na)
             along /= np.linalg.norm(along) or 1.0
             length = float(np.ptp(regions.vertices(a) @ along))
             if root <= 0 or height < root or length < 1.5 * root:
@@ -1540,7 +1580,7 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
     """thickness, ribs, bosses, corners, parting and envelope on a mesh, into ``report``."""
     regions = _safe(_Regions, mesh)
     if isinstance(regions, dict):
-        for name in ("thickness", "ribs", "bosses", "corners", "parting", "envelope"):
+        for name in ("thickness", "transitions", "ribs", "bosses", "corners", "parting", "envelope"):
             report[name] = dict(regions)
         return
     draft = report.get("draft")
@@ -1553,7 +1593,9 @@ def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float,
             draft["wall_face_count"] = len(items)
     thickness = _safe(_thickness_mesh, mesh, regions)
     walls: dict[int, float] = thickness.pop("_per", {}) if isinstance(thickness, dict) else {}
+    steps = thickness.pop("_transitions", None)
     report["thickness"] = thickness
+    report["transitions"] = steps if steps is not None else dict(thickness)
     nominal = thickness.get("nominal_mm")
 
     def wall_of(region: int):

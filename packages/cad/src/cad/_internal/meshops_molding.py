@@ -102,13 +102,16 @@ def raster(points: np.ndarray, triangles: np.ndarray, cells_across: int = RASTER
            row_cells: int = 250_000) -> dict[str, Any]:
     """The cells 2D triangles cover: ``grid`` (rows, cols), ``origin`` (its lower corner), ``cell`` (a cell's
     side), ``area`` (covered cells times a cell's area), ``outline`` (covered cells with an uncovered
-    neighbour) and ``area_error`` (half the outline's cells: a cell counts when its centre lies in a
-    triangle, so the area is good to about half a cell all round the outline)."""
+    neighbour), ``outer`` (those whose uncovered neighbour lies outside the part: the outline less its
+    holes' rims, where a core shuts off rather than a parting line runs) and ``area_error`` (half the
+    outline's cells: a cell counts when its centre lies in a triangle, so the area is good to about half a
+    cell all round the outline)."""
     pts = np.asarray(points, dtype=float).reshape(-1, 2)
     tri = np.asarray(triangles, dtype=int).reshape(-1, 3)
     if not len(pts) or not len(tri):
         empty = np.zeros((1, 1), dtype=bool)
-        return {"grid": empty, "origin": np.zeros(2), "cell": 1.0, "area": 0.0, "outline": empty, "area_error": 0.0}
+        return {"grid": empty, "origin": np.zeros(2), "cell": 1.0, "area": 0.0, "outline": empty, "outer": empty,
+                "area_error": 0.0}
     span = pts.max(axis=0) - pts.min(axis=0)
     cell = float(max(span.max(), 1e-9)) / cells_across
     lo = pts.min(axis=0) - 2 * cell
@@ -136,16 +139,65 @@ def raster(points: np.ndarray, triangles: np.ndarray, cells_across: int = RASTER
     padded = np.pad(grid, 1)
     inner = padded[:-2, 1:-1] & padded[2:, 1:-1] & padded[1:-1, :-2] & padded[1:-1, 2:]
     outline = grid & ~inner
+    outside = np.pad(exterior(~grid), 1)
+    touching = outside[:-2, 1:-1] | outside[2:, 1:-1] | outside[1:-1, :-2] | outside[1:-1, 2:]
     return {"grid": grid, "origin": lo, "cell": cell, "area": float(grid.sum()) * cell * cell,
-            "outline": outline, "area_error": 0.5 * float(outline.sum()) * cell * cell}
+            "outline": outline, "outer": outline & touching, "area_error": 0.5 * float(outline.sum()) * cell * cell}
+
+
+def exterior(empty: np.ndarray) -> np.ndarray:
+    """The cells of ``empty`` (a 2D mask) joined to its border through empty cells (4-connected): what lies
+    outside a projection, not in its holes. Runs of empty cells along each row, joined where they overlap
+    the row before, so the cost grows with the runs, not the cells."""
+    rows, _cols = empty.shape
+    runs: list[tuple[int, int, int]] = []          # (row, first column, past the last)
+    by_row: list[list[int]] = []
+    for row in range(rows):
+        line = np.concatenate([[False], empty[row], [False]])
+        change = np.flatnonzero(line[1:] != line[:-1])
+        mine = []
+        for start, stop in zip(change[0::2], change[1::2]):
+            mine.append(len(runs))
+            runs.append((row, int(start), int(stop)))
+        by_row.append(mine)
+    parent = list(range(len(runs)))
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for row in range(1, rows):
+        above, here = by_row[row - 1], by_row[row]
+        k = 0
+        for run in here:
+            _r, start, stop = runs[run]
+            while k < len(above) and runs[above[k]][2] <= start:
+                k += 1
+            j = k
+            while j < len(above) and runs[above[j]][1] < stop:
+                a, b = root(run), root(above[j])
+                if a != b:
+                    parent[a] = b
+                j += 1
+    width = empty.shape[1]
+    border = {root(i) for i, (row, start, stop) in enumerate(runs)
+              if row == 0 or row == rows - 1 or start == 0 or stop == width}
+    found = np.zeros_like(empty, dtype=bool)
+    for i, (row, start, stop) in enumerate(runs):
+        if root(i) in border:
+            found[row, start:stop] = True
+    return found
 
 
 def near_outline(projection: dict[str, Any], points: np.ndarray, band_cells: float = 3.0) -> np.ndarray:
-    """Whether each 2D point lies within ``band_cells`` cells of the projection's outline."""
+    """Whether each 2D point lies within ``band_cells`` cells of the projection's outer outline (``outer``: a
+    hole's rim is a shut-off, not where the parting line runs)."""
     pts = np.asarray(points, dtype=float).reshape(-1, 2)
     if not len(pts):
         return np.zeros(0, dtype=bool)
-    outline = projection["outline"]
+    outline = projection.get("outer", projection["outline"])
     height, width = outline.shape
     key = ("_dilated", float(band_cells))
     dilated = projection.get(key)

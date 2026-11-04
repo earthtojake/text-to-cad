@@ -8,14 +8,16 @@ Every part of the document is measured along the pull on its B-rep, each finding
   draft, either half) or ``split`` (the face turns through the pull: the parting line crosses it);
 - **undercuts**: points sampled on every face shot along the way the face opens with exact rays; a point
   the part blocks is trapped (a zero-draft one only when both ways are blocked). Trapped faces that touch
-  are one feature; what releases it is found by more rays (``meshops_molding.classify_undercut``);
+  are one group, split where its trapped points lie apart (two snaps under one lid are two features); what
+  releases each is found by more rays (``meshops_molding.classify_undercut``);
 - **thickness**: the rolling-ball wall under every sampled point (the exact ray straight through bounds
-  it), the nominal wall (the area-weighted median), each face's thin and thick readings, abrupt changes;
+  it), the nominal wall (the area-weighted median), each face's thin and thick readings; **transitions**:
+  each face's steepest change of wall, at the pair of points it lies between;
 - **ribs**: two opposite planar faces close together, both standing on one base face (a concave edge or
-  a concave fillet between), taller than thick; **bosses**: a convex cylinder standing on a face square
-  to its axis, with the coaxial hole inside it if it has one;
+  a concave fillet between), taller than thick; **bosses**: a convex cylinder (or a cone drafted 5 deg or
+  less) standing on a face square to its axis, with the coaxial hole inside it if it has one;
 - **corners**: every internal corner -- a concave edge with no fillet (radius 0) or a concave fillet
-  face (its radius) -- with its radius over the wall meeting there;
+  face (its radius; a free-form blend's from its curvature) -- with its radius over the wall meeting there;
 - **projection**: the part triangulated (each triangle naming its face) and projected on the parting
   plane, the covered area counted on a raster sized to the part; its spans and depth;
 - **parting**: the outline's silhouette (where faces opening one way meet faces opening the other, the
@@ -609,7 +611,56 @@ def _trap(geo: _Geometry, pull: np.ndarray, zero_tol: float) -> _Trapped:
     return _Trapped(blocked, blocker, zero)
 
 
-def _features(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
+#: Trapped points within this many sample spacings of one another (the larger of the two points') are one
+#: feature: two snaps under one lid are two features though the lid's face shadows both.
+_FEATURE_REACH = 3.0
+#: A group of more trapped points than this is not split (its pairs would cost more than they tell).
+_SPLIT_MOST = 4000
+
+
+def _features(geo: _Geometry, trapped: _Trapped) -> list[np.ndarray]:
+    """The trapped features, each a mask of the sampled points: trapped faces (at least two trapped points,
+    or a fiftieth of the face) grouped where they touch, each group's trapped points then split where they
+    lie apart (``_clusters``)."""
+    found = []
+    for group in _face_groups(geo, trapped):
+        mask = trapped.trapped & np.isin(geo.owner, group)
+        index = np.nonzero(mask)[0]
+        for cluster in _clusters(geo.points[index], _FEATURE_REACH * geo.spacing[index]):
+            part = np.zeros(len(geo.points), dtype=bool)
+            part[index[cluster]] = True
+            found.append(part)
+    return found
+
+
+def _clusters(points: np.ndarray, reach: np.ndarray) -> list[np.ndarray]:
+    """``points`` grouped where two lie within the larger of their ``reach`` (union-find over the pairs);
+    one group where there are too many to pair (``_SPLIT_MOST``)."""
+    count = len(points)
+    if count <= 1 or count > _SPLIT_MOST:
+        return [np.arange(count)] if count else []
+    parent = np.arange(count)
+
+    def root(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = int(parent[i])
+        return i
+
+    step = max(1, 2_000_000 // count)
+    for start in range(0, count, step):
+        stop = min(count, start + step)
+        d = np.linalg.norm(points[start:stop, None, :] - points[None, :, :], axis=2)
+        near = d <= np.maximum(reach[start:stop, None], reach[None, :])
+        for i, j in zip(*np.nonzero(near)):
+            a, b = root(int(i) + start), root(int(j))
+            if a != b:
+                parent[a] = b
+    labels = np.array([root(i) for i in range(count)])
+    return [np.nonzero(labels == label)[0] for label in np.unique(labels)]
+
+
+def _face_groups(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
     """Trapped faces (at least two trapped points, or a fiftieth of the face), grouped where they touch."""
     faces = []
     for ordinal in range(1, len(geo.faces) + 1):
@@ -640,12 +691,10 @@ def _features(geo: _Geometry, trapped: _Trapped) -> list[list[int]]:
 
 def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: bool = True) -> dict[str, Any]:
     trapped = _trap(geo, pull, zero_tol)
-    groups = _features(geo, trapped)
+    features = _features(geo, trapped)
+    groups = [sorted({int(face) for face in geo.owner[mask]}) for mask in features]
     in_group = np.isin(geo.owner, [face for group in groups for face in group])
-    trapped_mask = trapped.trapped & in_group
-
-    def counted_mask(group: list[int]) -> np.ndarray:
-        return trapped_mask & np.isin(geo.owner, group)
+    trapped_mask = np.logical_or.reduce(features) if features else np.zeros(len(geo.points), dtype=bool)
     items: list[dict[str, Any]] = []
     releases: dict = {}
     spent = [0]
@@ -656,9 +705,8 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
 
     # The largest features first: a part of hundreds of them (a connector's contacts) spends its release
     # rays (_RELEASE_RAYS) on the largest, and says which it did not search ("unknown").
-    order = sorted(groups, key=lambda group: -float(geo.weights[counted_mask(group)].sum()))
-    for group in order:
-        mine = counted_mask(group)
+    order = sorted(zip(groups, features), key=lambda pair: -float(geo.weights[pair[1]].sum()))
+    for group, mine in order:
         area = float(geo.weights[mine].sum())
         per_face = {face: float(geo.weights[mine & (geo.owner == face)].sum()) for face in group}
         # The face that best names the undercut: the largest of those mostly trapped (a snap's underside,
@@ -724,7 +772,7 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "pull_axis": [_r(v) for v in pull],
         "method": ("points sampled on every face, each shot along the way its face opens with exact rays (a "
                    "zero-draft point both ways); a blocked point is trapped; trapped faces that touch are one "
-                   "feature, released by rays along slides round the parting plane (and tilted 45 deg), a "
+                   "group, split where its trapped points lie apart: each piece a feature, released by rays along slides round the parting plane (and tilted 45 deg), a "
                    "lifter's short move, or a collapsible core's; each part is tested against itself"),
         "candidate_area_mm2": _r(area, 2),
         "candidate_area_pct_of_surface": _r(100 * area / surface, 2) if surface else 0.0,
@@ -863,6 +911,7 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
 
 def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
     sections: list[dict[str, Any]] = []
     medians: list[float] = []
     lows: list[float] = []
@@ -880,9 +929,7 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
                     "nominal_mm": _r(nominal, 3), "ratio_to_nominal": _r(face["max"] / nominal, 3),
                     "thin_ratio": _r((face["median"] or 0) / nominal, 3), "xyz": _xyz(face["at"])}
             if ordinal in found:
-                change = found[ordinal]
-                item["transition_ratio"] = _r(change["ratio"], 3)
-                item["transition_mm"] = [_r(value, 3) for value in change["thickness"]]
+                steps.append(_transition(geo.ref(ordinal), found[ordinal]))
             items.append(item)
             medians.append(face["median"])
             lows.append(face["low"])
@@ -894,10 +941,8 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
     weights = np.concatenate([geo.weights for geo in geos]) if geos else np.zeros(0)
     thinnest = sorted(items, key=lambda item: item["thickness_mm"] if item["thickness_mm"] is not None else 1e18)
     thickest = sorted(items, key=lambda item: -(item["ratio_to_nominal"] or 0))
-    abrupt = sorted((item for item in items if item.get("transition_ratio") is not None),
-                    key=lambda item: item["transition_ratio"])
     chosen, seen = [], set()
-    for item in [*thinnest[:_ITEMS // 3], *thickest[:_ITEMS // 3], *abrupt[:_ITEMS // 3]]:
+    for item in [*thinnest[:_ITEMS // 2], *thickest[:_ITEMS // 2]]:
         if id(item) not in seen:
             seen.add(id(item))
             chosen.append(item)
@@ -922,7 +967,26 @@ def _thickness(geos: list[_Geometry], thick: list[_Thickness]) -> dict[str, Any]
     }
     if len(nominals) > 1:
         result["per_part"] = nominals
+    steps.sort(key=lambda step: step["transition_ratio"])
+    result["_transitions"] = {"count": len(steps), "items": steps[:_ITEMS], "method": _TRANSITION_METHOD}
     return result
+
+
+_TRANSITION_METHOD = ("per face, the steepest change of the rolling-ball wall between two of its points within four "
+                      "sample spacings whose walls differ by half the nominal or more: transition_ratio is their "
+                      "distance over the change; the item stands between them (xyz), min_mm and max_mm the two "
+                      "walls, at_xyz each one's point")
+
+
+def _transition(location: str | None, change: dict[str, Any]) -> dict[str, Any]:
+    """One face's steepest change of wall (``ops.transitions``) as an item: where it is and what it steps."""
+    (a, b), (ta, tb) = change["points"], change["thickness"]
+    if ta > tb:
+        (a, b), (ta, tb) = (b, a), (tb, ta)
+    item = {"transition_ratio": _r(change["ratio"], 3), "min_mm": _r(ta, 3), "max_mm": _r(tb, 3),
+            "change_mm": _r(tb - ta, 3), "length_mm": _r(float(np.linalg.norm(np.asarray(b) - np.asarray(a))), 3),
+            "xyz": _xyz((np.asarray(a) + np.asarray(b)) / 2.0), "at_xyz": [_xyz(a), _xyz(b)]}
+    return ({"location": location} if location else {}) | item
 
 
 # --- ribs, bosses, corners -------------------------------------------------------------------------------
@@ -933,11 +997,61 @@ def _face_wall(thick: _Thickness, ordinal: int) -> float | None:
     return None if face is None else face["median"]
 
 
+#: Surfaces a fillet may be when it is no cylinder or torus: a blend the kernel wrote as a spline (a
+#: variable or a free-form fillet), read by its curvature (``_fillet_radius``).
+_FREEFORM = ("bspline", "revolution", "extrusion", "offset", "other")
+
+
+def _fillet_radius(geo: _Geometry, ordinal: int) -> float | None:
+    """The radius of a concave fillet face, None where the face is none: a concave cylinder's or torus's
+    own; a free-form face's (``_FREEFORM``) from its curvature at the middle of its parameters, concave where
+    its sampled normals turn toward one another (a hollow) rather than apart (a round)."""
+    cache = geo.__dict__.setdefault("_fillet_radii", {})
+    if ordinal in cache:
+        return cache[ordinal]
+    surface = geo.surfaces[ordinal - 1]
+    radius: float | None = None
+    if surface.kind in ("cylinder", "torus"):
+        if surface.concave:
+            radius = float(surface.minor_radius if surface.kind == "torus" else surface.radius or 0.0)
+    elif surface.kind in _FREEFORM:
+        mine = geo.owner == ordinal
+        points, normals = geo.points[mine], geo.normals[mine]
+        if len(points) >= 3:
+            dp = points[:, None, :] - points[None, :, :]
+            dn = normals[:, None, :] - normals[None, :, :]
+            turn = float(np.einsum("ijk,ijk->", dp, dn))
+            scale = float(np.einsum("ijk,ijk->", dp, dp)) or 1.0
+            if turn < -1e-9 * scale:
+                radius = _curvature_radius(geo.faces[ordinal - 1])
+    cache[ordinal] = radius
+    return radius
+
+
+def _curvature_radius(face: Any) -> float | None:
+    """1 / the larger principal curvature at the middle of a face's parameters (None where it is flat)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepLProp import BRepLProp_SLProps
+    from OCP.BRepTools import BRepTools
+
+    try:
+        umin, umax, vmin, vmax = BRepTools.UVBounds_s(face.wrapped)
+        props = BRepLProp_SLProps(BRepAdaptor_Surface(face.wrapped, True), (umin + umax) / 2, (vmin + vmax) / 2, 2,
+                                  1e-9)
+        if not props.IsCurvatureDefined():
+            return None
+        bend = max(abs(props.MaxCurvature()), abs(props.MinCurvature()))
+    except Exception:  # noqa: BLE001 - a face the kernel cannot differentiate there reads as no fillet
+        return None
+    return 1.0 / bend if bend > 1e-9 else None
+
+
 def _bases(geo: _Geometry, ordinal: int, links: dict[int, list[tuple[int, Any]]],
            square_to: np.ndarray, square: bool = True) -> list[tuple[int, float, int]]:
     """The planar faces a face stands on: (base ordinal, fillet radius (0 sharp), the fillet's ordinal or 0).
-    A base meets the face at a concave edge, or across a concave fillet (cylinder or torus) both of whose
-    joins are tangent. ``square``: the base's normal is square to ``square_to`` (a rib's); else along it."""
+    A base meets the face at a concave edge, or across a concave fillet (``_fillet_radius``: a cylinder, a
+    torus or a free-form blend) both of whose joins are tangent. ``square``: the base's normal is square to
+    ``square_to`` (a rib's); else along it."""
     found = []
 
     def fits(other: int) -> bool:
@@ -951,13 +1065,27 @@ def _bases(geo: _Geometry, ordinal: int, links: dict[int, list[tuple[int, Any]]]
         if edge.concave and not edge.smooth and fits(other):
             found.append((other, 0.0, 0))
         elif edge.smooth:
-            fillet = geo.surfaces[other - 1]
-            if fillet.kind not in ("cylinder", "torus") or not fillet.concave:
+            radius = _fillet_radius(geo, other)
+            if radius is None:
                 continue
-            radius = float(fillet.minor_radius if fillet.kind == "torus" else fillet.radius or 0.0)
             for beyond, join in links.get(other, []):
                 if beyond != ordinal and join.smooth and fits(beyond):
                     found.append((beyond, radius, other))
+    return found
+
+
+def _roots(geo: _Geometry, face: int, base: int, links: dict[int, list[tuple[int, Any]]]) -> list[tuple[float, int]]:
+    """Where ``face`` meets the plane of ``base``: (fillet radius, the fillet's ordinal) for each concave
+    fillet between them, (0, 0) for a sharp concave edge."""
+    found = []
+    for other, edge in links.get(face, []):
+        if edge.concave and not edge.smooth and geo.surfaces[other - 1].kind == "plane" and _same_plane(geo, other,
+                                                                                                         base):
+            found.append((0.0, 0))
+        elif edge.smooth and (radius := _fillet_radius(geo, other)) is not None:
+            if any(beyond != face and join.smooth and geo.surfaces[beyond - 1].kind == "plane"
+                   and _same_plane(geo, beyond, base) for beyond, join in links.get(other, [])):
+                found.append((radius, other))
     return found
 
 
@@ -1025,6 +1153,12 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
             if root <= 0 or height < 1.0 * root or length < 1.5 * root:
                 continue
             seen.add((min(a, b), max(a, b)))
+            # The rib's ends (faces joining both sides): their roots are the rib's too, sharp or filleted.
+            # (No wider than the rib across it: a wall the rib runs into joins both sides too, and is no end.)
+            ends = {end for end in ({other for other, _e in links.get(a, [])} & {other for other, _e in links.get(b, [])})
+                    - {base, fa, fb, 0} if float(np.ptp(geo.vertices(end) @ na)) <= 1.5 * root + geo.eps}
+            end_roots = [root for end in ends for root in _roots(geo, end, base, links)]
+            used.update(ends | {fillet_face for _radius, fillet_face in end_roots} - {0})
             wall = _face_wall(thick, base) or nominal
             gaps = []
             for face in (a, b):
@@ -1034,7 +1168,7 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
                 if len(finite) >= 0.5 * own.sum():
                     gaps.append(float(np.median(finite)))
             gap = min(gaps) if gaps else None
-            fillet = min(fillet_a, fillet_b)
+            fillet = min([fillet_a, fillet_b] + [radius for radius, _f in end_roots])
             draft = min(drafts[a - 1].draft, drafts[b - 1].draft)
             used.update({a, b, fa, fb} - {0})
             items.append({
@@ -1053,14 +1187,33 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
     return items
 
 
+#: A boss or its core may be drafted: a cone this close to a cylinder (its half-angle, degrees) is one.
+_BOSS_CONE_DEG = 5.0
+
+
+def _round(surface: Any) -> bool:
+    """A cylinder, or a cone drafted no more than ``_BOSS_CONE_DEG``: a boss's or a core's side."""
+    return surface.kind == "cylinder" or (surface.kind == "cone" and surface.half_angle_deg is not None
+                                          and abs(surface.half_angle_deg) <= _BOSS_CONE_DEG)
+
+
+def _radius_at(surface: Any, point: np.ndarray) -> float:
+    """A cylinder's radius, or a cone's where its axis passes ``point``'s height (its base, for a boss)."""
+    radius = float(surface.radius or 0.0)
+    if surface.kind != "cone":
+        return radius
+    height = float((np.asarray(point) - np.asarray(surface.origin)) @ np.asarray(surface.axis))
+    return radius + height * math.tan(math.radians(float(surface.half_angle_deg or 0.0)))
+
+
 def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used: set[int]) -> list[dict[str, Any]]:
     links = geo.neighbours()
     items: list[dict[str, Any]] = []
     holes = [(ordinal, surface) for ordinal, surface in enumerate(geo.surfaces, start=1)
-             if surface.kind == "cylinder" and surface.concave and surface.axis is not None]
+             if _round(surface) and surface.concave and surface.axis is not None]
     taken: set[int] = set()
     for ordinal, surface in enumerate(geo.surfaces, start=1):
-        if surface.kind != "cylinder" or surface.concave is not False or surface.axis is None or ordinal in taken:
+        if not _round(surface) or surface.concave is not False or surface.axis is None or ordinal in taken:
             continue
         axis = np.asarray(surface.axis)
         origin = np.asarray(surface.origin)
@@ -1074,11 +1227,11 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
         height = float(heights.max())
         if height <= 0:
             continue
-        radius = float(surface.radius or 0.0)
+        radius = _radius_at(surface, obase)
         inner = None
         for hole, hs in holes:
             ha = np.asarray(hs.axis)
-            if abs(abs(float(ha @ axis)) - 1.0) > 1e-6 or float(hs.radius or 0) >= radius:
+            if abs(abs(float(ha @ axis)) - 1.0) > 1e-6 or _radius_at(hs, obase) >= radius:
                 continue
             offset = np.asarray(hs.origin) - origin
             if np.linalg.norm(offset - axis * float(offset @ axis)) > 1e-3 * max(radius, 1.0):
@@ -1086,8 +1239,8 @@ def _bosses_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used:
             span = (geo.vertices(hole) - obase) @ nbase
             if span.max() < 0.5 * height:
                 continue
-            if inner is None or float(hs.radius) > inner[1]:
-                inner = (hole, float(hs.radius), float(span.min()))
+            if inner is None or _radius_at(hs, obase) > inner[1]:
+                inner = (hole, _radius_at(hs, obase), float(span.min()))
         taken.add(ordinal)
         used.update({ordinal, fillet_face} - {0})
         wall_ref = _face_wall(thick, base) or nominal
@@ -1122,13 +1275,15 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
                       "angle_deg": _r(edge.angle_deg, 2), "length_mm": _r(edge.length, 3),
                       "wall_mm": _r(reference, 3), "ratio_to_wall": 0.0, "xyz": _xyz(edge.midpoint)})
     for ordinal, surface in enumerate(geo.surfaces, start=1):
-        if surface.kind not in ("cylinder", "torus") or not surface.concave or ordinal in used:
+        if ordinal in used or surface.kind not in ("cylinder", "torus", *_FREEFORM):
             continue
         # A fillet: joined tangentially to at least two faces (its ends may meet caps at sharp edges).
         joins = [(other, edge) for other, edge in links.get(ordinal, []) if edge.smooth]
         if len(joins) < 2:
             continue
-        radius = float(surface.minor_radius if surface.kind == "torus" else surface.radius or 0.0)
+        radius = _fillet_radius(geo, ordinal)
+        if radius is None:
+            continue
         reference = wall(*(other for other, _edge in joins))
         items.append({"location": geo.ref(ordinal), "faces": [geo.ref(ordinal)] + [geo.ref(o) for o, _ in joins],
                       "radius_mm": _r(radius, 4), "sharp": False, "wall_mm": _r(reference, 3),
@@ -1339,10 +1494,12 @@ def _families(geos: list[_Geometry], pull: np.ndarray, wall_limit: float, zero_t
         trapped = [{face for group in part["groups"] for face in group} for part in under_parts]
     thick = _safe(lambda: [_thickness_part(geo) for geo in geos])
     if isinstance(thick, dict):
-        for name in ("thickness", "ribs", "bosses", "corners"):
+        for name in ("thickness", "transitions", "ribs", "bosses", "corners"):
             report[name] = dict(thick)
     else:
         report["thickness"] = _safe(_thickness, geos, thick)
+        steps = report["thickness"].pop("_transitions", None)
+        report["transitions"] = steps if steps is not None else dict(report["thickness"])
         used: list[set[int]] = [set() for _ in geos]
         report["ribs"] = _safe(lambda: _features_family("ribs", [
             _ribs_part(geo, t, d, t.nominal, u) for geo, t, d, u in zip(geos, thick, drafts, used)],

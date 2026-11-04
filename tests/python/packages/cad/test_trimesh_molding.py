@@ -512,7 +512,7 @@ class CheckTest(unittest.TestCase):
         self.assertFalse(report["partial"])
         self.assertEqual(sorted(report), ["bosses", "clamp", "corners", "draft", "envelope", "mesh", "notes", "partial",
                                          "parting", "process", "projection", "ribs", "rules", "scale", "source",
-                                         "thickness", "undercuts"])
+                                         "thickness", "transitions", "undercuts"])
         # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
         self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
@@ -524,6 +524,25 @@ class CheckTest(unittest.TestCase):
         self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"molding.draft_min"})
         self.assertTrue(facts.ok)
         self.assertEqual([f.code for f in facts.findings if f.severity == "warning"], ["zero_draft_walls"])
+
+    def test_an_open_mesh_of_two_bodies_is_still_measured(self) -> None:
+        # One triangle gone: the mesh is no longer watertight, and splitting its two bodies must not reach for a
+        # repair (trimesh's default repairs through networkx, which the library does not require).
+        import trimesh
+
+        with tempfile.TemporaryDirectory() as td:
+            path = _stl(Box(20, 20, 10) + Pos(40, 0, 0) * Box(10, 10, 10), Path(td), "pair")
+            mesh = trimesh.load(path)
+            mesh.update_faces(np.arange(1, len(mesh.faces)))
+            mesh.remove_unreferenced_vertices()
+            mesh.export(path)
+            result = cad.stl.dfm(path, process="molding", pull="z")
+        report = result.measurements
+        self.assertFalse(report["mesh"]["watertight"])
+        self.assertFalse(report["partial"], report.get("partial_sections"))
+        self.assertIn("several_bodies", {f.code for f in result.findings})
+        for family in ("draft", "undercuts", "thickness", "projection", "parting"):
+            self.assertNotIn("error", report[family], family)
 
     def test_a_bad_pull_is_refused(self) -> None:
         with tempfile.TemporaryDirectory() as td:
