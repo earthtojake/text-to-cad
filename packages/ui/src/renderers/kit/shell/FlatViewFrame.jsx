@@ -20,7 +20,8 @@ import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH, FLAT_PANEL_MIN_WIDTH, FlatPanelPil
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
  * its panel docked at the left (`FlatPanel.jsx`: search, then a tab per list), and on the canvas
- * beside it the strip at the top centre with the tool's row and the update under it, Quick Edit at
+ * beside it the strip at the top centre — the view's centre, open panel or not — with the tool's row
+ * and the update under it, Quick Edit at
  * the top-right, the loading cover and the alert card, laid out as every view's
  * (`RendererShell.jsx`'s), from the kit's parts. The renderer brings the picture (its canvases and
  * layers, `children`, in the pane the canvas view measures: `containerRef`), its tools
@@ -162,6 +163,19 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   // corner (Quick Edit) starts past its right.
   const stageRef = useRef(null);
   const topControls = useRef(null);
+  // How far the canvas starts from the view's left edge (the docked panel's width, open): the strip
+  // reaches back by that much, so it stands at the view's centre whether the panel is open or not.
+  const [stageLeft, setStageLeft] = useState(0);
+  useLayoutEffect(() => {
+    const stage = stageRef.current, frame = frameRef.current;
+    if (!stage || !frame) return undefined;
+    const measure = () => setStageLeft(Math.round(stage.getBoundingClientRect().left - frame.getBoundingClientRect().left));
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
   useLayoutEffect(() => {
     const controls = topControls.current, viewport = stageRef.current, frame = frameRef.current;
     if (!controls || !viewport || !frame) return undefined;
@@ -205,7 +219,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
         <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={busy ? "true" : "false"}>{children}</div>
         <PreviewChrome active={false}>
           {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
-            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : TOOLBAR_POSITION} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
+            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX - stageLeft}px` }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
                 <FloatingToolBar tools={tools} views={views} touch={mobile} />

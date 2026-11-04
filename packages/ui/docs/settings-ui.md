@@ -603,7 +603,7 @@ section stays mounted, out of sight, and a routine plays from Preview's playbar.
 **A flat view's panel** (`kit/shell/FlatPanel.jsx`, `FlatViewFrame.jsx`) is a KiCad board's and a
 KiCad schematic's, in place of the file sidebar, after KiCad's Appearance panel: docked at the view's
 left edge, the full height of the view, on the background with a rule at its right, and the canvas
-the narrower for it (the strip centres on the canvas). Nothing else changes for the other views.
+the narrower for it (the strip stays at the view's centre, panel open or not). Nothing else changes for the other views.
 
 - **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
   the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; then **Hide
