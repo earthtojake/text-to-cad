@@ -266,8 +266,12 @@ export interface CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
-  /** A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files. */
-  plotPayload(file: string, options?: CadRequestOptions): Promise<CadPlotPayload>;
+  /**
+   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
+   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
+   * hierarchy's index out (the viewer reads it with the first sheet it shows).
+   */
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */
@@ -321,7 +325,7 @@ export interface CadActivity {
 
 /** What the server writes: an engine document's or a mesh file's kinds, and a KiCad board's (`cad kicad_pcb export --to`). */
 export type ExportFormat = 'step' | 'glb' | 'stl' | 'threemf' | 'dxf' | 'xbf' | 'original'
-  | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf';
+  | 'gerbers' | 'drill' | 'pos' | 'bom' | 'odb' | 'ipc2581' | 'pdf' | 'svg' | 'netlist';
 export interface ExportSource { doc: string; revision: string }
 /** One export: `epoch` is the session's (`ExportService.epoch`), `''` until the page has asked it. */
 export interface ExportRequest { requestId: string; epoch: string; source: ExportSource; format: ExportFormat }

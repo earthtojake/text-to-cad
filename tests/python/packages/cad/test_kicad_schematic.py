@@ -17,7 +17,7 @@ from tests.python.support.engine_daemon import isolate
 from tests.python.support.kicad_schematic import (
     BUS_NETS, NETS, ROOT_UUID, SHEET_UUID, UUIDS, at, write_bus_schematic, write_schematic,
 )
-from tests.python.support.paths import add_repo_path
+from tests.python.support.paths import add_repo_path, repo_path
 
 add_repo_path("packages/cad/src")
 
@@ -160,6 +160,13 @@ class ThePayload(SchematicFixture):
         self.assertNotIn("schematic", payload)
         with self.assertRaisesRegex(ValueError, "no sheet /Power/; its sheets are /, /Load/"):
             build_schematic_plot(self.root, sheets=["/Power/"])
+
+    def test_the_javascript_fixture_is_this_schematics_payload(self) -> None:
+        from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
+
+        fixture = repo_path("packages", "ui", "src", "renderers", "schematic", "__fixtures__", "schematic.plot.json")
+        self.assertEqual(json.loads(fixture.read_text(encoding="utf-8")), json.loads(json.dumps(build_schematic_plot(self.root))),
+                         "regenerate the fixture: see its README")
 
 
 class TheStill(SchematicFixture):

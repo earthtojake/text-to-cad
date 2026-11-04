@@ -68,7 +68,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 /** One pane: a host, a workspace with one board, a live binding, and the tab. */
-async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en" } = {}) {
+async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any } = {}) {
   const file = `/models/${name}`;
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -95,7 +95,7 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     clipboard: { writeText: async (text: string | Promise<string>) => { copied.push(await text); }, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => DESTINATION, subscribe: () => noop, deliver: async () => ({ status: 'copied', partIds: [] }) },
   };
-  let latest: any = { renderers: {} };
+  let latest: any = state;
   // The person's theme, switched as the app menu's Theme switches it: a new environment for the view.
   let setScheme: (scheme: 'light' | 'dark') => void = noop;
   function Pane() {
@@ -444,7 +444,7 @@ it('the Circuit tab is the parts in their schematic blocks, then the nets: a blo
   dispose();
 });
 
-it("Settings holds KiCad's layer display options — Dim other layers, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
+it("Settings holds KiCad's layer display options — Other layers, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
@@ -455,13 +455,13 @@ it("Settings holds KiCad's layer display options — Dim other layers, the zones
   expect(pane.querySelector('[data-cad-file-sidebar] [role=checkbox], [data-cad-file-sidebar] [role=slider]')).toBeNull();
   // KiCad's own as a board opens: F.Cu active (its dot), nothing dimmed, the zones at 60%, the tracks at 100%.
   expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).not.toBeNull();
-  expect(drawn.at(-1)).toMatchObject({ active: null, dim: null, zones: 0.6, tracks: 1 });
+  expect(drawn.at(-1)).toMatchObject({ active: null, focus: null, zones: 0.6, tracks: 1 });
   await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
   const menu = await openMenu('Settings');
   expect(within(menu).getByRole('slider', { name: 'Zone opacity' }).getAttribute('aria-valuenow')).toBe('0.6');
   expect((within(menu).getByRole('textbox', { name: 'Track opacity value' }) as HTMLInputElement).value).toBe('100%');
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Dim other layers' }));
-  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ dim: 'F.Cu' }));
+  await user.click(within(menu).getByRole('menuitemradio', { name: 'Dimmed' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ focus: { layer: 'F.Cu', others: 'dimmed' } }));
   // The zones' opacity, typed into its value: the menu stays up, the keys the field's.
   const zones = within(menu).getByRole('textbox', { name: 'Zone opacity value' });
   await user.clear(zones);
@@ -474,13 +474,13 @@ it("Settings holds KiCad's layer display options — Dim other layers, the zones
   expect((zones as HTMLInputElement).value).toBe('25%');
   // A row's press: B.Cu active, drawn on top, the rest dimmed round it.
   await user.click(within(layers).getByRole('button', { name: 'Make B.Cu the active layer' }));
-  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ active: 'B.Cu', dim: 'B.Cu' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ active: 'B.Cu', focus: { layer: 'B.Cu', others: 'dimmed' } }));
   expect(layers.querySelector('[data-layer-row="B.Cu"] [data-layer-active]')).not.toBeNull();
   expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).toBeNull();
   // The board's area and what goes through the board are no active layer.
   expect(within(layers.querySelector<HTMLElement>('[data-layer-row="vias"]')!).queryByRole('button', { name: /active layer/ })).toBeNull();
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value)
-    .toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: 'B.Cu', dim: true, zones: 0.25, tracks: 1 }));
+    .toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: 'B.Cu', others: 'dimmed', zones: 0.25, tracks: 1 }));
   dispose();
 });
 
@@ -505,7 +505,7 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
     ['area', 'B.Mask', 'B.Cu', 'Edge.Cuts', 'F.Fab', 'F.CrtYd', 'F.Paste', 'F.SilkS', 'F.Mask', 'drills', 'vias', 'ratsnest', 'names']));
   // Shown again, the set is the mode's own: stored as the mode's, so a rebuild's new layer follows it.
   fireEvent.click(layers.querySelector('[data-layer-visibility="F.Cu"]')!);
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'board', side: 'top', poured: true, layers: null, active: null, others: 'shown', zones: 0.6, tracks: 1 }));
   dispose();
 });
 
@@ -556,9 +556,11 @@ it('Display and Settings are stock menus: a mode closes Display; View from below
   // Settings: the switches, then a rule and the opacities.
   await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
   const settings = await openMenu('Settings');
-  expect([...settings.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Settings', 'Opacity']);
-  expect(within(settings).queryAllByRole('menuitemradio')).toEqual([]);
-  expect(within(settings).getAllByRole('menuitemcheckbox').map(item => item.textContent)).toEqual(['Copper pours', 'View from below', 'Dim other layers']);
+  expect([...settings.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Settings', 'Other layers', 'Opacity']);
+  expect(within(settings).getAllByRole('menuitemradio')).toHaveLength(3);
+  expect(within(settings).getAllByRole('menuitemcheckbox').map(item => item.textContent)).toEqual(['Copper pours', 'View from below']);
+  expect(within(within(settings).getByRole('group', { name: 'Other layers' })).getAllByRole('menuitemradio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
+    .toEqual([['Shown', 'true'], ['Dimmed', 'false'], ['Hidden', 'false']]);
   expect(within(settings).getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Zone opacity', 'Track opacity']);
   await user.click(within(settings).getByRole('menuitemcheckbox', { name: 'View from below' }));
   await user.click(within(settings).getByRole('menuitemcheckbox', { name: 'Copper pours' }));
@@ -576,7 +578,7 @@ it('Display and Settings are stock menus: a mode closes Display; View from below
   expect(within(menu).queryAllByRole('slider')).toEqual([]);
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(menuShown('Display')).toBeNull());
-  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, others: 'shown', zones: 0.6, tracks: 1 }));
   expect(drawn.at(-1)).toMatchObject({ side: 'bottom', layers: ['area', 'B.Cu', 'Edge.Cuts', 'F.Cu', 'drills', 'vias', 'ratsnest', 'names'] });
   dispose();
 });
@@ -603,7 +605,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, dim: false, zones: 0.6, tracks: 1, appearance: 'light' } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, others: 'shown', zones: 0.6, tracks: 1, appearance: 'light' } })]);
   expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });
@@ -630,5 +632,47 @@ it('the live controller selects board references, declines a camera and a Displa
 it('paints after a StrictMode remount, as the development app mounts it', async () => {
   const { pane, dispose } = await open('blinky.kicad_pcb', { strict: true });
   await opened(pane);
+  dispose();
+});
+it("Other layers: Hidden from Settings leaves the menu up; Ctrl+H cycles the three while the board has the keyboard, and nowhere else", async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
+  const menu = await openMenu('Settings');
+  await user.click(within(menu).getByRole('menuitemradio', { name: 'Hidden' }));
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ focus: { layer: 'F.Cu', others: 'hidden' } }));
+  expect(menuShown('Settings')).not.toBeNull();
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(menuShown('Settings')).toBeNull());
+  // The board's own key, KiCad's: hidden, shown, dimmed, and round.
+  const canvas = pane.querySelector<HTMLCanvasElement>('canvas[data-board-tool]')!;
+  canvas.focus();
+  fireEvent.keyDown(canvas, { key: 'h', ctrlKey: true });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.others).toBe('shown'));
+  expect(drawn.at(-1)).toMatchObject({ focus: null });
+  fireEvent.keyDown(canvas, { key: 'h', metaKey: true });
+  await waitFor(() => expect(drawn.at(-1)).toMatchObject({ focus: { layer: 'F.Cu', others: 'dimmed' } }));
+  // Off the board (a text field outside it), the key is not the board's.
+  const outside = document.createElement('input');
+  document.body.append(outside);
+  outside.focus();
+  fireEvent.keyDown(outside, { key: 'h', ctrlKey: true });
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value?.others).toBe('dimmed'));
+  outside.remove();
+  dispose();
+});
+
+it("a view saved with the earlier Dim switch opens Dimmed", async () => {
+  const user = userEvent.setup();
+  const saved = { version: 2, camera: null, display: null, preview: null, playback: null,
+    renderer: { board: { signature: '1', value: { mode: 'board', side: 'top', poured: true, layers: null, active: null, dim: true, zones: 0.6, tracks: 1 } } } };
+  const { pane, dispose } = await open('blinky.kicad_pcb', { state: { renderers: { [KEY]: saved } } });
+  await opened(pane);
+  expect(drawn.at(-1)).toMatchObject({ focus: { layer: 'F.Cu', others: 'dimmed' } });
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
+  const menu = await openMenu('Settings');
+  expect(within(menu).getByRole('menuitemradio', { name: 'Dimmed' }).getAttribute('aria-checked')).toBe('true');
   dispose();
 });

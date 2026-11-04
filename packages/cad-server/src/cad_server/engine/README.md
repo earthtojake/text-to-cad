@@ -2789,8 +2789,9 @@ A kind's routes: `model`, `xbf` and `step` -- `structure`, `parts/<key>` (and it
 `faces|edges|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`,
 `POST mesh`, and a file's `source`; `dxf` -- `drawing`, `source`; `kicad_pcb` -- `plot` (the
 board's geometry per layer and its index, read from the file on each request: `viewer/plots.py`),
-`source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index:
-`viewer/plots.py`), `source`; `urdf`, `srdf`, `sdf` --
+`source`; `kicad_sch` -- `plot` (every sheet of the hierarchy a page, and the schematic's index;
+`?sheet=<path>` that sheet's page alone, `index=0` without the index; the hierarchy parsed once per
+revision of its files, `viewer/plots.py`'s `SchematicAnswers`), `source`; `urdf`, `srdf`, `sdf` --
 `structure`, `parts/<digest>`, `source`; `stl`, `glb`, `3mf` -- `source`. Each engine read is
 `serve.py`'s own, asked in process (`viewer/engine_app.py`): `structure` is its `/api/doc/<id>`,
 `parts/<key>` its `/part/<key>`, `measure` its `/volumes` -- the vocabulary the door's `read` speaks

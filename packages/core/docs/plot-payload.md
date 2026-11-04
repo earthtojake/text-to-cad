@@ -96,12 +96,14 @@ A view (`plot2d.drawPlot`'s `view`) chooses layers by id and orders them: withou
 `drill`, `via`, `ratsnest` and `names` kinds stay on top, each layer mirrored about the sheet's
 vertical centre line. A via's copper is drawn
 while `vias` is, and a name while `names` is, so a view hides a via, or every name, as one. The
-board's Display (`plot2d/boardDisplay.js`: `{ mode, side, poured, layers, active, dim, zones, tracks }`, the viewer's and
+board's Display (`plot2d/boardDisplay.js`: `{ mode, side, poured, layers, active, others, zones, tracks }`, the viewer's and
 `cad <type> snapshot --display`'s one contract) is a view over these ids: a mode is a set of layer
 kinds, `layers` an explicit set of ids (one that differs from its mode's reads as Custom), `poured`
 and `side` switches of their own, `active` the layer drawn on top of the stack (null: KiCad's order,
-its active layer the copper facing the eye), `dim` KiCad's "Inactive layers: Dim" (every layer but
-the active one and `area` at 30%), and `zones` and `tracks` the pours' fill and the tracks' opacity
+its active layer the copper facing the eye), `others` KiCad's high-contrast modes (`shown`, `dimmed`:
+every layer but the active one at 30%, `hidden`: not drawn; `area`, the outline and, with a copper layer
+active, every drill and every via through it at full strength in both: `plot.js`'s `focusedLayers`; the
+earlier `dim: true` reads as `dimmed`), and `zones` and `tracks` the pours' fill and the tracks' opacity
 (0.6 and 1 by default). What is drawn ON the board — an annotation's ink, Measure's ends
 — is kept in sheet millimetres, so it stays on what it marks from either side; the view's plan is
 the sheet with y negated, mirrored about its middle from below (`plot2d/boardView.js`), the frame a
@@ -212,7 +214,13 @@ KiCad's own frame, millimetres, y down: a point the viewer copies pastes straigh
 
 `GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic
 from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
-`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page. A
+`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page; the
+route's `?sheet=<path>` answers that sheet's page alone and `index=0` leaves the `schematic` index out
+(the viewer reads the sheet on screen, the index with the first it reads). The engine parses the
+hierarchy once per revision of its files, stamped by every sheet file and folder it read, and keeps
+each page it answered beside it. The colours are the
+reader's: the viewer's theme (`plot2d/theme.js`'s `schematicColors`, KiCad's light paper or a dark
+sheet), as the snapshot's `appearance`. A
 schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the

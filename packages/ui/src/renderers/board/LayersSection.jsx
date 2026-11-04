@@ -36,9 +36,9 @@ function LayerEye({ id, hidden, onToggle }) {
  * lists them — Front (outermost first), Inner, Back, then Other (the user layers and the outline, the
  * board's area, the vias, the drill holes, the ratsnest and the pads' and vias' names) — each with
  * its colour, its name, how many things it draws, and an eye that hides or shows it in the view; a
- * press on a board layer's row makes it the **active** layer, the one drawn on top and the one Dim
- * leaves bright (its filled dot after its name; until one is pressed, KiCad's own, the copper facing
- * the eye). How the layers are drawn — Dim other layers and the zones' and tracks' opacities — is
+ * press on a board layer's row makes it the **active** layer, the one drawn on top and the one Other
+ * layers keeps bright (its filled dot after its name; until one is pressed, KiCad's own, the copper facing
+ * the eye). How the layers are drawn — Other layers and the zones' and tracks' opacities — is
  * Display's (`BoardDisplay.jsx`), in the toolbar. A layer has nothing under it, so its one glyph is
  * its colour (KiCad's, in the view's theme: `plot2d/theme.js`), on the section title's line with the groups' labels
  * (`kit/inspector/layerRows.jsx`). A layer hidden or shown and the active one are the board's

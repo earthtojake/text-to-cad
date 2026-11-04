@@ -1,7 +1,12 @@
 """``GET /api/v1/documents/kicad_pcb/<id>/plot`` and ``.../drc``: a KiCad board drawn as geometry per layer,
 and KiCad's design rule check of it, each kept by the board's bytes.
 ``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files, every
-sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`), read again on each request.
+sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`), read again on each request; with
+``?sheet=/Power/`` that sheet's page alone, and with ``index=0`` without the hierarchy's index (the viewer
+reads the sheet on screen, the index with the first). The hierarchy is parsed once per revision of its
+files (``SchematicAnswers``): kept with the stamp of every file and folder it read (``mtime_ns``, size,
+inode), so an edit to any sheet, a sheet file added or a project file beside the root reads it anew,
+and each page answered is kept beside it.
 
 The board is the document's file, by its absolute path (``http_app`` resolves the id): a path that is not
 absolute, or not a ``.kicad_pcb``, is 400, a missing file 404. A file that is not a readable board is 400
@@ -33,6 +38,7 @@ from __future__ import annotations
 import json
 import os
 import threading
+import time
 from collections import OrderedDict
 from pathlib import Path
 from typing import Any
@@ -42,7 +48,8 @@ from cad.engine.formats.kicad import PLOT_SUFFIXES
 from .backend import absolute_path
 from .scanner import node_basename
 
-__all__ = ["HOLD_SECONDS", "HELD", "BoardAnswers", "PLOT_SUFFIXES", "resolve_plot_path", "schematic_payload_response"]
+__all__ = ["HOLD_SECONDS", "HELD", "BoardAnswers", "PLOT_SUFFIXES", "SchematicAnswers", "resolve_plot_path",
+           "schematic_payload_response"]
 
 # How long a request waits on a board's plot or DRC before it answers 202.
 HOLD_SECONDS = 2.0
@@ -63,16 +70,88 @@ def resolve_plot_path(file_ref) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
-def schematic_payload_response(file_ref) -> tuple[int, bytes | dict]:
-    """``(status, body)``: a schematic's plot payload's bytes at 200, or a JSON error dict."""
+def _stamp(path) -> tuple[int, int, int] | None:
+    try:
+        stat = os.stat(path)
+    except OSError:
+        return None
+    return stat.st_mtime_ns, stat.st_size, stat.st_ino
+
+
+class SchematicAnswers:
+    """The schematic hierarchies read, by the file asked for: each its index (``read_schematic_index``'s
+    answer), the stamps of what it was read from (every sheet file, each one's folder, the file asked
+    for and its folder: a sheet file added, a ``.kicad_pro`` beside the root, an edit anywhere changes
+    one) and the pages answered from it (by sheet and ``index``). The last ``HELD`` are kept; a stamp
+    that differs reads the hierarchy again."""
+
+    def __init__(self, held: int = HELD):
+        self.held = held
+        self.lock = threading.Lock()
+        self.kept: OrderedDict[str, dict] = OrderedDict()
+
+    @staticmethod
+    def _sources(candidate: str, index) -> tuple[str, ...]:
+        files = {str(path) for path in index.trees} | {candidate}
+        return tuple(sorted(files | {os.path.dirname(path) for path in files}))
+
+    def _entry(self, candidate: str) -> dict:
+        with self.lock:
+            entry = self.kept.get(candidate)
+            if entry is not None:
+                self.kept.move_to_end(candidate)
+        if entry is not None and entry["stamps"] is not None and all(_stamp(path) == stamp for path, stamp in entry["stamps"]):
+            return entry
+        from cad.engine.formats.kicad.schematic import read_schematic_index
+
+        started = time.time_ns()
+        read = read_schematic_index(candidate)
+        stamps = tuple((path, _stamp(path)) for path in self._sources(candidate, read[0]))
+        # A file written while it was read may hold what was not read: such a read answers this request
+        # and is read again on the next (no stamps), never kept as the file's.
+        if any(stamp is None or stamp[0] >= started for _path, stamp in stamps):
+            stamps = None
+        entry = {"stamps": stamps, "read": read, "pages": OrderedDict(), "lock": threading.Lock()}
+        with self.lock:
+            self.kept[candidate] = entry
+            self.kept.move_to_end(candidate)
+            while len(self.kept) > self.held:
+                self.kept.popitem(last=False)
+        return entry
+
+    def payload(self, candidate: str, sheet: str | None, index: bool) -> bytes:
+        """The payload's bytes for ``sheet`` (``None``: every sheet) with or without the index."""
+        from cad.engine.formats.kicad.schematic_plot import schematic_payload_bytes
+
+        entry = self._entry(candidate)
+        key = (sheet, index)
+        with entry["lock"]:
+            body = entry["pages"].get(key)
+            if body is None:
+                body = schematic_payload_bytes(candidate, sheets=None if sheet is None else [sheet], index=index,
+                                               read=entry["read"])
+                entry["pages"][key] = body
+                # A schematic's every page, with and without the index, is a few megabytes at most.
+                while len(entry["pages"]) > 64:
+                    entry["pages"].popitem(last=False)
+        return body
+
+
+SCHEMATICS = SchematicAnswers()
+
+
+def schematic_payload_response(file_ref, *, sheet: str | None = None, index: bool = True,
+                               answers: SchematicAnswers | None = None) -> tuple[int, bytes | dict]:
+    """``(status, body)``: a schematic's plot payload's bytes at 200, or a JSON error dict. ``sheet`` (a
+    sheet's path, ``/`` the root) plots that sheet's page alone, and ``index`` False leaves the index out;
+    a sheet the hierarchy does not have is a 400 naming those it has. The hierarchy is read once per
+    revision of its files (``SchematicAnswers``)."""
     candidate = resolve_plot_path(file_ref)
     if candidate is None:
         return 404, {"error": "Not found"}
     if not candidate.lower().endswith(".kicad_sch"):
         raise ValueError(f"a schematic's plot is a .kicad_sch's; {node_basename(candidate)} is not one")
-    from cad.engine.formats.kicad.schematic_plot import schematic_payload_bytes
-
-    return 200, schematic_payload_bytes(candidate)
+    return 200, (answers or SCHEMATICS).payload(candidate, sheet, index)
 
 
 class _Work:

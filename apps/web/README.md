@@ -242,8 +242,9 @@ This app exports no components. Other hosts use `@cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
 `@cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@cad/ui/renderers/dxf`, for `.glb`
 `@cad/ui/renderers/glb`, for `.stl` and `.3mf` `@cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot`, and for `.kicad_pcb` `@cad/ui/renderers/board`
-(`CadViewer` registers all six with the same client and preferences, as it does for the MCP app); all loading,
+for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot`, for `.kicad_pcb` `@cad/ui/renderers/board`, and for
+`.kicad_sch` `@cad/ui/renderers/schematic` (`CadViewer` registers all seven with the same client and preferences,
+as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package: the root workspace builds UI's ESM, declarations, CSS and worker assets before building
 the app, with no source alias or JSX loader. Web supplies its file source (`createCadFileSource`

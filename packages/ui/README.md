@@ -335,3 +335,10 @@ copies all of them through the host's clipboard.
 The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
 selection, Measure, annotation and Quick Edit host capabilities as the other renderers.
 It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command.
+The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
+(`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterChecklist.jsx`),
+read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
+first): its Circuit and Hierarchy in the file sidebar, the Hierarchy and a sheet symbol's double-click
+to move between sheets (each keeping its view for the session), and the app's theme,
+switched live; ERC belongs to the
+`cad` command.

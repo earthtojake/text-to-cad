@@ -7,6 +7,7 @@ import {
   PLOT_SCHEMA_VERSION,
   drawPlot,
   drawPlotImages,
+  focusedLayers,
   boardFitMargin,
   fitPlotTransform,
   grownOutline,
@@ -128,7 +129,7 @@ test("a payload this build does not understand is refused by name", () => {
   const items = (list) => sheet({ layers: [layer("F.Cu", "copper", "front", list)] });
   assert.throws(() => layoutPlot(null), /plot payload object/);
   assert.throws(() => layoutPlot({ ...BOARD, schemaVersion: 3 }), /schemaVersion 3.*Update cad-server and the app together/);
-  assert.throws(() => layoutPlot({ ...BOARD, sheets: [] }), /one board sheet/);
+  assert.throws(() => layoutPlot({ ...BOARD, sheets: [] }), /is one sheet: a board.s/);
   assert.throws(() => layoutPlot(sheet({ layers: [] })), /"blinky".*carries no layers/);
   assert.throws(() => layoutPlot(sheet({ layers: [{ id: "F.Cu", kind: "copper", side: "top", items: [] }] })), /side "top"; a layer is front, back, both/);
   assert.throws(() => layoutPlot(items([{ t: "svg" }])), /items\[0\] is not a plot item/);
@@ -363,9 +364,88 @@ test("the active layer tops the stack, Dim fades every other but the board's are
   assert.deepEqual(at(set, layerColor("B.Cu")).slice(0, 1), [0.25]);
   assert.deepEqual(at(set, layerColor("F.Cu"), 1), [0.5]);
   // Dim with F.Cu active: F.Cu as it is, the back copper and the courtyard faded, the board's area not.
-  const dimmed = alphas({ dim: "F.Cu" });
+  const dimmed = alphas({ focus: { layer: "F.Cu", others: "dimmed" } });
   assert.deepEqual(at(dimmed, layerColor("F.Cu"), 1), [1]);
   assert.deepEqual(at(dimmed, layerColor("B.CrtYd")), [DIM_OPACITY]);
   assert.deepEqual(at(dimmed, layerColor("area")), [1]);
   assert.deepEqual(at(dimmed, layerColor("B.Cu")).slice(0, 1), [DIM_OPACITY * ZONE_OPACITY]);
+});
+
+test("other layers shown, dimmed or hidden keep the outline, and the holes through an active copper layer, at full strength", () => {
+  const hole = (at, extra = {}) => ({ t: "circle", at, r: 0.3, w: 0.03, hole: "via", via: "through", ...extra });
+  const sheet = { layers: [
+    { id: "area", kind: "area", side: "both", items: [] },
+    { id: "B.Cu", kind: "copper", side: "back", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "In1.Cu", kind: "copper", side: "both", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "F.SilkS", kind: "silk", side: "front", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "Edge.Cuts", kind: "outline", side: "both", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "F.Cu", kind: "copper", side: "front", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "drills", kind: "drill", side: "both", items: [{ t: "circle", at: [2, 2], r: 0.5, w: 0.03, hole: "pad" }] },
+    // A through via, a blind one F.Cu to In1.Cu, and a buried one In1.Cu to B.Cu.
+    { id: "vias", kind: "via", side: "both", items: [hole([3, 3]), hole([4, 4], { via: "blind", span: ["F.Cu", "In1.Cu"] }),
+      hole([5, 5], { via: "blind", span: ["In1.Cu", "B.Cu"] })] },
+    { id: "names", kind: "names", side: "both", items: [] },
+  ] };
+  const strengths = (focus) => focusedLayers(sheet, { focus }).map(({ layer, fade }) => [layer.id, layer.items.length, fade]);
+  assert.ok(strengths(null).every(([, , fade]) => fade === 1));
+  assert.deepEqual(strengths({ layer: "F.Cu", others: "dimmed" }), [
+    ["area", 0, 1], ["B.Cu", 1, DIM_OPACITY], ["In1.Cu", 1, DIM_OPACITY], ["F.SilkS", 1, DIM_OPACITY], ["Edge.Cuts", 1, 1], ["F.Cu", 1, 1],
+    ["drills", 1, 1], ["vias", 1, DIM_OPACITY], ["vias", 2, 1], ["names", 0, DIM_OPACITY]]);
+  // Hidden: only the active layer and what keeps the bearings; the via the active layer is not on is gone.
+  assert.deepEqual(strengths({ layer: "F.Cu", others: "hidden" }), [["area", 0, 1], ["Edge.Cuts", 1, 1], ["F.Cu", 1, 1], ["drills", 1, 1], ["vias", 2, 1]]);
+  const vias = (focus) => focusedLayers(sheet, { focus }).filter(({ layer, fade }) => layer.id === "vias" && fade === 1).flatMap(({ layer }) => layer.items.map(item => item.at[0]));
+  assert.deepEqual(vias({ layer: "B.Cu", others: "hidden" }), [3, 5]);
+  assert.deepEqual(vias({ layer: "In1.Cu", others: "hidden" }), [3, 4, 5]);
+  // A layer that is no copper keeps the outline alone: its holes go the way of the rest.
+  assert.deepEqual(strengths({ layer: "F.SilkS", others: "hidden" }), [["area", 0, 1], ["F.SilkS", 1, 1], ["Edge.Cuts", 1, 1]]);
+});
+
+// A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its
+// edge, a resistor (its body's background fill, its outline, a pin), a wire, a junction and a field.
+const SCHEMATIC = {
+  schemaVersion: 4, kind: "schematic", generator: "eeschema",
+  sheets: [{ name: "/", path: "/", number: "1", file: "divider.kicad_sch", width: 297, height: 210, background: "#F5F4EF", page: [0, 0, 297, 210],
+    layers: [
+      layer("page", "sheet", "both", [{ t: "path", pts: [[0, 0], [297, 0], [297, 210], [0, 210], [0, 0]], w: 0, closed: true, page: true }]),
+      layer("symbols", "symbol", "both", [
+        { t: "poly", pts: square(100, 60, 2, 5), fill: "background", ref: "#R1", id: "b1" },
+        { t: "path", pts: square(100, 60, 2, 5), w: 0.254, closed: true, ref: "#R1", id: "b1", color: "#123456", opacity: 0.5 }
+      ]),
+      layer("pins", "pin", "both", [{ t: "path", pts: [[100, 55], [100, 57.5]], w: 0.1524, ref: "#R1.1", net: "+5V" }]),
+      layer("wires", "wire", "both", [{ t: "path", pts: [[100, 50], [100, 55]], w: 0.1524, net: "+5V", id: "w1" }]),
+      layer("junctions", "junction", "both", [{ t: "circle", at: [100, 50], r: 0.4572, w: 0, net: "+5V", id: "j1" }]),
+      layer("fields", "field", "both", [{ t: "text", text: "R1", w: 0.15, strokes: [[[103, 59], [104, 59]]], field: "Reference", ref: "#R1" }])
+    ] }],
+  schematic: { root: "divider.kicad_sch", sheets: [{ path: "/", name: "/", page: "1", parent: null, pins: [] }] }
+};
+
+test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colours, its page edge off", () => {
+  const layout = layoutPlot(SCHEMATIC);
+  assert.equal(layout.kind, "schematic");
+  assert.equal(layout.sheets[0].path, "/");
+  assert.equal(layout.schematic, SCHEMATIC.schematic);
+  assert.deepEqual(layout.modelBounds, [0, -210, 297, 0], "the fit frames the page");
+  const { ctx, calls, Path2D } = recorder(800, 600);
+  drawPlot(ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D });
+  // The paper, and nothing round it: the page's rectangle, not the canvas.
+  assert.deepEqual(calls.filter(([name]) => name === "fillRect"), [["fillRect", "#F5F4EF", 0, 0, 297, 210]]);
+  const inks = painted(calls).map(([name, , style]) => [name, name === "fill" ? style.fill : style.stroke, style.alpha]);
+  assert.deepEqual(inks, [
+    ["fill", "#FFFFC2", 1],   // the body's background: KiCad's device background
+    ["stroke", "#123456", 0.5], // its outline in the file's own colour
+    ["stroke", "#840000", 1], // the pin
+    ["stroke", "#009600", 1], // the wire
+    ["fill", "#009600", 1],   // the junction, a disc
+    ["stroke", "#006464", 1]  // the reference
+  ]);
+  // In the dark, the same sheet: a dark sheet and light ink, each element its hue, the file's own colour kept.
+  const dark = recorder(800, 600);
+  drawPlot(dark.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: dark.Path2D, theme: "dark" });
+  assert.deepEqual(dark.calls.filter(([name]) => name === "fillRect"), [["fillRect", "#1C1C1C", 0, 0, 297, 210]]);
+  assert.deepEqual(painted(dark.calls).map(([name, , style]) => (name === "fill" ? style.fill : style.stroke)),
+    ["#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
+  // Asked for, the page's edge is drawn too.
+  const bordered = recorder(800, 600);
+  drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });
+  assert.equal(painted(bordered.calls).length, inks.length + 1);
 });

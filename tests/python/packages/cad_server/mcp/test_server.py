@@ -819,8 +819,8 @@ class InlineServerTest(_Session):
     def test_a_step_and_an_engine_document_are_shown_and_the_agent_is_told_so(self) -> None:
         # The page draws both from what the cadgen engine serves of them (``cad_server.viewer.xbf``).
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB)", tools["cad_show"]["description"])
-        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB)", self.initialized["instructions"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", tools["cad_show"]["description"])
+        self.assertIn("(XBF, STEP, STL, GLB, 3MF, DXF, URDF, SRDF, SDF, KiCad PCB, KiCad schematic)", self.initialized["instructions"])
         for name in ("arm.xbf", "arm.step", "ARM.STP"):
             model = self.workspace / "parts" / name
             model.write_bytes(b"\0")

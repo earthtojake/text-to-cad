@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the CAD Viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -72,8 +72,8 @@ ERC and look at each sheet ([schematic](references/schematic.md)) before laying 
 to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
-group at a time, route octolinear by hand (never an autorouter) with widths for each net's current,
-and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
+group at a time ([placement](references/placement.md) says in what order and where), route
+octolinear by hand (never an autorouter) with widths for each net's current, and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
@@ -154,7 +154,9 @@ neighbours of every fix (a moved capacitor can open a clearance elsewhere). Neve
 person's behalf.
 
 Export only the requested deliverables from the saved revision you checked; see
-[manufacturing and STEP](references/manufacturing.md).
+[manufacturing and STEP](references/manufacturing.md). A DRC or ERC error blocks writing fabrication
+files (Gerbers, drill, placement, BOM, ODB++, IPC-2581) unless the person explicitly says to go ahead;
+the report then names every error they went ahead with.
 
 ## Show the model
 
@@ -176,8 +178,10 @@ schematic blocks their footprints record (by kind on a board that records none) 
 block picks every part in it, a net picks the whole net. Each arrives as a reference
 ([checks](references/checks.md#references) says what each names and how to resolve it). The
 **Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
-Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Dim
-other layers and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
+Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Other
+layers (KiCad's high-contrast modes: the layers but the active one **Shown**, **Dimmed** or **Hidden**,
+Ctrl+H cycling them; the outline, and the drills and vias through an active copper layer, always stay
+at full strength) and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
@@ -190,13 +194,35 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper-dark.png --display copper,dark
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","dim":true,"zones":0.3}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
+The board view is 2D only. For a 3D look, export the board to GLB (`cad kicad_pcb export board.kicad_pcb --to glb -o out/`, or a `@glb` on the board script) and open that file in the viewer.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.
+
+## Schematic views
+
+`cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
+selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy**, after the Circuit, is KiCad's
+Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
+Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
+junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+The **Circuit** lists the parts by the sheet they are placed on, each with its pins, and the nets with
+the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
+that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
+`#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
+app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
+drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
+menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
+a Quick Edit packet carries the sheet and theme the view showed:
+
+```bash
+cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","appearance":"dark"}'
+```

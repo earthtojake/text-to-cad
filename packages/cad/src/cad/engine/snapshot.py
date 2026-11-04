@@ -14,8 +14,9 @@ drawn by OCCT as the CAD Viewer draws it. One dispatcher by SRC's suffix:
 - ``.kicad_pcb``: a KiCad board, read from the file on each draw and painted flat in its layer
   colours, from the top or mirrored from below (``render/board.py``); its ``--display`` is a board
   mode (``board``, ``copper``, ``assembly``, ``placement``) or ``{mode, side, poured, layers,
-  active, dim, zones, tracks, appearance}`` (the active layer drawn on top, Dim fading the rest,
-  the zones' and tracks' opacities from 0 to 1).
+  active, others, zones, tracks, appearance}`` (the active layer drawn on top, ``others`` the rest
+  ``shown``, ``dimmed`` or ``hidden`` -- the outline and the holes through an active copper layer kept at full
+  strength; the earlier ``dim: true`` reads as ``dimmed`` -- the zones' and tracks' opacities from 0 to 1).
 - ``.kicad_sch``: a KiCad schematic, its hierarchy read from the files on each draw and one sheet
   painted flat in KiCad's schematic colours (``render/schematic.py``); its ``--display`` is
   ``{sheet, border, appearance}`` (the root sheet, ``/``, unless it names another: ``/Power/``).

@@ -241,6 +241,18 @@ class PlotRoute(unittest.TestCase):
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
         self.assertEqual((payload["kind"], [page["path"] for page in payload["sheets"]]), ("schematic", ["/", "/Load/"]))
+        # The viewer reads the sheet on screen alone: with the hierarchy's index first, then without it.
+        api = self.opened(schematic, "kicad_sch")
+        status, _, body = self.request("GET", f"{api}/plot?sheet=/Load/")
+        page = json.loads(body)
+        self.assertEqual((status, [sheet["path"] for sheet in page["sheets"]]), (200, ["/Load/"]))
+        self.assertEqual([sheet["path"] for sheet in page["schematic"]["sheets"]], ["/", "/Load/"])
+        status, _, body = self.request("GET", f"{api}/plot?sheet=%2F&index=0")
+        page = json.loads(body)
+        self.assertEqual((status, [sheet["path"] for sheet in page["sheets"]], "schematic" in page), (200, ["/"], False))
+        status, _, body = self.request("GET", f"{api}/plot?sheet=/Power/")
+        self.assertEqual(status, 400, body[:400])
+        self.assertIn("has no sheet /Power/", json.loads(body)["error"])
 
     def test_a_file_that_is_no_board_is_a_400_saying_why(self) -> None:
         broken = self.folder / "broken.kicad_pcb"
@@ -248,6 +260,46 @@ class PlotRoute(unittest.TestCase):
         status, _, body = self.request("GET", f"{self.opened(broken)}/plot")
         self.assertEqual(status, 400, body[:400])
         self.assertIn("broken.kicad_pcb is not a KiCad board", json.loads(body)["error"])
+
+
+class SchematicReads(unittest.TestCase):
+    """A schematic's hierarchy is parsed once per revision of its files: a page asked for again, or
+    another page, reads none of them; an edit to any sheet, or a file beside them, reads it anew."""
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = write_schematic(Path(self.tmp.name) / "divider")
+
+    def test_the_hierarchy_is_read_once_per_revision(self) -> None:
+        import os
+
+        from cad.engine.formats.kicad import schematic
+        from cad_server.viewer.plots import SchematicAnswers
+
+        answers = SchematicAnswers()
+        real = schematic.read_schematic_index
+        with mock.patch.object(schematic, "read_schematic_index", side_effect=real) as reads:
+            page = lambda sheet, index=True: json.loads(answers.payload(str(self.root), sheet, index))  # noqa: E731
+            first = page("/")
+            self.assertEqual([sheet["path"] for sheet in first["schematic"]["sheets"]], ["/", "/Load/"])
+            self.assertNotIn("schematic", page("/Load/", False))
+            self.assertEqual(page("/"), first)
+            self.assertEqual(reads.call_count, 1)
+            # An edit to the child sheet (a new stamp) reads the hierarchy again.
+            child = self.root.with_name("load.kicad_sch")
+            stat = child.stat()
+            os.utime(child, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+            page("/Load/", False)
+            self.assertEqual(reads.call_count, 2)
+            page("/Load/", False)
+            self.assertEqual(reads.call_count, 2)
+            # So does a file put beside them (the folder's stamp).
+            (self.root.parent / "notes.txt").write_text("x", encoding="utf-8")
+            folder = self.root.parent.stat()
+            os.utime(self.root.parent, ns=(folder.st_atime_ns, folder.st_mtime_ns + 1_000_000))
+            page("/")
+            self.assertEqual(reads.call_count, 3)
 
 
 if __name__ == "__main__":

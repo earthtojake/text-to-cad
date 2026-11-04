@@ -283,6 +283,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display, Settings |
+| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -398,6 +399,13 @@ button's orbit being the box): the right button's drag pans (a Mac trackpad's tw
 drag), as does the middle button's and a left drag with Ctrl, Cmd or Shift held (a Shift click still
 adds); the wheel, a trackpad's two-finger scroll and a pinch zoom; the browser's menu is kept off
 the board, as off a 3D view.
+
+**A schematic's filter is KiCad's too** (`schematic/SchematicSelectFilter.jsx`, over the kit's checklist the
+`kit/tools/select/SelectFilterChecklist.jsx`, a board's too): **All items**, then **Symbols** and **Pins**, **Wires** and
+**Labels**, **Sheets** and **Other items** (junctions, no-connects), each its name alone. A click takes
+the nearest ink, and of what is about as near the most specific — a pin, a junction or a no-connect, a
+label (a sheet pin, its net), a wire, a field (its symbol) — then the symbol body or sheet symbol it is
+inside. A whole net is picked from the Circuit's Nets.
 
 The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
 `selectGeometryMode`): All, a press takes the face or edge it lands on where the part's
@@ -547,14 +555,20 @@ opens or shuts it, as the STEP tree's. It opens as its blocks and "Nets (N)", a 
 parts and the Nets shut; a pick on the board opens its row's owners and scrolls it into view. A selected
 net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers: the
 layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
-active layer (a filled dot after its name), drawn on top, the one Settings' Dim other layers leaves
-bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
-draws too; and, after them, the shell's own **Animation** for a
+active layer (a filled dot after its name), drawn on top, the one Settings' Other layers keeps at
+full strength when it dims or hides the rest — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
+draws too; a KiCad schematic's **Circuit** and, for more than one sheet, **Hierarchy** (`schematic/SchematicSection.jsx`,
+`schematic/SheetsSection.jsx`): the Hierarchy is KiCad's Hierarchy Navigator, the root (by its
+file's name) and the sheets each places, in page order, each row its page number, every sheet open,
+the sheet shown lit; a press on a row shows that sheet, the way back up from one entered (no trail under the strip); the Circuit is the board's tree
+(`kit/inspector/CircuitTree.jsx`, its rules alike), its blocks the sheets the parts are placed on and
+each part's pins under it, a press showing the sheet what it picked is on; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
 section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
-drawing's, a board's), a board's Circuit lucide's CircuitBoard, Position's a spline, Animation's a
+drawing's, a board's), a Circuit lucide's CircuitBoard (a board's, a schematic's: one tree), a schematic's Hierarchy three
+sheets in a tree, Position's a spline, Animation's a
 clapperboard, any other section's a page named for it (a section names its own with `ToolPanel`'s
 `icon`; no two tiles of a file share one). Preview has no file sidebar: every
 section stays mounted, out of sight, and a routine plays from Preview's playbar.
@@ -714,13 +728,18 @@ stock dropdown from its own tile, hinted by its name (`board/BoardDisplay.jsx`):
 mode on screen's glyph, its layer presets (Board, Copper, Assembly, Placement, and Custom while
 it applies) as a radio group under a muted **Display modes** label, a choice closing it; then
 **Settings**, a sliders glyph, its switches under a muted **Settings** label — Copper pours (while
-copper is drawn), View from below and **Dim other layers**, checkbox items — then a rule and
-**Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
+copper is drawn) and View from below, checkbox items — then a rule and **Other layers**, KiCad's
+high-contrast modes, a radio group under its muted label: **Shown**, **Dimmed** or **Hidden** (every
+layer but the active one as it is, faded, or not drawn; the board's outline, and with a copper layer
+active every drill and every via through it, stay at full strength in both, so the active layer is
+never seen without its bearings), a choice leaving the menu open; **Ctrl+H** (⌘H) cycles the three while
+the board has the keyboard, as KiCad's does (a Mac's ⌘H is the system's Hide where the browser keeps
+it; Ctrl+H is the board's there too) — then a rule and **Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
 its glyph and name where an item's are, a slider and its committed percentage (Enter or blur
 commits; Escape in the value puts it back and keeps the menu open), the menu 14rem wide for them;
-a slide or a tick leaves it open. On a phone the strip's More has a submenu of each, Display then
+a slide, a tick or a choice of Other layers leaves it open. On a phone the strip's More has a submenu of each, Display then
 Settings. Its Layers sidebar can override a preset, shown as Custom, and chooses the active layer
-Dim leaves bright; the active layer, Dim and the opacities are kept through a change of mode. It
+Other layers keeps bright; the active layer, Other layers and the opacities are kept through a change of mode. It
 has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1169,6 +1188,9 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   a note; in an empty box it closes the box and is also the viewer's own Escape
   (it clears the selection). ⌘C or Ctrl+C with none of its text selected is the
   viewer's copy.
+- **Ctrl+H** (⌘H) on a KiCad board cycles Settings' Other layers, Shown, Dimmed, Hidden and round, as
+  KiCad's high-contrast key does, while the board has the keyboard (as Escape's viewer, above); no
+  other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.

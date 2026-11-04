@@ -39,10 +39,18 @@
  * with the item, and what lies off the canvas is left out, so a board of tens of thousands of items
  * pans in a few milliseconds. The pane keeps rasters of a view made with this same function and
  * paints them with `drawPlotImages`.
+ *
+ * **A schematic** (`kind: "schematic"`, `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=<path>`) is the
+ * same payload with a sheet's page for its sheet: KiCad's frame, the page's top-left corner at the origin,
+ * `width` x `height` the paper. It is drawn on its paper alone (nothing round it: what surrounds the paper
+ * is the pane's), in the `theme` (`theme.js`'s `schematicColors`: KiCad's light paper and dark
+ * ink, or a dark sheet and light ink, each element the same hue; the file's own colour where it gives one,
+ * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
+ * unless a view asks for its `border`. The fit frames the page.
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
-import { BOARD_PALETTES, DIM_OPACITY, ZONE_OPACITY, boardPalette } from "./theme.js";
+import { BOARD_PALETTES, DIM_OPACITY, ZONE_OPACITY, boardPalette, schematicColors, schematicItemColor } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
 
 /**
@@ -109,14 +117,16 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {string} background The colour the board is drawn on, `#rrggbb`.
  * @property {number} x Page position of the sheet's top-left corner, millimetres.
  * @property {number} y
+ * @property {string} [path] A schematic's sheet: its path in the hierarchy (`/`, `/Power/`).
  *
  * @typedef {object} PlotLayout
  * @property {number} schemaVersion
- * @property {string} kind What the payload draws: `"board"`. Words only, never drawing.
+ * @property {string} kind What the payload draws: `"board"`, or `"schematic"`, a schematic's sheet drawn on its paper.
  * @property {string} generator What wrote the file, for words: `"pcbnew 10.99"`.
  * @property {number|null} unrouted The board's connections still to make (the ratsnest's lines), else null.
  * @property {readonly PlotSheet[]} sheets
  * @property {object|null} board The board's index (`payload.board`), sheet millimetres; else null.
+ * @property {object|null} schematic A schematic's index (`payload.schematic`, its whole hierarchy); else null.
  * @property {readonly [number, number, number, number]} bounds The sheet's page box, `[minX, minY, maxX, maxY]`, y down: what the fit frames.
  * @property {readonly [number, number, number, number]} modelBounds The same box in drawing2d's model space, y up.
  * @property {readonly [number, number, number, number]} extent The page box of everything drawn: the sheet and every item, items past the sheet's edge included.
@@ -133,9 +143,12 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {boolean} [poured] False leaves the pours' fills out. Default true.
  * @property {"top"|"bottom"} [side] Bottom: the sheet mirrored left-right, the stack reversed. Default top.
  * @property {string|null} [active] The active layer, drawn on top of the board's stack (KiCad's); null keeps KiCad's order.
- * @property {string|null} [dim] With a layer id, every other layer but the board's area is drawn at `DIM_OPACITY` (KiCad's "Inactive layers: Dim").
+ * @property {{ layer: string, others: "dimmed"|"hidden" }|null} [focus] The active layer at full strength and every
+ *   other drawn at `DIM_OPACITY` or not at all (KiCad's high-contrast modes), but what keeps a person's bearings:
+ *   `focusedLayers`.
  * @property {number} [zones] The pours' fill opacity, 0..1. Default KiCad's 0.6.
  * @property {number} [tracks] The tracks' opacity, 0..1. Default 1.
+ * @property {boolean} [border] A schematic's page edge, drawn. Default off.
  */
 
 function describe(value) {
@@ -241,7 +254,7 @@ export function layoutPlot(payload) {
   }
   const sheets = payload.sheets;
   if (!Array.isArray(sheets) || sheets.length !== 1) {
-    throw new Error(`A plot payload's \`sheets\` is one board sheet; received ${describe(sheets)}.`);
+    throw new Error(`A plot payload's \`sheets\` is one sheet: a board's, or the schematic sheet asked for; received ${describe(sheets)}.`);
   }
   const placed = sheets.map((sheet, index) => {
     const where = `sheets[${index}]`;
@@ -262,11 +275,13 @@ export function layoutPlot(payload) {
     }
     return Object.freeze({
       index, name: String(sheet.name ?? ""), layers: layoutLayers(sheet, where),
-      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0
+      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0,
+      ...(typeof sheet.path === "string" ? { path: sheet.path } : {})
     });
   });
   const [sheet] = placed;
   const board = payload.board && typeof payload.board === "object" && !Array.isArray(payload.board) ? payload.board : null;
+  const schematic = payload.schematic && typeof payload.schematic === "object" && !Array.isArray(payload.schematic) ? payload.schematic : null;
   const bounds = [0, 0, sheet.width, sheet.height];
   const extent = [...bounds];
   for (const layer of sheet.layers) {
@@ -282,6 +297,7 @@ export function layoutPlot(payload) {
     unrouted: Number.isInteger(payload.unrouted) ? payload.unrouted : null,
     sheets: Object.freeze(placed),
     board,
+    schematic,
     bounds: Object.freeze(bounds),
     modelBounds: Object.freeze([0, -sheet.height, sheet.width, 0]),
     extent: Object.freeze(extent)
@@ -400,6 +416,57 @@ export function viewedLayers(sheet, view) {
   const active = stack.findIndex((layer) => layer.id === view?.active);
   if (active >= 0) stack.push(...stack.splice(active, 1));
   return [...kept.filter((layer) => UNDERLAY_KINDS.has(layer.kind)), ...stack, ...kept.filter((layer) => OVERLAY_KINDS.has(layer.kind))];
+}
+
+// The copper layers in their stack's order, F.Cu first, B.Cu last: where a blind via's span falls.
+const copperRank = (id) => (id === "F.Cu" ? 0 : id === "B.Cu" ? Infinity : Number(/^In(\d+)\.Cu$/.exec(id)?.[1] ?? NaN));
+// A hole through the copper layer `layer`: every pad's and every unplated one, and a via that spans it.
+const through = (item, layer) => {
+  if (!Array.isArray(item.span) || item.span.length !== 2) return true;
+  const [from, to] = item.span.map(copperRank).sort((a, b) => a - b);
+  const at = copperRank(layer);
+  return at >= from && at <= to;
+};
+const SPLIT = new WeakMap();
+/** `layer` with only the items `keep` takes, and the rest, made once per layer and active layer. */
+function splitLayer(layer, key, keep) {
+  let byKey = SPLIT.get(layer);
+  if (!byKey) SPLIT.set(layer, byKey = new Map());
+  if (!byKey.has(key)) {
+    const kept = layer.items.filter(keep);
+    byKey.set(key, [{ ...layer, items: kept }, { ...layer, items: layer.items.filter(item => !kept.includes(item)) }]);
+  }
+  return byKey.get(key);
+}
+
+/**
+ * The layers a view draws (`viewedLayers`), each with its strength: with a focus (`view.focus`, KiCad's
+ * "Inactive layers"), the active layer at full strength and every other dimmed (`DIM_OPACITY`) or left out,
+ * but for what keeps a person's bearings, which stays at full strength — the board's area, its outline
+ * (Edge.Cuts), and with a copper layer active, the holes through it: every drill (a pad's or an unplated
+ * hole goes through the board) and every via that spans it (a blind one's `span`; the others split off).
+ *
+ * @returns {{ layer: object, fade: number }[]}
+ */
+export function focusedLayers(sheet, view) {
+  const layers = viewedLayers(sheet, view);
+  const focus = view?.focus && typeof view.focus.layer === "string" ? view.focus : null;
+  if (!focus) return layers.map((layer) => ({ layer, fade: 1 }));
+  const other = focus.others === "hidden" ? null : DIM_OPACITY;
+  const copper = sheet.layers.some((layer) => layer.id === focus.layer && layer.kind === "copper");
+  const drawn = [];
+  for (const layer of layers) {
+    if (layer.id === focus.layer || UNDERLAY_KINDS.has(layer.kind) || layer.kind === "outline" || (copper && layer.kind === "drill")) {
+      drawn.push({ layer, fade: 1 });
+    } else if (copper && layer.kind === "via") {
+      const [kept, rest] = splitLayer(layer, focus.layer, (item) => through(item, focus.layer));
+      if (rest.items.length && other !== null) drawn.push({ layer: rest, fade: other });
+      if (kept.items.length) drawn.push({ layer: kept, fade: 1 });
+    } else if (other !== null) {
+      drawn.push({ layer, fade: other });
+    }
+  }
+  return drawn;
 }
 
 // ---- paths, in page space, made once per item ----------------------------------
@@ -813,7 +880,10 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
   const names = !named || named.has("names");
   const zones = clampUnit(view?.zones, ZONE_OPACITY);
   const tracks = clampUnit(view?.tracks, 1);
-  const dimmed = typeof view?.dim === "string" && view.dim ? view.dim : null;
+  if (layout.kind === "schematic") {
+    drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border: view?.border === true, colors: schematicColors(theme), PathCtor });
+    return;
+  }
   ctx.save();
   for (const sheet of layout.sheets) {
     const mirrorX = view?.side === "bottom" ? sheet.x + sheet.width / 2 : null;
@@ -826,14 +896,50 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     if (backdrop === "board") drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCtor });
     else if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
     else ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
-    for (const layer of viewedLayers(sheet, view)) {
+    for (const { layer, fade } of focusedLayers(sheet, view)) {
       pageSpace(ctx, transform, pixelRatio, mirrorX);
       drawLayer(ctx, layer, {
-        hairline, poured, visible: shown, PathCtor, detail: scale, background, mirrored: mirrorX != null, vias, names, zones, tracks, palette,
-        fade: dimmed && layer.id !== dimmed && !UNDERLAY_KINDS.has(layer.kind) ? DIM_OPACITY : 1,
+        hairline, poured, visible: shown, PathCtor, detail: scale, background, mirrored: mirrorX != null, vias, names, zones, tracks, palette, fade,
         viewport: across ?? [sheet.width, sheet.height]
       });
     }
+  }
+  ctx.restore();
+}
+
+/**
+ * A schematic's sheet on its paper: the page in its background, then its layers bottom to top, each item
+ * in KiCad's schematic colours (`schematicItemColor`), a line never thinner than a pixel; the page's edge
+ * only with `border`. What lies off the canvas is left out. A card's picture (`backdrop: "board"`) is the
+ * same: the paper, and nothing round it.
+ */
+function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border, colors, PathCtor }) {
+  ctx.save();
+  for (const sheet of layout.sheets) {
+    if (visible && !rectsOverlap(visible, layout.extent)) continue;
+    pageSpace(ctx, transform, pixelRatio, null);
+    ctx.fillStyle = colors.background;
+    ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const layer of sheet.layers) {
+      if (layer.kind === "sheet" && !border) continue;
+      for (const item of layer.items) {
+        if (visible && !rectsOverlap(visible, item.box)) continue;
+        const paint = schematicItemColor(layer.kind, item, colors);
+        ctx.globalAlpha = typeof item.opacity === "number" ? clampUnit(item.opacity, 1) : 1;
+        const path = pathOf(ctx, item, PathCtor);
+        if (item.t === "poly" || (item.t === "circle" && item.w === 0)) {
+          ctx.fillStyle = paint;
+          fill(ctx, path);
+        } else {
+          ctx.strokeStyle = paint;
+          ctx.lineWidth = Math.max(item.w, hairline);
+          stroke(ctx, path);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
   }
   ctx.restore();
 }
@@ -846,7 +952,7 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
  * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[], theme?: "light" | "dark" | null }} options
- *   `theme`: the canvas's colour, as `drawPlot`'s.
+ *   `theme`: the canvas's colour, as `drawPlot`'s (a schematic's sheet is its theme's paper).
  */
 export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [], theme = null }) {
   checkTransform(transform, "drawPlotImages");
@@ -856,7 +962,7 @@ export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images 
   pageSpace(ctx, transform, pixelRatio, null);
   for (const sheet of layout.sheets) {
     if (!shows(sheet.x, sheet.y, sheet.width, sheet.height)) continue;
-    ctx.fillStyle = canvasColor(sheet, theme);
+    ctx.fillStyle = layout.kind === "schematic" ? schematicColors(theme).background : canvasColor(sheet, theme);
     ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
   }
   for (const { image, x, y, width, height } of images) {

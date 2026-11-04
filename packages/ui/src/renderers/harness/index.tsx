@@ -6,6 +6,7 @@ import { createCadClient, createHttpPromptFiles } from '@cad/core/client';
 import { createTabStore, memoryTabRecord, useTabViewerState } from '@cad/ui/tab-store';
 import type { TabRecordStorage, TabStore } from '@cad/ui/tab-store';
 import { createBoardRenderer } from '@cad/ui/renderers/board';
+import { createSchematicRenderer } from '@cad/ui/renderers/schematic';
 import { createDxfRenderer } from '@cad/ui/renderers/dxf';
 import { createGlbRenderer } from '@cad/ui/renderers/glb';
 import { createMeshRenderer } from '@cad/ui/renderers/mesh';
@@ -24,6 +25,8 @@ import { ExportContext } from '../../../dist/export/context.js';
 // default mesh) is `/models/arm.urdf`.
 const requested = new URLSearchParams(location.search).get('file') || 'part.stl';
 const file = requested.startsWith('/') ? requested : `/models/${requested}`;
+// The host's theme: dark, as the viewer opens, unless `?scheme=light` asks for the light one.
+const colorScheme = new URLSearchParams(location.search).get('scheme') === 'light' ? 'light' as const : 'dark' as const;
 const promptMessages: string[] = [];
 const captures: { file: string; size: number; type: string; references: unknown }[] = [];
 // What a renderer asked the host to open (a mesh a robot description names, say).
@@ -74,7 +77,7 @@ function workspace(id: string, store: TabStore) {
     search: async () => ({ paths: [file], truncated: false })
   };
   const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
-  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
+  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme, platform: keyboardPlatform },
     clipboard: { writeText: async text => { promptMessages.push(await text); }, writeImage: async () => {} },
     promptFiles: createHttpPromptFiles({ origin: `${location.origin}/${id}` }),
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
@@ -88,7 +91,7 @@ function workspace(id: string, store: TabStore) {
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences: store.settings, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
-  const renderers = [createBoardRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
+  const renderers = [createBoardRenderer(services), createSchematicRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createXbfRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one', tabStore), b = workspace('two', otherTabStore);

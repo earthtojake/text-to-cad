@@ -40,7 +40,9 @@ Then by inspection:
   copper area and vias under them as the datasheet asks.
 - High-speed and analog nets, if any: differential pairs routed together, no
   splits under them in the reference plane, crystals with short traces and
-  ground guard.
+  ground guard ([layout](layout.md#return-current-and-the-reference-plane)).
+- Connectors: a horizontal one at a board edge with its mating face out, seen in a
+  GLB export opened in the viewer.
 
 This review answers layout questions, not circuit ones: whether the circuit
 works is the datasheets' and the designer's, and the report says which kind a

@@ -10,10 +10,9 @@ before citing either:
 - [KiCad's design rule checks](https://docs.kicad.org/master/en/pcbnew/pcbnew.html#design-rule-checking):
   what each DRC violation type means and which Board Setup value it reads.
 
-$pcb's manufacturing reference tabulates the standard-tier limits of the common
-fabs (JLCPCB, PCBWay, OSH Park, Aisler, Eurocircuits, Seeed Fusion, NextPCB) as
-the design rule names they map to. Recheck the fab's page for anything near a
-limit.
+[Manufacturing](manufacturing.md#standard-tier-limits) tabulates the standard-tier
+limits of JLCPCB, PCBWay and OSH Park and the design rules they map to. Recheck the
+fab's page for anything near a limit, and for any other fab.
 
 ## The board's rules are the first question
 

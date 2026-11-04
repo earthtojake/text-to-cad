@@ -70,6 +70,8 @@ class BoardJobReplayTest(unittest.TestCase):
             job("outline", {"layers": ["Edge.Cuts"]}),
             # The Layers' own: Dim with the front copper active, and the zones' fill at nothing.
             job("dim", {"mode": "board", "dim": True}),
+            # Hidden: the front copper alone, with the outline and the holes through it.
+            job("hidden", {"mode": "board", "others": "hidden"}),
             job("nozones", {"mode": "board", "zones": 0}),
             job("unpoured", {"mode": "board", "poured": False}),
             # What a prompt named, lit as the view lit it: the VBUS track, R1, an area round the text, a point.
@@ -83,11 +85,11 @@ class BoardJobReplayTest(unittest.TestCase):
         cls.images = {p.stem: Image.open(p).convert("RGB") for p in workspace.glob("*.png")}
 
     def test_each_view_is_written_at_its_size(self) -> None:
-        self.assertEqual(10, len(self.result))
+        self.assertEqual(11, len(self.result))
         # Every key the command line prints a snapshot by, as every other kind's report has it.
         for drawn in self.result:
             self.assertIs(False, drawn.report["preview"])
-        self.assertEqual(["assembly", "below", "darktop", "dim", "lit", "nozones", "outline", "placement", "top", "unpoured"], sorted(self.images))
+        self.assertEqual(["assembly", "below", "darktop", "dim", "hidden", "lit", "nozones", "outline", "placement", "top", "unpoured"], sorted(self.images))
         for name, image in self.images.items():
             self.assertEqual(SIZE, (image.width, image.height), name)
 
@@ -117,6 +119,17 @@ class BoardJobReplayTest(unittest.TestCase):
         self.assertTrue(near(top.getpixel(track), dim.getpixel(track), 25), f"the active copper does not: {dim.getpixel(track)}")
         # The zones at 0 draw the pour's fill as no fill at all.
         self.assertTrue(near(self.images["nozones"].getpixel(pour), self.images["unpoured"].getpixel(pour), 10))
+
+    def test_hidden_draws_the_active_layer_alone_but_the_outline_and_the_holes_through_it(self) -> None:
+        top, hidden = self.images["top"], self.images["hidden"]
+        area = hidden.getpixel(on_screen(30, 26))  # the board's own ground, where no layer of the front draws
+        pour, track = on_screen(8, 22), on_screen(30, 15)  # the GND pour on B.Cu; the VBUS track on F.Cu, active
+        self.assertTrue(near(hidden.getpixel(pour), area, 12), f"the back pour is gone: {hidden.getpixel(pour)}")
+        self.assertTrue(near(hidden.getpixel(track), top.getpixel(track), 25), f"the active copper stays: {hidden.getpixel(track)}")
+        # The outline, the via's hole and J1's pad hole as the full board draws them.
+        for x, y in ((0.05, 25), (18, 27), (5, 17.54)):
+            point = on_screen(x, y)
+            self.assertTrue(near(hidden.getpixel(point), top.getpixel(point), 30), f"({x}, {y}) kept: {hidden.getpixel(point)} vs {top.getpixel(point)}")
 
     def test_what_the_prompt_named_is_lit_and_what_names_nothing_said(self) -> None:
         lit, top = self.images["lit"], self.images["top"]
@@ -177,7 +190,11 @@ class BoardDisplayTest(unittest.TestCase):
         self.assertEqual("F.Cu", active_layer(self.LAYERS, display_options({})))
         self.assertEqual("B.Cu", active_layer(self.LAYERS, display_options({"side": "bottom"})))
         self.assertEqual("F.Cu", active_layer(self.LAYERS, display_options({"active": "area"})), "the board's area is no active layer")
-        for wrong in ({"dim": "yes"}, {"zones": 2}, {"tracks": True}, {"active": 3}):
+        # Others: three choices; the earlier dim switch read as they say it, true as dimmed.
+        self.assertEqual(["dimmed", "shown", "hidden", "hidden"], [display_options(value)["others"] for value in
+                         ({"dim": True}, {"dim": False}, {"others": "hidden"}, {"others": "hidden", "dim": True})])
+        self.assertNotIn("dim", display_options({"dim": True}))
+        for wrong in ({"dim": "yes"}, {"zones": 2}, {"tracks": True}, {"active": 3}, {"others": "faded"}):
             with self.assertRaises(SnapshotRefused):
                 display_options(wrong)
 
