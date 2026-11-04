@@ -33,7 +33,8 @@ current installation's
    its folders in the user's own (``cad.engine.places``), and moves what 0.10.0 kept there into them first.
 4. **The cad command.** This installation registered and ``~/.local/bin/cad`` written, as
    ``cad doctor`` does it (``installations.setup``); on a device with no current installation it
-   becomes the current one.
+   becomes the current one. First, once per device, whether it was updated or is a new person's, for
+   What's new (``cad_server/whats_new.py``), while the records of the releases before are there.
 5. **build123d.** The environment the engine's own kernel processes start from, ``cad[build123d]`` at
    this release (``cad_server._internal.base``), is said in the plan and never made here: it is made on
    first need (the first build, or a view or operation that needs the kernel), from uv's cache where it
@@ -572,10 +573,14 @@ class Installer:
     def _register(self) -> dict[str, Any]:
         """This installation registered and the proxy written: what ``cad doctor`` and the CAD app's
         server do (``installations.setup``)."""
+        from cad_server import whats_new
         from cad_server._internal import installations
         from cad_server.cli.doctor import _command_path_hint
 
         version = installations.own_version()
+        # Whether this device was updated or is a new person's, decided once while the records of the
+        # releases before are still there (``cad_server/whats_new.py``): its What's new, or none.
+        whats_new.settle(release=whats_new.minor(version))
         if version:
             (record, recorded, record_error), (proxy, before, proxy_error) = installations.setup(version)
         else:
