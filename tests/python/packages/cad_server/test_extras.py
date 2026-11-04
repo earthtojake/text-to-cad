@@ -278,6 +278,27 @@ class ChoosingTest(unittest.TestCase):
                               "    return step.read(Path(__file__).parent / 'part.step')\n")
         self.assertTrue(self.spec("read.py").default(), "a STEP read runs on the base: cad[build123d]")
 
+    def test_a_command_an_integration_declares_adds_it_and_any_other_adds_nothing(self) -> None:
+        from cad_server.cli import run
+
+        self.assertEqual(self.spec("kicad-cli", "version").integrations, ("kicad",), "kicad-cli is the kicad integration's")
+        self.assertEqual(self.spec("kicad-cli.exe", "version").integrations, ("kicad",), "as Windows spells it")
+        self.assertEqual(self.spec("--with", "cad[kicad]", "kicad-cli", "version").integrations, ("kicad",),
+                         "an explicit --with still works")
+        self.assertEqual(self.spec("--with", "cad[trimesh]", "kicad-cli").integrations, ("kicad", "trimesh"))
+        self.assertEqual(self.spec("--with", "cad[kicad]", "ruff", "check").integrations, ("kicad",))
+        for argv in (("ruff", "check"), ("kicad", "version"), ("./kicad-cli", "version")):
+            with self.subTest(argv=argv):
+                self.assertEqual(self.spec(*argv).integrations, (), "a command no integration declares adds nothing")
+        # The declared one runs through the library's module for it, in the environment's Python, never a file
+        # on PATH; another is the environment's own file, or none.
+        python = str(self.write("env/bin/python", ""))
+        self.assertEqual(run._command(run.parse(["kicad-cli", "pcb", "render", "b.kicad_pcb"]), python),
+                         [python, "-P", "-m", "cad.kicad._command", "kicad-cli", "pcb", "render", "b.kicad_pcb"])
+        self.assertIsNone(run._command(run.parse(["ruff", "check"]), python))
+        ruff = self.write("env/bin/ruff", "")
+        self.assertEqual(run._command(run.parse(["ruff", "check"]), python), [str(ruff), "check"])
+
     def test_a_header_that_names_cad_decides_the_integrations_outright(self) -> None:
         self.write("forced.py", """\
             # /// script

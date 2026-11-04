@@ -504,7 +504,18 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
     No module of the server imports an integration's code: the runner does, in whichever process
     runs it. A function of the library called where its integration is missing says which extra to
-    add, or to run the script with `cad run`.
+    add, or to run the script with `cad run`. A command line an integration's extra installs
+    (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
+    and the integration's `_command` module runs the environment's own command there, headless in
+    private homes, never one on PATH.
+
+30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
+    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+    findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
+    output path), or parity with the viewer (the same check, the same export). Everything else of the
+    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
+    skill documents with the tool's own flags at the pinned version; no typed command is added to
+    rename one.
 
 
 ## Agent operations
@@ -581,9 +592,10 @@ src/cad/
                          #   alone) and inspect; its flat still engine/render/schematic.py;
                          #   erc and export, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
-                         #   on _internal/programs), a board script through its headless
-                         #   api-server and KiPy (_session), DRC (_check), its exports (_export),
-                         #   a schematic's ERC and exports (_schematic) and producers
+                         #   on _internal/programs), `cad run kicad-cli` (_command), a board
+                         #   script through its headless api-server and KiPy (_session), DRC
+                         #   (_check), its exports (_export), a schematic's ERC and exports
+                         #   (_schematic) and producers
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each

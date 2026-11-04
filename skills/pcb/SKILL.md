@@ -78,6 +78,24 @@ footprint-local positions and rotations must be transformed into the board frame
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
 
+## KiCad's own command line
+
+Use the typed commands first (`cad kicad_pcb drc|export`, `cad kicad_sch erc|export`): their results are
+the ones the checks and the viewer read. For anything they do not cover, run KiCad's own command line
+with `cad run kicad-cli …`: the pinned kicode `kicad-cli` with its own subcommands and flags (`cad run
+kicad-cli pcb --help`), no `--with` needed, headless with private settings, its output and exit code
+KiCad's. `CAD_KICAD_CLI` does not change which one runs.
+
+```bash
+cad run kicad-cli pcb render --side top --rotate -45,0,45 -o tmp/board.png board.kicad_pcb
+cad run kicad-cli project downgrade --dry-run --target 10.0 board.kicad_pro   # then -o DIR without --dry-run
+```
+
+Most commands write only their `-o`, though kicad-cli may leave a `.kicad_prl` beside a board it reads.
+These rewrite the source: `pcb upgrade` and `sch upgrade`, `fp upgrade` and `sym upgrade` without `-o`,
+and `pcb drc --refill-zones --save-board`. `project downgrade` exits 2 without writing when the target
+cannot represent the board.
+
 ## Edit
 
 1. Inspect the saved board with `from cad import kicad_pcb` in a script run with

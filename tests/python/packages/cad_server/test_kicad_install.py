@@ -79,6 +79,24 @@ class Discovery(unittest.TestCase):
         with self.assertRaisesRegex(install.KicadMissingError, "not found.*cad\\[kicad\\].*CAD_KICAD_CLI"):
             self._find(self.stable.parent, self.nightly.parent, self.app.parent)
 
+    def test_cad_run_kicad_cli_runs_the_environment_s_then_kicode_s_never_path_s_or_the_variable_s(self) -> None:
+        from cad.kicad import _command
+
+        packaged = self._executable(self.root / "kicode", "kicad-cli")
+        environment = self.root / "env" / "bin"
+        environment.mkdir(parents=True)
+        python = environment / f"python{EXE}"
+        variables = {"PATH": str(self.stable.parent), "CAD_KICAD_CLI": str(self.stable)}
+        with mock.patch.object(_command.sys, "executable", str(python)), mock.patch.dict(os.environ, variables), \
+                mock.patch.dict(sys.modules, {"kicode": self._kicode(packaged)}):
+            self.assertEqual(_command.program(), packaged, "a kicode with no console script: its executable")
+            script = self._executable(environment / "scripts", "kicad-cli")
+            script.replace(environment / script.name)
+            self.assertEqual(_command.program(), environment / script.name, "kicode's console script comes first")
+        with mock.patch.object(_command.sys, "executable", str(self.empty / "python")), \
+                mock.patch.dict(os.environ, variables), mock.patch.dict(sys.modules, {"kicode": None}):
+            self.assertIsNone(_command.program(), "never one on PATH or CAD_KICAD_CLI's")
+
     def test_kicodes_version_is_its_own_never_asked(self) -> None:
         packaged = self._executable(self.root / "kicode", "kicad-cli")
         with mock.patch.dict(sys.modules, {"kicode": self._kicode(packaged)}), \

@@ -14,8 +14,9 @@ cad adds two things:
 - **The pin.** The environment holds ``cad[<integrations>]==<device release>`` (or the installation's
   source tree or wheel, ``base.Installation.requirement``). Its integrations are worked out from the
   program's imports (``cad_server._internal.scan``, ``extras.integrations``), or named outright by a header
-  that names ``cad[...]``. A header or project that pins cad to another release is refused in one line;
-  an unpinned ``cad`` is given the device's.
+  that names ``cad[...]``. A bare COMMAND an integration declares (``kicad-cli``: the registry's
+  ``commands``) adds that integration, as ``--with cad[<integration>]`` would. A header or project that
+  pins cad to another release is refused in one line; an unpinned ``cad`` is given the device's.
 - **The environment.** The device's engine makes it, outside any sandbox, over its door, its lines said as
   they come, offline first from uv's cache (``cad_server._internal.extras``, the base for
   ``cad[build123d]`` alone: ``base``); this command, which may run in an agent's sandbox, then runs the
@@ -23,7 +24,9 @@ cad adds two things:
   folder last on its module search path, not first (the library's ``cad._internal.program``): a project's
   ``cad.py`` never stands in for the library. A program whose environment is not the base names its Python
   in its orders, and the engine builds its models in a warm worker of that Python (the own-Python worker
-  path, under the worker contract).
+  path, under the worker contract). A COMMAND is the environment's own, never one on PATH; one an
+  integration declares runs through the library's module for it (``cad.kicad._command``), in that
+  environment's Python, headless in private homes, its arguments, stdio and exit code the tool's.
 
 The ``cad`` command (``cad_server._internal.proxy``) runs this verb with the installation it picks.
 """
@@ -265,6 +268,8 @@ def prepare(plan: Plan, release: str) -> Prepared:
     the Python. ``extras.Refused`` in one line for a header that does not read, cad pinned to another release
     than ``release``, or a ``requires-python`` the engine's Python does not meet (with ``--python``, checked
     once the environment is made: ``run``)."""
+    from cad._internal.integrations import for_command
+
     from cad_server._internal import extras, scan
 
     here = os.getcwd()
@@ -339,7 +344,8 @@ def prepare(plan: Plan, release: str) -> Prepared:
             return scan.scan(module=plan.target, cwd=here, roots=roots)
         if plan.kind == "code":
             return scan.scan(code=plan.target, cwd=here, roots=roots)
-        return set()
+        declared = for_command(plan.target)  # a command an integration declares: ``kicad-cli``
+        return {declared} if declared is not None else set()
 
     spec = extras.Spec(
         integrations=extras.integrations(header_cad=header_cad, given_cad=given_cad, project_cad=project_cad,
@@ -380,14 +386,34 @@ def _admitted(wanted: str | None, version: str, script: str, whose: str) -> None
         raise extras.Refused(f"{script} requires Python {wanted}, and {whose} is {version}")
 
 
+def _command(plan: Plan, python: str) -> list[str] | None:
+    """What runs a plan with its environment's ``python``: a script, a module or code through the library's
+    runner, the program's folder last on its path (``-P``, then ``PROGRAM``), never first; a command an
+    integration declares through the library's module for it (``Integration.runner``), headless; any other
+    command the environment's own file of that name. None for a command the environment lacks."""
+    from cad._internal.integrations import INTEGRATIONS, for_command
+
+    if plan.kind != "command":
+        flag = {"module": ["-m"], "code": ["-c"], "script": []}[plan.kind]
+        return [python, "-P", "-m", PROGRAM, *flag, plan.target, *plan.args]
+    declared = for_command(plan.target)
+    runner = INTEGRATIONS[declared].runner if declared is not None else None
+    if runner is not None:
+        return [python, "-P", "-m", runner, plan.target, *plan.args]
+    folder = Path(python).parent
+    found = next((folder / name for name in (plan.target, f"{plan.target}.exe") if (folder / name).is_file()), None)
+    return [str(found), *plan.args] if found is not None else None
+
+
 def main(argv: list[str] | None = None) -> int:
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] in (["-h"], ["--help"]):
         sys.stdout.write(USAGE + "\nRun a program as `uv run` does, with cad pinned at this device's release: a "
                                  "script's `# /// script` header names its own packages, and cad's integrations "
-                                 "are worked out from its imports (a header naming `cad[...]` decides them). The "
-                                 "environment is made once, by the device's engine, and used again. uv run's "
-                                 "options are taken as uv takes them.\n")
+                                 "are worked out from its imports (a header naming `cad[...]` decides them); a "
+                                 "command an integration declares (`kicad-cli`) gets that integration and runs "
+                                 "headless. The environment is made once, by the device's engine, and used again. "
+                                 "uv run's options are taken as uv takes them.\n")
         return 0
     from cad_server._internal import base, extras
 
@@ -426,17 +452,10 @@ def main(argv: list[str] | None = None) -> int:
         said(str(refused) if isinstance(refused, base.Refused) else f"{refused.strerror or refused}")
         return 1
     extras.tell(prepared.given, prepared.script, prepared.declared)  # what builds a document of it again
-    if plan.kind == "command":
-        folder = Path(env.python).parent
-        found = next((folder / name for name in (plan.target, f"{plan.target}.exe") if (folder / name).is_file()), None)
-        if found is None:
-            said(f"{plan.target} is no command of its environment: run a script, -m MODULE or -c CODE")
-            return 2
-        command = [str(found), *plan.args]
-    else:
-        flag = {"module": ["-m"], "code": ["-c"], "script": []}[plan.kind]
-        # The program's folder last on its path (``-P``, then the library's runner), never first.
-        command = [env.python, "-P", "-m", PROGRAM, *flag, plan.target, *plan.args]
+    command = _command(plan, env.python)
+    if command is None:
+        said(f"{plan.target} is no command of its environment: run a script, -m MODULE or -c CODE")
+        return 2
     sys.stdout.flush()
     if os.name == "nt":  # no exec on Windows: a child, and its exit code
         import subprocess

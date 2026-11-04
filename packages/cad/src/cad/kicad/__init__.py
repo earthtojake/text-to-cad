@@ -7,6 +7,8 @@ client (as ``kicode``), one KiCad nightly's build of both. A person's own KiCad 
 * ``_program``: ``kicad-cli`` found and run, by the library's one helper for external programs
   (``cad._internal.programs``): ``CAD_KICAD_CLI``, refused unless it names a ``kicad-cli``, then
   kicode's; only ``kicad-cli`` itself is ever run, headless, in private homes (``kicode.environment``).
+* ``_command``: ``cad run kicad-cli ARGS`` -- KiCad's own command line, the environment's (kicode's console
+  script, else ``kicode.executable()``), headless in a private folder, its exit code kicad-cli's.
 * ``_session``: what ``@kicad_pcb("board.kicad_pcb")`` runs -- a private ``kicad-cli api-server`` on the
   board, KiPy connected to it, the function handed the open board, the board saved when it returns
   and not when it raises, the server stopped and its folder removed.

@@ -450,7 +450,9 @@ verbosity) key nothing. What it adds is two things:
   runs, an `export`, none; a type alone, `from cad import step`, none), and each of cad's decorators it
   applies (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
-  (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
+  (`--with build123d`); and for a bare command, the integration that declares it (`kicad-cli`: the
+  kicad integration's, the registry's `commands`). `--with cad[...]` adds to either. None found: the
+  core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming
   the device's release (`extras.pinned`: `plate.py's header pins cad to ==0.9.0, and this device runs
   cad 0.10.0: drop the pin, ...`); a pin of the device's own release is as none, and an unpinned
@@ -460,7 +462,12 @@ verbosity) key nothing. What it adds is two things:
   cache, with the base's link mode, find-links and index settings; with no engine of its installation
   answering, `cad run` makes it itself. Then `cad run`, which may run in an agent's sandbox, runs the
   program with that environment's Python, in the caller's folder and environment, its folder last on
-  its module search path (`cad._internal.program`). The environment of the build123d integration
+  its module search path (`cad._internal.program`). A command is the environment's own file, never
+  one on PATH; one an integration declares runs through that integration's `_command` module in the
+  environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
+  script; with a kicode that has none, `kicode.executable()`), headless in private homes
+  (`cad.kicad._program.private_run`, a typed command's), its arguments, stdio and exit code
+  kicad-cli's, and never the one `CAD_KICAD_CLI` names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
 **What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.
@@ -653,7 +660,9 @@ cad run [uv run's options] SCRIPT.py | -m MODULE | -c CODE | COMMAND [ARGS...]
                                              uv run, cad pinned at this release with the integrations
                                              the program's imports use: the models the script
                                              explicitly calls (and python SCRIPT.py in an environment
-                                             of the library's, with its kernel)
+                                             of the library's, with its kernel); a command an
+                                             integration declares (kicad-cli) with that integration,
+                                             headless
 cad requirement [INTEGRATION ...] [--json]   the exact requirement a Python of a program's own installs
                                              this release's cad by: cad[build123d]==<release>
 cad model export ID DST [DST ...] [--tolerance MM] [--json]
