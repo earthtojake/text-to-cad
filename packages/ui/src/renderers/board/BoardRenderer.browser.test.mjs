@@ -83,14 +83,17 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
   const pane = page.getByTestId('one');
   const fitted = await frame(pane);
   const canvas = await canvasOf(pane).boundingBox();
-  const transform = fitPlotTransform(layoutPlot(BOARD), Math.round(canvas.width), Math.round(canvas.height));
+  // The board's fit: its margin, clear of the tool strip the frame measures over its top.
+  const top = await pane.evaluate(element => Number.parseFloat(getComputedStyle(element.querySelector('[data-slot=cad-file-view]'))
+    .getPropertyValue('--cad-tools-bottom')) || 0);
+  const transform = fitPlotTransform(layoutPlot(BOARD), Math.round(canvas.width), Math.round(canvas.height), { top });
   const at = ([x, y]) => pageToScreen(transform, x, y);
   // The board on KiCad's canvas: its background off the page as on it, the board's area shadowed over it;
   // the VBUS track (y = 15) red.
   const background = hex(BOARD.sheets[0].background);
   assert.ok(near(pixel(fitted, 2, 2), background, 12), `KiCad's canvas round the board: ${pixel(fitted, 2, 2)}`);
   const [cornerX, cornerY] = at([1, 1]);
-  assert.ok(near(pixel(fitted, cornerX, cornerY), [35, 45, 58], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
+  assert.ok(near(pixel(fitted, cornerX, cornerY), [62, 62, 62], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
   const [trackX, trackY] = at([30, 15]);
   assert.ok(red(pixel(fitted, trackX, trackY)), `the track: ${pixel(fitted, trackX, trackY)}`);
   // R1 pad 2 (35.825, 15): drawn as the board draws it, until a press selects it and lights it.

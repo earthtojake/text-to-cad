@@ -10,7 +10,7 @@
  * drawing's default pen" looks like.
  *
  * So the pair lives here, ONCE, as the numbers `packages/ui/src/styles/tokens.css`
- * declares: `oklch(1 0 0)` / `oklch(0.145 0 0)` light, `oklch(0.28 0.008 264)` /
+ * declares: `oklch(1 0 0)` / `oklch(0.145 0 0)` light, `oklch(0.28 0 0)` /
  * `oklch(0.985 0 0)` dark. Change a token and change these together — a test
  * cannot read a stylesheet that the headless bundle never loads.
  *
@@ -21,7 +21,7 @@
 /** `{ background, foreground }` as `#rrggbb`, per colour scheme. */
 export const APP_THEME_COLORS = Object.freeze({
   light: Object.freeze({ background: "#ffffff", foreground: "#171717" }),
-  dark: Object.freeze({ background: "#27292d", foreground: "#fafafa" })
+  dark: Object.freeze({ background: "#292929", foreground: "#fafafa" })
 });
 
 /**

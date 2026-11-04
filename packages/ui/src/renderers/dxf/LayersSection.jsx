@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Box, Eye, EyeOff } from "lucide-react";
+import { Box, Eye, EyeOff, Layers } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
@@ -62,7 +62,7 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
     if (!next.delete(name)) next.add(name);
     return next;
   });
-  return <ToolPanel id="layers" title={t("layers.title")} label={t("layers.title")} fit="tree" resizable collapsible={false}>
+  return <ToolPanel id="layers" title={t("layers.title")} label={t("layers.title")} fit="tree" resizable collapsible={false} icon={Layers}>
     <ul className="px-1 py-1 text-tiny" aria-label={t("layers.label")} data-drawing-layers="">
       {rows.map(row => {
         const hidden = hiddenLayers.has(row.name), open = row.inserts.length > 0 && !folded.has(row.name);

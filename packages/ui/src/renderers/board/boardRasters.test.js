@@ -11,7 +11,7 @@ import { PATCH_LIMIT, SETTLE_MS, createBoardRasters } from "./boardRasters.js";
 
 // A 40 x 30 mm board of one track: enough geometry to draw, and to tell a patch's drawing from a frame's.
 const PAYLOAD = { schemaVersion: 4, kind: "board", unrouted: 0, sheets: [
-  { name: "blinky", width: 40, height: 30, background: "#001023", layers: [
+  { name: "blinky", width: 40, height: 30, background: "#292929", layers: [
     { id: "F.Cu", kind: "copper", side: "front", items: [{ t: "path", pts: [[5, 15], [35, 15]], w: 1, net: "VIN" }] }
   ] }
 ] };

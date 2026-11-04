@@ -81,8 +81,9 @@ from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION, PlotError
 
 __all__ = ["BOARD_BACKGROUND", "build_plot", "payload_bytes", "plot_payload_bytes"]
 
-#: KiCad's default colour theme behind a board.
-BOARD_BACKGROUND = "#001023"
+#: The canvas behind a board: the viewer's neutral dark grey (its dark `--background`, `#292929`),
+#: in place of KiCad's default theme's navy, so a board sits on the same canvas as every other view.
+BOARD_BACKGROUND = "#292929"
 _DIGITS = 4
 _GRAPHICS = ("line", "rect", "poly", "circle", "arc", "curve")
 _COPPER = re.compile(r"^(F|B|In\d+)\.Cu$")

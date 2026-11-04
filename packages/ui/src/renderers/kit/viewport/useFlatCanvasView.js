@@ -78,9 +78,13 @@ function wheelZoomFactor(event) {
  *   release are the tool's too, and the view does not pan.
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
  * @param {boolean} [options.orbitPan]  The 3D views' pans: a right-button drag, and a primary drag with Ctrl, Cmd or Shift.
+ * @param {(bounds: readonly number[], width: number, height: number, options: { top: number }) => object} [options.fitBox]
+ *   The fit: drawing2d's by default (a 16px gutter); a board's leaves more (`plot2d`'s `fitBoardBounds`).
+ * @param {boolean} [options.clearStrip]  The fit keeps clear of the view's tool strip over its top, as a
+ *   drawing's does: the room the frame measures as `--cad-tools-bottom`.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDrag = null, middlePan = false, orbitPan = false }) {
+  onTap = null, onHover = null, onDrag = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -93,6 +97,10 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   const restoredRef = useRef(restored);
   const boundsRef = useRef(bounds);
   boundsRef.current = bounds;
+  const fitBoxRef = useRef(fitBox);
+  fitBoxRef.current = fitBox;
+  const clearStripRef = useRef(clearStrip);
+  clearStripRef.current = clearStrip;
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
   const onViewMovedRef = useRef(onViewMoved);
@@ -141,7 +149,9 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const box = boundsRef.current;
     const { width, height } = sizeRef.current;
     if (!box || width <= 0 || height <= 0) return;
-    const fitted = fitTransform(box, width, height);
+    const frame = clearStripRef.current ? containerRef.current?.closest?.("[data-slot=cad-file-view]") : null;
+    const strip = frame ? Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom")) : 0;
+    const fitted = fitBoxRef.current(box, width, height, { top: Number.isFinite(strip) ? strip : 0 });
     fitScaleRef.current = fitted.scale;
     if (force || !movedRef.current) {
       movedRef.current = false;

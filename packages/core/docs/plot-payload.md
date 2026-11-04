@@ -29,7 +29,7 @@ board is the board alone, which the fit frames.
   "generator": "pcbnew 10.99",     // what wrote the file, for words
   "unrouted": 1,                   // connections still to make: the ratsnest's lines
   "sheets": [{
-    "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
+    "name": "blinky", "width": 40.0, "height": 30.0, "background": "#292929",
     "layers": [ { "id": "area", "kind": "area", "side": "both", "items": [ ... ] }, ... ]
   }],
   "board": { ... },                // the board's index, in sheet millimetres
@@ -62,7 +62,8 @@ the `CheckResult` `cad kicad_pcb drc --json` prints, as data.
 One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outline (`Edge.Cuts`)
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
-decimals. The sheet is what the renderer frames; the whole canvas is its background, KiCad's. It
+decimals. The sheet is what the renderer frames; the whole canvas is its background (the viewer's
+neutral dark grey, `#292929`, where KiCad's theme has navy). It
 clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
 where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
 

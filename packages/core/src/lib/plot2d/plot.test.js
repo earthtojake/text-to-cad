@@ -7,6 +7,7 @@ import {
   PLOT_SCHEMA_VERSION,
   drawPlot,
   drawPlotImages,
+  boardFitMargin,
   fitPlotTransform,
   grownOutline,
   layoutPlot,
@@ -51,7 +52,7 @@ const NOTE = layer("F.Fab", "fab", "front", [{ t: "text", text: "REV A", w: 0.15
 const INDEX = { origin: [20, 15], parts: [], pads: [] };
 const BOARD = {
   schemaVersion: 4, kind: "board", generator: "pcbnew 10.99", unrouted: 1,
-  sheets: [{ name: "blinky", width: 40, height: 30, background: "#001023", layers: LAYERS }], board: INDEX
+  sheets: [{ name: "blinky", width: 40, height: 30, background: "#292929", layers: LAYERS }], board: INDEX
 };
 const index = (id) => LAYERS.findIndex((entry) => entry.id === id);
 
@@ -63,7 +64,7 @@ test("a board is one sheet of layers at the page's origin, its index beside it",
   assert.deepEqual(layout.modelBounds, [0, -30, 40, 0]);
   // The extent is everything drawn: the outline's stroke reaches a shade past the sheet.
   assert.deepEqual(layout.extent.map((v) => Math.round(v * 1000) / 1000), [-0.05, -0.05, 40.05, 30.05]);
-  assert.deepEqual(layout.sheets.map(({ x, y, background, name }) => [x, y, background, name]), [[0, 0, "#001023", "blinky"]]);
+  assert.deepEqual(layout.sheets.map(({ x, y, background, name }) => [x, y, background, name]), [[0, 0, "#292929", "blinky"]]);
   assert.deepEqual(layout.sheets[0].layers.map(({ id, kind, side }) => [id, kind, side]), LAYERS.map(({ id, kind, side }) => [id, kind, side]));
   assert.equal(layout.board, INDEX);
   assert.equal(layout.unrouted, 1);
@@ -86,11 +87,25 @@ test("the fit frames the sheet the right way up, whatever is drawn past it: its 
   const [left, top] = pageToScreen(transform, 0, 0);
   const [right, bottom] = pageToScreen(transform, ...layout.bounds.slice(2));
   assert.ok(top < bottom, `page y grows downwards on screen: ${top} -> ${bottom}`);
-  // Centred, inside drawing2d's 16 px gutter, the tight axis touching it.
+  // Centred, inside a board's margin (6% of the pane's smaller side: 36 px), the tight axis touching it.
   assert.ok(Math.abs((left + right) / 2 - 300) < 1e-9 && Math.abs((top + bottom) / 2 - 500) < 1e-9);
-  assert.ok(Math.abs(right - left - 568) < 1e-9, `width is the binding axis: ${right - left}`);
+  assert.ok(Math.abs(right - left - 528) < 1e-9, `width is the binding axis: ${right - left}`);
   // screen = page * scale + offset, on both axes.
   assert.deepEqual(pageToScreen(transform, 10, 20), [10 * transform.scale + transform.offsetX, 20 * transform.scale + transform.offsetY]);
+});
+
+test("a board's fit leaves the 3D views' room round it, never under drawing2d's 16 px, and clears the tool strip", () => {
+  // 6% of the smaller side, floored at 16 px: a large pane's board breathes, a small card's keeps its gutter.
+  assert.equal(boardFitMargin(1200, 800), 48);
+  assert.equal(boardFitMargin(200, 150), 16);
+  const layout = layoutPlot(BOARD);
+  // 40 x 30 mm in 1200 x 800 with 56 px of tool strip over its top: height binds, (800 - 56 - 96) / 30 px a mm.
+  const fitted = fitPlotTransform(layout, 1200, 800, { top: 56 });
+  const [left, top] = pageToScreen(fitted, 0, 0);
+  const [right, bottom] = pageToScreen(fitted, 40, 30);
+  assert.ok(Math.abs(fitted.scale - (800 - 56 - 96) / 30) < 1e-9, `the margin on both sides of the room under the strip: ${fitted.scale}`);
+  assert.ok(Math.abs(top - (56 + 48)) < 1e-9 && Math.abs(800 - bottom - 48) < 1e-9, `48 px under the strip and above the foot: ${top}, ${bottom}`);
+  assert.ok(Math.abs((left + right) / 2 - 600) < 1e-9, "centred across");
 });
 
 test("screenToPage inverts pageToScreen, under a zoom about a point too", () => {
@@ -167,6 +182,20 @@ function recorder(width, height) {
 }
 const painted = (calls) => calls.filter(([name]) => name === "fill" || name === "stroke");
 
+test("a card's picture is the board on nothing: its area in the canvas colour, its cutout open, no box of canvas round it", () => {
+  const layout = layoutPlot(BOARD);
+  const { ctx, calls, Path2D } = recorder(800, 600);
+  drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D, backdrop: "board" });
+  assert.ok(!calls.some(([name]) => name === "fillRect"), "no rectangle of canvas");
+  const [first] = painted(calls);
+  assert.deepEqual([first[0], first[2].fill, first[3]], ["fill", "#292929", "evenodd"], "first, the board's area in the background, its cutout open");
+  // A board with no outline is its sheet, filled.
+  const bare = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: LAYERS.filter((one) => one.kind !== "area") }] });
+  const plain = recorder(800, 600);
+  drawPlot(plain.ctx, bare, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D: plain.Path2D, backdrop: "board" });
+  assert.deepEqual(plain.calls.find(([name]) => name === "fillRect"), ["fillRect", "#292929", 0, 0, 40, 30]);
+});
+
 test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", () => {
   const layout = layoutPlot(BOARD);
   const { ctx, calls, Path2D } = recorder(800, 600);
@@ -174,7 +203,7 @@ test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", (
   drawPlot(ctx, layout, { transform, pixelRatio: 2, Path2D });
   // What the canvas shows filled with the board's background (400 x 300 CSS px at 10 px/mm: the sheet here).
   const zero = (value) => (value === 0 ? 0 : value);
-  assert.deepEqual(calls.slice(0, 3).map((call) => call.map(zero)), [["save"], ["setTransform", 20, 0, 0, 20, 0, 0], ["fillRect", "#001023", 0, 0, 40, 30]]);
+  assert.deepEqual(calls.slice(0, 3).map((call) => call.map(zero)), [["save"], ["setTransform", 20, 0, 0, 20, 0, 0], ["fillRect", "#292929", 0, 0, 40, 30]]);
   assert.ok(!calls.some(([name]) => name === "clip"), "nothing is clipped to the sheet");
   const drawn = painted(calls);
   const find = (name, color, test = () => true) => drawn.filter(([kind, , style]) => kind === name && (name === "fill" ? style.fill : style.stroke) === color && test(style));
@@ -193,7 +222,7 @@ test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", (
   // A pad's hole: its golden wall, then the board's background seen through; a via's: white wall, golden hole.
   const fills = drawn.filter(([kind]) => kind === "fill").map(([, , style]) => style.fill);
   const after = (first, second) => fills.indexOf(second, fills.indexOf(first)) > fills.indexOf(first);
-  assert.ok(after(HOLE_COLORS.pad.wall, "#001023") && after(HOLE_COLORS.via.wall, HOLE_COLORS.via.fill));
+  assert.ok(after(HOLE_COLORS.pad.wall, "#292929") && after(HOLE_COLORS.via.wall, HOLE_COLORS.via.fill));
   // A surface pad's names, on its copper in the copper's name colour, at their own stroke; the via's name waits
   // for a closer view (its level of detail is 60 px/mm).
   assert.equal(find("stroke", netnameColor("F.Cu"), (style) => style.width === 0.045).length, 1);
@@ -250,7 +279,7 @@ test("knocked-out text is its box with the letters cut out, and a pad's clearanc
   drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D });
   // Without a canvas of its own to cut on (this recording double), the letters are drawn in the board's background.
   const drawn = painted(calls).map(([name, , style]) => [name, name === "fill" ? style.fill : style.stroke]);
-  assert.deepEqual(drawn.slice(0, 2), [["fill", layerColor("F.SilkS")], ["stroke", "#001023"]]);
+  assert.deepEqual(drawn.slice(0, 2), [["fill", layerColor("F.SilkS")], ["stroke", "#292929"]]);
   // The clearance outline: a hairline, then the pad.
   assert.deepEqual(painted(calls).slice(2).map(([name, , style]) => [name, style.width]), [["stroke", 0.1], ["fill", 0.1], ["stroke", 0.1]]);
   const grown = grownOutline(square(0, 0, 2, 1), 0.5);
@@ -290,7 +319,7 @@ test("the pane's frame is the sheet's background and the rasters placed over it,
     { image: "empty", x: 0, y: 0, width: 0, height: 5 }
   ] });
   assert.deepEqual(calls, [
-    ["save"], ["setTransform", 4, 0, 0, 4, 0, 0], ["fillRect", "#001023", 0, 0, 40, 30], ["drawImage", "patch", 0, 0, 40, 30], ["restore"]
+    ["save"], ["setTransform", 4, 0, 0, 4, 0, 0], ["fillRect", "#292929", 0, 0, 40, 30], ["drawImage", "patch", 0, 0, 40, 30], ["restore"]
   ]);
 });
 

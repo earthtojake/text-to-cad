@@ -348,7 +348,7 @@ function createFloorAxisSettings(floorColor, options = {}) {
         options.color,
         lightFloor
           ? mixHexColors(normalizedFloorColor, "#0f172a", 0.62)
-          : mixHexColors(normalizedFloorColor, "#f8fafc", 0.58)
+          : mixHexColors(normalizedFloorColor, "#fafafa", 0.58)
       ),
       opacity: normalizeNumber(options.opacity, DEFAULT_FLOOR_AXIS_SETTINGS.opacity, 0, 1)
     }
@@ -363,13 +363,13 @@ function createFloorGridSettings(floorColor, options = {}) {
     options.centerColor,
     lightFloor
       ? mixHexColors(normalizedFloorColor, "#0f172a", 0.48)
-      : mixHexColors(normalizedFloorColor, "#f8fafc", 0.46)
+      : mixHexColors(normalizedFloorColor, "#fafafa", 0.46)
   );
   const cellColor = normalizeColor(
     options.cellColor,
     lightFloor
       ? mixHexColors(normalizedFloorColor, "#475569", 0.26)
-      : mixHexColors(normalizedFloorColor, "#cbd5e1", 0.22)
+      : mixHexColors(normalizedFloorColor, "#d4d4d4", 0.22)
   );
   const opacity = normalizeNumber(options.opacity, DEFAULT_FLOOR_GRID_SETTINGS.opacity, 0, 1);
   const density = normalizeNumber(
@@ -909,26 +909,27 @@ const WORKBENCH_BASE_THEME_SETTINGS = Object.freeze({
   }
 });
 
-// Workbench dark mode treatment: Preview's cool blue-grey, at its mid-tone
-// (#25272b; Preview's stage runs #2c2e31 at its centre to #202226 at its
-// edges), so the tools view and Preview read as one look. Mode
+// Workbench dark mode treatment: Preview's neutral grey (chroma 0, as the app's
+// dark surfaces are), at its mid-tone (#272727; Preview's stage runs #2e2e2e at
+// its centre to #222222 at its edges), so the tools view and Preview read as one
+// look; the floor's grid and axes mix toward neutral white over it. Mode
 // overrides can only swap colors, not light intensities, so dark-part
 // visibility is tuned entirely through these colors: lifted ambient and
 // hemisphere-ground fill so shaded faces of dark parts keep their form and
-// a canvas/floor luminance step for silhouette separation. Edges stay deep
-// navy so they read as subtle technical linework on light fills; wireframe
-// display relies on the automatic light-edge contrast fallback.
-const WORKBENCH_DARK_FLOOR_COLOR = "#30333a";
+// a canvas/floor luminance step for silhouette separation. The model's edges
+// keep the look's own linework colour on its light fills; wireframe display
+// relies on the automatic light-edge contrast fallback.
+const WORKBENCH_DARK_FLOOR_COLOR = "#333333";
 
 const WORKBENCH_DARK_THEME_SETTINGS = Object.freeze({
   ...WORKBENCH_BASE_THEME_SETTINGS,
   background: {
     ...WORKBENCH_BASE_THEME_SETTINGS.background,
-    solidColor: "#25272b",
-    linearStart: "#2c2e31",
-    linearEnd: "#202226",
-    radialInner: "#2c2e31",
-    radialOuter: "#202226"
+    solidColor: "#272727",
+    linearStart: "#2e2e2e",
+    linearEnd: "#222222",
+    radialInner: "#2e2e2e",
+    radialOuter: "#222222"
   },
   floor: {
     ...WORKBENCH_BASE_THEME_SETTINGS.floor,
@@ -1216,7 +1217,7 @@ export const THEME_PRESETS = Object.freeze([
     id: "workbench-dark",
     label: "Dark",
     preview: {
-      background: "#25272b",
+      background: "#272727",
       modelColor: "#b6c4ce"
     },
     settings: WORKBENCH_DARK_THEME_PRESET_SETTINGS

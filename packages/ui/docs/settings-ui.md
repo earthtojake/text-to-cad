@@ -282,7 +282,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits), Pencil, Shapes, Measure; Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -381,8 +381,8 @@ for when it shows again.
 Select filter that is a checklist, because KiCad's is: the chevron's dropdown, headed "Pick",
 holds a grid of stock checkbox items in KiCad's two columns, row by row — **All items** and
 **Locked items**, **Footprints** and **Text**, **Tracks** and **Vias**, **Pads** and **Graphics**,
-**Zones** and **Rule Areas**, then **Dimensions** — each with its kind's glyph and its check at the
-row's right end. Ticking a box leaves the menu up (a press on the board puts it away) and takes
+**Zones** and **Rule Areas**, then **Dimensions** — each its name alone, with no glyph (KiCad's
+boxes have none), and its check at the row's right end. Ticking a box leaves the menu up (a press on the board puts it away) and takes
 Select up. All items ticks or unticks every kind, and shows a dash while some are ticked; Locked
 items is no kind: ticked, a click takes what KiCad saved locked as well (a pad is taken whatever
 its part, as KiCad's single click), and it is unticked as a board opens, as KiCad's. Every kind is
@@ -541,19 +541,22 @@ reference, value, footprint name and MPN, a net's name), then the parts in the s
 their footprints record (a sheet's name without `.sch`/`.kicad_sch`; on a board that records none,
 the kinds: ICs, Resistors, ...), each part with its pads, then Nets (the `unconnected-(...)` pins
 shut under their own group) — a block's name selects every part in it, a chip each, a part's,
-pad's or net's selects it as a click on the board does, and each frames what it picked; a selected
-net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers
-headed by KiCad's Layer Display Options, **Dim other layers** (the checkbox at its row's right end,
-as every switch in a settings form), then the **Zones** and **Tracks** opacity rows (a slider and
-its committed value; 60% and 100%), then the layer list and its Other group, where a press on a
-board layer's row makes it the active layer (a filled dot after its name), drawn on top, the one
-Dim leaves bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot
---display` draws too; and, after them, the shell's own **Animation** for a
+pad's or net's selects it as a click on the board does, and each frames what it picked, opening
+and scrolling nothing; a group's name (Nets, the unconnected pins) is a label: only a row's chevron
+opens or shuts it, as the STEP tree's. It opens as its blocks and "Nets (N)", a block of several
+parts and the Nets shut; a pick on the board opens its row's owners and scrolls it into view. A selected
+net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers: the
+layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
+active layer (a filled dot after its name), drawn on top, the one Display's Dim other layers leaves
+bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
+draws too; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
-section, a tree's a tree icon named for it (Model tree, Links), Position's a spline, Animation's a
-clapperboard, any other section's a page named for it. Preview has no file sidebar: every
+section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
+drawing's, a board's), a board's Circuit lucide's CircuitBoard, Position's a spline, Animation's a
+clapperboard, any other section's a page named for it (a section names its own with `ToolPanel`'s
+`icon`; no two tiles of a file share one). Preview has no file sidebar: every
 section stays mounted, out of sight, and a routine plays from Preview's playbar.
 
 - **One section at a time.** None is open as a file opens. A tile opens its section in a panel
@@ -707,9 +710,14 @@ label. Checks sit at the row's right end. Choosing a mode closes the menu; ticki
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has Display for its
-layer presets (Board, Copper, Assembly, Placement), copper pours and top/bottom view. Its
-Layers sidebar can override a preset, shown as Custom; its active layer, Dim and the zones' and
-tracks' opacities are kept through a change of mode. It has no 3D Projection or Preview.
+layer presets (Board, Copper, Assembly, Placement), then **Settings** — Copper pours, View from
+below and **Dim other layers**, checkbox items — then **Opacity**, KiCad's Layer Display Options'
+**Zones** (60%) and **Tracks** (100%): each a row of its glyph and name where an item's are, a
+slider and its committed percentage (Enter or blur commits; Escape in the value puts it back and
+keeps the menu open), the menu 14rem wide for them; a slide or a tick leaves the menu open. Its
+Layers sidebar can override a preset, shown as Custom, and chooses the active layer Dim leaves
+bright; the active layer, Dim and the opacities are kept through a change of mode. It has no 3D
+Projection or Preview.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

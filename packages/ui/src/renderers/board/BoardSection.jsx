@@ -1,6 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye } from "lucide-react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { CircuitBoard, Eye } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
@@ -17,6 +17,8 @@ import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
 import { boardTreeAncestors, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
 
 const EMPTY = Object.freeze([]);
+// The Nets group's row (`boardTree.js`): shut as the tab opens.
+const NETS_GROUP = "group:nets";
 // The room the eye takes at a row's right end: the row's `--row-actions`.
 const ROW_ACTIONS_WIDTH = "1.5rem";
 // A part or a net can be isolated; a pad is seen with its part, a group is many things.
@@ -64,7 +66,15 @@ function visibleRows(roots, expanded) {
 
 // One row of the tree: a block (a schematic sheet, or a kind), a group (Nets), a part, a net or a pad, with one
 // glyph in one column — a branch's chevron, a pad's own — its name, its muted detail, and a part's or net's eye.
-// A block's name selects every part in it; a group's opens or shuts it.
+// A block's name selects every part in it; a group's name is a label, and does nothing. Only a branch's
+// chevron opens or shuts it, as the STEP tree's.
+const ROW_NAME_CLASS = "flex h-full min-w-0 flex-1 items-center gap-1 pr-2 text-left";
+function RowName({ node }) {
+  return <>
+    <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
+    {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
+  </>;
+}
 function BoardRow({ node, depth, branch, open, selected, isolated, toggle, choose, hover, onIsolate }) {
   const { t } = useI18n();
   const pickable = node.kind !== "group";
@@ -78,14 +88,15 @@ function BoardRow({ node, depth, branch, open, selected, isolated, toggle, choos
       className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node)}>
       <TreeRowChevron expanded={open} />
     </button> : null}
-    <button type="button" aria-label={pickable ? t("tree.select", { name: node.label }) : node.label} aria-pressed={pickable ? selected : undefined}
-      onClick={event => (pickable ? choose(node, event) : toggle(node))} data-board-block={block ? node.id : undefined}
-      className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+    {pickable ? <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected}
+      onClick={event => choose(node, event)} data-board-block={block ? node.id : undefined}
+      className={cn(ROW_NAME_CLASS, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         branch && "pl-1", eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
       {branch ? null : <KindGlyph kind={node.kind} />}
-      <TreeRowLabel className="max-w-full shrink-0">{node.label}</TreeRowLabel>
-      {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
-    </button>
+      <RowName node={node} />
+    </button> : <span className={cn(ROW_NAME_CLASS, "cursor-default", branch && "pl-1")} data-board-group={node.id}>
+      <RowName node={node} />
+    </span>}
     {eye ? <IsolateEye node={node} on={isolated} onToggle={onIsolate} /> : null}
   </TreeRowSurface>;
 }
@@ -122,9 +133,12 @@ const MemoBoardSearchRow = memo(BoardSearchRow);
  * the board does, under any tool, and frames it; a press on a block's name selects every part in
  * it, a chip each, and frames them; a selected net is lit on the board, the rest stepped back, as
  * KiCad's net highlight; a part's or a net's eye isolates it. It opens as every tree does, until
- * there is a choice (`kit/inspector/treeExpansion.js`), but for a block of several parts, shut until
- * the person opens it. A pick on the board opens its row's owners
- * and brings it into view, once; from the first row the person opens or shuts, the shape is theirs.
+ * there is a choice (`kit/inspector/treeExpansion.js`), but for a block of several parts and the
+ * Nets, shut until the person opens them: the blocks and "Nets (N)", closed. Only a row's chevron
+ * opens or shuts it, as the STEP tree's: a block's name selects its parts, a group's (Nets,
+ * Unconnected pins) is a label. A pick on the board opens its row's owners and brings it into view,
+ * once; a press in the tree opens and scrolls nothing (its row is in view). From the first row the
+ * person opens or shuts, the shape is theirs.
  * The viewer is read-only: nothing here edits the file.
  *
  * @param {{ index: object, selection: ReturnType<typeof import("../kit/tools/select/useSceneSelection.js").useSceneSelection>,
@@ -136,10 +150,12 @@ export default function BoardSection({ index, selection, isolated = EMPTY, onIso
   const tree = useMemo(() => buildBoardTree(index, t), [index, t]);
   const rowHeight = useTreeRowHeight();
   // Untouched, the tree is the rule's shape for the board it shows; the person's from their first change.
-  // A block of more than one part opens when the person opens it: a board's blocks are many, and long.
+  // A block of more than one part, and the Nets, open when the person opens them: a board's blocks
+  // and nets are many, and long.
   const opened = useMemo(() => {
     const open = openUntilChoice(tree.roots, node => node.children);
     for (const node of tree.roots) if (node.kind === "block" && node.children.length > 1) open.delete(node.id);
+    open.delete(NETS_GROUP);
     return open;
   }, [tree]);
   const openedRef = useRef(opened);
@@ -182,9 +198,19 @@ export default function BoardSection({ index, selection, isolated = EMPTY, onIso
     select(node.selector, { multiSelect: additive(event) });
     onFrameRef.current?.([node.selector]);
   }, [select, clear]);
+  // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing. The
+  // selection it makes is marked as the tree's (`pressedInTree`), and the reveal below passes it by.
+  const pressedInTree = useRef(false);
+  const chooseInTree = useCallback((node, event) => {
+    pressedInTree.current = true;
+    // Spent by the selection it makes (committed within the press), or, if it made none, at once after.
+    setTimeout(() => { pressedInTree.current = false; }, 0);
+    choose(node, event);
+  }, [choose]);
   const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown } = useTreeSearch(tree.roots);
 
-  // A pick on the board opens its row's owners, and its row comes into view, once.
+  // A pick on the board opens its row's owners, and its row comes into view, once; a press in the
+  // tree (above) does neither. A search hit's press does, once its filter is cleared: its row was not in view.
   const rowElements = useRef(new Map());
   const registerRow = useCallback((key, element) => { if (element) rowElements.current.set(key, element); else rowElements.current.delete(key); }, []);
   const target = useMemo(() => {
@@ -192,6 +218,11 @@ export default function BoardSection({ index, selection, isolated = EMPTY, onIso
     return last ? boardTreeNodeIds(last).find(id => tree.nodesById.has(id)) || null : null;
   }, [selected, tree]);
   const revealed = useRef(null);
+  useLayoutEffect(() => {
+    if (!pressedInTree.current) return;
+    pressedInTree.current = false;
+    revealed.current = target;
+  }, [selected, target]);
   useEffect(() => {
     if (!target || searching || revealed.current === target) return;
     const missing = boardTreeAncestors(tree, target).filter(id => !expanded.has(id));
@@ -209,7 +240,7 @@ export default function BoardSection({ index, selection, isolated = EMPTY, onIso
   const renderTreeRow = at => {
     const row = rows[at];
     return <MemoBoardRow node={row.node} depth={row.depth} branch={row.branch} open={row.open} selected={highlighted.has(row.node.id)}
-      isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={choose} hover={hover} onIsolate={onIsolate} />;
+      isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={chooseInTree} hover={hover} onIsolate={onIsolate} />;
   };
   const renderSearchRow = at => {
     const match = matches[at], id = match.entry.node.id;
@@ -217,7 +248,7 @@ export default function BoardSection({ index, selection, isolated = EMPTY, onIso
       choose={choose} hover={hover} onIsolate={onIsolate} />;
   };
   // Headed by its filter, always there: Escape or its X clears it.
-  return <ToolPanel id="board" label={t("board.text.circuit")} fit="tree" resizable collapsible={false}
+  return <ToolPanel id="board" label={t("board.text.circuit")} fit="tree" resizable collapsible={false} icon={CircuitBoard}
     header={<TreeFilterInput label={t("board.text.filter_circuit")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onKeyDown} dense
       yieldWhileTyping className="px-0 shadow-none" />}>
     <div className="flex flex-col text-tiny" aria-label={t("board.text.board_parts_and_nets")}>

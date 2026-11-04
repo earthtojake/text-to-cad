@@ -46,6 +46,10 @@ ZONE_OPACITY = 0.6
 # KiCad's "Inactive layers: Dim": every layer but the active one at this share (plot2d's DIM_OPACITY).
 DIM_OPACITY = 0.3
 # What may be the active layer: a board layer, not the area or what goes through the board.
+#: The room a still's fit leaves round the board, as the board view's (plot2d's ``boardFitMargin``):
+#: this share of the still's smaller side, never less than this many CSS pixels.
+BOARD_FIT_MARGIN_SHARE = 0.06
+BOARD_FIT_MARGIN_PX = 16
 ACTIVE_KINDS = {"copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "outline"}
 # A hole's fill and its plated wall (None: the board's background, seen through).
 HOLES = {"pad": (None, "#E3B72E"), "via": ("#E3B72E", "#ECECEC"), "npth": ("#1AC4D2", None)}
@@ -409,9 +413,12 @@ class Held:
             cx, cy, half = plan_view(still.camera, self.path.name)
             scale = height / (2 * half)
         else:
+            # The board view's fit (plot2d's ``boardFitMargin``): 6% of the still's smaller side a side,
+            # never under 16px; a still has no tool strip over it to clear.
             cx, cy = sheet["width"] / 2, -sheet["height"] / 2
-            scale = min(max(width - 32 * ss, width / 2) / max(sheet["width"], 1e-9),
-                        max(height - 32 * ss, height / 2) / max(sheet["height"], 1e-9))
+            margin = max(BOARD_FIT_MARGIN_PX * ss, BOARD_FIT_MARGIN_SHARE * min(width, height))
+            scale = min(max(width - 2 * margin, width / 2) / max(sheet["width"], 1e-9),
+                        max(height - 2 * margin, height / 2) / max(sheet["height"], 1e-9))
 
         def place(point):
             x = sheet["width"] - point[0] if bottom else point[0]

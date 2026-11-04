@@ -386,7 +386,8 @@ direction at the card's aspect, on its own (no floor, grid or axes, whatever the
 person turned on) and on transparency, so it suits either scheme, off to the side of the view, so
 the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
-of its own). A view that goes before it settles rejects it. `useModelThumbnail`
+of its own, and a KiCad board its fitted board, its area in the canvas colour and nothing round it,
+`drawPlot`'s `backdrop: "board"`). A view that goes before it settles rejects it. `useModelThumbnail`
 keeps one per revision of a file per mounted view (a model rebuilt while it is
 open is pictured again once its new revision is drawn), and only for the file the
 view still shows. A model's document is pictured as a file is, by its id: its catalog
