@@ -41,9 +41,11 @@ class ManufacturingCheckCommand(unittest.TestCase):
     def test_molding_answers_one_json_line_with_its_measurements(self) -> None:
         code, out, _ = _run("stl", str(self.box), "--process", "molding", "--pull", "-z", "--json")
         payload = json.loads(out)
-        self.assertEqual(code, 0)
+        # A plain box has no draft: the generic rules fail it (exit 1) and say where.
+        self.assertEqual(code, 1)
         self.assertEqual(sorted(payload), ["findings", "measurements", "ok", "path", "summary"])
-        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["ok"])
+        self.assertIn("molding.draft_min", [f["code"] for f in payload["findings"] if f["severity"] == "error"])
         self.assertEqual(payload["measurements"]["draft"]["pull_axis"], [0.0, 0.0, -1.0], "--pull -z reached argparse")
         finding = next(f for f in payload["findings"] if f["code"] == "zero_draft_walls")
         self.assertEqual((finding["severity"], len(finding["location"].split(", "))), ("warning", 3))

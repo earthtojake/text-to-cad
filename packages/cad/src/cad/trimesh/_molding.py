@@ -31,6 +31,8 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
+from cad._internal import meshops_molding as ops
+
 # Length units a mesh file may carry, as a factor to millimetres: an STL is unitless, so the caller
 # states which one (the check's one table).
 from cad._internal.manufacturing import UNITS_MM as _UNITS_MM
@@ -82,32 +84,14 @@ def _prepared(mesh: trimesh.Trimesh, units: str = "mm") -> trimesh.Trimesh:
 
 
 def _pull_vector(spec: str) -> np.ndarray:
-    """`z`, `+z`, `-y`, or `x,y,z` components, normalised.
+    """`z`, `+z`, `-y`, or `x,y,z` components, normalised (``meshops_molding.pull_vector``).
 
     A leading sign belongs to an AXIS NAME only. `-1,0,1` is a vector whose
     first component is negative, not the negation of `1,0,1`: reading the sign
     as global turns it into `(-1,0,-1)` and measures a different axis than the
     one asked for.
     """
-    text = (spec or "").strip().lower()
-    if not text:
-        raise ValueError("pull is empty; give an axis name (z, -y) or three comma-separated components")
-    named = text[1:] if text[:1] in "+-" else text
-    if named in _AXES:
-        sign = -1.0 if text[:1] == "-" else 1.0
-        vec = np.array(_AXES[named], dtype=float) * sign
-    else:
-        try:
-            parts = [float(v) for v in text.split(",")]
-        except ValueError as exc:
-            raise ValueError(f"pull must be an axis name or three comma-separated components, got {spec!r}") from exc
-        if len(parts) != 3:
-            raise ValueError(f"pull must be an axis name or three comma-separated components, got {spec!r}")
-        vec = np.array(parts, dtype=float)
-    norm = float(np.linalg.norm(vec))
-    if not np.isfinite(norm) or norm == 0.0:
-        raise ValueError("pull vector has zero length")
-    return vec / norm + 0.0  # + 0.0 so a negated axis prints 0.0, not -0.0
+    return ops.pull_vector(spec)
 
 
 def _shells(mesh: trimesh.Trimesh) -> tuple[list, int]:
@@ -415,6 +399,8 @@ def _draft_facts(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zer
             "location_xyz": [round(float(v), 2) for v in centers[i]],
             "note": "one triangle; use min_wall_draft for a figure that does not move with the mesh",
         }
+        for g in pooled:
+            g.pop("_members", None)
         result["lowest_draft_wall_faces"] = [
             {"draft_deg": g["draft_deg"], "area_mm2": g["area_mm2"], "surface": g["surface"],
              **({"spread_deg": g["spread_deg"]} if "spread_deg" in g else {}),
@@ -522,6 +508,7 @@ def _surface_faces(mesh: trimesh.Trimesh, sel: np.ndarray, pull: np.ndarray, alo
             "spread_deg": round(high - low, 3),
             "surface": "curved",
             "opens_toward": _opens(float(np.average(along[surface], weights=weight)), zero_tol),
+            "_members": surface,
         })
     return groups
 
@@ -706,6 +693,7 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
     total_area = 0.0
     total_faces = 0
     pooled: list = []
+    features: list = []
     probe_edge = 0.0
     probe_notes: list[str] = []
     for index, body in enumerate(bodies):
@@ -744,6 +732,7 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         total_trapped += float(areas[trapped].sum())
         total_faces += int(candidates.sum())
         pooled += _pooled_faces(probe, candidates, pull, along, zero_tol=zero_tol)
+        features += _undercut_features(body, probe, candidates, pull, zero_tol, eps, max(probe_edge, eps))
         per_body.append({
             "body": index,
             "candidate_area_mm2": round(float(areas[candidates].sum()), 2),
@@ -764,6 +753,18 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         "trapped_zero_draft_area_mm2": round(total_trapped, 2),
         "largest_candidate_faces": sorted(pooled, key=lambda g: -g["area_mm2"])[:8],
     }
+    features.sort(key=lambda item: -item["trapped_area_mm2"])
+    releases = [item["release"] for item in features]
+    result.update({
+        "undercut_count": len(features),
+        "external_count": sum(1 for item in features if item["kind"] == "external"),
+        "internal_count": sum(1 for item in features if item["kind"] == "internal"),
+        "side_action_count": sum(item["side_action_count"] for item in features),
+        "lifter_count": releases.count("lifter"),
+        "collapsible_core_count": releases.count("collapsible_core"),
+        "unreleasable_count": releases.count("none"),
+        "items": features[:300],
+    })
     if probe_notes:
         result["probe_resolution_note"] = " ".join(probe_notes)
     if len(bodies) > 1:
@@ -937,7 +938,8 @@ def _mark_partial(report: dict) -> bool:
 
 
 def measure(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol: float) -> dict:
-    """Every family for one pull: the mesh, its scale, draft, undercuts and projection."""
+    """Every family for one pull: the mesh, its scale, draft, undercuts, projection, and the families it
+    shares with exact geometry -- thickness, ribs, bosses, corners, parting and envelope."""
     report = {
         "mesh": _safe(_mesh_facts, mesh),
         "scale": _safe(_scale_hint, mesh),
@@ -945,8 +947,22 @@ def measure(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol
         "undercuts": _safe(_undercut_facts, mesh, pull, zero_tol),
         "projection": _safe(_projection_facts, mesh, pull),
     }
+    _shared_families(mesh, pull, wall_limit, zero_tol, report)
+    report["notes"] = list(_MESH_NOTES)
     _mark_partial(report)
     return report
+
+
+#: What a mesh cannot say that exact geometry does.
+_MESH_NOTES = (
+    "a mesh has no faces: every item is placed at x, y, z, a 'face' is a region of triangles joined across "
+    "edges turning under 20 deg",
+    "a curved face's draft is read off its chords (low by up to its spread_deg); exact geometry reads a cylinder's "
+    "or cone's exactly",
+    "fillet radii are not read: a filleted corner or rib root joins its faces into one region, so corners lists "
+    "sharp internal corners only and ribs only those meeting their base at a sharp edge",
+    "bosses are found only with their axis along the pull",
+)
 
 
 def pulls(mesh: trimesh.Trimesh, wall_limit: float, zero_tol: float) -> dict:
@@ -958,3 +974,591 @@ def pulls(mesh: trimesh.Trimesh, wall_limit: float, zero_tol: float) -> dict:
     }
     _mark_partial(report)
     return report
+
+
+# --- the families a mesh shares with exact geometry (``meshops_molding``) ---------------------------------
+#
+# A mesh has no faces a ref names, so every item here is placed at x, y, z; and it has no surfaces, so a
+# "face" is a REGION: triangles joined across edges that turn less than _SMOOTH_DEG (a box's side, a boss's
+# whole cylinder; a fillet joins the faces it blends into one region).
+
+_SMOOTH_DEG = 20.0
+#: A concave edge turning this much is a sharp internal corner: a square one turns 90, and a fillet
+#: exported coarsely enough to turn 45 a facet (two facets round a quarter) is not one.
+_CORNER_TURN_DEG = 60.0
+_THICKNESS_SAMPLES = 2400
+_THICK_RATIO = 1.5
+
+
+def _cast(mesh: trimesh.Trimesh):
+    """``cast(origins, directions)``: the distance to the first triangle each ray meets, inf for none."""
+    def cast(origins: np.ndarray, directions: np.ndarray) -> np.ndarray:
+        found = np.full(len(origins), np.inf)
+        if not len(origins):
+            return found
+        locations, index_ray, _index_tri = mesh.ray.intersects_location(
+            ray_origins=origins, ray_directions=directions, multiple_hits=False)
+        if len(index_ray):
+            found[index_ray] = np.linalg.norm(locations - origins[index_ray], axis=1)
+        return found
+    return cast
+
+
+def _xyz(point) -> list:
+    return [round(float(v), 3) + 0.0 for v in point]
+
+
+def _clusters(points: np.ndarray, reach: float) -> list[np.ndarray]:
+    """Points grouped where they lie within ``reach`` of one another."""
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+    from scipy.spatial import cKDTree
+
+    if not len(points):
+        return []
+    pairs = cKDTree(points).query_pairs(reach, output_type="ndarray")
+    graph = coo_matrix((np.ones(len(pairs)), (pairs[:, 0], pairs[:, 1])), shape=(len(points), len(points)))
+    count, labels = connected_components(graph, directed=False)
+    return [np.nonzero(labels == label)[0] for label in range(count)]
+
+
+def _undercut_features(body: trimesh.Trimesh, probe: trimesh.Trimesh, candidates: np.ndarray, pull: np.ndarray,
+                       zero_tol: float, eps: float, edge: float) -> list:
+    """The candidate triangles grouped into features (within 1.5 probe edges of one another), each with
+    what releases it (``meshops_molding.classify_undercut`` against the body's own rays)."""
+    index = np.nonzero(candidates)[0]
+    if not len(index):
+        return []
+    centers, normals, areas = probe.triangles_center[index], probe.face_normals[index], probe.area_faces[index]
+    cast = _cast(body)
+    diag = float(np.linalg.norm(body.extents)) or 1.0
+    found = []
+    # A cluster this small (2e-4 of the body's surface) is a ray grazing a corner between two facets, not a
+    # feature: the corpus's artifacts are 0.01-0.03 mm2 on a 12000 mm2 tray.
+    least = 2e-4 * float(body.area)
+    for group in _clusters(centers, 1.5 * edge):
+        area = float(areas[group].sum())
+        if area <= least:
+            continue
+        # Each triangle's centre and three points toward its corners: a long facet down a bore is read
+        # along its length (the slide's stroke is the farthest point's).
+        corners = probe.triangles[index[group]]
+        spread = [centers[group]] + [(4.0 * corners[:, k] + corners[:, (k + 1) % 3] + corners[:, (k + 2) % 3]) / 6.0
+                                     for k in range(3)]
+        points = np.vstack(spread) + np.tile(normals[group], (4, 1)) * eps
+        release = ops.classify_undercut(points, np.tile(normals[group], (4, 1)), pull, cast, scale=diag,
+                                        zero_tol_deg=zero_tol)
+        side = np.asarray(release["vectors"][0]) if release["vectors"] else ops.basis(pull)[0]
+        across = np.cross(pull, side)
+        across /= np.linalg.norm(across) or 1.0
+        heights, widths = centers[group] @ pull, centers[group] @ across
+        if release["release"] == "side_action" and (release["stroke_mm"] or 0.0) <= 2.0 * eps:
+            continue  # freed by no travel at all: blocked only by the surface it was cast from
+        found.append({
+            "trapped_area_mm2": round(area, 2), "xyz": _xyz((centers[group] * areas[group, None]).sum(0) / area),
+            "kind": release["kind"], "release": release["release"], "side_actions": release["directions"],
+            "side_action_count": len(release["directions"]) if release["release"] == "side_action" else 0,
+            "angled": any(release["angled"]),
+            "stroke_mm": round(release["stroke_mm"], 3) if release["stroke_mm"] is not None else None,
+            "height_mm": round(float(np.ptp(heights)), 3), "width_mm": round(float(np.ptp(widths)), 3),
+            "triangle_count": int(len(group))})
+    return found
+
+
+class _Regions:
+    """A mesh's regions (see above), their adjacency and its kind (concave, convex) across sharp edges."""
+
+    def __init__(self, mesh: trimesh.Trimesh) -> None:
+        self.mesh = mesh
+        adjacency = mesh.face_adjacency
+        angles = np.degrees(mesh.face_adjacency_angles) if len(adjacency) else np.zeros(0)
+        smooth = adjacency[angles < _SMOOTH_DEG] if len(adjacency) else np.zeros((0, 2), dtype=int)
+        self.label = trimesh.graph.connected_component_labels(smooth, node_count=len(mesh.faces))
+        self.count = int(self.label.max()) + 1 if len(self.label) else 0
+        self.areas = np.bincount(self.label, weights=mesh.area_faces, minlength=self.count)
+        sharp = angles >= _SMOOTH_DEG
+        convex = mesh.face_adjacency_convex if len(adjacency) else np.zeros(0, dtype=bool)
+        self.links: dict[int, dict[int, dict]] = {}
+        if len(adjacency):
+            edges = mesh.face_adjacency_edges
+            for (fa, fb), concave, angle, edge in zip(adjacency[sharp], ~convex[sharp], angles[sharp], edges[sharp]):
+                a, b = int(self.label[fa]), int(self.label[fb])
+                if a == b:
+                    continue
+                for x, y in ((a, b), (b, a)):
+                    link = self.links.setdefault(x, {}).setdefault(y, {"concave": 0.0, "convex": 0.0, "turn": 0.0,
+                                                                        "angle": 0.0, "points": []})
+                    length = float(np.linalg.norm(mesh.vertices[edge[0]] - mesh.vertices[edge[1]]))
+                    link["concave" if concave else "convex"] += length
+                    # the turn across the link, weighted by length: one sliver's crease does not make a corner
+                    link["turn"] += float(angle) * length
+                    link["angle"] = link["turn"] / max(link["concave"] + link["convex"], 1e-12)
+                    link["points"].append(mesh.vertices[edge].mean(axis=0))
+        normals = mesh.face_normals
+        self.normal = np.zeros((self.count, 3))
+        np.add.at(self.normal, self.label, normals * mesh.area_faces[:, None])
+        size = np.linalg.norm(self.normal, axis=1)
+        self.normal = self.normal / np.where(size > 0, size, 1.0)[:, None]
+        spread = np.ones(self.count)
+        np.minimum.at(spread, self.label, np.einsum("ij,ij->i", normals, self.normal[self.label]))
+        self.planar = spread > np.cos(np.radians(1.0))
+        self.centroid = np.zeros((self.count, 3))
+        np.add.at(self.centroid, self.label, mesh.triangles_center * mesh.area_faces[:, None])
+        self.centroid /= np.where(self.areas > 0, self.areas, 1.0)[:, None]
+
+    def coplanar(self, a: int, b: int) -> bool:
+        if a == b:
+            return True
+        if not (self.planar[a] and self.planar[b]) or float(self.normal[a] @ self.normal[b]) < np.cos(np.radians(0.5)):
+            return False
+        scale = max(float(np.linalg.norm(self.mesh.extents)), 1.0)
+        return abs(float((self.centroid[b] - self.centroid[a]) @ self.normal[a])) < 1e-4 * scale
+
+    def faces(self, region: int) -> np.ndarray:
+        return np.nonzero(self.label == region)[0]
+
+    def concave_neighbours(self, region: int) -> list[int]:
+        return [other for other, link in self.links.get(region, {}).items() if link["concave"] > link["convex"]]
+
+    def convex_neighbours(self, region: int) -> set[int]:
+        return {other for other, link in self.links.get(region, {}).items() if link["convex"] >= link["concave"]}
+
+    def vertices(self, region: int) -> np.ndarray:
+        return self.mesh.vertices[np.unique(self.mesh.faces[self.faces(region)])]
+
+
+def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
+    count = min(_THICKNESS_SAMPLES, max(200, len(mesh.faces)))
+    points, faces = trimesh.sample.sample_surface_even(mesh, count, seed=0) if hasattr(
+        trimesh.sample, "sample_surface_even") else trimesh.sample.sample_surface(mesh, count, seed=0)
+    if len(points) < 50:
+        points, faces = trimesh.sample.sample_surface(mesh, count, seed=0)
+    faces = np.asarray(faces, dtype=int)
+    normals = mesh.face_normals[faces]
+    weights = np.full(len(points), float(mesh.area) / max(len(points), 1))
+    spacing = np.full(len(points), float(np.sqrt(float(mesh.area) / max(len(points), 1))))
+    diag = float(np.linalg.norm(mesh.extents)) or 1.0
+    eps = min(max(1e-4 * diag, 1e-5), 0.01)
+    ray = _cast(mesh)(points - normals * eps, -normals) + eps
+    owner = regions.label[faces]
+    # A point is never held by its own region: across a curved region's chords the ball would be held by
+    # the next facet's crease (exact geometry has none there); the ray straight through bounds it instead.
+    values, bound = ops.ball_thickness(points, normals, ray, mesh.vertices, mesh.faces, others=points,
+                                       point_face=owner, triangle_face=regions.label, others_face=owner)
+    held = np.array([b >= 0 and int(regions.label[b]) in regions.convex_neighbours(int(o))
+                     for b, o in zip(bound, owner)], dtype=bool)
+    finite = np.isfinite(values)
+    clean = finite & ~held
+    if clean.any() and weights[clean].sum() >= 0.5 * weights[finite].sum():
+        nominal = ops.weighted_median(values[clean], weights[clean])
+    else:
+        nominal = ops.weighted_median(values, weights)
+    per: dict[int, dict] = {}
+    for region in np.unique(owner[finite]):
+        mine = (owner == region) & finite
+        v, w, tidy = values[mine], weights[mine], clean[mine]
+        narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
+        median = low = float(v.max()) if narrow else ops.weighted_median(v[tidy], w[tidy])
+        if not narrow:
+            low = ops.weighted_quantile(v[tidy], w[tidy], 0.1)
+        top = int(np.argmax(v))
+        per[int(region)] = {"median": median, "low": low, "max": float(v[top]), "at": points[mine][top],
+                            "narrow": narrow}
+    for region, face in per.items():
+        if face["narrow"]:
+            walls = [per[o]["median"] for o in regions.convex_neighbours(region) if o in per and not per[o]["narrow"]]
+            if walls:
+                face["median"] = face["low"] = float(np.median(walls))
+                face["max"] = max(face["max"], face["median"])
+    if per:
+        # The nominal wall: the area median of the regions' own walls (a narrow region's from its neighbours).
+        nominal = ops.weighted_median(np.array([face["median"] for face in per.values()]),
+                                      np.array([float(regions.areas[region]) for region in per]))
+    items, sections = [], []
+    found = ops.transitions(points, values, owner, ~held, spacing, nominal) if nominal else {}
+    for region, face in per.items():
+        if not nominal:
+            break
+        item = {"thickness_mm": round(face["median"], 3), "min_mm": round(face["low"], 3),
+                "max_mm": round(face["max"], 3), "nominal_mm": round(nominal, 3),
+                "ratio_to_nominal": round(face["max"] / nominal, 3), "thin_ratio": round(face["median"] / nominal, 3),
+                "area_mm2": round(float(regions.areas[region]), 2), "xyz": _xyz(face["at"])}
+        if region in found:
+            item["transition_ratio"] = round(found[region]["ratio"], 3)
+            item["transition_mm"] = [round(t, 3) for t in found[region]["thickness"]]
+        items.append(item)
+        if face["max"] > _THICK_RATIO * nominal:
+            sections.append({"thickness_mm": item["max_mm"], "ratio_to_nominal": item["ratio_to_nominal"],
+                             "xyz": item["xyz"]})
+    sections.sort(key=lambda section: -section["ratio_to_nominal"])
+    thin = sorted(items, key=lambda item: item["thickness_mm"])[:100]
+    thick = sorted(items, key=lambda item: -item["ratio_to_nominal"])[:100]
+    steep = sorted((i for i in items if "transition_ratio" in i), key=lambda item: item["transition_ratio"])[:100]
+    chosen, seen = [], set()
+    for item in thin + thick + steep:
+        if id(item) not in seen:
+            seen.add(id(item))
+            chosen.append(item)
+    return {
+        "_per": {region: face["median"] for region, face in per.items()},
+        "nominal_mm": round(nominal, 3) if nominal else None,
+        "min_mm": round(min(i["thickness_mm"] for i in items), 3) if items else None,
+        "min_point_mm": round(min(i["min_mm"] for i in items), 3) if items else None,
+        "max_mm": round(max(i["max_mm"] for i in items), 3) if items else None,
+        "median_mm": round(ops.weighted_median(values, weights), 3) if finite.any() else None,
+        "ratio_max_nominal": round(max(i["max_mm"] for i in items) / nominal, 3) if items and nominal else None,
+        "thick_ratio_reported": _THICK_RATIO, "thick_sections": sections[:20], "thick_section_count": len(sections),
+        "sample_count": int(finite.sum()), "region_count": len(items), "items": chosen,
+        "method": ("rolling ball on the mesh: at points spread evenly over the triangles, the diameter of the "
+                   "largest ball touching the surface there that no triangle cuts into, never more than the ray "
+                   "straight through; per region (triangles joined across edges under 20 deg) the area median, "
+                   "10th percentile and most. Exact for flat walls; a curved wall is read off its chords"),
+    }
+
+
+def _ribs_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_of, nominal: float | None,
+               used: set) -> list:
+    """Ribs on a mesh: two opposite flat regions whose rays into the material come out of one another, both
+    meeting one flat base region at a sharp concave edge (a filleted root joins them all into one region:
+    not found here)."""
+    cast = _cast(mesh)
+    diag = float(np.linalg.norm(mesh.extents)) or 1.0
+    eps = min(max(1e-4 * diag, 1e-5), 0.01)
+    items, seen = [], set()
+    for a in range(regions.count):
+        if not regions.planar[a]:
+            continue
+        na = regions.normal[a]
+        bases_a = [b for b in regions.concave_neighbours(a)
+                   if regions.planar[b] and abs(float(regions.normal[b] @ na)) < np.sin(np.radians(20.0))]
+        if not bases_a:
+            continue
+        tris = regions.faces(a)
+        centers = mesh.triangles_center[tris]
+        locations, index_ray, index_tri = mesh.ray.intersects_location(
+            ray_origins=centers - mesh.face_normals[tris] * eps, ray_directions=-mesh.face_normals[tris],
+            multiple_hits=False)
+        if not len(index_ray):
+            continue
+        hit_region = regions.label[index_tri]
+        distance = np.linalg.norm(locations - centers[index_ray], axis=1)
+        for b in np.unique(hit_region):
+            b = int(b)
+            if b == a or (min(a, b), max(a, b)) in seen or not regions.planar[b]:
+                continue
+            if float(regions.normal[b] @ na) > -np.cos(np.radians(12.0)):
+                continue
+            if (hit_region == b).sum() < 0.5 * len(tris):
+                continue
+            bases_b = regions.concave_neighbours(b)
+            common = [base for base in bases_a if any(regions.coplanar(base, other) for other in bases_b)]
+            if not common:
+                continue
+
+            def standing(base: int) -> float:
+                origin = regions.centroid[base]
+                return float(((regions.vertices(a) - origin) @ regions.normal[base]).max())
+
+            base = min(common, key=standing)
+            height = standing(base)
+            across = distance[hit_region == b]
+            root, tip = float(across.max()), float(across.min())
+            along = np.cross(regions.normal[base], na)
+            along /= np.linalg.norm(along) or 1.0
+            length = float(np.ptp(regions.vertices(a) @ along))
+            if root <= 0 or height < root or length < 1.5 * root:
+                continue
+            seen.add((min(a, b), max(a, b)))
+            used.update({a, b})
+            wall = wall_of(base) or nominal
+            gaps = []
+            for side in (a, b):
+                own = regions.faces(side)
+                gap = cast(mesh.triangles_center[own] + mesh.face_normals[own] * eps, mesh.face_normals[own])
+                finite = gap[np.isfinite(gap)]
+                if len(finite) >= 0.5 * len(own):
+                    gaps.append(float(np.median(finite)))
+            gap = min(gaps) if gaps else None
+            lean = abs(float(na @ pull))
+            items.append({
+                "thickness_mm": round(root, 3), "tip_thickness_mm": round(tip, 3), "height_mm": round(height, 3),
+                "length_mm": round(length, 3), "wall_mm": round(wall, 3) if wall else None,
+                "thickness_ratio": round(root / wall, 3) if wall else None,
+                "height_ratio": round(height / wall, 3) if wall else None,
+                "height_to_thickness": round(height / root, 3), "base_fillet_mm": 0.0, "base_fillet_ratio": 0.0,
+                "base_fillet_wall_ratio": 0.0, "draft_deg": round(float(np.degrees(np.arcsin(min(1.0, lean)))), 3),
+                "gap_mm": round(gap, 3) if gap is not None else None,
+                "gap_to_thickness": round(gap / root, 3) if gap is not None else None,
+                "gap_to_wall": round(gap / wall, 3) if gap is not None and wall else None,
+                "xyz": _xyz(regions.centroid[a])})
+    return items
+
+
+def _circle(points: np.ndarray) -> tuple[np.ndarray, float, float]:
+    """A least-squares circle through 2D points: centre, radius and the RMS misfit."""
+    x, y = points[:, 0], points[:, 1]
+    a = np.column_stack([x, y, np.ones(len(x))])
+    rhs = x * x + y * y
+    solution, *_ = np.linalg.lstsq(a, rhs, rcond=None)
+    centre = solution[:2] / 2.0
+    radius = float(np.sqrt(max(solution[2] + centre @ centre, 0.0)))
+    misfit = float(np.sqrt(np.mean((np.linalg.norm(points - centre, axis=1) - radius) ** 2)))
+    return centre, radius, misfit
+
+
+def _bosses_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_of, nominal: float | None,
+                 used: set) -> list:
+    """Bosses on a mesh whose axis runs along the pull: a convex curved region whose normals all lie square to
+    the pull, a circle round it, standing on a flat region square to the pull at a sharp concave edge; its
+    hole, a concave such region on the same axis inside it."""
+    u, v = ops.basis(pull)
+    cylinders = []
+    for region in range(regions.count):
+        if regions.planar[region]:
+            continue
+        tris = regions.faces(region)
+        if len(tris) < 6 or np.abs(mesh.face_normals[tris] @ pull).max() > np.sin(np.radians(3.0)):
+            continue
+        verts = regions.vertices(region)
+        flat = np.column_stack([verts @ u, verts @ v])
+        centre, radius, misfit = _circle(flat)
+        if radius <= 0 or misfit > 0.02 * radius:
+            continue
+        centers = np.column_stack([mesh.triangles_center[tris] @ u, mesh.triangles_center[tris] @ v])
+        normals = np.column_stack([mesh.face_normals[tris] @ u, mesh.face_normals[tris] @ v])
+        convex = float(np.mean(np.einsum("ij,ij->i", centers - centre, normals))) > 0
+        heights = verts @ pull
+        cylinders.append({"region": region, "centre": centre, "radius": radius, "convex": convex,
+                          "low": float(heights.min()), "high": float(heights.max())})
+    items = []
+    for boss in (c for c in cylinders if c["convex"]):
+        bases = [b for b in regions.concave_neighbours(boss["region"])
+                 if regions.planar[b] and abs(float(regions.normal[b] @ pull)) > np.cos(np.radians(5.0))]
+        if not bases:
+            continue
+        base = bases[0]
+        level = float(regions.centroid[base] @ pull)
+        up = float(regions.normal[base] @ pull) > 0
+        height = (boss["high"] - level) if up else (level - boss["low"])
+        if height <= 0:
+            continue
+        holes = [c for c in cylinders if not c["convex"] and c["radius"] < boss["radius"]
+                 and np.linalg.norm(c["centre"] - boss["centre"]) < 0.02 * boss["radius"]]
+        hole = max(holes, key=lambda c: c["radius"]) if holes else None
+        used.update({boss["region"], *(([hole["region"]]) if hole else [])})
+        wall_ref = wall_of(base) or nominal
+        wall = boss["radius"] - hole["radius"] if hole else 2 * boss["radius"]
+        floor = None
+        if hole:
+            floor = (hole["low"] - level) if up else (level - hole["high"])
+        centre3 = boss["centre"][0] * u + boss["centre"][1] * v + pull * (level + (height / 2 if up else -height / 2))
+        items.append({"od_mm": round(2 * boss["radius"], 3), "id_mm": round(2 * hole["radius"], 3) if hole else None,
+                      "hollow": hole is not None, "boss_wall_mm": round(wall, 3),
+                      "wall_mm": round(wall_ref, 3) if wall_ref else None,
+                      "wall_ratio": round(wall / wall_ref, 3) if wall_ref else None,
+                      "od_to_id": round(boss["radius"] / hole["radius"], 3) if hole else None,
+                      "height_mm": round(height, 3), "height_to_od": round(height / (2 * boss["radius"]), 3),
+                      "base_fillet_mm": 0.0, "hole_floor_above_base_mm": round(max(floor, 0.0), 3) if hole else None,
+                      "xyz": _xyz(centre3)})
+    return items
+
+
+def _corners_mesh(mesh: trimesh.Trimesh, regions: _Regions, wall_of, nominal: float | None, used: set) -> list:
+    """Sharp internal corners on a mesh: regions meeting at a concave edge turning ``_CORNER_TURN_DEG`` or more
+    (a filleted corner joins its faces into one region, or its facets each turn less, and is not listed: a
+    mesh's fillet radius is not read)."""
+    items = []
+    # A region this small is a sliver the exporter left where faces meet, not a face of the part.
+    least = 2e-4 * float(mesh.area)
+    for a, links in regions.links.items():
+        for b, link in links.items():
+            if a >= b or link["concave"] <= link["convex"] or link["angle"] < _CORNER_TURN_DEG or a in used or b in used:
+                continue
+            if min(regions.areas[a], regions.areas[b]) < least:
+                continue
+            walls = [w for w in (wall_of(a), wall_of(b)) if w]
+            wall = min(walls) if walls else nominal
+            points = np.array(link["points"])
+            items.append({"radius_mm": 0.0, "sharp": True, "angle_deg": round(180.0 + link["angle"], 2),
+                          "length_mm": round(link["concave"], 3), "wall_mm": round(wall, 3) if wall else None,
+                          "ratio_to_wall": 0.0, "xyz": _xyz(points[len(points) // 2])})
+    return items
+
+
+def _parting_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, zero_tol: float, wall_limit: float,
+                  trapped: np.ndarray | None) -> dict:
+    """The parting (``meshops_molding.parting``) on a mesh: silhouette edges between triangles opening either
+    way, zero-draft regions and curved regions turning through the pull, those near the projected outline."""
+    u, v = ops.basis(pull)
+    flat = np.column_stack([mesh.vertices @ u, mesh.vertices @ v])
+    projection = ops.raster(flat, mesh.faces)
+    heights = mesh.vertices @ pull
+    top, bottom = float(heights.max()), float(heights.min())
+    tolerance = max(1e-3 * (top - bottom), 0.01)
+    tol = np.sin(np.radians(zero_tol))
+    along = mesh.face_normals @ pull
+    sign = np.where(along > tol, 1, np.where(along < -tol, -1, 0))
+    skip = trapped if trapped is not None else np.zeros(len(mesh.faces), dtype=bool)
+    elements = []
+    adjacency = mesh.face_adjacency
+    if len(adjacency):
+        opposite = (sign[adjacency[:, 0]] * sign[adjacency[:, 1]] < 0) & ~skip[adjacency[:, 0]] & ~skip[adjacency[:, 1]]
+        edges = mesh.face_adjacency_edges[opposite]
+        if len(edges):
+            mids = mesh.vertices[edges].mean(axis=1)
+            near = ops.near_outline(projection, np.column_stack([mids @ u, mids @ v]), 3.0)
+            for (va, vb), keep in zip(edges, near):
+                if keep:
+                    ha, hb = float(heights[va]), float(heights[vb])
+                    elements.append({"kind": "edge", "low": min(ha, hb), "high": max(ha, hb),
+                                     "weight": float(np.linalg.norm(mesh.vertices[va] - mesh.vertices[vb])),
+                                     "xyz": _xyz((mesh.vertices[va] + mesh.vertices[vb]) / 2)})
+    for region in range(regions.count):
+        tris = regions.faces(region)
+        if skip[tris].any():
+            continue
+        signs = sign[tris]
+        drafts = np.degrees(np.arcsin(np.clip(np.abs(along[tris]), 0, 1)))
+        if drafts.min() >= wall_limit:
+            continue
+        verts = regions.vertices(region)
+        if not ops.near_outline(projection, np.column_stack([verts @ u, verts @ v]), 3.0).any():
+            continue
+        if (signs == 0).all():
+            hv = verts @ pull
+            elements.append({"kind": "wall", "low": float(hv.min()), "high": float(hv.max()),
+                             "weight": float(regions.areas[region]), "xyz": _xyz(regions.centroid[region])})
+        elif (signs > 0).any() and (signs < 0).any() and not regions.planar[region]:
+            turning = tris[np.argsort(np.abs(along[tris]))[: max(2, len(tris) // 10)]]
+            ht = mesh.triangles_center[turning] @ pull
+            elements.append({"kind": "turn", "low": float(ht.min()), "high": float(ht.max()),
+                             "weight": float(regions.areas[region]), "xyz": _xyz(regions.centroid[region])})
+    found = ops.parting(elements, top, bottom, max(tolerance, 2 * projection["cell"]))
+    off = {id(element) for element in found["off_plane"]}
+    items = [{"kind": e["kind"], "low_mm": round(e["low"], 4), "high_mm": round(e["high"], 4),
+              "on_plane": id(e) not in off, "xyz": e["xyz"]} for e in elements]
+    items.sort(key=lambda item: item["on_plane"])
+    depth = max(found["depth_above"], found["depth_below"])
+    return {"pull_axis": [round(float(x), 4) for x in pull], "flat_parting_possible": found["flat"],
+            "parting_plane_height_mm": round(found["height"], 4),
+            "parting_plane_range_mm": [round(x, 4) for x in found["range"]] if found["range"] else None,
+            "depth_above_mm": round(found["depth_above"], 3), "depth_below_mm": round(found["depth_below"], 3),
+            "depth_from_parting_mm": round(depth, 3), "silhouette_count": len(items),
+            "off_plane_count": len(found["off_plane"]), "tolerance_mm": round(tolerance, 4), "items": items[:300],
+            "method": ("silhouette edges between triangles opening either way along the pull, zero-draft regions and "
+                       "curved regions turning through it, near the projected outline (a mesh's: a curved face's "
+                       "turn is read off its chords)"),
+            "_span": [float(np.ptp(flat[:, 0])), float(np.ptp(flat[:, 1]))]}
+
+
+def _shared_families(mesh: trimesh.Trimesh, pull: np.ndarray, wall_limit: float, zero_tol: float,
+                     report: dict) -> None:
+    """thickness, ribs, bosses, corners, parting and envelope on a mesh, into ``report``."""
+    regions = _safe(_Regions, mesh)
+    if isinstance(regions, dict):
+        for name in ("thickness", "ribs", "bosses", "corners", "parting", "envelope"):
+            report[name] = dict(regions)
+        return
+    draft = report.get("draft")
+    if isinstance(draft, dict) and "error" not in draft:
+        items = _safe(_draft_items, mesh, regions, pull, wall_limit, zero_tol)
+        if isinstance(items, dict):
+            report["draft"] = items
+        else:
+            draft["items"] = items
+            draft["wall_face_count"] = len(items)
+    thickness = _safe(_thickness_mesh, mesh, regions)
+    walls: dict[int, float] = thickness.pop("_per", {}) if isinstance(thickness, dict) else {}
+    report["thickness"] = thickness
+    nominal = thickness.get("nominal_mm")
+
+    def wall_of(region: int):
+        return walls.get(region)
+
+    used: set = set()
+    report["ribs"] = _safe(lambda: _family(_ribs_mesh(mesh, regions, pull, wall_of, nominal, used),
+                                           "thickness_ratio"))
+    report["bosses"] = _safe(lambda: _family(_bosses_mesh(mesh, regions, pull, wall_of, nominal, used), "wall_ratio"))
+    report["corners"] = _safe(lambda: _family(_corners_mesh(mesh, regions, wall_of, nominal, used), "ratio_to_wall",
+                                              low=True))
+    parting = _safe(_parting_mesh, mesh, regions, pull, zero_tol, wall_limit, _trapped_regions(mesh, regions, pull,
+                                                                                               zero_tol))
+    span = parting.pop("_span", None) if isinstance(parting, dict) else None
+    report["parting"] = parting
+    projection = report.get("projection") or {}
+    if span is not None and "error" not in projection:
+        report["envelope"] = {"items": [{"span_major_mm": round(max(span), 3), "span_minor_mm": round(min(span), 3),
+                                         "depth_along_pull_mm": projection.get("depth_along_pull_mm"),
+                                         "depth_from_parting_mm": parting.get("depth_from_parting_mm"),
+                                         "volume_mm3": projection.get("volume_mm3")}],
+                              "method": "spans of the mesh's projection on the parting plane, its depth along the "
+                                        "pull and the farther of its depths either side of the parting plane"}
+    else:
+        report["envelope"] = {"error": "the projection or the parting was not measured"}
+
+
+def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wall_limit: float,
+                 zero_tol: float) -> list:
+    """The draft per region, the rules' items: a flat region's exactly (its normal), a curved one's at the 5th
+    percentile of its wall facets' area (its chords scatter: ``spread_deg``), tangent bands left out; ``opens``
+    as the region leans, ``split`` where it leans both ways (the parting line crosses it)."""
+    along = mesh.face_normals @ pull
+    draft = np.round(np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0))), 3)
+    tangent = _tangent_faces(mesh, pull, along, zero_tol)
+    tol = float(np.sin(np.radians(zero_tol)))
+    areas = mesh.area_faces
+    reach = mesh.triangles @ pull
+    items = []
+    for region in range(regions.count):
+        tris = regions.faces(region)
+        wall = tris[(draft[tris] < wall_limit) & ~tangent[tris]]
+        if not len(wall):
+            continue
+        weight = areas[wall]
+        total = float(weight.sum())
+        if total <= 0:
+            continue
+        order = wall[np.argsort(draft[wall])]
+        share = np.cumsum(areas[order]) / total
+        low = float(draft[order][min(int(np.searchsorted(share, 0.05)), len(order) - 1)])
+        high = float(draft[order][min(int(np.searchsorted(share, 0.95)), len(order) - 1)])
+        lean = along[wall]
+        up, down = float(weight[lean > tol].sum()) / total, float(weight[lean < -tol].sum()) / total
+        curved = not bool(regions.planar[region])
+        opens = ("split" if curved and up > 0.05 and down > 0.05 else
+                 "none" if low < zero_tol and not curved else
+                 "+pull" if up >= down and up > 0 else "-pull" if down > 0 else "none")
+        if not curved:
+            low = high = float(np.degrees(np.arcsin(min(1.0, abs(float(regions.normal[region] @ pull))))))
+            low = round(low, 3)
+            opens = "none" if low < zero_tol else ("+pull" if float(regions.normal[region] @ pull) > 0 else "-pull")
+        centre = (mesh.triangles_center[wall] * weight[:, None]).sum(axis=0) / total
+        items.append({"draft_deg": round(low, 3), "area_mm2": round(total, 2), "opens": opens,
+                      "surface": "curved" if curved else "flat",
+                      "depth_mm": round(float(reach[wall].max() - reach[wall].min()), 3), "xyz": _xyz(centre),
+                      **({"spread_deg": round(high - low, 3)} if curved else {})})
+    items.sort(key=lambda item: (item["draft_deg"], -item["area_mm2"]))
+    return items[:300]
+
+
+def _trapped_regions(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, zero_tol: float) -> np.ndarray:
+    """Per triangle: does it lie in a region mostly blocked along the way it opens (an undercut's: a slide
+    forms it, and the parting line runs round it)?"""
+    along = mesh.face_normals @ pull
+    tol = np.sin(np.radians(zero_tol))
+    eps = 1e-3 * max(float(np.linalg.norm(mesh.extents)), 1.0)
+    origins = mesh.triangles_center + mesh.face_normals * eps
+    sign = np.where(along >= 0, 1.0, -1.0)
+    blocked = mesh.ray.intersects_any(ray_origins=origins, ray_directions=np.outer(sign, pull))
+    zero = np.abs(along) <= tol
+    if zero.any():
+        index = np.nonzero(zero & blocked)[0]
+        blocked[index] = mesh.ray.intersects_any(ray_origins=origins[index], ray_directions=np.outer(-sign[index], pull))
+    share = np.bincount(regions.label, weights=mesh.area_faces * blocked, minlength=regions.count)
+    trapped = share > 0.3 * np.maximum(regions.areas, 1e-12)
+    return trapped[regions.label]
+
+
+def _family(items: list, key: str, low: bool = False) -> dict:
+    items.sort(key=lambda item: (item.get(key) if item.get(key) is not None else np.inf) * (1 if low else -1))
+    return {"count": len(items), "items": items[:300]}
