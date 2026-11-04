@@ -27,7 +27,7 @@ from typing import Any
 import numpy as np
 
 __all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "even_points", "lateral_directions",
-           "near_outline", "nearest_broad", "parting", "pull_vector", "raster", "transitions", "weighted_median", "weighted_quantile"]
+           "near_outline", "nearest_broad", "nearest_broad_all", "parting", "pull_vector", "raster", "transitions", "weighted_median", "weighted_quantile"]
 
 Cast = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -146,13 +146,13 @@ def near_outline(projection: dict[str, Any], points: np.ndarray, band_cells: flo
     if not len(pts):
         return np.zeros(0, dtype=bool)
     outline = projection["outline"]
-    rows, cols = np.nonzero(outline)
-    if not len(rows):
-        return np.zeros(len(pts), dtype=bool)
     height, width = outline.shape
     key = ("_dilated", float(band_cells))
     dilated = projection.get(key)
     if dilated is None:
+        rows, cols = np.nonzero(outline)
+        if not len(rows):
+            return np.zeros(len(pts), dtype=bool)
         reach = int(math.ceil(band_cells))
         dilated = np.zeros_like(outline)
         for dy in range(-reach, reach + 1):
@@ -176,13 +176,16 @@ BOUND_POINTS = 12000
 
 
 def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray, floor: float,
-                 chunk: int = 64) -> np.ndarray:
-    """The ball radius each point allows against the surface points ``q`` alone: an upper bound on the
-    exact one (a subset of the surface can only hold a ball less tightly)."""
+                 chunk: int = 64, q_face: np.ndarray | None = None, p_face: np.ndarray | None = None) -> np.ndarray:
+    """The ball radius each point allows against the surface points ``q`` alone (those of other faces, with
+    ``q_face`` and ``p_face``): an upper bound on the exact one (a subset of the surface can only hold a ball
+    less tightly)."""
     radius = radius.copy()
     if not len(q) or not len(p):
         return radius  # nothing else on the surface (a part of one closed face): the ray alone bounds it
-    q = q[_subset(len(q), BOUND_POINTS)]
+    keep = _subset(len(q), BOUND_POINTS)
+    q = q[keep]
+    q_face = q_face[keep] if q_face is not None else None
     for start in range(0, len(p), chunk):
         stop = min(len(p), start + chunk)
         d = q[None, :, :] - p[start:stop, None, :]
@@ -190,6 +193,8 @@ def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray
         square = np.einsum("cmk,cmk->cm", d, d)
         with np.errstate(divide="ignore", invalid="ignore"):
             candidate = np.where(depth > floor, square / (2.0 * np.maximum(depth, floor)), np.inf)
+        if q_face is not None and p_face is not None:
+            candidate = np.where(q_face[None, :] == p_face[start:stop, None], np.inf, candidate)
         radius[start:stop] = np.minimum(radius[start:stop], candidate.min(axis=1))
     return radius
 
@@ -302,16 +307,12 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
     reach = np.max(np.stack([np.linalg.norm(corner - centroid, axis=1) for corner in (a_t, b_t, c_t)]), axis=0)
     if own:
         # The bound from points must leave each point's own face out too: the points are the faces'.
-        upper = radius.copy()
-        faces = np.asarray(point_face)
         tri_face = np.asarray(triangle_face)
         extra = np.asarray(others, dtype=float).reshape(-1, 3) if others is not None else np.zeros((0, 3))
         extra_face = np.asarray(others_face) if others_face is not None else np.full(len(extra), -1)
         q_face = np.concatenate([tri_face, extra_face])
         q = np.vstack([centroid, extra])
-        for face in np.unique(faces):
-            mine = faces == face
-            upper[mine] = _point_bound(p_all[mine], n_all[mine], q[q_face != face], radius[mine], floor)
+        upper = _point_bound(p_all, n_all, q, radius, floor, q_face=q_face, p_face=np.asarray(point_face))
     else:
         q = np.vstack([verts, centroid] + ([np.asarray(others, dtype=float).reshape(-1, 3)] if others is not None else []))
         upper = _point_bound(p_all, n_all, q, radius, floor)
@@ -323,22 +324,39 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         # any face does (a one-face ellipsoid's far side).
         longest = np.max(np.stack([np.linalg.norm(b_t - a_t, axis=1), np.linalg.norm(c_t - b_t, axis=1),
                                    np.linalg.norm(a_t - c_t, axis=1)]), axis=0)
-        typical = {int(face): float(np.median(longest[tri_face == face])) for face in np.unique(tri_face)}
+        by_face = np.argsort(tri_face, kind="stable")
+        labels, first = np.unique(tri_face[by_face], return_index=True)
+        medians = [float(np.median(chunk)) for chunk in np.split(longest[by_face], first[1:])]
+        typical = dict(zip(labels.tolist(), medians))
         keep_off = np.array([3.0 * typical.get(int(face), 0.0) for face in np.asarray(point_face)])
     # Points a few at a time (neighbours in the sampled order lie near one another, so their triangles mostly
     # coincide): each solves the triangles within its own ball's reach (2 r of the bound), its own face's left out.
     chunk = 24
+    # The triangles in order along x, so a chunk of points looks only at those within its reach in x (then
+    # y, z) before measuring distances: a part of fifty thousand triangles is not every chunk's to scan.
+    along_x = np.argsort(centroid[:, 0], kind="stable")
+    sorted_x = centroid[along_x, 0]
+    widest = float(reach.max()) if len(reach) else 0.0
     for start in range(0, len(p_all), chunk):
         index = np.arange(start, min(len(p_all), start + chunk))
-        distance = np.linalg.norm(centroid[None, :, :] - p_all[index, None, :], axis=2) - reach[None, :]
+        span = 2.0 * float(np.max(upper[index])) * (1 + 1e-9) + widest
+        lo_p, hi_p = p_all[index].min(axis=0) - span, p_all[index].max(axis=0) + span
+        window = along_x[np.searchsorted(sorted_x, lo_p[0]):np.searchsorted(sorted_x, hi_p[0], side="right")]
+        inside = np.all((centroid[window] >= lo_p) & (centroid[window] <= hi_p), axis=1)
+        window = window[inside]
+        if not len(window):
+            continue
+        distance = np.linalg.norm(centroid[None, window, :] - p_all[index, None, :], axis=2) - reach[None, window]
         near = distance <= 2.0 * upper[index, None] * (1 + 1e-9)
         if own:
-            near &= (tri_face[None, :] != np.asarray(point_face)[index, None]) | (distance > keep_off[index, None])
-        columns = np.nonzero(near.any(axis=0))[0]
+            near &= (tri_face[None, window] != np.asarray(point_face)[index, None]) | (distance > keep_off[index, None])
+        local = np.nonzero(near.any(axis=0))[0]
+        columns = window[local]
+        near = near[:, local]
         if not len(columns):
             continue
         least, pick = _exact_balls(p_all[index], n_all[index], a_t[columns], b_t[columns], c_t[columns],
-                                   near[:, columns], floor)
+                                   near, floor)
         tighter = least < radius[index]
         radius[index[tighter]] = least[tighter]
         bound[index[tighter]] = columns[pick[tighter]]
@@ -403,6 +421,29 @@ def nearest_broad(start: int, neighbours: Callable[[int], Any], broad: Callable[
     return []
 
 
+def nearest_broad_all(faces: list[int], neighbours: Callable[[int], Any], broad: Callable[[int], bool],
+                      most: int = 6, keep: int = 8) -> dict[int, list[int]]:
+    """``nearest_broad`` for every face at once: one walk out from all the broad faces together, ring by ring
+    (at most ``most``), each face reached taking the broad faces it was reached from (at most ``keep``)."""
+    nearest: dict[int, list[int]] = {face: [face] for face in faces if broad(face)}
+    ring = list(nearest)
+    for _ in range(most):
+        reached: dict[int, list[int]] = {}
+        for face in ring:
+            for other in neighbours(face):
+                if other in nearest:
+                    continue
+                sources = reached.setdefault(other, [])
+                for source in nearest[face]:
+                    if len(sources) < keep and source not in sources:
+                        sources.append(source)
+        if not reached:
+            break
+        nearest.update(reached)
+        ring = list(reached)
+    return {face: sources for face, sources in nearest.items() if not broad(face)}
+
+
 def weighted_quantile(values: np.ndarray, weights: np.ndarray, quantile: float) -> float | None:
     """The finite value at ``quantile`` of the weight, lowest first; None for none."""
     v = np.asarray(values, dtype=float)
@@ -464,12 +505,13 @@ def _freed_after(points: np.ndarray, side: np.ndarray, pulls: Sequence[np.ndarra
     ahead = cast(points, np.repeat(side[None, :], n, axis=0))
 
     def clear(index: np.ndarray, stroke: np.ndarray) -> np.ndarray:
+        # Every pull at once, one cast: a point is clear when any pull from where it moved leaves the part.
         moved = points[index] + stroke[:, None] * side[None, :]
-        free = np.zeros(len(moved), dtype=bool)
-        for pull in pulls:
-            left = ~free
-            if left.any():
-                free[left] = ~np.isfinite(cast(moved[left], np.repeat(pull[None, :], int(left.sum()), axis=0)))
+        k = len(moved)
+        if not k:
+            return np.zeros(0, dtype=bool)
+        hit = cast(np.tile(moved, (len(pulls), 1)), np.repeat(np.asarray(pulls, dtype=float), k, axis=0))
+        free = (~np.isfinite(hit)).reshape(len(pulls), k).any(axis=0)
         return free & (ahead[index] > stroke)
 
     previous = 0.0
@@ -493,12 +535,72 @@ def _freed_after(points: np.ndarray, side: np.ndarray, pulls: Sequence[np.ndarra
     return best
 
 
+def _ever_freed(points: np.ndarray, side: np.ndarray, pulls: Sequence[np.ndarray], cast: Cast,
+                strokes: np.ndarray) -> np.ndarray:
+    """Per point, whether some stroke of ``strokes`` along ``side`` (the move itself clear) frees it for a
+    pull -- every stroke and pull cast at once, one call: a yes or no, no stroke found."""
+    n = len(points)
+    if not n:
+        return np.zeros(0, dtype=bool)
+    ahead = cast(points, np.repeat(side[None, :], n, axis=0))
+    moved = (points[:, None, :] + strokes[None, :, None] * side[None, None, :]).reshape(-1, 3)
+    open_ = (ahead[:, None] > strokes[None, :]).reshape(-1)
+    free = np.zeros(len(moved), dtype=bool)
+    if open_.any():
+        index = np.nonzero(open_)[0]
+        k = len(index)
+        hit = cast(np.tile(moved[index], (len(pulls), 1)), np.repeat(np.asarray(pulls, dtype=float), k, axis=0))
+        free[index] = (~np.isfinite(hit)).reshape(len(pulls), k).any(axis=0)
+    return free.reshape(n, len(strokes)).any(axis=1)
+
+
 def _subset(count: int, most: int) -> np.ndarray:
     return np.arange(count) if count <= most else np.unique(np.linspace(0, count - 1, most).astype(int))
 
 
+def _signature(points: np.ndarray, normals: np.ndarray) -> tuple:
+    """A feature's shape, wherever it stands: its point count, the spans of its points and its mean normal,
+    rounded -- the same for each of a row of identical contacts."""
+    span = points.max(axis=0) - points.min(axis=0)
+    size = float(np.linalg.norm(span)) or 1.0
+    mean = normals.mean(axis=0)
+    return (len(points), *np.round(span / max(size, 1e-12) * 50).astype(int), round(size, 3),
+            *np.round(mean * 20).astype(int))
+
+
+def _replays(release: dict[str, Any], probe: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast,
+             strokes: np.ndarray, tol: float) -> bool:
+    """Whether a release found for a feature of the same shape frees this one's probe points as it did."""
+    vectors = [np.asarray(vector, dtype=float) for vector in release["vectors"]]
+    if release["release"] == "side_action":
+        freed = np.zeros(len(probe), dtype=bool)
+        for side in vectors:
+            leans = normals @ side >= -tol
+            freed |= leans & ~np.isfinite(cast(probe, np.repeat(side[None, :], len(probe), axis=0)))
+        return bool(freed.all())
+    if release["release"] == "lifter":
+        reach = float(release["stroke_mm"] or 0.0) * 1.05
+        ladder = strokes[strokes <= reach] if (strokes <= reach).any() else strokes[:1]
+        return bool(_ever_freed(probe, vectors[0], (pull, -pull), cast, np.append(ladder, reach)).all())
+    lateral = lateral_directions(pull, 8)
+    if release["release"] == "collapsible_core":
+        left = np.ones(len(probe), dtype=bool)
+        for side in lateral:
+            index = np.nonzero(left)[0]
+            if not len(index):
+                break
+            left[index] = ~_ever_freed(probe[index], side, (pull, -pull), cast, strokes)
+        return not left.any()
+    if release["release"] == "none":
+        # Two of its points, freed by no direction, as they were.
+        two = probe[_subset(len(probe), 2)]
+        return all(not _ever_freed(two, side, (pull, -pull), cast, strokes).any() for side in lateral)
+    return False
+
+
 def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray, cast: Cast, *, scale: float,
-                      zero_tol_deg: float, stroke_limit: float | None = None) -> dict[str, Any]:
+                      zero_tol_deg: float, stroke_limit: float | None = None,
+                      cache: dict | None = None) -> dict[str, Any]:
     """What releases a trapped feature, from its points (already offset off the surface), their outward
     normals, the pull and ``cast``. Directions tried: eight round the parting plane, the feature's own mean
     lateral normal, and each of those tilted 45 degrees toward either pull (an angled slide).
@@ -512,10 +614,16 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     - ``collapsible_core``: every point is cleared so, but along directions round an axis that no one
       direction serves (an internal groove or thread round the pull);
     - ``none``: some point is cleared by none of these (a sealed pocket, an interlock).
+
+    With ``cache`` (one dict per part), a feature of the same shape as one already classified (a row of
+    identical contacts) is given its release once that release frees a probe of its own points too.
     """
     pts = np.asarray(points, dtype=float).reshape(-1, 3)
     nrm = np.asarray(normals, dtype=float).reshape(-1, 3)
-    chosen_points = _subset(len(pts), RELEASE_POINTS)
+    # Points tested, at most: four per sqrt of the feature's points, 16 to RELEASE_POINTS -- a part of many
+    # small features (a connector's contacts) spends its rays on each in proportion, not 96 apiece.
+    most = int(min(RELEASE_POINTS, max(16, 4 * math.sqrt(len(pts)))))
+    chosen_points = _subset(len(pts), most)
     pts, nrm = pts[chosen_points], nrm[chosen_points]
     p = np.asarray(pull, dtype=float)
     p = p / np.linalg.norm(p)
@@ -531,6 +639,22 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     if not n:
         return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
                 "stroke_mm": None}
+    key = _signature(pts, nrm) if cache is not None else None
+    if key is not None and key in cache:
+        probe = _subset(n, 8)
+        limit = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
+        ladder = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
+        if _replays(cache[key], pts[probe], nrm[probe], p, cast, ladder, tol):
+            return dict(cache[key])
+    found = _classify(pts, nrm, p, cast, scale, tol, lateral, candidates, stroke_limit)
+    if key is not None:
+        cache[key] = found
+    return found
+
+
+def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale: float, tol: float,
+              lateral: np.ndarray, candidates: np.ndarray, stroke_limit: float | None) -> dict[str, Any]:
+    n = len(pts)
     frees = np.zeros((len(candidates), n), dtype=bool)
     for index, side in enumerate(candidates):
         if index == len(lateral) and frees[:index].all(axis=1).any():
@@ -542,9 +666,18 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
         chosen: list[int] = []
         left = np.ones(n, dtype=bool)
         plain = np.arange(len(candidates)) < len(lateral)
+        # A world axis is preferred where it frees nine-tenths as many points as the best (a symmetric
+        # groove's slides read +x and -x, not whichever diagonal its sampled points favoured); then any
+        # plain slide over an angled one.
+        axis = np.array(["," not in direction_name(c) for c in candidates])
+        penalty = np.where(plain, 0.0, 0.5)
         while left.any() and len(chosen) < 4:
-            gain = (frees & left[None, :]).sum(axis=1) - np.where(plain, 0.0, 0.5)
+            gain = (frees & left[None, :]).sum(axis=1) - penalty
             pick = int(np.argmax(gain))
+            if not axis[pick] and (axis & plain).any():
+                best_axis = int(np.argmax(np.where(axis & plain, gain, -np.inf)))
+                if gain[best_axis] >= 0.9 * gain[pick] and gain[best_axis] > 0:
+                    pick = best_axis
             if gain[pick] <= 0:
                 break
             chosen.append(pick)
@@ -564,19 +697,50 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
                     "angled": [not bool(plain[pick]) for pick in chosen],
                     "stroke_mm": float(best[np.isfinite(best)].max()) if np.isfinite(best).any() else float(scale)}
     limit = float(stroke_limit if stroke_limit is not None else 0.25 * scale)
-    strokes = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 16), [limit]]))
+    strokes = np.unique(np.concatenate([np.geomspace(max(limit * 2e-3, 1e-4), limit, 12), [limit]]))
+    # A few points first: one that no direction frees settles it (nothing releases the feature) before
+    # every point has walked every direction.
+    probe = pts[_subset(n, 8)]
+    stuck = np.ones(len(probe), dtype=bool)
+    for side in lateral:
+        if not stuck.any():
+            break
+        index = np.nonzero(stuck)[0]
+        stuck[index] = ~_ever_freed(probe[index], side, (p, -p), cast, strokes)
+    if stuck.any():
+        return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
+                "stroke_mm": None}
     freed = np.full((len(lateral), n), np.inf)
+    # Which directions free every point at all (a yes or no each, cheap); only those are walked for their
+    # stroke, and none past the shortest common stroke found yet.
+    ever = np.array([_ever_freed(pts, side, (p, -p), cast, strokes) for side in lateral])
+    frees_all = ever.all(axis=1)
+    reach = math.inf
     for index, side in enumerate(lateral):
-        freed[index] = _freed_after(pts, side, (p, -p), cast, strokes)
+        if not frees_all[index]:
+            continue
+        ladder = strokes[strokes <= reach * (1 + 1e-9)] if math.isfinite(reach) else strokes
+        if not len(ladder):
+            continue
+        freed[index] = _freed_after(pts, side, (p, -p), cast, ladder)
+        if np.isfinite(freed[index]).all():
+            reach = min(reach, float(freed[index].max()))
     common = np.max(freed, axis=1)
     if np.isfinite(common).any():
         pick = int(np.argmin(common))
         return {"release": "lifter", "kind": "internal", "directions": [direction_name(lateral[pick])],
                 "vectors": [lateral[pick]], "angled": [False], "stroke_mm": float(common[pick])}
-    each = np.min(freed, axis=0)
-    if np.isfinite(each).all():
+    if ever.any(axis=0).all():
+        # No one direction frees it all, but each point is freed by some: a collapsing core; its stroke the
+        # longest any point needs along a direction that frees it.
+        each = np.full(n, np.inf)
+        for index, side in enumerate(lateral):
+            mine = ever[index] & ~np.isfinite(each)
+            if mine.any():
+                each[mine] = _freed_after(pts[mine], side, (p, -p), cast, strokes)
+        finite = each[np.isfinite(each)]
         return {"release": "collapsible_core", "kind": "internal", "directions": [], "vectors": [], "angled": [],
-                "stroke_mm": float(each.max())}
+                "stroke_mm": float(finite.max()) if len(finite) else None}
     return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [], "stroke_mm": None}
 
 
