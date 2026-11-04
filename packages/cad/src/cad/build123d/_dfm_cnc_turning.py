@@ -49,14 +49,14 @@ def _radial(points: np.ndarray, origin: np.ndarray, axis: np.ndarray) -> np.ndar
 
 
 def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
-    largest = max(range(1, model.n + 1), key=lambda i: model.face(i).area)
+    largest = model.largest()
     scores: dict[tuple[Any, ...], list[Any]] = {}
     for i in range(1, model.n + 1):
         s = model.surface(i)
         if s.kind in _REVOLVED and s.axis is not None:
             key = _axis_key(s)
             entry = scores.setdefault(key, [0.0, s])
-            entry[0] += float(model.face(i).area)
+            entry[0] += model.mesh_area(i)
     base = {"part": model.part.name, "location": model.ref(largest), "xyz": model.center(largest)}
     if not scores:
         return {"turning": [{**base, "axis": None, "axisymmetric_fraction": 0.0, "max_diameter_mm": None,
@@ -67,7 +67,8 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
     origin = np.asarray(chosen.origin, dtype=float)
     on = [i for i in range(1, model.n + 1) if _on_axis(model.surface(i), origin, axis)]
     on_set = set(on)
-    revolved_area = sum(float(model.face(i).area) for i in on)
+    revolved_area = sum(model.mesh_area(i) for i in on)
+    total_area = sum(model.mesh_area(i) for i in range(1, model.n + 1))
     points = np.vstack([model.outline(i) for i in range(1, model.n + 1)])
     along = points @ axis
     radii = _radial(points, origin, axis)
@@ -81,7 +82,7 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
                         and edge.faces[0] in on_set and edge.faces[1] in on_set)
     off = [i for i in range(1, model.n + 1) if i not in on_set]
     turning = {**base, "axis": brep.rounded(axis, 6), "axis_origin": brep.rounded(origin - axis * float(origin @ axis)),
-               "axisymmetric_fraction": round(revolved_area / model.area, 4) if model.area else None,
+               "axisymmetric_fraction": round(revolved_area / total_area, 4) if total_area else None,
                "max_diameter_mm": round(2 * max_radius, 4), "length_mm": round(length, 4),
                "length_to_diameter": round(length / (2 * max_radius), 4) if max_radius > 0 else None,
                "bar_removal_ratio": round(1 - volume / bar, 4) if bar > 0 else None,
@@ -144,9 +145,9 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
             kind = "flat"
         else:
             kind = "feature"
-        main = max(group, key=lambda f: model.face(f).area)
+        main = max(group, key=model.mesh_area)
         live.append({"kind": kind, "relation": hole.get("relation") if hole else None,
-                     "area_mm2": round(sum(float(model.face(f).area) for f in group), 4), "face_count": len(group),
+                     "area_mm2": round(sum(model.mesh_area(f) for f in group), 4), "face_count": len(group),
                      "location": model.ref(main), "faces": [model.ref(f) for f in sorted(group)][:20],
                      "xyz": model.center(main)})
     return {"turning": [turning], "turned_diameters": diameters, "bores": bores, "grooves": grooves,

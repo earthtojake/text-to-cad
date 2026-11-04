@@ -237,10 +237,17 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
     on one axis are one thread: its major and minor diameters (the band), its length along the axis, its
     pitch (the axial advance per turn of the points' angle), internal where the cylinder nearest its minor
     radius is a hole's (a tap drill) and external where it is a boss's."""
+    if all(model.surface(i).kind in _ANALYTIC for i in range(1, model.n + 1)):
+        return [], set()
     axes: list[tuple[np.ndarray, np.ndarray, float, bool]] = []
+    seen: set[tuple[Any, ...]] = set()
     for i in range(1, model.n + 1):
         s = model.surface(i)
         if s.kind == "cylinder" and s.concave is not None:
+            key = _axis_key(s) + (round(float(s.radius), 6), bool(s.concave))
+            if key in seen:
+                continue
+            seen.add(key)
             axes.append((unit(s.axis), np.asarray(s.origin, dtype=float), float(s.radius), bool(s.concave)))
     if not axes:
         return [], set()
@@ -248,7 +255,7 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
     for i in range(1, model.n + 1):
         if model.surface(i).kind in _ANALYTIC:
             continue
-        points = model.outline(i)
+        points = np.vstack([model.edge_points(i, 129), model.samples(i)[0]])  # a helix sampled every few degrees
         if len(points) < 8:
             continue
         for k, (a, o, _, _) in enumerate(axes):
@@ -272,7 +279,7 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
     for k, flanks in by_axis.items():
         a, o, _, _ = axes[k]
         faces = sorted({face for face, _ in flanks})
-        points = np.vstack([pts for _, pts in flanks])
+        points = np.vstack([model.edge_points(face) for face, _ in flanks])  # along the crest and the root
         rel = points - o
         along = rel @ a
         radius = np.linalg.norm(rel - np.outer(along, a), axis=1)
