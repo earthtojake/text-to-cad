@@ -1,6 +1,6 @@
 # Benchmarks
 
-Manual commands that measure cadgen and the CAD Viewer. None of them runs in CI:
+Manual commands that measure the engine and the CAD Viewer. None of them runs in CI:
 what they write goes under an ignored `tmp/` folder, never into the tree
 (`AGENTS.md`), and only their pure helpers are tested
 (`tests/python/global/test_bench_helpers.py`). Performance numbers come from one
@@ -15,7 +15,7 @@ warm, and times every step:
 
 ```sh
 .venv/bin/python scripts/bench/corpus_bench.py --dry-run         # the config and the interpreter, checked
-.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy cadgen build
+.venv/bin/python scripts/bench/corpus_bench.py --max-load 16     # every model; each step waits for load <= 16 and no other busy build
 .venv/bin/python scripts/bench/corpus_bench.py --model l_bracket # one; repeat --model for more
 ```
 
@@ -36,7 +36,7 @@ The models, smallest first, are `l_bracket`, `planetary_gear`, `qdd`, `motorbike
 its default root is `../tom-cad`. A worktree or isolated clone may have no such sibling;
 give `--config` a copy of `corpus.json` with the relative path to the external checkout
 or copied checkout. `--dry-run` checks configuration, files, edits and the selected
-interpreter's cadgen import (`--cadgen-src`), without building anything. It does not
+interpreter's import of the `cad` library (from `--cadgen-src`, default `packages/cad/src`), without building anything. It does not
 infer calls from source or promise that a script calls the selected model.
 
 Each project is copied into a fresh output folder. Source stays unchanged except for
