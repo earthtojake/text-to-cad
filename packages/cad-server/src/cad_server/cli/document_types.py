@@ -127,7 +127,9 @@ def pull_value(argv: list[str]) -> list[str]:
 def _dfm(document_type: str) -> Callable[[list[str], str], int]:
     """``cad <type> dfm --process molding|printing``: the library's manufacturing check (``cad.<type>.dfm``),
     run here when this environment holds the trimesh integration, else in the environment that holds it
-    (``cad_server._internal.integration_env``), its options refused here first, before one is made."""
+    (``cad_server._internal.integration_env``), its options refused here first, before one is made. A STEP,
+    an xbf or a model given no ``--process`` is checked for the one its parts declare: the options every
+    process shares are refused here, the rest in the integration once it has read the document."""
 
     def run(argv: list[str], prog: str) -> int:
         from cad_server._internal import integration_env
@@ -160,6 +162,8 @@ def _checked_elsewhere(document_type: str, target: tuple[str, str], integration:
 
     def measured() -> CheckResult:
         given = {name: value for name, value in keywords.items() if name not in ("process", "candidates")}
+        # No --process on a B-rep type: the shared options are refused here, the process's in the integration,
+        # which reads the document, takes its parts' declared process and resolves the rest for it.
         options(document_type, keywords.get("process"), given, candidates=bool(keywords.get("candidates")))
         python = integration_env.environment(integration, said)
         found = integration_env.call(python, document_type, target[1], [str(value) for value in positional], keywords)

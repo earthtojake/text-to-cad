@@ -106,14 +106,15 @@ class Part:
         return list(self.shape.solids())
 
     def facts(self) -> dict[str, Any]:
-        """What a report says of the part itself: its name, its ref's owner, its declared material, its box,
-        volume and counts."""
-        from cad._internal.dfm import materials
+        """What a report says of the part itself: its name, its ref's owner, its declared material and the
+        process it declares (its route: ``machined``, ``fdm``), its box, volume and counts."""
+        from cad._internal.dfm import materials, processes
 
         box = self.shape.bounding_box()
         declared = getattr(self.material, "name", None)
         return {"name": self.name, "owner": self.owner, "occurrences": self.occurrences,
                 "material": str(declared) if declared else None, "material_table": materials.declared(self.material),
+                "process": processes.route(getattr(self.material, "process", None)),
                 "bbox_mm": [round(box.size.X, 4), round(box.size.Y, 4), round(box.size.Z, 4)],
                 "bbox_min_mm": [round(box.min.X, 4), round(box.min.Y, 4), round(box.min.Z, 4)],
                 "volume_mm3": round(float(self.shape.volume), 4), "area_mm2": round(float(self.shape.area), 4),

@@ -26,7 +26,10 @@ code is the rule's id and whose hint says what to change; the record of every ru
 Each option belongs to a process (``dfm.<process>.OPTIONS``) or to all (``dfm.COMMON``), and one given to
 another process is refused by name before anything is read, as an option the check does not take would be
 (law 16). The standard library alone: the server's command resolves the options here before it starts an
-environment that holds the integration.
+environment that holds the integration. A STEP, an xbf or a model given no process is checked for the one
+its parts declare (``part.material = metals.aluminum(process=machined())``): the options every process
+shares are checked here, and the integration reads the document, takes the declared process and resolves
+the rest (``declared``) before it measures.
 """
 
 from __future__ import annotations
@@ -40,7 +43,7 @@ from typing import Any
 from cad._internal import dfm
 from cad.results import CheckFinding, CheckResult
 
-__all__ = ["BREP_TYPES", "DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "dfm_for", "finish", "options"]
+__all__ = ["BREP_TYPES", "DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "declared", "dfm_for", "finish", "options"]
 
 PROCESSES = dfm.PROCESSES
 #: The types measured on their B-rep (the build123d integration); the rest are meshes (trimesh), but a DXF,
@@ -72,14 +75,26 @@ def _flag(name: str) -> str:
     return "--" + name.replace("_", "-")
 
 
-def options(document_type: str, process: str | None, given: dict[str, Any], *, candidates: bool = False) -> dict[str, Any]:
+def _give_process(document_type: str, why: str = "") -> ValueError:
+    return ValueError(f"cad.{document_type}.dfm measures for a process{why}: give --process "
+                      f"{', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}")
+
+
+def options(document_type: str, process: str | None, given: dict[str, Any], *,
+            candidates: bool = False) -> dict[str, Any] | None:
     """The options a check of ``process`` runs with: those ``given`` (None, or False for a flag: not given),
     the defaults for the rest. ``ValueError`` naming the fix for no process or another, an option of another
     process, a pull beside ``candidates`` (which ranks every pull), ``candidates`` of a process that ranks
-    none, a units the type does not take, a rule set the process has not, or a value out of range."""
+    none, a units the type does not take, a rule set the process has not, or a value out of range.
+
+    With no process, a B-rep type's (``BREP_TYPES``) check takes the one its parts declare, read with the
+    document: what holds for every process is checked here (units, the material, a rule set some process
+    has, a pull beside ``candidates``) and None is answered; the integration resolves the rest once it has
+    read the parts (``declared``). Any other type refuses it."""
     if process is None:
-        raise ValueError(f"cad.{document_type}.dfm measures for a process: give --process "
-                         f"{', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}")
+        if document_type not in BREP_TYPES:
+            raise _give_process(document_type)
+        return _preflight(document_type, given, candidates)
     module = dfm.module(process)
     if document_type in CUT_TYPES and process != "sheet":
         raise ValueError(f"a DXF is checked as a sheet's cut file: --process sheet, not {process}")
@@ -111,6 +126,85 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *, c
                          f"does not hold: check the part's STEP, xbf or model (cad step dfm, cad xbf dfm, cad model dfm)")
     module.validate(resolved, document_type)
     return resolved
+
+
+def _preflight(document_type: str, given: dict[str, Any], candidates: bool) -> None:
+    """What ``options`` refuses of a B-rep type's check before its process is known: an option no process
+    takes, a units, a material, a rule set no process has, a pull beside ``candidates``. Each option of one
+    process is judged once the declared process is read (``declared``)."""
+    if candidates and given.get("pull") is not None:
+        raise ValueError("--candidates ranks every pull: give it no --pull")
+    units = given.get("units")
+    if units is not None and units != "mm":
+        if units not in UNITS_MM:
+            raise ValueError(f"--units is one of {', '.join(UNITS_MM)}, not {units!r}")
+        raise ValueError(f"{_DECLARED[document_type]}, read as millimetres: --units is an STL's, which declares none")
+    chosen = given.get("rules")
+    sets = sorted({name for process in PROCESSES for name in dfm.module(process).RULE_SETS})
+    if chosen is not None and chosen != "none" and chosen not in sets:
+        raise ValueError(f"--rules is one of {', '.join((*sets, 'none'))}, not {chosen!r}")
+    from cad._internal.dfm import materials
+
+    materials.resolve(given.get("material"))
+    return None
+
+
+def declared(document_type: str, parts: list[tuple[str, Any]], given: dict[str, Any], *,
+             candidates: bool = False) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """The process the parts declare (``parts``: each part's name and its declared material, a
+    ``bd_materials.FinishedMaterial`` or None), the options resolved for it (``options``) and the info finding
+    that says so (``process_declared``). A declared technology or layer height is taken where none is
+    given (``given``'s wins). ``dfm.Unmeasured`` (``process_mixed``) for parts that declare different
+    routes; ``ValueError`` naming the fix for none declared or one no check measures (cast, wrought)."""
+    from cad._internal.dfm import processes
+
+    routes: dict[str, list[tuple[str, Any]]] = {}
+    for name, material in parts:
+        applied = getattr(material, "process", None)
+        found = processes.route(applied)
+        if found is not None:
+            routes.setdefault(found, []).append((name, material))
+    if not routes:
+        raise _give_process(document_type, ", and no part declares one (part.material = "
+                                           "metals.aluminum(process=machined()))")
+    if len(routes) > 1:
+        named = ", ".join(f"{route} ({', '.join(name for name, _ in held[:3])}"
+                          f"{f' and {len(held) - 3} more' if len(held) > 3 else ''})"
+                          for route, held in sorted(routes.items()))
+        raise dfm.Unmeasured("process_mixed", f"the parts declare different processes -- {named} -- so none is "
+                                              f"taken: give --process, or check each part on its own")
+    (route, held), = routes.items()
+    materials = sorted({str(getattr(material, "name", None) or "a material") for _, material in held})
+    said = f"{', '.join(materials[:3])}, {route}"
+    mapped = [processes.declared(getattr(material, "process", None)) for _, material in held]
+    if mapped[0] is None:
+        raise _give_process(document_type, f", and the part's declared material ({said}) is made by a process "
+                                           f"no check measures")
+    process, technology, _ = mapped[0]
+    layers = {layer for _, _, layer in mapped if layer is not None}
+    chosen = dict(given)
+    took: list[str] = []
+    if technology is not None:
+        if given.get("technology") is None:
+            chosen["technology"] = technology
+            took.append(f"technology {technology}")
+        elif given["technology"] != technology:
+            took.append(f"technology {given['technology']} as given, not the declared {technology}")
+        # The layer height is the declared technology's: a technology given instead takes its own.
+        if chosen.get("technology") == technology and given.get("layer_height") is None and len(layers) == 1:
+            chosen["layer_height"] = layers.pop()
+            took.append(f"layer height {chosen['layer_height']:g} mm")
+    try:
+        resolved = options(document_type, process, chosen, candidates=candidates)
+    except ValueError as error:
+        raise ValueError(f"{error} (the process is {process}, the parts' declared {route}: give --process to "
+                         f"check another)") from None
+    assert resolved is not None
+    detail = f" ({', '.join(took)})" if took else ""
+    finding = {"severity": "info", "code": "process_declared", "location": "bodies",
+               "message": f"process {process}{detail}, read from the part's declared material ({said}): "
+                          f"give --process to check another"}
+    return process, resolved, finding
 
 
 def _label(source: Any) -> Path:
@@ -194,11 +288,23 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
     return CheckResult(ok=ok, path=label, findings=tuple(found), summary=line, measurements=report)
 
 
-def measure(document_type: str, source: Any, process: str, resolved: dict[str, Any], candidates: bool) -> CheckResult:
-    """Measure ``source`` with its integration, then ``finish`` it."""
+def measure(document_type: str, source: Any, process: str | None, resolved: dict[str, Any] | None,
+            candidates: bool, given: dict[str, Any] | None = None) -> CheckResult:
+    """Measure ``source`` with its integration, then ``finish`` it. With no ``process`` (a B-rep type's, its
+    options ``given`` unresolved) the integration reads the document, takes the process its parts declare and
+    resolves the options for it (``declared``) before it measures."""
     label = _label(source)
     if isinstance(source, (str, os.PathLike)) and label.is_absolute() and not label.is_file():
         return _failed(label, "file not found", "invalid_target")
+    if process is None:
+        from cad.build123d._dfm_check import measure_declared
+
+        try:
+            process, resolved, report = measure_declared(document_type, source, given or {}, candidates)
+        except dfm.Unmeasured as failure:
+            return _failed(label, failure.message, failure.code)
+        return finish(label, {"process": process, **report}, process, resolved, candidates)
+    assert resolved is not None
     if document_type in BREP_TYPES:
         from cad.build123d._dfm_check import measure as measured
     elif document_type in CUT_TYPES:
@@ -278,7 +384,9 @@ def dfm_for(document_type: str) -> Any:
 
         source: what to check: a file of the type (a .step, .xbf, .stl, .3mf, .glb, or a .dxf cut file), or a
           model's document id the engine holds (cad model dfm), or the handle its call returns.
-        process: cnc, sheet, molding or printing.
+        process: cnc, sheet, molding or printing; default, for a STEP, an xbf or a model, the process the parts
+          declare (part.material = metals.aluminum(process=machined()): machined is cnc, molded molding, fdm,
+          sls, mjf, slm and vat printing with technology fdm, sls, mjf, pbf and sla), when every part agrees.
         rules: the rule set the verdicts come from: generic (default), a shop's (protolabs, hubs, xometry, sendcutsend: those the process has), or none.
         material: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits;
           default the material the part declares (part.material = metals.aluminum()), when every part agrees.
@@ -315,9 +423,8 @@ def dfm_for(document_type: str) -> Any:
         from cad._internal.document_type import refuse_other
 
         refuse_other(document_type, source)
-        assert process is not None
         try:
-            return measure(document_type, source, process, resolved, candidates)
+            return measure(document_type, source, process, resolved, candidates, given)
         except ModuleNotFoundError as error:
             from cad._internal.integrations import missing
 

@@ -27,6 +27,25 @@ and every verdict says it is no shop's limit (`rules_generic`). A rule's id (`cn
 is its finding's code; its severity is `error` where the source's number is a feasibility limit (the part
 cannot be made as drawn under that rule) and `warning` where it is a recommendation, a cost or a risk.
 
+## The process and the options
+
+`--process` names the check. Given none, a STEP, an xbf or a model is checked for the process its parts
+declare: a part's `bd_materials` material carries how it is made (`part.material =
+metals.aluminum(process=machined())`, its `.process` an `AppliedProcess`), and `processes.declared` maps the
+route: `machined` is cnc, `molded` molding, `fdm`, `sls`, `mjf`, `slm` and `vat` printing with `--technology`
+fdm, sls, mjf, pbf and sla, an FDM wall's `pitch_mm` its `--layer-height`. A technology or layer height given
+wins over the declared one (a technology given takes its own layer height). Cast and wrought stock have no
+check, and no route is sheet's: those, and parts that declare no process, are refused with the fix (`give
+--process cnc, sheet, molding or printing`); a mesh (STL, 3MF, GLB) and a DXF always need `--process`.
+
+The options resolve in two steps when the process comes from the parts. `manufacturing.options(type, None,
+...)`, the type side, refuses what holds for every process before anything is read -- a units, a material, a
+rule set no process has, a pull beside `--candidates` -- and answers None; the command then starts the
+integration's environment, which reads the document (`_dfm_brep.read`), takes the declared process
+(`manufacturing.declared`) and resolves the options for it, refusing there an option of another process
+(`--pull` on a machined part) with the declared route named. Given `--process`, every option is resolved and
+refused before the read, as before.
+
 ## The result
 
 A `cad.results.CheckResult`: `ok` (no error), `findings` (each a severity, a code, a message, a location and,
@@ -34,7 +53,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
 
 ```
 {"process": "cnc", "source": {"type": "step", "measured_as": "brep", "document": "plate"},
- "document": {...}, "bodies": [{"name", "owner", "bbox_mm", "volume_mm3", "face_count", ...}],
+ "document": {...}, "bodies": [{"name", "owner", "material", "material_table", "process", "bbox_mm", "volume_mm3", ...}],
  "<family>": {"items": [{<fields>, "location": "plate/face 7", "xyz": [x, y, z], "faces": [...]}, ...],
               "count": 12, <scalars>},
  "partial": false, "partial_sections": [],
@@ -71,6 +90,11 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   `bd_materials` material the document keeps: its family or its name's stem, `materials.declared`), when every
   part that declares one names the same material of the table (`material_declared`, info); parts that disagree
   are judged as with none (`material_mixed`, info), as is a material the table has no name for.
+- **The process** is `--process`'s, else the one the parts declare (above): `process_declared` (info) says
+  what was read and from which material (`process cnc, read from the part's declared material
+  (Alu_G6061_T6, machined): give --process to check another`), with the technology and layer height taken;
+  each body's `process` is its declared route. Parts that declare different routes are not measured: the
+  result fails with one error, `process_mixed`, naming each route and its parts.
 - The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target`, a
   document with no part that has a face `document_empty`; a part with no face beside others (an empty
   label an exporter left) is skipped and said, `empty_parts` (info).

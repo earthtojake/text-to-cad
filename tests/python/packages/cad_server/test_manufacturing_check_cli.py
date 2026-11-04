@@ -44,6 +44,14 @@ if __name__ == "__main__":
 """
 
 
+# The same plate, its material declared with its process: machined, so cnc is the check given no --process.
+DECLARED = POCKETED.replace("    part.label = \"plate\"\n", """    from bd_materials import metals
+    from bd_materials.processes import machined
+
+    part.label, part.material = "plate", metals.aluminum(process=machined())
+""")
+
+
 def _run(document_type: str, *argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
@@ -172,6 +180,26 @@ class ModelTest(unittest.TestCase):
             refused, said, _ = _run("xbf", ident, "--process", "cnc", "--json")
             self.assertEqual(refused, 1)
             self.assertIn("use cad model dfm", json.loads(said)["error"])
+
+    def test_a_model_given_no_process_is_checked_for_the_one_its_part_declares(self) -> None:
+        """Reads the part's declared process back from the engine's document. DEPENDS ON THE ENGINE ROUND-TRIP:
+        the material's process must survive the xbf (``cad.engine.document``); until it does, the loaded part's
+        ``material.process`` is None and this fails with "no part declares one"."""
+        import os
+
+        with tempfile.TemporaryDirectory(prefix="cad-dfm-declared-") as folder:
+            script = Path(folder) / "plate.py"
+            script.write_text(DECLARED, encoding="utf-8")
+            built = engine_daemon.run([sys.executable, str(script)], cwd=folder,
+                                      env={**os.environ, "PYTHONPATH": str(SRC)})
+            self.assertEqual(built.returncode, 0, built.stderr)
+            ident = built.stdout.strip().splitlines()[-1]
+            code, out, _ = _run("model", ident, "--json")
+            payload = json.loads(out)
+            self.assertNotIn("error", payload)
+            self.assertEqual((code, payload["measurements"]["process"]), (1, "cnc"))
+            codes = {f["code"] for f in payload["findings"]}
+            self.assertTrue({"process_declared", "material_declared", "cnc.internal_corner_sharp"} <= codes, codes)
 
 
 if __name__ == "__main__":

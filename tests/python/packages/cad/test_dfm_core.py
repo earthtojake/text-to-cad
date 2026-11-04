@@ -303,6 +303,100 @@ class DeclaredMaterialTest(unittest.TestCase):
         self.assertNotIn("resin_unknown", {finding.code for finding in molded.findings})
 
 
+class DeclaredProcessTest(unittest.TestCase):
+    """A check given no process takes the one the parts declare (``bd_materials``' ``process=``), says so, and
+    lets a technology or layer height given win over the declared one."""
+
+    @staticmethod
+    def _part(material: object, label: str = "plate", x: float = 0.0) -> bd.Part:
+        part = bd.Pos(x, 0, 0) * (bd.Box(40, 20, 6) - bd.Cylinder(4, 10))
+        part.label, part.material = label, material
+        return part
+
+    @staticmethod
+    def _checked(shape: object, **given: object):
+        from cad.build123d._dfm_check import checked
+
+        return checked(shape, None, dict(given))
+
+    def _context(self, result) -> dict:
+        self.assertIn("process_declared", {finding.code for finding in result.findings})
+        return result.measurements["rules"]["context"]
+
+    def test_each_declared_route_is_its_process(self) -> None:
+        from bd_materials import metals, plastics
+        from bd_materials.processes import fdm, machined, molded, slm, vat
+
+        machined_ = self._checked(self._part(metals.aluminum(process=machined())))
+        self.assertEqual((machined_.measurements["process"], machined_.measurements["bodies"][0]["process"]),
+                         ("cnc", "machined"))
+        said = next(f.message for f in machined_.findings if f.code == "process_declared")
+        self.assertEqual(said, "process cnc, read from the part's declared material (Alu_G6061_T6, machined): "
+                               "give --process to check another")
+        self.assertIn("holes", machined_.measurements, "the cnc check ran")
+        self._context(machined_)
+        self.assertEqual(self._checked(self._part(plastics.abs_(process=molded()))).measurements["process"], "molding")
+        printed = self._checked(self._part(plastics.pla(process=fdm(layer_height_mm=0.2))))
+        self.assertEqual(printed.measurements["process"], "printing")
+        self.assertEqual({key: self._context(printed)[key] for key in ("technology", "layer_height")},
+                         {"technology": "fdm", "layer_height": 0.2})
+        # the other prints resolve as fdm's does (measured above): their technology, no layer height
+        for applied, technology in ((slm(), "pbf"), (vat(), "sla")):
+            with self.subTest(technology=technology):
+                parts = [("plate", metals.titanium(process=applied))]
+                process, resolved, said = manufacturing.declared("step", parts, {})
+                self.assertEqual((process, resolved["technology"], resolved["layer_height"], said["code"]),
+                                 ("printing", technology, None, "process_declared"))
+
+    def test_a_technology_given_wins_over_the_declared_one(self) -> None:
+        from bd_materials import plastics
+        from bd_materials.processes import fdm
+
+        part = self._part(plastics.pla(process=fdm(layer_height_mm=0.3)))
+        context = self._context(self._checked(part, technology="sla"))
+        self.assertEqual(context["technology"], "sla")
+        self.assertNotEqual(context["layer_height"], 0.3, "fdm's layer height is not sla's")
+        _, resolved, _ = manufacturing.declared("step", [("plate", part.material)], {"layer_height": 0.1})
+        self.assertEqual((resolved["technology"], resolved["layer_height"]), ("fdm", 0.1))
+
+    def test_parts_that_disagree_or_declare_nothing_checkable_name_the_fix(self) -> None:
+        from bd_materials import metals, plastics
+        from bd_materials.processes import cast, machined, molded
+
+        mixed = self._checked(bd.Compound(children=[self._part(metals.aluminum(process=machined()), "a"),
+                                                   self._part(plastics.abs_(process=molded()), "b", 60)]))
+        self.assertFalse(mixed.ok)
+        self.assertEqual([f.code for f in mixed.findings], ["process_mixed"])
+        self.assertIn("machined (a), molded (b)", mixed.findings[0].message)
+        for material, said in ((metals.aluminum(process=cast()), r"\(Alu_G6061_T6, cast\) is made by a process no "),
+                               (metals.aluminum(), "no part declares one"), (None, "no part declares one")):
+            with self.subTest(said=said), self.assertRaisesRegex(ValueError, said + ".*give --process cnc, sheet"):
+                self._checked(self._part(material))
+        # an option of another process is refused once the declared one is read
+        with self.assertRaisesRegex(ValueError, "--pull is not cnc's.*the parts' declared machined"):
+            self._checked(self._part(metals.aluminum(process=machined())), pull="z")
+
+    def test_the_type_side_defers_the_process_to_a_brep_types_read(self) -> None:
+        from types import SimpleNamespace
+
+        from cad._internal.dfm import processes
+
+        self.assertIsNone(manufacturing.options("model", None, {"material": "aluminum"}))
+        for document_type in ("stl", "threemf", "glb", "dxf"):
+            with self.subTest(document_type=document_type), self.assertRaisesRegex(ValueError, "give --process"):
+                manufacturing.options(document_type, None, {})
+        for given, said in (({"units": "cm"}, "an xbf is in millimetres"), ({"rules": "acme"}, "--rules is one of"),
+                            ({"material": "cheese"}, "--material is one of")):
+            with self.subTest(given=given), self.assertRaisesRegex(ValueError, said):
+                manufacturing.options("xbf", None, given)
+        # duck typed: a route's value, an FDM skin's pitch is its line width, not a layer height
+        route = SimpleNamespace(value="fdm")
+        self.assertEqual(processes.declared(SimpleNamespace(process=route, pitch_mm=0.12)), ("printing", "fdm", 0.12))
+        self.assertEqual(processes.declared(SimpleNamespace(process=route, pitch_mm=0.4, skin=True)),
+                         ("printing", "fdm", None))
+        self.assertIsNone(processes.declared(SimpleNamespace(process=SimpleNamespace(value="wrought"))))
+
+
 class DetailTest(unittest.TestCase):
     def test_a_rule_formats_the_item_and_the_context_into_its_detail_and_hint(self) -> None:
         rule = Rule("c.edge", "edges", "makeable", "min", 1, "ways", "ways", "s",

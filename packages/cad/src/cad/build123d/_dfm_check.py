@@ -5,7 +5,9 @@ and what ``cad.build123d.cnc(shape)`` and its siblings run for a live shape.
 The document is read as the engine reads it (``_dfm_brep.read``); the process's module measures it
 (``_dfm_cnc``, ``_dfm_sheet``, ``_dfm_molding``, ``_dfm_printing``: each ``measure(document, options,
 candidates)``, a report of plain data, facts alone); the type side makes the result of the report: the
-process's findings and the rule set's verdicts (``manufacturing.finish``).
+process's findings and the rule set's verdicts (``manufacturing.finish``). Given no process
+(``measure_declared``), the document is read first and measured for the process its parts declare, the
+options resolved for it then (``manufacturing.declared``).
 """
 
 from __future__ import annotations
@@ -16,7 +18,7 @@ from typing import Any
 
 from cad.build123d import _dfm_brep
 
-__all__ = ["checked", "measure"]
+__all__ = ["checked", "measure", "measure_declared"]
 
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
@@ -43,13 +45,51 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
     return _measured(_dfm_brep.read(document_type, source), document_type, process, options, candidates)
 
 
-def checked(shape: Any, process: str, given: dict[str, Any], *, candidates: bool = False,
+def _declared(document: _dfm_brep.Document, document_type: str, given: dict[str, Any], candidates: bool,
+              measured_as: str) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """The process ``document``'s parts declare, the options resolved for it, and the report, which says what
+    was read (``process_declared``)."""
+    from cad._internal import manufacturing
+    from cad._internal.dfm import Unmeasured
+
+    if not document.parts:
+        raise Unmeasured("document_empty", "the document holds no part with a face to measure")
+    process, resolved, said = manufacturing.declared(
+        document_type, [(part.owner or part.name, part.material) for part in document.parts], given,
+        candidates=candidates)
+    report = _measured(document, measured_as, process, resolved, candidates)
+    report["findings"] = [*(report.get("findings") or ()), said]
+    return process, resolved, report
+
+
+def measure_declared(document_type: str, source: Any, given: dict[str, Any],
+                     candidates: bool) -> tuple[str, dict[str, Any], dict[str, Any]]:
+    """``measure`` with no process given: ``source`` read first, then measured for the process its parts
+    declare, its options (``given``, unresolved) resolved for that process (``manufacturing.declared``).
+    The process, the options and the report; ``Unmeasured``, or ``ValueError`` naming the fix for no process
+    declared."""
+    return _declared(_dfm_brep.read(document_type, source), document_type, given, candidates, document_type)
+
+
+def checked(shape: Any, process: str | None, given: dict[str, Any], *, candidates: bool = False,
             name: str | None = None) -> Any:
     """The check of a live build123d shape, as a ``CheckResult``: its options resolved as a STEP's are, its
-    findings at refs of the document the engine would make of it."""
+    findings at refs of the document the engine would make of it. With no ``process``, the one its parts
+    declare (``manufacturing.declared``)."""
     from cad._internal import manufacturing
+    from cad._internal.dfm import Unmeasured
 
+    if process is None:
+        manufacturing.options("step", None, given, candidates=candidates)
+        document = _dfm_brep.parts_of(shape, name=name)
+        label = Path(document.name or "shape")
+        try:
+            process, resolved, measured = _declared(document, "step", given, candidates, "shape")
+        except Unmeasured as failure:
+            return manufacturing._failed(label, failure.message, failure.code)
+        return manufacturing.finish(label, {"process": process, **measured}, process, resolved, candidates)
     resolved = manufacturing.options("step", process, given, candidates=candidates)
+    assert resolved is not None
     document = _dfm_brep.parts_of(shape, name=name)
     report = {"process": process, **_measured(document, "shape", process, resolved, candidates)}
     return manufacturing.finish(Path(document.name or "shape"), report, process, resolved, candidates)
