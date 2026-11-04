@@ -1,4 +1,5 @@
 import { buildBoardRefToken, isBoardRefPath, parseBoardRefSelector, parseBoardRefToken } from '../lib/boardRefs.js';
+import { buildSchematicRefToken, isSchematicRefPath, parseSchematicRefSelector, parseSchematicRefToken } from '../lib/schematicRefs.js';
 import { buildCadRefToken, isDocumentId, isEngineRefFile, isEngineSelector, isLabelSelector, parseCadRefToken } from '../lib/cadRefs.js';
 
 let operationSequence = 0;
@@ -32,7 +33,9 @@ export function validatePromptReference(reference) {
     requireValue(resource.kind === 'workspace-file' || resource.kind === 'cad-model', 'CAD selectors require a file or a model');
     // A document the engine draws (an .xbf, a STEP, a model) is named in the engine's grammar; any
     // other file by its renderer's labels (cadRefs.js).
+    // A KiCad board or schematic in its references' grammar (`boardRefs.js`, `schematicRefs.js`).
     const valid = isBoardRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseBoardRefSelector(selector))
+      : isSchematicRefPath(resource.path) ? selector => typeof selector === "string" && selector === selector.trim() && Boolean(parseSchematicRefSelector(selector))
       : isEngineRefFile(resource.path) ? isEngineSelector : isLabelSelector;
     requireValue(Array.isArray(target.selectors) && target.selectors.length > 0 && target.selectors.every(selector => valid(selector)),
       'invalid CAD selector');
@@ -110,6 +113,11 @@ export function parsePromptReference(text) {
     try { return validatePromptReference({ resource: { kind: 'workspace-file', path: board.path }, target: { kind: 'cad-selector', selectors: board.selectors } }); }
     catch { return null; }
   }
+  const schematic = line ? parseSchematicRefToken(line) : null;
+  if (schematic && isSchematicRefPath(schematic.path)) {
+    try { return validatePromptReference({ resource: { kind: 'workspace-file', path: schematic.path }, target: { kind: 'cad-selector', selectors: schematic.selectors } }); }
+    catch { return null; }
+  }
   const parsed = line ? parseCadRefToken(line) : null;
   if (!parsed || parsed.token.trim() !== line || !parsed.selectors.length) return null;
   try { return validatePromptReference({ resource: { kind: isDocumentId(parsed.cadPath) ? 'cad-model' : 'workspace-file', path: parsed.cadPath }, target: { kind: 'cad-selector', selectors: parsed.selectors } }); }
@@ -124,7 +132,8 @@ export function formatPromptReference(reference) {
   requireValue(path.length > 0, 'a reference names its file or URL');
   if (reference.target.kind === 'cad-selector') {
     const selectors = [...reference.target.selectors];
-    return isBoardRefPath(path) ? buildBoardRefToken({ path, selectors }) : buildCadRefToken({ cadPath: path, selectors });
+    return isBoardRefPath(path) ? buildBoardRefToken({ path, selectors })
+      : isSchematicRefPath(path) ? buildSchematicRefToken({ path, selectors }) : buildCadRefToken({ cadPath: path, selectors });
   }
   const quoted = /[\s#"\\]/.test(path) ? JSON.stringify(path) : path;
   if (reference.target.kind === 'text-range') {

@@ -49,7 +49,7 @@ const VIEW_CAPABILITIES = Object.freeze({
   document: DEFAULT_CAPABILITIES,
   drawing: Object.freeze({ iconKind: ENTRY_ICON_KIND.DXF }),
   robot: ROBOT_CAPABILITIES,
-  // A KiCad board, the one plot (`packages/ui/src/renderers/board`).
+  // A KiCad board or schematic, the plots (`packages/ui/src/renderers/board`, `.../schematic`).
   plot: Object.freeze({ iconKind: ENTRY_ICON_KIND.KICAD_PCB })
 });
 

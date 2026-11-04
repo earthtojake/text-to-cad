@@ -9,17 +9,21 @@
  * thing is drawn again in its own colours. Widths are screen pixels, as the person reads them, at any
  * zoom. Pure canvas 2D, in page millimetres (`plot2d`'s page space).
  */
-import { schematicItemColor } from "../plot2d/theme.js";
+import { schematicColors, schematicItemColor } from "../plot2d/theme.js";
 
-/** The schematic's highlight on its paper: the viewer's blue, dark enough to read on it. */
+/**
+ * The schematic's highlight on its sheet, by appearance: the viewer's blue, dark enough to read on the
+ * light paper and light enough on the dark sheet; `dim` is the sheet's own colour laid over what steps back.
+ */
 export const SCHEMATIC_OVERLAY_COLORS = Object.freeze({
-  selection: "#1f6feb",
-  shadow: "rgba(31, 111, 235, 0.28)",
-  hover: "rgba(31, 111, 235, 0.22)",
-  // The paper over what steps back.
-  dim: "rgba(245, 244, 239, 0.72)",
-  draft: "rgba(31, 111, 235, 0.08)",
-  draftEdge: "rgba(31, 111, 235, 0.7)"
+  light: Object.freeze({
+    selection: "#1f6feb", shadow: "rgba(31, 111, 235, 0.28)", hover: "rgba(31, 111, 235, 0.22)",
+    dim: "rgba(245, 244, 239, 0.72)", draft: "rgba(31, 111, 235, 0.08)", draftEdge: "rgba(31, 111, 235, 0.7)"
+  }),
+  dark: Object.freeze({
+    selection: "#8dc5ff", shadow: "rgba(141, 197, 255, 0.3)", hover: "rgba(141, 197, 255, 0.24)",
+    dim: "rgba(28, 28, 28, 0.72)", draft: "rgba(141, 197, 255, 0.1)", draftEdge: "rgba(141, 197, 255, 0.75)"
+  })
 });
 // How far a shadow reaches past its ink, in screen pixels, and an ink's least width.
 const SHADOW_PX = 3;
@@ -55,12 +59,12 @@ function trace(ctx, item) {
 const filled = (item) => item.t === "poly" || (item.t === "circle" && item.w === 0);
 
 /** Draw `entries` (`{ item, kind }`) in `color`, `extra` screen pixels wider than their ink; a fill as a fill. */
-function ink(ctx, entries, { color, extra = 0, own = false, px, visible }) {
+function ink(ctx, entries, { color, extra = 0, own = false, px, visible, theme }) {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   for (const { item, kind } of entries) {
     if (visible && !(item.box[0] <= visible[2] && item.box[2] >= visible[0] && item.box[1] <= visible[3] && item.box[3] >= visible[1])) continue;
-    const paint = own ? schematicItemColor(kind, item) : color;
+    const paint = own ? schematicItemColor(kind, item, theme) : color;
     // A symbol body's background is lit by its outline, never filled over.
     if (!own && item.t === "poly" && item.fill === "background") continue;
     trace(ctx, item);
@@ -81,33 +85,35 @@ function ink(ctx, entries, { color, extra = 0, own = false, px, visible }) {
  * @param {{ width: number, height: number, x?: number, y?: number }} sheet  The drawn sheet (its paper).
  * @param {{ transform: { scale: number, offsetX: number, offsetY: number }, pixelRatio?: number, width?: number, height?: number,
  *   hovered?: readonly object[], selected?: readonly object[], isolated?: readonly object[], dim?: boolean,
- *   draft?: readonly [number, number, number, number] | null }} options
+ *   draft?: readonly [number, number, number, number] | null, appearance?: "light" | "dark" }} options
  *   `hovered`, `selected`, `isolated`: drawn entries (`{ item, kind }`); `dim`: the rest of the sheet stepped back
  *   (a net selected); `draft`: Select's box being dragged, page millimetres.
  */
 export function drawSchematicOverlay(ctx, sheet, { transform, pixelRatio = 1, width = 0, height = 0, hovered = [], selected = [], isolated = [],
-  dim = false, draft = null }) {
+  dim = false, draft = null, appearance = "light" }) {
   if (!transform) return;
+  const colors = SCHEMATIC_OVERLAY_COLORS[appearance === "dark" ? "dark" : "light"];
+  const theme = schematicColors(appearance);
   const px = 1 / transform.scale;
   const visible = width > 0 && height > 0
     ? [-transform.offsetX * px, -transform.offsetY * px, (width - transform.offsetX) * px, (height - transform.offsetY) * px] : null;
   ctx.save();
   pageSpace(ctx, transform, pixelRatio);
   if (isolated.length || dim) {
-    ctx.fillStyle = SCHEMATIC_OVERLAY_COLORS.dim;
+    ctx.fillStyle = colors.dim;
     ctx.fillRect(sheet.x || 0, sheet.y || 0, sheet.width, sheet.height);
-    if (isolated.length) ink(ctx, isolated, { own: true, px, visible });
+    if (isolated.length) ink(ctx, isolated, { own: true, px, visible, theme });
   }
-  if (hovered.length) ink(ctx, hovered, { color: SCHEMATIC_OVERLAY_COLORS.hover, extra: SHADOW_PX * 2, px, visible });
+  if (hovered.length) ink(ctx, hovered, { color: colors.hover, extra: SHADOW_PX * 2, px, visible });
   if (selected.length) {
-    ink(ctx, selected, { color: SCHEMATIC_OVERLAY_COLORS.shadow, extra: SHADOW_PX * 2, px, visible });
-    ink(ctx, selected, { color: SCHEMATIC_OVERLAY_COLORS.selection, px, visible });
+    ink(ctx, selected, { color: colors.shadow, extra: SHADOW_PX * 2, px, visible });
+    ink(ctx, selected, { color: colors.selection, px, visible });
   }
   if (draft) {
     const [x0, y0, x1, y1] = draft;
-    ctx.fillStyle = SCHEMATIC_OVERLAY_COLORS.draft;
+    ctx.fillStyle = colors.draft;
     ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
-    ctx.strokeStyle = SCHEMATIC_OVERLAY_COLORS.draftEdge;
+    ctx.strokeStyle = colors.draftEdge;
     ctx.lineWidth = px;
     ctx.strokeRect(x0, y0, x1 - x0, y1 - y0);
   }

@@ -40,15 +40,15 @@
  *
  * **A schematic** (`kind: "schematic"`, `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=<path>`) is the
  * same payload with a sheet's page for its sheet: KiCad's frame, the page's top-left corner at the origin,
- * `width` x `height` the paper. It is drawn as KiCad draws it, on its paper alone (the sheet's background
- * over the page, nothing round it: what surrounds the paper is the pane's), each item in KiCad's default
- * schematic colours (`theme.js`'s `schematicItemColor`: the file's own colour where it gives one, a symbol
- * body's background fill KiCad's device background), its page edge (`page`, kind `sheet`) left off unless
- * a view asks for its `border`. The fit frames the page.
+ * `width` x `height` the paper. It is drawn on its paper alone (nothing round it: what surrounds the paper
+ * is the pane's), in the view's `appearance` (`theme.js`'s `schematicColors`: KiCad's light paper and dark
+ * ink, or a dark sheet and light ink, each element the same hue; the file's own colour where it gives one,
+ * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
+ * unless a view asks for its `border`. The fit frames the page.
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
-import { DIM_OPACITY, HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor, schematicItemColor } from "./theme.js";
+import { DIM_OPACITY, HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor, schematicColors, schematicItemColor } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
 
 /**
@@ -144,6 +144,8 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {string|null} [dim] With a layer id, every other layer but the board's area is drawn at `DIM_OPACITY` (KiCad's "Inactive layers: Dim").
  * @property {number} [zones] The pours' fill opacity, 0..1. Default KiCad's 0.6.
  * @property {number} [tracks] The tracks' opacity, 0..1. Default 1.
+ * @property {"light"|"dark"} [appearance] A schematic's sheet: its paper and ink, the viewer's theme. Default light.
+ * @property {boolean} [border] A schematic's page edge, drawn. Default off.
  */
 
 function describe(value) {
@@ -818,7 +820,7 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
   const tracks = clampUnit(view?.tracks, 1);
   const dimmed = typeof view?.dim === "string" && view.dim ? view.dim : null;
   if (layout.kind === "schematic") {
-    drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border: view?.border === true, PathCtor });
+    drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border: view?.border === true, colors: schematicColors(view?.appearance), PathCtor });
     return;
   }
   ctx.save();
@@ -850,12 +852,12 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
  * only with `border`. What lies off the canvas is left out. A card's picture (`backdrop: "board"`) is the
  * same: the paper, and nothing round it.
  */
-function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border, PathCtor }) {
+function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border, colors, PathCtor }) {
   ctx.save();
   for (const sheet of layout.sheets) {
     if (visible && !rectsOverlap(visible, layout.extent)) continue;
     pageSpace(ctx, transform, pixelRatio, null);
-    ctx.fillStyle = sheet.background;
+    ctx.fillStyle = colors.background;
     ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
@@ -863,7 +865,7 @@ function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, 
       if (layer.kind === "sheet" && !border) continue;
       for (const item of layer.items) {
         if (visible && !rectsOverlap(visible, item.box)) continue;
-        const paint = schematicItemColor(layer.kind, item);
+        const paint = schematicItemColor(layer.kind, item, colors);
         ctx.globalAlpha = typeof item.opacity === "number" ? clampUnit(item.opacity, 1) : 1;
         const path = pathOf(ctx, item, PathCtor);
         if (item.t === "poly" || (item.t === "circle" && item.w === 0)) {
@@ -888,9 +890,10 @@ function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, 
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
- * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[] }} options
+ * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[], view?: PlotView|null }} options
+ *   `view`: the one the images were drawn with (a schematic's sheet is its appearance's paper).
  */
-export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [] }) {
+export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [], view = null }) {
   checkTransform(transform, "drawPlotImages");
   const visible = shownRect(ctx, transform, pixelRatio);
   const shows = (x, y, width, height) => !visible || rectsOverlap(visible, [x, y, x + width, y + height]);
@@ -898,7 +901,7 @@ export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images 
   pageSpace(ctx, transform, pixelRatio, null);
   for (const sheet of layout.sheets) {
     if (!shows(sheet.x, sheet.y, sheet.width, sheet.height)) continue;
-    ctx.fillStyle = sheet.background;
+    ctx.fillStyle = layout.kind === "schematic" ? schematicColors(view?.appearance).background : sheet.background;
     ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
   }
   for (const { image, x, y, width, height } of images) {

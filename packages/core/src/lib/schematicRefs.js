@@ -81,3 +81,33 @@ export function buildSchematicRefToken({ path = "", selectors = [] } = {}) {
   });
   return `${encoded}#${bodies.join(",")}`;
 }
+
+/**
+ * `<file>#<selectors>` as `{path, selectors}` (canonical selectors, in the order written), or null: the
+ * board's token (`boardRefs.js`), its selectors a schematic's. The file half is optional and JSON-quoted
+ * when it holds whitespace, '#', a quote or a backslash.
+ */
+export function parseSchematicRefToken(token) {
+  const text = String(token ?? "").trim();
+  let path = "";
+  let rest = text;
+  if (text.startsWith('"')) {
+    let end = 1;
+    while (end < text.length && text[end] !== '"') end += text[end] === "\\" ? 2 : 1;
+    try { path = JSON.parse(text.slice(0, end + 1)); } catch { return null; }
+    rest = text.slice(end + 1);
+  } else {
+    const hash = text.indexOf("#");
+    if (hash < 0) return null;
+    path = text.slice(0, hash);
+    rest = text.slice(hash);
+  }
+  if (!rest.startsWith("#")) return null;
+  const selectors = [];
+  for (const piece of splitBoardRefSelectors(rest.slice(1))) {
+    const parsed = parseSchematicRefSelector(piece);
+    if (!parsed) return null;
+    selectors.push(parsed.canonical);
+  }
+  return selectors.length ? { path, selectors } : null;
+}

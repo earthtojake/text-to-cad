@@ -393,6 +393,12 @@ test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colo
     ["fill", "#009600", 1],   // the junction, a disc
     ["stroke", "#006464", 1]  // the reference
   ]);
+  // In the dark, the same sheet: a dark sheet and light ink, each element its hue, the file's own colour kept.
+  const dark = recorder(800, 600);
+  drawPlot(dark.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: dark.Path2D, view: { appearance: "dark" } });
+  assert.deepEqual(dark.calls.filter(([name]) => name === "fillRect"), [["fillRect", "#1C1C1C", 0, 0, 297, 210]]);
+  assert.deepEqual(painted(dark.calls).map(([name, , style]) => (name === "fill" ? style.fill : style.stroke)),
+    ["#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
   // Asked for, the page's edge is drawn too.
   const bordered = recorder(800, 600);
   drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });

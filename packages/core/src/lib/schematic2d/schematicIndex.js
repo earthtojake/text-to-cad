@@ -118,7 +118,18 @@ function segmentDistance([px, py], [ax, ay], [bx, by]) {
   const t = length > 0 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / length)) : 0;
   return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
 }
-/** How far a point is from an item's ink, page millimetres: 0 inside a filled shape or a text's box. */
+function insidePolygon([x, y], pts) {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i, i += 1) {
+    const [xi, yi] = pts[i], [xj, yj] = pts[j];
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+/**
+ * How far a point is from an item's ink, page millimetres: 0 inside a filled shape, a text's box or a
+ * small closed outline (a label's flag, a sheet pin's); a sheet's or a symbol's outline is its edge alone.
+ */
 function inkDistance(item, point) {
   if (item.t === "text") return inBox(item.box, point) ? 0 : Infinity;
   if (item.t === "circle") {
@@ -126,6 +137,8 @@ function inkDistance(item, point) {
     return item.w === 0 ? Math.max(0, d - item.r) : Math.abs(d - item.r);
   }
   const pts = item.pts;
+  if (item.t === "poly" && insidePolygon(point, pts)) return 0;
+  if (item.closed && (item.label || item.role === "pin") && insidePolygon(point, pts)) return 0;
   let best = Infinity;
   const step = item.pairs ? 2 : 1;
   for (let index = 0; index + 1 < pts.length; index += step) best = Math.min(best, segmentDistance(point, pts[index], pts[index + 1]));
@@ -218,28 +231,33 @@ export function createSchematicPage(index, sheet) {
   };
 
   /**
-   * The most specific thing under `point` that `kinds` (Select's filter, the `SCHEMATIC_PICK_KINDS`
-   * ticked) takes, within `tolerance` millimetres: a pin, a junction or a no-connect, a label (a sheet
-   * pin, its net), a wire, a field (its part), a symbol's ink (its part; a power symbol, its label),
-   * a sheet symbol's ink; then, nothing's ink near, the symbol body or the sheet symbol the point is
-   * inside, the smallest first. `{ selector, kind }`, or null.
+   * What is under `point` that `kinds` (Select's filter, the `SCHEMATIC_PICK_KINDS` ticked) takes, within
+   * `tolerance` millimetres: the nearest ink — a pin, a junction or a no-connect, a label (a sheet pin, its
+   * net), a wire, a field (its part), a symbol's outline (its part; a power symbol, its label), a sheet
+   * symbol's outline — or the symbol body or sheet symbol the point is inside; of those about as near (half
+   * the reach), the most specific, in that order. `{ selector, kind }`, or null.
    */
   function pick(point, { kinds = SCHEMATIC_PICK_KINDS, tolerance = 0.5 } = {}) {
     const wanted = new Set(kinds);
-    let best = null;
+    const hits = [];
     for (const entry of drawn) {
       if (!inBox(entry.item.box, point, tolerance)) continue;
       const pickEntry = pickOf(entry);
       if (!pickEntry || !wanted.has(pickEntry.filter)) continue;
       const distance = inkDistance(entry.item, point);
-      if (distance > tolerance) continue;
-      if (!best || pickEntry.rank < best.rank || (pickEntry.rank === best.rank && distance < best.distance)) best = { ...pickEntry, distance };
+      if (distance <= tolerance) hits.push({ ...pickEntry, distance, area: 0 });
     }
-    if (best) return { selector: quote(best.selector), kind: best.filter };
-    const areas = [...(wanted.has("symbols") ? bodies : EMPTY), ...(wanted.has("sheets") ? sheetBoxes : EMPTY)]
-      .filter((area) => area.box && inBox(area.box, point, tolerance))
-      .sort((a, b) => (a.box[2] - a.box[0]) * (a.box[3] - a.box[1]) - (b.box[2] - b.box[0]) * (b.box[3] - b.box[1]));
-    return areas.length ? { selector: areas[0].selector, kind: areas[0].kind } : null;
+    // Inside a body or a sheet's box is as near as its ink, and the least specific: the smallest box first.
+    for (const area of [...(wanted.has("symbols") ? bodies : EMPTY), ...(wanted.has("sheets") ? sheetBoxes : EMPTY)]) {
+      if (area.box && inBox(area.box, point)) {
+        hits.push({ selector: area.selector, filter: area.kind, rank: 7, distance: 0, area: (area.box[2] - area.box[0]) * (area.box[3] - area.box[1]) });
+      }
+    }
+    if (!hits.length) return null;
+    const nearest = Math.min(...hits.map((hit) => hit.distance));
+    const near = hits.filter((hit) => hit.distance <= nearest + tolerance / 2);
+    near.sort((a, b) => a.rank - b.rank || a.area - b.area || a.distance - b.distance);
+    return { selector: quote(near[0].selector), kind: near[0].filter };
   }
 
   /** Everything `kinds` takes whose ink lies wholly inside `box` (KiCad's window selection), once each. */
