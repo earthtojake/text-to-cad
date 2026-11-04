@@ -1,7 +1,8 @@
 import { useI18n } from "@cad/ui/i18n";
+import { CircuitBoard } from "lucide-react";
 import { useMemo } from "react";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
-import { CircuitTabIcon, NetKindIcon, PinKindIcon, SymbolKindIcon } from "./schematicIcons.jsx";
+import { NetKindIcon, PinKindIcon, SymbolKindIcon } from "./schematicIcons.jsx";
 import { buildSchematicTree, schematicTreeNodeIds } from "./schematicTree.js";
 
 const CLOSED = Object.freeze(["group:nets"]);
@@ -23,7 +24,7 @@ export default function SchematicSection({ index, ...props }) {
   const { t } = useI18n();
   const tree = useMemo(() => buildSchematicTree(index, t), [index, t]);
   const panel = useMemo(() => ({
-    id: "schematic", label: t("board.text.circuit"), icon: CircuitTabIcon, filterLabel: t("board.text.filter_circuit"),
+    id: "schematic", label: t("board.text.circuit"), icon: CircuitBoard, filterLabel: t("board.text.filter_circuit"),
     listLabel: t("schematic.text.schematic_parts_and_nets"), treeLabel: t("schematic.text.schematic"), resultsLabel: t("schematic.text.schematic_search_results"),
     nothingMatches: query => t("schematic.text.nothing_in_the_schematic_matches_query", { query })
   }), [t]);

@@ -17,7 +17,6 @@ const icon = (name, children) => {
   return SchematicIcon;
 };
 
-export const CircuitTabIcon = icon("CircuitTabIcon", <path d="M2.5 12h4l1.5-4 2.5 8 2.5-8 2.5 8 1.5-4h4.5" />);
 export const HierarchyTabIcon = icon("HierarchyTabIcon", <><rect x="8" y="2.5" width="8" height="6" rx="1" /><rect x="2.5" y="15.5" width="8" height="6" rx="1" />
   <rect x="13.5" y="15.5" width="8" height="6" rx="1" /><path d="M12 8.5v3.5M6.5 12h11M6.5 12v3.5M17.5 12v3.5" /></>);
 
