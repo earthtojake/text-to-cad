@@ -264,8 +264,12 @@ export interface CadWorkspaceService {
    * noted by the server and sent only with consent. Never fails.
    */
   reportActivity(activity: CadActivity): void;
-  /** A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files. */
-  plotPayload(file: string, options?: CadRequestOptions): Promise<CadPlotPayload>;
+  /**
+   * A `.kicad_pcb` drawn on the server as geometry per layer (its document's `plot`); the client never parses KiCad's files.
+   * A `.kicad_sch`'s: `sheet` (a sheet's path, `/` the root) draws that sheet's page alone, `index: false` leaves the
+   * hierarchy's index out (the viewer reads it with the first sheet it shows).
+   */
+  plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */

@@ -404,17 +404,23 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     reportActivity(activity) {
       void Promise.resolve(fetchImpl(cadApiUrl(`${API}/local/activity`, { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },
-    async plotPayload(file, { signal } = {}) {
+    async plotPayload(file, { signal, sheet, index } = {}) {
       // A `.kicad_pcb` drawn from its file on the SERVER, as geometry per layer and the board's
       // index, its pours KiCad's refill of a copy: a plain GET of the document's `plot`. The server
       // keeps it by the board's bytes, so a saved edit is the next read's; the client only paints.
       // Bytes the server has not plotted yet it plots off the request (KiCad's refill, the plot),
       // answering 202 { state: 'plotting', retryMs } until it has, and the client asks again after
       // `retryMs`, as a drawing's does; each request's 10 s is the time the server may stay silent.
+      // A `.kicad_sch`'s plot is its sheets', each a page: `sheet` asks for one alone, `index: false` without the
+      // hierarchy's index, which the first read carries.
       if (!file) throw new Error('Missing file');
       const api = await documentApi(file, { signal, operation: 'plotting' });
+      const query = new URLSearchParams();
+      if (typeof sheet === 'string' && sheet) query.set('sheet', sheet);
+      if (index === false) query.set('index', '0');
+      const route = query.size ? `${api}/plot?${query}` : `${api}/plot`;
       for (;;) {
-        const reply = await request(`${api}/plot`, { signal, timeoutMs: 10_000, operation: 'plotting' });
+        const reply = await request(route, { signal, timeoutMs: 10_000, operation: 'plotting' });
         if (reply?.state !== 'plotting') return reply;
         await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
         if (disposed) throw abortError();

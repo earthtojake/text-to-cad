@@ -73,3 +73,35 @@ export function itemColor(layerId, item) {
   if (item.t === "label") return layerId === "names" ? NAME_COLORS[item.kind] || NAME_COLORS.pad : netnameColor(layerId);
   return layerColor(layerId);
 }
+
+/**
+ * KiCad's default schematic colours (its light theme, `common/settings/builtin_color_themes.h`'s
+ * schematic half), by layer kind and by what an item is: the schematic plot's
+ * (`cad.engine.formats.kicad.schematic_plot`), as `cad kicad_sch snapshot` paints them
+ * (`cad.engine.render.schematic.LIGHT`, kept in step). A schematic is drawn on its paper in either
+ * theme of the viewer, as KiCad draws it: the colours are chosen against the paper, and a file's own
+ * colours (an item's `color`) were chosen against it too.
+ */
+export const SCHEMATIC_COLORS = Object.freeze({
+  background: "#F5F4EF", sheet: "#840000", notes: "#0000C2", sheet_box: "#840000", sheet_name: "#006464",
+  sheet_file: "#725600", sheet_pin: "#006464", sheet_field: "#840084", symbol: "#840000",
+  symbol_background: "#FFFFC2", pin: "#840000", wire: "#009600", bus: "#000084", junction: "#009600",
+  no_connect: "#000084", pin_number: "#A90000", pin_name: "#006464", reference: "#006464",
+  value: "#006464", field: "#840084", local: "#0F0F0F", global: "#840000", hierarchical: "#725600"
+});
+
+/**
+ * The colour a schematic item of a layer of `kind` is drawn in: its own where the file gives one, else
+ * the theme's for what it is (a field's name, a label's kind, a sheet's part), else its layer's.
+ * A symbol body's `fill: "background"` is KiCad's device background.
+ */
+export function schematicItemColor(kind, item) {
+  if (item.t === "poly" && item.fill === "background") return SCHEMATIC_COLORS.symbol_background;
+  if (item.color) return item.color;
+  if (kind === "field") {
+    return item.field === "Reference" ? SCHEMATIC_COLORS.reference : item.field === "Value" ? SCHEMATIC_COLORS.value : SCHEMATIC_COLORS.field;
+  }
+  if (kind === "label") return SCHEMATIC_COLORS[item.label] || SCHEMATIC_COLORS.local;
+  if (kind === "sheet_box" && item.role) return SCHEMATIC_COLORS[`sheet_${item.role}`] || SCHEMATIC_COLORS.sheet_box;
+  return SCHEMATIC_COLORS[kind] || SCHEMATIC_COLORS.symbol;
+}
