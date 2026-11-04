@@ -139,7 +139,7 @@ def _uncached_said(call: str, count: int) -> str:
     times = f"{count} call{'' if count == 1 else 's'}"
     if call.startswith("OCCT's "):
         return (f"runs {call} uncached ({times}): it is never retained; use build123d's operation for it, "
-                "or an engine reader (read_step, read_xbf, read_mesh)")
+                "or an engine reader (step.read, xbf.read, stl.read)")
     return (f"runs {call} uncached ({times}) on a shape no keyed call made (OCCT called past build123d, say): it is "
             "never retained; make that shape with build123d's operation, read it with an engine reader, or make it in "
             "a @memo function of values that returns it as made")
@@ -645,7 +645,7 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 body_script, _, function = body_name.rpartition("::")
                 retention["fallbacks"].setdefault(f"{Path(body_script).name}::{function}", []).extend(
                     f"reads {_shown(Path(path), Path(body_script).parent) if path else 'a file'} through {call}: "
-                    "its body is never retained (any edit runs it whole); use read_step/read_xbf/read_mesh" for call, path in reads)
+                    "its body is never retained (any edit runs it whole); use step.read/xbf.read/stl.read" for call, path in reads)
             # Each call a body ran uncached (``memo._ran_uncached``), which keeps it from being retained:
             # an OCCT maker no key names, or a build123d call given what no keyed call made.
             for body_name, counts in run.uncached.items():

@@ -107,8 +107,8 @@ class ReadAndPlaceTest(_Folder):
         plate = "\n            ".join(textwrap.dedent(writer).split("\n\n\n", 1)[1].strip().splitlines())
         refused = self.build("reads.py", reads.format(plate=plate, tail=".moved(bd.Location((0, 0, 1)))"))
         self.assertEqual([report["ok"] for report in refused], [True, False, False])
-        self.assertIn("read_xbf", refused[1]["error"])
-        self.assertIn("read_step", refused[2]["error"])
+        self.assertIn("xbf.read", refused[1]["error"])
+        self.assertIn("step.read", refused[2]["error"])
         for report in refused[1:]:
             self.assertIn("this build writes it (reads.py::plate)", report["error"])
 
