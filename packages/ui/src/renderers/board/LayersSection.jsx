@@ -44,7 +44,7 @@ function LayerEye({ id, hidden, onToggle }) {
  * panel's search is up, the layers whose names match, and nothing else. Everything here is the
  * board's Display (`plot2d/boardDisplay.js`), the one object `cad <type> snapshot --display` draws,
  * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. How the
- * board is drawn — its preset, side, other layers and opacities — is the view cluster's (`BoardDisplay.jsx`).
+ * board is drawn — its preset, side, other layers and opacities — is the strip's Flip and Display (`BoardDisplay.jsx`).
  *
  * @param {{ sheet: { layers: { id: string, kind: string, side: string, items: unknown[] }[] },
  *   display: ReturnType<typeof import("@cad/core/lib/plot2d/index.js").readBoardDisplay>,

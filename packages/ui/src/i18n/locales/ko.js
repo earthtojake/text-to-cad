@@ -885,6 +885,5 @@ export default {
   "board.text.layer_display": "레이어 표시",
   "board.text.others": "기타",
   "board.text.pours": "동박 채우기",
-  "board.text.view_controls": "기판 보기",
   "board.text.flip_board": "기판 뒤집기",
 };

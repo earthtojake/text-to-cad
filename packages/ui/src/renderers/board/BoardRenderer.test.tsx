@@ -130,12 +130,11 @@ const panel = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-flat
 const showTab = (pane: HTMLElement, name: string) => fireEvent.click(within(panel(pane)).getByRole('tab', { name }));
 const searchBox = (pane: HTMLElement) => within(panel(pane)).getByRole('textbox', { name: 'Search the board' }) as HTMLInputElement;
 const tabBody = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElement>(`[data-flat-panel-section="${id}"]`)!;
-// The view cluster at the canvas's bottom-right, and its Display popover, opened if it is not.
-const cluster = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Board view' });
+// The strip's Display popover, opened if it is not.
 const displayMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
   const shown = document.querySelector<HTMLElement>('[data-board-display-menu]');
   if (shown) return shown;
-  await user.click(within(cluster(pane)).getByRole('button', { name: 'Display' }));
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Display' }));
   return waitFor(() => { const found = document.querySelector<HTMLElement>('[data-board-display-menu]'); expect(found).not.toBeNull(); return found!; });
 };
 /** A choice of Display's, by its accessible name: its Select opened, the option pressed. */
@@ -171,15 +170,16 @@ const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unkno
   fireEvent.pointerUp(canvas, event);
 };
 
-it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — and nothing after it; its panel is docked, open, the Circuit then the Layers", async () => {
+it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then Flip and Display after the rule; its panel is docked, open, the Circuit then the Layers", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
-  expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  expect([...tools.querySelectorAll(':scope button[aria-pressed]')].filter(button => !button.closest('[data-view-controls]'))
+    .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // The board's view settings are the Layers tab's, as KiCad's Appearance panel keeps them: none on the strip.
-  expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  // Its view controls after the rule, as a 3D view's Display and Projection: Flip, then Display.
+  expect([...tools.querySelectorAll('[data-strip-rule] + [data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
@@ -197,9 +197,6 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   expect(tabBody(pane, 'circuit').hidden).toBe(false);
   expect(tabBody(pane, 'layers').hidden).toBe(true);
-  // Its view controls are the view cluster at the canvas's bottom-right: Flip, then Display.
-  expect(within(cluster(pane)).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
-  expect(pane.querySelector('[data-cad-view-cluster]')!.getAttribute('style')).toMatch(/right: 8px; bottom: 8px/);
   // The Layers tab is the layer list alone.
   expect(within(tabBody(pane, 'layers')).queryAllByRole('combobox')).toEqual([]);
   // Nothing is picked yet: no Quick Edit.
@@ -221,13 +218,13 @@ it('a native board uses the host language for its controls, tree and accessible 
   dispose();
 });
 
-it('a board without its index is the picture and its Layers alone: no tools, no Circuit, no Quick Edit', async () => {
+it('a board without its index is the picture, its Flip and Display, and its Layers: no tools, no Circuit, no Quick Edit', async () => {
   const { board: _index, ...picture } = BOARD as any;
   readPlot = () => json(picture);
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  expect(within(pane).queryAllByRole('button', { name: 'Select' })).toEqual([]);
+  expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
   expect(within(panel(pane)).getAllByRole('tab').map(tab => tab.querySelector('[data-flat-panel-tab-name]')!.textContent)).toEqual(['Layers']);
   tap(pane, [34.175, 15]);
   expect(box(pane)).toBeNull();
@@ -600,7 +597,7 @@ it('a preset chooses the layers; Flip and the pours are switches kept through a 
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
-  const flip = within(cluster(pane)).getByRole('button', { name: 'Flip board' });
+  const flip = within(strip(pane)).getByRole('button', { name: 'Flip board' });
   await user.click(flip);
   expect(flip.getAttribute('aria-pressed')).toBe('true');
   await user.click(within(await displayMenu(user, pane)).getByRole('checkbox', { name: 'Copper pours' }));

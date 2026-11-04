@@ -886,6 +886,5 @@ export default {
   "board.text.layer_display": "层显示",
   "board.text.others": "其他层",
   "board.text.pours": "铺铜",
-  "board.text.view_controls": "电路板视图",
   "board.text.flip_board": "翻转电路板",
 };

@@ -25,7 +25,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { BoardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
+import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
 import BoardSection from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
@@ -58,7 +58,7 @@ import { useBoardView } from "./useBoardView.js";
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its panel
  * (`kit/shell/FlatPanel.jsx`) is a search over two tabs, the Circuit (its parts in their schematic
  * blocks, and its nets) and the Layers (each layer's eye, a row's press for the active layer); its view
- * controls are the view cluster at the canvas's bottom-right (`BoardDisplay.jsx`: Flip, and Display's
+ * controls are the strip's, after its tools (`BoardDisplay.jsx`: Flip, and Display's
  * preset, other layers, pours and opacities): one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  */
@@ -451,9 +451,8 @@ function BoardSurface({ view, data }) {
   return (
     <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={[]}
-      panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack}
-      viewControls={layered ? <BoardViewControls display={display} sheet={sheet} onChange={setDisplay} disabled={!shown} touch={mobile} /> : null} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : []}
+      panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}

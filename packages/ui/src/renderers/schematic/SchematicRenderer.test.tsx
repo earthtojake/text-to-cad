@@ -131,8 +131,6 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
-  // No view cluster either: a schematic's colours are the theme's, and it has no display settings.
-  expect(pane.querySelector('[data-cad-view-cluster]')).toBeNull();
   // The panel: one search over both tabs, the Circuit open first.
   const panel = pane.querySelector<HTMLElement>('[data-flat-panel]')!;
   expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Parts, nets, sheets');

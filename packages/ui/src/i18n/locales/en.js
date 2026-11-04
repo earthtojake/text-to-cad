@@ -914,6 +914,5 @@ export default {
   "board.text.layer_display": "Layer display",
   "board.text.others": "Others",
   "board.text.pours": "Pours",
-  "board.text.view_controls": "Board view",
   "board.text.flip_board": "Flip board",
 };

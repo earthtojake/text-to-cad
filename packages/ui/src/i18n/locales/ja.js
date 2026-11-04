@@ -885,6 +885,5 @@ export default {
   "board.text.layer_display": "レイヤー表示",
   "board.text.others": "その他",
   "board.text.pours": "ベタ",
-  "board.text.view_controls": "基板の表示",
   "board.text.flip_board": "基板を反転",
 };

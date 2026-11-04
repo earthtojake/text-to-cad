@@ -211,8 +211,7 @@ schematic blocks their footprints record (by kind on a board that records none) 
 block picks every part in it, a net picks the whole net. Each arrives as a reference
 ([checks](references/checks.md#references) says what each names and how to resolve it). Its
 **Layers** tab lists the layers: each layer's eye, and a press for the active layer (drawn on top).
-How the board is drawn is the view cluster at the canvas's bottom-right: **Flip board**, and
-**Display** — the preset (the mode), Other layers (KiCad's high-contrast modes: the layers but the
+How the board is drawn is the toolbar's, after its tools: **Flip board**, and **Display** — the preset (the mode), Other layers (KiCad's high-contrast modes: the layers but the
 active one **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling them; the outline, and the drills and
 vias through an active copper layer, always stay at full strength), the copper pours and the zones'
 and tracks' opacity. They are the display, so a Quick Edit's packet

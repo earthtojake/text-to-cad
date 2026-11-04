@@ -1,9 +1,10 @@
-import { useI18n } from "@cad/ui/i18n";
+import { useI18n, english } from "@cad/ui/i18n";
+import { useState } from "react";
 import { FlipHorizontal2, SlidersHorizontal } from "lucide-react";
-import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
-import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../kit/tools/stripTouch.js";
+import { FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
+import { useStripButtonClass } from "../kit/tools/FloatingToolBar.js";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -18,13 +19,12 @@ import { SUB_TOOLBAR_SLIDER_CLASS } from "../kit/tools/SubToolbar.jsx";
 
 /**
  * A board's view controls (`settings-ui.md`), the only ones a board has, because its picture is a
- * choice: the view cluster at the canvas's bottom-right (`FlatViewFrame.jsx`'s `viewControls`), apart
- * from the strip's tools, as SOLIDWORKS' Heads-up View toolbar, Onshape's render menu under its
- * view cube and Fusion's navigation bar keep them. Two tiles:
+ * choice: two tiles at the strip's end, after its rule, where a 3D view's Display and Projection
+ * stand (on a phone, rows of the strip's More):
  *
  * - **Flip** (KiCad's View ▸ Flip Board): the board seen from below, mirrored, its back layers on top,
  *   and back; pressed while it is from below.
- * - **Display**, a popover of settings sections, as the settings form's rows are (a label in its
+ * - **Display** (a sliders glyph), a popover of settings sections, as the settings form's rows are (a label in its
  *   muted column, the control filling the rest): **Display** — **Preset**, the modes
  *   (`plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board, Copper, Assembly,
  *   Placement), and **Custom** while the Layers tab's eyes have left the mode's set (choosing the mode
@@ -126,32 +126,56 @@ function BoardLayerDisplaySettings({ display, sheet, onChange }) {
 }
 
 /**
- * The board's view cluster: Flip, then Display and its popover. `touch`: a phone's 36px tiles.
- * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void,
- *   disabled?: boolean, touch?: boolean }} props
+ * Display's tile and popover, a 3D view's Projection's way (`kit/shell/ProjectionPopover.jsx`): its
+ * own tile on the strip, or, from a phone's More, `anchor`ed there and held open by it.
  */
-export function BoardViewControls({ display, sheet, onChange, disabled = false, touch = false }) {
+function BoardDisplayPopover({ display, sheet, onChange, disabled = false, anchor = null, open: held, onOpenChange }) {
   const { t } = useI18n();
-  const tile = touch ? TOUCH_STRIP_BUTTON_CLASS : STRIP_BUTTON_CLASS;
+  const [ownOpen, setOpen] = useState(false);
+  const open = held ?? ownOpen;
+  const tile = useStripButtonClass();
+  const changeOpen = next => { setOpen(next); onOpenChange?.(next); };
+  return <Popover open={open} onOpenChange={changeOpen} modal={false}>
+    {anchor ? <PopoverAnchor virtualRef={anchor} /> : <PopoverTrigger asChild>
+      <ToolbarButton label={t("display.label")} tooltipSide="bottom" className={tile} disabled={disabled} data-board-display-button="">
+        <SlidersHorizontal aria-hidden="true" />
+      </ToolbarButton>
+    </PopoverTrigger>}
+    {/* A settings form under the strip: the menus' surface, the form's rows, 15rem for a slider beside its value. */}
+    <PopoverContent align="center" sideOffset={6} collisionPadding={8} aria-label={t("display.label")} data-board-display-menu=""
+      className={cn(FLOATING_SURFACE_CLASS, "w-60 p-1 text-tiny data-[state=closed]:animate-none!")}>
+      <BoardPresetSettings display={display} sheet={sheet} onChange={onChange} />
+      <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onChange} />
+    </PopoverContent>
+  </Popover>;
+}
+
+/** Flip's tile: pressed while the board is seen from below. */
+function BoardFlipTile({ below, onToggle, disabled }) {
+  const { t } = useI18n();
+  const tile = useStripButtonClass();
+  return <ToolbarButton label={t("board.text.flip_board")} tooltipSide="bottom" className={tile} active={below} aria-pressed={below} disabled={disabled}
+    onClick={onToggle} data-board-side={below ? "bottom" : "top"}>
+    <FlipHorizontal2 aria-hidden="true" />
+  </ToolbarButton>;
+}
+
+/**
+ * The strip's view controls for a board (`FloatingToolBar.js`'s `ViewportViewControl`s), Flip then
+ * Display: each its tile, and in a phone's More, Flip a ticked row and Display its popover from More.
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void,
+ *   disabled?: boolean, t?: Function }} options
+ */
+export function boardViewControls({ display, sheet, onChange, disabled = false, t = english }) {
   const below = display.side === "bottom";
-  return <div role="group" aria-label={t("board.text.view_controls")} data-board-view-controls=""
-    className={cn("pointer-events-auto inline-flex items-center gap-0.5 rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}>
-    <ToolbarButton label={t("board.text.flip_board")} tooltipSide="top" className={tile} active={below} aria-pressed={below} disabled={disabled}
-      onClick={() => onChange({ ...display, side: below ? "top" : "bottom" })} data-board-side={display.side}>
-      <FlipHorizontal2 aria-hidden="true" />
-    </ToolbarButton>
-    <Popover modal={false}>
-      <PopoverTrigger asChild>
-        <ToolbarButton label={t("display.label")} tooltipSide="top" className={tile} disabled={disabled} data-board-display-button="">
-          <SlidersHorizontal aria-hidden="true" />
-        </ToolbarButton>
-      </PopoverTrigger>
-      {/* A settings form over the canvas: the menus' surface, the form's rows, 15rem for a slider beside its value. */}
-      <PopoverContent side="top" align="end" sideOffset={6} collisionPadding={8} aria-label={t("display.label")} data-board-display-menu=""
-        className={cn(FLOATING_SURFACE_CLASS, "w-60 p-1 text-tiny data-[state=closed]:animate-none!")}>
-        <BoardPresetSettings display={display} sheet={sheet} onChange={onChange} />
-        <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onChange} />
-      </PopoverContent>
-    </Popover>
-  </div>;
+  const flip = () => onChange({ ...display, side: below ? "top" : "bottom" });
+  return [{
+    id: "flip", label: t("board.text.flip_board"), icon: <FlipHorizontal2 />, disabled, active: below, onSelect: flip,
+    tile: <BoardFlipTile below={below} onToggle={flip} disabled={disabled} />
+  }, {
+    id: "display", label: t("display.label"), icon: <SlidersHorizontal />, disabled,
+    tile: <BoardDisplayPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} />,
+    popover: ({ anchor, open, onOpenChange }) => <BoardDisplayPopover display={display} sheet={sheet} onChange={onChange}
+      anchor={anchor} open={open} onOpenChange={onOpenChange} />
+  }];
 }
