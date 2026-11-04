@@ -270,8 +270,8 @@ export default {
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "Got it",
   "whatsNew.title": "What's New (v{version})",
-  "whatsNew.0.11.boards.title": "KiCad boards.",
-  "whatsNew.0.11.boards.body": "Open a `.kicad_pcb` in the viewer, and your agent can check it and export its fab files.",
+  "whatsNew.0.11.boards.title": "KiCad.",
+  "whatsNew.0.11.boards.body": "Your agent can lay out, check and export KiCad boards and schematics, with KiCad built in.",
   "whatsNew.0.11.install.title": "One-command install and updates.",
   "whatsNew.0.11.install.body": "One command sets up every agent app on your computer, and the Update button keeps it current.",
   "whatsNew.0.11.print.title": "Your own print tolerance.",

@@ -256,8 +256,8 @@ export default {
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "知道了",
   "whatsNew.title": "新功能（v{version}）",
-  "whatsNew.0.11.boards.title": "KiCad 電路板。",
-  "whatsNew.0.11.boards.body": "在檢視器中開啟 `.kicad_pcb`，你的代理即可檢查它並匯出生產檔案。",
+  "whatsNew.0.11.boards.title": "KiCad。",
+  "whatsNew.0.11.boards.body": "你的代理可以佈局、檢查並匯出 KiCad 電路板與電路圖，KiCad 已內建。",
   "whatsNew.0.11.install.title": "一個指令完成安裝與更新。",
   "whatsNew.0.11.install.body": "一個指令即可設定這台電腦上的所有代理應用程式，「更新」按鈕讓它保持最新。",
   "whatsNew.0.11.print.title": "自訂列印公差。",

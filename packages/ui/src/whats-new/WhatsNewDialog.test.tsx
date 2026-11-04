@@ -33,8 +33,8 @@ it("an update says what's new: the release's title, each item a bold title and i
   expect(dialog).toBeTruthy();
   expect(screen.getByRole('heading', { name: "What's New (v0.11.0)" })).toBeTruthy();
   expect([...dialog!.querySelectorAll('li strong')].map(node => node.textContent)).toEqual(
-    ['KiCad boards.', 'One-command install and updates.', 'Your own print tolerance.']);
-  expect(dialog!.querySelector('li code')?.textContent).toBe('.kicad_pcb');
+    ['KiCad.', 'One-command install and updates.', 'Your own print tolerance.']);
+  expect(dialog!.querySelector('li')?.textContent).toContain('lay out, check and export KiCad boards and schematics');
   // Read by a screen reader as its title and its notes; the button has the focus.
   expect(dialog!.getAttribute('aria-describedby')).toBe(dialog!.querySelector('ul')!.id);
   expect(screen.getAllByRole('button').map(button => button.textContent)).toEqual(['Got it']);

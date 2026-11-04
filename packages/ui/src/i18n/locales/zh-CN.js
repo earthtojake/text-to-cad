@@ -256,8 +256,8 @@ export default {
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "知道了",
   "whatsNew.title": "新功能（v{version}）",
-  "whatsNew.0.11.boards.title": "KiCad 电路板。",
-  "whatsNew.0.11.boards.body": "在查看器中打开 `.kicad_pcb`，你的智能体即可检查它并导出生产文件。",
+  "whatsNew.0.11.boards.title": "KiCad。",
+  "whatsNew.0.11.boards.body": "你的智能体可以布局、检查和导出 KiCad 电路板与原理图，KiCad 已内置。",
   "whatsNew.0.11.install.title": "一条命令完成安装和更新。",
   "whatsNew.0.11.install.body": "一条命令即可设置这台电脑上的所有智能体应用，“更新”按钮让它保持最新。",
   "whatsNew.0.11.print.title": "自定打印公差。",

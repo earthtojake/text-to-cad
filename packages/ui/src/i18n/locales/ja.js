@@ -255,8 +255,8 @@ export default {
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "OK",
   "whatsNew.title": "新機能（v{version}）",
-  "whatsNew.0.11.boards.title": "KiCad の基板。",
-  "whatsNew.0.11.boards.body": "ビューアーで `.kicad_pcb` を開くと、エージェントがチェックして製造用ファイルを書き出せます。",
+  "whatsNew.0.11.boards.title": "KiCad。",
+  "whatsNew.0.11.boards.body": "エージェントが KiCad の基板と回路図をレイアウト、チェック、書き出しでき、KiCad は同梱されています。",
   "whatsNew.0.11.install.title": "インストールも更新もコマンドひとつで。",
   "whatsNew.0.11.install.body": "ひとつのコマンドでこのコンピューターのすべてのエージェントアプリが設定され、アップデートボタンで最新の状態を保てます。",
   "whatsNew.0.11.print.title": "印刷の公差を指定。",
