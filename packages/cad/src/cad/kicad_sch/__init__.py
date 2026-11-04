@@ -24,10 +24,26 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cad.engine.formats.kicad.schematic import read_schematic as read
+from typing import Any
+
 from cad.results import CheckResult, ExportResult
 
 __all__ = ["erc", "export", "inspect", "read"]
+
+
+def __getattr__(name: str) -> Any:
+    # The reader loads when first used: the formats package it lives in imports numpy, and a command's
+    # help (``cad kicad_sch erc --help``) is made from this module without it.
+    if name == "read":
+        from cad.engine.formats.kicad.schematic import read_schematic
+
+        globals()["read"] = read_schematic
+        return read_schematic
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | {"read"})
 
 
 def inspect(path: Path | str, ref: str | None = None) -> dict:

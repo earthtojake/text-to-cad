@@ -24,11 +24,31 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from cad.engine.formats.kicad.board_index import read_board as read
-from cad.engine.formats.kicad.geometry import inside
+from typing import Any
+
 from cad.results import CheckResult, ExportResult
 
 __all__ = ["drc", "export", "inside", "inspect", "read"]
+
+# The reader and the even-odd test load when first used: the formats package they live in imports
+# numpy, and a command's help (``cad kicad_pcb drc --help``) is made from this module without it.
+_LAZY = {"read": ("cad.engine.formats.kicad.board_index", "read_board"),
+         "inside": ("cad.engine.formats.kicad.geometry", "inside")}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY:
+        import importlib
+
+        module, attribute = _LAZY[name]
+        value = getattr(importlib.import_module(module), attribute)
+        globals()[name] = value
+        return value
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(_LAZY))
 
 
 def inspect(path: Path | str) -> dict:
