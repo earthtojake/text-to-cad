@@ -38,7 +38,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
  "<family>": {"items": [{<fields>, "location": "plate/face 7", "xyz": [x, y, z], "faces": [...]}, ...],
               "count": 12, <scalars>},
  "partial": false, "partial_sections": [],
- "rules": {"set", "title", "version", "generic", "note", "context", "evaluated", "failed": [ids],
+ "rules": {"set", "title", "version", "generic", "note", "context", "evaluated", "failed": [ids], "none_found": [ids],
            "outcomes": [{"rule", "family", "field", "op", "limit", "unit", "severity", "source", "status",
                          "evaluated", "unmeasured", "failures": [{"value", "location", "xyz"}], "reason"}],
            "sources": [{"id", "publisher", "title", "url", "accessed"}]}}
@@ -51,10 +51,13 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   part of an assembly is measured once, placed where its first occurrence stands.
 - **A family that failed** is `{"error": "..."}`, named in `partial_sections`, and an error finding
   (`measurement_failed`); the other families are still reported.
-- **Every rule has an outcome**: `passed`, `failed` (each failing item's value, place and the limit),
-  `not_evaluated` (the set gives no limit for this material or technology, or nothing was measured to judge)
-  or `not_applicable` (the rule is for another context: turning, a gauge, a technology). A figure that was
-  not measured is never a pass. At most eight failures of one rule are findings; the rest are counted in one
+- **Every rule has an outcome**: `passed` (each item within the limit; with none to judge -- no hole, no
+  wall under the family's threshold -- `passed` with `evaluated` 0, reason `none found`, listed in
+  `rules.none_found`), `failed` (each failing item's value, place and the limit), `not_evaluated` (the set
+  gives no limit for this material or technology, or the family or the figure was not measured: unverified)
+  or `not_applicable` (the rule is for another context -- turning, a gauge, a technology, a cut file -- or
+  reads a figure this source's items do not carry, which another rule judges). A figure that was not
+  measured is never a pass. At most eight failures of one rule are findings; the rest are counted in one
   more, and `rules.outcomes` lists every one.
 - **Items** are sorted worst first and capped (a few hundred), with the family's `count`. Every figure is
   finite: the result is JSON (`allow_nan=False`), and a report that is not is `not_finite`.

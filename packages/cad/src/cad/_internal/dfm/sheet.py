@@ -415,7 +415,7 @@ _SCS_RULES = (
     _r("flat_min_length", "parts", "flat_length_mm", "min", 38.1, "mm", "flat blank's long side to bend",
        SCS_BENDING, when={"bent": True}, fix="the smallest part to bend is 0.375 x 1.5 in flat"),
     _r("cut_layers", "cut_file", "cut_layer_count", "max", 1.0, "layers", "layers holding cut geometry",
-       SCS_CUTTING, severity="warning", fix="put all cut geometry on one layer"),
+       SCS_CUTTING, severity="warning", when={"cut_file": True}, fix="put all cut geometry on one layer"),
 )
 
 _SHOP_ONLY = {
@@ -541,7 +541,8 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
     scale = report.get("scale") or {}
     found: dict[str, Any] = {"material": material, "material_class": materials.material_class(material),
                              "thickness": thickness, "bent": bent, "kerf": resolved.get("kerf"),
-                             "scale_known": not scale.get("units_unknown", False)}
+                             "scale_known": not scale.get("units_unknown", False),
+                             "cut_file": "cut_file" in report}  # a DXF's: a cut file's own rules apply
     given = sheet_size(resolved.get("sheet_size"))
     if given is None and rules == "sendcutsend" and bent:
         given = SCS_BENDING_SHEET

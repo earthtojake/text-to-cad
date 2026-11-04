@@ -272,6 +272,20 @@ def dfm_for(document_type: str) -> Any:
                 raise
             raise ModuleNotFoundError(said, name=error.name) from None
 
+    if document_type in CUT_TYPES:
+        # A cut file's own help: what it checks and what it is; the options stay every type's (one signature).
+        doc = dfm.__doc__ or ""
+        summary = doc.split("\n\n", 2)
+        dfm.__doc__ = "\n\n".join([
+            "Check a sheet's cut file (a DXF) for laser, waterjet or router cutting: --process sheet.",
+            "        Its units, closed contours on the cut layers, curves cut twice (overlapping, crossing, zero-area),\n"
+            "        annotation on a cut layer, curves drawn as short lines, and holes, slots, webs and spacing against the\n"
+            "        kerf and the thickness, judged against a cited rule set (--rules); each finding at a layer and an\n"
+            "        entity handle. Only the sheet process's options apply.",
+            summary[2] if len(summary) > 2 else ""]).replace(
+            "        source: what to check: a file of the type (a .step, .xbf, .stl, .3mf, .glb, or a .dxf cut file), or a\n"
+            "          model's document id the engine holds (cad model dfm), or the handle its call returns.",
+            "        source: the .dxf cut file to check.")
     dfm.__module__ = f"cad.{document_type}"
     dfm.__qualname__ = dfm.__name__ = "dfm"
     return dfm

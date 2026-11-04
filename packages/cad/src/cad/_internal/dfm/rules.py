@@ -11,8 +11,10 @@ a ref in ``cad xbf inspect``'s grammar -- and ``xyz``), or the family itself whe
 for the whole part). The limit is a number, or one number per value of a ``context`` key (``by``: the
 material's class, a printing technology), times another (``scale_by``: a sheet's thickness), and the rule
 applies only where the context matches ``when`` (elsewhere it is recorded ``not_applicable``, never dropped)
-and to the items matching ``item_when``. A figure that was not measured is no verdict: it is counted
-(``not_evaluated``), never passed.
+and to the items matching ``item_when`` (``not_applicable`` too where no item carries the fields it reads: a
+mesh's walls, against a rule for supported walls). A family measured with nothing to judge -- no hole, no
+wall under its threshold -- passes, ``none found``. A figure that was not measured, or a family that was
+not, is no verdict: it is counted (``not_evaluated``), never passed.
 
 The standard library alone: the command resolves a rule set before it starts an environment.
 """
@@ -129,6 +131,10 @@ def _matches(conditions: Mapping[str, Any], values: Mapping[str, Any]) -> bool:
     return True
 
 
+def _wants_none(wanted: Any) -> bool:
+    return wanted is None or (isinstance(wanted, (tuple, list, set, frozenset)) and None in wanted)
+
+
 def _number(value: Any) -> float | None:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         return None
@@ -140,14 +146,21 @@ def _fails(rule: Rule, value: float, limit: float) -> bool:
     return value < limit - slack if rule.op == "min" else value > limit + slack
 
 
-def _items(report: Mapping[str, Any], rule: Rule) -> list[Mapping[str, Any]] | None:
+def _items(report: Mapping[str, Any], rule: Rule) -> tuple[list[Mapping[str, Any]] | None, bool]:
+    """The items the rule judges (None: the family was not measured), and whether the family holds items the
+    rule could read at all: False where every item lacks the fields its ``item_when`` reads (a mesh's walls,
+    which do not say whether they are supported, against a rule for supported walls)."""
     family = report.get(rule.family)
     if not isinstance(family, Mapping) or "error" in family:
-        return None
+        return None, True
     items = family.get("items")
     if isinstance(items, list):
-        return [item for item in items if isinstance(item, Mapping) and _matches(rule.item_when, item)]
-    return [family]
+        listed = [item for item in items if isinstance(item, Mapping)]
+        readable = not rule.item_when or not listed or any(
+            all(item.get(key) is not None or _wants_none(wanted) for key, wanted in rule.item_when.items())
+            for item in listed)
+        return [item for item in listed if _matches(rule.item_when, item)], readable
+    return [family], True
 
 
 def _where(item: Mapping[str, Any], rule: Rule) -> str:
@@ -194,7 +207,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
                                  f"{key} is {value}" for key, value in rule.when.items())})
             continue
         limit = rule.limit_for(context)
-        items = _items(report, rule) if limit is not None else None
+        items, readable = _items(report, rule) if limit is not None else (None, True)
         outcome: dict[str, Any] = {"rule": rule.id, "family": rule.family, "field": rule.field, "op": rule.op,
                                    "limit": limit, "unit": rule.unit, "severity": rule.severity,
                                    "source": rule.source}
@@ -202,6 +215,11 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             outcome["status"] = "not_evaluated"
             outcome["reason"] = ("the rule set gives no limit here" if limit is None
                                  else f"{rule.family} was not measured")
+            outcomes.append(outcome)
+            continue
+        if not readable:
+            outcome.update(status="not_applicable", reason="this source's " + rule.family + " do not say "
+                           + ", ".join(rule.item_when) + ": another rule judges them")
             outcomes.append(outcome)
             continue
         failures: list[dict[str, Any]] = []
@@ -215,10 +233,13 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             if _fails(rule, value, limit):
                 failures.append({"value": value, "location": _where(item, rule), "xyz": item.get("xyz")})
         failures.sort(key=lambda found: found["value"], reverse=rule.op == "max")
-        outcome.update(status="failed" if failures else ("passed" if evaluated else "not_evaluated"),
-                       evaluated=evaluated, unmeasured=unmeasured, failures=failures)
+        # Measured and nothing to judge -- no hole, no wall under the family's own threshold -- is a pass: none
+        # found. A figure the items do not carry is no pass.
+        status = "failed" if failures else "passed" if evaluated or not unmeasured else "not_evaluated"
+        outcome.update(status=status, evaluated=evaluated, unmeasured=unmeasured, failures=failures)
         if not evaluated and not failures:
-            outcome["reason"] = "no feature it applies to" if not unmeasured else f"{rule.field} was not measured"
+            outcome["reason"] = "none found: no feature it applies to" if not unmeasured else \
+                f"{rule.field} was not measured"
         outcomes.append(outcome)
         for failure in failures[:SHOWN_PER_RULE]:
             findings.append(CheckFinding(rule.severity, rule.id, _message(rule, rule_set, failure["value"], limit),
@@ -231,6 +252,8 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         "set": rule_set.name, "title": rule_set.title, "version": rule_set.version, "generic": rule_set.generic,
         "note": rule_set.note, "context": {key: value for key, value in context.items() if _plain(value)},
         "evaluated": sum(1 for outcome in outcomes if outcome["status"] in ("passed", "failed")),
+        "none_found": [outcome["rule"] for outcome in outcomes
+                       if outcome["status"] == "passed" and not outcome.get("evaluated")],
         "failed": [outcome["rule"] for outcome in outcomes if outcome["status"] == "failed"],
         "outcomes": outcomes,
         "sources": [source.as_data() for source in rule_set.sources],

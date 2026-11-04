@@ -77,6 +77,19 @@ class RulesTest(unittest.TestCase):
         self.assertEqual(found[0].message.split(" is ")[0], "v 21 mm")  # the worst first
         self.assertEqual(len(record["outcomes"][0]["failures"]), 20)
 
+    def test_nothing_to_judge_passes_and_figures_a_source_lacks_are_not_applicable(self) -> None:
+        holes = Rule("hole", "holes", "d", "min", 1.0, "mm", "hole", "s")
+        supported = Rule("wall", "walls", "t", "min", 1.0, "mm", "supported wall", "s", item_when={"supported": True})
+        unknown = Rule("mesh_wall", "walls", "t", "min", 1.0, "mm", "wall", "s", item_when={"supported": None})
+        report = {"holes": {"items": [], "count": 0}, "walls": {"items": [{"t": 0.5, "supported": None}]}}
+        found, record = evaluate(report, _set(holes, supported, unknown), {})
+        status = {o["rule"]: (o["status"], o.get("reason", "")) for o in record["outcomes"]}
+        self.assertEqual(status["hole"], ("passed", "none found: no feature it applies to"))  # measured: no hole
+        self.assertEqual(status["wall"][0], "not_applicable")  # a mesh's walls do not say they are supported
+        self.assertEqual(status["mesh_wall"][0], "failed")    # the rule for walls of unknown support reads them
+        self.assertEqual(record["none_found"], ["hole"])
+        self.assertEqual([f.code for f in found], ["mesh_wall"])
+
     def test_a_rule_citing_a_source_its_set_does_not_list_is_refused(self) -> None:
         with self.assertRaises(ValueError):
             _set(Rule("r", "f", "v", "max", 1.0, "mm", "v", "elsewhere"))
