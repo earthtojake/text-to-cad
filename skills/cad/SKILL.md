@@ -193,7 +193,9 @@ A project with standing deliverables gets an `exports.py` that imports its model
 calls `export(x, path, ...)` on each (`x` a model call's handle); running it rewrites every deliverable
 ([exports](references/exports.md)). An export takes a document and its destinations,
 and nothing else: a posed file is a model that returns the posed assembly
-(`posed(arm(), "folded")`), and a part on its own is the part's own model.
+(`posed(arm(), "folded")`), and a part on its own is the part's own model. An STL or 3MF
+for printing a part with fits takes `--tolerance MM`, about a tenth of its smallest
+clearance ([print tolerance](references/exports.md#print-tolerance)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
