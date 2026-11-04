@@ -49,8 +49,8 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * drawn, as a board draws none. Its sidebar is the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
  * Navigator: a press shows that sheet) and the Circuit (`SchematicSection.jsx`, a board's tree rules);
  * a double-click on a sheet symbol enters its sheet, and the trail under the strip (`SheetTrail.jsx`)
- * goes back up. Ink and measurements are the sheet's they were made on: showing another sheet lets them
- * go. A schematic has no view controls: it has no layers, and its colours are the theme's.
+ * goes back up. Each sheet keeps its view for the session: going back to one finds it where it was left.
+ * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic has no view controls: it has no layers, and its colours are the theme's.
  * A selected net is lit across the sheet shown, the rest stepped back, as KiCad's net highlight.
  */
 
@@ -108,7 +108,16 @@ function SchematicSurface({ view, data }) {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => stateChangeRef.current?.(record), SAVE_DELAY_MS);
   }, []);
-  const rememberView = useCallback(transform => save({ camera: transform ? { ...transform } : null }), [save]);
+  // Each sheet's view, for the session: going back to a sheet finds it where it was left (null: the fit).
+  // The file's view keeps the one on screen, which a reopen restores on the sheet it reopens on.
+  const sheetViews = useRef(null);
+  if (!sheetViews.current) sheetViews.current = new Map([[sheet, restored]]);
+  const lastSheet = useRef(null);
+  const rememberView = useCallback(transform => {
+    const camera = transform ? { ...transform } : null;
+    sheetViews.current.set(lastSheet.current ?? sheet, camera);
+    save({ camera });
+  }, [save, sheet]);
   useEffect(() => { storedRef.current = JSON.stringify(writeFileView({ camera: restored, renderer: { schematic: { sheet }, isolated: { selectors: [...restoredIsolation] } }, signatures: SLICES })); }, []);
   useEffect(() => { if (shownSheet) save({ sheet: shownSheet }); }, [shownSheet, save]);
   useEffect(() => { save({ isolated: isolation.isolated }); }, [isolation.isolated, save]);
@@ -188,7 +197,6 @@ function SchematicSurface({ view, data }) {
     pendingFrame.current = frameSelectors;
     setSheet(canonicalSheetPath(path));
   }, []);
-  const lastSheet = useRef(null);
   useEffect(() => {
     if (!shownSheet || !page) return;
     const previous = lastSheet.current;
@@ -202,7 +210,10 @@ function SchematicSurface({ view, data }) {
     const wanted = pendingFrame.current;
     pendingFrame.current = null;
     if (wanted && frameOnPage(wanted)) return;
-    if (previous !== shownSheet) viewRef.current?.fit();
+    if (previous === shownSheet) return;
+    const left = sheetViews.current.get(shownSheet);
+    if (left) viewRef.current?.setView(left);
+    else viewRef.current?.fit();
   }, [shownSheet, page]);
   /** Frame what `selectors` name on the sheet shown; false when none of it is drawn here. */
   function frameOnPage(selectors) {

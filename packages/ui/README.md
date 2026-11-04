@@ -339,5 +339,6 @@ The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot vie
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterChecklist.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
 first): its Hierarchy and Circuit in the file sidebar, a sheet symbol's double-click and the trail
-under the strip to move between sheets, and the app's theme, switched live; ERC belongs to the
+under the strip to move between sheets (each keeping its view for the session), and the app's theme,
+switched live; ERC belongs to the
 `cad` command.

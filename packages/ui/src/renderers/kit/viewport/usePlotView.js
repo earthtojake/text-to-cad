@@ -114,6 +114,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     return Object.assign(light, { dark });
   }, [noun]);
 
-  return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame, capture, thumbnail,
+  return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame, setView: view.setView,
+    capture, thumbnail,
     transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

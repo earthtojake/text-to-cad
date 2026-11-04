@@ -7,7 +7,9 @@
  * selects, then the ink itself in the selection's blue. A net or what is isolated steps the rest of the
  * sheet back first — the paper laid over it, faint — as KiCad's net highlight does, and an isolated
  * thing is drawn again in its own colours. Widths are screen pixels, as the person reads them, at any
- * zoom. Pure canvas 2D, in page millimetres (`plot2d`'s page space).
+ * zoom. First, the sheet's edge, a pixel wide just outside the paper, so the paper reads against the pane
+ * round it in either theme (a dark sheet on the dark app's grey above all). Pure canvas 2D, in page
+ * millimetres (`plot2d`'s page space).
  */
 import { schematicColors, schematicItemColor } from "../plot2d/theme.js";
 
@@ -17,11 +19,11 @@ import { schematicColors, schematicItemColor } from "../plot2d/theme.js";
  */
 export const SCHEMATIC_OVERLAY_COLORS = Object.freeze({
   light: Object.freeze({
-    selection: "#1f6feb", shadow: "rgba(31, 111, 235, 0.28)", hover: "rgba(31, 111, 235, 0.22)",
+    selection: "#1f6feb", shadow: "rgba(31, 111, 235, 0.28)", hover: "rgba(31, 111, 235, 0.22)", edge: "#B4B4B4",
     dim: "rgba(245, 244, 239, 0.72)", draft: "rgba(31, 111, 235, 0.08)", draftEdge: "rgba(31, 111, 235, 0.7)"
   }),
   dark: Object.freeze({
-    selection: "#8dc5ff", shadow: "rgba(141, 197, 255, 0.3)", hover: "rgba(141, 197, 255, 0.24)",
+    selection: "#8dc5ff", shadow: "rgba(141, 197, 255, 0.3)", hover: "rgba(141, 197, 255, 0.24)", edge: "#6B6B6B",
     dim: "rgba(28, 28, 28, 0.72)", draft: "rgba(141, 197, 255, 0.1)", draftEdge: "rgba(141, 197, 255, 0.75)"
   })
 });
@@ -99,6 +101,10 @@ export function drawSchematicOverlay(ctx, sheet, { transform, pixelRatio = 1, wi
     ? [-transform.offsetX * px, -transform.offsetY * px, (width - transform.offsetX) * px, (height - transform.offsetY) * px] : null;
   ctx.save();
   pageSpace(ctx, transform, pixelRatio);
+  // The paper's edge, outside it: half a pixel out, so no ink at the edge is covered.
+  ctx.strokeStyle = colors.edge;
+  ctx.lineWidth = px;
+  ctx.strokeRect((sheet.x || 0) - px / 2, (sheet.y || 0) - px / 2, sheet.width + px, sheet.height + px);
   if (isolated.length || dim) {
     ctx.fillStyle = colors.dim;
     ctx.fillRect(sheet.x || 0, sheet.y || 0, sheet.width, sheet.height);

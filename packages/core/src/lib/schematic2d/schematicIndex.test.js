@@ -110,12 +110,13 @@ test("the overlay steps the sheet back for a net and draws the selection in its 
     fillRect(...args) { calls.push(["fillRect", this.fillStyle, ...args]); },
     fill() { calls.push(["fill", this.fillStyle]); },
     stroke() { calls.push(["stroke", this.strokeStyle]); },
-    strokeRect() { calls.push(["strokeRect"]); }
+    strokeRect() { calls.push(["strokeRect", this.strokeStyle]); }
   };
   const net = page.itemsOf(index.resolve("#net:+5V"));
   drawSchematicOverlay(ctx, layout.sheets[0], { transform: { scale: 4, offsetX: 0, offsetY: 0 }, selected: net, dim: true });
-  assert.deepEqual(calls[0], ["fillRect", "rgba(245, 244, 239, 0.72)", 0, 0, 297, 210], "the paper over the rest");
-  assert.deepEqual(calls.slice(1).map(([name, style]) => `${name} ${style}`), [
+  assert.deepEqual(calls[0], ["strokeRect", "#B4B4B4"], "the paper's edge first");
+  assert.deepEqual(calls[1], ["fillRect", "rgba(245, 244, 239, 0.72)", 0, 0, 297, 210], "the paper over the rest");
+  assert.deepEqual(calls.slice(2).map(([name, style]) => `${name} ${style}`), [
     "stroke rgba(31, 111, 235, 0.28)", "stroke rgba(31, 111, 235, 0.28)", "fill rgba(31, 111, 235, 0.28)", "stroke rgba(31, 111, 235, 0.28)",
     "stroke #1f6feb", "stroke #1f6feb", "fill #1f6feb"
   ]);
