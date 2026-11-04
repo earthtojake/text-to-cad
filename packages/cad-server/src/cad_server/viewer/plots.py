@@ -1,7 +1,9 @@
 """``GET /api/v1/documents/kicad_pcb/<id>/plot`` and ``.../drc``: a KiCad board drawn as geometry per layer,
 and KiCad's design rule check of it, each kept by the board's bytes.
 ``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files, every
-sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`), read again on each request.
+sheet a page of layers (:mod:`cad.engine.formats.kicad.schematic_plot`), read again on each request; with
+``?sheet=/Power/`` that sheet's page alone, and with ``index=0`` without the hierarchy's index (the viewer
+reads the sheet on screen, the index with the first).
 
 The board is the document's file, by its absolute path (``http_app`` resolves the id): a path that is not
 absolute, or not a ``.kicad_pcb``, is 400, a missing file 404. A file that is not a readable board is 400
@@ -63,8 +65,10 @@ def resolve_plot_path(file_ref) -> str | None:
     return candidate if os.path.isfile(candidate) else None
 
 
-def schematic_payload_response(file_ref) -> tuple[int, bytes | dict]:
-    """``(status, body)``: a schematic's plot payload's bytes at 200, or a JSON error dict."""
+def schematic_payload_response(file_ref, *, sheet: str | None = None, index: bool = True) -> tuple[int, bytes | dict]:
+    """``(status, body)``: a schematic's plot payload's bytes at 200, or a JSON error dict. ``sheet`` (a
+    sheet's path, ``/`` the root) plots that sheet's page alone, and ``index`` False leaves the index out;
+    a sheet the hierarchy does not have is a 400 naming those it has."""
     candidate = resolve_plot_path(file_ref)
     if candidate is None:
         return 404, {"error": "Not found"}
@@ -72,7 +76,7 @@ def schematic_payload_response(file_ref) -> tuple[int, bytes | dict]:
         raise ValueError(f"a schematic's plot is a .kicad_sch's; {node_basename(candidate)} is not one")
     from cad.engine.formats.kicad.schematic_plot import schematic_payload_bytes
 
-    return 200, schematic_payload_bytes(candidate)
+    return 200, schematic_payload_bytes(candidate, sheets=None if sheet is None else [sheet], index=index)
 
 
 class _Work:

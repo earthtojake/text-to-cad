@@ -76,6 +76,8 @@ function wheelZoomFactor(event) {
  *   event: PointerEvent | null }) => boolean | void} [options.onDrag]  Asked, as a press with the primary button
  *   travels past a tap, whether the drag is the tool's (`"start"` answering true); if it is, its moves and its
  *   release are the tool's too, and the view does not pan.
+ * @param {(point: { x: number, y: number }, event: MouseEvent) => boolean | void} [options.onDoubleTap]  Asked first what a
+ *   double-click is (a schematic's sheet symbol entered, answering true); else it fits.
  * @param {boolean} [options.middlePan]  A press of the middle button pans.
  * @param {boolean} [options.orbitPan]  The 3D views' pans: a right-button drag, and a primary drag with Ctrl, Cmd or Shift.
  * @param {(bounds: readonly number[], width: number, height: number, options: { top: number }) => object} [options.fitBox]
@@ -84,7 +86,7 @@ function wheelZoomFactor(event) {
  *   drawing's does: the room the frame measures as `--cad-tools-bottom`.
  */
 export function useFlatCanvasView({ content, bounds, restored = null, colorScheme = "light", onViewMoved, paint: paintFrame,
-  onTap = null, onHover = null, onDrag = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
+  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, middlePan = false, orbitPan = false, fitBox = fitTransform, clearStrip = false }) {
   const containerRef = useRef(null);
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
@@ -113,6 +115,8 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   hoverRef.current = onHover;
   const dragRef = useRef(onDrag);
   dragRef.current = onDrag;
+  const doubleTapRef = useRef(onDoubleTap);
+  doubleTapRef.current = onDoubleTap;
   const middlePanRef = useRef(middlePan);
   middlePanRef.current = middlePan;
   const orbitPanRef = useRef(orbitPan);
@@ -374,7 +378,11 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       event.preventDefault();
       zoomBy(wheelZoomFactor(event), local(event));
     };
-    const onDoubleClick = (event) => { event.preventDefault(); fit(); };
+    const onDoubleClick = (event) => {
+      event.preventDefault();
+      if (doubleTapRef.current?.(local(event), event) === true) return;
+      fit();
+    };
 
     canvas.addEventListener("pointerdown", onPointerDown);
     canvas.addEventListener("pointermove", onPointerMove);

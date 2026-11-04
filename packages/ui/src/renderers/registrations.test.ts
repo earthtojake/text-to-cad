@@ -7,6 +7,7 @@ import { createDxfRenderer } from "./dxf/index.js";
 import { createGlbRenderer } from "./glb/index.js";
 import { createMeshRenderer } from "./mesh/index.js";
 import { createRobotRenderer } from "./robot/index.js";
+import { createSchematicRenderer } from "./schematic/index.js";
 import { createXbfRenderer } from "./xbf/index.js";
 
 // A registration loads its component beside its document; these tests are about the document.
@@ -15,6 +16,7 @@ vi.mock("./dxf/DxfRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./glb/GlbRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./mesh/MeshRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./robot/RobotRenderer.jsx", () => ({ default: () => null }));
+vi.mock("./schematic/SchematicRenderer.jsx", () => ({ default: () => null }));
 vi.mock("./xbf/XbfRenderer.jsx", () => ({ default: () => null }));
 
 const file = (path: string, mediaType: string, mime?: string): FileMetadata => ({
@@ -41,9 +43,9 @@ describe("viewer renderer registrations", () => {
 
   it("opens a STEP and an .xbf in the engine document's renderer, and nothing else in it", () => {
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createXbfRenderer({ client })];
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const path of ["part.step", "PART.STP", "model.xbf"]) expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe("xbf");
-    for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
+    for (const [path, id] of [["plate.dxf", "dxf"], ["blinky.kicad_pcb", "board"], ["divider.kicad_sch", "schematic"], ["arm.glb", "glb"], ["arm.stl", "mesh"], ["bot.urdf", "robot"]]) {
       expect(selectRenderer(renderers, file(path, "cad"))?.id).toBe(id);
     }
   });
@@ -56,7 +58,7 @@ describe("viewer renderer registrations", () => {
       createRenderSession: () => ({ dispose: () => { disposed += 1; } }),
     } as never;
     const renderers = [createDxfRenderer({ client }), createBoardRenderer({ client }), createGlbRenderer({ client }), createMeshRenderer({ client }),
-      createRobotRenderer({ client }), createXbfRenderer({ client })];
+      createRobotRenderer({ client }), createSchematicRenderer({ client }), createXbfRenderer({ client })];
     for (const renderer of renderers) {
       const prepared = await renderer.prepare({ file: file("part.step", "cad"), source: {} as never, signal: new AbortController().signal });
       prepared.dispose?.();

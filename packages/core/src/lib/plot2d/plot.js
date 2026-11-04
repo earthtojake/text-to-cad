@@ -39,10 +39,18 @@
  * with the item, and what lies off the canvas is left out, so a board of tens of thousands of items
  * pans in a few milliseconds. The pane keeps rasters of a view made with this same function and
  * paints them with `drawPlotImages`.
+ *
+ * **A schematic** (`kind: "schematic"`, `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=<path>`) is the
+ * same payload with a sheet's page for its sheet: KiCad's frame, the page's top-left corner at the origin,
+ * `width` x `height` the paper. It is drawn on its paper alone (nothing round it: what surrounds the paper
+ * is the pane's), in the `theme` (`theme.js`'s `schematicColors`: KiCad's light paper and dark
+ * ink, or a dark sheet and light ink, each element the same hue; the file's own colour where it gives one,
+ * a symbol body's background fill the device background), its page edge (`page`, kind `sheet`) left off
+ * unless a view asks for its `border`. The fit frames the page.
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
-import { BOARD_PALETTES, DIM_OPACITY, ZONE_OPACITY, boardPalette } from "./theme.js";
+import { BOARD_PALETTES, DIM_OPACITY, ZONE_OPACITY, boardPalette, schematicColors, schematicItemColor } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
 
 /**
@@ -109,14 +117,16 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {string} background The colour the board is drawn on, `#rrggbb`.
  * @property {number} x Page position of the sheet's top-left corner, millimetres.
  * @property {number} y
+ * @property {string} [path] A schematic's sheet: its path in the hierarchy (`/`, `/Power/`).
  *
  * @typedef {object} PlotLayout
  * @property {number} schemaVersion
- * @property {string} kind What the payload draws: `"board"`. Words only, never drawing.
+ * @property {string} kind What the payload draws: `"board"`, or `"schematic"`, a schematic's sheet drawn on its paper.
  * @property {string} generator What wrote the file, for words: `"pcbnew 10.99"`.
  * @property {number|null} unrouted The board's connections still to make (the ratsnest's lines), else null.
  * @property {readonly PlotSheet[]} sheets
  * @property {object|null} board The board's index (`payload.board`), sheet millimetres; else null.
+ * @property {object|null} schematic A schematic's index (`payload.schematic`, its whole hierarchy); else null.
  * @property {readonly [number, number, number, number]} bounds The sheet's page box, `[minX, minY, maxX, maxY]`, y down: what the fit frames.
  * @property {readonly [number, number, number, number]} modelBounds The same box in drawing2d's model space, y up.
  * @property {readonly [number, number, number, number]} extent The page box of everything drawn: the sheet and every item, items past the sheet's edge included.
@@ -136,6 +146,7 @@ const HEX_COLOR = /^#(?:[0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
  * @property {string|null} [dim] With a layer id, every other layer but the board's area is drawn at `DIM_OPACITY` (KiCad's "Inactive layers: Dim").
  * @property {number} [zones] The pours' fill opacity, 0..1. Default KiCad's 0.6.
  * @property {number} [tracks] The tracks' opacity, 0..1. Default 1.
+ * @property {boolean} [border] A schematic's page edge, drawn. Default off.
  */
 
 function describe(value) {
@@ -241,7 +252,7 @@ export function layoutPlot(payload) {
   }
   const sheets = payload.sheets;
   if (!Array.isArray(sheets) || sheets.length !== 1) {
-    throw new Error(`A plot payload's \`sheets\` is one board sheet; received ${describe(sheets)}.`);
+    throw new Error(`A plot payload's \`sheets\` is one sheet: a board's, or the schematic sheet asked for; received ${describe(sheets)}.`);
   }
   const placed = sheets.map((sheet, index) => {
     const where = `sheets[${index}]`;
@@ -262,11 +273,13 @@ export function layoutPlot(payload) {
     }
     return Object.freeze({
       index, name: String(sheet.name ?? ""), layers: layoutLayers(sheet, where),
-      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0
+      width: sheet.width, height: sheet.height, background: sheet.background, x: 0, y: 0,
+      ...(typeof sheet.path === "string" ? { path: sheet.path } : {})
     });
   });
   const [sheet] = placed;
   const board = payload.board && typeof payload.board === "object" && !Array.isArray(payload.board) ? payload.board : null;
+  const schematic = payload.schematic && typeof payload.schematic === "object" && !Array.isArray(payload.schematic) ? payload.schematic : null;
   const bounds = [0, 0, sheet.width, sheet.height];
   const extent = [...bounds];
   for (const layer of sheet.layers) {
@@ -282,6 +295,7 @@ export function layoutPlot(payload) {
     unrouted: Number.isInteger(payload.unrouted) ? payload.unrouted : null,
     sheets: Object.freeze(placed),
     board,
+    schematic,
     bounds: Object.freeze(bounds),
     modelBounds: Object.freeze([0, -sheet.height, sheet.width, 0]),
     extent: Object.freeze(extent)
@@ -814,6 +828,10 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
   const zones = clampUnit(view?.zones, ZONE_OPACITY);
   const tracks = clampUnit(view?.tracks, 1);
   const dimmed = typeof view?.dim === "string" && view.dim ? view.dim : null;
+  if (layout.kind === "schematic") {
+    drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border: view?.border === true, colors: schematicColors(theme), PathCtor });
+    return;
+  }
   ctx.save();
   for (const sheet of layout.sheets) {
     const mirrorX = view?.side === "bottom" ? sheet.x + sheet.width / 2 : null;
@@ -839,6 +857,43 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
 }
 
 /**
+ * A schematic's sheet on its paper: the page in its background, then its layers bottom to top, each item
+ * in KiCad's schematic colours (`schematicItemColor`), a line never thinner than a pixel; the page's edge
+ * only with `border`. What lies off the canvas is left out. A card's picture (`backdrop: "board"`) is the
+ * same: the paper, and nothing round it.
+ */
+function drawSchematic(ctx, layout, { transform, pixelRatio, visible, hairline, border, colors, PathCtor }) {
+  ctx.save();
+  for (const sheet of layout.sheets) {
+    if (visible && !rectsOverlap(visible, layout.extent)) continue;
+    pageSpace(ctx, transform, pixelRatio, null);
+    ctx.fillStyle = colors.background;
+    ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (const layer of sheet.layers) {
+      if (layer.kind === "sheet" && !border) continue;
+      for (const item of layer.items) {
+        if (visible && !rectsOverlap(visible, item.box)) continue;
+        const paint = schematicItemColor(layer.kind, item, colors);
+        ctx.globalAlpha = typeof item.opacity === "number" ? clampUnit(item.opacity, 1) : 1;
+        const path = pathOf(ctx, item, PathCtor);
+        if (item.t === "poly" || (item.t === "circle" && item.w === 0)) {
+          ctx.fillStyle = paint;
+          fill(ctx, path);
+        } else {
+          ctx.strokeStyle = paint;
+          ctx.lineWidth = Math.max(item.w, hairline);
+          stroke(ctx, path);
+        }
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
+  ctx.restore();
+}
+
+/**
  * The pane's frame: each visible sheet's rectangle in its background, then `images` — rasters of
  * a view made with `drawPlot`, placed in page space — over them. An image that misses the canvas
  * costs nothing.
@@ -846,7 +901,7 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
  * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[], theme?: "light" | "dark" | null }} options
- *   `theme`: the canvas's colour, as `drawPlot`'s.
+ *   `theme`: the canvas's colour, as `drawPlot`'s (a schematic's sheet is its theme's paper).
  */
 export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [], theme = null }) {
   checkTransform(transform, "drawPlotImages");
@@ -856,7 +911,7 @@ export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images 
   pageSpace(ctx, transform, pixelRatio, null);
   for (const sheet of layout.sheets) {
     if (!shows(sheet.x, sheet.y, sheet.width, sheet.height)) continue;
-    ctx.fillStyle = canvasColor(sheet, theme);
+    ctx.fillStyle = layout.kind === "schematic" ? schematicColors(theme).background : canvasColor(sheet, theme);
     ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
   }
   for (const { image, x, y, width, height } of images) {

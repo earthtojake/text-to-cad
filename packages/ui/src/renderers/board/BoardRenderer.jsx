@@ -22,7 +22,7 @@ import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
-import { boardAnnotationDocument, boardAnnotationSurface } from "./boardAnnotation.js";
+import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
 import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
@@ -33,7 +33,7 @@ import {
   BOARD_DEFAULT_FILTER, BOARD_NO_CAMERA, BOARD_NO_DISPLAY, BOARD_TOOL, BOARD_TOOL_MODES, boardPickKinds, boardWorkingLayer, readBoardFilter
 } from "./tools.js";
 import { useBoardDocument } from "./useBoardDocument.js";
-import { readBoardIsolation, useBoardIsolation } from "./useBoardIsolation.js";
+import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
 import { useBoardView } from "./useBoardView.js";
 
 /**
@@ -102,8 +102,9 @@ function BoardSurface({ view, data }) {
   const [stored] = useState(() => readFileView(view.state, SLICES));
   const [restored] = useState(() => readTransform(stored.camera));
   const [display, setDisplay] = useState(() => readBoardDisplay(stored.renderer.board));
-  const [restoredIsolation] = useState(() => readBoardIsolation(stored.renderer.isolated));
-  const isolation = useBoardIsolation({ index, restored: restoredIsolation });
+  const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
+  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
+  const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
   const saved = useRef({ camera: restored, display, isolated: restoredIsolation });
   const storedRef = useRef("");
   const saveTimer = useRef(0);
@@ -197,7 +198,7 @@ function BoardSurface({ view, data }) {
   }, []);
 
   // Annotate's layer: ink on the board, under the view (and its side) as it stands.
-  const annotationSurface = useMemo(() => boardAnnotationSurface({
+  const annotationSurface = useMemo(() => plotAnnotationSurface({
     transform: () => viewRef.current?.transformRef.current || null,
     mirrorX: () => mirrorRef.current,
     canvas: () => viewRef.current?.canvasRef.current || null
@@ -415,7 +416,7 @@ function BoardSurface({ view, data }) {
   };
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-    capture, currentView, annotationDocument: boardAnnotationDocument, runtime, live: BOARD_LIVE,
+    capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 

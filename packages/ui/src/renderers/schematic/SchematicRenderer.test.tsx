@@ -1,0 +1,226 @@
+import { useState } from 'react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { createCadClient } from '@cad/core/client';
+import { pageToScreen } from '@cad/core/lib/plot2d/plot.js';
+import { exportChoices } from '../../export/formats.js';
+import { FileViewer } from '../../../dist/file-viewer/index.js';
+import { createSchematicRenderer } from '../../../dist/renderers/schematic/index.js';
+// Loaded with the file, not inside the first test: the registration imports it lazily.
+import '../../../dist/renderers/schematic/SchematicRenderer.js';
+import SCHEMATIC from './__fixtures__/schematic.plot.json';
+
+// The schematic tab's chrome and its answers to the host, mounted as a host mounts it: the FileViewer over
+// the real registration and a real CAD client, whose backend answers the committed payload a sheet at a
+// time, as the route does (`__fixtures__/schematic.plot.json`: the Python suite's divider — the root sheet,
+// R1 and R2 between +5V and GND, the MID net, J1 on VOUT, the sheet Load at (127, 57.15), 31.75 x 19.05;
+// Load holds C1 and R3). The pixels are the browser suite's; what the tab offers, what it reads, picks and
+// shows are decided here.
+
+const frames = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number }>);
+const drawn = vi.hoisted(() => [] as Array<string>);
+vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    drawPlot: (_ctx: unknown, _layout: unknown, { theme }: { theme: string }) => { drawn.push(theme); },
+    drawPlotImages: (_ctx: unknown, _layout: unknown, { transform }: { transform: any }) => { frames.push({ ...transform }); }
+  };
+});
+
+const noop = () => {};
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+const context2d = new Proxy({}, { get: (_target, key) => (key === 'canvas' ? undefined : key === 'measureText' ? (text: string) => ({ width: text.length * 7 }) : noop), set: () => true });
+let reads: string[] = [];
+const DESTINATION = { kind: 'clipboard', available: true };
+
+/** What the route answers for `?sheet=` and `index=0`: the one page, with or without the hierarchy's index. */
+function sheetPayload(url: URL) {
+  const sheet = url.searchParams.get('sheet') || '/';
+  const page = SCHEMATIC.sheets.find(one => one.path === sheet);
+  if (!page) return json({ error: `divider.kicad_sch has no sheet ${sheet}` }, 400);
+  const { schematic, ...rest } = SCHEMATIC;
+  return json({ ...rest, sheets: [page], ...(url.searchParams.get('index') === '0' ? {} : { schematic }) });
+}
+
+beforeEach(() => {
+  frames.length = 0;
+  drawn.length = 0;
+  reads = [];
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
+  vi.stubGlobal('cancelAnimationFrame', (handle: number) => clearTimeout(handle));
+  vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }));
+  vi.stubGlobal('Path2D', class { constructor() { return new Proxy(this, { get: (target, key) => (key in target ? (target as any)[key] : noop) }); } });
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
+    { x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON: noop } as DOMRect);
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(context2d as unknown as CanvasRenderingContext2D);
+  vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation(function (callback, type) {
+    setTimeout(() => callback(new Blob(['png'], { type: type || 'image/png' })), 0);
+  });
+});
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
+
+async function open({ colorScheme = 'light' } = {}) {
+  const file = '/models/divider.kicad_sch';
+  const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input));
+    if (url.pathname.endsWith('/api/v1/documents') && init?.method === 'POST') {
+      return json({ id: 'sch', kind: 'kicad_sch', api: '/api/v1/documents/kicad_sch/sch' }, 201);
+    }
+    if (url.pathname.endsWith('/api/v1/documents')) {
+      return json({ documents: [{ entry: { kind: 'kicad_sch', file, url: '/divider.kicad_sch', hash: 'one', bytes: 4096 }, revision: 'one' }] });
+    }
+    if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
+    if (url.pathname.endsWith('/api/v1/documents/kicad_sch/sch/plot')) { reads.push(url.search); return sheetPayload(url); }
+    return new Response('', { status: 404 });
+  });
+  const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
+  await client.refresh();
+  let controller: any = null;
+  const live = { bind(next: unknown) { controller = next; return () => { controller = null; }; } };
+  const renderers = [createSchematicRenderer({ client, live })];
+  const host = {
+    files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'kicad_sch' }) },
+    navigation: { openFile: noop },
+    environment: { colorScheme, locale: 'en' },
+    clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: { getSnapshot: () => DESTINATION, subscribe: () => noop, deliver: async () => ({ status: 'copied', partIds: [] }) },
+  };
+  let latest: any = { renderers: {} };
+  function Pane() {
+    const [state, setState] = useState<any>(latest);
+    latest = state;
+    return <section data-testid="pane"><FileViewer file={file} host={host as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
+  }
+  render(<Pane />);
+  const pane = screen.getByTestId('pane');
+  return { pane, get controller() { return controller; }, dispose: () => client.dispose() };
+}
+
+const canvasOf = (pane: HTMLElement) => pane.querySelector<HTMLCanvasElement>('[data-schematic-surface] canvas[data-schematic-sheet]')!;
+const onSheet = (pane: HTMLElement, sheet: string) => waitFor(() => {
+  expect(canvasOf(pane).dataset.schematicSheet).toBe(sheet);
+  expect(pane.querySelector('[data-schematic-surface] [aria-busy="false"]')).not.toBeNull();
+});
+const point = (at: [number, number]) => {
+  const [clientX, clientY] = pageToScreen(frames.at(-1)!, at[0], at[1]);
+  return { pointerId: 1, pointerType: 'mouse', button: 0, clientX, clientY };
+};
+const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unknown> = {}) => {
+  const event = { ...point(at), ...init };
+  fireEvent.pointerDown(canvasOf(pane), event);
+  fireEvent.pointerUp(canvasOf(pane), event);
+};
+/** Zoom in about the pane's middle (jsdom's pane fits the page small): a pick's reach is a few pixels, in millimetres. */
+const zoomIn = async (pane: HTMLElement) => {
+  const before = frames.at(-1)!.scale;
+  fireEvent.wheel(canvasOf(pane), { deltaY: -700, clientX: 600, clientY: 350 });
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(before * 2));
+};
+const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
+const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
+
+it('opens on the root sheet, read with the index, drawn in the theme, with a Hierarchy and a Circuit and no view controls', async () => {
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  expect(reads).toEqual(['?sheet=%2F']);
+  await waitFor(() => expect(drawn.includes('light')).toBe(true));
+  const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
+  expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  // The Hierarchy: the root by its file's name, Load under it, the root shown.
+  const rows = [...pane.querySelectorAll<HTMLElement>('[data-schematic-sheet-row]')];
+  expect(rows.map(row => [row.dataset.schematicSheetRow, row.textContent])).toEqual([['/', 'divider1'], ['/Load/', 'Load2']]);
+  expect(within(rows[0]).getByRole('button', { name: 'Show sheet divider' }).getAttribute('aria-current')).toBe('page');
+  // The Circuit: a block per sheet, shut while it holds several parts, then the Nets, shut.
+  const blocks = [...pane.querySelectorAll<HTMLElement>('[data-schematic-row^="sheet:"], [data-schematic-row^="group:"]')].map(row => row.dataset.schematicRow);
+  expect(blocks).toEqual(['sheet:/', 'sheet:/Load/', 'group:nets']);
+  expect(pane.querySelector('[data-schematic-row="part:R1"]')).toBeNull();
+  // Its Export is KiCad's: the PDF, the SVGs, the netlist and the BOM.
+  expect(exportChoices({ file: '/models/divider.kicad_sch', planar: false }).map(choice => choice.format)).toEqual(['pdf', 'svg', 'netlist', 'bom']);
+  expect((await controllerOf(view)).readState().schematicDisplay).toEqual({ sheet: '/', border: false, appearance: 'light' });
+  view.dispose();
+});
+
+it('a sheet is shown from the Hierarchy, by a double-click on its symbol, and back up from its trail, each read once', async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  expect(pane.querySelector('[data-schematic-trail]')).toBeNull();
+  await user.click(within(pane).getByRole('button', { name: 'Show sheet Load' }));
+  await onSheet(pane, '/Load/');
+  expect(reads).toEqual(['?sheet=%2F', '?sheet=%2FLoad%2F&index=0']);
+  // Below the root, the trail: the root a button back up, the sheet shown its name.
+  const trail = pane.querySelector<HTMLElement>('[data-schematic-trail]')!;
+  expect(trail.textContent).toBe('dividerLoad');
+  await user.click(within(trail).getByRole('button', { name: 'divider' }));
+  await onSheet(pane, '/');
+  // The sheet's symbol, double-clicked, enters it: read before, so read no more.
+  fireEvent.dblClick(canvasOf(pane), point([140, 66]));
+  await onSheet(pane, '/Load/');
+  expect(reads).toHaveLength(2);
+  expect((await controllerOf(view)).readState().schematicDisplay.sheet).toBe('/Load/');
+  view.dispose();
+});
+
+it('a press picks what is under it and reveals its row; a net from the tree lights; a part on another sheet shows that sheet', async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const controller = await controllerOf(view);
+  await zoomIn(pane);
+  // R1's body, in the middle of its symbol: its part, its row revealed under its opened block.
+  tap(pane, [101.6, 59.69]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#R1']));
+  await waitFor(() => expect(pane.querySelector('[data-schematic-row="part:R1"] button[aria-pressed="true"]')).not.toBeNull());
+  // The MID label's text, then its wire to the sheet: each by its uuid.
+  tap(pane, [115.2, 63.4]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#label:5c4e0000-0000-4000-8000-0000000000a2']));
+  tap(pane, [124, 64.77]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#wire:5c4e0000-0000-4000-8000-0000000000a1']));
+  // Nothing: nothing.
+  tap(pane, [20, 20]);
+  await waitFor(() => expect(selected(controller)).toEqual([]));
+  // The Nets opened, /MID pressed: the net selected, on the sheet shown.
+  await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="group:nets"]')!).getByRole('button', { name: /Expand/ }));
+  await user.click(within(pane.querySelector<HTMLElement>('[data-schematic-row="net:/MID"]')!).getByRole('button', { name: 'Select /MID' }));
+  expect(selected(controller)).toEqual(['#net:/MID']);
+  expect(canvasOf(pane).dataset.schematicSheet).toBe('/');
+  // C1 is on Load alone: selecting it shows Load.
+  await controller.select('#C1');
+  await onSheet(pane, '/Load/');
+  expect(selected(controller)).toEqual(['#C1']);
+  await expect(controller.select('#R99')).rejects.toThrow(/Not in this schematic: #R99/);
+  view.dispose();
+});
+
+it("Select's filter is KiCad's boxes, each its name alone; without Pins a press on a pin inside its body takes the symbol", async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane } = view;
+  await onSheet(pane, '/');
+  const controller = await controllerOf(view);
+  await user.click(within(pane).getByRole('button', { name: 'Selection filter: everything' }));
+  const menu = await waitFor(() => { const found = document.querySelector<HTMLElement>('[role=menu][aria-label="Selection filter"]'); expect(found).not.toBeNull(); return found!; });
+  const boxes = within(menu).getAllByRole('menuitemcheckbox');
+  expect(boxes.map(box => box.textContent)).toEqual(['All items', 'Symbols', 'Pins', 'Wires', 'Labels', 'Sheets', 'Other items']);
+  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Pins' }));
+  await user.keyboard('{Escape}');
+  await zoomIn(pane);
+  tap(pane, [101.6, 57.1]);
+  await waitFor(() => expect(selected(controller)).toEqual(['#R1']));
+  view.dispose();
+});
+
+it('in the dark theme the sheet is drawn dark', async () => {
+  const view = await open({ colorScheme: 'dark' });
+  await onSheet(view.pane, '/');
+  await waitFor(() => expect(drawn.includes('dark')).toBe(true));
+  expect((await controllerOf(view)).readState().schematicDisplay.appearance).toBe('dark');
+  view.dispose();
+});

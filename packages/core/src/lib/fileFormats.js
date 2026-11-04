@@ -19,7 +19,7 @@ export const RENDER_FORMAT = Object.freeze({
   // A cadgen engine document (`cad.engine`): served by the engine, drawn by its own renderer.
   XBF: TYPES.xbf.wire,
   KICAD_PCB: TYPES.kicad_pcb.wire,
-  // A KiCad schematic, drawn from its files as a board is, every sheet a page (no view of it yet).
+  // A KiCad schematic, drawn from its files as a board is, a sheet at a time (`packages/ui/src/renderers/schematic`).
   KICAD_SCH: TYPES.kicad_sch.wire
 });
 
@@ -36,7 +36,7 @@ const FORMAT_BY_EXTENSION = Object.freeze(Object.fromEntries([
   ["gltf", TYPES.glb.wire]
 ]));
 
-// Formats the viewer shows as a PLOT: a KiCad board drawn from its file, as geometry per layer,
+// Formats the viewer shows as a PLOT: a KiCad board or schematic drawn from its files, as geometry per layer,
 // by its document's `plot` (`GET /api/v1/documents/kicad_pcb/<id>/plot`). Like a DXF, the render asset is the file itself; nothing bakes a mesh
 // for it.
 export const PLOT_RENDER_FORMATS = Object.freeze(

@@ -212,7 +212,11 @@ KiCad's own frame, millimetres, y down: a point the viewer copies pastes straigh
 
 `GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic
 from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
-`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page. A
+`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page; the
+route's `?sheet=<path>` answers that sheet's page alone and `index=0` leaves the `schematic` index out
+(the viewer reads the sheet on screen, the index with the first it reads). The colours are the
+reader's: the viewer's theme (`plot2d/theme.js`'s `schematicColors`, KiCad's light paper or a dark
+sheet), as the snapshot's `appearance`. A
 schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a
 point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
 (`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the

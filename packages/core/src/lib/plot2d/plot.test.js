@@ -128,7 +128,7 @@ test("a payload this build does not understand is refused by name", () => {
   const items = (list) => sheet({ layers: [layer("F.Cu", "copper", "front", list)] });
   assert.throws(() => layoutPlot(null), /plot payload object/);
   assert.throws(() => layoutPlot({ ...BOARD, schemaVersion: 3 }), /schemaVersion 3.*Update cad-server and the app together/);
-  assert.throws(() => layoutPlot({ ...BOARD, sheets: [] }), /one board sheet/);
+  assert.throws(() => layoutPlot({ ...BOARD, sheets: [] }), /is one sheet: a board.s/);
   assert.throws(() => layoutPlot(sheet({ layers: [] })), /"blinky".*carries no layers/);
   assert.throws(() => layoutPlot(sheet({ layers: [{ id: "F.Cu", kind: "copper", side: "top", items: [] }] })), /side "top"; a layer is front, back, both/);
   assert.throws(() => layoutPlot(items([{ t: "svg" }])), /items\[0\] is not a plot item/);
@@ -368,4 +368,54 @@ test("the active layer tops the stack, Dim fades every other but the board's are
   assert.deepEqual(at(dimmed, layerColor("B.CrtYd")), [DIM_OPACITY]);
   assert.deepEqual(at(dimmed, layerColor("area")), [1]);
   assert.deepEqual(at(dimmed, layerColor("B.Cu")).slice(0, 1), [DIM_OPACITY * ZONE_OPACITY]);
+});
+
+// A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its
+// edge, a resistor (its body's background fill, its outline, a pin), a wire, a junction and a field.
+const SCHEMATIC = {
+  schemaVersion: 4, kind: "schematic", generator: "eeschema",
+  sheets: [{ name: "/", path: "/", number: "1", file: "divider.kicad_sch", width: 297, height: 210, background: "#F5F4EF", page: [0, 0, 297, 210],
+    layers: [
+      layer("page", "sheet", "both", [{ t: "path", pts: [[0, 0], [297, 0], [297, 210], [0, 210], [0, 0]], w: 0, closed: true, page: true }]),
+      layer("symbols", "symbol", "both", [
+        { t: "poly", pts: square(100, 60, 2, 5), fill: "background", ref: "#R1", id: "b1" },
+        { t: "path", pts: square(100, 60, 2, 5), w: 0.254, closed: true, ref: "#R1", id: "b1", color: "#123456", opacity: 0.5 }
+      ]),
+      layer("pins", "pin", "both", [{ t: "path", pts: [[100, 55], [100, 57.5]], w: 0.1524, ref: "#R1.1", net: "+5V" }]),
+      layer("wires", "wire", "both", [{ t: "path", pts: [[100, 50], [100, 55]], w: 0.1524, net: "+5V", id: "w1" }]),
+      layer("junctions", "junction", "both", [{ t: "circle", at: [100, 50], r: 0.4572, w: 0, net: "+5V", id: "j1" }]),
+      layer("fields", "field", "both", [{ t: "text", text: "R1", w: 0.15, strokes: [[[103, 59], [104, 59]]], field: "Reference", ref: "#R1" }])
+    ] }],
+  schematic: { root: "divider.kicad_sch", sheets: [{ path: "/", name: "/", page: "1", parent: null, pins: [] }] }
+};
+
+test("a schematic's sheet is drawn on its paper alone, in KiCad's schematic colours, its page edge off", () => {
+  const layout = layoutPlot(SCHEMATIC);
+  assert.equal(layout.kind, "schematic");
+  assert.equal(layout.sheets[0].path, "/");
+  assert.equal(layout.schematic, SCHEMATIC.schematic);
+  assert.deepEqual(layout.modelBounds, [0, -210, 297, 0], "the fit frames the page");
+  const { ctx, calls, Path2D } = recorder(800, 600);
+  drawPlot(ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D });
+  // The paper, and nothing round it: the page's rectangle, not the canvas.
+  assert.deepEqual(calls.filter(([name]) => name === "fillRect"), [["fillRect", "#F5F4EF", 0, 0, 297, 210]]);
+  const inks = painted(calls).map(([name, , style]) => [name, name === "fill" ? style.fill : style.stroke, style.alpha]);
+  assert.deepEqual(inks, [
+    ["fill", "#FFFFC2", 1],   // the body's background: KiCad's device background
+    ["stroke", "#123456", 0.5], // its outline in the file's own colour
+    ["stroke", "#840000", 1], // the pin
+    ["stroke", "#009600", 1], // the wire
+    ["fill", "#009600", 1],   // the junction, a disc
+    ["stroke", "#006464", 1]  // the reference
+  ]);
+  // In the dark, the same sheet: a dark sheet and light ink, each element its hue, the file's own colour kept.
+  const dark = recorder(800, 600);
+  drawPlot(dark.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: dark.Path2D, theme: "dark" });
+  assert.deepEqual(dark.calls.filter(([name]) => name === "fillRect"), [["fillRect", "#1C1C1C", 0, 0, 297, 210]]);
+  assert.deepEqual(painted(dark.calls).map(([name, , style]) => (name === "fill" ? style.fill : style.stroke)),
+    ["#2E2E24", "#123456", "#D07050", "#3CC83C", "#3CC83C", "#4FCBCB"]);
+  // Asked for, the page's edge is drawn too.
+  const bordered = recorder(800, 600);
+  drawPlot(bordered.ctx, layout, { transform: fitPlotTransform(layout, 800, 600), Path2D: bordered.Path2D, view: { border: true } });
+  assert.equal(painted(bordered.calls).length, inks.length + 1);
 });

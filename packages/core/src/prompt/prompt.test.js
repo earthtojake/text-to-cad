@@ -79,6 +79,15 @@ test('a KiCad board names its references as board selectors, as the agent resolv
   assert.equal(parsePromptReference('/work/blinky.kicad_pcb#R1 and more'), null);
 });
 
+test('a KiCad schematic names its references as schematic selectors: a board\'s for what both hold, its own for sheets and uuids', () => {
+  const schematic = { resource: { kind: 'workspace-file', path: '/work/divider.kicad_sch' }, target: { kind: 'cad-selector', selectors: ['#R1.2', '#net:/MID', '#sheet:/Load/'] } };
+  assert.equal(formatPromptReference(referencePart(schematic).reference), '/work/divider.kicad_sch#R1.2,net:/MID,sheet:/Load/');
+  // A board's point is no schematic selector.
+  assert.throws(() => referencePart({ ...schematic, target: { kind: 'cad-selector', selectors: ['#@x1y2'] } }), /invalid CAD/);
+  assert.deepEqual(parsePromptReference('/work/divider.kicad_sch#R1,wire:AB12'),
+    { resource: { kind: 'workspace-file', path: '/work/divider.kicad_sch' }, target: { kind: 'cad-selector', selectors: ['#R1', '#wire:ab12'] } });
+});
+
 test('invalid bundles fail before delivery, including dangling relationships and unknown targets', () => {
   assert.throws(() => createPromptContext([textPart('a'), textPart('b')]), /unique/);
   assert.throws(() => createPromptContext([{ id: 'i', kind: 'attachment', name: 'a.pdf', mimeType: 'application/pdf', content: new Blob(), about: ['missing'] }]), /absent reference/);
