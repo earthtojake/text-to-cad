@@ -255,7 +255,7 @@ export default {
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "확인",
   "whatsNew.title": "새로운 기능 (v{version})",
-  "whatsNew.0.11.boards.title": "KiCad.",
+  "whatsNew.0.11.boards.title": "KiCad 지원.",
   "whatsNew.0.11.boards.body": "에이전트가 KiCad 기판과 회로도를 배치하고 검사하고 내보낼 수 있으며, KiCad가 함께 제공됩니다.",
   "whatsNew.0.11.install.title": "설치와 업데이트를 명령 하나로.",
   "whatsNew.0.11.install.body": "명령 하나로 이 컴퓨터의 모든 에이전트 앱이 설정되고, 업데이트 버튼으로 최신 상태를 유지합니다.",
