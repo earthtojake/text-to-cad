@@ -447,8 +447,8 @@ verbosity) key nothing. What it adds is two things:
   name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
   it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
   build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
-  runs, an `export`, none; a type alone, `from cad import step`, none), and each of cad's decorators it
-  applies (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
+  runs, an `export`, none; a type's edit its integration, `kicad_pcb.edit` kicad; a type alone, `from cad
+  import step`, none) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
   (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming
@@ -905,13 +905,18 @@ it (`model.check_result`): for the document and each file the model declares, ex
 must take the value (`registry.producer_for`), else the build fails, naming what the type is made of
 and the integration that would take the value. Today the build123d integration's producers take a
 build123d `Shape` for every type with a decorator, and the engine's writers -- the XCAF document
-(`document.py`) and its translations (`export.translate`) -- make the files, as before. A producer that
-declares (`Producer.declare`) decides what its type's decorator does with what it decorates, found by
-`registry.declarer_for`: the kicad integration's `@kicad_pcb` makes a board script, which runs in the
-caller's process through kicode's headless `api-server` and KiPy (`cad.kicad._session`), never in a
-worker, and a `@step`, `@glb` or `@dxf` stacked on one is written from the saved board by `kicad-cli` (the
-board and its parts in 3D, or its outline and holes). Every other
-decorated function is the engine's model.
+(`document.py`) and its translations (`export.translate`) -- make the files, as before. Every decorated function is the engine's model.
+
+**Edits.** A KiCad board or schematic is no producer's: it is changed in place by its type's edit
+(`cad.registry.Edit`), `with kicad_pcb.edit(path) as board:` and `with kicad_sch.edit(path) as
+schematic:`, run in the caller's process, never in a worker or the daemon (`cad.kicad._session.edit`): a
+private headless `kicad-cli api-server` on the file (kicode's, in private KiCad homes), KiPy connected to
+it and the open document handed to the block -- a schematic's project symbol libraries loaded first; a file
+not there yet made by KiCad (`CreateDocument`) -- and saved at the block's end when the block changed it
+or KiCad made it, never when it raises. One server serves a project: an edit of the project's other file
+inside the block joins it (`OpenDocument`), each document saved at its own block's end. Nothing is
+declared, and nothing is written from the edited file but what explicit calls after the block write
+(`kicad_pcb.export`, `kicad_pcb.drc`, `kicad_sch.export`, `kicad_sch.erc`).
 
 **The commands.** `cad_server.cli.document_types` makes every type's command from the registry:
 `OPERATIONS` maps `(type, operation)` to its run -- the engine's verbs (`engine/cli.py`'s parsers and

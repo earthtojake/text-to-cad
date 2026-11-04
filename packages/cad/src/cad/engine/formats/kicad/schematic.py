@@ -736,7 +736,9 @@ class _Reader:
                 if str(entry[1]) == uuid_path:
                     ref = str(sexpr.value(entry, "reference", ref))
                     unit = int(sexpr.number(sexpr.value(entry, "unit"), unit))
-        style = int(sexpr.number(sexpr.value(node, "body_style", sexpr.value(node, "convert")), 1))
+        # A symbol KiCad's IPC API placed is saved with (body_style 0), which KiCad draws and connects as its
+        # first style, 1.
+        style = int(sexpr.number(sexpr.value(node, "body_style", sexpr.value(node, "convert")), 1)) or 1
         transform = symbol_transform(angle, mirror)
         pins: list[Pin] = []
         if lib is None:

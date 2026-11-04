@@ -1,14 +1,15 @@
 # Lay out a board
 
-Place and route a board from its schematic in board scripts (`@kicad_pcb`), one checked step at a time.
-A layout of 100 or more nets takes hours, so work in steps: each board script saves the board when its
-function returns, and the next step reads what the last one saved.
+Place and route a board from its schematic in edits (`with kicad_pcb.edit("board.kicad_pcb") as b:`), one
+checked step at a time. A layout of 100 or more nets takes hours, so work in steps: each edit saves the
+board at its block's end, and the next step reads what the last one saved. Each states the board it wants
+("U1 at (10, 20)", "VBUS 0.8 mm"), so running a step again is harmless.
 
 ## The method
 
 1. **Start from the schematic.** Export its netlist with KiCad's command line (`kicad-cli sch export
-   netlist -o tmp/board.net board.kicad_sch`; `kicode.executable()` is that command line, run with
-   `kicode.environment()`), then bring the parts and nets onto the board in a board script:
+   netlist -o tmp/board.net board.kicad_sch`, or `kicad_sch.export("board.kicad_sch", "netlist", "tmp")`
+   in the script), then bring the parts and nets onto the board in an edit:
    `b.import_netlist("tmp/board.net")` (`dry_run=True` first to see what it would change). The
    schematic, not the footprints, says what connects to what.
 2. **Rules before copper.** Set the clearances, netclasses and track widths from the fab's limits and

@@ -22,16 +22,17 @@ only just added, its server may still be starting: try again for up to a minute 
 explains any other failure.
 
 Viewing, inspecting and taking snapshots need no KiCad. DRC (`cad kicad_pcb drc`), ERC (`cad
-kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and a `@kicad_pcb` board script run KiCad's command line, `kicad-cli`,
+kicad_sch erc`), every export (`cad kicad_pcb export`, `cad kicad_sch export`) and an edit
+(`kicad_pcb.edit`, `kicad_sch.edit`) run KiCad's command line, `kicad-cli`,
 and its IPC API from kicode, the `kicad` extra (`cad[kicad]`): the `cad` command installs it the first
 time a board command needs it (some 100 MB, once; nothing for you to install), and `cad run` gives a
-board script's environment it. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
-another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for a
-board script). It runs headless, with private settings, and never opens KiCad's app; never open a
+script that edits a board its environment. A KiCad you installed yourself is never run. `CAD_KICAD_CLI` can name
+another `kicad-cli` (the command line itself, named `kicad-cli`; KiCad 9 or newer, a nightly's for an
+edit). It runs headless, with private settings, and never opens KiCad's app; never open a
 board in KiCad's app to check it.
 
-kicode's KiCad is a nightly (10.99), so a board it saves is in the nightly's format, which a stable
-KiCad app refuses; viewing and snapshots still work.
+kicode's KiCad is a nightly (10.99), so a board or schematic it saves is in the nightly's format, which a
+stable KiCad app refuses; viewing and snapshots still work.
 
 ## Native files are the source
 
@@ -41,31 +42,44 @@ model, build step, or generated-board ownership marker. A helper script may make
 but reread the current file before editing and preserve unknown records and UUIDs. Do not regenerate
 an existing project from an incomplete description.
 
-A persistent board script edits the board through KiCad's IPC API: `@kicad_pcb` hands the function
-the open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`), saves it when the function
-returns and saves nothing when it raises. Run it with `cad run board.py`, which gives it the `kicad`
-extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a `kicad-cli` that
-`CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import KiPy's names
-from `kicode` (`from kicode.proto.common.types import KIID`), never from `kipy`: the two cannot share a
-process. Saving writes the board in the nightly's format: a board from an older KiCad is upgraded,
-which the run says, and that older KiCad can no longer open it. A `@step` stacked on it writes the saved board's STEP (`kicad-cli pcb export
-step --subst-models`), and a `@glb` its GLB the same way; parts whose 3D model is missing (or, in a STEP,
-only in VRML) have no body in it, which the run names. A `@dxf` writes its outline and drilled holes, for
-an enclosure (`cad kicad_pcb export --to dxf`'s file):
+Change a board through KiCad's IPC API in an edit, a `with` block: `kicad_pcb.edit` hands the block the
+open board (KiPy's `Board`, as kicode names it: `kicode.board.Board`) and saves it at the block's end
+when the block changed it; a block that changes nothing leaves the file byte for byte, and one that
+raises saves nothing (its exception goes on). A board not there yet is made by KiCad, with its project,
+and saved. `kicad_sch.edit` does the same for a schematic ([schematic](references/schematic.md#edit-it));
+the two of one project, one inside the other, share one KiCad. Run the script with `cad run board.py`,
+which gives it the `kicad` extra (kicode: KiPy and a `kicad-cli` with its headless `api-server`); a
+`kicad-cli` that `CAD_KICAD_CLI` names without one is refused up front, before any server starts. Import
+KiPy's names from `kicode` (`from kicode.proto.common.types import KIID`, `from kicode.util.units import
+from_mm`), never from `kipy`: the two cannot share a process. Saving writes the file in the nightly's
+format: one from an older KiCad is upgraded, which the run says, and that older KiCad can no longer open
+it. Checks and exports of the saved board are calls after the block (`kicad_pcb.drc`, `kicad_pcb.export`);
+a STEP or GLB export leaves out a part whose 3D model is missing (or, in a STEP, only in VRML), which it
+says, and `--to dxf` writes the outline and drilled holes, for an enclosure:
 
 ```python
-from cad import dxf, kicad_pcb, step
+from cad import kicad_pcb
+from kicode.util.units import from_mm
 
-@step("STEP/board.step")
-@dxf("DXF/board-outline.dxf")
-@kicad_pcb("board.kicad_pcb")          # the board file is the source; the function edits it
-def board(b):
-    for footprint in b.get_footprints():
-        ...
+BOARD = "board.kicad_pcb"
 
-if __name__ == "__main__":
-    board()
+with kicad_pcb.edit(BOARD) as b:       # the board file is the source; the block edits it in place
+    power = [t for t in b.get_tracks() if t.net.name in {"+5V", "+3V3"}]
+    for track in power:
+        track.width = from_mm(0.8)
+    b.update_items(power)
+    b.refill_zones()
+drc = kicad_pcb.drc(BOARD)
+if not drc.ok:
+    raise SystemExit("\n".join(drc.human_lines()))  # each finding, then FAILED and the count
+for kind in ("gerbers", "drill", "pos", "bom", "step"):
+    kicad_pcb.export(BOARD, to=kind, out=f"fab/{kind}")
 ```
+
+An edit states the result it wants, so running it again is harmless: "U1 is at (10, 20)", "the power
+tracks are 0.8 mm", never "move U1 5 mm" or "widen the tracks by 0.2 mm". Set absolute positions,
+rotations, widths and nets; create an item only when the board does not hold it yet (find it first by its
+reference, net or place). A script stopped halfway and run again then ends where one run would.
 
 A board's design starts at its schematic, which says what connects to what: read it, check it with
 ERC and look at each sheet ([schematic](references/schematic.md)) before laying out, and hold the board
@@ -83,10 +97,10 @@ connector mating side; a plausible-looking layout does not establish electrical 
 1. Inspect the saved board with `from cad import kicad_pcb` in a script run with
    `cad run`; record the parts, nets, outline, relevant dimensions and constraints before
    changing it. [Checks](references/checks.md) documents this read-only API and clickable references.
-2. Edit the native files, or the board in a board script. Keep net assignments, layer stack, track
-   widths, clearances and custom rules consistent with the chosen fab and electrical requirements.
-   Refill changed copper zones with KiCad (`b.refill_zones()` in a board script) before relying on
-   their saved fill.
+2. Edit the board in a `kicad_pcb.edit` block (or, as a fallback, the native file). Keep net assignments,
+   layer stack, track widths, clearances and custom rules consistent with the chosen fab and electrical
+   requirements. Refill changed copper zones with KiCad (`b.refill_zones()` in the block) before relying
+   on their saved fill.
 
 ## Check each change
 

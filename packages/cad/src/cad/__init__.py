@@ -4,8 +4,9 @@ declare.
 The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
 (``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
 ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
-``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``, a board
-script's ``@kicad_pcb("board.kicad_pcb")``), its reader where it has one (``step.read``) and its
+``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``), its edit where
+its files are changed in place (``with kicad_pcb.edit("board.kicad_pcb") as board:``), its reader where it
+has one (``step.read``) and its
 operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
 ``.inspect``, and those named for what they do (``.dfm``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's

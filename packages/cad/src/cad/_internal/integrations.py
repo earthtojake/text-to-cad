@@ -1,7 +1,7 @@
 """cad's integrations as ``cad run`` reads them: what tells a program needs one, worked out from the registry.
 
 The registry (``cad.registry.INTEGRATIONS``) is the one place each integration's modules, distributions and
-extra are listed, and its document types say which decorators need which integration. This module is the
+extra are listed, and its document types say which of their functions need which integration. This module is the
 view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
 scan, no code run), to add one a resolution pulled in through another package, and to give a requirement
 its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
@@ -14,22 +14,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "decorated", "for_distribution", "for_module", "for_name", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "for_distribution", "for_module", "for_name", "missing"]
 
 
 @dataclass(frozen=True)
 class Integration:
     """One integration, as ``cad run`` reads it: its extra's name (``cad[<extra>]``), the top-level modules a
     program imports of it (``modules``), the distributions that are it, which a resolution may pull in
-    through another package (``distributions``, as PEP 503 normalizes their names), the names of cad's
-    decorators that need it (``decorators``: ``@cad.<name>`` or a ``<name>`` imported from cad), and the
+    through another package (``distributions``, as PEP 503 normalizes their names), and the
     package indexes and folders of wheels its packages come from beside the default index (``indexes``,
     ``find_links``: none today, a hook for packaged binaries)."""
 
     extra: str
     modules: tuple[str, ...]
     distributions: tuple[str, ...]
-    decorators: tuple[str, ...] = ()
     indexes: tuple[str, ...] = ()
     find_links: tuple[str, ...] = ()
 
@@ -42,21 +40,16 @@ def _normal(name: str) -> str:
 
 def _from_registry() -> dict[str, Integration]:
     """Every integration with an extra, from the registry: its modules; the distributions that are it
-    (``identity``: its own and the other builds of its modules, not every package its extra installs); the decorators its own
-    producers declare for every target (``Producer.declare``, ``decorates`` None: ``@kicad_pcb``) -- a
-    decorator the engine makes a model of is no sign of an integration a program chose."""
-    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED, producers_for
+    (``identity``: its own and the other builds of its modules, not every package its extra installs)."""
+    from cad.registry import INTEGRATIONS as REGISTERED
 
     found: dict[str, Integration] = {}
     for name, integration in REGISTERED.items():
         if not integration.extra:
             continue
-        decorators = tuple(entry.id for entry in DOCUMENT_TYPES.values() if entry.decorator_integration == name
-                           and any(producer.integration == name and producer.declare and producer.decorates is None
-                                   for producer in producers_for(entry.id)))
         distributions = tuple(dict.fromkeys(_normal(item) for item in integration.identity))
-        found[integration.extra] = Integration(integration.extra, integration.modules, distributions, decorators,
-                                               integration.indexes, integration.find_links)
+        found[integration.extra] = Integration(integration.extra, integration.modules, distributions, integration.indexes,
+                                               integration.find_links)
     return found
 
 
@@ -89,9 +82,9 @@ def for_name(name: str) -> str | None:
     from where each is declared: an earlier spelling read as the name it is now (the alias table,
     ``cad._internal.aliases.current``: ``cad.read_step`` is ``cad.step.read``, ``cad.ap242`` is
     ``cad.build123d``); then an integration's namespace (``cad.build123d``, ``cad.kicad._session``: the
-    registry's), a document type's reader (``cad.step.read``: its ``reader_integration``) and a type's
-    operation that runs in the caller (``cad.step.dfm``: trimesh; never one the engine runs, as
-    ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
+    registry's), a document type's reader (``cad.step.read``: its ``reader_integration``), its edit
+    (``cad.kicad_pcb.edit``: the edit's integration, kicad) and a type's operation that runs in the caller
+    (``cad.step.dfm``: trimesh; never one the engine runs, as ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
     from cad._internal.aliases import current
     from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED
 
@@ -106,6 +99,8 @@ def for_name(name: str) -> str | None:
         return None
     if parts[2] == "read":
         needed = entry.reader_integration
+    elif parts[2] == "edit":
+        needed = entry.edit.integration if entry.edit is not None else None
     else:
         operation = entry.operation(parts[2])
         needed = operation.integration if operation is not None and not operation.engine else None
@@ -116,11 +111,6 @@ def for_distribution(name: str) -> str | None:
     """The integration a distribution (any spelling of its name) is part of, or None."""
     normal = _normal(name)
     return next((key for key, found in INTEGRATIONS.items() if normal in found.distributions), None)
-
-
-def decorated(name: str) -> str | None:
-    """The integration one of cad's decorators, by its name, needs, or None."""
-    return next((key for key, found in INTEGRATIONS.items() if name in found.decorators), None)
 
 
 def missing(error: BaseException) -> str | None:

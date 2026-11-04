@@ -57,6 +57,19 @@ class TheHierarchy(SchematicFixture):
         self.assertEqual(self.view.parts, ("C1", "J1", "R1", "R2", "R3"))
         self.assertTrue(all(symbol.power for symbol in self.view.symbols if symbol.ref.startswith("#PWR")))
 
+    def test_a_symbol_saved_with_body_style_0_has_its_first_styles_pins(self) -> None:
+        """KiCad's IPC API places a symbol that it saves with ``(body_style 0)``, and draws and connects it as
+        style 1: so is it read."""
+        with tempfile.TemporaryDirectory(prefix="kicad-sch-style-") as folder:
+            root = write_schematic(Path(folder))
+            text = root.read_text(encoding="utf-8")
+            root.write_text(text.replace('(lib_id "Device:R") (at 101.6 59.69 0) (unit 1)',
+                                         '(lib_id "Device:R") (at 101.6 59.69 0) (unit 1) (body_style 0)', 1),
+                            encoding="utf-8")
+            self.assertIn("(body_style 0)", root.read_text(encoding="utf-8"))
+            [r1] = read_schematic(root).part("R1")
+            self.assertEqual(["1", "2"], [pin.number for pin in r1.pins])
+
 
 class TheNets(SchematicFixture):
     def test_nets_are_kicads_names_and_pins(self) -> None:

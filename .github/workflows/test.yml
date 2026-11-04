@@ -327,7 +327,7 @@ jobs:
 
   # Native KiCad boards through kicode's kicad-cli and KiPy, in the environment of cad[kicad] the server
   # makes, as on a person's computer: DRC, every export, a STEP and mesh round trip of a saved board, and a
-  # @kicad_pcb board script through the headless api-server. Only KiCad's code, its suite and its runner
+  # board's and a schematic's edit through the headless api-server. Only KiCad's code, its suite and its runner
   # select it (and a full run): viewing and drawing a board need no KiCad and are the package suites'.
   # kicode is ~110 MB from PyPI for Linux (kicode-pcb and kicode-sch), some 10 s; no apt, no PPA.
   kicad:

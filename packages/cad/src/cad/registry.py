@@ -34,7 +34,8 @@ from types import MappingProxyType
 from typing import Any
 
 __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIEWS", "DocumentTypeEntry",
-           "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "decorators_taking", "help_text", "integrations_of", "producer_for", "producers_for",
+           "Edit", "Integration", "Operation", "Probe", "Producer", "by_extension", "help_text", "integrations_of",
+           "producer_for", "producers_for",
            "type_of"]
 
 #: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
@@ -95,13 +96,9 @@ class Integration:
 class Producer:
     """Code that makes ``document_type`` from a value ``matcher`` accepts: the integration it belongs to,
     the values it takes (``accepts``, in words), the code that writes the file (``writer``), and the parts
-    of the type's content it provides.
-
-    A producer that also DECLARES says what the type's decorator does with what it is stacked on
-    (``declare``: the dotted name of ``(type, out, name) -> apply``), for the targets ``decorates`` takes
-    (None: every target of a type that has no other declarer). Without one, a decorator is the engine's
-    (``cad.engine.model``): the function is a model, and its result is checked against the matchers when
-    it is built."""
+    of the type's content it provides. A producer regenerates its file from code: the type's decorator is
+    the engine's (``cad.engine.model``), the function a model, and its result is checked against the matchers
+    when it is built."""
 
     document_type: str
     integration: str
@@ -109,8 +106,18 @@ class Producer:
     matcher: Callable[[Any], bool] = field(compare=False, repr=False)
     writer: str
     provides: tuple[str, ...]
-    declare: str = ""
-    decorates: Callable[[Any], bool] | None = field(default=None, compare=False, repr=False)
+
+
+@dataclass(frozen=True)
+class Edit:
+    """How a file of a type is changed in place, in the caller's process, rather than made by a producer: the
+    function that opens it for a ``with`` block (``<type>.edit``), the integration it runs, the word for what it
+    opens, what the block is handed, in words, and the parts of the type's content it can change."""
+
+    integration: str
+    noun: str
+    hands: str
+    changes: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -133,14 +140,14 @@ class DocumentTypeEntry:
     content: tuple[str, ...]
     operations: tuple[Operation, ...]
     decorator: bool = False
-    #: The integration the type's decorator needs: the one whose producer it declares through, else the
-    #: engine's models' (build123d's).
-    decorator_integration: str | None = None
     reader: bool = False
     #: The integration its reader needs in the process that calls it (None: our own code alone): a STEP's,
     #: an xbf's and an STL's read hands a model build123d's objects, through the kernel memo.
     reader_integration: str | None = None
     wire: str = ""
+    #: How a file of it is changed in place (``<id>.edit``, a ``with`` block), where it can be: a KiCad board's
+    #: and schematic's, through KiCad's IPC API. None for a type whose files are made or authored alone.
+    edit: Edit | None = None
 
     def __post_init__(self) -> None:
         if not self.id.isidentifier() or self.id != self.id.lower():
@@ -154,8 +161,6 @@ class DocumentTypeEntry:
             raise ValueError(f"{self.id}: a reader_integration with no reader")
         if not self.wire:
             object.__setattr__(self, "wire", self.id)
-        if self.decorator and self.decorator_integration is None:
-            object.__setattr__(self, "decorator_integration", "build123d")
 
     @property
     def suffix(self) -> str:
@@ -248,7 +253,9 @@ _TYPES = (
          Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
          Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-                   "kicad")), decorator=True, decorator_integration="kicad", reader=True),
+                   "kicad")), reader=True,
+        edit=Edit("kicad", "board", "the open board, through KiCad's IPC API (kicode's KiPy)",
+                  ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"))),
     DocumentTypeEntry(
         "kicad_sch", "KiCad schematic", "a KiCad schematic, read with every sheet of its project's hierarchy",
         (".kicad_sch",), "text/plain; charset=utf-8", "plot",
@@ -257,7 +264,10 @@ _TYPES = (
          Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
          Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names"),
          Operation("erc", "KiCad's electrical rules check: errors fail it, warnings are said", "kicad")),
-        reader=True),
+        reader=True,
+        edit=Edit("kicad", "schematic", "the open schematic, its project's symbol libraries loaded, through KiCad's IPC API "
+                           "(kicode's KiPy)",
+                  ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"))),
 )
 
 #: Every document type, by id, in the table's order.
@@ -274,15 +284,16 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
     "kicad": Integration(
         "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
-                 "its fabrication exports run kicad-cli, headless, and a board script edits through the API",
+                 "its fabrication exports run kicad-cli, headless, and an edit of a board or a schematic goes "
+                 "through the API",
         extra="kicad", process="separate",
         # kicad-cli is kicode's (the extra's), or the one CAD_KICAD_CLI names: a check or an export runs 9 or
-        # newer, a board script needs its headless api-server (kicode's has it; another's is asked,
-        # cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
+        # newer, an edit (kicad_pcb.edit, kicad_sch.edit) needs its headless api-server (kicode's has it; another's
+        # is asked, cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
         probe=Probe("kicad-cli", "9.0", "kicad-cli comes with cad's kicad integration, cad[kicad] (kicode), which the "
                                         "cad command installs on first need (a script run with cad run: name "
                                         "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
-                                        "KiCad 9 or newer (a nightly's, 10.99, for a @kicad_pcb board script)",
+                                        "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
                     "CAD_KICAD_CLI"),
         modules=("kicode",), distributions=("kicode",),
         identity=("kicode", "kicode-pcb", "kicode-sch")),
@@ -321,9 +332,8 @@ def type_of(path: Any) -> DocumentTypeEntry | None:
 def _producers() -> tuple[Producer, ...]:
     # Each integration registers the producers it has; this is the one place they are gathered.
     from cad.build123d._producers import PRODUCERS as build123d
-    from cad.kicad._producers import PRODUCERS as kicad
 
-    return (*build123d, *kicad)
+    return build123d
 
 
 def producers_for(document_type: str) -> tuple[Producer, ...]:
@@ -354,23 +364,6 @@ def producer_for(document_type: str, value: Any, *, where: str = "a model") -> P
                     f"({more})")
 
 
-def declarer_for(document_type: str, target: Any) -> Producer | None:
-    """The producer that declares what ``@<type>`` does with ``target`` (``Producer.declare``), or None when
-    the decorator is the engine's. Two that take one target is the registry's error."""
-    found = [producer for producer in producers_for(document_type) if producer.declare
-             and (producer.decorates is None or producer.decorates(target))]
-    if len(found) > 1:
-        raise RuntimeError(f"@{document_type}: {len(found)} producers declare {type(target).__name__}: exactly one may")
-    return found[0] if found else None
-
-
-def decorators_taking(target: Any) -> tuple[str, ...]:
-    """The types whose decorator a producer declares for ``target`` by what it is (``decorates``, not None):
-    a @kicad_pcb board script's ``step``. Empty for a target any decorator takes, a plain function."""
-    return tuple(dict.fromkeys(producer.document_type for producer in _producers() if producer.declare
-                               and producer.decorates is not None and producer.decorates(target)))
-
-
 def help_text(document_type: str) -> str:
     """A type's help, worked out from this table: what it is, the content it carries, its operations and
     what writes it."""
@@ -385,7 +378,12 @@ def help_text(document_type: str) -> str:
         needs = f" [{operation.integration}]" if operation.integration else ""
         lines.append(f"  {name.ljust(width)}  {operation.summary}{needs}")
     producers = producers_for(entry.id)
-    if producers and not entry.has_file:
+    if entry.edit is not None:
+        lines.append("written by:")
+        lines.append(f"  with {entry.id}.edit(\"{entry.edit.noun}{entry.suffix}\") as {entry.edit.noun}: {entry.edit.hands}, "
+                     f"changed in place, saved at the block's end when changed ({entry.edit.integration}: "
+                     f"{', '.join(entry.edit.changes)})")
+    elif producers and not entry.has_file:
         lines.append("made by:")
         for producer in producers:
             lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "

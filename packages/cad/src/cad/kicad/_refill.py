@@ -2,7 +2,7 @@
 
 ``refill(board, out_dir)`` copies the board, and its ``.kicad_pro`` and ``.kicad_dru`` (the rules a fill
 keeps clear by), into ``out_dir``, opens the copy in a private headless ``kicad-cli api-server``
-(``_session``: kicode's kicad-cli and KiPy), refills every zone and saves the copy; the person's file is
+(``_session.edit``: kicode's kicad-cli and KiPy), refills every zone and saves the copy; the person's file is
 never opened by KiCad. ``python -m cad.kicad._refill BOARD OUT_DIR`` runs it for the engine, in the
 environment of ``cad[kicad]``, and prints the refilled file's path.
 """
@@ -25,7 +25,7 @@ _BESIDE = (".kicad_pro", ".kicad_dru")
 
 def refill(board: Path | str, out_dir: Path | str) -> Path:
     """KiCad's refill of ``board``'s zones, written as a copy in ``out_dir``: the copy's path."""
-    from ._session import BoardScript, run
+    from ._session import edit
 
     board, out_dir = Path(board).resolve(), Path(out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -35,12 +35,11 @@ def refill(board: Path | str, out_dir: Path | str) -> Path:
         if board.with_suffix(suffix).is_file():
             shutil.copyfile(board.with_suffix(suffix), copy.with_suffix(suffix))
 
-    def refilled(opened) -> None:
+    # The copy is saved in the format of the KiCad that ran it, which a copy needs no word about; saved here,
+    # whatever KiCad says of a refill that changed nothing, as the plot reads the copy.
+    with contextlib.redirect_stderr(io.StringIO()), edit(copy, "kicad_pcb") as opened:
         opened.refill_zones(block=True, max_poll_seconds=REFILL_SECONDS)
-
-    # The copy is saved in the format of the KiCad that ran it, which a copy needs no word about.
-    with contextlib.redirect_stderr(io.StringIO()):
-        run(BoardScript(refilled, copy))
+        opened.save()
     return copy
 
 

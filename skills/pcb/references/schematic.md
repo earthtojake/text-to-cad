@@ -78,11 +78,81 @@ cannot see your global symbol and footprint library tables (a project's own `sym
 
 ## Edit it
 
-Edit the `.kicad_sch` as text (the schematic's S-expressions: KiCad's
-[file format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/)), or in KiCad, and keep
-every `uuid`: references and the board's links to its symbols are made of them. A placed symbol's
-drawing lives in the file's `lib_symbols`; a new symbol needs its entry there. Its reference is the
-`instances` entry for its sheet's path. After each edit, read it back, draw it and check it.
+Edit a schematic in a `with kicad_sch.edit(...) as s:` block: it hands the block the open schematic
+through KiCad's IPC API (KiPy's `Schematic`, kicode's: `kicode.schematic.Schematic`), the project's symbol
+libraries already loaded, as `kicad_pcb.edit` does a board ([SKILL.md](../SKILL.md#native-files-are-the-source)):
+saved at the block's end when it changed it, left byte for byte when it changed nothing, nothing saved
+when it raises; a schematic not there yet is made, with its project. State the schematic you want, so a
+second run changes nothing: place a symbol only when its reference is not there yet. Run the script with
+`cad run schematic.py`.
+
+```python
+from cad import kicad_sch
+from kicode.geometry import Vector2
+from kicode.schematic_types import SchematicLine, SchematicLineType
+
+def pin_at(symbol, number):                  # a pin's end on the sheet, for a symbol placed at 0 degrees
+    pin = next(pin for pin in symbol.definition.pins if pin.number == number)
+    return symbol.position + pin.position    # its definition's frame, y down, unrotated and unmirrored
+
+with kicad_sch.edit("board.kicad_sch") as s:  # any sheet of the project
+    placed = {symbol.reference: symbol for symbol in s.get_symbols()}
+    for ref, y in (("R1", 50.8), ("R2", 63.5)):
+        if ref not in placed:
+            placed[ref] = s.place_symbol_from_library("parts:R", Vector2.from_xy_mm(50.8, y), reference=ref)
+    if not s.get_lines():
+        wire = SchematicLine()
+        wire.type = SchematicLineType.SLT_WIRE  # a new line is a graphic, joining nothing, until it is a wire
+        wire.start, wire.end = pin_at(placed["R1"], "2"), pin_at(placed["R2"], "1")
+        s.create_items(wire)
+```
+
+Then read it back (`kicad_sch.read`: the pins and their nets), draw it and check it with ERC.
+
+**The safe calls.**
+
+- Place a symbol with `s.place_symbol_from_library("<library>:<symbol>", position, reference="R1")`
+  (`orientation=`, `unit=` for the rest): KiCad copies the library's symbol, its pins and drawing, into the
+  file and keeps its library link. Never make a `SchematicSymbolInstance` from a library id alone and
+  create it: it comes out hollow, with no pins or drawing.
+- Change an item only as it was read back: `s.get_symbols()`, `s.get_lines()`, `s.get_labels()` (and
+  `s.for_sheet(sheet)` for a sheet of the hierarchy, `s.get_hierarchy()` for its sheets), changed and sent
+  with `s.update_items(...)`. Make wires, labels, junctions and no-connects with `s.create_items(...)`, a
+  group of edits in one commit (`s.begin_commit()`, `s.push_commit(commit)`). `s.get_netlist()` says what
+  connects while the script runs.
+- A wire's ends must land on a pin's end (`pin_at` above; turn the pin's offset with the symbol's
+  orientation for a turned or mirrored one), a junction or another wire's end.
+
+**Libraries.** A symbol is placed from the project's own symbol libraries: the rows of its `sym-lib-table`,
+beside the `.kicad_pro` (`${KIPRJMOD}` is that folder). The script runs KiCad with private settings, so no
+global library table, and none of KiCad's stock libraries, is there: copy each library a design needs (its
+`.kicad_sym`) into the project and list it:
+
+```
+(sym_lib_table
+  (version 7)
+  (lib (name "parts")(type "KiCad")(uri "${KIPRJMOD}/parts.kicad_sym")(options "")(descr ""))
+)
+```
+
+A placement from a library the table does not list fails in one line naming it and the row to add; a
+listed library that did not load is said when the block starts. (`KICAD10_SYMBOL_DIR`, set to a copy of
+KiCad's libraries, is what a row of `${KICAD10_SYMBOL_DIR}/Device.kicad_sym` reads.)
+
+**Fragile on this nightly** (KiCad 10.99 over IPC; check the saved file after each):
+
+- A sheet symbol made over IPC that reuses another sheet's file makes the next save fail: make each new
+  sheet's file its own, or place repeated sheets in KiCad.
+- Updating a placed symbol (`update_items`) can detach it from its library: read the file back and check
+  its `lib_id` after moving or changing one.
+- A line ending (an arrow) set over IPC is lost on save.
+- A bus entry gets a new uuid on save: never keep a `#bus_entry:<uuid>` across one.
+
+Editing the `.kicad_sch` as text (KiCad's
+[file format](https://dev-docs.kicad.org/en/file-formats/sexpr-schematic/)) is the fallback, for what the
+API cannot do: keep every `uuid` (references and the board's links to its symbols are made of them), give
+a new symbol its `lib_symbols` entry and its reference in the `instances` entry for its sheet's path.
+After each edit, read it back, draw it and check it.
 
 ## Draw it cleanly
 
@@ -115,9 +185,26 @@ The board takes its parts and nets from the schematic's netlist:
 cad kicad_sch export board.kicad_sch --to netlist -o tmp
 ```
 
-writes `tmp/board.net`, the netlist [layout](layout.md)'s first step imports in a board script
-(`b.import_netlist(...)`). After a layout or a schematic edit, hold the board to the schematic pin by
-pin:
+writes `tmp/board.net`, the netlist [layout](layout.md)'s first step imports in a board's edit
+(`b.import_netlist(...)`). There is no "Update PCB": a schematic edit reaches the board through that
+netlist, exported from the saved schematic. One script does both, the schematic's block first:
+
+```python
+from cad import kicad_pcb, kicad_sch
+
+with kicad_sch.edit("board.kicad_sch") as s:
+    ...                                       # saved at this block's end
+(netlist,) = kicad_sch.export("board.kicad_sch", "netlist", "tmp").written
+with kicad_pcb.edit("board.kicad_pcb") as b:
+    b.import_netlist(str(netlist))            # dry_run=True first, to see what it would change
+```
+
+A board's and a schematic's edits of one project can also share one block, and one KiCad:
+`with kicad_sch.edit("board.kicad_sch") as s, kicad_pcb.edit("board.kicad_pcb") as b:`, each saved at its
+own end (the board's first). The netlist is read from the saved schematic, so import it after the
+schematic's block, as above.
+
+After a layout or a schematic edit, hold the board to the schematic pin by pin:
 
 ```python
 from cad import kicad_pcb, kicad_sch

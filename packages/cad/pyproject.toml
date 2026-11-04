@@ -70,7 +70,7 @@ build123d = [
   "pillow",
 ]
 # The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
-# (KiPy, as `kicode`) in one package -- what a check, an export and a @kicad_pcb board script run; a
+# (KiPy, as `kicode`) in one package -- what a check, an export and an edit (kicad_pcb.edit) run; a
 # person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
 # 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [

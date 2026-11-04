@@ -226,20 +226,22 @@ class ChoosingTest(unittest.TestCase):
         assert isinstance(found, extras.Spec)
         return found
 
-    def test_the_scan_finds_an_integration_through_local_imports_and_cad_s_decorators(self) -> None:
+    def test_the_scan_finds_an_integration_through_local_imports_and_cad_s_names(self) -> None:
         from cad_server._internal import scan
 
         self.write("lib/__init__.py", "from .shapes import plate\n")
         self.write("lib/shapes.py", "def plate():\n    import build123d as bd  # inside a body, as a model's\n"
                                     "    return bd.Box(1, 1, 1)\n")
-        self.write("boards.py", "from cad import kicad_pcb as board\n\n@board('b.kicad_pcb')\ndef b():\n    pass\n")
+        self.write("boards.py", "from cad import kicad_pcb as board\n\nwith board.edit('b.kicad_pcb') as b:\n    pass\n")
         self.write("model.py", "import numpy\nfrom lib import plate\nimport boards\n")
         self.write("plain.py", "import json\nfrom cad import model\n")
-        self.write("attribute.py", "import cad as c\n\n@c.kicad_pcb('x')\ndef x():\n    pass\n")
+        self.write("attribute.py", "import cad.kicad_pcb\n\nwith cad.kicad_pcb.edit('x.kicad_pcb') as b:\n    pass\n")
+        self.write("schematic.py", "from cad.kicad_sch import edit\n\nwith edit('d.kicad_sch') as s:\n    pass\n")
         self.write("dynamic.py", "import importlib\nimportlib.import_module('build' + '123d')\n")
         self.assertEqual(scan.scan(script=self.folder / "model.py"), {"build123d", "kicad"})
         self.assertEqual(scan.scan(script=self.folder / "plain.py"), set(), "the core alone")
         self.assertEqual(scan.scan(script=self.folder / "attribute.py"), {"kicad"})
+        self.assertEqual(scan.scan(script=self.folder / "schematic.py"), {"kicad"}, "a schematic's edit, as a board's")
         self.assertEqual(scan.scan(script=self.folder / "dynamic.py"), set(), "an import by name is not seen")
         self.assertEqual(scan.scan(module="lib", cwd=self.folder), {"build123d"})
         self.assertEqual(scan.scan(code="import OCP.TopoDS", cwd=self.folder), {"build123d"})

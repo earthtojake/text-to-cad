@@ -2,7 +2,7 @@
 
 The ``kicad`` integration's probe (``cad.registry.INTEGRATIONS["kicad"]``), run by the library's one
 helper for the external programs our code runs (``cad._internal.programs``), the standard library
-alone, so the library's ``@kicad_pcb``, ``cad.kicad_pcb.drc`` and ``export`` and the server's commands
+alone, so the library's ``kicad_pcb.edit``, ``cad.kicad_pcb.drc`` and ``export`` and the server's commands
 find and run it the same way. The ``kicad-cli`` run is the integration's own: kicode's
 (``kicode.executable()``, the ``cad[kicad]`` extra's), or the file ``CAD_KICAD_CLI`` names, refused unless
 it is a ``kicad-cli`` (``kicad-cli.exe`` on Windows). A person's own KiCad is never run -- not on PATH,
@@ -103,8 +103,8 @@ def _is_packaged(cli: Path) -> bool:
 #: ``kicad-cli`` as the helper runs it: the override, then kicode's, never PATH or an installation's.
 KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: [p for p in (packaged(),) if p],
                                      homes=_HOMES, title="KiCad 9", search_path=False)
-#: What a board script needs beyond a check's or an export's kicad-cli: its headless api-server.
-API_SERVER_HINT = ("a @kicad_pcb board script runs kicad-cli's headless api-server, which kicode's kicad-cli (cad[kicad]) "
+#: What an edit needs beyond a check's or an export's kicad-cli: its headless api-server.
+API_SERVER_HINT = ("kicad_pcb.edit and kicad_sch.edit run kicad-cli's headless api-server, which kicode's kicad-cli (cad[kicad]) "
                    "and a KiCad nightly's (10.99) have; a check or an export needs only KiCad 9 or newer. Unset "
                    "CAD_KICAD_CLI to run kicode's, or set it to a nightly's kicad-cli")
 KICAD_MINIMUM = KICAD.minimum
@@ -187,7 +187,7 @@ def kicad_version(cli: Path) -> str | None:
 
 
 def check_api_server(cli: Path) -> Path:
-    """``cli`` when it has the headless ``api-server`` a board script runs: kicode's always has; another's
+    """``cli`` when it has the headless ``api-server`` an edit runs: kicode's always has; another's
     (``CAD_KICAD_CLI``) is asked, ``kicad-cli api-server --help`` run headless listing its ``--socket``.
     Else ``KicadMissingError``, before any server is started: a stable KiCad's kicad-cli has no such command."""
     if _is_packaged(cli):

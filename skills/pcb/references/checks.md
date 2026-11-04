@@ -55,7 +55,7 @@ one they were working on (the copper nearest them, or the layer they isolated), 
 ask for there unless the note says otherwise. A `<uuid>` is the one the
 board file saved the item with (`(uuid "...")`), kept by every save and by KiCad's API, so it
 still names the item after you move it: find it in the file by that uuid (case-insensitive), or
-in a `@kicad_pcb` script with `board.get_items_by_id(KIID(value=uuid))` (`from
+in a `kicad_pcb.edit` block with `board.get_items_by_id(KIID(value=uuid))` (`from
 kicode.proto.common.types import KIID`). Copies of one footprint can share their items' uuids; such
 an item is named under its footprint's uuid, `#text:<footprint uuid>/<uuid>`. A reference whose
 item is gone raises `ValueError`.

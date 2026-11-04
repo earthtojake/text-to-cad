@@ -66,6 +66,9 @@ These words mean one thing each, in the code, the commands and every document.
   tool: OCP is a dependency of `build123d`, not an integration.
 - **Producer**: code that makes a document type from some input. Many integrations can produce one type.
   Each type documents the content it carries, and each producer states which parts of it it provides.
+- **Edit**: code that changes a native file of a type in place, in the caller's process, rather than
+  making it: `kicad_pcb.edit` and `kicad_sch.edit`, a `with` block over the open document. An edit is no
+  producer and no operation.
 - **Operation**: one of a closed set. `export` and `snapshot` are shared by every type that has them, and
   `inspect` and `read` are where a type has them; every other operation is named for what it does: `dfm`
   (a 3D type's manufacturing check), `drc` (a board's design rule check), `erc` (a schematic's electrical
@@ -443,8 +446,8 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
 24. **One table names every document type and integration.** *The package.* The registry (`cad.registry`) is the
     single source of every layer: each type's id, extensions, MIME type, how it is viewed (an engine
     document, a mesh, a drawing, a robot, a plot), the content it carries, its operations and the
-    integration each needs, and whether it has a decorator; each integration's name, extra, process kind
-    and, for an external program, its probe (the program, the oldest version our code supports, the
+    integration each needs, and whether it has a decorator or an edit; each integration's name, extra,
+    process kind and, for an external program, its probe (the program, the oldest version our code supports, the
     install hint -- for a program that comes with an extra, as kicad-cli comes with `cad[kicad]`, that
     extra -- and the variable that names a program outright, as `CAD_KICAD_CLI` does). A document type
     either has files (its extensions) or has none (`model`, a document in memory, named by its id): a
@@ -473,14 +476,21 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
-27. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
-    persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
-    it and its integration -- decide which makes the file of the returned value. A matcher reads the
-    value's type names and modules, never importing a library to ask. Exactly one producer per return
-    type per document type; a return none takes fails loudly, naming the types the document is made of and
-    the integration that would add more. A producer may also declare what its decorator does with the
-    function it is given (a KiCad board script, `@kicad_pcb`, run through KiCad's IPC API; the `@step`
-    stacked on one, written by `kicad-cli`); which one is the registry's, by what is decorated.
+27. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
+    A producer is the engine's: a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`, `@threemf`,
+    `@dxf`) declares a persistent script's output, the function is a model the engine builds, and the
+    registry's producers -- each a type, a matcher, the code that writes it and its integration -- decide
+    which makes the file of the returned value, which is written again from the model whenever it runs. A
+    matcher reads the value's type names and modules, never importing a library to ask. Exactly one producer
+    per return type per document type; a return none takes fails loudly, naming the types the document is
+    made of and the integration that would add more. An edit is a file's own: the file is the source, and
+    `with <type>.edit(path) as document:` opens it in its tool, in the caller's process, hands the block the
+    tool's live document, and saves it where it is at the block's end only when the block changed it, and
+    not at all when the block raises (a KiCad board's and schematic's, `kicad_pcb.edit` and `kicad_sch.edit`,
+    through KiCad's IPC API, one KiCad per project for both). An edit declares nothing, writes no other file
+    and is never a model: what is made from an edited file (a STEP, Gerbers, a check) is an explicit call
+    afterwards (`kicad_pcb.export`, `kicad_pcb.drc`). A type has a decorator or an edit, never both; the
+    registry says which (`Producer`, `Edit`).
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
@@ -574,16 +584,16 @@ src/cad/
                          #   (_source.py, _validation.py, sdf's _external.py, gz sdf --check)
   kicad_pcb/             # a saved KiCad board: read, inside and inspect (the reader is
                          #   engine/formats/kicad, the standard library alone, and its flat
-                         #   still engine/render/board.py); drc and export, the kicad
-                         #   integration's; @kicad_pcb is the kicad integration's board script
+                         #   still engine/render/board.py); drc, export and edit (a with
+                         #   block), the kicad integration's
   kicad_sch/             # a saved KiCad schematic: read (its hierarchy, its nets and
                          #   references; engine/formats/kicad/schematic, the standard library
                          #   alone) and inspect; its flat still engine/render/schematic.py;
-                         #   erc and export, the kicad integration's
+                         #   erc, export and edit, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
-                         #   on _internal/programs), a board script through its headless
-                         #   api-server and KiPy (_session), DRC (_check), its exports (_export),
-                         #   a schematic's ERC and exports (_schematic) and producers
+                         #   on _internal/programs), an edit of a board or a schematic through
+                         #   its headless api-server and KiPy (_session), DRC (_check), its exports (_export),
+                         #   a schematic's ERC and exports (_schematic)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each
@@ -648,6 +658,19 @@ board's shape, every sheet a page, drawn from the symbols' own drawings the file
 the same stroke font; `cad kicad_sch snapshot --sheet /Power/` draws one page. KiCad owns ERC (`cad.kicad_sch.erc`, `cad
 kicad_sch erc`) and the exports (`cad.kicad_sch.export(schematic, to, out)`, `cad kicad_sch export --to
 pdf|svg|netlist|bom -o DIR`), the `kicad` integration's, run where the board's are.
+
+A board or a schematic is changed in place through KiCad's IPC API by an edit of it, a `with` block:
+`with kicad_pcb.edit("board.kicad_pcb") as board:` or `with kicad_sch.edit("design.kicad_sch") as schematic:`
+hands the block the open document (KiPy's, kicode's), through kicode's headless `kicad-cli api-server` on
+the file, in private KiCad homes (a person's own KiCad settings and library tables are never read or
+written; `cad.kicad._session`). A file not there yet is made by KiCad, with its project, and saved; an
+existing one is saved at the block's end only when the block changed it (KiCad's own modified state), so a
+block that changes nothing leaves it byte for byte, in its own format; nothing is saved when the block
+raises, and the exception goes on. One KiCad serves a project: the board's and the schematic's edits of one
+project, one inside the other, share it, each saved at its own block's end. A schematic's symbol libraries
+are its project's own `sym-lib-table`'s, loaded before the block runs; a placement from one the project
+lacks is refused in one line naming it. The library writes no other file of KiCad's: a `.kicad_prl` an edit
+made is removed. Exports and checks of the edited file are explicit calls after the block.
 
 ## Manufacturing checks
 

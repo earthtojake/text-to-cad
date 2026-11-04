@@ -55,9 +55,9 @@ an integration.
       namespace. It imports only its own extra's dependencies and re-exports nothing of the tool
       (`tests/python/packages/cad_server/test_core_imports.py`).
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
-      accepts and which parts of the type's content it provides. A producer whose decorator does more
-      than the engine's model declares it (`declare`, for the targets `decorates` takes): KiCad's
-      `@kicad_pcb` board script, and the `@step`, `@glb` and `@dxf` stacked on one. A matcher reads type names and
+      accepts and which parts of the type's content it provides; it regenerates a file from what a model
+      returns. A tool that changes a native file in place is no producer but the type's edit
+      (`cad.registry.Edit`, `<type>.edit`, a `with` block: KiCad's `kicad_pcb.edit`). A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).
 - [ ] **An external program's probe and headless rules**: found through the library's one helper

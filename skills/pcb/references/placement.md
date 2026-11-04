@@ -120,9 +120,11 @@ never by eye from a snapshot: a guess is easily a few tenths of a millimetre out
 
 ## Move, then check
 
-Move each group in one `@kicad_pcb` script: position and rotation with `b.update_items(...)` on the
-footprints read back from the board, and a change of side with `b.flip_items(...)`, KiCad's own flip,
-which mirrors pads, courtyard and graphics to the other side. Never set a footprint's layer by hand.
+Move each group in one `kicad_pcb.edit` block: position and rotation with `b.update_items(...)` on the
+footprints read back from the board, set to where each belongs (never moved by an offset, so the block
+can run again), and a change of side with `b.flip_items(...)`, KiCad's own flip, which mirrors pads,
+courtyard and graphics to the other side, only for a part not on that side already. Never set a
+footprint's layer by hand.
 After each group:
 
 - **DRC.** `cad kicad_pcb drc board.kicad_pcb`: fix every courtyard, clearance and edge error.
