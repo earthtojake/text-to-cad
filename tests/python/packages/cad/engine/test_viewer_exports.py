@@ -24,7 +24,7 @@ class ViewerExportsTest(unittest.TestCase):
                                  mesh=None, path=None, foreign=False)
         with tempfile.TemporaryDirectory() as folder:
             output = Path(folder) / "result.step"
-            def write(source, _unused, target, check=None, **kwargs):
+            def write(source, _unused, target, tolerance=None, told=None, *, check=None, **kwargs):
                 target.write_bytes(b"written step")
                 if check is not None:
                     check(target)
@@ -68,7 +68,7 @@ class ViewerExportsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             output = Path(folder) / "result.step"
 
-            def write(source, _unused, target, **kwargs):
+            def write(source, _unused, target, *args, **kwargs):
                 target.write_bytes(b"written step")
                 return target.stat().st_size
 

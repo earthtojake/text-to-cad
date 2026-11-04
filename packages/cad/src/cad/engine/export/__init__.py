@@ -471,8 +471,7 @@ def translate(document: Any, kind: str | None, path: Any, tolerance: float | Non
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     if not spec.atomic:
-        spec.write(view, path)
-        return path.stat().st_size
+        return spec.write(view, path)
 
     def write(temporary: Path) -> None:
         spec.write(view, temporary)
