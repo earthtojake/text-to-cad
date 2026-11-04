@@ -226,11 +226,19 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertEqual(jobs_for("skills/print3d/scripts/orca_presets.py"), {"skills"})
         self.assertEqual(tests_for("skills/print3d/scripts/orca_presets.py")["skills_tests"], [])
 
-    def test_the_manufacturing_check_runs_the_package_suites(self):
-        # Its measurements are the library's trimesh integration: no skill suite reads them.
-        chosen = tests_for("packages/cad/src/cad/trimesh/_molding.py")
-        self.assertEqual(chosen["cadgen_tests"], [CADGEN])
-        self.assertEqual(chosen["skills_tests"], [])
+    def test_the_manufacturing_check_runs_the_tests_that_reach_it(self):
+        # A leaf of the library: its type side, its exact measurements and its mesh measurements reach the
+        # tests that name them and those that read every command, never the whole suite or a skill's.
+        for path in ("packages/cad/src/cad/trimesh/_molding.py", "packages/cad/src/cad/build123d/_dfm_cnc.py",
+                     "packages/cad/src/cad/_internal/dfm/rules.py", "packages/cad/src/cad/_internal/manufacturing.py"):
+            with self.subTest(path=path):
+                chosen = tests_for(path)
+                self.assertIn(f"{LIBRARY}/test_dfm_core.py", chosen["cadgen_tests"])
+                self.assertIn(f"{LIBRARY}/test_trimesh_molding.py", chosen["cadgen_tests"])
+                self.assertIn(f"{SERVER}/test_manufacturing_check_cli.py", chosen["cadgen_tests"])
+                self.assertNotIn(CADGEN, chosen["cadgen_tests"])
+                self.assertNotIn(f"{LIBRARY}/engine/test_animation.py", chosen["cadgen_tests"])
+                self.assertEqual(chosen["skills_tests"], [])
 
     def test_a_test_file_runs_itself(self):
         self.assertEqual(tests_for(f"{SERVER}/test_settings.py")["cadgen_tests"], [f"{SERVER}/test_settings.py"])
