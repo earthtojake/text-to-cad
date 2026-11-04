@@ -315,6 +315,8 @@ export default {
   "select.filter": "선택 필터",
   "select.filterCurrent": "{filter}: {mode}",
   "select.everything": "전체",
+  "select.tool": "도구",
+  "select.boxSelect": "영역 선택",
   "select.groupEdges": "모서리 묶기",
   "select.groupFaces": "면 묶기",
   "measure.filter": "측정 필터",

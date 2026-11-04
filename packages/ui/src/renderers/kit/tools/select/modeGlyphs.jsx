@@ -11,6 +11,11 @@ import { useId } from 'react';
 // `weight` thickens a glyph's strokes for the badge, which is drawn at under half size.
 const TOOL_GLYPHS = Object.freeze({
   select: <path d="M4.037 4.688a.495.495 0 0 1 .651-.651l16 6.5a.5.5 0 0 1-.063.947l-6.124 1.58a2 2 0 0 0-1.438 1.435l-1.579 6.126a.5.5 0 0 1-.947.063z" />,
+  // Box select: lucide's SquareMousePointer.
+  boxSelect: <>
+    <path d="M12.034 12.681a.498.498 0 0 1 .647-.647l9 3.5a.5.5 0 0 1-.033.943l-3.444 1.068a1 1 0 0 0-.66.66l-1.067 3.443a.5.5 0 0 1-.943.033z" />
+    <path d="M21 11V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6" />
+  </>,
   measure: <>
     <path d="M21.3 15.3a2.4 2.4 0 0 1 0 3.4l-2.6 2.6a2.4 2.4 0 0 1-3.4 0L2.7 8.7a2.41 2.41 0 0 1 0-3.4l2.6-2.6a2.41 2.41 0 0 1 3.4 0Z" />
     <path d="m14.5 12.5 2-2" /><path d="m11.5 9.5 2-2" /><path d="m8.5 6.5 2-2" /><path d="m17.5 15.5 2-2" />
@@ -42,7 +47,7 @@ export function ModeGlyph({ tool, mode, ...props }) {
   return <svg {...SVG} data-mode-glyph={glyph ? mode : tool} {...props}>{glyph ? glyph(1) : TOOL_GLYPHS[tool]}</svg>;
 }
 
-/** The strip's composite: the tool's glyph (`tool`, "select" or "measure") badged with `mode`'s glyph, none for "all". */
+/** The strip's composite: the tool's glyph (`tool`, "select", "boxSelect" or "measure") badged with `mode`'s glyph, none for "all". */
 export function ToolModeIcon({ tool, mode, ...props }) {
   const mask = `tool-mode-${useId().replace(/[^\w-]/g, '')}`;
   const glyph = MODE_GLYPHS[mode];

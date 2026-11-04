@@ -339,6 +339,8 @@ export default {
   "select.filter": "Selection filter",
   "select.filterCurrent": "{filter}: {mode}",
   "select.everything": "everything",
+  "select.tool": "Tool",
+  "select.boxSelect": "Box select",
   "select.groupEdges": "Group edges",
   "select.groupFaces": "Group faces",
   "measure.filter": "Measure filter",

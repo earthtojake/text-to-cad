@@ -158,6 +158,48 @@ it("Select's menu is a STEP's single choice: All when a file opens, or one kind 
   expect(selectGeometryMode(['faces', 'edges'])).toBe('topology');
 });
 
+it("Select and Box select are two tools in their own section at the top of Select's menu, apart from what they pick", async () => {
+  const user = userEvent.setup({ pointerEventsCheck: 0 });
+  const toolChange = vi.fn(), change = vi.fn();
+  function Harness() {
+    const [tool, setTool] = useState<'select' | 'box'>('select');
+    const [value, setValue] = useState<readonly string[]>(['faces']);
+    return <>
+      <XbfSelectModeMenu value={value} onChange={(next: readonly string[]) => { setValue(next); change(next); }} assembly={false} posable={false}
+        connected={{ edgeChain: false, tangentFaces: false }} onConnectedChange={() => {}}
+        tool={tool} onToolChange={(next: 'select' | 'box') => { setTool(next); toolChange(next); }} />
+      <XbfSelectIcon tool={tool} mode="faces" aria-hidden="true" />
+    </>;
+  }
+  const open = () => user.click(document.querySelector<HTMLElement>('[data-select-filter-trigger]')!);
+  const tools = () => [...document.querySelectorAll('[data-select-tool]')].map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`);
+  const badge = () => [...document.querySelectorAll('svg[data-tool-icon-base]')].map(icon =>
+    `${icon.getAttribute('data-tool-icon-base')}:${icon.querySelector('[data-tool-icon-badge]')?.getAttribute('data-tool-icon-badge') ?? ''}`);
+  render(<Harness />);
+  expect(badge()).toEqual(['select:faces']);
+  await open();
+  // The tools first, each with its glyph, then a rule, then what a pick takes.
+  const menu = document.querySelector<HTMLElement>('[role=menu]')!;
+  expect(tools()).toEqual(['Select:true', 'Box select:false']);
+  expect(menu.querySelector('[data-select-tool="box"] svg[data-mode-glyph]')?.getAttribute('data-mode-glyph')).toBe('boxSelect');
+  const order = [...menu.querySelectorAll('[data-select-tool], [role=separator], [data-select-filter]')]
+    .map(item => item.getAttribute('data-select-tool') ?? item.getAttribute('data-select-filter') ?? 'rule');
+  expect(order.slice(0, 4)).toEqual(['select', 'box', 'rule', 'all']);
+  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Tool', 'Pick']);
+  await user.click(document.querySelector<HTMLElement>('[data-select-tool="box"]')!);
+  // Choosing a tool puts the menu away and leaves what is picked as it was; the strip's button is Box select's, badged the same.
+  expect([toolChange.mock.calls, change.mock.calls, !!document.querySelector('[role=menu]')]).toEqual([[['box']], [], false]);
+  expect(badge()).toEqual(['boxSelect:faces']);
+  await open();
+  expect(tools()).toEqual(['Select:false', 'Box select:true']);
+  cleanup();
+  // Without a tool to choose, the menu has no Tool section.
+  render(<XbfSelectModeMenu value={['faces']} onChange={() => {}} assembly={false} posable={false}
+    connected={{ edgeChain: false, tangentFaces: false }} onConnectedChange={() => {}} />);
+  await open();
+  expect(document.querySelectorAll('[data-select-tool]').length).toBe(0);
+});
+
 // An engine document's Position over a hinge's mechanism: one revolute pair with one named configuration.
 const I = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const hingeKinematics = {

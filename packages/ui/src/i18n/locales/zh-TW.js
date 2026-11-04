@@ -316,6 +316,8 @@ export default {
   "select.filter": "選取篩選器",
   "select.filterCurrent": "{filter}：{mode}",
   "select.everything": "全部",
+  "select.tool": "工具",
+  "select.boxSelect": "框選",
   "select.groupEdges": "成組選取邊",
   "select.groupFaces": "成組選取面",
   "measure.filter": "測量篩選器",
