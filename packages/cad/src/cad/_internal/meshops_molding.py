@@ -26,8 +26,8 @@ from typing import Any
 
 import numpy as np
 
-__all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "lateral_directions", "near_outline",
-           "parting", "pull_vector", "raster", "transitions", "weighted_median", "weighted_quantile"]
+__all__ = ["ball_thickness", "basis", "classify_undercut", "direction_name", "even_points", "lateral_directions",
+           "near_outline", "nearest_broad", "parting", "pull_vector", "raster", "transitions", "weighted_median", "weighted_quantile"]
 
 Cast = Callable[[np.ndarray, np.ndarray], np.ndarray]
 
@@ -192,22 +192,31 @@ def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray
     return radius
 
 
-def _exact_ball(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray, c_t: np.ndarray,
-                floor: float) -> tuple[float, int]:
-    """The least radius at which the ball tangent at ``p`` (centre p - r n) meets one of the triangles
-    (corners ``a_t``, ``b_t``, ``c_t``), and that triangle's index; (inf, -1) for none."""
-    best = np.full(len(a_t), np.inf)
+def _exact_balls(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray, c_t: np.ndarray,
+                 allowed: np.ndarray, floor: float) -> tuple[np.ndarray, np.ndarray]:
+    """For each point ``p[k]`` (outward normal ``n[k]``): the least radius at which the ball tangent there
+    (centre p - r n) meets one of the triangles it is ``allowed`` (corners ``a_t``, ``b_t``, ``c_t``), and that
+    triangle's index (-1 for none)."""
+    P, N = p[:, None, :], n[:, None, :]
+    A, B, Cc = a_t[None], b_t[None], c_t[None]
+    best = np.full(allowed.shape, np.inf)
+
+    def dot(x, y):
+        return np.einsum("kmj,kmj->km", x, y)
+
     with np.errstate(divide="ignore", invalid="ignore", over="ignore"):
-        for corner in (a_t, b_t, c_t):
-            d = corner - p
-            h = -(d @ n)
-            best = np.minimum(best, np.where(h > floor, np.einsum("ij,ij->i", d, d) / (2.0 * h), np.inf))
+        for corner in (A, Cc, B):
+            d = corner - P
+            h = -dot(d, np.broadcast_to(N, d.shape))
+            best = np.minimum(best, np.where(h > floor, dot(d, d) / (2.0 * h), np.inf))
         # edges: g(t) = (|a|^2 + 2t a.e + t^2 |e|^2) / (2 (h0 + t h1)) is stationary where
         # |e|^2 h1 t^2 + 2 |e|^2 h0 t + (2 a.e h0 - |a|^2 h1) = 0
-        for start, end in ((a_t, b_t), (b_t, c_t), (c_t, a_t)):
-            a, e = start - p, end - start
-            h0, h1 = -(a @ n), -(e @ n)
-            ae, aa, ee = np.einsum("ij,ij->i", a, e), np.einsum("ij,ij->i", a, a), np.einsum("ij,ij->i", e, e)
+        for start, end in ((A, B), (B, Cc), (Cc, A)):
+            a = start - P
+            e = np.broadcast_to(end - start, a.shape)
+            nn = np.broadcast_to(N, a.shape)
+            h0, h1 = -dot(a, nn), -dot(e, nn)
+            ae, aa, ee = dot(a, e), dot(a, a), dot(e, e)
             qa, qb, qc = ee * h1, 2.0 * ee * h0, 2.0 * ae * h0 - aa * h1
             disc = qb * qb - 4.0 * qa * qc
             root = np.sqrt(np.maximum(disc, 0.0))
@@ -222,26 +231,30 @@ def _exact_ball(p: np.ndarray, n: np.ndarray, a_t: np.ndarray, b_t: np.ndarray, 
         size = np.linalg.norm(m, axis=1)
         good = size > 0
         m = m / np.where(good, size, 1.0)[:, None]
-        w = np.einsum("ij,ij->i", m, p - a_t)
-        mn = m @ n
         v0, v1 = b_t - a_t, c_t - a_t
-        d00, d01, d11 = np.einsum("ij,ij->i", v0, v0), np.einsum("ij,ij->i", v0, v1), np.einsum("ij,ij->i", v1, v1)
+        d00, d01, d11 = (np.einsum("ij,ij->i", v0, v0), np.einsum("ij,ij->i", v0, v1),
+                         np.einsum("ij,ij->i", v1, v1))
         den = d00 * d11 - d01 * d01
+        w = np.einsum("mj,kmj->km", m, P - A)
+        mn = np.einsum("mj,kj->km", m, n)
         for sign in (-1.0, 1.0):
             r = w / (mn + sign)
-            centre = p[None, :] - r[:, None] * n[None, :]
-            touch = centre - np.einsum("ij,ij->i", m, centre - a_t)[:, None] * m
-            rel = touch - a_t
-            d20, d21 = np.einsum("ij,ij->i", rel, v0), np.einsum("ij,ij->i", rel, v1)
+            centre = P - r[:, :, None] * N
+            touch = centre - np.einsum("mj,kmj->km", m, centre - A)[:, :, None] * m[None]
+            rel = touch - A
+            d20, d21 = np.einsum("kmj,mj->km", rel, v0), np.einsum("kmj,mj->km", rel, v1)
             bv = (d11 * d20 - d01 * d21) / den
             bw = (d00 * d21 - d01 * d20) / den
-            hh = -((touch - p) @ n)
-            ok = good & np.isfinite(r) & (r > 0) & (bv >= -1e-9) & (bw >= -1e-9) & (bv + bw <= 1 + 1e-9) & (hh > floor)
+            hh = -np.einsum("kmj,kj->km", touch - P, n)
+            ok = (good[None] & np.isfinite(r) & (r > 0) & (bv >= -1e-9) & (bw >= -1e-9) & (bv + bw <= 1 + 1e-9)
+                  & (hh > floor))
             best = np.minimum(best, np.where(ok, r, np.inf))
-    if not len(best):
-        return math.inf, -1
-    pick = int(np.argmin(best))
-    return float(best[pick]), (pick if np.isfinite(best[pick]) else -1)
+    best = np.where(allowed, best, np.inf)
+    if not best.shape[1]:
+        return np.full(len(p), np.inf), np.full(len(p), -1)
+    pick = np.argmin(best, axis=1)
+    least = best[np.arange(len(p)), pick]
+    return least, np.where(np.isfinite(least), pick, -1)
 
 
 def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, vertices: np.ndarray,
@@ -300,19 +313,83 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         q = np.vstack([verts, centroid] + ([np.asarray(others, dtype=float).reshape(-1, 3)] if others is not None else []))
         upper = _point_bound(p_all, n_all, q, radius, floor)
     upper = np.where(np.isfinite(upper), upper, scale)
-    for index, (p, n) in enumerate(zip(p_all, n_all)):
-        # A triangle can bind the ball only if it comes within the ball's own reach of p (2 r).
-        near = np.linalg.norm(centroid - p, axis=1) - reach <= 2.0 * upper[index] * (1 + 1e-9)
+    tri_face = np.asarray(triangle_face) if own else None
+    # Points a few at a time (neighbours in the sampled order lie near one another, so their triangles mostly
+    # coincide): each solves the triangles within its own ball's reach (2 r of the bound), its own face's left out.
+    chunk = 24
+    for start in range(0, len(p_all), chunk):
+        index = np.arange(start, min(len(p_all), start + chunk))
+        distance = np.linalg.norm(centroid[None, :, :] - p_all[index, None, :], axis=2) - reach[None, :]
+        near = distance <= 2.0 * upper[index, None] * (1 + 1e-9)
         if own:
-            near &= np.asarray(triangle_face) != point_face[index]
-        if not near.any():
+            near &= tri_face[None, :] != np.asarray(point_face)[index, None]
+        columns = np.nonzero(near.any(axis=0))[0]
+        if not len(columns):
             continue
-        found = np.nonzero(near)[0]
-        least, pick = _exact_ball(p, n, a_t[found], b_t[found], c_t[found], floor)
-        if least < radius[index]:
-            radius[index] = least
-            bound[index] = int(found[pick])
+        least, pick = _exact_balls(p_all[index], n_all[index], a_t[columns], b_t[columns], c_t[columns],
+                                   near[:, columns], floor)
+        tighter = least < radius[index]
+        radius[index[tighter]] = least[tighter]
+        bound[index[tighter]] = columns[pick[tighter]]
     return np.where(np.isfinite(radius), 2.0 * radius, np.nan), bound
+
+
+def even_points(vertices: np.ndarray, triangles: np.ndarray, count: int) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """About ``count`` points spread over a mesh by area, with no randomness: the triangles in order, each
+    given the points its share of the running area asks for (a running quota, so a small triangle beside a
+    large one is neither always skipped nor always sampled), each point the centre of one of an n x n cut of
+    its triangle, taken evenly. Returns the points, their triangles and the area each stands for. The same
+    mesh gives the same points on every platform; a mesh whose vertices move slightly gives points that move
+    with them."""
+    verts = np.asarray(vertices, dtype=float).reshape(-1, 3)
+    tris = np.asarray(triangles, dtype=int).reshape(-1, 3)
+    a, b, c = verts[tris[:, 0]], verts[tris[:, 1]], verts[tris[:, 2]]
+    areas = 0.5 * np.linalg.norm(np.cross(b - a, c - a), axis=1)
+    total = float(areas.sum())
+    if total <= 0 or not len(tris):
+        return np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0)
+    quota = total / max(1, count)
+    running = np.cumsum(areas) / quota
+    wanted = np.floor(running + 0.5).astype(int) - np.floor(np.concatenate([[0.0], running[:-1]]) + 0.5).astype(int)
+    points, owner, weights = [], [], []
+    for index in np.nonzero(wanted > 0)[0]:
+        k = int(wanted[index])
+        cuts = int(math.ceil(math.sqrt(k)))
+        bary = []
+        for i in range(cuts):
+            for j in range(cuts - i):
+                bary.append(((i + 1 / 3) / cuts, (j + 1 / 3) / cuts))
+                if i + j <= cuts - 2:
+                    bary.append(((i + 2 / 3) / cuts, (j + 2 / 3) / cuts))
+        chosen = np.array(bary)[np.unique(np.linspace(0, len(bary) - 1, k).astype(int))]
+        wa, wb = chosen[:, 0:1], chosen[:, 1:2]
+        points.append(wa * a[index] + wb * b[index] + (1.0 - wa - wb) * c[index])
+        owner.append(np.full(len(chosen), index))
+        weights.append(np.full(len(chosen), float(areas[index]) / len(chosen)))
+    if not points:
+        return np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0)
+    return np.vstack(points), np.concatenate(owner).astype(int), np.concatenate(weights)
+
+
+def nearest_broad(start: int, neighbours: Callable[[int], Any], broad: Callable[[int], bool],
+                  most: int = 6) -> list[int]:
+    """The broad faces nearest ``start`` across its neighbours (one ring after another, at most ``most``
+    rings out): where a narrow face -- a fillet's strip, a corner's patch, a rib's top -- takes its wall."""
+    seen, ring = {start}, [start]
+    for _ in range(most):
+        following = []
+        for face in ring:
+            for other in neighbours(face):
+                if other not in seen:
+                    seen.add(other)
+                    following.append(other)
+        found = [face for face in following if broad(face)]
+        if found:
+            return found
+        if not following:
+            break
+        ring = following
+    return []
 
 
 def weighted_quantile(values: np.ndarray, weights: np.ndarray, quantile: float) -> float | None:

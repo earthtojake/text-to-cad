@@ -649,7 +649,13 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         v, w = values[mine], geo.weights[mine]
         top = int(np.argmax(v))
         tidy = clean[mine]
-        narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
+        # Narrow: a face the ball cannot sit on -- most of its points held by a face round a convex edge, or
+        # the face narrower (its area over its span) than twice the widest ball it holds.
+        corners = geo.vertices(ordinal)
+        span = 2.0 * float(np.linalg.norm(corners - corners.mean(axis=0), axis=1).max()) if len(corners) else 0.0
+        width = float(geo.areas[ordinal - 1]) / span if span > 0 else 0.0
+        narrow = (float(w[tidy].sum()) < 0.3 * float(w.sum())
+                  or width < 2.0 * float(v.max()))
         if narrow:
             median = low = float(v.max())
         else:
@@ -664,8 +670,10 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
             walls = [per_face[other]["median"] for other in convex.get(ordinal, set())
                      if other in per_face and not per_face[other]["narrow"]]
             if not walls:
-                walls = [per_face[other]["median"] for other, _edge in geo.neighbours().get(ordinal, [])
-                         if other in per_face and not per_face[other]["narrow"]]
+                links = geo.neighbours()
+                walls = [per_face[other]["median"] for other in ops.nearest_broad(
+                    ordinal, lambda face: [o for o, _e in links.get(face, [])],
+                    lambda face: face in per_face and not per_face[face]["narrow"])]
             if walls:
                 face["median"] = face["low"] = float(np.median(walls))
                 face["max"] = max(face["max"], face["median"])

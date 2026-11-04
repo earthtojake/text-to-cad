@@ -333,7 +333,7 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
             f"no one flat parting plane takes the outline: {parting.get('off_plane_count', len(off))} silhouette "
             f"piece(s) lie off the best plane at {parting.get('parting_plane_height_mm')} mm along the pull; the "
             f"parting line steps or follows a contour (a costlier mold)",
-            off[0]["location"] if off else "parting"))
+            (off[0].get("location") or where(off[0].get("xyz"))) if off else "parting"))
     thickness = report.get("thickness") or {}
     if "error" not in thickness and thickness.get("nominal_mm") is None and "items" in thickness:
         found.append(CheckFinding("warning", "thickness_unmeasured",
