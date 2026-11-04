@@ -59,7 +59,18 @@ def making():
 
 
 def automatic(daemon):
-    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``)."""
+    """The engine's automatic update, asked for as it tends itself (``cad_server._internal.update.Update.automatic``);
+    first, the folder of a release a switch failed to move to, removed once nothing runs from it
+    (``cad_server._internal.releases.discard``): a ``cad update`` whose switch went back ran from it until it
+    ended."""
+    try:
+        from cad_server._internal import releases
+
+        failed = releases.failed()
+        if failed is not None:
+            releases.discard(failed)
+    except Exception:  # noqa: BLE001 - the engine's tending never fails for a folder
+        pass
     try:
         from cad_server._internal.update import UPDATE
 

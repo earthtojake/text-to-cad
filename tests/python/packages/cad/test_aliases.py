@@ -81,6 +81,19 @@ class TheAliases(unittest.TestCase):
                               "cad.<document_type>.export, cad.step.export, ...)",
                               f"{script}:5: CadDeprecationWarning: cad.ap242 is deprecated; use cad.build123d"], lines)
 
+    def test_what_another_process_said_is_not_said_again_and_a_file_in_the_working_folder_is_named_relative(self) -> None:
+        # A worker importing a script its program imported already ignores what that import says (cad.engine.build),
+        # and each counts as said: once a run. What is said names the file relative to the working folder.
+        with tempfile.TemporaryDirectory() as folder:
+            script = Path(folder) / "arm.py"
+            script.write_text("import cad, warnings\nwith warnings.catch_warnings():\n"
+                              "    warnings.filterwarnings('ignore', category=FutureWarning)\n"
+                              "    cad.read_step\ncad.read_step\ncad.memo\n", encoding="utf-8")
+            proc = subprocess.run([sys.executable, str(script)], capture_output=True, text=True, timeout=120, cwd=folder)
+        self.assertEqual(0, proc.returncode, proc.stderr)
+        self.assertEqual(["arm.py:6: CadDeprecationWarning: cad.memo is deprecated; use cad.build123d.memo"],
+                         [line for line in proc.stderr.splitlines() if "CadDeprecationWarning" in line])
+
     def test_the_old_result_types_take_their_0_10_call_shapes(self) -> None:
         from cad import results
 

@@ -111,7 +111,8 @@ the releases on disk, the current one, the engine's and each app's plugin's) and
 left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
 records of an older format, the bytecode of installations no longer registered, cache folders no record
 names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among
-them; none written in the last seven days); `cad run` a program exactly as `uv run` runs it -- uv run's
+them; none written in the last seven days; and the release folders but the current one and the one
+before, a release an update failed to move to among them, `_internal/releases.py`); `cad run` a program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
 integrations its imports use (`_internal/extras.py`, `_internal/scan.py`, by the library's registry), in an
 environment the engine makes, its own folder last on its path; `cad requirement [INTEGRATION ...]` the

@@ -315,6 +315,35 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("Smart App Control", err)
         self.assertIn("3077", err)
 
+    def test_prune_removes_a_release_folder_but_the_current_one_and_the_one_before(self) -> None:
+        # An update to 1.2.0 that failed and went back left its folder: --prune takes it, and its failure stays.
+        from cad_server import auto_updates
+        from cad_server._internal import base, installations, releases, switch
+
+        for version in ("1.0.0", "1.1.0", "1.2.0"):
+            folder = releases.where(version)
+            python, command = base.interpreter(folder), releases.console(folder)
+            python.parent.mkdir(parents=True)
+            for path in (python, command):
+                path.write_text("", encoding="utf-8")
+            (folder / releases.MARKER).write_text('{"schema": "%s", "version": "%s"}' % (releases.SCHEMA, version),
+                                                  encoding="utf-8")
+        installations.point("1.1.0")
+        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "its engine exited 3",
+                        "at": "2026-11-03T21:00:00+0000"})
+        auto_updates.attempt("1.2.0", error="its engine exited 3", now=1000.0)
+        out = _run(["--no-server"])[1]
+        self.assertIn("  releases 1.0.0 (the release before), 1.1.0 (current), 1.2.0 (cad doctor --prune removes it) "
+                      f"in {releases.root()}\n", out)
+        self.assertTrue(releases.where("1.2.0").is_dir(), "nothing is removed without --prune")
+        with mock.patch.object(releases, "running", return_value=False):
+            code, out, _ = _run(["--prune"])
+        self.assertEqual(code, 0)
+        self.assertIn(f"removed {releases.where('1.2.0')}\n", out)
+        self.assertEqual([release["version"] for release in releases.listing()], ["1.0.0", "1.1.0"])
+        self.assertEqual((switch.last()["to"], switch.last()["ok"]), ("1.2.0", False), "the failure stays recorded")
+        self.assertEqual(auto_updates.attempted()["error"], "its engine exited 3")
+
     def test_the_report_says_what_the_device_runs(self) -> None:
         from cad_server._internal import installations, releases, switch
 
@@ -334,7 +363,7 @@ class DoctorTests(unittest.TestCase):
         code, out, _ = _run(["--no-server"])
         self.assertEqual(code, 0, out)
         self.assertIn(f"  current  text-to-cad 1.1.0 ({releases.where('1.1.0')})\n", out)
-        self.assertIn(f"  releases 1.0.0, 1.1.0 (current) in {releases.root()}\n", out)
+        self.assertIn(f"  releases 1.0.0 (the release before), 1.1.0 (current) in {releases.root()}\n", out)
         self.assertIn("  update   2026-10-31T09:00:00+0000: switched to text-to-cad 1.1.0 from 1.0.0, 640 ms without an "
                       "engine\n", out)
         # Another installation's doctor (a skill's one-time step run by uvx) registers nothing and leaves

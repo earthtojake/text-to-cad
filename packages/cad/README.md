@@ -287,7 +287,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     SAME object for a release at least: it warns once per name per process, with `CadDeprecationWarning`
     (a `FutureWarning`, which Python shows by default), naming the new path ("cad.read_step is deprecated;
     use cad.step.read"), from the lookup itself, so the warning names the line of the program that spelled
-    it. An alias is kept out of every `__all__` and every document but the migration guide; a test pins the
+    it, as the person named the file. A run says each once: the program's own process says what its import
+    spells, and the worker that imports the same script to build its models does not say it again. An
+    alias needs what its new path needs, so `cad run` gives a 0.10 script the integration its 0.11 spelling
+    gets. An alias is kept out of every `__all__` and every document but the migration guide; a test pins the
     table of them (`cad._internal.aliases`). An agent migrates a project on first touch.
 
     **Tier 3: a person's data** -- documents, the state folder and its records, Recents, settings,

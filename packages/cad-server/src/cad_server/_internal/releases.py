@@ -13,7 +13,12 @@ registers it, ``cad_server._internal.installations``), and the switch points ``c
 After a switch the folder of the release before stays: a session the switch did not end may still
 run a process from it (Python imports lazily, so a folder must never vanish under a live one), and a
 switch that fails goes back to it. The others go at that switch (``collect``), each once no process
-runs from it, with the bases made for it.
+runs from it, with the bases made for it. A switch that failed and went back leaves the release it
+failed to move to for nothing: its folder goes once the release before's engine is up again and
+nothing runs from it (``discard``: by the switch, else by that engine as it tends itself), and so does
+any folder but the current release's and the one before's at ``cad doctor --prune`` (``kept``). The
+failure stays recorded -- the switch's ``update.json``, an automatic update's attempt -- so an
+automatic update does not try that release again by itself any sooner.
 
 What is made from where: a release on the index as ``cad-server==<version>`` (the library without
 its kernel comes with it, at the same release); one this installation was installed from as a wheel
@@ -35,8 +40,8 @@ from typing import Any, Callable, Iterable
 
 from cad_server._internal import base
 
-__all__ = ["FOLDER", "MARKER", "SCHEMA", "collect", "complete", "console", "listing", "make", "root", "running",
-           "where"]
+__all__ = ["FOLDER", "MARKER", "SCHEMA", "before", "collect", "complete", "console", "discard", "failed", "kept",
+           "listing", "make", "root", "running", "where"]
 
 FOLDER = "releases"
 MARKER = "cad-release.json"
@@ -157,34 +162,101 @@ def running(folder: Path | str) -> bool:
                for line in listed.stdout.splitlines())
 
 
+def before(current: str | None) -> str | None:
+    """The release kept as the one before ``current``, the way back: the one the last switch came from,
+    where that switch went to ``current`` and held (``cad_server._internal.switch.last``), else the newest
+    release folder older than ``current`` (as PEP 440 orders them). None for none."""
+    from cad.engine.contract import _order
+
+    if not current:
+        return None
+    try:
+        from cad_server._internal.switch import last
+
+        switched = last() or {}
+    except Exception:  # noqa: BLE001 - no record: the order of the releases says the one before
+        switched = {}
+    if switched.get("to") == current and switched.get("ok") and isinstance(switched.get("from"), str):
+        return switched["from"]
+    mine = _order(current)
+    older = [(order, found["version"]) for found in listing()
+             if found["version"] != current and (order := _order(found["version"])) is not None
+             and mine is not None and order < mine]
+    return max(older)[1] if older else None
+
+
+def kept(current: str | None = None) -> set[str]:
+    """The releases whose folders stay: the current one (``current``, else the device's) and the one before
+    it (``before``)."""
+    from cad_server._internal import installations
+
+    current = current or installations.current_version()
+    return {release for release in (current, before(current)) if release}
+
+
 def collect(keep: Iterable[str]) -> list[str]:
     """The release folders but those of ``keep`` (the current release and the one before it) removed,
     each with the bases made for it and its installation record, once no process runs from it
     (``running``): the paths removed. A folder that cannot be removed whole (on Windows, one a process
     runs from) stays, and goes at a later update."""
-    from cad_server._internal import installations
-
-    kept = set(keep)
+    kept_here = set(keep)
     removed: list[str] = []
     for found in listing():
-        if found["version"] in kept or running(found["path"]):
-            continue
-        folder = Path(found["path"])
-        for env in _bases_of(folder):
-            shutil.rmtree(env, ignore_errors=True)
-            if not env.exists():
-                removed.append(str(env))
-        shutil.rmtree(folder, ignore_errors=True)
-        if folder.exists():
-            continue
-        removed.append(str(folder))
-        try:
-            record = next((record for record in installations.records()
-                           if installations._same_place(record["prefix"], folder)), None)
-            if record is not None:
-                installations.forget(record["version"])
-        except (OSError, ValueError):
-            pass
+        if found["version"] not in kept_here:
+            removed += _remove(found)
+    return removed
+
+
+def discard(release: str, keep: Iterable[str] | None = None) -> list[str]:
+    """The folder of ``release`` removed -- one a switch failed to move to --, with its bases and its
+    installation record, unless it is one ``keep`` names (by default ``kept``: the current release and the
+    one before it) or a process runs from it: the paths removed. Its failure is not forgotten: the
+    switch's record and an automatic update's attempt are not touched."""
+    if release in (kept() if keep is None else set(keep)):
+        return []
+    found = next((found for found in listing() if found["version"] == release), None)
+    return _remove(found) if found is not None else []
+
+
+def failed() -> str | None:
+    """The release the last switch failed to move to, while its folder is still here and it is not the
+    current release: what ``discard`` takes once nothing runs from it. None for none."""
+    from cad_server._internal import installations, switch
+
+    last = switch.last() or {}
+    target = last.get("to")
+    if last.get("ok") is not False or not isinstance(target, str) or target == installations.current_version():
+        return None
+    try:
+        return target if where(target).is_dir() else None
+    except ValueError:
+        return None
+
+
+def _remove(found: dict[str, Any]) -> list[str]:
+    """One release folder of ``listing``'s removed, with its bases and its installation record, unless a
+    process runs from it: the paths removed."""
+    from cad_server._internal import installations
+
+    if running(found["path"]):
+        return []
+    removed: list[str] = []
+    folder = Path(found["path"])
+    for env in _bases_of(folder):
+        shutil.rmtree(env, ignore_errors=True)
+        if not env.exists():
+            removed.append(str(env))
+    shutil.rmtree(folder, ignore_errors=True)
+    if folder.exists():
+        return removed
+    removed.append(str(folder))
+    try:
+        record = next((record for record in installations.records()
+                       if installations._same_place(record["prefix"], folder)), None)
+        if record is not None:
+            installations.forget(record["version"])
+    except (OSError, ValueError):
+        pass
     return removed
 
 

@@ -284,7 +284,13 @@ that reads the folder in place needs nothing), and then switches (`cad_server._i
 
 Every page and card keeps its link through it, and reloads once its engine answers with the new
 release. The release before's folder stays -- a process of it may still run, and it is the way back
---; the others go at the next switch, once nothing runs from them (`releases.collect`). After the
+--; the others go at the next switch, once nothing runs from them (`releases.collect`). A switch that
+went back leaves the release it failed to move to for nothing: its folder goes once the release
+before's engine answers again and nothing runs from it (`releases.discard`: by the switch, else by that
+engine as it tends itself, after a `cad update` run from that folder has ended), its failure kept in
+`update.json` and an automatic update's attempt, so it is not tried again by itself any sooner; `cad
+doctor --prune` removes every release folder but the current one and the one before (`releases.kept`:
+the release the last switch to it came from, else the newest older one). After the
 switch, held or gone back, the release left current writes the plugin folder again (its own `cad
 plugin --refresh`, `switch.follow`): nothing changes when that release's setup already wrote it, and a
 switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
@@ -437,8 +443,12 @@ verbosity) key nothing. What it adds is two things:
   core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
   folder, its package, its project, following absolute and relative imports and the imports inside
   function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
-  build123d integration; `kicode`: the kicad integration), and each of cad's decorators it applies
-  (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
+  build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
+  name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
+  it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
+  build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
+  runs, an `export`, none; a type alone, `from cad import step`, none), and each of cad's decorators it
+  applies (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
   (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming

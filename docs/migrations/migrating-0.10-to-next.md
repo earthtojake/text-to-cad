@@ -24,7 +24,7 @@ and its operations -- and our helpers that take build123d's objects are `cad.bui
 | `from cad import read_step` / `read_step(path)` | `from cad import step` / `step.read(path)` |
 | `from cad import read_xbf` / `read_xbf(path)` | `from cad import xbf` / `xbf.read(path)` |
 | `from cad import read_mesh` / `read_mesh(path)` | `from cad import stl` / `stl.read(path)` |
-| `from cad import export` / `export(handle, *paths)` | `from cad import model` / `model.export(handle, *paths)` (`tolerance=` as before); the alias is `cad.model.export` itself, so a file is its own type's: `xbf.export("arm.xbf", "arm.step")`, `stl.export("part.stl", "part.glb")` |
+| `from cad import export` / `export(handle, *paths)` | `from cad import model` / `model.export(handle, *paths)` (`tolerance=` as before); a file is its own type's: `xbf.export("arm.xbf", "arm.step")`, `stl.export("part.stl", "part.glb")`. The alias is the engine's export (`cad.engine.api.export`), which takes any source as 0.10's did -- a handle, a document id or a file -- so a 0.10 `exports.py` keeps writing a file's exports until it is migrated |
 | `from cad import snapshot` / `snapshot(source, out)` | `cad.<type>.snapshot(source, out)`: `model.snapshot(handle, out)`, `stl.snapshot("part.stl", out)` |
 | `from cad import inspect` / `inspect(source, ref)` | `cad.<type>.inspect(source, ref)`: `model.inspect(handle, ref)`, `step.inspect("part.step")` |
 | `from cad import memo, paint` | `from cad.build123d import memo, paint` |

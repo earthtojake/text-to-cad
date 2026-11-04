@@ -40,6 +40,7 @@ import sys
 import threading
 import time
 import traceback
+import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
@@ -49,6 +50,9 @@ from typing import Any, Callable
 from cad.engine.ids import canonical, file_id
 
 __all__ = ["BuildError", "build", "load_script"]
+
+# What the library's aliases say of an earlier spelling (``cad.read_step is deprecated; use cad.step.read``).
+_DEPRECATED = r"cad(gen)?\.[\w.]+ is deprecated; use "
 
 # The library's import names: its own, and ``cadgen``, its earlier one (an alias of it). A model's module
 # is never named so (``load_script``).
@@ -522,7 +526,13 @@ def _build(script: Path, functions: list[str] | None = None, *, log: Callable[[s
                 _hear()
                 _HEARD[0] = heard
             try:
-                module = load_script(script)
+                with warnings.catch_warnings():
+                    if run_token:
+                        # The program's own process imported this script and said each earlier spelling of the
+                        # library's it spells (``cad._internal.aliases``): once a run, never again here, where
+                        # each still counts as said.
+                        warnings.filterwarnings("ignore", message=_DEPRECATED, category=FutureWarning)
+                    module = load_script(script)
             except BuildError:
                 raise
             except Exception as error:  # noqa: BLE001 - the model's own error, reported

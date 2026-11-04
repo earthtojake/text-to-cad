@@ -39,7 +39,7 @@ cad xbf export share/arm.xbf GLB/arm.glb
 A mesh file converts to another mesh format: an `.stl`, `.glb` or `.3mf` exports to
 either of the other two, keeping what the target format can hold, with no kernel loaded
 (`cad stl export scan.stl scan.3mf`). A mesh never becomes an `.xbf`, `.step` or `.dxf`:
-it has no B-rep, so model it in build123d, with `read_mesh` for its numbers
+it has no B-rep, so model it in build123d, with `stl.read` for its numbers
 ([inputs](model-contract.md#inputs)). Each file is written beside its target and
 moved over it, so a failed export leaves the old file whole. `--json` prints what was
 written as one object (`{"ok": true, "source", "files": [{"path", "kind", "bytes",
@@ -138,7 +138,7 @@ materials, element names and mechanism, read back losslessly, and the compiled t
 the model's animations, which only a GLB exported from it reads. Export one only:
 
 - to share a model without its code;
-- to compose it in another project, where `read_xbf` reads it as an input.
+- to compose it in another project, where `xbf.read` reads it as an input.
 
 A server restart needs none: the server keeps each model document it built in its own
 cache, so after a restart the document's id opens in the viewer, answers `cad <type> inspect`,
@@ -147,7 +147,7 @@ checks the code against it and nothing reruns, so after an edit run the script t
 again.
 
 A vendor STEP converted once (`cad step export vendor/motor.step vendor/motor.xbf`) is
-read by `read_xbf` many times faster than `read_step` parses the STEP, with the same
+read by `xbf.read` many times faster than `step.read` parses the STEP, with the same
 geometry, names, colours and materials. Keep the xbf beside the STEP, and read the xbf
 ([inputs](model-contract.md#inputs)).
 

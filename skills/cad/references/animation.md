@@ -36,7 +36,7 @@ The rules:
   animation's job, and the Position panel would show a slider for each.
 - **Animations are GLB-only.** `cad model export "$ID" model.glb`,
   `model.export(part(), "model.glb")` and `cad xbf export model.xbf model.glb` from an xbf the
-  model exported all bake them, the same bytes. `read_xbf` imports a part's geometry
+  model exported all bake them, the same bytes. `xbf.read` imports a part's geometry
   without them.
 - **`.hide` is a scale trick.** glTF has no visibility channel, so a hidden part is
   scaled to 0. Use `.scale(parts, to=1, start=t, end=t, interpolation="STEP")` to bring

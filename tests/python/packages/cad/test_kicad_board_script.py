@@ -201,16 +201,55 @@ class BoardScriptTest(unittest.TestCase):
         self.assertEqual([], _Server.started)
 
     def test_a_socket_path_too_long_for_a_unix_socket_moves_to_a_short_folder(self) -> None:
+        # In order: the private folder; a short folder directly in the temporary folder (what a sandbox lets a
+        # program write); one under /tmp. Each folder of its own is removed afterwards.
+        if sys.platform.startswith("win"):
+            self.skipTest("a named pipe has no such limit")
+        with _session._socket(self.folder) as socket:
+            self.assertEqual(self.folder / "api.sock", socket)
+        deep = self.folder / ("d" * 120)
+        short_tmp = Path(tempfile.mkdtemp(prefix="t", dir="/tmp")).resolve()
+        self.addCleanup(lambda: __import__("shutil").rmtree(short_tmp, ignore_errors=True))
+        with mock.patch.object(_session.tempfile, "gettempdir", lambda: str(short_tmp)):
+            with _session._socket(deep) as socket:
+                self.assertEqual(short_tmp, socket.parent.parent, "directly in the temporary folder")
+                self.assertLessEqual(len(str(socket)), 100)
+                self.assertTrue(socket.parent.is_dir())
+                made = socket.parent
+            self.assertFalse(made.exists(), "the short folder is removed")
+        made_in: list[str] = []
+        real = tempfile.mkdtemp
+
+        def refusing(prefix: str = "", dir: str | None = None):  # noqa: A002 - mkdtemp's own name
+            made_in.append(str(dir))
+            if dir != "/tmp":
+                raise PermissionError(1, "Operation not permitted")
+            return real(prefix=prefix, dir=dir)
+
+        with mock.patch.object(_session.tempfile, "gettempdir", lambda: str(short_tmp)), \
+                mock.patch.object(_session.tempfile, "mkdtemp", refusing):
+            with _session._socket(deep) as socket:
+                self.assertEqual(Path("/tmp"), socket.parent.parent, "then /tmp")
+        self.assertEqual([str(short_tmp), "/tmp"], made_in)
+
+    def test_no_folder_that_gives_a_short_socket_is_one_line_naming_the_cause_and_the_fix(self) -> None:
         if sys.platform.startswith("win"):
             self.skipTest("a named pipe has no such limit")
         deep = self.folder / ("d" * 120)
-        with _session._socket(deep) as socket:
-            self.assertLessEqual(len(str(socket)), 100)
-            self.assertTrue(socket.parent.is_dir())
-            short = socket.parent
-        self.assertFalse(short.exists(), "the short folder is removed")
-        with _session._socket(self.folder) as socket:
-            self.assertEqual(self.folder / "api.sock", socket)
+
+        def refused(prefix: str = "", dir: str | None = None):  # noqa: A002 - mkdtemp's own name
+            raise PermissionError(1, "Operation not permitted")
+
+        with mock.patch.object(_session.tempfile, "gettempdir", lambda: str(deep)), \
+                mock.patch.object(_session.tempfile, "mkdtemp", refused):
+            with self.assertRaises(_program.KicadRunError) as said:
+                with _session._socket(deep):
+                    self.fail("no socket")
+        message = str(said.exception)
+        self.assertNotIn("\n", message)
+        self.assertIn(f"{deep} is too deep", message)
+        self.assertIn("/tmp refused a folder (Operation not permitted)", message)
+        self.assertIn("set TMPDIR to a shorter folder this program may write", message)
 
     def test_step_on_a_function_of_the_board_names_the_order(self) -> None:
         def edits(board):

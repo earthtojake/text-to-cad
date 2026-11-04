@@ -12,7 +12,8 @@ releases left behind that none running now needs (``cad_server._internal.leftove
 format, the bytecode of installations no longer registered, cache folders no record names, environments
 of models' packages unused for a week), and
 cadgen 0.7's store and state files, with their size and when they were last written. ``--prune``
-removes those records, the launchers earlier releases published beside the proxy (0.8's ``cadgen``
+removes those records, the release folders but the current release's and the one before's (one an update
+failed to move to among them: ``releases.kept``), the launchers earlier releases published beside the proxy (0.8's ``cadgen``
 proxy, ``cadgen-<version>``, ``cadgen-python-<version>``: ``installations.prune_legacy``) and those leftovers, but
 any written in the last seven days, a line for each kind; ``--all-versions`` with it removes 0.7's
 however recently written. Nothing is removed without ``--prune``.
@@ -106,8 +107,12 @@ def _current() -> list[str]:
             lines.append("current  none: the first CAD session or `cad setup` makes one current")
         found = releases.listing()
         if found:
+            current = (record or {}).get("version") or named
+            kept = releases.kept(current) if current else {release["version"] for release in found}
             said = ", ".join(release["version"] + ("" if release["complete"] else " (incomplete)")
-                             + (" (current)" if release["version"] == (record or {}).get("version") else "")
+                             + (" (current)" if release["version"] == current else
+                                " (the release before)" if release["version"] in kept else
+                                " (cad doctor --prune removes it)")
                              for release in found)
             lines.append(f"releases {said} in {_home(str(releases.root()))}")
         last = switch.last()
@@ -519,6 +524,13 @@ def main(argv: list[str] | None = None, prog: str = "cad doctor") -> int:
             sys.stdout.write(f"removed {path}\n")
         if not removed:
             sys.stdout.write("no registered installation has lost its interpreter\n")
+        # And the release folders but the current one's and the one before's (``releases.kept``): one an update
+        # failed to move to among them, its failure still recorded. None while no installation is current.
+        from cad_server._internal import releases
+
+        if installations.current_version():
+            for path in releases.collect(releases.kept()):
+                sys.stdout.write(f"removed {path}\n")
         # And the launchers earlier releases published beside the cad command: 0.8's proxy among them.
         for path in installations.prune_legacy():
             sys.stdout.write(f"removed {path}, a launcher the cad command replaces\n")
