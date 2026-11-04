@@ -102,7 +102,7 @@ The steps:
 
 The worked example is the KiCad board view (`packages/ui/src/renderers/board/`): a flat view like a
 drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Circuit and Layers sections, a
-Display menu of its own, and its refs as chips.
+Display and Settings menus of its own, and its refs as chips.
 
 ## Walkthrough: a type and its integration together (KiCad)
 

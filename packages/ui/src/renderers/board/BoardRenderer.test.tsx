@@ -137,7 +137,10 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
   expect(tools.querySelector('[data-strip-rule] + [data-view-controls]')).not.toBeNull();
-  expect([...tools.querySelectorAll('[data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display mode: Board']);
+  // Its view controls: Display (the modes), then Settings (how the layers are drawn), each its own glyph and hint.
+  expect([...tools.querySelectorAll('[data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display mode: Board', 'Settings']);
+  expect(tools.querySelector('[data-board-settings] svg.lucide-sliders-horizontal')).not.toBeNull();
+  expect(tools.querySelector('[data-board-display] svg.lucide-sliders-horizontal')).toBeNull();
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
@@ -169,7 +172,7 @@ it('a board without its index is the picture and its Display alone: no tools, no
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display mode: Board']);
+  expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display mode: Board', 'Settings']);
   expect(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Layers']);
   tap(pane, [34.175, 15]);
   expect(box(pane)).toBeNull();
@@ -426,20 +429,20 @@ it('the Circuit tab is the parts in their schematic blocks, then the nets: a blo
   dispose();
 });
 
-it("Display holds KiCad's layer display options — Dim other layers, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
+it("Settings holds KiCad's layer display options — Dim other layers, the zones' and tracks' opacity — and a Layers row's press makes it the active layer", async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
   fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Layers' }));
   const layers = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layers]'); expect(found).not.toBeNull(); return found!; });
-  // The Layers tab is the layer list alone: how the layers are drawn is Display's.
+  // The Layers tab is the layer list alone: how the layers are drawn is Settings'.
   expect(pane.querySelector('[data-cad-file-sidebar] [role=checkbox], [data-cad-file-sidebar] [role=slider]')).toBeNull();
   // KiCad's own as a board opens: F.Cu active (its dot), nothing dimmed, the zones at 60%, the tracks at 100%.
   expect(layers.querySelector('[data-layer-row="F.Cu"] [data-layer-active]')).not.toBeNull();
   expect(drawn.at(-1)).toMatchObject({ active: null, dim: null, zones: 0.6, tracks: 1 });
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
-  const menu = await openMenu('Display');
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
+  const menu = await openMenu('Settings');
   expect(within(menu).getByRole('slider', { name: 'Zone opacity' }).getAttribute('aria-valuenow')).toBe('0.6');
   expect((within(menu).getByRole('textbox', { name: 'Track opacity value' }) as HTMLInputElement).value).toBe('100%');
   await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Dim other layers' }));
@@ -452,7 +455,7 @@ it("Display holds KiCad's layer display options — Dim other layers, the zones'
   // Escape in a value puts its draft back and leaves the menu open.
   await user.type(zones, '9');
   await user.keyboard('{Escape}');
-  expect(menuShown('Display')).not.toBeNull();
+  expect(menuShown('Settings')).not.toBeNull();
   expect((zones as HTMLInputElement).value).toBe('25%');
   // A row's press: B.Cu active, drawn on top, the rest dimmed round it.
   await user.click(within(layers).getByRole('button', { name: 'Make B.Cu the active layer' }));
@@ -491,22 +494,32 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   dispose();
 });
 
-it('Display is a stock menu: a mode closes it; View from below and the pours leave it open, and are kept through a change of mode', async () => {
+it('Display and Settings are stock menus: a mode closes Display; View from below and the pours leave Settings open, and are kept through a change of mode', async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
-  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
-  const menu = await openMenu('Display');
-  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Display modes', 'Settings', 'Opacity']);
-  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
-  expect(within(menu).getAllByRole('menuitemcheckbox').map(item => item.textContent)).toEqual(['Copper pours', 'View from below', 'Dim other layers']);
-  expect(within(menu).getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Zone opacity', 'Track opacity']);
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'View from below' }));
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Copper pours' }));
-  expect(menuShown('Display')).not.toBeNull();
+  // Settings: the switches, then a rule and the opacities.
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Settings' }));
+  const settings = await openMenu('Settings');
+  expect([...settings.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Settings', 'Opacity']);
+  expect(within(settings).queryAllByRole('menuitemradio')).toEqual([]);
+  expect(within(settings).getAllByRole('menuitemcheckbox').map(item => item.textContent)).toEqual(['Copper pours', 'View from below', 'Dim other layers']);
+  expect(within(settings).getAllByRole('slider').map(slider => slider.getAttribute('aria-label'))).toEqual(['Zone opacity', 'Track opacity']);
+  await user.click(within(settings).getByRole('menuitemcheckbox', { name: 'View from below' }));
+  await user.click(within(settings).getByRole('menuitemcheckbox', { name: 'Copper pours' }));
+  expect(menuShown('Settings')).not.toBeNull();
   // A switch is not a layer set: the mode is still the one on screen.
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' })).toBeTruthy();
+  await user.keyboard('{Escape}');
+  await waitFor(() => expect(menuShown('Settings')).toBeNull());
+  // Display: the modes alone, under their label; a mode closes it.
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
+  const menu = await openMenu('Display');
+  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Display modes']);
+  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
+  expect(within(menu).queryAllByRole('menuitemcheckbox')).toEqual([]);
+  expect(within(menu).queryAllByRole('slider')).toEqual([]);
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
   await waitFor(() => expect(menuShown('Display')).toBeNull());
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board?.value).toEqual({ mode: 'copper', side: 'bottom', poured: false, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 }));
