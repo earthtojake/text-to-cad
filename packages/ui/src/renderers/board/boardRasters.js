@@ -45,12 +45,13 @@ function defaultCanvas(width, height) {
 
 /**
  * @param {{ layout: import("@cad/core/lib/plot2d/plot.js").PlotLayout,
- *   onChange: () => void, view?: object|null,
+ *   onChange: () => void, view?: object|null, theme?: "light" | "dark" | null,
  *   createCanvas?: (width: number, height: number) => HTMLCanvasElement,
  *   schedule?: typeof setTimeout, cancel?: typeof clearTimeout }} options
- *   `onChange`: a better picture is ready; paint again.
+ *   `onChange`: a better picture is ready; paint again. `theme`: the palette and canvas the patches are
+ *   drawn in (`plot2d/theme.js`); a new theme is a new set of rasters, drawn here, nothing fetched.
  */
-export function createBoardRasters({ layout, onChange, view = null, createCanvas = defaultCanvas,
+export function createBoardRasters({ layout, onChange, view = null, theme = null, createCanvas = defaultCanvas,
   schedule = (callback, delay) => setTimeout(callback, delay), cancel = (handle) => clearTimeout(handle) }) {
   /** @type {{ canvas: HTMLCanvasElement, scale: number, rect: number[], used: number }[]} */
   let patches = [];
@@ -98,7 +99,7 @@ export function createBoardRasters({ layout, onChange, view = null, createCanvas
     // needs to be drawn (its level of detail) is the view's own scale, in CSS pixels, and where a
     // track's names fall the view's own size, in millimetres, not the patch's.
     const viewport = [frame.width / frame.transform.scale, frame.height / frame.transform.scale];
-    drawPlot(context, layout, { transform: { scale, offsetX: originX - left, offsetY: originY - top }, view, detail: frame.transform.scale, viewport });
+    drawPlot(context, layout, { transform: { scale, offsetX: originX - left, offsetY: originY - top }, view, detail: frame.transform.scale, viewport, theme });
     patches.push({
       canvas, scale, used: (clock += 1),
       rect: [(left - originX) / scale, (top - originY) / scale, (right - originX) / scale, (bottom - originY) / scale]
@@ -157,7 +158,7 @@ export function createBoardRasters({ layout, onChange, view = null, createCanvas
       if (box && patches.length === 0) rasterize(frame);
       // The browser's default (bilinear) smoothing: a patch is resampled only while the view
       // moves, and "high" quality costs several times as much per frame on a software canvas.
-      drawPlotImages(ctx, layout, { transform: frame.transform, pixelRatio: frame.pixelRatio, images: placed(frame) });
+      drawPlotImages(ctx, layout, { transform: frame.transform, pixelRatio: frame.pixelRatio, images: placed(frame), theme });
       const visible = box ? visiblePageRect(frame.transform, frame.width, frame.height) : null;
       for (const patch of patches) {
         if (visible && rectsOverlap(patch.rect, visible)) patch.used = (clock += 1);

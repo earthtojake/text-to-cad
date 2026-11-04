@@ -387,7 +387,11 @@ person turned on) and on transparency, so it suits either scheme, off to the sid
 the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
 of its own, and a KiCad board its fitted board, its area in the canvas colour and nothing round it,
-`drawPlot`'s `backdrop: "board"`). A view that goes before it settles rejects it. `useModelThumbnail`
+`drawPlot`'s `backdrop: "board"`). A view that draws its file in the dark theme's own colours too
+(a board's) hands the light picture carrying the dark one as `dark`: the host keeps both
+(`CadClient.keepThumbnail`, the record's `thumbnailDark`) and the home's card shows the theme's,
+swapped as the theme switches, never turned; a card with one picture shows it in both (a drawing's
+turned light on a dark card, as before). A view that goes before it settles rejects it. `useModelThumbnail`
 keeps one per revision of a file per mounted view (a model rebuilt while it is
 open is pictured again once its new revision is drawn), and only for the file the
 view still shows. A model's document is pictured as a file is, by its id: its catalog

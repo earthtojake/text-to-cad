@@ -1,7 +1,7 @@
 import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
-import { BOARD_OVERLAY_COLORS, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
+import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
@@ -38,8 +38,11 @@ import { useBoardView } from "./useBoardView.js";
 
 /**
  * A KiCad board as the picture drawn from its file, on a canvas, head on, as a drawing is: in
- * KiCad's own colours, on its board background, layer by layer (the payload comes from the
- * BACKEND, `GET /api/v1/documents/kicad_pcb/<id>/plot`; nothing here parses KiCad's files).
+ * KiCad's colours, layer by layer, on the app's canvas, in the view's theme — KiCad's own on the
+ * dark canvas, the same hues darkened to read on the light one (`plot2d/theme.js`), the overlay's
+ * highlight and dim too (`board2d/boardOverlay.js`); a switch of theme draws it again here, from
+ * the payload it holds (the payload comes from the BACKEND, `GET /api/v1/documents/kicad_pcb/<id>/plot`,
+ * geometry alone; nothing here parses KiCad's files).
  *
  * It is a flat view, composed exactly as a drawing's (`../dxf/DxfRenderer.jsx`), from the same
  * kit (`kit/shell/FlatViewFrame.jsx`, `useFlatView.js`): Select, as KiCad's — a click picks the most
@@ -61,8 +64,8 @@ import { useBoardView } from "./useBoardView.js";
  */
 
 const SAVE_DELAY_MS = 180;
-// What the frame says it draws: a board, a picture dark whatever the theme (the floating surfaces' cue).
-const BOARD_SURFACE = Object.freeze({ "data-board-surface": "", "data-cad-dark-picture": "" });
+// What the frame says it draws: a board, on its theme's canvas.
+const BOARD_SURFACE = Object.freeze({ "data-board-surface": "" });
 // The file's slices: the board's Display and what is isolated, kept across rebuilds.
 const SLICES = Object.freeze({ board: "1", isolated: "1" });
 
@@ -171,15 +174,19 @@ function BoardSurface({ view, data }) {
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const { references, chips } = useBoardReferences({ scene, selection, resource: workspace.resource });
+  // The overlay's colours are the theme's (`board2d/boardOverlay.js`): a highlight that reads on the canvas under it.
+  const schemeRef = useRef(colorScheme);
+  schemeRef.current = colorScheme;
   const overlay = useCallback((ctx, { transform, pixelRatio, width, height }) => {
     const board = indexRef.current;
     if (!board) return;
-    const base = { transform, pixelRatio, width, height, mirrorX: mirrorRef.current };
+    const colors = boardOverlayColors(schemeRef.current);
+    const base = { transform, pixelRatio, width, height, mirrorX: mirrorRef.current, colors };
     const isolated = isolationRef.current.resolved;
     // What is isolated first, everything else stepped back; then the hover and the selection (a net
     // in focus steps the rest back).
     if (isolated.length) {
-      drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...BOARD_OVERLAY_COLORS, selection: BOARD_OVERLAY_COLORS.hover } });
+      drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...colors, selection: colors.hover } });
     }
     const { hovered, selected } = highlightRef.current;
     const net = selected.some(item => item.kind === "net");
@@ -335,7 +342,8 @@ function BoardSurface({ view, data }) {
     const current = viewRef.current, size = current?.sizeRef.current;
     const camera = current && size ? planCamera(current.transformRef.current, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
-    return seen ? { ...seen, display: viewDisplay(displayRef.current) } : null;
+    // The view as it was seen: its Display and the theme it was drawn in (a snapshot's `appearance`).
+    return seen ? { ...seen, display: { ...viewDisplay(displayRef.current), appearance: schemeRef.current } } : null;
   }, []);
 
   // Measure's layer: the measurements, the one being drawn, and the snap under the pointer.
@@ -423,7 +431,7 @@ function BoardSurface({ view, data }) {
   const sidebar = layered || index ? <>
     {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
       onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> : null}
-    {layered ? <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} /> : null}
+    {layered ? <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> : null}
   </> : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand

@@ -721,7 +721,11 @@ commits; Escape in the value puts it back and keeps the menu open), the menu 14r
 a slide or a tick leaves it open. On a phone the strip's More has a submenu of each, Display then
 Settings. Its Layers sidebar can override a preset, shown as Custom, and chooses the active layer
 Dim leaves bright; the active layer, Dim and the opacities are kept through a change of mode. It
-has no 3D Projection or Preview.
+has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
+(white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
+on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
+net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
+again in the browser, from the payload it holds.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with

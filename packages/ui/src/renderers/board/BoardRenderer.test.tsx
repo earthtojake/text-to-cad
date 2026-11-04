@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useMemo, useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
@@ -20,13 +20,20 @@ import BOARD from './__fixtures__/board.plot.json';
 // the rasters themselves are `drawPlot`, which jsdom cannot draw and the pixels are not its to check.
 const frames = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number }>);
 const drawn = vi.hoisted(() => [] as Array<{ layers: string[]; side: string; poured: boolean }>);
+// The theme each raster and frame is drawn in, and the canvas each paint clears to.
+const themes = vi.hoisted(() => [] as Array<string | null>);
+const canvases = vi.hoisted(() => [] as Array<string | null>);
 vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    drawPlot: (_ctx: unknown, _layout: unknown, { view }: { view: any }) => { if (view) drawn.push(view); },
+    drawPlot: (_ctx: unknown, _layout: unknown, { view, theme }: { view: any, theme?: string }) => { if (view) drawn.push(view); themes.push(theme ?? null); },
     drawPlotImages: (_ctx: unknown, _layout: unknown, { transform }: { transform: any }) => { frames.push({ ...transform }); }
   };
+});
+vi.mock('@cad/core/lib/drawing2d/index.js', async (importOriginal) => {
+  const actual = await importOriginal<Record<string, any>>();
+  return { ...actual, clearSurface: (ctx: unknown, options: { background?: string }) => { canvases.push(options.background ?? null); return actual.clearSurface(ctx, options); } };
 });
 
 const noop = () => {};
@@ -42,6 +49,8 @@ const context2d = new Proxy({}, { get: (_target, key) => (key === 'canvas' ? und
 beforeEach(() => {
   frames.length = 0;
   drawn.length = 0;
+  themes.length = 0;
+  canvases.length = 0;
   copied = [];
   readPlot = () => json(BOARD);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
@@ -87,14 +96,20 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     promptContext: { getSnapshot: () => DESTINATION, subscribe: () => noop, deliver: async () => ({ status: 'copied', partIds: [] }) },
   };
   let latest: any = { renderers: {} };
+  // The person's theme, switched as the app menu's Theme switches it: a new environment for the view.
+  let setScheme: (scheme: 'light' | 'dark') => void = noop;
   function Pane() {
     const [state, setState] = useState<any>(latest);
+    const [scheme, setSchemeState] = useState<'light' | 'dark'>('light');
+    setScheme = setSchemeState;
+    const themed = useMemo(() => ({ ...host, environment: { ...host.environment, colorScheme: scheme } }), [scheme]);
     latest = state;
-    return <section data-testid="pane"><FileViewer file={file} host={host as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
+    return <section data-testid="pane"><FileViewer file={file} host={themed as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
   }
   render(strict ? <StrictMode><Pane /></StrictMode> : <Pane />);
   const pane = screen.getByTestId('pane');
-  return { pane, get controller() { return controller; }, get state() { return latest; }, dispose: () => client.dispose() };
+  return { pane, get controller() { return controller; }, get state() { return latest; }, scheme: (next: 'light' | 'dark') => act(() => setScheme(next)),
+    dispose: () => client.dispose() };
 }
 
 const opened = async (pane: HTMLElement) => {
@@ -494,6 +509,45 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   dispose();
 });
 
+it("a switch of theme draws the board again in that theme's canvas and palette, from the payload it holds", async () => {
+  let reads = 0;
+  readPlot = () => { reads += 1; return json(BOARD); };
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const plots = reads;
+  const swatch = (id: string) => pane.querySelector<HTMLElement>(`[data-layer-row="${id}"] [data-layer-glyph] span`)!.style.backgroundColor;
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-file-sidebar-tools]')!).getByRole('button', { name: 'Layers' }));
+  await waitFor(() => expect(pane.querySelector('[data-layer-row="F.SilkS"]')).not.toBeNull());
+  // Light: the app's white canvas, KiCad's silkscreen yellow darkened to read on it.
+  expect(themes.at(-1)).toBe('light');
+  expect(canvases.at(-1)).toBe('#FFFFFF');
+  expect(swatch('F.SilkS')).toBe('rgb(156, 150, 77)');
+  themes.length = 0;
+  await view.scheme('dark');
+  // Dark: drawn again here, KiCad's own colours on the neutral dark canvas, nothing asked of the server.
+  await waitFor(() => expect(themes).toContain('dark'));
+  await waitFor(() => expect(canvases.at(-1)).toBe('#292929'));
+  expect(swatch('F.SilkS')).toBe('rgb(242, 237, 161)');
+  expect(reads).toBe(plots);
+  await view.scheme('light');
+  await waitFor(() => expect(canvases.at(-1)).toBe('#FFFFFF'));
+  dispose();
+});
+
+it("a board's card picture is drawn in both themes, on nothing but the board, the dark one carried beside the light", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  themes.length = 0;
+  const picture = await controller.thumbnail({ width: 480, height: 360 });
+  expect(picture).toBeInstanceOf(Blob);
+  expect(picture.dark).toBeInstanceOf(Blob);
+  expect([...themes].sort()).toEqual(['dark', 'light']);
+  dispose();
+});
+
 it('Display and Settings are stock menus: a mode closes Display; View from below and the pours leave Settings open, and are kept through a change of mode', async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();
@@ -549,7 +603,7 @@ it("Measure snaps to pad centres, in millimetres, as its row's chip, and opens n
   await waitFor(() => expect(promptFiles.create).toHaveBeenCalledTimes(1));
   const request = promptFiles.create.mock.calls[0][0] as any;
   expect(request).not.toHaveProperty('measurements');
-  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, dim: false, zones: 0.6, tracks: 1 } })]);
+  expect(request.views).toEqual([expect.objectContaining({ label: 'current view', display: { mode: 'board', side: 'top', poured: true, dim: false, zones: 0.6, tracks: 1, appearance: 'light' } })]);
   expect(request.views[0].camera).toMatchObject({ up: [0, 1, 0] });
   dispose();
 });

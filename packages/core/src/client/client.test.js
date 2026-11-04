@@ -414,8 +414,13 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
   assert.deepEqual(await client.recents(), [row]);
   assert.deepEqual(await client.changeRecents({ action: 'open', path: '/models/a.step' }), [row]);
   await client.keepThumbnail(new Blob([thumbnail], { type: 'image/png' }), '/models/a.step');
-  // A picture, by its document's id, versioned by the picture's name.
+  // A picture drawn in the dark theme's colours too carries it: both are kept.
+  await client.keepThumbnail(Object.assign(new Blob([thumbnail], { type: 'image/png' }), { dark: new Blob([thumbnail], { type: 'image/png' }) }), '/models/a.kicad_pcb');
+  // A picture, by its document's id, versioned by the picture's name; in the dark theme its dark one where it has one.
   assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
+  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png' }, { scheme: 'dark' }), 'http://one.test/api/v1/documents/d1/thumbnail?v=a.png');
+  assert.equal(client.thumbnailUrl({ id: 'd1', thumbnail: 'a.png', thumbnailDark: 'b.png' }, { scheme: 'dark' }),
+    'http://one.test/api/v1/documents/d1/thumbnail?v=b.png&scheme=dark');
   assert.equal(await client.thumbnail({ id: 'd1', thumbnail: 'a.png' }), 'data:image/png;base64,iVBORw==');
   assert.equal(await client.thumbnail({ id: 'd2', thumbnail: 'none.png' }), null);
   assert.equal(await client.pick(), '/models/picked.step');
@@ -440,6 +445,7 @@ test('the library, Open, Reveal and the person\'s settings are guarded requests 
     ['/api/v1/documents', 'GET', null, null],
     ['/api/v1/documents', 'PATCH', '1', { action: 'open', path: '/models/a.step' }],
     ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
+    ['/api/v1/documents', 'PATCH', '1', { action: 'thumbnail', path: '/models/a.kicad_pcb', png: 'iVBORw==', dark: 'iVBORw==' }],
     ['/api/v1/documents/d1/thumbnail', 'GET', null, null], ['/api/v1/documents/d2/thumbnail', 'GET', null, null],
     ['/api/v1/local/pick', 'POST', '1', null],
     ['/api/v1/local/reveal', 'POST', '1', { path: '/models/a.step' }], ['/api/v1/local/reveal', 'POST', '1', { path: '/models/gone.step' }],

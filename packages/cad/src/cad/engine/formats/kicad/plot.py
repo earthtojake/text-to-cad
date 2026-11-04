@@ -81,8 +81,9 @@ from cad.engine.formats.kicad import PLOT_SCHEMA_VERSION, PlotError
 
 __all__ = ["BOARD_BACKGROUND", "build_plot", "payload_bytes", "plot_payload_bytes"]
 
-#: The canvas behind a board: the viewer's neutral dark grey (its dark `--background`, `#292929`),
-#: in place of KiCad's default theme's navy, so a board sits on the same canvas as every other view.
+#: The canvas behind a board in the payload: the viewer's neutral dark grey (its dark `--background`,
+#: `#292929`), in place of KiCad's default theme's navy. The viewer and the snapshot draw on their
+#: theme's own canvas (core's `plot2d/theme.js`, `render/board.py`'s ``PALETTES``); this is the dark one.
 BOARD_BACKGROUND = "#292929"
 _DIGITS = 4
 _GRAPHICS = ("line", "rect", "poly", "circle", "arc", "curve")

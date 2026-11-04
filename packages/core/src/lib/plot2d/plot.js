@@ -9,9 +9,11 @@
  * ITEMS: filled polygons (pads, pours, filled graphics, the board's area with its cutouts), stroked
  * paths (tracks, graphics, a pour's outline and hatch), circles (via rings, holes), text as the
  * strokes of a permissive font, and labels (a pad's number and net, a via's net) laid out here in
- * that font (`strokeFont.js`). This module draws them on a 2D canvas in KiCad's default colours and
+ * that font (`strokeFont.js`). This module draws them on a 2D canvas in the viewer's theme — KiCad's
+ * default colours on the dark canvas, the same hues darkened to read on the light one — and KiCad's
  * display (`theme.js`: pours at KiCad's zone opacity, plated holes seen through), so the viewer's
- * pane and the headless snapshot draw the same picture from the same payload.
+ * pane and the headless snapshot draw the same picture from the same payload, and a switch of theme
+ * draws it again from the payload already held.
  *
  * **Page space** is the payload's own: millimetres, x right, y down, the sheet's top-left corner
  * at the origin. The board's index (`payload.board`, sheet millimetres) is the layout's `board`.
@@ -40,7 +42,7 @@
  */
 import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
-import { DIM_OPACITY, HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
+import { BOARD_PALETTES, DIM_OPACITY, ZONE_OPACITY, boardPalette } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
 
 /**
@@ -623,8 +625,8 @@ function disc(ctx, at, radius, start = 0, end = Math.PI * 2) {
  * background for a pad's (seen through), golden for a via's, two halves in its end layers' copper for a
  * blind or buried via's — or cyan for an unplated one.
  */
-function drawHole(ctx, item, background, PathCtor) {
-  const colors = HOLE_COLORS[item.hole] || HOLE_COLORS.npth;
+function drawHole(ctx, item, background, PathCtor, palette) {
+  const colors = palette.holes[item.hole] || palette.holes.npth;
   if (item.t === "circle") {
     if (item.w > 0 && colors.wall) {
       ctx.fillStyle = colors.wall;
@@ -633,10 +635,10 @@ function drawHole(ctx, item, background, PathCtor) {
     }
     if (item.span && item.span.length === 2) {
       // KiCad's DrawArc from 180 degrees is the half on top of the screen: the via's top layer.
-      ctx.fillStyle = layerColor(item.span[0]);
+      ctx.fillStyle = palette.layer(item.span[0]);
       disc(ctx, item.at, item.r, Math.PI, Math.PI * 2);
       ctx.fill();
-      ctx.fillStyle = layerColor(item.span[1]);
+      ctx.fillStyle = palette.layer(item.span[1]);
       disc(ctx, item.at, item.r, 0, Math.PI);
       ctx.fill();
       return;
@@ -665,8 +667,8 @@ function pageSpace(ctx, transform, pixelRatio, mirrorX) {
 }
 
 function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, background, mirrored, vias, names, viewport, fade = 1, zones = ZONE_OPACITY,
-  tracks = 1 }) {
-  const color = layerColor(layer.id);
+  tracks = 1, palette = BOARD_PALETTES.dark }) {
+  const color = palette.layer(layer.id);
   const copper = layer.kind === "copper";
   // The tracks whose net names this frame writes, over everything else on their copper (KiCad's netname layer).
   const named = [];
@@ -681,14 +683,14 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
     if (visible && !rectsOverlap(visible, item.box)) continue;
     if (copper && names && isTrack(item) && detail >= trackNameDetail(item.w)) named.push(item);
     if (item.hole) {
-      drawHole(ctx, item, background, PathCtor);
+      drawHole(ctx, item, background, PathCtor, palette);
       continue;
     }
     if (item.t === "label") {
       // KiCad's level of detail: a name is drawn once its pad or via reads at this scale.
       if (detail < (item.lod || 0)) continue;
       // At its own stroke, however thin: KiCad's names fade out as the view draws back, never bolden.
-      ctx.strokeStyle = itemColor(layer.id, item);
+      ctx.strokeStyle = palette.item(layer.id, item);
       ctx.lineWidth = item.w > 0 ? item.w : hairline;
       stroke(ctx, pathOf(ctx, item, PathCtor, mirrored));
       continue;
@@ -731,7 +733,7 @@ function drawLayer(ctx, layer, { hairline, poured, visible, PathCtor, detail, ba
     if (alpha !== 1) ctx.globalAlpha = fade;
   }
   if (named.length > 0) {
-    ctx.strokeStyle = netnameColor(layer.id);
+    ctx.strokeStyle = palette.netname(layer.id);
     for (const item of named) strokeTrackNames(ctx, item, viewport, mirrored, PathCtor);
   }
   ctx.globalAlpha = 1;
@@ -751,6 +753,11 @@ function checkTransform(transform, who) {
   if (!transform || !(transform.scale > 0)) {
     throw new Error(`${who} needs a transform with a positive scale; received ${describe(transform)}.`);
   }
+}
+
+/** The canvas a sheet is drawn on: its theme's, or without one the sheet's own background (the payload's dark canvas). */
+export function canvasColor(sheet, theme = null) {
+  return theme ? boardPalette(theme).background : sheet.background;
 }
 
 /**
@@ -781,17 +788,20 @@ function drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCto
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
  * @param {{ transform: DrawingTransform, pixelRatio?: number, view?: PlotView|null, detail?: number,
- *   viewport?: readonly [number, number], backdrop?: "canvas" | "board", Path2D?: any }} options
+ *   viewport?: readonly [number, number], backdrop?: "canvas" | "board", theme?: "light" | "dark" | null, Path2D?: any }} options
  *   `detail` is the CSS pixels per millimetre the view shows, for the labels' level of detail
  *   (`transform.scale` when omitted: a raster drawn at device scale passes its view's own), and
  *   `viewport` the millimetres it shows across and down, for where the tracks' names fall (what the
  *   canvas shows when omitted: a raster larger than its view passes the view's own).
  *   `backdrop`: `"canvas"`, the canvas the sheet's background everywhere (the view, a snapshot), or
  *   `"board"`, the board's own area alone, the rest left clear (a library card's picture).
+ *   `theme`: `"light"` or `"dark"`, the viewer's colour scheme — the board's palette and canvas
+ *   (`theme.js`'s `boardPalette`); without one, KiCad's dark colours on the sheet's own background.
  *   `Path2D` is injectable so this module is exercised in `node --test` with a recording double.
  */
 export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, detail = null, viewport = null, backdrop = "canvas",
-  Path2D: PathCtor = globalThis.Path2D }) {
+  theme = null, Path2D: PathCtor = globalThis.Path2D }) {
+  const palette = boardPalette(theme);
   checkTransform(transform, "drawPlot");
   const visible = shownRect(ctx, transform, pixelRatio);
   const across = viewport ?? (visible ? [visible[2] - visible[0], visible[3] - visible[1]] : null);
@@ -811,14 +821,15 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     const shown = visible && mirrorX != null ? [2 * mirrorX - visible[2], visible[1], 2 * mirrorX - visible[0], visible[3]] : visible;
     if (shown && !rectsOverlap(shown, layout.extent)) continue;
     pageSpace(ctx, transform, pixelRatio, null);
-    ctx.fillStyle = sheet.background;
+    const background = canvasColor(sheet, theme);
+    ctx.fillStyle = background;
     if (backdrop === "board") drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCtor });
     else if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
     else ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
     for (const layer of viewedLayers(sheet, view)) {
       pageSpace(ctx, transform, pixelRatio, mirrorX);
       drawLayer(ctx, layer, {
-        hairline, poured, visible: shown, PathCtor, detail: scale, background: sheet.background, mirrored: mirrorX != null, vias, names, zones, tracks,
+        hairline, poured, visible: shown, PathCtor, detail: scale, background, mirrored: mirrorX != null, vias, names, zones, tracks, palette,
         fade: dimmed && layer.id !== dimmed && !UNDERLAY_KINDS.has(layer.kind) ? DIM_OPACITY : 1,
         viewport: across ?? [sheet.width, sheet.height]
       });
@@ -834,9 +845,10 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
  *
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
- * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[] }} options
+ * @param {{ transform: DrawingTransform, pixelRatio?: number, images: readonly PlacedImage[], theme?: "light" | "dark" | null }} options
+ *   `theme`: the canvas's colour, as `drawPlot`'s.
  */
-export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [] }) {
+export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images = [], theme = null }) {
   checkTransform(transform, "drawPlotImages");
   const visible = shownRect(ctx, transform, pixelRatio);
   const shows = (x, y, width, height) => !visible || rectsOverlap(visible, [x, y, x + width, y + height]);
@@ -844,7 +856,7 @@ export function drawPlotImages(ctx, layout, { transform, pixelRatio = 1, images 
   pageSpace(ctx, transform, pixelRatio, null);
   for (const sheet of layout.sheets) {
     if (!shows(sheet.x, sheet.y, sheet.width, sheet.height)) continue;
-    ctx.fillStyle = sheet.background;
+    ctx.fillStyle = canvasColor(sheet, theme);
     ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
   }
   for (const { image, x, y, width, height } of images) {

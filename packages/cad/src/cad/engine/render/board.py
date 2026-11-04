@@ -26,7 +26,9 @@ MODES = {
 DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance", "active", "dim", "zones", "tracks"}
 # What a set saved when a board had a drawing sheet may still name: no layer now, left out.
 GONE = {"sheet"}
-# Mirrors core/lib/plot2d/theme.js; snapshot pixel tests check the layer colours.
+# Mirrors core/lib/plot2d/theme.js, both themes; snapshot pixel tests check the layer colours. Dark is KiCad's
+# default theme on the viewer's neutral dark canvas; light is each of its colours darkened, its hue kept, to read
+# at 3:1 on white (theme.js says how). ``appearance`` picks one, light by default, as every snapshot's does.
 INNER = ["#7FC87F", "#CE7D2C", "#4FCBCB", "#DB628B", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#8DCB81", "#ED7C33",
          "#5BC3EB", "#F76F8E", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1", "#ED7C33", "#5BC3EB", "#F76F8E", "#A7A5C6",
          "#28CCD9", "#E8B2A7", "#F2EDA1", "#ED7C33", "#5BC3EB", "#F76F8E", "#A7A5C6", "#28CCD9", "#E8B2A7", "#F2EDA1"]
@@ -42,6 +44,16 @@ COLORS = {
     "vias": "#E3B72E", "ratsnest": (0, 248, 255, 0.35), "drills": "#E3B72E",
     "area": (100, 100, 100, 0.35), "names": (255, 255, 255, 0.9),
 }
+LIGHT_INNER = ["#5BA35C", "#CE7D2C", "#14A5A5", "#DB628B", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#67A35B", "#E6762B",
+               "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1",
+               "#03A3AE", "#BC887E", "#9C964D", "#E6762B", "#32A0C7", "#EE6786", "#9391B1", "#03A3AE", "#BC887E", "#9C964D"]
+LIGHT_COLORS = {
+    **COLORS, "F.SilkS": "#9C964D", "B.SilkS": "#BC887E", "F.Fab": "#939393", "B.CrtYd": "#0AA3B4",
+    "F.Mask": (213, 97, 252, 0.4), "B.Mask": (15, 166, 155, 0.4), "F.Paste": (163, 143, 137, 0.9), "B.Paste": (21, 164, 164, 0.9),
+    "Edge.Cuts": "#939590", "Dwgs.User": "#939393", "Eco1.User": "#769B93", "Eco2.User": "#A59503",
+    "User.1": "#939393", "User.3": "#769B93", "User.4": "#A59503", "User.5": "#939393", "User.7": "#769B93", "User.8": "#A59503",
+    "User.9": "#BC887E", "vias": "#B58F0E", "ratsnest": (20, 164, 169, 0.6), "drills": "#B58F0E", "area": (0, 0, 0, 0.07),
+}
 ZONE_OPACITY = 0.6
 # KiCad's "Inactive layers: Dim": every layer but the active one at this share (plot2d's DIM_OPACITY).
 DIM_OPACITY = 0.3
@@ -53,8 +65,16 @@ BOARD_FIT_MARGIN_PX = 16
 ACTIVE_KINDS = {"copper", "mask", "paste", "silk", "fab", "courtyard", "adhesive", "user", "margin", "outline"}
 # A hole's fill and its plated wall (None: the board's background, seen through).
 HOLES = {"pad": (None, "#E3B72E"), "via": ("#E3B72E", "#ECECEC"), "npth": ("#1AC4D2", None)}
+LIGHT_HOLES = {"pad": (None, "#B58F0E"), "via": ("#B58F0E", "#949494"), "npth": ("#0BA3B0", None)}
 NAMES = {"pad": (255, 255, 255, 0.9), "via": (50, 50, 50, 0.9)}
+#: Each appearance's canvas, its layers and its holes (theme.js's ``BOARD_PALETTES``).
+PALETTES = {
+    "dark": {"background": "#292929", "colors": COLORS, "inner": INNER, "holes": HOLES},
+    "light": {"background": "#FFFFFF", "colors": LIGHT_COLORS, "inner": LIGHT_INNER, "holes": LIGHT_HOLES},
+}
 UNDERLAYS = {"area"}
+# Placement's airwires, as the overlay draws them (board2d/boardOverlay.js's ``airwire``): light on dark, dark on light.
+AIRWIRES = {"dark": (232, 238, 245, 0.8), "light": (80, 86, 94, 0.8)}
 OVERLAYS = {"drill", "via", "ratsnest", "names"}
 
 
@@ -62,7 +82,17 @@ def display_options(value: Any, grid: bool = False) -> dict:
     from cad.engine.snapshot import SnapshotRefused, _json_or_file
 
     if isinstance(value, str):
-        value = _json_or_file(value, "--display") if value.lstrip().startswith("{") or value.endswith(".json") else {"mode": value}
+        if value.lstrip().startswith("{") or value.endswith(".json"):
+            value = _json_or_file(value, "--display")
+        else:
+            # A mode, an appearance, or both by commas (``copper,dark``), as every snapshot's --display takes them.
+            tokens = [token.strip() for token in value.split(",") if token.strip()]
+            value = {}
+            for token in tokens:
+                key = "appearance" if token in ("light", "dark") else "mode"
+                if key in value:
+                    raise SnapshotRefused(f"--display {value!r} names one mode and one appearance (light or dark), by commas")
+                value[key] = token
     if value is None:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
@@ -106,24 +136,27 @@ def _rgba(color) -> tuple[int, int, int, int]:
     return int(color[1:3], 16), int(color[3:5], 16), int(color[5:7], 16), 255
 
 
-def layer_color(layer: str):
+def layer_color(layer: str, appearance: str = "dark"):
+    palette = PALETTES[appearance]
     inner = re.fullmatch(r"In(\d+)\.Cu", layer)
-    return INNER[(int(inner[1]) - 1) % len(INNER)] if inner else COLORS.get(layer, COLORS["Dwgs.User"])
+    if inner:
+        return palette["inner"][(int(inner[1]) - 1) % len(palette["inner"])]
+    return palette["colors"].get(layer, palette["colors"]["Dwgs.User"])
 
 
-def netname_color(layer: str):
+def netname_color(layer: str, appearance: str = "dark"):
     """theme.js's ``netnameColor``: white names on copper, or dark ones on copper bright enough."""
-    color = layer_color(layer)
+    color = layer_color(layer, appearance)
     if isinstance(color, tuple):
         return (255, 255, 255, 0.7)
     r, g, b = (int(color[i:i + 2], 16) / 255 for i in (1, 3, 5))
     return (0, 0, 0, 0.7) if r * 0.299 + g * 0.587 + b * 0.117 > 0.5 else (255, 255, 255, 0.7)
 
 
-def item_color(layer: str, item: dict):
+def item_color(layer: str, item: dict, appearance: str = "dark"):
     if item["t"] == "label":
-        return NAMES.get(item.get("kind"), NAMES["pad"]) if layer == "names" else netname_color(layer)
-    return layer_color(layer)
+        return NAMES.get(item.get("kind"), NAMES["pad"]) if layer == "names" else netname_color(layer, appearance)
+    return layer_color(layer, appearance)
 
 
 def grown_outline(points, distance: float) -> list:
@@ -185,13 +218,14 @@ def active_layer(layers: list[dict], display: dict) -> str | None:
 class _Painter:
     """One frame of a plot on a Pillow image, as ``plot2d.drawPlot`` paints it on a canvas."""
 
-    def __init__(self, image, place, scale: float, ss: int, background: str):
+    def __init__(self, image, place, scale: float, ss: int, background: str, appearance: str = "dark"):
         from PIL import Image, ImageDraw
 
         self.Image, self.ImageDraw = Image, ImageDraw
         self.image = image
         self.pen = ImageDraw.Draw(image, "RGBA")
         self.place, self.scale, self.ss, self.background = place, scale, ss, background
+        self.appearance = appearance
         self.batch = None  # a translucent colour's mask, painted in one pass: (rgba, mask, pen)
 
     # -- translucent paint: one mask per run of a colour, composited once, so it never doubles up on itself
@@ -290,7 +324,8 @@ class _Painter:
     # -- items
 
     def hole(self, item: dict):
-        fill, wall = HOLES.get(item["hole"], HOLES["npth"])
+        holes = PALETTES[self.appearance]["holes"]
+        fill, wall = holes.get(item["hole"], holes["npth"])
         fill = fill or self.background
         if item["t"] == "circle":
             if item.get("w", 0) > 0 and wall:
@@ -298,8 +333,8 @@ class _Painter:
             span = item.get("span")
             if span and len(span) == 2:
                 # plot.js: the half on top of the screen is the via's top layer, the other its bottom.
-                self.disc(item["at"], item["r"], layer_color(span[0]), start=180, end=360)
-                self.disc(item["at"], item["r"], layer_color(span[1]), start=0, end=180)
+                self.disc(item["at"], item["r"], layer_color(span[0], self.appearance), start=180, end=360)
+                self.disc(item["at"], item["r"], layer_color(span[1], self.appearance), start=0, end=180)
                 return
             self.disc(item["at"], item["r"], fill)
             return
@@ -312,7 +347,7 @@ class _Painter:
         from cad.engine.formats.kicad.labels import is_track, track_labels, track_name_detail
         from cad.engine.formats.kicad.stroke_font import text_strokes
 
-        color = layer_color(layer["id"])
+        color = layer_color(layer["id"], self.appearance)
         copper = layer["kind"] == "copper"
         detail = self.scale / self.ss
         named = []  # the tracks whose net names this frame writes, over everything else on their copper
@@ -332,7 +367,7 @@ class _Painter:
                     continue
                 strokes = text_strokes(item["text"], size=item["size"], at=item["at"], angle=item.get("angle", 0.0), mirror=mirrored)
                 for stroke in strokes:
-                    self.line(stroke, item_color(layer["id"], item), item.get("w", 0), minimum=False)
+                    self.line(stroke, item_color(layer["id"], item, self.appearance), item.get("w", 0), minimum=False)
                 continue
             paint = color
             if item.get("knockout"):
@@ -361,7 +396,7 @@ class _Painter:
             for label in track_labels(item, viewport):
                 strokes = text_strokes(label["text"], size=label["size"], at=label["at"], angle=label["angle"], mirror=mirrored)
                 for stroke in strokes:
-                    self.line(stroke, netname_color(layer["id"]), label["w"], minimum=False)
+                    self.line(stroke, netname_color(layer["id"], self.appearance), label["w"], minimum=False)
         self.flush()
 
 
@@ -424,8 +459,10 @@ class Held:
             x = sheet["width"] - point[0] if bottom else point[0]
             return ((x - cx) * scale + width / 2, (point[1] + cy) * scale + height / 2)
 
-        # KiCad's canvas: the board's background, everywhere.
-        image = Image.new("RGB", (width, height), sheet["background"])
+        # The canvas of the still's appearance, everywhere (the payload's own is the dark one).
+        appearance = display["appearance"]
+        background = PALETTES[appearance]["background"]
+        image = Image.new("RGB", (width, height), background)
         named = set(display["layers"]) if display["layers"] is not None else None
         vias, names = named is None or "vias" in named, named is None or "names" in named
         viewport = (width / scale, height / scale)  # the millimetres the still shows, for where a track's names fall
@@ -434,7 +471,7 @@ class Held:
         for layer in layers:
             faded = kept is not None and layer["id"] != kept and layer["kind"] not in UNDERLAYS
             under = image.copy() if faded else None
-            _Painter(image, place, scale, ss, sheet["background"]).layer(
+            _Painter(image, place, scale, ss, background, appearance).layer(
                 layer, poured=display["poured"], vias=vias, names=names, mirrored=bottom, viewport=viewport,
                 zones=display["zones"], tracks=display["tracks"])
             if faded:
@@ -442,8 +479,8 @@ class Held:
         if display["mode"] == "placement":
             from PIL import ImageDraw
 
-            airwires = _Painter(image, place, scale, ss, sheet["background"])
-            _placement(ImageDraw.Draw(image, "RGBA"), payload["board"], place, scale, bottom, airwires.line)
+            airwires = _Painter(image, place, scale, ss, background, appearance)
+            _placement(ImageDraw.Draw(image, "RGBA"), payload["board"], place, scale, bottom, airwires.line, appearance)
             airwires.flush()
         warnings = list(self.warnings)
         if still.references:  # what the prompt named, lit as the viewer lit it (`board_refs.py`)
@@ -452,7 +489,7 @@ class Held:
             from cad.engine.render.board_refs import paint_references
 
             warnings += paint_references(ImageDraw.Draw(image, "RGBA"), self.path, still.references,
-                                         payload["board"]["origin"], place, scale, ss)
+                                         payload["board"]["origin"], place, scale, ss, appearance=appearance)
         frame = np.array(image)
         if still.annotation:
             paint_ink(frame, still.annotation.get("marks", []), place, height / REFERENCE_HEIGHT)
@@ -465,7 +502,7 @@ class Held:
             "preview": False, "boardDisplay": display, "warnings": warnings, **finished(still), "timings": {"renderMs": round((time.perf_counter()-started)*1000)}}
 
 
-def _placement(pen, board, place, scale, bottom, line):
+def _placement(pen, board, place, scale, bottom, line, appearance="dark"):
     """Placement's pads and all unpoured net connections, as the board overlay draws them."""
     pads = board["pads"]
     near = "bottom" if bottom else "top"
@@ -500,7 +537,7 @@ def _placement(pen, board, place, scale, bottom, line):
             next_pin = min((i for i in range(len(points)) if i not in joined), key=distance.__getitem__)
             joined.add(next_pin)
             if parents[next_pin] >= 0:
-                line([points[parents[next_pin]], points[next_pin]], (232, 238, 245, 0.8), 0)
+                line([points[parents[next_pin]], points[next_pin]], AIRWIRES[appearance], 0)
             for i, point in enumerate(points):
                 if i not in joined:
                     length = math.dist(point, points[next_pin])

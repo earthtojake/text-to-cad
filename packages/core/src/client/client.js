@@ -328,16 +328,21 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
       return request(`${API}/documents`, { method: 'PATCH', headers: JSON_POST, body: change, operation: 'recents' }).then(libraryRows);
     },
     async keepThumbnail(png, path) {
-      return client.changeRecents({ action: 'thumbnail', path, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
+      // A picture drawn in the dark theme's own colours too (a board's) carries it as `dark`: kept beside it.
+      const encode = async (blob) => encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+      return client.changeRecents({ action: 'thumbnail', path, png: await encode(png), ...(png.dark ? { dark: await encode(png.dark) } : {}) });
     },
-    async thumbnail(model, { signal } = {}) {
+    async thumbnail(model, { signal, scheme } = {}) {
       // A document's picture, by its id; the picture's name (its content's) keeps an older one out of any cache.
-      const response = await fetchImpl(client.thumbnailUrl(model), { signal, cache: 'no-store' });
+      const response = await fetchImpl(client.thumbnailUrl(model, { scheme }), { signal, cache: 'no-store' });
       if (!response.ok) return null;
       return `data:image/png;base64,${encodeBase64(new Uint8Array(await response.arrayBuffer()))}`;
     },
-    thumbnailUrl(model) {
-      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`, { origin, params: { v: model.thumbnail } });
+    thumbnailUrl(model, { scheme } = {}) {
+      // In the dark theme, its dark theme's picture where it has one; else its one picture.
+      const dark = scheme === 'dark' && model.thumbnailDark;
+      return cadApiUrl(`${API}/documents/${encodeURIComponent(model.id)}/thumbnail`,
+        { origin, params: dark ? { v: model.thumbnailDark, scheme: 'dark' } : { v: model.thumbnail } });
     },
     pick() {
       return request(`${API}/local/pick`, { method: 'POST', headers: { 'x-cad-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);

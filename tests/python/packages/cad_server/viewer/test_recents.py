@@ -55,6 +55,22 @@ class RecentStoreTest(unittest.TestCase):
         third = store.thumbnail("/a.step", b"\x89PNG three")
         self.assertEqual([path.name for path in store.thumbnails.iterdir()], [third])
 
+    def test_a_picture_may_have_its_dark_theme_s_beside_it_and_one_without_keeps_its_one(self) -> None:
+        store = RecentStore(self.tmp)
+        store.opened("/a.kicad_pcb")
+        store.thumbnail("/a.kicad_pcb", b"\x89PNG light", b"\x89PNG dark")
+        [entry] = store.list()
+        self.assertEqual(store.read_thumbnail(entry.public()["thumbnailDark"]), b"\x89PNG dark")
+        self.assertEqual(store.read_thumbnail(entry.thumbnail), b"\x89PNG light")
+        # Both are shown, so neither is swept; a picture taken again without one has none.
+        old = time.time() - 3600
+        for path in store.thumbnails.iterdir():
+            os.utime(path, (old, old))
+        store.thumbnail("/a.kicad_pcb", b"\x89PNG light")
+        [entry] = store.list()
+        self.assertIsNone(entry.public()["thumbnailDark"])
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [entry.thumbnail])
+
     def test_a_file_is_updated_when_it_last_changed_on_disk_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")
         model = self.tmp / "part.stl"

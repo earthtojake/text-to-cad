@@ -9,7 +9,9 @@ a CAD file opened on a page is a record of its own (``kind: "file"``: its path, 
 opened, ``created``, and last, ``opened``, whether it is pinned), and every model a script built is one already (``kind: "model"``, which the
 engine writes when it registers the build), as is every shape a program handed over (``kind:
 "shape"``). The home's picture of each is UI state on its record (``preview``), the PNG under
-``recents/thumbnails`` named by its content. Removing a file's entry forgets its record, the file
+``recents/thumbnails`` named by its content, and, for a document whose picture its view draws in
+the dark theme's own colours too (a KiCad board's), a second PNG beside it (``thumbnailDark``) the
+home shows in the dark theme; an entry without one shows its one picture in both. Removing a file's entry forgets its record, the file
 untouched; a model's entry is deleted with its document (``cad_server.engine.models.delete``: its record
 and its document in the engine's cache). Nothing goes on its own: a model whose script is gone stays
 listed, ``missing``, until the person deletes it.
@@ -70,6 +72,8 @@ class Recent:
     created: float | None = None
     pinned: bool = False
     thumbnail: str | None = None
+    # Its picture in the dark theme's own colours, where its view draws one (a board's); None: ``thumbnail`` in both.
+    thumbnail_dark: str | None = None
     # When the picture was taken, in seconds: a document updated since has an old one.
     pictured: float | None = None
     # ``file``, ``model`` or ``shape`` (the record's ``kind``).
@@ -132,6 +136,7 @@ class Recent:
             # A file that is gone, or a model whose script is (``detached``): listed, and removable.
             "missing": not present,
             "thumbnail": self.thumbnail,
+            "thumbnailDark": self.thumbnail_dark,
             "pictured": self.pictured,
         }
         found["kind"] = self.kind
@@ -190,13 +195,22 @@ class RecentStore:
         """Forget a file's entry: its record. The file stays where it is."""
         self.registry.delete(self._ident(path))
 
-    def thumbnail(self, path: str, png: bytes) -> str:
-        """Keep a PNG for an entry (a file's path, or a model's id): its content name."""
+    def thumbnail(self, path: str, png: bytes, dark: bytes | None = None) -> str:
+        """Keep a PNG for an entry (a file's path, or a model's id), and its dark theme's where its view
+        draws one: the light one's content name. A picture taken without a dark one has none."""
+        name = self._keep(png)
+        preview = {"thumbnail": name, "pictured": time.time()}
+        if dark is not None:
+            preview["thumbnailDark"] = self._keep(dark)
+        self._change(path, lambda record: {**record, "preview": preview})
+        self._sweep_thumbnails()
+        return name
+
+    def _keep(self, png: bytes) -> str:
+        """A PNG under its content's name, written once."""
         name = hashlib.sha256(png).hexdigest()[:32] + ".png"
         if not (self.thumbnails / name).exists():
             self.state.write(f"{THUMBNAILS}/{name}", png)
-        self._change(path, lambda record: {**record, "preview": {"thumbnail": name, "pictured": time.time()}})
-        self._sweep_thumbnails()
         return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
@@ -224,7 +238,8 @@ class RecentStore:
         for record in self.registry.list():
             preview = record.get("preview") or {}
             common = {"pinned": bool(record.get("pinned")), "thumbnail": preview.get("thumbnail"),
-                      "pictured": preview.get("pictured"), "created": record.get("created")}
+                      "thumbnail_dark": preview.get("thumbnailDark"), "pictured": preview.get("pictured"),
+                      "created": record.get("created")}
             if record.get("kind") == "file" and record.get("opened"):
                 path = str(registering.home(self.registry, record))
                 entries.append(Recent(path=path, opened=float(record["opened"]), updated=_mtime(path), **common))
@@ -243,7 +258,8 @@ class RecentStore:
     def _sweep_thumbnails(self) -> None:
         """A picture no record shows goes once it is old enough that no writer can still be about to
         name it (a writer saves the PNG, then writes its record)."""
-        shown = {(record.get("preview") or {}).get("thumbnail") for record in self.registry.list()}
+        shown = {name for record in self.registry.list() for name in
+                 ((record.get("preview") or {}).get("thumbnail"), (record.get("preview") or {}).get("thumbnailDark"))}
         cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
         for name in self.state.names(THUMBNAILS):
             try:
