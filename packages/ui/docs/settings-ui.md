@@ -612,11 +612,11 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   muted; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
-- **Two lines, the same on both sides** (Figma's). What is read stands 16px in from each edge: the
-  search field, a tab's name, a settings heading, label and control (a Select, a value, a checkbox),
-  a layer group's name, a swatch, and an icon's glyph (the collapse button's, a row's eye: an icon
-  button's box stops 5px short of the line). What lights up under the pointer or for what is chosen —
-  a tab's button, a row's background — runs 8px from each edge. Every rule runs the panel's width.
+- **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
+  field, the collapse button, a tab's button, a row's background — runs 8px from each edge. What is
+  read in them starts 16px in: the search icon, a tab's name, a row's first glyph, a layer group's
+  name; a settings heading, label and control (a Select, a value, a checkbox) and a row's eye stand
+  on that 16px line on both sides. Every rule runs the panel's width.
   A settings row's label column is 3rem (its labels are short words) and its control fills the rest.
   The navbar's logo stands on the same 16px line: its drawn mark, not its image's edge.
 - **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):

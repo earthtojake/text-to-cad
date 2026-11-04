@@ -16,7 +16,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
  * after it, then a row of tabs, buttons as Figma's (a board's Circuit and Layers, a schematic's
  * Circuit and Hierarchy), and the open tab's list under them, scrolling as one. It keeps two lines,
- * the same on both sides: what is read 16px in, what lights up 8px in.
+ * the same on both sides: its boxes 8px in, what is read in them 16px in.
  *
  * - **Collapsed, it goes completely**: its expand button alone on a small pill at the canvas's
  *   top-left (`FlatPanelPill`). ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search.
@@ -32,15 +32,12 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
  */
 
-// The panel's two lines, the same on both sides (Figma's): what is read — text, fields, the edges of
-// controls, an icon's glyph — stands 16px in (`CONTENT_PX`); a surface that lights under the pointer
-// or for what is chosen (a tab's button, a row) runs 8px further out (`SURFACE_PX`), padded back to the line.
+// The panel's two lines, the same on both sides (Figma's): every box in its head and lists — the search
+// field, the collapse button, a tab's button, a row — runs 8px from each edge (`SURFACE_PX`), and
+// what is read in them starts on the line 16px in (`CONTENT_PX`): the search icon, a tab's name, a
+// row's first glyph, a settings label.
 const CONTENT_PX = 16;
 const SURFACE_PX = 8;
-// An icon button's glyph is 5px inside its 24px box: the box stops short of the line by that much.
-const ICON_INSET_PX = 5;
-// A phone's 36px touch button and its 18px glyph: 9px.
-const TOUCH_ICON_INSET_PX = 9;
 const KEY_NUDGE_PX = 16;
 export const FLAT_PANEL_DEFAULT_WIDTH = 216;
 export const FLAT_PANEL_MIN_WIDTH = 200;
@@ -162,7 +159,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
       page && "absolute inset-0 z-50")}
     style={page ? undefined : { width: drawnWidth }}>
     {/* The head: the search, then the collapse button at its right (Back before it, on a phone). */}
-    <div className="flex shrink-0 items-center gap-1.5" style={{ padding: page ? `${SURFACE_PX}px ${CONTENT_PX}px 6px ${CONTENT_PX - TOUCH_ICON_INSET_PX}px` : `${SURFACE_PX}px ${CONTENT_PX - ICON_INSET_PX}px 6px ${CONTENT_PX}px` }} data-flat-panel-head="">
+    <div className="flex shrink-0 items-center gap-1.5" style={{ padding: `${SURFACE_PX}px ${SURFACE_PX}px 6px` }} data-flat-panel-head="">
       {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
       <TreeFilterInput label={searchLabel} placeholder={searchPlaceholder} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
         inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border pl-px pr-0.5 shadow-none" data-flat-panel-search="" />

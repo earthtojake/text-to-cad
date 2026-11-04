@@ -181,8 +181,8 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(head.firstElementChild!.hasAttribute('data-flat-panel-search')).toBe(true);
   expect(head.lastElementChild!.getAttribute('aria-label')).toBe('Hide panel');
   expect(head.lastElementChild!.getAttribute('aria-keyshortcuts')).toMatch(/\\$/);
-  // The search on the panel's 16px line, the button's glyph ending on it on the right (its box 5px short).
-  expect(head.style.padding).toBe('8px 11px 6px 16px');
+  // The search field and the collapse button on the boxes' line, 8px in, as the tabs' buttons below them.
+  expect(head.style.padding).toBe('8px 8px 6px');
   expect(searchBox(pane).placeholder).toBe('Parts, nets, layers');
   expect(within(aside).getAllByRole('tab').map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
