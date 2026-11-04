@@ -21,10 +21,20 @@ __all__ = ["checked", "measure"]
 
 def _measured(document: _dfm_brep.Document, document_type: str, process: str, options: dict[str, Any],
               candidates: bool) -> dict[str, Any]:
+    from cad._internal.dfm import Unmeasured
+
+    if not document.parts:
+        raise Unmeasured("document_empty", "the document holds no part with a face to measure")
     module = importlib.import_module(f"cad.build123d._dfm_{process}")
     report = module.measure(document, options, candidates)
+    found = list(report.pop("findings", None) or ())
+    if document.empty:
+        shown = ", ".join(document.empty[:8]) + (f" and {len(document.empty) - 8} more" if len(document.empty) > 8 else "")
+        found.append({"severity": "info", "code": "empty_parts", "location": document.empty[0],
+                      "message": f"{len(document.empty)} part(s) hold no face and were not measured: {shown}"})
     return {"source": {"type": document_type, "measured_as": "brep", "document": document.name},
-            "document": document.facts(), "bodies": [part.facts() for part in document.parts], **report}
+            "document": document.facts(), "bodies": [part.facts() for part in document.parts], **report,
+            **({"findings": found} if found else {})}
 
 
 def measure(document_type: str, source: Any, process: str, options: dict[str, Any], candidates: bool) -> dict[str, Any]:

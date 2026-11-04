@@ -122,10 +122,13 @@ class Document:
     name: str
     parts: list[Part]
     source: str | None = None
+    #: The owners of parts that hold no face (an empty label a STEP's exporter left): never measured.
+    empty: list[str] = field(default_factory=list)
 
     def facts(self) -> dict[str, Any]:
         return {"name": self.name, "part_count": len(self.parts),
-                "occurrence_count": sum(part.occurrences for part in self.parts), "units": "mm"}
+                "occurrence_count": sum(part.occurrences for part in self.parts), "units": "mm",
+                "empty_parts": list(self.empty)}
 
 
 # --- reading ---------------------------------------------------------------------------------------------
@@ -167,7 +170,9 @@ def _loaded(loaded: Any) -> Document:
                     face_names=dict(proto.face_names))
         first[prototype] = part
         order.append(part)
-    return Document(name=loaded.name, parts=order, source=str(loaded.path))
+    empty = [part.owner or part.name for part in order if not part.faces()]
+    return Document(name=loaded.name, parts=[part for part in order if part.faces()], source=str(loaded.path),
+                    empty=empty)
 
 
 def read(document_type: str, source: Any) -> Document:
@@ -221,7 +226,8 @@ def parts_of(shape: Any, name: str | None = None) -> Document:
         placed = leaf if where is None or node is root else bd.Shape.cast(leaf.wrapped.Located(where.wrapped))
         parts.append(Part(name=node.label, owner=refs.owner_text(root, node), shape=placed,
                           paths=(refs.path_text(root, node),)))
-    return Document(name=tree["name"], parts=parts)
+    empty = [part.owner or part.name for part in parts if not part.faces()]
+    return Document(name=tree["name"], parts=[part for part in parts if part.faces()], empty=empty)
 
 
 # --- surfaces --------------------------------------------------------------------------------------------

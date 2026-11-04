@@ -230,6 +230,21 @@ class RefsTest(unittest.TestCase):
         nub = next(part for part in document.parts if part.name == "nub")
         self.assertAlmostEqual(nub.shape.center().X, 5.0, places=6)
 
+    def test_a_part_with_no_face_is_said_and_skipped(self) -> None:
+        from cad.build123d import printing
+
+        box = bd.Box(10, 10, 10)
+        box.label = "box"
+        hollow = bd.Compound([])
+        hollow.label = "nothing"
+        kit = bd.Compound(children=[box, hollow])
+        kit.label = "kit"
+        document = brep.parts_of(kit)
+        self.assertEqual(([part.name for part in document.parts], document.empty), (["box"], ["nothing"]))
+        result = printing(kit)
+        self.assertEqual([f.location for f in result.findings if f.code == "empty_parts"], ["nothing"])
+        self.assertFalse(result.measurements["partial"])
+
 
 if __name__ == "__main__":
     unittest.main()
