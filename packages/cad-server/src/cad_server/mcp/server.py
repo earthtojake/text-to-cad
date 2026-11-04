@@ -92,13 +92,10 @@ PROTOCOL = 9
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 # The formats every surface opens, as the agent is told them and as a host's file handler offers them: a
-# cadgen engine document (XBF) among them. A KiCad schematic has no view in the CAD app yet (``cad kicad_sch
-# snapshot`` draws it), so neither offers one.
-_NO_VIEW_YET = frozenset({"kicad_sch"})
-EXTENSIONS = sorted(set(VIEWER_EXTENSIONS) - {suffix for entry in DOCUMENT_TYPES.values() if entry.id in _NO_VIEW_YET
-                                              for suffix in entry.extensions})
+# cadgen engine document (XBF) among them, and a KiCad board and schematic.
+EXTENSIONS = sorted(set(VIEWER_EXTENSIONS))
 # File formats alone: a model, the one type with no file, is shown by its document id.
-FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.id not in _NO_VIEW_YET and entry.has_file)
+FORMATS = ", ".join(entry.title for entry in DOCUMENT_TYPES.values() if entry.has_file)
 
 # How long a call that reads a view waits for one the agent just opened (a tab from cad_open, a card
 # from an inline cad_show) to sync for the first time: the host loads the page, then the page its
