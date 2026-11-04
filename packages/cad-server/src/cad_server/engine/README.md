@@ -284,7 +284,13 @@ that reads the folder in place needs nothing), and then switches (`cad_server._i
 
 Every page and card keeps its link through it, and reloads once its engine answers with the new
 release. The release before's folder stays -- a process of it may still run, and it is the way back
---; the others go at the next switch, once nothing runs from them (`releases.collect`). After the
+--; the others go at the next switch, once nothing runs from them (`releases.collect`). A switch that
+went back leaves the release it failed to move to for nothing: its folder goes once the release
+before's engine answers again and nothing runs from it (`releases.discard`: by the switch, else by that
+engine as it tends itself, after a `cad update` run from that folder has ended), its failure kept in
+`update.json` and an automatic update's attempt, so it is not tried again by itself any sooner; `cad
+doctor --prune` removes every release folder but the current one and the one before (`releases.kept`:
+the release the last switch to it came from, else the newest older one). After the
 switch, held or gone back, the release left current writes the plugin folder again (its own `cad
 plugin --refresh`, `switch.follow`): nothing changes when that release's setup already wrote it, and a
 switch that went back puts the release before's plugin back, the apps' copies with it. What a switch
