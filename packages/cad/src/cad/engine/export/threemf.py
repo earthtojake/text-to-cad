@@ -7,7 +7,8 @@ its display colour the look's colour in sRGB, and a metallic display property pe
 (``pbmetallicdisplayproperties``: the material's metallicness and roughness, a matte one
 for a look without a material). An object's default look is its part's; a painted face's
 triangles name their own (``pid``/``p1``). A placement whose own colour is not its part's
-places an object of its own drawn in that colour.
+places an object of its own drawn in that colour. An export's own tolerance is said in the
+model's ``Description`` metadata, one of the names the core specification defines.
 """
 
 from __future__ import annotations
@@ -106,9 +107,12 @@ def write(view: Any, path: Path) -> None:
     resources = (f'<m:pbmetallicdisplayproperties id="{PROPERTIES_ID}">{"".join(metallic)}'
                  f'</m:pbmetallicdisplayproperties>' if shown else "")
     group = f' m:displaypropertiesid="{PROPERTIES_ID}"' if shown else ""
+    tolerance = view.tolerance
+    described = (f'<metadata name="Description">Meshed to within {tolerance:g} mm</metadata>'
+                 if tolerance is not None else "")
     model = ('<?xml version="1.0" encoding="UTF-8"?>\n'
              f'<model unit="millimeter" xml:lang="en-US" xmlns="{CORE}" xmlns:m="{MATERIALS}">'
-             f'<metadata name="Title">{escape(view.name)}</metadata>'
+             f'<metadata name="Title">{escape(view.name)}</metadata>{described}'
              f'<resources>{resources}<basematerials id="{BASE_ID}"{group}>{"".join(bases)}</basematerials>'
              f'{"".join(objects)}</resources><build>{"".join(items)}</build></model>')
     content_types = ('<?xml version="1.0" encoding="UTF-8"?>\n'

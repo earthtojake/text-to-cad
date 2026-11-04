@@ -364,14 +364,16 @@ def _leftovers():
     (``earlier_state_dir``, ``earlier_cache_dir``: the folders named, where ``CAD_STATE_DIR`` and
     ``CAD_CACHE_DIR`` name them)."""
     from cad_server._internal import installations, leftovers
-    from cad.engine.places import cache_dir, earlier_cache_dir, earlier_state_dir, engine_dir, state_dir
+    from cad.engine.places import (appdata_cache_dir, appdata_state_dir, cache_dir, earlier_cache_dir,
+                                   earlier_state_dir, engine_dir, state_dir)
 
     state, cache = state_dir(), cache_dir()
     before, before_cache = earlier_state_dir(), earlier_cache_dir()
     prefixes = [record["prefix"] for record in installations.records()]
     return (state, cache, leftovers.engine_records(state),
             leftovers.bytecode_folders(cache, prefixes, engine_dir()), leftovers.unrecorded(state, cache),
-            leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache))
+            leftovers.earlier(before), leftovers.package_environments(cache), leftovers.seven(before, before_cache),
+            leftovers.appdata(appdata_state_dir(), appdata_cache_dir()))
 
 
 def _environments(number: int) -> str:
@@ -408,7 +410,7 @@ def _report_leftovers() -> list[str]:
     from cad_server._internal import leftovers
 
     try:
-        _state, _cache, records, bytecode, cached, earlier, packages, seven = _leftovers()
+        _state, _cache, records, bytecode, cached, earlier, packages, seven, appdata = _leftovers()
     except Exception as error:  # noqa: BLE001 - a report line, never a reason for the report to fail
         return [f"leftover unknown ({type(error).__name__}: {error})"]
     said = _leftover_words(records, bytecode, cached, earlier, packages)
@@ -418,6 +420,11 @@ def _report_leftovers() -> list[str]:
                 f"cad doctor --prune removes it once nothing has written it for {leftovers.QUIET_DAYS} days, "
                 "or now with --all-versions")
         lines.append(f"0.7      {leftovers.seven_text(seven)}: {when}")
+    for path in appdata.paths:
+        lines.append(f"0.10     {path}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it")
+    for path in appdata.recent:
+        lines.append(f"0.10     {path}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
+                     f"nothing has written it for {leftovers.QUIET_DAYS} days")
     return lines
 
 
@@ -427,7 +434,7 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
     from cad_server._internal import leftovers
     from cad_server._internal.leftovers import count, size
 
-    state, _cache, records, bytecode, cached, earlier, packages, seven = _leftovers()
+    state, _cache, records, bytecode, cached, earlier, packages, seven, appdata = _leftovers()
     lines = []
     removed, trimmed = leftovers.remove_engine_records(state, records)
     if removed:
@@ -454,6 +461,9 @@ def _prune_leftovers(all_versions: bool = False) -> list[str]:
     elif seven.paths:
         lines.append(f"kept {leftovers.seven_text(seven)}: a cadgen 0.7 still installed may use it; it goes once "
                      f"nothing has written it for {leftovers.QUIET_DAYS} days, or now with --all-versions")
+    for path in appdata.paths:
+        lines.append(f"removed {path}, a folder 0.10.0 kept on Windows" if leftovers.remove([path])
+                     else f"could not remove {path}, a folder 0.10.0 kept on Windows")
     return lines
 
 

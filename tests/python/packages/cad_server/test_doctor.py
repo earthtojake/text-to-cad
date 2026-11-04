@@ -604,6 +604,28 @@ class SevenLeftoversTest(PrivateFolders):
         self.assertTrue(all(path.exists() for path in theirs))
 
 
+class TenWindowsLeftoversTest(PrivateFolders):
+    """0.10.0's Windows folders in the local application data, what this release took of them moved out:
+    ``cad doctor`` names each, and ``--prune`` removes each whole once nothing has written it for a week."""
+
+    def test_a_quiet_folder_goes_whole_and_a_recent_one_stays(self) -> None:
+        from cad.engine import places
+
+        state, cache = self.root / "AppData" / "cad-state", self.root / "AppData" / "cad"
+        self.file("AppData/cad-state/installations/0.10.0.json", "{}")
+        self.file("AppData/cad/base/0123/pyvenv.cfg", "", old=False)
+        with mock.patch.object(places, "appdata_state_dir", return_value=state), \
+                mock.patch.object(places, "appdata_cache_dir", return_value=cache):
+            _code, out, _ = _run(["--no-server"])
+            self.assertIn(f"  0.10     {state}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it\n", out)
+            self.assertIn(f"  0.10     {cache}, a folder 0.10.0 kept on Windows: cad doctor --prune removes it once "
+                          "nothing has written it for 7 days\n", out)
+            _code, out, _ = _run(["--prune"])
+        self.assertIn(f"removed {state}, a folder 0.10.0 kept on Windows\n", out)
+        self.assertFalse(state.exists())
+        self.assertTrue((cache / "base" / "0123" / "pyvenv.cfg").exists(), "written this week: it stays")
+
+
 class KernelProbeTest(unittest.TestCase):
     """The real probe, once: this interpreter's kernel imports in a child."""
 
