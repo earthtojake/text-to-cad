@@ -282,7 +282,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display, Settings |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; no view controls (its Display is its panel's Layers tab) |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
@@ -543,32 +543,12 @@ assembly's **Model tree** (a part file, whose tree would be its one row, has non
 **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**, where a joint can be driven; a drawing's **Layers**, where it has four or more
 layers or any block reference (a flat pattern's CUT and BEND has none): each layer's pen, name,
-entity count and eye, its block references under it; a KiCad board's **Circuit** and **Layers**
-(`board/BoardSection.jsx`, `board/LayersSection.jsx`): the Circuit headed by its filter (a part's
-reference, value, footprint name and MPN, a net's name), then the parts in the schematic blocks
-their footprints record (a sheet's name without `.sch`/`.kicad_sch`; on a board that records none,
-the kinds: ICs, Resistors, ...), each part with its pads, then Nets (the `unconnected-(...)` pins
-shut under their own group) — a block's name selects every part in it, a chip each, a part's,
-pad's or net's selects it as a click on the board does, and each frames what it picked, opening
-and scrolling nothing; a group's name (Nets, the unconnected pins) is a label: only a row's chevron
-opens or shuts it, as the STEP tree's. It opens as its blocks and "Nets (N)", a block of several
-parts and the Nets shut; a pick on the board opens its row's owners and scrolls it into view. A selected
-net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers: the
-layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
-active layer (a filled dot after its name), drawn on top, the one Settings' Other layers keeps at
-full strength when it dims or hides the rest — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
-draws too; a KiCad schematic's **Circuit** and, for more than one sheet, **Hierarchy** (`schematic/SchematicSection.jsx`,
-`schematic/SheetsSection.jsx`): the Hierarchy is KiCad's Hierarchy Navigator, the root (by its
-file's name) and the sheets each places, in page order, each row its page number, every sheet open,
-the sheet shown lit; a press on a row shows that sheet, the way back up from one entered (no trail under the strip); the Circuit is the board's tree
-(`kit/inspector/CircuitTree.jsx`, its rules alike), its blocks the sheets the parts are placed on and
-each part's pins under it, a press showing the sheet what it picked is on; and, after them, the shell's own **Animation** for a
+entity count and eye, its block references under it; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
 section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
-drawing's, a board's), a Circuit lucide's CircuitBoard (a board's, a schematic's: one tree), a schematic's Hierarchy three
-sheets in a tree, Position's a spline, Animation's a
+drawing's), Position's a spline, Animation's a
 clapperboard, any other section's a page named for it (a section names its own with `ToolPanel`'s
 `icon`; no two tiles of a file share one). Preview has no file sidebar: every
 section stays mounted, out of sight, and a routine plays from Preview's playbar.
@@ -619,6 +599,62 @@ section stays mounted, out of sight, and a routine plays from Preview's playbar.
   record carries is dropped). `panels` holds only what a person set; `collapsed` is the tool
   stack's folded panels. Which section is open is not kept: a file opens with none. A new tab (a
   cleared record) puts everything back at its defaults.
+
+**A flat view's panel** (`kit/shell/FlatPanel.jsx`, `FlatViewFrame.jsx`) is a KiCad board's and a
+KiCad schematic's, in place of the file sidebar, after KiCad's Appearance panel: docked at the view's
+left edge, the full height of the view, on the background with a rule at its right, and the canvas
+the narrower for it (the strip centres on the canvas). Nothing else changes for the other views.
+
+- **Its head.** The toggle first, **Hide panel** (lucide's PanelLeftClose, its tooltip naming ⌘\ or
+  Ctrl+\), 13px in from the view's top and left edges, then the search box filling the row
+  (`TreeFilterInput`, dense, in a 1px border): "Search the board", "Find a part, net or layer"; "Search
+  the schematic", "Find a part, net or sheet".
+- **Its tabs**, text, under the head, the open one underlined: a board's **Circuit** then
+  **Layers**, a schematic's **Circuit** then, for more than one sheet, **Hierarchy**. Arrow keys move
+  between them. The tab shown is the person's, by the kind of file (`toolStack.tabs`), the first at
+  first. Every tab stays mounted, and each keeps its own scroll.
+- **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
+  a board's parts in the schematic blocks their footprints record (a sheet's name without
+  `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its
+  pads, then Nets (the `unconnected-(...)` pins shut under their own group); a schematic's blocks the
+  sheets the parts are placed on, each part's pins under it. A block's name selects every part in it, a
+  chip each, a part's, pad's or net's selects it as a click on the picture does, and each frames what it
+  picked (a schematic shows the sheet it is on), opening and scrolling nothing; a group's name (Nets, the
+  unconnected pins) is a label: only a row's chevron opens or shuts it. It opens as its blocks and "Nets
+  (N)", a block of several parts and the Nets shut; a pick on the picture opens its row's owners and
+  scrolls it into view. A selected net is lit and the rest stepped back, as KiCad's net highlight.
+- **The Layers** (`board/LayersSection.jsx`), KiCad's Appearance panel's Layers tab: **View** (a
+  settings section, `board/BoardDisplay.jsx`: **Preset**, the modes as a Select — Board, Copper,
+  Assembly, Placement, and Custom while the eyes have left the mode's set — and **Side**, Top or
+  Bottom); then the layers, grouped Front, Inner, Back, Other, each its colour, name, count and eye, a
+  press on a board layer's row making it the active layer (a filled dot after its name), drawn on top;
+  then **Layer display**: **Others** (KiCad's high-contrast modes, a Select: every layer but the active
+  one **Shown**, **Dimmed** or **Hidden**; the outline, and with a copper layer active every drill and
+  via through it, stay at full strength; **Ctrl+H** (⌘H) cycles them while the board has the keyboard),
+  **Pours** (a checkbox, while copper is drawn), and the **Zones**' (60%) and **Tracks**' (100%)
+  opacities, sliders with their committed values. Its rows are the settings form's (see
+  [Display settings](#display-settings-and-section-primitives)). All of it is the board's Display
+  (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display` draws too; the board has no view
+  controls on the strip.
+- **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
+  file's name) and the sheets each places, in page order, each row its page number, every sheet open,
+  the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
+- **Search is the panel's.** What is typed searches every tab: the tabs step aside and the body lists
+  each tab's hits under its name — the layers or sheets whose names match first, then the Circuit's
+  ranked hits (its arrows and Enter walk and pick them) — a tab with none left out, and one line when
+  nothing matches. Escape or the box's X clears it and the tabs come back.
+- **Collapsed, it goes whole.** **Hide panel** takes it away and leaves its toggle on the same pixel,
+  alone on a pill over the canvas (**Show panel**, lucide's PanelLeftOpen, the strip's surface), so a
+  second press undoes the first. No rail, no hover reveal, and a pick on the picture never opens it.
+  ⌘\ (Ctrl+\) shows and hides it, and / opens it with the keyboard in its search, while the view has
+  the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
+  width (`toolStack.panels.flat`: 248px at first, 200px to half the view, from a grip on its right
+  edge, Left/Right by 16px).
+- **Under 1024px of view** it is never docked: it starts collapsed, and the pill opens it over the
+  canvas, a scrim behind it; Escape or a press on the scrim closes it. **On a phone** (under 600px) the
+  pill is a touch tile at the left of the strip's line, and the panel opens as the whole view, **Back
+  to the view** in its toggle's place; a row pressed closes it, the pick made, and Quick Edit's sheet
+  keeps the bottom.
 
 **The tool stack** (`ToolStack`) is the column under the strip and the sub-toolbar, centred
 with them, for a renderer's own `toolPanels`. STEP and the robot renderer hand none: their
@@ -723,24 +759,9 @@ menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
-DXF view has no Display or Preview control. A native KiCad board has two view controls, each a
-stock dropdown from its own tile, hinted by its name (`board/BoardDisplay.jsx`): **Display**, the
-mode on screen's glyph, its layer presets (Board, Copper, Assembly, Placement, and Custom while
-it applies) as a radio group under a muted **Display modes** label, a choice closing it; then
-**Settings**, a sliders glyph, its switches under a muted **Settings** label — Copper pours (while
-copper is drawn) and View from below, checkbox items — then a rule and **Other layers**, KiCad's
-high-contrast modes, a radio group under its muted label: **Shown**, **Dimmed** or **Hidden** (every
-layer but the active one as it is, faded, or not drawn; the board's outline, and with a copper layer
-active every drill and every via through it, stay at full strength in both, so the active layer is
-never seen without its bearings), a choice leaving the menu open; **Ctrl+H** (⌘H) cycles the three while
-the board has the keyboard, as KiCad's does (a Mac's ⌘H is the system's Hide where the browser keeps
-it; Ctrl+H is the board's there too) — then a rule and **Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
-its glyph and name where an item's are, a slider and its committed percentage (Enter or blur
-commits; Escape in the value puts it back and keeps the menu open), the menu 14rem wide for them;
-a slide, a tick or a choice of Other layers leaves it open. On a phone the strip's More has a submenu of each, Display then
-Settings. Its Layers sidebar can override a preset, shown as Custom, and chooses the active layer
-Other layers keeps bright; the active layer, Other layers and the opacities are kept through a change of mode. It
-has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
+DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
+settings are its panel's Layers tab (see [A flat view's panel](#the-file-sidebar-and-the-tool-stack)),
+and it has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
 net dim with it (`board2d/boardOverlay.js`), and its layer swatches; a switch of theme draws it
@@ -1188,9 +1209,12 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   a note; in an empty box it closes the box and is also the viewer's own Escape
   (it clears the selection). ⌘C or Ctrl+C with none of its text selected is the
   viewer's copy.
-- **Ctrl+H** (⌘H) on a KiCad board cycles Settings' Other layers, Shown, Dimmed, Hidden and round, as
+- **Ctrl+H** (⌘H) on a KiCad board cycles the Layers tab's Others, Shown, Dimmed, Hidden and round, as
   KiCad's high-contrast key does, while the board has the keyboard (as Escape's viewer, above); no
   other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
+- **⌘\\** (Ctrl+\\) on a KiCad board or schematic shows and hides its panel, and **/** opens it with
+  the keyboard in its search, while the view has the keyboard; in the search box, Escape clears what is
+  typed, then (over the canvas or on a phone) closes the panel.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.

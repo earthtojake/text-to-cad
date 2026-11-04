@@ -25,7 +25,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
+import { readBoardDisplay } from "./BoardDisplay.jsx";
 import BoardSection from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
@@ -55,11 +55,11 @@ import { useBoardView } from "./useBoardView.js";
  * draws on the board, and Measure, between points snapped to pad, via and hole centres, track ends
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
- * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
- * Circuit (its parts in their schematic blocks, and its nets) and its Layers (each layer's eye, and a
- * row's press for the active layer), each tile its own glyph; its view controls are its Display (the
- * modes) and its Settings (the pours, the side, Other layers and the zones' and tracks'
- * opacities): one contract with `cad <type> snapshot --display`. A payload without its
+ * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its panel
+ * (`kit/shell/FlatPanel.jsx`) is a search over two tabs, the Circuit (its parts in their schematic
+ * blocks, and its nets) and the Layers (the board's view settings — preset, side, the other layers,
+ * the pours and the zones' and tracks' opacities, `BoardDisplay.jsx` — and each layer's eye, a row's
+ * press for the active layer): one contract with `cad <type> snapshot --display`. The strip has no view controls. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  */
 
@@ -434,12 +434,14 @@ function BoardSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : [];
-  const sidebar = layered || index ? <>
-    {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
-      onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> : null}
-    {layered ? <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> : null}
-  </> : null;
+  // The panel (`kit/shell/FlatPanel.jsx`): the Circuit, then the Layers with the board's view settings.
+  const panelTabs = [
+    ...(index ? [{ id: "circuit", label: t("board.text.circuit"), searchLast: true, content: <BoardSection index={index} selection={selection} isolated={isolation.isolated}
+      onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> }] : []),
+    ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> }] : [])
+  ];
+  const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
+    searchPlaceholder: t("board.text.search_board_placeholder"), tabs: panelTabs } : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps a crosshair (Annotate's layer has its own).
@@ -449,8 +451,8 @@ function BoardSurface({ view, data }) {
   return (
     <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views}
-      sidebar={sidebar} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={[]}
+      panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}

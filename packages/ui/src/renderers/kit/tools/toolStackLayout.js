@@ -1,12 +1,15 @@
 // The tool stack's layout, a viewing preference of the person's rather than of a file: the tab
-// keeps it (`settings.toolStack` of the tab record) and it holds across files. Two things, and
+// keeps it (`settings.toolStack` of the tab record) and it holds across files. Three things, and
 // nothing else (any other key a stored record carries is dropped):
 //
 //   panels     for each panel a person can size (`ToolPanel.jsx`'s `resizable`), the width and
 //              the height cap they dragged it to, by panel id, and each file sidebar section's
 //              panel (`fileSidebarSizeId`: `sidebar:<id>`) — only what they set; a panel opens at its
 //              defaults otherwise (`TOOL_PANEL_WIDTH`, and `toolPanelDefaultHeight`: the stack's height);
-//   collapsed  which panels and sidebar sections are folded to their first row, by id.
+//   collapsed  which panels and sidebar sections are folded to their first row, by id (a flat
+//              view's panel, `flat`, collapsed: `FlatViewFrame.jsx`);
+//   tabs       the tab a flat view's panel shows, by the kind of file (`board`: `layers`); absent
+//              until one is chosen.
 //
 // Importing this module has no environmental effects.
 
@@ -37,10 +40,17 @@ const PANEL_ID = /^[a-z][a-z0-9-]{0,31}(?::[a-z][a-z0-9-]{0,31})?$/;
 const MAX_PANELS = 32;
 
 export const DEFAULT_TOOL_STACK = Object.freeze({ panels: Object.freeze({}), collapsed: Object.freeze({}) });
+// A tab's id, as a panel's is: a short word.
+const TAB_ID = /^[a-z][a-z0-9-]{0,31}$/;
 
 const finite = value => typeof value === "number" && Number.isFinite(value);
 const bounded = (value, floor) => finite(value) && value > 0 ? Math.round(Math.min(MAX_STORED_PX, Math.max(floor, value))) : undefined;
 const record = value => value && typeof value === "object" && !Array.isArray(value) ? Object.entries(value).slice(0, MAX_PANELS) : [];
+const words = value => {
+  const kept = {};
+  for (const [id, word] of record(value)) if (TAB_ID.test(id) && typeof word === "string" && TAB_ID.test(word)) kept[id] = word;
+  return kept;
+};
 const flags = value => {
   const kept = {};
   for (const [id, flag] of record(value)) if (PANEL_ID.test(id) && typeof flag === "boolean") kept[id] = flag;
@@ -51,8 +61,8 @@ const flags = value => {
  * The layout the stack is drawn with, from anything a store handed back: the sizes of the panels a
  * person has set (`{ width?, height? }` by id, each bounded; a panel with neither is absent),
  * and the panels whose folded state differs from nothing at all (`true` folded, `false` unfolded
- * against a panel that starts folded).
- * @returns {{ panels: Record<string, { width?: number, height?: number }>, collapsed: Record<string, boolean> }}
+ * against a panel that starts folded), and the tab each kind of flat view's panel shows.
+ * @returns {{ panels: Record<string, { width?: number, height?: number }>, collapsed: Record<string, boolean>, tabs?: Record<string, string> }}
  */
 export function normalizeToolStack(value) {
   const panels = {};
@@ -61,7 +71,9 @@ export function normalizeToolStack(value) {
     const width = bounded(size.width, isFileSidebarSize(id) ? FILE_SIDEBAR_MIN_WIDTH : TOOL_PANEL_WIDTH), height = bounded(size.height, TOOL_PANEL_MIN_HEIGHT);
     if (width !== undefined || height !== undefined) panels[id] = { ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}) };
   }
-  return { panels, collapsed: flags(value?.collapsed) };
+  const tabs = words(value?.tabs);
+  // No tab chosen is no key: a stack without a flat view's panel reads as it always has.
+  return { panels, collapsed: flags(value?.collapsed), ...(Object.keys(tabs).length ? { tabs } : {}) };
 }
 
 /**

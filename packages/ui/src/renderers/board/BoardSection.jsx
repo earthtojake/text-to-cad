@@ -1,6 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
 import { useMemo } from "react";
-import { CircuitBoard } from "lucide-react";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
 import { boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
@@ -11,7 +10,7 @@ const CLOSED = Object.freeze(["group:nets"]);
 const KIND_GLYPHS = Object.freeze({ part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
 
 /**
- * A board's **Circuit**, a tab of the file sidebar (`boardTree.js`): its parts in blocks — the
+ * A board's **Circuit**, a tab of the view's panel (`boardTree.js`): its parts in blocks — the
  * schematic sheets their footprints record, else their kinds — each part with its pads, then its
  * nets, each with the pads on it, as the kit's Circuit tree draws one (`kit/inspector/CircuitTree.jsx`:
  * its filter, a part's reference, value, footprint name and MPN, a net's name; its rules for what opens,
@@ -25,10 +24,6 @@ const KIND_GLYPHS = Object.freeze({ part: PartKindIcon, pad: PadKindIcon, net: N
 export default function BoardSection({ index, ...props }) {
   const { t } = useI18n();
   const tree = useMemo(() => buildBoardTree(index, t), [index, t]);
-  const panel = useMemo(() => ({
-    id: "board", label: t("board.text.circuit"), icon: CircuitBoard, filterLabel: t("board.text.filter_circuit"),
-    listLabel: t("board.text.board_parts_and_nets"), treeLabel: t("board.text.board"), resultsLabel: t("board.text.board_search_results"),
-    nothingMatches: query => t("board.text.nothing_on_the_board_matches_query", { query })
-  }), [t]);
+  const panel = useMemo(() => ({ listLabel: t("board.text.board_parts_and_nets"), treeLabel: t("board.text.board"), resultsLabel: t("board.text.board_search_results") }), [t]);
   return <CircuitTree tree={tree} nodeIdsOf={boardTreeNodeIds} glyphs={KIND_GLYPHS} closedGroups={CLOSED} data="board" panel={panel} {...props} />;
 }

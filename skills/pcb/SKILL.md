@@ -205,15 +205,16 @@ download: give its path. Never screenshot the viewer to check your own work; rev
 The board view supports layers, selection, Measure, annotations and Quick Edit. Select works as
 KiCad's: a click picks a part, pad, track, via, zone, rule area, text, dimension or graphic, as its
 Selection Filter ticks them (locked items only when the person ticks them), and a drag names an
-area, a box on the layer the person works on. The sidebar's **Circuit** lists the parts in the
+area, a box on the layer the person works on. The panel at the left (⌘\ or Ctrl+\ hides and shows
+it, / searches it) has one search over two tabs. Its **Circuit** lists the parts in the
 schematic blocks their footprints record (by kind on a board that records none) and the nets: a
 block picks every part in it, a net picks the whole net. Each arrives as a reference
-([checks](references/checks.md#references) says what each names and how to resolve it). The
-**Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
-Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Other
-layers (KiCad's high-contrast modes: the layers but the active one **Shown**, **Dimmed** or **Hidden**,
-Ctrl+H cycling them; the outline, and the drills and vias through an active copper layer, always stay
-at full strength) and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
+([checks](references/checks.md#references) says what each names and how to resolve it). Its
+**Layers** tab is KiCad's Appearance panel: the preset (the mode) and the side, then each layer's eye
+and a press for the active layer (drawn on top), then the layer display — Other layers (KiCad's
+high-contrast modes: the layers but the active one **Shown**, **Dimmed** or **Hidden**, Ctrl+H cycling
+them; the outline, and the drills and vias through an active copper layer, always stay at full
+strength), the copper pours and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
@@ -242,7 +243,8 @@ solid inferred from the 2D plot.
 ## Schematic views
 
 `cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
-selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy**, after the Circuit, is KiCad's
+selection, Measure, annotations and Quick Edit, and its panel: one search over the **Circuit** and,
+for more than one sheet, the **Hierarchy**. The Hierarchy is KiCad's
 Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
 Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
 junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.

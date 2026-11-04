@@ -45,7 +45,7 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
  * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
  * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
- * drawn, as a board draws none. Its sidebar is the Circuit (`SchematicSection.jsx`, a board's tree rules)
+ * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Circuit (`SchematicSection.jsx`, a board's tree rules)
  * and, for a schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
  * Navigator: a press shows that sheet, the way back up from one entered); a double-click on a sheet
  * symbol enters its sheet. Each sheet keeps its view for the session: going back to one finds it where it was left.
@@ -445,18 +445,21 @@ function SchematicSurface({ view, data }) {
   const selectMenu = <SchematicSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
   const toolRow = row;
-  const sidebar = index ? <>
-    <SchematicSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
-      onSelect={() => selectTool(SCHEMATIC_TOOL.SELECT)} />
-    {index.order.length > 1 ? <SheetsSection index={index} shown={shownSheet} onShow={showSheet} onHover={selector => selection.hover(selector)} /> : null}
-  </> : null;
+  // The panel (`kit/shell/FlatPanel.jsx`): the Circuit, then, for more than one sheet, the Hierarchy.
+  const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
+    searchPlaceholder: t("schematic.text.search_schematic_placeholder"), tabs: [
+      { id: "circuit", label: t("board.text.circuit"), searchLast: true, content: <SchematicSection index={index} selection={selection} isolated={isolation.isolated}
+        onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={() => selectTool(SCHEMATIC_TOOL.SELECT)} /> },
+      ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}
+        onShow={showSheet} onHover={selector => selection.hover(selector)} /> }] : [])
+    ] } : null;
   const cursor = measuring ? "cursor-crosshair" : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
     <FlatViewFrame surface={SCHEMATIC_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("schematic.text.reading_schematic")}
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
-      toolRow={index ? toolRow : null} views={[]} sidebar={sidebar} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
+      toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
       shown={shown} onReload={view.reload}>
       <canvas ref={canvasRef} aria-label={t("schematic.text.schematic_file", { file: view.file.name, sheet: shownSheet && index ? index.sheetName(shownSheet) : "" })}

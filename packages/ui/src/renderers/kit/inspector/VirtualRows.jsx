@@ -8,7 +8,7 @@ export const VIRTUAL_ROWS_OVERSCAN = 12;
 
 function scrollerOf(element) {
   // In the file sidebar a section does not scroll: the bar does, as one.
-  const panel = element.closest('[data-file-sidebar-scroller]') || element.closest('[data-tool-panel-body]');
+  const panel = element.closest('[data-file-sidebar-scroller]') || element.closest('[data-flat-panel-scroller]') || element.closest('[data-tool-panel-body]');
   if (panel) return panel;
   for (let node = element.parentElement; node; node = node.parentElement) {
     if (/(auto|scroll|overlay)/.test(getComputedStyle(node).overflowY)) return node;

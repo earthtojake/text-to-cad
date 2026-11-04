@@ -7,9 +7,9 @@ import {
   ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides,
   TreeRowLabel, TreeRowSurface, treeRowActionsClass, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
-import { TreeFilterHighlight, TreeFilterInput } from "@cad/ui/primitives/tree-filter";
+import { TreeFilterHighlight } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
-import ToolPanel from "../tools/ToolPanel.jsx";
+import { useFlatPanel } from "../shell/FlatPanel.jsx";
 import { useTreeSearch } from "./modelTreeSearch.js";
 import { openUntilChoice } from "./treeExpansion.js";
 import VirtualRows, { revealRow } from "./VirtualRows.jsx";
@@ -125,10 +125,12 @@ export function treeAncestors(tree, id) {
 }
 
 /**
- * A **Circuit**, a tab of the file sidebar: a board's (`board/BoardSection.jsx`) and a schematic's
+ * A **Circuit**, a tab of a flat view's panel (`kit/shell/FlatPanel.jsx`): a board's (`board/BoardSection.jsx`) and a schematic's
  * (`schematic/SchematicSection.jsx`) — its parts in blocks, each part with its pins or pads, then its
- * nets, each with the pins on it — as a tree is drawn in the sidebar (`settings-ui.md`): headed by its
- * filter, dense rows mounted as they scroll into view (`VirtualRows`). The pointer on a row lights
+ * nets, each with the pins on it — as a tree is drawn in a panel (`settings-ui.md`): dense rows mounted
+ * as they scroll into view (`VirtualRows`). The panel's search box searches it: while something is
+ * typed, its ranked hits replace its rows (the arrow keys walk them, Enter picks), and with none it
+ * draws nothing, so the panel leaves it out. The pointer on a row lights
  * what it names on the picture; a press on a part, a pin or a net selects it (Shift, Ctrl or Cmd adds or
  * takes away), as a click on the picture does, under any tool, and frames it; a press on a block's name
  * selects every part in it, a chip each, and frames them; a part's or a net's eye isolates it. It opens
@@ -141,8 +143,7 @@ export function treeAncestors(tree, id) {
  *
  * @param {{ tree: { roots: object[], nodesById: Map<string, object>, parents: Map<string, string> },
  *   nodeIdsOf(id: string): string[], glyphs: Record<string, import("react").ComponentType<any>>,
- *   closedGroups?: readonly string[], data: string, panel: { id: string, label: string, icon: import("react").ComponentType<any>,
- *   filterLabel: string, listLabel: string, treeLabel: string, resultsLabel: string, nothingMatches(query: string): string },
+ *   closedGroups?: readonly string[], data: string, panel: { listLabel: string, treeLabel: string, resultsLabel: string },
  *   selection: ReturnType<typeof import("../tools/select/useSceneSelection.js").useSceneSelection>,
  *   isolated: readonly string[], onIsolate(id: string): void, onSelect(): void, onFrame?(ids: readonly string[]): void }} props
  *   A node names what it picks by `pick` (a block, every part in it, by `picks`). `nodeIdsOf`: the rows a pick's id stands for (a pad shows under its part and under its net); `data`: the rows'
@@ -187,7 +188,12 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
   onFrameRef.current = onFrame;
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
+  const flatPanel = useFlatPanel();
+  const pickedRef = useRef(flatPanel?.picked);
+  pickedRef.current = flatPanel?.picked;
   const choose = useCallback((node, event) => {
+    // A row pressed: on a phone, the panel gives the view back, the pick on it.
+    pickedRef.current?.();
     if (node.picks) {
       // A block: every part in it, one selection, a chip each; with Shift, Ctrl or Cmd, added to what is selected.
       onSelectRef.current?.();
@@ -211,7 +217,13 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
     setTimeout(() => { pressedInTree.current = false; }, 0);
     choose(node, event);
   }, [choose]);
-  const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown } = useTreeSearch(tree.roots);
+  const search = useMemo(() => ({ query: flatPanel?.query ?? "" }), [flatPanel?.query]);
+  const { searching, found, cursorId, listRef, onKeyDown } = useTreeSearch(tree.roots, search);
+  // The panel's search box walks the hits with the arrows and picks with Enter.
+  const keysRef = useRef(onKeyDown);
+  keysRef.current = onKeyDown;
+  const registerKeys = flatPanel?.registerKeys;
+  useEffect(() => registerKeys?.(event => keysRef.current(event)), [registerKeys]);
 
   // A pick on the board opens its row's owners, and its row comes into view, once; a press in the
   // tree (above) does neither. A search hit's press does, once its filter is cleared: its row was not in view.
@@ -251,23 +263,18 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
     return <MemoCircuitSearchRow match={match} selected={highlighted.has(id)} isolated={isolatedIds.has(id)} cursor={id === cursorId}
       choose={choose} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} />;
   };
-  // Headed by its filter, always there: Escape or its X clears it.
-  return <ToolPanel id={panel.id} label={panel.label} fit="tree" resizable collapsible={false} icon={panel.icon}
-    header={<TreeFilterInput label={panel.filterLabel} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onKeyDown} dense
-      yieldWhileTyping className="px-0 shadow-none" />}>
-    <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
-      <div ref={listRef} className="px-1 py-1" onClick={event => { if (!event.target.closest("li,button,input")) clear(); }}>
-        {searching ? <p role="status" className="px-2 py-1 text-muted-foreground">
-          {found.total > matches.length ? t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}
+  return <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
+    <div ref={listRef} className="px-1" onClick={event => { if (!event.target.closest("li,button,input")) clear(); }}>
+      {searching ? matches.length ? <div data-flat-panel-hit="">
+        {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground">
+          {t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() })}
         </p> : null}
-        {searching ? matches.length
-          ? <VirtualRows key="search" aria-label={panel.resultsLabel} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}
-            rowKey={at => matches[at].entry.node.id} rowProps={at => ({ className: "min-w-0", "data-search-row": matches[at].entry.node.id })} renderRow={renderSearchRow} />
-          : deferredQuery.trim() ? <p className="px-3 py-6 text-center text-muted-foreground">{panel.nothingMatches(deferredQuery.trim())}</p> : null
+        <VirtualRows key="search" aria-label={panel.resultsLabel} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}
+          rowKey={at => matches[at].entry.node.id} rowProps={at => ({ className: "min-w-0", "data-search-row": matches[at].entry.node.id })} renderRow={renderSearchRow} />
+      </div> : null
         : <VirtualRows key="tree" aria-label={panel.treeLabel} count={rows.length} rowHeight={rowHeight} pinned={treePinned}
           rowKey={at => rows[at].node.id} rowProps={at => ({ className: "min-w-0", "aria-level": rows[at].depth + 1 })}
           renderRow={renderTreeRow} registerRow={registerRow} />}
-      </div>
     </div>
-  </ToolPanel>;
+  </div>;
 }

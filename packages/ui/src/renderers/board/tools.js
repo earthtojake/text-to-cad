@@ -10,7 +10,7 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // or Shift, pans, the wheel, a trackpad's two-finger scroll or a pinch zooms, a double-click fits;
 // Pencil and Shapes draw on the board; Measure takes
 // distances between points snapped to its pad, via and hole centres, its track ends and its
-// outline's corners, in millimetres (a drag pans under it). Its one view control is its Display.
+// outline's corners, in millimetres (a drag pans under it). Its view settings are its panel's Layers tab.
 export const BOARD_TOOL = FLAT_TOOL;
 
 export const BOARD_TOOL_MODES = createToolModes({
@@ -26,4 +26,4 @@ export {
 export const BOARD_NO_CAMERA = "A board is drawn flat and head on: it has no camera to pose. "
   + "Zoom and pan it in the view, or call resetCamera to fit the whole board again.";
 export const BOARD_NO_DISPLAY = "A board's Display (its mode, the side it is seen from, its copper pours and the layers drawn) "
-  + "is the person's, set in the view's Display and Settings menus and its Layers; it has no surfaces, lighting or render mode.";
+  + "is the person's, set in the Layers tab of the view's panel; it has no surfaces, lighting or render mode.";

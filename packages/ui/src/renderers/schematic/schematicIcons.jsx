@@ -1,7 +1,6 @@
 /**
  * A schematic's glyphs, on lucide's 24-unit grid and in the board's one line (1.7, round:
- * `../board/boardIcons.jsx`), outlines only, so each reads at the strip's 14px: the sidebar's tabs —
- * the Circuit, a resistor between two wires; the Hierarchy, a sheet with two sheets under it — and the
+ * `../board/boardIcons.jsx`), outlines only, so each reads at the strip's 14px: the
  * kinds a pick names, in Quick Edit's chips and the Circuit's rows: a symbol (a resistor's zigzag body
  * with its leads), a pin (a lead with its end dot), a net (two pins and the wire between them, a label's
  * flag on it), a sheet (a sheet symbol, its pins' flags on its edge), a label (a flag), a wire (a bent
@@ -16,9 +15,6 @@ const icon = (name, children) => {
   SchematicIcon.displayName = name;
   return SchematicIcon;
 };
-
-export const HierarchyTabIcon = icon("HierarchyTabIcon", <><rect x="8" y="2.5" width="8" height="6" rx="1" /><rect x="2.5" y="15.5" width="8" height="6" rx="1" />
-  <rect x="13.5" y="15.5" width="8" height="6" rx="1" /><path d="M12 8.5v3.5M6.5 12h11M6.5 12v3.5M17.5 12v3.5" /></>);
 
 export const SymbolKindIcon = icon("SymbolKindIcon", <path d="M12 2.5v4l3 1.5-6 3 6 3-6 3 3 1.5v4" />);
 export const PinKindIcon = icon("PinKindIcon", <><path d="M3.5 12h12" /><circle cx="18.5" cy="12" r="2.5" fill="currentColor" /></>);

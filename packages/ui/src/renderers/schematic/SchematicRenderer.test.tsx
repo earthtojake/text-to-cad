@@ -122,7 +122,7 @@ const zoomIn = async (pane: HTMLElement) => {
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 
-it('opens on the root sheet, read with the index, drawn in the theme, with a Hierarchy and a Circuit and no view controls', async () => {
+it('opens on the root sheet, read with the index, drawn in the theme, its panel the Circuit then the Hierarchy, and no view controls', async () => {
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
@@ -131,6 +131,11 @@ it('opens on the root sheet, read with the index, drawn in the theme, with a Hie
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  // The panel: one search over both tabs, the Circuit open first.
+  const panel = pane.querySelector<HTMLElement>('[data-flat-panel]')!;
+  expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Find a part, net or sheet');
+  expect(within(panel).getAllByRole('tab').map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Hierarchy', 'false']]);
+  fireEvent.click(within(panel).getByRole('tab', { name: 'Hierarchy' }));
   // The Hierarchy: the root by its file's name, Load under it, the root shown.
   const rows = [...pane.querySelectorAll<HTMLElement>('[data-schematic-sheet-row]')];
   expect(rows.map(row => [row.dataset.schematicSheetRow, row.textContent])).toEqual([['/', 'divider1'], ['/Load/', 'Load2']]);
@@ -153,6 +158,7 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   // The root zoomed in before leaving it: coming back finds it as it was left.
   await zoomIn(pane);
   const left = { ...frames.at(-1)! };
+  await user.click(within(pane).getByRole('tab', { name: 'Hierarchy' }));
   await user.click(within(pane).getByRole('button', { name: 'Show sheet Load' }));
   await onSheet(pane, '/Load/');
   expect(reads).toEqual(['?sheet=%2F', '?sheet=%2FLoad%2F&index=0']);
@@ -160,7 +166,9 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   expect(pane.querySelector('[data-schematic-trail]')).toBeNull();
   const fitted = { ...frames.at(-1)! };
   expect(fitted.scale).toBeLessThan(left.scale);
-  await user.click(within(pane).getByRole('button', { name: 'Show sheet divider' }));
+  // A sheet found by the panel's search is shown from its hit, the tree stepping aside.
+  fireEvent.change(within(pane).getByRole('textbox', { name: 'Search the schematic' }), { target: { value: 'divid' } });
+  await user.click(within(pane.querySelector<HTMLElement>('[data-flat-panel-section="hierarchy"] [data-flat-panel-hit]')!).getByRole('button', { name: 'Show sheet divider' }));
   await onSheet(pane, '/');
   await waitFor(() => expect(frames.at(-1)).toEqual(left));
   // The sheet's symbol, double-clicked, enters it: read before, so read no more.

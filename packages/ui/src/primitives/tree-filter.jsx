@@ -12,7 +12,7 @@ import { useI18n } from '@cad/ui/i18n';
  * the rows' glyph column and its text starts where their names do: the rows sit 4px in (their
  * list's padding), each glyph 5px further (`TREE_ROW_INSET_PX`) and 12px wide, its name 4px after it.
  */
-export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, yieldWhileTyping = false, dense = false, clearLabel: givenClearLabel, className, ...props }) {
+export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, inputRef, trailing, yieldWhileTyping = false, dense = false, clearLabel: givenClearLabel, className, ...props }) {
   const { t } = useI18n();
   const clearLabel = givenClearLabel ?? t('tree.clearFilter');
   return <div {...props} data-slot="tree-filter" className={cn('group/filter flex shrink-0 items-center gap-1',
@@ -22,6 +22,7 @@ export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown
     <div className="relative flex min-w-0 flex-1 items-center">
       <Search className={cn('pointer-events-none absolute text-muted-foreground', dense ? 'left-1.5 size-2.5' : 'left-[5px] size-3')} />
       <input
+        ref={inputRef}
         aria-label={label}
         className={cn('w-full min-w-0 rounded-md bg-transparent pr-5 outline-none placeholder:text-muted-foreground',
           dense ? 'h-5 pl-5 text-tiny' : 'h-6 pl-[21px] text-xs focus:bg-background/70')}
