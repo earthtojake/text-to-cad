@@ -102,8 +102,9 @@ function BoardSurface({ view, data }) {
   const [stored] = useState(() => readFileView(view.state, SLICES));
   const [restored] = useState(() => readTransform(stored.camera));
   const [display, setDisplay] = useState(() => readBoardDisplay(stored.renderer.board));
-  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated));
-  const isolation = useIsolation({ index, restored: restoredIsolation });
+  const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
+  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
+  const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
   const saved = useRef({ camera: restored, display, isolated: restoredIsolation });
   const storedRef = useRef("");
   const saveTimer = useRef(0);

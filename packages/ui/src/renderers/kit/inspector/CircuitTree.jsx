@@ -37,7 +37,7 @@ function IsolateEye({ node, on, onToggle, data }) {
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(on ? "tree.exitIsolateNamed" : "tree.isolateNamed", { name: node.label })} aria-pressed={on}
         className={cn("h-5 w-4", on ? "text-foreground" : "text-muted-foreground")} {...{ [`data-${data}-isolate`]: node.id }}
-        onClick={event => { event.stopPropagation(); onToggle(node.selector); }}>
+        onClick={event => { event.stopPropagation(); onToggle(node.pick); }}>
         <Eye className="size-3" aria-hidden="true" />
       </Button>
     </TooltipHint>
@@ -61,7 +61,7 @@ function visibleRows(roots, expanded) {
 // One row of the tree: a block (a schematic sheet, or a kind), a group (Nets), a part, a net or a pad, with one
 // glyph in one column — a branch's chevron, a pad's own — its name, its muted detail, and a part's or net's eye.
 // A block's name selects every part in it; a group's name is a label, and does nothing. Only a branch's
-// chevron opens or shuts it, as the STEP tree's.
+// chevron opens or shuts it, as the model tree's.
 const ROW_NAME_CLASS = "flex h-full min-w-0 flex-1 items-center gap-1 pr-2 text-left";
 function RowName({ node }) {
   return <>
@@ -76,7 +76,7 @@ function CircuitRow({ node, depth, branch, open, selected, isolated, toggle, cho
   const eye = isolable(node);
   return <TreeRowSurface dense active={selected} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
     style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
-    onMouseEnter={() => hover(node.selector || "")} onMouseLeave={() => hover("")}>
+    onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
     <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
     {branch ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
       className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node)}>
@@ -102,7 +102,7 @@ function CircuitSearchRow({ match, selected, isolated, cursor, choose, hover, on
   const { entry, indices, alias } = match, { node } = entry;
   const eye = isolable(node);
   return <TreeRowSurface dense active={selected} cursor={cursor} className="group/row relative gap-0 pr-0"
-    style={eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : undefined} onMouseEnter={() => hover(node.selector || "")} onMouseLeave={() => hover("")}>
+    style={eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : undefined} onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
     <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} style={{ paddingLeft: TREE_ROW_INSET_PX }}
       className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
@@ -134,18 +134,18 @@ export function treeAncestors(tree, id) {
  * selects every part in it, a chip each, and frames them; a part's or a net's eye isolates it. It opens
  * as every tree does, until there is a choice (`treeExpansion.js`), but for a block of several parts and
  * the groups `closedGroups` names (the Nets), shut until the person opens them. Only a row's chevron
- * opens or shuts it, as the STEP tree's: a block's name selects its parts, a group's is a label. A pick
+ * opens or shuts it, as the model tree's: a block's name selects its parts, a group's is a label. A pick
  * on the picture opens its row's owners and brings it into view, once; a press in the tree opens and
  * scrolls nothing (its row is in view). From the first row the person opens or shuts, the shape is
  * theirs. The viewer is read-only: nothing here edits the file.
  *
  * @param {{ tree: { roots: object[], nodesById: Map<string, object>, parents: Map<string, string> },
- *   nodeIdsOf(selector: string): string[], glyphs: Record<string, import("react").ComponentType<any>>,
+ *   nodeIdsOf(id: string): string[], glyphs: Record<string, import("react").ComponentType<any>>,
  *   closedGroups?: readonly string[], data: string, panel: { id: string, label: string, icon: import("react").ComponentType<any>,
  *   filterLabel: string, listLabel: string, treeLabel: string, resultsLabel: string, nothingMatches(query: string): string },
  *   selection: ReturnType<typeof import("../tools/select/useSceneSelection.js").useSceneSelection>,
- *   isolated: readonly string[], onIsolate(selector: string): void, onSelect(): void, onFrame?(selectors: readonly string[]): void }} props
- *   `nodeIdsOf`: the rows a selector stands for (a pad shows under its part and under its net); `data`: the rows'
+ *   isolated: readonly string[], onIsolate(id: string): void, onSelect(): void, onFrame?(ids: readonly string[]): void }} props
+ *   A node names what it picks by `pick` (a block, every part in it, by `picks`). `nodeIdsOf`: the rows a pick's id stands for (a pad shows under its part and under its net); `data`: the rows'
  *   attributes' word (`data-<data>-row`); `onSelect`: a row pressed takes Select up, as a pick in any tree does;
  *   `onFrame`: what a press picked, framed.
  */
@@ -177,7 +177,7 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
     const rows = new Set(selected.flatMap(nodeIdsOf));
     const picked = new Set(selected);
     // A block is lit while every part in it is selected.
-    for (const node of tree.nodesById.values()) if (node.selectors?.length && node.selectors.every(id => picked.has(id))) rows.add(node.id);
+    for (const node of tree.nodesById.values()) if (node.picks?.length && node.picks.every(id => picked.has(id))) rows.add(node.id);
     return rows;
   }, [selected, tree, nodeIdsOf]);
   const isolatedIds = useMemo(() => new Set(isolated.flatMap(nodeIdsOf)), [isolated, nodeIdsOf]);
@@ -188,19 +188,19 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
   const selectedRef = useRef(selected);
   selectedRef.current = selected;
   const choose = useCallback((node, event) => {
-    if (node.selectors) {
+    if (node.picks) {
       // A block: every part in it, one selection, a chip each; with Shift, Ctrl or Cmd, added to what is selected.
       onSelectRef.current?.();
       if (!additive(event)) clear();
       const kept = new Set(additive(event) ? selectedRef.current : []);
-      for (const id of node.selectors) if (!kept.has(id)) select(id, { multiSelect: true });
-      onFrameRef.current?.(node.selectors);
+      for (const id of node.picks) if (!kept.has(id)) select(id, { multiSelect: true });
+      onFrameRef.current?.(node.picks);
       return;
     }
-    if (!node.selector) return;
+    if (!node.pick) return;
     onSelectRef.current?.();
-    select(node.selector, { multiSelect: additive(event) });
-    onFrameRef.current?.([node.selector]);
+    select(node.pick, { multiSelect: additive(event) });
+    onFrameRef.current?.([node.pick]);
   }, [select, clear]);
   // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing. The
   // selection it makes is marked as the tree's (`pressedInTree`), and the reveal below passes it by.

@@ -5,7 +5,7 @@ import { english } from "@cad/ui/i18n";
  * its **Hierarchy**, the sheets as KiCad's Hierarchy Navigator lists them, the root and the sheets each
  * places, in page order. Nodes are what the kit's tree search reads (`id`, `label`, `children`,
  * `selectionId` and `searchAliases`: a part's value, footprint name, symbol and MPN, a pin's name),
- * plus what the row selects (`selector`; a block's `selectors`, every part in it) and a muted `detail`.
+ * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
 import { parseSchematicRefSelector } from "@cad/core/lib/schematicRefs.js";
@@ -18,7 +18,7 @@ function pinNode(pin, { underNet = false } = {}) {
   const name = pin.name && pin.name !== pin.number && pin.name !== "~" ? pin.name : "";
   const key = `${pin.part}.${pin.number}`;
   return {
-    id: `${underNet ? "netpin" : "pin"}:${key}`, kind: "pin", selector: `#${key}`,
+    id: `${underNet ? "netpin" : "pin"}:${key}`, kind: "pin", pick: `#${key}`,
     // Under its part a pin is its number; under a net it is the part and the number.
     label: underNet ? key : pin.number,
     detail: underNet ? name : [name, pin.net].filter(Boolean).join(" · "),
@@ -55,7 +55,7 @@ export function buildSchematicTree(index, t = english) {
     if (!bySheet.has(sheet)) bySheet.set(sheet, []);
     const pins = (pinsOf.get(part.ref) || []).slice().sort((a, b) => naturalCompare(a.number, b.number));
     bySheet.get(sheet).push({
-      id: `part:${part.ref}`, kind: "part", selector: `#${part.ref}`, label: part.ref, detail: part.value || "",
+      id: `part:${part.ref}`, kind: "part", pick: `#${part.ref}`, label: part.ref, detail: part.value || "",
       selectionId: part.ref, children: pins.map((pin) => pinNode(pin)),
       searchAliases: [part.value, String(part.footprint || "").split(":").pop(), String(part.lib_id || "").split(":").pop(), part.mpn || part.fields?.MPN]
         .filter(Boolean)
@@ -63,11 +63,11 @@ export function buildSchematicTree(index, t = english) {
   }
   const blocks = [...bySheet.keys()].sort((a, b) => (page.get(a) ?? 1e9) - (page.get(b) ?? 1e9)).map((sheet) => ({
     id: `sheet:${sheet}`, kind: "block", label: sheet ? index.sheetName(sheet) : t("board.text.other"), detail: String(bySheet.get(sheet).length),
-    children: bySheet.get(sheet), selectors: bySheet.get(sheet).map((node) => node.selector)
+    children: bySheet.get(sheet), picks: bySheet.get(sheet).map((node) => node.pick)
   }));
   const listed = [...index.nets.values()].sort((a, b) => naturalCompare(a.name, b.name));
   const netNode = (net) => ({
-    id: `net:${net.name}`, kind: "net", selector: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
+    id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
     detail: t(net.pins.length === 1 ? "schematic.text.count_pin" : "schematic.text.count_pins", { count: net.pins.length }),
     selectionId: `net:${net.name}`, searchAliases: [],
     children: net.pins.slice().sort(naturalCompare).map((key) => index.pins.get(key)).filter(Boolean).map((pin) => pinNode(pin, { underNet: true }))

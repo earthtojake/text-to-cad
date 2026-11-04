@@ -1,5 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
+import SelectFilterChecklist from "../kit/tools/select/SelectFilterChecklist.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { BOARD_FILTER_GRID, BOARD_LOCKED, BOARD_SELECT_KINDS, boardFilterAll, readBoardFilter } from "./boardPick.js";
 
@@ -21,7 +21,7 @@ const BOXES = Object.freeze({
 const COUNTED = Object.freeze({ all: "select_filter_all", parts: "select_filter_parts" });
 
 /**
- * A board's Select filter: KiCad's Selection Filter, the kit's filter menu (`kit/tools/select/SelectFilterMenu.jsx`),
+ * A board's Select filter: KiCad's Selection Filter, the kit's filter menu (`kit/tools/select/SelectFilterChecklist.jsx`),
  * a grid of boxes in its two columns, row by row (`BOARD_FILTER_GRID`) — All items and Locked items, then Footprints and Text, Tracks and Vias,
  * Pads and Graphics, Zones and Rule Areas, Dimensions — in the chevron's dropdown after Select's
  * button (`ToolSettingsMenu`), headed "Pick", each box a stock checkbox item, its name alone (no
@@ -46,6 +46,6 @@ export default function BoardSelectFilter({ value, onChange, disabled = false })
     else onChange(readBoardFilter(on ? [...value, id] : value.filter(other => other !== id)));
   };
   const checked = id => (id === "all" ? (everything ? true : kinds.length ? "indeterminate" : false) : value.includes(id));
-  return <SelectFilterMenu grid={BOARD_FILTER_GRID} label={id => t(BOXES[id])} checked={checked} onToggle={toggle} mode={mode} disabled={disabled}
+  return <SelectFilterChecklist grid={BOARD_FILTER_GRID} label={id => t(BOXES[id])} checked={checked} onToggle={toggle} mode={mode} disabled={disabled}
     trigger={everything ? "all" : kinds.join(" ") || "none"} />;
 }

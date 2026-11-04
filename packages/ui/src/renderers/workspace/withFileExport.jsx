@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { useExportView } from "../../../export/context.js";
-import { useViewerHost } from "../../../host/context.js";
-import { useWorkspaceDocument } from "../../workspace/useWorkspaceDocument.js";
+import { useExportView } from "../../export/context.js";
+import { useViewerHost } from "../../host/context.js";
+import { useWorkspaceDocument } from "./useWorkspaceDocument.js";
 
 /**
  * A KiCad file's renderer (a board's, a schematic's) with Export: the file on screen published as the file menu's export source

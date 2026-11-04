@@ -6,7 +6,7 @@ const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transist
  * kinds (ICs, Resistors, ...) — each part with its pads, then its nets, each with the pads on it.
  * Nodes are what the kit's tree search reads (`id`, `label`, `children`, `selectionId` — the
  * reference a pasted `#U3.9` finds — and `searchAliases`: a part's value, footprint name and MPN),
- * plus what the row selects (`selector`; a block's `selectors`, every part in it) and a muted `detail`.
+ * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
 
@@ -62,14 +62,14 @@ export function buildBoardTree(index, t = english) {
     const seen = new Set();
     const pads = [...part.pads].filter((pad) => !seen.has(pad.number) && seen.add(pad.number)).sort((a, b) => naturalCompare(a.number, b.number));
     byKind.get(kind).push({
-      id: `part:${part.ref}`, kind: "part", selector: `#${part.ref}`, label: part.ref, detail: part.value,
+      id: `part:${part.ref}`, kind: "part", pick: `#${part.ref}`, label: part.ref, detail: part.value,
       selectionId: part.ref, searchAliases: [part.value, part.footprint.split(":").pop(), part.fields.MPN].filter(Boolean),
       children: pads.map((pad) => padNode(index.pads.get(`${pad.ref}.${pad.number}`) || pad)),
     });
   }
   const block = (key, label) => ({
     id: `${bySheet ? "sheet" : "kind"}:${key}`, kind: "block", label, detail: String(byKind.get(key).length), children: byKind.get(key),
-    selectors: byKind.get(key).map((node) => node.selector),
+    picks: byKind.get(key).map((node) => node.pick),
   });
   const parts = bySheet
     ? [...byKind.keys()].filter(Boolean).sort(naturalCompare).map((sheet) => block(sheet, sheet))
@@ -79,7 +79,7 @@ export function buildBoardTree(index, t = english) {
     .filter((net) => net.pads.length || net.tracks.length)
     .sort((a, b) => naturalCompare(a.name, b.name));
   const netNode = (net) => ({
-    id: `net:${net.name}`, kind: "net", selector: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
+    id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name,
     detail: t(net.pads.length === 1 ? "board.text.count_pad" : "board.text.count_pads", { count: net.pads.length }), selectionId: `net:${net.name}`, searchAliases: [],
     children: net.pads.map((pad) => ({ pad, key: `${pad.ref}.${pad.number}` })).sort((a, b) => naturalCompare(a.key, b.key)).map(({ pad }) => padNode(pad, { underNet: true })),
   });

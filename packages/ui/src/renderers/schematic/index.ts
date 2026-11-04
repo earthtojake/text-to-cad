@@ -51,9 +51,9 @@ export function createSchematicRenderer({ client, ...options }: SchematicRendere
       const prepared = await prepareWorkspaceEntry(client, context);
       return { ...prepared, data: { ...prepared.data, services } };
     },
-    // The renderer, with the file menu's Export of the schematic (`kit/shell/withFileExport.jsx`).
+    // The renderer, with the file menu's Export of the schematic (`workspace/withFileExport.jsx`).
     load: async () => {
-      const [{ default: Schematic }, { withFileExport }] = await Promise.all([import('./SchematicRenderer.jsx'), import('../kit/shell/withFileExport.jsx')]);
+      const [{ default: Schematic }, { withFileExport }] = await Promise.all([import('./SchematicRenderer.jsx'), import('../workspace/withFileExport.jsx')]);
       return { default: withFileExport(Schematic) as ComponentType<FileRendererProps<PreparedSchematicDocument>> };
     }
   });

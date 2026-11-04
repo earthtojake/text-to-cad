@@ -90,8 +90,9 @@ function SchematicSurface({ view, data }) {
   const document = useSchematicDocument({ workspace, path: view.file.path, sheet });
   const { file, plot, index, page, shown, alert } = document;
   const shownSheet = document.sheet;
-  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated));
-  const isolation = useIsolation({ index, restored: restoredIsolation });
+  const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
+  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
+  const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
   const saved = useRef({ camera: restored, sheet, isolated: restoredIsolation });
   const storedRef = useRef("");
   const saveTimer = useRef(0);

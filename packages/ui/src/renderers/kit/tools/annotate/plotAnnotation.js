@@ -1,7 +1,7 @@
 /**
  * Annotate on a plot — a board, a schematic's sheet (`@cad/core`'s `plot2d`): where its marks go, and how
  * they come back to the screen — the flat view's `surface` for the kit's Annotate layer
- * (`AnnotationOverlay.jsx`), as a drawing's is (`../../../dxf/drawingAnnotation.js`).
+ * (`AnnotationOverlay.jsx`), as a drawing's is.
  *
  * A mark drawn over a board (or a sheet: never mirrored) lies on the board: its screen points become sheet millimetres (x, y
  * down, the payload's page space: `@cad/core`'s `plot2d/boardView.js`) under the view as it

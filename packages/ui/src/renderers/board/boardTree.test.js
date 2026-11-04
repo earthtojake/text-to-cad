@@ -33,7 +33,7 @@ test("a board whose footprints record no sheet is its parts in blocks by kind, t
   assert.deepEqual(tree.roots.map((node) => `${node.label} ${node.detail}`), ["ICs 1", "Capacitors 2", "Nets 3"]);
   const parts = tree.roots.slice(0, 2);
   // A block selects every part in it.
-  assert.deepEqual(parts.map((node) => [node.kind, node.selectors]), [["block", ["#U1"]], ["block", ["#C2", "#C10"]]]);
+  assert.deepEqual(parts.map((node) => [node.kind, node.picks]), [["block", ["#U1"]], ["block", ["#C2", "#C10"]]]);
   assert.deepEqual(parts[1].children.map((node) => node.label), ["C2", "C10"], "natural order");
   // A pin of two pads is one row; a pad row says its pin's name and net.
   assert.deepEqual(parts[0].children[0].children.map((node) => [node.label, node.detail]), [["2", "VO · VIN"], ["4", "NC · unconnected-(U1-NC-Pad4)"]]);
@@ -60,7 +60,7 @@ test("a board whose footprints record their schematic sheets is its parts in tho
     { ref: "R9", value: "1k", footprint: "R_0603", side: "top", at: [30, 5], rotation: 0, fields: {}, outline: square(30, 5, 1, 1) }] }));
   assert.deepEqual(tree.roots.map((node) => [node.id, node.label, node.detail]),
     [["sheet:power", "power", "2"], ["sheet:regulator", "regulator", "1"], ["sheet:", "Other", "1"], ["group:nets", "Nets", "3"]]);
-  assert.deepEqual(tree.roots[0].selectors, ["#C2", "#C10"]);
+  assert.deepEqual(tree.roots[0].picks, ["#C2", "#C10"]);
   assert.deepEqual(boardTreeAncestors(tree, "pad:U1.2"), ["sheet:regulator", "part:U1"]);
   // The filter finds a part by its value, footprint name and MPN, and a net by its name.
   assert.deepEqual(tree.nodesById.get("part:C10").searchAliases, ["1u", "C_0603"]);

@@ -13,7 +13,7 @@ test("the Circuit is the parts in their sheets' blocks, each with its pins, then
   assert.deepEqual(tree.roots.map(node => [node.id, node.label, node.detail]), [
     ["sheet:/", "divider", "3"], ["sheet:/Load/", "Load", "2"], ["group:nets", "Nets", "5"]
   ]);
-  assert.deepEqual(tree.roots[0].selectors, ["#J1", "#R1", "#R2"]);
+  assert.deepEqual(tree.roots[0].picks, ["#J1", "#R1", "#R2"]);
   const r1 = tree.nodesById.get("part:R1");
   assert.deepEqual([r1.detail, r1.children.map(pin => [pin.id, pin.label, pin.detail])], ["10k", [["pin:R1.1", "1", "+5V"], ["pin:R1.2", "2", "/MID"]]]);
   const nets = tree.nodesById.get("group:nets").children;

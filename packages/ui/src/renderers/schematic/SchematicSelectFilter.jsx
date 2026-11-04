@@ -1,5 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
+import SelectFilterChecklist from "../kit/tools/select/SelectFilterChecklist.jsx";
 import { SCHEMATIC_FILTER_GRID, SCHEMATIC_SELECT_KINDS, readSchematicFilter } from "./tools.js";
 
 const BOXES = Object.freeze({
@@ -9,7 +9,7 @@ const BOXES = Object.freeze({
 
 /**
  * A schematic's Select filter: KiCad's Selection Filter, the kit's filter menu
- * (`kit/tools/select/SelectFilterMenu.jsx`) — All items, then Symbols and Pins, Wires and Labels, Sheets
+ * (`kit/tools/select/SelectFilterChecklist.jsx`) — All items, then Symbols and Pins, Wires and Labels, Sheets
  * and Other items (junctions, no-connects) — each box a checkbox and its name, no glyph. Ticking one
  * leaves the menu open and takes Select up; All items ticks or unticks every kind, a dash when some are.
  *
@@ -25,6 +25,6 @@ export default function SchematicSelectFilter({ value, onChange, disabled = fals
     else onChange(readSchematicFilter(on ? [...value, id] : value.filter(other => other !== id)));
   };
   const checked = id => (id === "all" ? (everything ? true : kinds.length ? "indeterminate" : false) : value.includes(id));
-  return <SelectFilterMenu grid={SCHEMATIC_FILTER_GRID} label={id => t(BOXES[id])} checked={checked} onToggle={toggle} mode={mode} disabled={disabled}
+  return <SelectFilterChecklist grid={SCHEMATIC_FILTER_GRID} label={id => t(BOXES[id])} checked={checked} onToggle={toggle} mode={mode} disabled={disabled}
     trigger={everything ? "all" : kinds.join(" ") || "none"} data="schematic" />;
 }
