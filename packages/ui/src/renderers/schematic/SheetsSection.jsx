@@ -59,7 +59,7 @@ export default function SheetsSection({ index, shown, onShow, onHover = () => {}
     <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel>
   </button>;
   if (found) {
-    return found.length ? <ul className="flex flex-col px-1 text-tiny" aria-label={t("schematic.text.schematic_sheets")} data-flat-panel-hit="">
+    return found.length ? <ul className="flex flex-col px-2 text-tiny" aria-label={t("schematic.text.schematic_sheets")} data-flat-panel-hit="">
       {found.map(node => <li key={node.id} className="min-w-0">
         <TreeRowSurface dense active={node.path === shown} className="relative gap-0 pr-0" style={{ paddingLeft: TREE_ROW_INSET_PX }} data-schematic-sheet-row={node.path}
           onMouseEnter={() => onHover(formatSheetSelector(node.path))} onMouseLeave={() => onHover("")}>
@@ -68,7 +68,7 @@ export default function SheetsSection({ index, shown, onShow, onHover = () => {}
       </li>)}
     </ul> : null;
   }
-  return <ul className="flex flex-col px-1 py-1 text-tiny" role="tree" aria-label={t("schematic.text.schematic_sheets")}>
+  return <ul className="flex flex-col px-2 py-1 text-tiny" role="tree" aria-label={t("schematic.text.schematic_sheets")}>
     {rows.map(({ node, depth, branch, open }) => {
       const active = node.path === shown;
       return <li key={node.id} role="treeitem" aria-level={depth + 1} aria-selected={active} aria-expanded={branch ? open : undefined} className="min-w-0">

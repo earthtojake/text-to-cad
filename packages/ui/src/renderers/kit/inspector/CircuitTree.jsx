@@ -264,7 +264,7 @@ export default function CircuitTree({ tree, nodeIdsOf, glyphs, closedGroups = EM
       choose={choose} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} />;
   };
   return <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
-    <div ref={listRef} className="px-1" onClick={event => { if (!event.target.closest("li,button,input")) clear(); }}>
+    <div ref={listRef} className="px-2" onClick={event => { if (!event.target.closest("li,button,input")) clear(); }}>
       {searching ? matches.length ? <div data-flat-panel-hit="">
         {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground">
           {t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() })}

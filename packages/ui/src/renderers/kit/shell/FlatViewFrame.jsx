@@ -27,10 +27,11 @@ import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH, FLAT_PANEL_MIN_WIDTH, FlatPanelPil
  * (`flatViewTools`), its view controls after the strip's rule (`views`), its panel's tabs (`panel`)
  * and Quick Edit's props (`useFlatHandover`'s `quickEdit`).
  *
- * The panel is docked while the view is 1024px wide or more, open until the person collapses it
- * (kept: `toolStack.collapsed.flat`, its width `toolStack.panels.flat`, its tab by the kind of
- * file `toolStack.tabs`); collapsed, its toggle stays on the same pixel, on a pill over the canvas.
- * Narrower, it starts collapsed and opens over the canvas; on a phone it opens as the whole view.
+ * The panel is docked, the canvas always the narrower for it while it is open. In a view 1024px wide
+ * or more it is open until the person collapses it (kept: `toolStack.collapsed.flat`, its width
+ * `toolStack.panels.flat`, its tab by the kind of file `toolStack.tabs`); narrower, it starts
+ * collapsed. Collapsed, its expand button stands on a pill at the canvas's top-left. On a phone it
+ * opens as the whole view.
  * ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search (`useFlatHandover`'s `panelControl`).
  *
  * While the picture loads, or once it has failed to, none of the viewer's own chrome: the load
@@ -44,8 +45,8 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
 // On a phone with a panel, its pill stands at the left of the strip's line (a 36px tile in 4px of padding and a border).
 const TOOLBAR_POSITION_PHONE_SIDEBAR = Object.freeze({ ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX + 46 + 8}px` });
-// Narrower than this, the panel is never docked: it opens over the canvas (GitHub's file tree, Webflow's panels).
-export const FLAT_PANEL_DOCK_PX = 1024;
+// Narrower than this, the panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
+export const FLAT_PANEL_OPEN_PX = 1024;
 const FLAT_PANEL_ID = "flat";
 
 /**
@@ -99,7 +100,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
   const sided = Boolean(panel?.tabs.length);
   const besideSidebarTile = mobile && sided;
 
-  // ---- the panel: docked, over the canvas, or the whole view, by the view's width ----
+  // ---- the panel: docked, or on a phone the whole view; open at first in a wide view ----
   const frameRef = useRef(null);
   const [frameWidth, setFrameWidth] = useState(0);
   useLayoutEffect(() => {
@@ -113,10 +114,12 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
     return () => observer.disconnect();
   }, []);
   // Unmeasured (jsdom), a view is wide.
-  const mode = mobile ? "page" : frameWidth && frameWidth < FLAT_PANEL_DOCK_PX ? "overlay" : "docked";
+  const mode = mobile ? "page" : "docked";
   const docked = mode === "docked";
-  const [floatingOpen, setFloatingOpen] = useState(false);
-  useEffect(() => { setFloatingOpen(false); }, [mode]);
+  // In a wide view it is the person's, kept; narrower, and on a phone, it starts collapsed each time.
+  const kept = docked && !(frameWidth && frameWidth < FLAT_PANEL_OPEN_PX);
+  const [sessionOpen, setSessionOpen] = useState(false);
+  useEffect(() => { setSessionOpen(false); }, [kept, mode]);
   // The layout as the person last changed it here, the host's store's once it answers (a host
   // without one keeps it for as long as the view is open).
   const [layout, setLayout] = useState(toolStack);
@@ -125,15 +128,15 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
     setLayout(current => ({ ...current, ...patch(current) }));
     onToolStackChange(patch);
   }, [onToolStackChange]);
-  const open = sided && !toolsHidden && (docked ? layout?.collapsed?.[FLAT_PANEL_ID] !== true : floatingOpen);
+  const open = sided && !toolsHidden && (kept ? layout?.collapsed?.[FLAT_PANEL_ID] !== true : sessionOpen);
   const setOpen = useCallback(next => {
-    if (!docked) { setFloatingOpen(next); return; }
+    if (!kept) { setSessionOpen(next); return; }
     changeStack(current => {
       const collapsed = { ...current?.collapsed };
       if (next) delete collapsed[FLAT_PANEL_ID]; else collapsed[FLAT_PANEL_ID] = true;
       return { collapsed };
     });
-  }, [docked, changeStack]);
+  }, [kept, changeStack]);
   const tabs = panel?.tabs ?? [];
   const storedTab = panel ? layout?.tabs?.[panel.kind] : undefined;
   const tab = tabs.some(entry => entry.id === storedTab) ? storedTab : tabs[0]?.id;
@@ -217,9 +220,8 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
             {compact || !quickEdit ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} />}
           </ViewportTopRight>
         </PreviewChrome>
-        {/* Collapsed, the panel's toggle stays where it was, alone on a pill over the canvas. */}
+        {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
         {sided && !toolsHidden && !open ? <FlatPanelPill touch={mobile} onOpen={() => setOpen(true)} /> : null}
-        {mode === "overlay" ? panelNode : null}
         {/* Where there is no strip (a compact host), the picture catching up says so at the top centre. */}
         {toolsHidden && updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">

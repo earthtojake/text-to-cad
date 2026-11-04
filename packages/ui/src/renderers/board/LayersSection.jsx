@@ -87,11 +87,11 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
   // Searching: the layers whose names match, as one list; none, nothing (the panel leaves the tab out).
   if (query) {
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
-    return found.length ? <ul className="px-1 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
+    return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
   return <div className="flex flex-col gap-1 pt-1 text-tiny">
     <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
-    <div className="border-t border-border px-1 pt-1" aria-label={t("board.text.board_layers")} data-board-layers="">
+    <div className="border-t border-border px-2 pt-1" aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
         <li className="flex h-6 items-center text-muted-foreground" style={{ paddingLeft: LAYER_ROW_INSET_PX }} aria-hidden="true">{group.label}</li>
         {group.layers.map(row)}

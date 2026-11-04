@@ -605,14 +605,15 @@ KiCad schematic's, in place of the file sidebar, after KiCad's Appearance panel:
 left edge, the full height of the view, on the background with a rule at its right, and the canvas
 the narrower for it (the strip centres on the canvas). Nothing else changes for the other views.
 
-- **Its head.** The toggle first, **Hide panel** (lucide's PanelLeftClose, its tooltip naming ⌘\ or
-  Ctrl+\), 13px in from the view's top and left edges, then the search box filling the row
-  (`TreeFilterInput`, dense, in a 1px border): "Search the board", "Find a part, net or layer"; "Search
-  the schematic", "Find a part, net or sheet".
-- **Its tabs**, text, under the head, the open one underlined: a board's **Circuit** then
-  **Layers**, a schematic's **Circuit** then, for more than one sheet, **Hierarchy**. Arrow keys move
-  between them. The tab shown is the person's, by the kind of file (`toolStack.tabs`), the first at
-  first. Every tab stays mounted, and each keeps its own scroll.
+- **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
+  the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; then **Hide
+  panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
+- **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent, the others
+  muted; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
+  sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
+  file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
+- **One gutter.** The head, the tabs and every list start 8px in from the panel's edges: the search
+  box, a tab and a row's background all begin on that line, and a settings label too.
 - **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
   a board's parts in the schematic blocks their footprints record (a sheet's name without
   `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its
@@ -643,18 +644,18 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   each tab's hits under its name — the layers or sheets whose names match first, then the Circuit's
   ranked hits (its arrows and Enter walk and pick them) — a tab with none left out, and one line when
   nothing matches. Escape or the box's X clears it and the tabs come back.
-- **Collapsed, it goes whole.** **Hide panel** takes it away and leaves its toggle on the same pixel,
-  alone on a pill over the canvas (**Show panel**, lucide's PanelLeftOpen, the strip's surface), so a
-  second press undoes the first. No rail, no hover reveal, and a pick on the picture never opens it.
+- **Collapsed, it goes whole.** **Hide panel** takes it away and leaves **Show panel** (lucide's
+  PanelLeftOpen) alone on a pill at the canvas's top-left, 8px in, on the strip's surface. No rail, no
+  hover reveal, and a pick on the picture never opens it.
   ⌘\ (Ctrl+\) shows and hides it, and / opens it with the keyboard in its search, while the view has
   the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
-  width (`toolStack.panels.flat`: 248px at first, 200px to half the view, from a grip on its right
+  width (`toolStack.panels.flat`: 216px at first, 180px to half the view, from a grip on its right
   edge, Left/Right by 16px).
-- **Under 1024px of view** it is never docked: it starts collapsed, and the pill opens it over the
-  canvas, a scrim behind it; Escape or a press on the scrim closes it. **On a phone** (under 600px) the
-  pill is a touch tile at the left of the strip's line, and the panel opens as the whole view, **Back
-  to the view** in its toggle's place; a row pressed closes it, the pick made, and Quick Edit's sheet
-  keeps the bottom.
+- **Open, it is always docked**: the canvas is the narrower for it, at any width. Under 1024px of
+  view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**
+  (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
+  whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
+  Quick Edit's sheet keeps the bottom.
 
 **The tool stack** (`ToolStack`) is the column under the strip and the sub-toolbar, centred
 with them, for a renderer's own `toolPanels`. STEP and the robot renderer hand none: their
@@ -1214,7 +1215,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
 - **⌘\\** (Ctrl+\\) on a KiCad board or schematic shows and hides its panel, and **/** opens it with
   the keyboard in its search, while the view has the keyboard; in the search box, Escape clears what is
-  typed, then (over the canvas or on a phone) closes the panel.
+  typed, then (on a phone) closes the panel.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.

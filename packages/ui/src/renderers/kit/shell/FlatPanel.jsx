@@ -13,31 +13,30 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 /**
  * A flat view's panel (a board's, a schematic's: `FlatViewFrame.jsx`), docked at the view's left
- * edge the way KiCad's Appearance panel is: one search box over everything, then text tabs, one per
- * list (a board's Circuit and Layers, a schematic's Circuit and Hierarchy), and the open tab's list
- * under them, scrolling as one.
+ * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
+ * after it, then a row of tabs, buttons as Figma's (a board's Circuit and Layers, a schematic's
+ * Circuit and Hierarchy), and the open tab's list under them, scrolling as one. Head, tabs and lists
+ * keep one gutter: 8px in from the panel's edges.
  *
- * - **The toggle never moves.** Open, it is the first thing in the panel, at its top-left; collapsed,
- *   the panel goes completely and the same button stays on the same pixel, alone on a small pill over
- *   the canvas (`FlatPanelPill`), so a second click undoes the first. ⌘\ (Ctrl+\) does the same, and
- *   / opens the panel on its search.
+ * - **Collapsed, it goes completely**: its expand button alone on a small pill at the canvas's
+ *   top-left (`FlatPanelPill`). ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search.
  * - **Search** is the panel's, not a tab's: while something is typed, the tabs step aside and the
  *   body lists what matches in every tab, each under its tab's name (a tab with no match is left out;
  *   a tab of many ranked hits, `searchLast`, after the others);
  *   Escape or the box's X clears it. A tab reads the query from `useFlatPanel()`, and a tab whose
  *   results the arrow keys walk registers its keys there (the Circuit's).
- * - **Three ways to be shown**, the frame's choice by the view's width: `docked` beside the canvas,
- *   the canvas the narrower for it, its width the person's (a grip on its right edge, kept);
- *   `overlay`, under 1024px, over the canvas, a scrim behind it that closes it, as Escape does;
- *   `page`, on a phone, the whole view, with Back in the toggle's place; a pick in it closes it.
+ * - **Two ways to be shown**: `docked` beside the canvas, the canvas always the narrower for it, its
+ *   width the person's (a grip on its right edge, kept); `page`, on a phone, the whole view, with
+ *   Back before its search; a pick in it closes it.
  *
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
  */
 
-const PANEL_INSET_PX = VIEWPORT_INSET_PX + 5;
+// The panel's one gutter: its head, its tabs and the boxes of its rows start this far in from its edges.
+const GUTTER_PX = 8;
 const KEY_NUDGE_PX = 16;
-export const FLAT_PANEL_DEFAULT_WIDTH = 248;
-export const FLAT_PANEL_MIN_WIDTH = 200;
+export const FLAT_PANEL_DEFAULT_WIDTH = 216;
+export const FLAT_PANEL_MIN_WIDTH = 180;
 /** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
 export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
 
@@ -49,7 +48,7 @@ const FlatPanelContext = createContext(null);
  */
 export const useFlatPanel = () => useContext(FlatPanelContext);
 
-/** The collapsed panel: its toggle alone, on the pixel the open panel's toggle takes. */
+/** The collapsed panel: its expand button alone, at the canvas's top-left. */
 export function FlatPanelPill({ onOpen, touch = false }) {
   const { t } = useI18n();
   const platform = useViewerHost()?.environment?.platform;
@@ -63,7 +62,7 @@ export function FlatPanelPill({ onOpen, touch = false }) {
 }
 
 /**
- * @param {{ mode: "docked" | "overlay" | "page", open: boolean, onClose(): void, label: string,
+ * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
  *   searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
  *   focusSearch: number }} props
@@ -102,20 +101,20 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   const onSearchKeyDown = event => {
     if (event.key === "Escape") {
       if (query) { event.preventDefault(); event.stopPropagation(); setQuery(""); return; }
-      if (!docked) { event.preventDefault(); event.stopPropagation(); onClose(); }
+      if (page) { event.preventDefault(); event.stopPropagation(); onClose(); }
       return;
     }
     keys.current?.(event);
   };
-  // A floating panel (over the canvas, or the whole view) goes with Escape, wherever its focus is.
+  // A phone's page goes with Escape, wherever its focus is.
   const onPanelKeyDown = event => {
-    if (docked || event.key !== "Escape" || event.defaultPrevented) return;
+    if (!page || event.key !== "Escape" || event.defaultPrevented) return;
     event.preventDefault();
     event.stopPropagation();
     onClose();
   };
 
-  // The width: the person's, from the grip on the right edge (a floating panel's too), one write when it lets go.
+  // The width: the person's, from the grip on the right edge, one write when it lets go.
   const [draft, setDraft] = useState(null);
   const drawnWidth = Math.min(maxWidth, Math.max(FLAT_PANEL_MIN_WIDTH, draft ?? width));
   const drag = useRef(null);
@@ -153,21 +152,19 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     onKeyDown={onPanelKeyDown}
     className={cn("flex min-h-0 flex-col bg-background text-tiny text-foreground",
       docked && "relative h-full shrink-0 border-r border-border",
-      mode === "overlay" && "absolute inset-y-0 left-0 z-40 border-r border-border shadow-xl",
       page && "absolute inset-0 z-50")}
     style={page ? undefined : { width: drawnWidth }}>
-    {/* The head: the toggle where the pill's is (Back, on a phone), then the search. */}
-    <div className="flex shrink-0 items-center gap-1.5" style={{ padding: `${PANEL_INSET_PX}px ${PANEL_INSET_PX - 4}px 6px ${PANEL_INSET_PX}px` }} data-flat-panel-head="">
-      {page
-        ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton>
-        : <ToolbarButton label={t("flatPanel.hide")} shortcut={flatPanelShortcut(platform)} tooltipSide="right" className={STRIP_BUTTON_CLASS} aria-expanded onClick={onClose} data-flat-panel-toggle="">
-          <PanelLeftClose aria-hidden="true" />
-        </ToolbarButton>}
+    {/* The head: the search, then the collapse button at its right (Back before it, on a phone). */}
+    <div className="flex shrink-0 items-center gap-1" style={{ padding: `${GUTTER_PX}px ${GUTTER_PX}px 6px` }} data-flat-panel-head="">
+      {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
       <TreeFilterInput label={searchLabel} placeholder={searchPlaceholder} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
         inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border px-0.5 shadow-none" data-flat-panel-search="" />
+      {page ? null : <ToolbarButton label={t("flatPanel.hide")} shortcut={flatPanelShortcut(platform)} tooltipSide="bottom" className={STRIP_BUTTON_CLASS} aria-expanded onClick={onClose} data-flat-panel-toggle="">
+        <PanelLeftClose aria-hidden="true" />
+      </ToolbarButton>}
     </div>
-    {/* The tabs, text: KiCad's Appearance panel's. While a search is up they step aside. */}
-    <div role="tablist" aria-label={label} hidden={searching} className="flex shrink-0 gap-4 border-b border-border" style={{ paddingLeft: PANEL_INSET_PX + 2, paddingRight: PANEL_INSET_PX }}>
+    {/* The tabs, buttons as Figma's: the open one raised on the accent. While a search is up they step aside. */}
+    <div role="tablist" aria-label={label} hidden={searching} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${GUTTER_PX}px ${GUTTER_PX}px` }}>
       {tabs.map(entry => {
         const on = entry.id === active;
         return <button key={entry.id} type="button" role="tab" id={ids(entry.id).tab} aria-controls={ids(entry.id).panel} aria-selected={on} tabIndex={on ? 0 : -1}
@@ -180,15 +177,15 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
             onTabChange(next.id);
             event.currentTarget.parentElement?.querySelector(`[data-flat-panel-tab="${CSS.escape(next.id)}"]`)?.focus();
           }}
-          className={cn("-mb-px border-b-2 py-1.5 text-tiny transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
-            on ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
+          className={cn("h-6 rounded-md px-2 text-tiny transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+            on ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")}>
           {entry.label}
         </button>;
       })}
     </div>
     <ScrollArea className="min-h-0 flex-1" viewportRef={scroller} viewportProps={{ "data-flat-panel-scroller": "" }}>
       <FlatPanelContext.Provider value={panel}>
-        <div className={cn("group/body flex flex-col pb-2", searching && "pt-1")} data-flat-panel-body="">
+        <div className={"group/body flex flex-col pt-1 pb-2"} data-flat-panel-body="">
           {tabs.map(entry => {
             const shown = searching || entry.id === active;
             return <section key={entry.id} role="tabpanel" id={ids(entry.id).panel} aria-labelledby={ids(entry.id).tab} hidden={!shown}
@@ -197,7 +194,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
               style={searching && entry.searchLast ? { order: 1 } : undefined}
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-              {searching ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingLeft: PANEL_INSET_PX - 1 }}>{entry.label}</h3> : null}
+              {searching ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{entry.label}</h3> : null}
               {entry.content}
             </section>;
           })}
@@ -213,9 +210,5 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         draft !== null && "after:bg-ring")}
       onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={stopDrag} onPointerCancel={stopDrag} onKeyDown={keyDrag} data-flat-panel-grip="" />}
   </aside>;
-  return <>
-    {/* Over the canvas, a scrim that closes the panel; nothing behind a docked one or the phone's page. */}
-    {mode === "overlay" && open ? <div className="absolute inset-0 z-30 bg-black/20" aria-hidden="true" onPointerDown={event => { event.preventDefault(); onClose(); }} data-flat-panel-scrim="" /> : null}
-    {aside}
-  </>;
+  return aside;
 }

@@ -174,13 +174,15 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
-  // The panel, docked at the left: its toggle first, at its top-left, then the search over every tab, then the tabs, text.
+  // The panel, docked at the left: the search over every tab, its collapse button after it, then the tabs, buttons.
   const aside = panel(pane);
   expect([aside.getAttribute('data-flat-panel'), aside.hidden]).toEqual(['docked', false]);
   const head = aside.querySelector<HTMLElement>('[data-flat-panel-head]')!;
-  expect(head.firstElementChild!.getAttribute('aria-label')).toBe('Hide panel');
-  expect(head.firstElementChild!.getAttribute('aria-keyshortcuts')).toMatch(/\\$/);
-  expect(searchBox(pane).placeholder).toBe('Find a part, net or layer');
+  expect(head.firstElementChild!.hasAttribute('data-flat-panel-search')).toBe(true);
+  expect(head.lastElementChild!.getAttribute('aria-label')).toBe('Hide panel');
+  expect(head.lastElementChild!.getAttribute('aria-keyshortcuts')).toMatch(/\\$/);
+  expect(head.style.padding).toBe('8px 8px 6px');
+  expect(searchBox(pane).placeholder).toBe('Parts, nets, layers');
   expect(within(aside).getAllByRole('tab').map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   expect(tabBody(pane, 'circuit').hidden).toBe(false);
@@ -686,7 +688,7 @@ it("a view saved with the earlier Dim switch opens Dimmed", async () => {
   dispose();
 });
 
-it("the panel collapses whole, its toggle on the same pixel on a pill; ⌘\\ shows and hides it, / opens it on its search, and the tab is kept", async () => {
+it("the panel collapses whole to a pill at the canvas's top-left; ⌘\\ shows and hides it, / opens it on its search, and the tab is kept", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   showTab(pane, 'Layers');
@@ -694,9 +696,7 @@ it("the panel collapses whole, its toggle on the same pixel on a pill; ⌘\\ sho
   expect(panel(pane).hidden).toBe(true);
   const pill = pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!;
   expect(within(pill).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Show panel']);
-  // The pill stands where the open panel's toggle starts: the view's inset, then the pill's padding and border.
   expect([pill.style.top, pill.style.left]).toEqual(['8px', '8px']);
-  expect(panel(pane).querySelector<HTMLElement>('[data-flat-panel-head]')!.style.padding).toMatch(/^13px .* 13px$/);
   fireEvent.click(within(pill).getByRole('button', { name: 'Show panel' }));
   expect(panel(pane).hidden).toBe(false);
   expect(pane.querySelector('[data-flat-panel-pill]')).toBeNull();
@@ -714,26 +714,20 @@ it("the panel collapses whole, its toggle on the same pixel on a pill; ⌘\\ sho
   dispose();
 });
 
-it("under 1024px the panel starts collapsed and opens over the board, Escape or the scrim closing it; on a phone it is the whole view, and a pick gives the board back", async () => {
+it("under 1024px the panel starts collapsed and, opened, docks all the same; on a phone it is the whole view, and a pick gives the board back", async () => {
   const sized = (width: number) => vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue(
     { x: 0, y: 0, left: 0, top: 0, right: width, bottom: 700, width, height: 700, toJSON: noop } as DOMRect);
   sized(900);
   const view = await open();
-  const { pane } = view;
-  await opened(pane);
-  const controller = await controllerOf(view);
-  await waitFor(() => expect(panel(pane).getAttribute('data-flat-panel')).toBe('overlay'));
-  expect(panel(pane).hidden).toBe(true);
-  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
-  expect(panel(pane).hidden).toBe(false);
-  fireEvent.keyDown(searchBox(pane), { key: 'Escape' });
-  expect(panel(pane).hidden).toBe(true);
-  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
-  fireEvent.pointerDown(pane.querySelector('[data-flat-panel-scrim]')!);
-  expect(panel(pane).hidden).toBe(true);
+  await opened(view.pane);
+  await waitFor(() => expect(panel(view.pane).hidden).toBe(true));
+  expect(panel(view.pane).getAttribute('data-flat-panel')).toBe('docked');
+  fireEvent.click(within(view.pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
+  expect([panel(view.pane).getAttribute('data-flat-panel'), panel(view.pane).hidden]).toEqual(['docked', false]);
+  expect(view.pane.querySelector('[data-flat-panel-scrim]')).toBeNull();
   view.dispose();
   cleanup();
-  // A phone: the panel is the whole view, Back in its toggle's place; a row pressed closes it, the pick made.
+  // A phone: the panel is the whole view, Back before its search; a row pressed closes it, the pick made.
   sized(400);
   const phone = await open();
   await opened(phone.pane);
@@ -743,6 +737,5 @@ it("under 1024px the panel starts collapsed and opens over the board, Escape or 
   fireEvent.click(within(tabBody(phone.pane, 'circuit')).getByRole('button', { name: 'Select J1' }));
   expect(panel(phone.pane).hidden).toBe(true);
   expect(selected(await controllerOf(phone))).toEqual(['#J1']);
-  void controller;
   phone.dispose();
 });
