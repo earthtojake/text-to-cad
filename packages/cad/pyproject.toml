@@ -83,7 +83,9 @@ kicad = [
 # optional: the undercut and wall-thickness ray casts need rtree's index, and mesh.split, body_count and
 # the connected-component graphs need scipy -- without them a family dies on a ModuleNotFoundError.
 # Meshes are read by the library's own readers (a 3MF and a GLB written as an STL first), so trimesh's
-# 3MF loader and the packages it alone needs (lxml, networkx) are not ours.
+# 3MF loader and the packages it alone needs (lxml, networkx) are not ours. networkx is also what
+# mesh.split's default repair of open pieces needs: the measurements split with repair=False, so an open
+# mesh is measured as it is.
 trimesh = [
   "trimesh>=4.6,<6",
   "rtree>=1.2,<2",

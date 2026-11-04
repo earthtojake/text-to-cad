@@ -186,6 +186,30 @@ def _measured(path, **options) -> dict:
     return _checked(path, **options)[1]
 
 
+class OpenMeshTest(unittest.TestCase):
+    def test_an_open_mesh_is_still_measured_and_says_it_is_open(self) -> None:
+        # a 0.4 mm-walled cup missing one triangle: trimesh's split would repair the open piece through
+        # networkx (not a dependency) and lose the walls; measured as it is, the thin wall still fails
+        import numpy as np
+
+        cup = _hollow_box(0.4)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            mesh = trimesh.load(_stl(cup, tmp, "cup"))
+            mesh.update_faces(np.arange(len(mesh.faces)) != int(np.argmax(mesh.area_faces)))
+            path = tmp / "open.stl"
+            mesh.export(path)
+            result = cad.stl.dfm(path, process="printing", technology="fdm")
+        codes = [finding.code for finding in result.findings]
+        self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
+        self.assertEqual(codes[0], "not_watertight", "said first: every figure after it is of an open surface")
+        self.assertNotIn("measurement_failed", codes)
+        self.assertNotIn("internal_void", codes, "an open mesh's voxel voids are its holes")
+        walls = [o for o in result.measurements["rules"]["outcomes"] if o["rule"] == "printing.wall"]
+        self.assertEqual({o["status"] for o in walls}, {"failed"})
+        self.assertAlmostEqual(min(f["value"] for o in walls for f in o["failures"]), 0.4, delta=0.01)
+
+
 class CheckTest(unittest.TestCase):
     def test_the_check_emits_every_fact_family(self) -> None:
         with tempfile.TemporaryDirectory() as td:

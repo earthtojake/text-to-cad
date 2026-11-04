@@ -27,7 +27,7 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["KNIFE_DEG", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
+__all__ = ["ANGLE_EPS", "OVERHANG_AREA_MM2", "OVERHANG_REACH_MM", "KNIFE_DEG", "POCKET_MIN_CELLS", "rot_text", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
            "frame", "orientation_rows", "ranked", "rotation", "span", "support", "voxels"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
@@ -42,6 +42,17 @@ _JITTER = (0.0763932 * (math.sqrt(5) - 1), 0.0447214 * (math.sqrt(3) - 1))
 #: minimum is deeper than a whole wall, which a printer cannot lay. 45 deg is also the slope the guides
 #: (Hubs FDM) hold self-supporting: a chamfer of 45 deg or more leaves no knife edge.
 KNIFE_DEG = 45.0
+
+#: An angle within this many degrees of a limit is at the limit, not under it: a 45 deg chamfer the kernel
+#: makes reads 44.999999999999936 on one axis and 45.000000000000014 on the other, and both are 45 (Hubs FDM:
+#: "up to 45°" self-supports). Every comparison of a surface's angle with a limit subtracts it.
+ANGLE_EPS = 1e-6
+#: Overhangs too small to need support (the owner's figures, both paths): a slope, ceiling or cantilever with
+#: less than OVERHANG_AREA_MM2 under the angle limit, or a cantilever reaching less than the nozzle's width
+#: (``--nozzle``, else OVERHANG_REACH_MM: one extrusion width lays it), is listed with ``counted`` false and
+#: judged by no rule -- a 0.01 mm flat a chamfer leaves short of its corner is no overhang.
+OVERHANG_AREA_MM2 = 1.0
+OVERHANG_REACH_MM = 0.4
 
 
 def thin_depth(minimum: float | None, angle_deg: float) -> float | None:
@@ -179,7 +190,7 @@ def support(V: np.ndarray, F: np.ndarray, angle_limit: float, pitch: float, plat
         return empty
     line, t, tri, sign, first, before = _sorted(c)
     normals, _ = frame(V, F)
-    steep = angles(normals[tri]) < angle_limit
+    steep = angles(normals[tri]) < angle_limit - ANGLE_EPS
     starts = (sign < 0) & (before <= 0) & steep & (t > plate + band)
     below = np.where(first, plate, np.roll(t, 1))
     length = np.where(starts, t - below, 0.0)
@@ -397,11 +408,12 @@ def cavities(grid: Grid, ball_radius: float, cap: int = 32) -> tuple[list[Cavity
         cells = np.flatnonzero(region)
         ijk = np.stack(np.unravel_index(cells, shape), axis=1)
         found.append(Cavity(cells, float(len(cells) * grid.pitch ** 3), grid.center(ijk.mean(axis=0)), sealed))
-    # sealed pockets too small for the ball
+    # sealed pockets too small for the ball -- but not a crumb of a few voxels, which the surface's own
+    # voxels close off at an inner corner (an exact inner shell is found apart, by the B-rep)
     for pocket in np.unique(air_labels[air & ~outside_all & (labels == -3)])[:max(0, cap - len(found))]:
         region = (air_labels == pocket) & (labels == -3)
         cells = np.flatnonzero(region)
-        if not len(cells):
+        if len(cells) < POCKET_MIN_CELLS:
             continue
         labels[region] = len(found)
         ijk = np.stack(np.unravel_index(cells, shape), axis=1)
@@ -624,6 +636,24 @@ def field_pitch(size: np.ndarray, ball: float | None = None) -> tuple[float, flo
 # --- orientations -------------------------------------------------------------------------------------------
 
 
+#: A sealed pocket of air under this many voxels is the voxelisation's, not the part's: a lone voxel the
+#: surface closes off at an inner corner read as a cavity with no escape hole (an error in powder and resin).
+POCKET_MIN_CELLS = 8
+
+
+def rot_text(R: np.ndarray) -> str:
+    """``R`` as the build123d rotation that makes it, pasteable: ``bd.Rot(x, y, z)`` (degrees; build123d's
+    ``Rot(x, y, z)`` is Rx @ Ry @ Rz)."""
+    R = np.asarray(R, dtype=float)
+    b = math.asin(max(-1.0, min(1.0, float(R[0, 2]))))
+    if abs(math.cos(b)) > 1e-9:
+        a, c = math.atan2(-R[1, 2], R[2, 2]), math.atan2(-R[0, 1], R[0, 0])
+    else:  # gimbal: fold the turn about z into x
+        a, c = math.atan2(R[2, 1], R[1, 1]), 0.0
+    values = [round(math.degrees(v), 3) + 0.0 for v in (a, b, c)]
+    return "bd.Rot({:g}, {:g}, {:g})".format(*values)
+
+
 def rotation(axis: str, degrees: float) -> np.ndarray:
     """A 3x3 rotation about ``x``, ``y`` or ``z``."""
     c, s = round(math.cos(math.radians(degrees)), 15), round(math.sin(math.radians(degrees)), 15)
@@ -668,13 +698,13 @@ def orientation_rows(V: np.ndarray, F: np.ndarray, candidates: dict[str, np.ndar
         held = support(W, F, angle_limit, pitch, plate_z=zmin, owners=owners)
         on_cosmetic = sum(area for owner, area in held["per_owner_mm2"].items() if cosmetic and owner in cosmetic)
         box = W.max(axis=0) - W.min(axis=0)
-        rows.append({"orientation": name, "rotation": np.round(R, 6).tolist(),
+        rows.append({"orientation": name, "rotation": np.round(R, 6).tolist(), "rotate": rot_text(R),
                      "support_volume_mm3": round(held["volume_mm3"], 2),
                      "support_contact_mm2": round(held["contact_area_mm2"], 2),
                      "support_contact_cosmetic_mm2": round(float(on_cosmetic), 2),
                      "build_height_mm": round(float(box[2]), 3),
                      "bed_contact_mm2": round(float(areas[down & on_plate & (tilt < 1.0)].sum()), 2),
-                     "overhang_area_mm2": round(float(areas[down & ~on_plate & (tilt < angle_limit)].sum()), 2),
+                     "overhang_area_mm2": round(float(areas[down & ~on_plate & (tilt < angle_limit - ANGLE_EPS)].sum()), 2),
                      "stair_step_area_mm2": round(float(areas[(tilt > 0.5) & (tilt < shallow_deg)].sum()), 2),
                      "bbox_mm": [round(float(v), 3) for v in box]})
     return rows

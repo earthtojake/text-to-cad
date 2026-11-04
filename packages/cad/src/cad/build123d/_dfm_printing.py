@@ -61,6 +61,18 @@ GAP_CEILING = 3.0
 DETAIL_CEILING = 2.0
 #: A shallow slope stair-steps: above flat and under this many degrees from horizontal.
 SHALLOW_DEG = 20.0
+#: A wall ray that lands on a face sharing an edge with its own within this many mm met the seam, not the
+#: far side of a wall: a sample on a tangent or concave edge re-hits its neighbour at 0.0003-0.008 mm (seen on
+#: B-spline robot parts). Every published minimum wall is 0.3 mm or more. (A knife edge's sliver, whose two
+#: faces share the edge, is the knife family's: ``_walls`` leaves it to it.)
+SEAM_HIT_MM = 0.05
+#: Overhangs too small to need support: ``meshops_printing``'s floors, shared with the mesh path.
+OVERHANG_AREA_MM2 = mo.OVERHANG_AREA_MM2
+OVERHANG_REACH_MM = mo.OVERHANG_REACH_MM
+#: An embossed or engraved step is a detail (text, a logo, a mark) only while it is narrower than this, mm:
+#: wider steps -- a lid's groove, a locating land, a ledge -- are the part's geometry, which the wall and gap
+#: rules judge.
+DETAIL_ACROSS_MM = 3.0
 
 
 def _r(value: float | None, digits: int = 4) -> float | None:
@@ -292,7 +304,9 @@ class Context:
                     # at a knife edge (under KNIFE_DEG) it measures the sliver, which is real
                     corner = any(not edge.concave and not edge.smooth and edge.angle_deg >= mo.KNIFE_DEG
                                  for edge in adjacent.get(other, ()))
-                    if not corner:
+                    # a ray re-hitting the neighbour across a shared edge at almost nothing met the seam
+                    seam = other in adjacent and wall[0] < SEAM_HIT_MM
+                    if not corner and not seam:
                         info.thickness.append((wall[0], k, other))
                 if gap is not None:
                     other = gap[1] + 1
@@ -417,7 +431,9 @@ def _solid(ctx: Context) -> dict[str, Any]:
 def _overhangs(ctx: Context) -> dict[str, Any]:
     limit = ctx.angle_limit
     total_area = sum(info.area for infos in ctx.faces for info in infos) or 1.0
-    bridges = {(item["part"], item["ordinal"]): item["kind"] for item in _flat_ceilings(ctx)}
+    ceilings = {(item["part"], item["ordinal"]): item for item in _flat_ceilings(ctx)}
+    bridges = {key: item["kind"] for key, item in ceilings.items()}
+    reach_floor = float(ctx.options.get("nozzle") or OVERHANG_REACH_MM)
     plate_band = max(1.0, 5 * ctx.layer)
     items, histogram, below_total = [], np.zeros(9), 0.0
     for infos in ctx.faces:
@@ -435,10 +451,10 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
             area = np.array([s.area for s in down])
             scale = info.area / max(sum(s.area for s in info.samples), 1e-12)
             area = area * scale
-            under = angles < limit
+            under = angles < limit - mo.ANGLE_EPS
             heights = np.array([float(s.point[2]) - ctx.z0 for s in down])
             for value, share in zip(angles, area):
-                histogram[min(8, int(value // 10))] += share
+                histogram[min(8, int((value + mo.ANGLE_EPS) // 10))] += share
             worst = int(angles.argmin())
             kind = "slope"
             if info.group is not None and ctx.rounds[info.group].coverage_deg >= ROUND_DEG and \
@@ -449,13 +465,19 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
             elif ctx.on_plate(info.zmin) and (not under.any() or heights[under].max() <= plate_band):
                 kind = "plate_edge"
             below = float(area[under].sum())
-            if kind not in ("hole", "plate_edge", "bridge"):
+            reach = (ceilings.get((info.part, info.ordinal)) or {}).get("reach_mm")
+            # too small to need support: under the area floor, or a cantilever shorter than a bead is wide
+            # (a bridge passes the floors too: metal supports every ceiling; the headline leaves bridges out)
+            counted = kind not in ("hole", "plate_edge") and below >= OVERHANG_AREA_MM2 and not (
+                kind == "cantilever" and reach is not None and reach < reach_floor)
+            if counted and kind != "bridge":
                 below_total += below
             items.append({"location": ctx.ref(info.part, info.ordinal), "xyz": _xyz(down[worst].point),
                           "angle_deg": _r(float(angles.min()), 3), "area_mm2": _r(float(area.sum()), 3),
                           "area_below_limit_mm2": _r(below, 3), "height_mm": _r(float(heights.min()), 3),
-                          "max_height_mm": _r(float(heights.max()), 3), "kind": kind, "surface": info.surface.kind})
-    counted = [item for item in items if item["kind"] not in ("hole", "plate_edge", "bridge")
+                          "max_height_mm": _r(float(heights.max()), 3), "kind": kind, "surface": info.surface.kind,
+                          "reach_mm": reach, "counted": bool(counted)})
+    counted = [item for item in items if item["counted"] and item["kind"] != "bridge"
                and (item["area_below_limit_mm2"] or 0) > 0]
     largest = sorted(counted, key=lambda item: -(item["area_below_limit_mm2"] or 0))[:8]
     items, count = _capped(items, lambda item: (item["angle_deg"], -(item["area_mm2"] or 0)))
@@ -467,7 +489,7 @@ def _overhangs(ctx: Context) -> dict[str, Any]:
             "largest_faces_below_limit": [{"location": item["location"], "location_xyz": item["xyz"],
                                            "surface_angle_deg": item["angle_deg"],
                                            "area_mm2": item["area_below_limit_mm2"]} for item in largest],
-            "plate_band_mm": plate_band}
+            "plate_band_mm": plate_band, "area_floor_mm2": OVERHANG_AREA_MM2, "reach_floor_mm": reach_floor}
 
 
 def _edge_points(edge: Any, step: float) -> np.ndarray:
@@ -534,15 +556,9 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
 
 
 def _bridges(ctx: Context) -> dict[str, Any]:
+    # a horizontal round hole's arch is no bridge: every layer of it stands on the one below but the crown's
+    # last few, so it is judged by its diameter (``printing.horizontal_hole``), not as a span
     items = [{key: value for key, value in item.items() if key not in ("part", "ordinal")} for item in _flat_ceilings(ctx)]
-    if ctx.technology in ("fdm", "sla") and ctx.angle_limit > 0:
-        # a horizontal round hole's arch is bridged where it is under the angle limit: a chord of d sin(limit)
-        for item in _round_items(ctx, True):
-            if item["orientation"] == "horizontal" and not item["teardrop"]:
-                chord = item["diameter_mm"] * math.sin(math.radians(ctx.angle_limit))
-                items.append({"kind": "bridge", "length_mm": _r(chord, 4), "reach_mm": _r(chord / 2.0, 4),
-                              "supporting_edges": 0, "arch": True, "diameter_mm": item["diameter_mm"],
-                              "location": item["location"], "xyz": item["xyz"]})
     items, count = _capped(items, lambda item: -(item["length_mm"] or 0.0))
     return {"items": items, "count": count, "flat_within_deg": FLAT_DEG,
             "bridge_count": sum(1 for item in items if item["kind"] == "bridge"),
@@ -561,19 +577,56 @@ def _connections(ctx: Context, part: int, ordinal: int) -> int:
     return count
 
 
+def _knife_zones(ctx: Context, part: int) -> list[tuple[np.ndarray, np.ndarray, float]]:
+    """Each knife edge of ``part`` as segments (starts, ends) and its thin depth: the sliver the knife family
+    reports, which the walls leave to it."""
+    minimum = rules.wall_minimum(ctx.options)
+    edges = ctx.parts[part].edges()
+    zones = []
+    for edge in ctx.edges(part):
+        if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG:
+            continue
+        depth = mo.thin_depth(minimum, edge.angle_deg)
+        if depth:
+            points = _edge_points(edges[edge.ordinal - 1], max(0.05, depth / 4.0))
+            zones.append((points[:-1], points[1:], float(depth)))
+    return zones
+
+
+def _near_segments(points: np.ndarray, starts: np.ndarray, ends: np.ndarray) -> np.ndarray:
+    """Each point's distance to the nearest of the segments."""
+    d = ends - starts
+    length2 = np.maximum((d * d).sum(axis=1), 1e-300)
+    rel = points[:, None, :] - starts[None, :, :]
+    t = np.clip((rel * d[None]).sum(axis=2) / length2[None], 0.0, 1.0)
+    closest = starts[None] + t[..., None] * d[None]
+    return np.linalg.norm(points[:, None, :] - closest, axis=2).min(axis=1)
+
+
 def _walls(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, every, where = [], [], []
     for part, infos in enumerate(ctx.faces):
+        zones = _knife_zones(ctx, part)
         for info in infos:
             pin = info.group is not None and not ctx.rounds[info.group].concave and \
                 ctx.rounds[info.group].coverage_deg >= ROUND_DEG
             if not info.thickness or pin:  # a pin's thickness is its diameter: the pins' rules judge it
                 continue
-            values = np.array([t for t, _, _ in info.thickness])
-            thinnest = info.thickness[int(values.argmin())]
+            thickness = info.thickness
+            if zones:
+                # a sample inside a knife edge's thin depth is that knife's sliver, reported once, by the knife
+                points = np.array([info.samples[k].point for _, k, _ in thickness])
+                keep = np.ones(len(points), dtype=bool)
+                for starts, ends, depth in zones:
+                    keep &= _near_segments(points, starts, ends) > depth + ctx.tol
+                thickness = [row for row, kept in zip(thickness, keep) if kept]
+                if not thickness:
+                    continue
+            values = np.array([t for t, _, _ in thickness])
+            thinnest = thickness[int(values.argmin())]
             every.extend(values.tolist())
-            where.extend((float(t), info.samples[k].point) for t, k, _ in info.thickness)
+            where.extend((float(t), info.samples[k].point) for t, k, _ in thickness)
             joined = max(_connections(ctx, part, info.ordinal), _connections(ctx, part, thinnest[2]))
             items.append({"location": ctx.ref(part, info.ordinal), "xyz": _xyz(info.samples[thinnest[1]].point),
                           "thickness_mm": _r(thinnest[0], 4), "median_mm": _r(float(np.median(values)), 4),
@@ -732,10 +785,16 @@ def _details(ctx: Context) -> dict[str, Any]:
                     height = float((np.array(top.surface.origin) - np.array(bottom.surface.origin)) @ nt)
                     if not 1e-6 < height <= DETAIL_CEILING:
                         continue
-                    emboss = top.area < bottom.area
+                    # which side is the detail is its extent across: a raised one is narrow through the
+                    # material (the side's rays in), a sunk one across the air (its rays out); a step wide both
+                    # ways is the part's geometry, not a detail
+                    across = min((t for t, _, _ in side.thickness), default=math.inf)
+                    over = min((g for g, _, _ in side.gap), default=math.inf)
+                    emboss = across <= over
+                    width = across if emboss else over
+                    if not width < DETAIL_ACROSS_MM:
+                        continue
                     region = top if emboss else bottom
-                    widths = [t for t, _, _ in side.thickness] if emboss else [g for g, _, _ in side.gap]
-                    width = min(widths) if widths else None
                     key = (part, region.ordinal, "emboss" if emboss else "engrave")
                     item = found.get(key)
                     if item is None:
@@ -751,7 +810,7 @@ def _details(ctx: Context) -> dict[str, Any]:
     items, count = _capped(list(found.values()), lambda item: (item["height_mm"], item["width_mm"] or 0.0))
     for item in items:
         item["faces"] = item["faces"][:12]
-    return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING}
+    return {"items": items, "count": count, "step_ceiling_mm": DETAIL_CEILING, "across_below_mm": DETAIL_ACROSS_MM}
 
 
 def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:
@@ -970,6 +1029,25 @@ def _inner_shells(ctx: Context, part: int) -> list[dict[str, Any]]:
     return found
 
 
+def _runs(ctx: Context, group: Round) -> list[tuple[float, float]]:
+    """The stretches of a round along its axis that its faces cover, overlapping ones merged: a hole cut
+    through two opposite walls is two runs; a cylinder the kernel split into halves along its seam is one."""
+    spans = []
+    for ordinal in group.faces:
+        info = ctx.info(group.part, ordinal)
+        points = [np.array([v.X, v.Y, v.Z]) for v in info.face.vertices()] + [s.point for s in info.samples]
+        along = [float((point - group.origin) @ group.axis) for point in points]
+        if along:
+            spans.append((min(along), max(along)))
+    merged: list[list[float]] = []
+    for lo, hi in sorted(spans):
+        if merged and lo <= merged[-1][1] + 1e-6:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    return [(lo, hi) for lo, hi in merged] or [(group.lo, group.hi)]
+
+
 def _trapped(ctx: Context) -> dict[str, Any]:
     ctx.measure_rays()
     items, pitches, balls = [], [], []
@@ -1007,16 +1085,18 @@ def _trapped(ctx: Context) -> dict[str, Any]:
                 cavities.append(entry)
             entry.update(volume_mm3=shell["volume_mm3"], sealed=True, exact=True, centroid=shell["centroid"],
                          faces=shell["faces"])
-        # escape holes: the holes with one end in the cavity and the other outside
+        # escape holes: each run of a hole along its axis with one end in the cavity and the other outside --
+        # a run, not the whole round, so one cut through two opposite walls is the two holes it makes
         for index, group in ctx.rounds_of(True):
             if group.part != part:
                 continue
             reach = 1.5 * grid.pitch + 1e-3
-            ends = [group.origin + group.axis * (group.lo - reach), group.origin + group.axis * (group.hi + reach)]
-            marks = [label(end) for end in ends]
-            for cavity in cavities:
-                if cavity["k"] is not None and cavity["k"] in marks and any(m in (-1,) for m in marks):
-                    cavity["holes"].append(group)
+            for lo, hi in _runs(ctx, group):
+                ends = [group.origin + group.axis * (lo - reach), group.origin + group.axis * (hi + reach)]
+                marks = [label(end) for end in ends]
+                for cavity in cavities:
+                    if cavity["k"] is not None and cavity["k"] in marks and -1 in marks:
+                        cavity["holes"].append(group)
         # every wall sample's outside, labelled at once: the cavity (if any) each wall faces
         rows = [(t, info.ordinal, info.samples[k]) for info in ctx.faces[part] for t, k, _ in info.thickness]
         facing = (labels[grid.index(np.array([s.point + s.normal * 0.75 * grid.pitch for _, _, s in rows]))]

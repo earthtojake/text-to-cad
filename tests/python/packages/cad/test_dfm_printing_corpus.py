@@ -56,7 +56,7 @@ def features():
     part += bd.Pos(-5, 12, 4) * bd.Cylinder(0.2, 4, align=A)                                     # pin 0.4
     part -= bd.Pos(-5, -12, 0) * bd.Cylinder(0.2, 20)                                            # hole 0.4
     part -= bd.Pos(10, 10, 4) * bd.Box(0.3, 12, 2.5, align=TOP)                                  # slot 0.3
-    part += bd.Pos(10, -10, 4) * bd.Box(4, 4, 0.05, align=A)                                     # emboss 0.05
+    part += bd.Pos(10, -10, 4) * bd.Box(2, 4, 0.05, align=A)                                     # emboss 0.05
     part -= bd.Pos(25, 0, 4) * bd.Box(0.2, 8, 0.2, align=TOP)                                    # engrave 0.2
     planted = [
         ("printing.wall_unsupported", ALL, (-25, 10, 8), 7.0),
@@ -95,9 +95,8 @@ def spans():
         ("printing.overhang_angle", ("pbf",), (0, 0, 6), 17.0),
         ("printing.overhang_angle", ("fdm", "sla", "pbf"), (45, 0, 2.6), 16.0),
         ("printing.horizontal_hole_diameter", ("pbf",), (-45, 0, 10), 6.0),
-        ("printing.bridge_length", ("fdm",), (-45, 0, 15), 6.0),
-        ("printing.knife_edge", ALL, (60, -5, 5.29), 6.0),
-        ("printing.wall_unsupported", ALL, (57, -5, 5), 8.0),
+        ("printing.horizontal_hole", ("fdm",), (-45, 0, 10), 6.0),           # 12 mm: over FDM's 10
+        ("printing.knife_edge", ALL, (60, -5, 5.29), 6.0),                    # its sliver is the knife's alone
     ]
     mesh = [
         ("printing.knife_edge", ALL, (60, -5, 5.29), 6.0),
@@ -154,9 +153,8 @@ def knives():
         bd.make_face(bd.Polyline((0, 0), (20, 0), (0, h), (0, 0))), 10)
     planted = [("printing.knife_edge", ALL, (8.24, 1.5, 8.0), 3.0),
                ("printing.knife_edge", ALL, (50, -5, 0), 6.0)]
-    exact = planted + [("printing.wall_unsupported", ALL, (8.24, 1.5, 8.0), 6.0),   # the sliver itself
-                       ("printing.wall_unsupported", ALL, (45, -5, 1), 7.0)]
-    return _doc("knives", _named(lip - notch, "lip"), _named(wedge, "wedge")), exact, planted
+    # each sliver is its knife's, reported once (no wall inside the knife's thin depth), on both paths
+    return _doc("knives", _named(lip - notch, "lip"), _named(wedge, "wedge")), planted, planted
 
 
 def bracket(scale: float = 1.0):

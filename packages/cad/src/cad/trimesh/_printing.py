@@ -85,7 +85,7 @@ def _bodies(mesh: trimesh.Trimesh) -> list[trimesh.Trimesh]:
     solid's cavity is) and slivers of no area worth a thousandth of the whole."""
     found = []
     total = float(mesh.area) or 1.0
-    for body in mesh.split(only_watertight=False):
+    for body in mesh.split(only_watertight=False, repair=False):  # repair needs networkx, not ours
         if body.is_watertight and float(body.volume) < 0:
             continue
         if not body.is_watertight and float(body.area) < 1e-3 * total:
@@ -125,7 +125,8 @@ def _mesh_facts(mesh: trimesh.Trimesh) -> dict:
     }
 
 
-def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.2, regions: bool = True) -> dict:
+def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.2, regions: bool = True,
+                    reach_floor: float = mo.OVERHANG_REACH_MM) -> dict:
     """Face angles measured from horizontal: 0 = flat ceiling, 90 = vertical. The counted triangles as
     connected regions (``items``), each a slope, a bridge or cantilever over the walls that carry it, a
     flat ceiling nothing carries, or a round on the plate's edge."""
@@ -139,7 +140,7 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
     z_min = mesh.bounds[0][2]
     on_plate = centers[:, 2] < (z_min + 0.1)
 
-    counted = down & ~on_plate & (surface_angle < angle_limit)
+    counted = down & ~on_plate & (surface_angle < angle_limit - mo.ANGLE_EPS)
     total_area = float(areas.sum())
 
     # angle histogram of down-facing, off-plate faces (10° bins)
@@ -166,7 +167,7 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
             for i in order
         ]
 
-    items = _overhang_regions(mesh, counted, surface_angle, z_min, max(1.0, 5 * layer)) if regions else []
+    items = _overhang_regions(mesh, counted, surface_angle, z_min, max(1.0, 5 * layer), reach_floor) if regions else []
     excluded = sum(item["area_below_limit_mm2"] for item in items if item["kind"] in ("plate_edge", "bridge"))
     return {
         "items": sorted(items, key=lambda item: (item["angle_deg"], -item["area_mm2"]))[:CAP],
@@ -183,7 +184,7 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float, layer: float = 0.
 
 
 def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarray, z_min: float,
-                      plate_band: float) -> list[dict]:
+                      plate_band: float, reach_floor: float = mo.OVERHANG_REACH_MM) -> list[dict]:
     """Each connected region of ``counted`` triangles: its steepest angle, area, height, and what carries it
     -- the walls below its boundary (a bridge held from opposite sides, a cantilever from one)."""
     if not counted.any():
@@ -218,11 +219,14 @@ def _overhang_regions(mesh: trimesh.Trimesh, counted: np.ndarray, tilt: np.ndarr
             kind = "slope"
         worst = region[int(tilt[region].argmin())]
         area = float(areas[region].sum())
+        # too small to need support: under the area floor, or a cantilever shorter than a bead is wide
+        big = kind != "plate_edge" and area >= mo.OVERHANG_AREA_MM2 and not (
+            kind == "cantilever" and spread["reach_mm"] is not None and spread["reach_mm"] < reach_floor)
         items.append({"xyz": _p(centers[worst]), "angle_deg": _r(float(tilt[region].min()), 3),
                       "area_mm2": _r(area, 3), "area_below_limit_mm2": _r(area, 3),
                       "height_mm": _r(float(heights.min()), 3), "max_height_mm": _r(float(heights.max()), 3),
                       "kind": kind, "flat": flat, "length_mm": _r(spread["length_mm"]),
-                      "reach_mm": _r(spread["reach_mm"]), "supporting_edges": int(carries.sum())})
+                      "reach_mm": _r(spread["reach_mm"]), "supporting_edges": int(carries.sum()), "counted": bool(big)})
     return items
 
 
@@ -293,7 +297,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42, keep: dict 
     single part actually has. Splitting first makes that impossible, because
     each body is only ever measured against itself.
     """
-    bodies = mesh.split(only_watertight=False)
+    bodies = mesh.split(only_watertight=False, repair=False)  # repair needs networkx, not ours
     cell = max(2.0, float(np.linalg.norm(mesh.extents)) / 40.0)
     if len(bodies) <= 1:
         facts = _wall_facts_single(mesh, samples, seed)
@@ -763,7 +767,8 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         "technology": resolved["technology"],
         "mesh": _safe(_mesh_facts, mesh),
         "scale": _safe(_scale_hint, mesh),
-        "overhangs": _safe(_overhang_facts, mesh, angle_limit, resolved["layer"]),
+        "overhangs": _safe(_overhang_facts, mesh, angle_limit, resolved["layer"], True,
+                           float(resolved.get("nozzle") or mo.OVERHANG_REACH_MM)),
         "wall_thickness": _safe(_wall_facts, mesh, samples, 42, kept),
         "gaps": _safe(_gap_facts, mesh, samples),
         "clearances": _safe(_clearance_facts, mesh),

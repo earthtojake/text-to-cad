@@ -44,6 +44,14 @@ DEFAULT_ANGLE = {"fdm": 45.0, "sla": 19.0, "sls": 0.0, "mjf": 0.0, "pbf": 45.0}
 #: The layer height each technology's stair-stepping is measured with when none is given, mm: FDM's common
 #: 0.2, SLA's 0.1 standard (Xometry), SLS's 0.1, MJF's 0.08 (Hubs), metal's 0.03 (Protolabs, 20 to 30 um).
 DEFAULT_LAYER = {"fdm": 0.2, "sla": 0.1, "sls": 0.1, "mjf": 0.08, "pbf": 0.03}
+#: FDM's horizontal round holes print unsupported up to this diameter, mm (their arch stands layer on layer
+#: but the crown's last few): above it ``printing.horizontal_hole`` warns. The owner's figure -- Hubs's FDM
+#: guide gives none, only that support in a horizontal hole is hard to remove and that turning the part 90
+#: deg removes it.
+HORIZONTAL_HOLE_MM = 10.0
+#: What a finding on an assembly measured: the parts as printed together, where they stand.
+IN_PLACE = ("the check measures the parts as printed together, in place (print-in-place); a part printed on its "
+            "own is checked by its own id")
 #: Materials that warp on an FDM plate (shrinking as they cool): a long flat contact is a risk.
 WARP_PRONE = ("abs", "nylon", "nylon_gf", "pc", "pc_abs", "pp", "peek", "pei", "pom", "pbt")
 
@@ -125,7 +133,8 @@ def _overhang(rows: list[tuple[str, float, str, str]], kinds_by_tech: dict[str, 
     for technology, limit, source, severity in rows:
         found.append(Rule("printing.overhang_angle", "overhangs", "angle_deg", "min", {technology: limit}, "deg",
                           "down-facing surface angle from horizontal", source, severity=severity, by="technology",
-                          when={"technology": technology}, item_when={"kind": kinds_by_tech[technology]},
+                          when={"technology": technology},
+                          item_when={"kind": kinds_by_tech[technology], "counted": True},
                           fix="support it, chamfer it to at least {limit:g} deg from horizontal, or turn the part"))
     return found
 
@@ -139,7 +148,7 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
     generic = name == "generic"
     rows: dict[str, list[tuple[str, float, str, str]]] = {key: [] for key in (
         "wall_s", "wall_u", "hole", "pin", "pin_aspect", "overhang", "bridge", "cantilever", "hhole", "clear", "gap",
-        "escape_n", "escape_d", "hollow", "fit", "emboss", "engrave_d", "engrave_w", "warp", "section")}
+        "escape_n", "escape_d", "hollow", "fit", "emboss", "engrave_d", "engrave_w", "warp", "section", "hround")}
 
     def add(key: str, technology: str, limit: float, source: str, severity: str) -> None:
         # generic: the first source to give a technology a figure wins (Hubs, then Protolabs, then Xometry)
@@ -191,6 +200,8 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
             add("escape_n", "pbf", 1, "hubs-sls", "error")
             add("escape_d", "mjf", 3.5, "hubs-sls", "warning")
             add("escape_d", "pbf", 3.5, "hubs-sls", "warning")
+            # generic's own threshold on Hubs's advice for FDM's horizontal holes (HORIZONTAL_HOLE_MM)
+            add("hround", "fdm", HORIZONTAL_HOLE_MM, "hubs-fdm", "warning")
     if P:
         for tech, wall in (("sla", 0.305), ("sls", 0.762), ("mjf", 0.508), ("pbf", 0.381)):
             add("wall_s", tech, wall, "protolabs-toolkit", "error")
@@ -258,8 +269,14 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
                     "horizontal hole diameter", rows["hhole"],
                     "give it a teardrop or diamond top, or keep it to {limit:g} mm",
                     {"orientation": "horizontal", "teardrop": False})
+    found += _rules("printing.horizontal_hole", "holes", "diameter_mm", "max", "mm", "horizontal round hole diameter",
+                    rows["hround"], "give it a teardrop or flat top, or turn the part so the hole stands vertical: "
+                    "above {limit:g} mm its crown sags", {"orientation": "horizontal", "teardrop": False},
+                    "generic's own threshold: Hubs FDM gives no diameter, only that a horizontal hole's support is "
+                    "hard to remove and turning the part 90 deg removes it")
     found += _rules("printing.clearance", "clearances", "distance_mm", "min", "mm", "clearance between parts",
-                    rows["clear"], "open the clearance to at least {limit:g} mm (parts printed together fuse)")
+                    rows["clear"], "open the clearance to at least {limit:g} mm (parts printed together fuse); "
+                    + IN_PLACE)
     found += _rules("printing.gap", "gaps", "gap_mm", "min", "mm", "gap between faces", rows["gap"],
                     "open the gap to at least {limit:g} mm or close it")
     found += _rules("printing.escape_holes", "trapped_volumes", "escape_holes", "min", "count",
@@ -294,7 +311,7 @@ def _set(name: str, title: str, note: str, generic: bool = False) -> RuleSet:
     cited = sorted({rule.source for rule in rules} | {source for source in
                                                       (s for _, s in BUILD_VOLUMES.get(name, {}).values())})
     return RuleSet(name, "printing", title, _ACCESSED, rules, tuple(SOURCES[ident] for ident in cited),
-                   generic=generic, note=note)
+                   generic=generic, note=note, selector="technology")
 
 
 RULE_SETS: dict[str, RuleSet] = {
@@ -400,8 +417,10 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     mesh = _ok(report.get("mesh"))
     if mesh:
         if mesh.get("watertight") is False:
-            found.append(CheckFinding("warning", "not_watertight", "the mesh is not watertight: its volume, wall "
-                                      "thickness and support volume are measured of an open surface", "mesh"))
+            found.append(CheckFinding("warning", "not_watertight", "the mesh is not watertight (holes or open edges): "
+                                      "a slicer may misread it, and its volume, walls, cavities and support are "
+                                      "measured of an open surface -- read every figure below with that",
+                                      "mesh", "repair the mesh, or export it again from the model"))
         if (mesh.get("body_count") or 0) > 1:
             found.append(CheckFinding("info", "several_bodies", f"{mesh['body_count']} separate bodies: walls are "
                                       "measured per body", "mesh"))
@@ -420,15 +439,21 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     if candidates:
         return found
     overhangs = _ok(report.get("overhangs"))
+    parts = (solid.get("part_count") or 0) if solid else (mesh.get("body_count") or 0)
     if (overhangs.get("down_facing_area_below_limit_mm2") or 0) > 0:
         faces = overhangs.get("largest_faces_below_limit") or [{}]
+        assembled = f"; {IN_PLACE}" if parts > 1 else ""
         found.append(CheckFinding(
             "warning" if technology not in POWDER else "info", "overhangs",
             f"{overhangs['down_facing_area_below_limit_mm2']:g} mm2 ({overhangs['down_facing_area_below_limit_pct']:g}%"
             f" of the surface) faces down at under {overhangs['angle_limit_used_deg']:g} deg from horizontal, off "
-            f"the plate, {overhangs['face_count_below_limit']} faces",
-            faces[0].get("location") or where(faces[0].get("location_xyz"))))
-    edge = [item for item in overhangs.get("items") or () if item.get("kind") == "plate_edge"]
+            f"the plate, {overhangs['face_count_below_limit']} {'faces' if solid else 'triangles'}{assembled}",
+            faces[0].get("location") or where(faces[0].get("location_xyz")),
+            "support it, chamfer the undersides to the angle or steeper, or turn the part (--candidates ranks the "
+            "orientations; turn it in the model)" if technology not in POWDER else None))
+    # a face on the plate's edge that faces down under the limit (a 45 deg chamfer there is the cure, not one)
+    edge = [item for item in overhangs.get("items") or ()
+            if item.get("kind") == "plate_edge" and (item.get("area_below_limit_mm2") or 0) > 0]
     if edge and technology in ("fdm", "sla"):
         found.append(CheckFinding("info", "plate_edge_round", f"{len(edge)} rounded or sloped face(s) meet the plate "
                                   f"facing down: they sag on the first layers", edge[0].get("location"),
@@ -437,11 +462,13 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
     if isinstance(walls, dict) and walls.get("note"):
         found.append(CheckFinding("info", "walls_not_measured", walls["note"], "wall_thickness"))
     trapped = _ok(report.get("trapped_volumes"))
-    if technology in ("fdm",):
+    # an open mesh has no inside: the voxels' "voids" in it are its holes' artefacts
+    if technology in ("fdm",) and not (mesh and mesh.get("watertight") is False):
         for item in trapped.get("items") or ():
             if item.get("sealed"):
                 found.append(CheckFinding("info", "internal_void", f"a sealed void of {item['volume_mm3']:g} mm3: "
-                                          "FDM prints it as it does infill", item.get("location")))
+                                          "FDM prints it as it does infill",
+                                          item.get("location") or where(item.get("xyz")) or "trapped_volumes"))
     bed = _ok(report.get("bed"))
     if bed and technology in ("fdm", "sla") and not (bed.get("contact_area_mm2") or 0) > 0:
         found.append(CheckFinding("warning", "no_bed_contact", "nothing flat rests on the plate: the part stands on "
@@ -462,8 +489,9 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
 def summary(report: dict[str, Any], resolved: dict[str, Any], candidates: bool) -> str:
     if candidates:
         rows = _ok(report.get("orientations")).get("candidates") or []
-        return "orientations ranked: " + "; ".join(
-            f"{row['orientation']} score {row.get('score', 0):g}: support {mm(row.get('support_volume_mm3'))} mm3, "
+        return "orientations ranked (turn the part in its model with the rotation given): " + "; ".join(
+            f"{row['orientation']} {row.get('rotate', '')} score {row.get('score', 0):g}: support "
+            f"{mm(row.get('support_volume_mm3'))} mm3, "
             f"{mm(row['build_height_mm'])} mm tall" for row in rows)
     body = _ok(report.get("mesh")) or _ok(report.get("solid"))
     overhangs, walls = _ok(report.get("overhangs")), _ok(report.get("wall_thickness"))
