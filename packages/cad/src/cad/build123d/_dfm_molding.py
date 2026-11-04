@@ -280,7 +280,13 @@ class _Geometry:
                     except Exception:  # noqa: BLE001 - a degenerate edge adds no point
                         continue
             own = self.points[self.owner == ordinal]
-            self._vertices[ordinal] = np.vstack([np.array(corners + edge_points).reshape(-1, 3), own])
+            found = np.vstack([np.array(corners + edge_points).reshape(-1, 3), own])
+            if not len(found):
+                # A closed face with no vertex, no edge and no sample: its box's corners stand for it.
+                box = face.bounding_box()
+                found = np.array([[x, y, z] for x in (box.min.X, box.max.X) for y in (box.min.Y, box.max.Y)
+                                  for z in (box.min.Z, box.max.Z)])
+            self._vertices[ordinal] = found
         return self._vertices[ordinal]
 
     def neighbours(self) -> dict[int, list[tuple[int, Any]]]:
@@ -1036,6 +1042,8 @@ def _parting_part(geo: _Geometry, drafts: list[_FaceDraft], projection: dict[str
     trapped = trapped or set()
     u, v = ops.basis(pull)
     heights = vertices @ pull if len(vertices) else geo.points @ pull
+    if not len(heights):
+        heights = np.array([float(geo.lo @ pull), float(geo.hi @ pull)])
     top, bottom = float(heights.max()), float(heights.min())
     depth = top - bottom
     tolerance = max(1e-3 * depth, 0.01)

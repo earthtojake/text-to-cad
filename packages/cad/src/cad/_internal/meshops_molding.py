@@ -180,6 +180,8 @@ def _point_bound(p: np.ndarray, n: np.ndarray, q: np.ndarray, radius: np.ndarray
     """The ball radius each point allows against the surface points ``q`` alone: an upper bound on the
     exact one (a subset of the surface can only hold a ball less tightly)."""
     radius = radius.copy()
+    if not len(q) or not len(p):
+        return radius  # nothing else on the surface (a part of one closed face): the ray alone bounds it
     q = q[_subset(len(q), BOUND_POINTS)]
     for start in range(0, len(p), chunk):
         stop = min(len(p), start + chunk)
@@ -278,7 +280,8 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
     the edge): low by an outside edge, never high.
 
     Points sampled on exact faces lie off a triangulation of them (a chord runs inside a convex face), so
-    with ``point_face`` and ``triangle_face`` (and ``others_face``) a point is never held by its own face; ``cap``
+    with ``point_face`` and ``triangle_face`` (and ``others_face``) a point is not held by its own face's triangles
+    near it (within three of them); ``cap``
     gives its own face's bound instead (a convex cylinder's or sphere's radius, inf for a plane)."""
     p_all = np.asarray(points, dtype=float).reshape(-1, 3)
     n_all = np.asarray(normals, dtype=float).reshape(-1, 3)
@@ -314,6 +317,14 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         upper = _point_bound(p_all, n_all, q, radius, floor)
     upper = np.where(np.isfinite(upper), upper, scale)
     tri_face = np.asarray(triangle_face) if own else None
+    if own:
+        # A point is kept from its own face's triangles only near it (three of that face's typical triangles
+        # across), where a chord runs inside the surface the point lies on; farther off they bound the ball as
+        # any face does (a one-face ellipsoid's far side).
+        longest = np.max(np.stack([np.linalg.norm(b_t - a_t, axis=1), np.linalg.norm(c_t - b_t, axis=1),
+                                   np.linalg.norm(a_t - c_t, axis=1)]), axis=0)
+        typical = {int(face): float(np.median(longest[tri_face == face])) for face in np.unique(tri_face)}
+        keep_off = np.array([3.0 * typical.get(int(face), 0.0) for face in np.asarray(point_face)])
     # Points a few at a time (neighbours in the sampled order lie near one another, so their triangles mostly
     # coincide): each solves the triangles within its own ball's reach (2 r of the bound), its own face's left out.
     chunk = 24
@@ -322,7 +333,7 @@ def ball_thickness(points: np.ndarray, normals: np.ndarray, ray: np.ndarray, ver
         distance = np.linalg.norm(centroid[None, :, :] - p_all[index, None, :], axis=2) - reach[None, :]
         near = distance <= 2.0 * upper[index, None] * (1 + 1e-9)
         if own:
-            near &= tri_face[None, :] != np.asarray(point_face)[index, None]
+            near &= (tri_face[None, :] != np.asarray(point_face)[index, None]) | (distance > keep_off[index, None])
         columns = np.nonzero(near.any(axis=0))[0]
         if not len(columns):
             continue
@@ -517,6 +528,9 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     tilted = np.vstack([(lateral + p) / math.sqrt(2.0), (lateral - p) / math.sqrt(2.0)])
     candidates = np.vstack([lateral, tilted])
     n = len(pts)
+    if not n:
+        return {"release": "none", "kind": "internal", "directions": [], "vectors": [], "angled": [],
+                "stroke_mm": None}
     frees = np.zeros((len(candidates), n), dtype=bool)
     for index, side in enumerate(candidates):
         if index == len(lateral) and frees[:index].all(axis=1).any():
