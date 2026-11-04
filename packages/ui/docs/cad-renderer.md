@@ -17,8 +17,8 @@ Applications use the registrations and the shared
 
 `src/renderers/kit` is the format-blind half of the viewer: small modules a
 renderer composes, none of which asks what it is showing. There is one renderer
-per file family, each a vertical slice over the kit: `src/renderers/dxf`
-([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
+per file family, each a vertical slice over the kit: `src/renderers/board` (a KiCad board),
+`src/renderers/dxf` ([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
 `src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
 `src/renderers/xbf` (an `.xbf`, a STEP and an STP, [Engine document renderer](#engine-document-renderer)). The kit imports itself, shared UI
@@ -45,8 +45,8 @@ its menus offer (`VIEW_SETTING_IDS`). A setting left out does not affect the
 scene, and saved settings are never rewritten. `viewFeaturesForKind(kind, { parts })`
 is the one rule of which list a file gets: `ALL_VIEW_FEATURES` for an engine document (an `.xbf`, a
 STEP) of several parts (`XBF_VIEW_FEATURES`), and without Parts or Explode for one of one part
-(`XBF_PART_VIEW_FEATURES`); Solid, Clip and Explode for a GLB of several rigid nodes that draw;
-Solid and Clip for any other 3D file; and `EDGELESS_VIEW_FEATURES` (no Edges, Clip or Explode)
+(`XBF_PART_VIEW_FEATURES`); for any other 3D file Solid, with Parts where it draws several
+parts (`scenePartCount`), and Clip, and Explode too for a GLB of several rigid nodes that draw; and `EDGELESS_VIEW_FEATURES` (no Edges, Clip or Explode)
 for a drawing. Render is no mode. Every
 renderer hands its list to the shell, which configures the view-settings store
 (`configure({ features })`) and Display's settings from it, and to its Explode and Clip
@@ -353,7 +353,7 @@ it, the file sidebar, Quick Edit at the top-right.
   alert card (`ViewerAlertCard`) carrying the SERVER's sentence (`failureAlert`,
   `kind: "http"`); a payload from
   a server that disagrees about `schemaVersion` gets its own alert whose recovery is to
-  update text-to-cad.
+  update `cad-server` (the Update button or `cad update`) and reload.
 - **Host commands**: `resetCamera` fits the drawing again, `capture` hands over the
   PNG, `clearSelection` lets go of the picks, and `readState` reports `camera: null`,
   an empty `display`, the selection as references and `selectedEntities` (handles).
@@ -393,8 +393,9 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
   (`userData.cadSourceColor === false`: no materials in the file, a writer's
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
-- **Display**: `viewFeaturesForKind("glb", { parts })`: Solid and Clip, and Explode where the
-  file has two or more rigid nodes that draw (`explodeParts`); Preview draws Render.
+- **Display**: `viewFeaturesForKind("glb", { parts, explodeParts })`: Solid and Clip, Parts where
+  the file has several meshes, and Explode where it has two or more rigid nodes that draw
+  (`explodeParts`); Preview draws Render.
 - **Tools** (`glb/tools.js`): **Select** (in hand as the file opens), **Pencil**, **Shapes**,
   **Measure**, **Explode** (several parts only) and **Clip**. Select picks a NODE: the glTF
   node a mesh belongs to, marked on load (`userData.gltfNode`, `glbMeshData.js`), named
@@ -458,12 +459,14 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
   coloured the rest keep the colour their material carried. Flat is unlit,
   Single colour and Color by part override source colours (the palette is dealt
   in the order it always was, `paletteIndex`), opacity applies to every object.
-- **Display**: `viewFeaturesForKind` (Solid and Clip; Preview drawing Render).
+- **Display**: `viewFeaturesForKind` (Solid and Clip, and Parts for a 3MF of several objects;
+  Preview drawing Render).
 - **Tools** (`mesh/tools.js`): a 3MF has **Select** (its objects, by their place in the
   build: `model.3mf#o2.1`; an unnamed one is "Object o2.1"), **Pencil**, **Shapes**, **Measure** (in the
   unit the file declares, approximately) and **Clip**, Select in hand as it opens. An STL is
-  one mesh in no unit: **Pencil**, **Shapes** and **Clip**, nothing in hand as it opens (a press on ink
-  still picks it), and its Quick Edit names the whole file. Neither has parts to move apart,
+  one mesh in no unit: **Select**, **Pencil**, **Shapes** and **Clip**, Select in hand as it opens
+  and the view's plain navigation (it picks no part; a press on ink still picks it), and its Quick
+  Edit names the whole file. Neither has parts to move apart,
   nor a viewport context menu.
 - **Panels**: none, and no file sidebar sections of its own. Preview is the shell's, as for every 3D file;
   it draws the scene's sibling (`createSibling()`: its own meshes, materials and look over the
@@ -536,8 +539,8 @@ the loader asks which format it was.
   it too, because it draws the robot with this same scene.
   Materials are double-sided, so a mirrored `<mesh scale>` cannot turn a link
   inside out. "Color by part" deals the palette in the order parts always took it.
-- **Display**: `viewFeaturesForKind` (Solid and Clip; Preview drawing Render). A robot is
-  posed, never exploded.
+- **Display**: `viewFeaturesForKind` (Solid and Clip, and Parts where it has several link
+  meshes; Preview drawing Render). A robot is posed, never exploded.
 - **Tools** (`robot/tools.js`): **Select**, its menu the chevron after it
   (`kit/tools/select/SelectFilterMenu.jsx`): **All** (when a file opens), **Links** alone or
   **Position** alone (the joints' knobs; the menu is offered where a control can be driven, and
@@ -796,7 +799,8 @@ The port and app adapters own delivery and return an acknowledged outcome.
 Quick Edit (`kit/tools/quick-edit/QuickEdit.jsx`) is the shared note to the agent:
 a box at the top-right, there only while it has something to carry, which
 `RendererShell` mounts for a renderer that hands it `references` — every 3D file's renderer
-(a picture, `compact`, gets none; a drawing has no Quick Edit). Its box, header and buttons are the design system's
+(a picture, `compact`, gets none); a DXF and a board mount the same box over their canvas
+(`kit/shell/useFlatView.js`). Its box, header and buttons are the design system's
 ([Quick Edit](settings-ui.md#quick-edit)); what it can do follows the host
 ([prompt handoff](viewer-host.md#prompt-handoff)), never an app. The renderer hands
 the shell what is selected as `references`, in the prompt grammar (an `.xbf`'s and a STEP's in the engine's,
@@ -1289,7 +1293,7 @@ player advances the time by what the frame took (`advanceAnimationElapsed` in co
 
 Drawing is the viewer's own ink ([annotations](annotation.md)), with no drawing SDK
 behind it, and two strip tools: **Pencil** (the Pen, the Highlighter, the Eraser) and **Shapes** (the Rectangle,
-Line, Arrow, Ellipse, Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot and a DXF offer them. (The tools themselves are the
+Line, Arrow, Ellipse, Text). An engine document (an .xbf or a STEP), a GLB, a mesh, a robot, a DXF and a KiCad board offer them. (The tools themselves are the
 SHELL's — `kit/tools/annotate`, `shell.tools.drawing` — and a renderer puts them on its strip;
 `renderers/shell-harness` also mounts them, for tests.)
 
@@ -1383,9 +1387,9 @@ snapshot job, and a picture of each ([annotations](annotation.md#lifetime-and-ca
 The file navbar is [FileViewer's](file-viewer.md#the-navbar-and-the-explorer): the logo,
 which opens the app menu (Back to home, the person's settings, feedback, the links, the
 version), Back and Forward where the host keeps the view's history, the file's name (which
-opens the explorer) and its ⋯ menu at the left; at the
-right only what a host or a file adds: the update, the renderer's actions and, last, the
-host's actions (the web viewer's Export). A host that shows the view alone (`chrome: "bare"`,
+opens the explorer) and its ⋯ menu at the left (the web viewer's Export is a submenu of the
+⋯); at the right only what a host or a file adds: the renderer's actions, the host's actions
+(the CAD app's Full size) and, last, outermost, the update. A host that shows the view alone (`chrome: "bare"`,
 the CAD app's file handler) has no navbar; in Preview no host has one. The CAD renderers publish one navbar action, and only while a person has put away an
 alert card the model survives: the card's own icon, which brings it back (see
 [Inspect, Render and live revisions](#inspect-render-and-live-revisions)). What a person

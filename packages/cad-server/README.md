@@ -41,7 +41,7 @@ src/cad_server/
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
   kicad/                 # a KiCad schematic's electrical rules check and exports (`cad kicad_sch
-                         #   check|export`: schematic), by the kicad integration's kicad-cli, headless
+                         #   erc|export`: schematic), by the kicad integration's kicad-cli, headless
                          #   in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation

@@ -105,12 +105,11 @@ the engine holds (`file` is its id, `name` its function, `sourcePath` null: it h
 browse); else a 404 whose `error` is the engine's words for why, naming the command that builds
 it again, and whose `state` the engine's (`unsaved`, `detached`). A script is never a row. An
 envelope says what the document is: `id`, `kind` (`model`, or a file's by its extension: `xbf`,
-`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `sdf`), `name`, `version`, `state` (a model's,
+`step`, `stl`, `glb`, `3mf`, `dxf`, `urdf`, `srdf`, `sdf`, `kicad_pcb`, `kicad_sch`), `name`, `version`, `state` (a model's,
 the engine's: `live`, `held`, `building`, `failed`; a file's `live`), `source` (a model's script and
 function, a file's path), `producers`, `api` (where its kind's reads are,
 `/api/v1/documents/<kind>/<id>`), `exports` (the formats its Export offers), and for a document
-the engine serves, `held` (whether the engine holds its read now, asked without starting one). A row is computed from the file when it is asked for, so it is never
-stale. It also carries `revision`, a digest of its entries that moves whenever
+the engine serves, `held` (whether the engine holds its read now, asked without starting one). A row is computed from the file when it is asked for. It also carries `revision`, a digest of its entries that moves whenever
 anything a client would see in them does: a host that cannot afford to read the
 catalog on a timer (the CAD app relays every request through its host's few
 shared slots) compares the revision it is told with the client's
@@ -199,7 +198,7 @@ document of another kind is a 404 naming the right one (`"<id> is a step"`).
 | `GET /api/v1/documents/<id>/version` | Its version, waited on (`?after=&wait=&progress=`): the engine's version wait. |
 | `GET /api/v1/documents/<id>/thumbnail` | Its library picture (`?v=` its name, which the page sends to keep an older one out of a cache). |
 | `POST /api/v1/documents/<id>/exports` | An export of it (below). |
-| `GET /api/v1/documents/<kind>/<id>/...` | Its kind's reads: a model's, an `.xbf`'s and a STEP's `structure`, `parts/<key>` (and `faces\|edges\|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`, `POST mesh`; a DXF's `drawing` (below); a robot description's `structure` (`cad_server.robot_payload`: its articulation, its visuals at rest) and `parts/<hash>`, a primitive the engine meshed, by its digest; and every file's `source`, its bytes. |
+| `GET /api/v1/documents/<kind>/<id>/...` | Its kind's reads: a model's, an `.xbf`'s and a STEP's `structure`, `parts/<key>` (and `faces\|edges\|vertices/<ordinal>`, `groups`, `volume`), `measure`, `kinematics`, `POST pose`, `POST mesh`; a DXF's `drawing` (below); a KiCad board's `plot` and `drc`, and a schematic's `plot` (`cad_server.viewer.plots`; the payload is `@cad/core`'s `docs/plot-payload.md`); a robot description's `structure` (`cad_server.robot_payload`: its articulation, its visuals at rest) and `parts/<hash>`, a primitive the engine meshed, by its digest; and every file's `source`, its bytes. |
 | `GET /api/v1/local/files?path=...` | A CAD file's bytes, by its absolute path (a robot's link mesh, a file a model's file names beside it). |
 | `GET /api/v1/local/folder?path=...[&q=...]` | One folder's subfolders and CAD files; with `q`, the CAD files under it whose path holds `q`, bounded. |
 | `POST /api/v1/local/reveal` | `{path}`: show a file in the desktop's file manager. |

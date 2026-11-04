@@ -6,7 +6,7 @@ absolute path, under the navbar (or alone, `chrome: "bare"`), with the name menu
 It imports no concrete renderer. Applications compose registrations from the
 separate `@cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)). A CAD host composes
-`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the five
+`CadViewer` (`@cad/ui/cad-viewer`), which is this component with the six
 CAD renderers, the home and the standard error pages ([viewer host](viewer-host.md)).
 
 ```tsx

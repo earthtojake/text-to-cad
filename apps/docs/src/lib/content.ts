@@ -21,7 +21,7 @@ export const support = {
 // backticks, which the page sets as code.
 export const howItWorks = [
   "Your agent writes each model as a Python script with build123d, built on Open CASCADE.",
-  "Running the script, `python model.py`, builds the model with text-to-cad's server into an `.xbf` document (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each model's work in memory, so an edit rebuilds only what it changed.",
+  "Running the script, `python model.py`, builds the model with text-to-cad's server into a document it holds in memory (its parts, names, colours, materials and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each model's work in memory, so an edit rebuilds only what it changed.",
   "The CAD viewer shows the model in your agent app or your browser, and follows every rebuild.",
 ];
 
@@ -100,7 +100,7 @@ export const skillGroups = [
     name: "CAD",
     path: "skills/cad",
     summary:
-      "Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF, GLB and DXF exports.",
+      "Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built by text-to-cad's server and exported as STEP, STL, 3MF, GLB, DXF or xbf files.",
   },
   {
     name: "Engineering Drawing",
