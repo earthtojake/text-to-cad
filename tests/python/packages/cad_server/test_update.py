@@ -219,8 +219,15 @@ class ReleaseFoldersTest(Fixture):
         self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"})
         self.assertEqual(releases.discard("1.1.0"), [], "never the current release")
         self.assertEqual(releases.discard("1.0.0"), [], "never the one before")
+        lock = releases.where("1.2.0").with_name("1.2.0.lock")
+        lock.write_text("", encoding="utf-8")
         with mock.patch.object(releases, "running", return_value=False):
             self.assertEqual(releases.discard("1.2.0"), [str(releases.where("1.2.0"))])
+        self.assertFalse(lock.exists(), "its making's lock goes with it")
+        # An incomplete folder is no way back: the one before is the newest complete older one.
+        incomplete = releases.where("1.0.5")
+        incomplete.mkdir(parents=True)
+        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"})
 
     def test_a_folder_a_process_runs_from_is_kept(self) -> None:
         for version in ("1.0.0", "1.1.0"):

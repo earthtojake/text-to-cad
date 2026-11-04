@@ -165,7 +165,8 @@ def running(folder: Path | str) -> bool:
 def before(current: str | None) -> str | None:
     """The release kept as the one before ``current``, the way back: the one the last switch came from,
     where that switch went to ``current`` and held (``cad_server._internal.switch.last``), else the newest
-    release folder older than ``current`` (as PEP 440 orders them). None for none."""
+    complete release folder older than ``current`` (as PEP 440 orders them): an incomplete one is no way
+    back. None for none."""
     from cad.engine.contract import _order
 
     if not current:
@@ -180,7 +181,7 @@ def before(current: str | None) -> str | None:
         return switched["from"]
     mine = _order(current)
     older = [(order, found["version"]) for found in listing()
-             if found["version"] != current and (order := _order(found["version"])) is not None
+             if found["version"] != current and found["complete"] and (order := _order(found["version"])) is not None
              and mine is not None and order < mine]
     return max(older)[1] if older else None
 
@@ -250,6 +251,8 @@ def _remove(found: dict[str, Any]) -> list[str]:
     if folder.exists():
         return removed
     removed.append(str(folder))
+    # The lock its making held (``base.make``), empty, goes with it.
+    folder.with_name(f"{folder.name}.lock").unlink(missing_ok=True)
     try:
         record = next((record for record in installations.records()
                        if installations._same_place(record["prefix"], folder)), None)
