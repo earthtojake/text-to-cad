@@ -210,6 +210,15 @@ floor is not planar (a 3D-contoured cavity is reported through access and walls,
 edges are judged at their midpoint; text and engraving are recognised only as many fine faces and as
 narrow gaps; turning: ID groove depth beyond the bore, parting/chucking allowances, and cone point angle.
 
+### Budgets
+
+A part is meshed once and sampled about 400 x sqrt(faces) points by area, at most 6000, each face 1 to 16 (rays grow
+with the face count's square root, not the triangulation). Rays along one direction look up a grid of the faces' box
+shadows square to it. A point no machine direction reaches is probed on two points a face, at most 32 directions
+each (the part's own normals and axes first, then every 15 degrees about each world axis, then 200 over the
+sphere); a point that fails all 32 reads as having no line of sight -- a stated cap, so a rare direction can be
+missed. A face's unreached share is read on at most 16 points.
+
 ## Sheet metal
 
 A STEP, an xbf or a live shape (`cad.build123d.sheet_metal(shape)`) is measured on its exact B-rep
@@ -436,6 +445,15 @@ PP 0.035-0.150, PS 0.035-0.150 PPS 0.020-0.180, polyurethane 0.080-0.750, long-f
 - Clamp force is the part's projected area alone (no runner), a molder's factor table, not a resin's cavity
   pressure.
 
+### Budgets
+
+Each face's points are chosen by area before they are mapped to the surface, about 6000 a part; wall thickness is
+read at a fixed number of points whatever the face count (a small face of a part of thousands takes its broad
+neighbours' wall); rays along one direction look up a grid of the faces' box shadows. The undercut release search
+spends at most 200000 rays a part, largest features first; a feature left over reads release `unknown`, is counted
+in `unsearched_count` and is still judged by `molding.undercut`. Between world-axis slides freeing about as many
+points (within a fiftieth), the first in the candidates' order is taken, +x before +y.
+
 ## 3D printing
 
 ### The check
@@ -540,3 +558,16 @@ xometry-3dp, xometry-guide (Xometry Pro design guide) -- URLs in `cad._internal.
 - Lattices, minimum feature by local curvature, text legibility, tolerance stack-ups, residual stress beyond the
   largest cross-section and thick sections, and FDM horizontal holes (no fetched source gives a teardrop diameter;
   FDM's arch is judged as a bridge instead).
+
+### Budgets (exact geometry; each stated in the report it limits)
+
+- Samples: `--samples` (2000) by area, each face at least 4 -- fewer when the floor alone would pass 6000 (a part of
+  thousands of faces gets one each) -- at most 400; a face of many triangles keeps its count, spread over them.
+  The wall and gap rays of a part are cast together (one slab test per chunk of 64 rays against every face box).
+- Clearances: each side of a pair thinned to 1500 points; the 3 nearest face pairs measured exactly
+  (BRepExtrema) where the triangulations come within 1.5 mm plus their margin, at most 90 exact queries a document,
+  nearest pairs first; the rest keep the triangulations' distance (`exact: false`, `uncertainty_mm`); at most 4
+  overlap booleans.
+- Soundness: the kernel's boolean check on parts while their faces add up to 200; the rest BRepCheck topology alone
+  (`solid.items[].check`).
+- Flat ceilings: the 40 largest refined to the exact farthest point; the rest read on their samples (`refined`).
