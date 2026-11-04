@@ -214,7 +214,9 @@ KiCad's own frame, millimetres, y down: a point the viewer copies pastes straigh
 from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
 `kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page; the
 route's `?sheet=<path>` answers that sheet's page alone and `index=0` leaves the `schematic` index out
-(the viewer reads the sheet on screen, the index with the first it reads). The colours are the
+(the viewer reads the sheet on screen, the index with the first it reads). The engine parses the
+hierarchy once per revision of its files, stamped by every sheet file and folder it read, and keeps
+each page it answered beside it. The colours are the
 reader's: the viewer's theme (`plot2d/theme.js`'s `schematicColors`, KiCad's light paper or a dark
 sheet), as the snapshot's `appearance`. A
 schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a

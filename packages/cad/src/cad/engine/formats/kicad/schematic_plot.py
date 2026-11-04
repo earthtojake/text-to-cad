@@ -537,11 +537,13 @@ def _id(node: list) -> str | None:
 
 
 def build_schematic_plot(path: Path | str, *, sheets: Sequence[str] | None = None,
-                         index: bool = True) -> dict[str, Any]:
+                         index: bool = True, read: tuple[SchematicIndex, list[str]] | None = None) -> dict[str, Any]:
     """The plot payload of the schematic hierarchy ``path`` belongs to (the module doc): every sheet
     instance a page, in page order; ``sheets`` (paths, ``/Power/``) draws those alone, and ``index``
-    False leaves the index out (a still draws without it)."""
-    read, warnings = read_schematic_index(path)
+    False leaves the index out (a still draws without it). ``read`` is the hierarchy already read
+    (:func:`.schematic.read_schematic_index`'s answer for ``path``), which a caller that keeps it
+    passes so the files are not parsed again."""
+    read, warnings = read if read is not None else read_schematic_index(path)
     pages = []
     wanted = None if sheets is None else {_canonical(path_) for path_ in sheets}
     for sheet in read.sheets:
@@ -565,8 +567,9 @@ def _canonical(path: str) -> str:
     return "/" + "".join(f"{part}/" for part in parts)
 
 
-def schematic_payload_bytes(path: Path | str, *, sheets: Sequence[str] | None = None, index: bool = True) -> bytes:
+def schematic_payload_bytes(path: Path | str, *, sheets: Sequence[str] | None = None, index: bool = True,
+                            read: tuple[SchematicIndex, list[str]] | None = None) -> bytes:
     """The payload as compact JSON bytes, as the viewer's route answers it (``build_schematic_plot``'s
-    ``sheets`` and ``index``)."""
-    return json.dumps(build_schematic_plot(path, sheets=sheets, index=index), separators=(",", ":"),
+    ``sheets``, ``index`` and ``read``)."""
+    return json.dumps(build_schematic_plot(path, sheets=sheets, index=index, read=read), separators=(",", ":"),
                       ensure_ascii=False).encode("utf-8")
