@@ -25,7 +25,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { boardAnnotationDocument, boardAnnotationSurface } from "./boardAnnotation.js";
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { boardDisplayControl, readBoardDisplay } from "./BoardDisplay.jsx";
+import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
 import BoardSection from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
@@ -54,9 +54,9 @@ import { useBoardView } from "./useBoardView.js";
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
  * Circuit (its parts in their schematic blocks, and its nets) and its Layers (each layer's eye, and a
- * row's press for the active layer), each tile its own glyph; its one view control is its Display
- * (the modes, the pours, the side, Dim other layers and the zones' and tracks' opacities): one
- * contract with `cad <type> snapshot --display`. A payload without its
+ * row's press for the active layer), each tile its own glyph; its view controls are its Display (the
+ * modes) and its Settings (the pours, the side, Dim other layers and the zones' and tracks'
+ * opacities): one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  */
 
@@ -419,7 +419,7 @@ function BoardSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  const views = layered ? [boardDisplayControl({ t, display, sheet, onChange: setDisplay, disabled: !shown })] : [];
+  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : [];
   const sidebar = layered || index ? <>
     {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
       onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> : null}

@@ -282,7 +282,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display, Settings |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -547,7 +547,7 @@ opens or shuts it, as the STEP tree's. It opens as its blocks and "Nets (N)", a 
 parts and the Nets shut; a pick on the board opens its row's owners and scrolls it into view. A selected
 net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers: the
 layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
-active layer (a filled dot after its name), drawn on top, the one Display's Dim other layers leaves
+active layer (a filled dot after its name), drawn on top, the one Settings' Dim other layers leaves
 bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
 draws too; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
@@ -709,15 +709,19 @@ menu has a Display row whose nested submenu is the same list (`DisplayMenuItems`
 label. Checks sit at the row's right end. Choosing a mode closes the menu; ticking Grid
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
-DXF view has no Display or Preview control. A native KiCad board has Display for its
-layer presets (Board, Copper, Assembly, Placement), then **Settings** — Copper pours, View from
-below and **Dim other layers**, checkbox items — then **Opacity**, KiCad's Layer Display Options'
-**Zones** (60%) and **Tracks** (100%): each a row of its glyph and name where an item's are, a
-slider and its committed percentage (Enter or blur commits; Escape in the value puts it back and
-keeps the menu open), the menu 14rem wide for them; a slide or a tick leaves the menu open. Its
-Layers sidebar can override a preset, shown as Custom, and chooses the active layer Dim leaves
-bright; the active layer, Dim and the opacities are kept through a change of mode. It has no 3D
-Projection or Preview.
+DXF view has no Display or Preview control. A native KiCad board has two view controls, each a
+stock dropdown from its own tile, hinted by its name (`board/BoardDisplay.jsx`): **Display**, the
+mode on screen's glyph, its layer presets (Board, Copper, Assembly, Placement, and Custom while
+it applies) as a radio group under a muted **Display modes** label, a choice closing it; then
+**Settings**, a sliders glyph, its switches under a muted **Settings** label — Copper pours (while
+copper is drawn), View from below and **Dim other layers**, checkbox items — then a rule and
+**Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
+its glyph and name where an item's are, a slider and its committed percentage (Enter or blur
+commits; Escape in the value puts it back and keeps the menu open), the menu 14rem wide for them;
+a slide or a tick leaves it open. On a phone the strip's More has a submenu of each, Display then
+Settings. Its Layers sidebar can override a preset, shown as Custom, and chooses the active layer
+Dim leaves bright; the active layer, Dim and the opacities are kept through a change of mode. It
+has no 3D Projection or Preview.
 
 A 3D view's Display is a choice of mode and the Grid switch, and nothing else: a mode has no settings
 of its own, and there is no settings page. The modes, in order, are **Solid** (shaded with
