@@ -158,7 +158,7 @@ export function createPlotRasters({ layout, onChange, view = null, createCanvas 
       if (box && patches.length === 0) rasterize(frame);
       // The browser's default (bilinear) smoothing: a patch is resampled only while the view
       // moves, and "high" quality costs several times as much per frame on a software canvas.
-      drawPlotImages(ctx, layout, { transform: frame.transform, pixelRatio: frame.pixelRatio, images: placed(frame) });
+      drawPlotImages(ctx, layout, { transform: frame.transform, pixelRatio: frame.pixelRatio, images: placed(frame), view });
       const visible = box ? visiblePageRect(frame.transform, frame.width, frame.height) : null;
       for (const patch of patches) {
         if (visible && rectsOverlap(patch.rect, visible)) patch.used = (clock += 1);

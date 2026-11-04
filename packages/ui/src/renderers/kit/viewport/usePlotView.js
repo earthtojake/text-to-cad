@@ -34,9 +34,12 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's box.
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
+ * @param {object|null} [options.thumbnailView]  `drawPlot`'s `view` for a card's picture (a schematic's appearance); none, the plot as made.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDrag = null, onDoubleTap = null }) {
+  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, thumbnailView = null }) {
+  const thumbnailViewRef = useRef(thumbnailView);
+  thumbnailViewRef.current = thumbnailView;
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -97,7 +100,8 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error(`The browser cannot draw the ${noun}’s picture.`)); return; }
     clearSurface(context, { width: canvas.width, height: canvas.height });
-    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board" });
+    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board",
+      view: thumbnailViewRef.current });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error(`The browser could not encode this ${noun} as a PNG.`));
