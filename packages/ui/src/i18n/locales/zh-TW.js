@@ -5,12 +5,6 @@
  */
 export default {
   "board.text.board": "電路板",
-  "board.text.view": "檢視",
-  "board.text.board_view": "電路板檢視",
-  "board.text.view_2d": "2D",
-  "board.text.view_3d": "3D",
-  "board.text.couldn_t_draw_the_board_in_3d": "無法以 3D 繪製電路板",
-  "board.text.not_replayed_in_3d": "電路板的 3D 檢視不會重現：備註帶有所選內容",
   "board.text.copper": "銅層",
   "board.text.assembly": "組裝",
   "board.text.placement": "配置",
@@ -361,9 +355,6 @@ export default {
   "progress.update.build123d": "正在安裝 build123d",
   "progress.update.apps": "正在更新應用程式",
   "progress.update.restart": "正在重新啟動",
-  "progress.board-model.queued": "正在等待 KiCad",
-  "progress.board-model.kicad": "正在準備 KiCad",
-  "progress.board-model.export": "正在以 3D 繪製電路板",
 
   "display.label": "顯示",
   "display.mode": "顯示模式",

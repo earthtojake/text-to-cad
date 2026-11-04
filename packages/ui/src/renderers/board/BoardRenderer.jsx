@@ -1,5 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -35,12 +35,6 @@ import {
 import { useBoardDocument } from "./useBoardDocument.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
 import { useBoardView } from "./useBoardView.js";
-import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
-
-// The 3D view of the board, its code loaded once a person (or the file's view) asks for it: three.js
-// and the 3D stage come with it, never with the 2D board.
-const Board3DSurface = lazy(() => import("./Board3DView.jsx"));
-const THREE_D_LOADING = Object.freeze({ opening: true, progress: Object.freeze({ label: "Preparing view" }) });
 
 /**
  * A KiCad board as the picture drawn from its file, on a canvas, head on, as a drawing is: in
@@ -67,21 +61,13 @@ const THREE_D_LOADING = Object.freeze({ opening: true, progress: Object.freeze({
  * modes) and its Settings (the pours, the side, Other layers and the zones' and tracks'
  * opacities): one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
- *
- * The Display's **View** chooses **2D**, this picture, or **3D**, KiCad's own 3D model of the board shown on
- * the 3D stage (`Board3DView.jsx`). One file view holds both (`BoardFile`): the board's document and
- * index, the Display, what is isolated and what is selected (so a pick in either is the other's, and
- * the Circuit, the chips and Quick Edit are the same), and the record each half keeps of its own view
- * (the 2D window, the 3D camera and display); a switch mounts the other half and keeps the first's
- * record, so switching back finds it as it was. Once the 2D board has drawn its 3D model is asked for
- * in the background (`client.boardModel`, `wait: false`), so 3D is usually ready when it is chosen.
  */
 
 const SAVE_DELAY_MS = 180;
 // What the frame says it draws: a board, on its theme's canvas.
 const BOARD_SURFACE = Object.freeze({ "data-board-surface": "" });
-// The file's slices: the board's Display, what is isolated, 2D or 3D, and the 3D view's own record, kept across rebuilds.
-const SLICES = Object.freeze({ board: "1", isolated: "1", view: "1", scene3d: "1" });
+// The file's slices: the board's Display and what is isolated, kept across rebuilds.
+const SLICES = Object.freeze({ board: "1", isolated: "1" });
 
 const BOARD_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
 const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
@@ -103,119 +89,42 @@ const boardPacketReferences = (references, file) => [...new Set(references
 const viewDisplay = display => ({ mode: display.mode, side: display.side, poured: display.poured, ...(display.layers ? { layers: [...display.layers] } : {}),
   ...(display.active ? { active: display.active } : {}), others: display.others, zones: display.zones, tracks: display.tracks });
 
-/**
- * The file's view, one record the two halves write their parts of (`SLICES`): the 2D window (`camera`), the
- * Display, what is isolated, 2D or 3D, and the 3D view's own record. Written soon after a change, and at once
- * as the file closes.
- */
-function useBoardFileView(view) {
-  const [stored] = useState(() => readFileView(view.state, SLICES));
-  const record = useRef(null);
-  if (!record.current) {
-    record.current = {
-      camera: readTransform(stored.camera), board: readBoardDisplay(stored.renderer.board),
-      isolated: readIsolation(stored.renderer.isolated?.selectors), view: stored.renderer.view === "3d" ? "3d" : "2d",
-      scene3d: stored.renderer.scene3d && typeof stored.renderer.scene3d === "object" ? stored.renderer.scene3d : null
-    };
-  }
-  const serialize = () => {
-    const { camera, board, isolated, view: shown, scene3d } = record.current;
-    return writeFileView({ camera, renderer: { board, isolated: { selectors: [...isolated] }, view: shown, ...(scene3d ? { scene3d } : {}) },
-      signatures: SLICES });
-  };
-  const storedRef = useRef("");
-  if (!storedRef.current) storedRef.current = JSON.stringify(serialize());
-  const timer = useRef(0);
-  const pending = useRef(null);
-  const stateChangeRef = useRef(view.onStateChange);
-  stateChangeRef.current = view.onStateChange;
-  const write = useCallback(change => {
-    record.current = { ...record.current, ...change };
-    const next = serialize();
-    const serialized = JSON.stringify(next);
-    if (serialized === storedRef.current) return;
-    storedRef.current = serialized;
-    pending.current = next;
-    window.clearTimeout(timer.current);
-    timer.current = window.setTimeout(() => { pending.current = null; stateChangeRef.current?.(next); }, SAVE_DELAY_MS);
-  }, []);
-  useEffect(() => () => {
-    window.clearTimeout(timer.current);
-    if (pending.current) stateChangeRef.current?.(pending.current);
-  }, []);
-  return { record, write };
-}
-
-/** The board's file: what both halves share (the module), and the half on screen. */
-function BoardFile({ view, data }) {
-  const { t } = useI18n();
-  const workspace = useWorkspaceDocument({ view, data });
-  const document = useBoardDocument({ workspace, path: view.file.path });
-  const { index } = document;
-  const files = useBoardFileView(view);
-  const [display, setDisplay] = useState(() => files.record.current.board);
-  const [shownView, setShownView] = useState(() => files.record.current.view);
-  const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
-  const [restoredIsolation] = useState(() => files.record.current.isolated);
-  const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
-  const { write } = files;
-  useEffect(() => { write({ board: display, isolated: isolation.isolated, view: shownView }); }, [display, isolation.isolated, shownView, write]);
-
-  // What is selected, one selection for both halves: the half on screen paints it (`sink`).
-  const sink = useRef({ ink: NO_SELECTION, named: NO_SELECTION, highlight: null, paint: null });
-  const scene = useMemo(() => (index ? createBoardScene(index, { t, onHighlight: (ink, named) => {
-    sink.current.ink = ink;
-    sink.current.named = named;
-    sink.current.highlight?.(ink, named);
-  } }) : null), [index, t]);
-  const requestPaint = useCallback(() => sink.current.paint?.(), []);
-  const selection = useSceneSelection({ scene, requestRender: requestPaint });
-  const { references, chips } = useBoardReferences({ scene, selection, resource: workspace.resource });
-  const nameReference = useCallback(reference => {
-    const id = reference?.resource?.path === workspace.resource?.path && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
-    const described = id ? scene?.describePart(id) : null;
-    return described ? { name: described.name, kind: described.glyph } : "";
-  }, [workspace.resource?.path, scene]);
-
-  // 3D where the server draws a board in 3D and the file is one on this machine.
-  const client = workspace.client;
-  const offers3d = typeof client?.boardModel === "function" && workspace.resource?.kind === "workspace-file";
-  const in3d = offers3d && shownView === "3d";
-  const viewChoice = useMemo(() => (offers3d ? { value: shownView, onChange: setShownView } : null), [offers3d, shownView]);
-  // Once the 2D board has drawn, its 3D model is asked for, at the back of the server's queue of one: it never
-  // holds the board up (the server makes it off every request, one board at a time).
-  const drawn = document.shown && !document.loading && !document.updating && !document.alert;
-  const revision = String(workspace.resource?.revision || "");
-  useEffect(() => {
-    if (!offers3d || !drawn) return undefined;
-    const controller = new AbortController();
-    client.boardModel(document.file, { wait: false, signal: controller.signal }).catch(() => {});
-    return () => controller.abort();
-  }, [offers3d, drawn, client, document.file, revision]);
-
-  const shared = { view, data, workspace, document, files, display, setDisplay, isolation, scene, selection, references, chips, nameReference,
-    sink, viewChoice };
-  if (in3d) {
-    // Its code loading is the shared loading screen, as the model's making is.
-    return <Suspense fallback={<div className="relative h-full bg-background" data-board-model="loading">
-      <ViewerLoadingOverlay loading={THREE_D_LOADING} operationKey={document.file} />
-    </div>}><Board3DSurface {...shared} /></Suspense>;
-  }
-  return <BoardSurface {...shared} />;
-}
-
-function BoardSurface({ view, data, workspace, document, files, display, setDisplay, isolation, scene, selection, references, chips, nameReference, sink, viewChoice }) {
+function BoardSurface({ view, data }) {
   const { t } = useI18n();
   const host = useViewerHost();
   const mobile = useViewerMobile();
+  const workspace = useWorkspaceDocument({ view, data });
+  const document = useBoardDocument({ workspace, path: view.file.path });
   const { file, plot, index, sheet, layered, shown, alert } = document;
   const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
 
-  // ---- the file's view: the transform (the Display and what is isolated are the file's) ----
-  const [restored] = useState(() => files.record.current.camera);
-  const { write } = files;
+  // ---- the file's view: the transform, the board's Display, what is isolated ----
+  const [stored] = useState(() => readFileView(view.state, SLICES));
+  const [restored] = useState(() => readTransform(stored.camera));
+  const [display, setDisplay] = useState(() => readBoardDisplay(stored.renderer.board));
+  const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
+  const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
+  const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
+  const saved = useRef({ camera: restored, display, isolated: restoredIsolation });
+  const storedRef = useRef("");
+  const saveTimer = useRef(0);
+  const stateChangeRef = useRef(view.onStateChange);
+  stateChangeRef.current = view.onStateChange;
+  const save = useCallback(change => {
+    saved.current = { ...saved.current, ...change };
+    const { camera, display: board, isolated } = saved.current;
+    const record = writeFileView({ camera, renderer: { board, isolated: { selectors: [...isolated] } }, signatures: SLICES });
+    const serialized = JSON.stringify(record);
+    if (serialized === storedRef.current) return;
+    storedRef.current = serialized;
+    window.clearTimeout(saveTimer.current);
+    saveTimer.current = window.setTimeout(() => stateChangeRef.current?.(record), SAVE_DELAY_MS);
+  }, []);
   // A view that is still the fit stores no camera: `null` is "fit me".
-  const rememberView = useCallback(transform => write({ camera: transform ? { ...transform } : null }), [write]);
+  const rememberView = useCallback(transform => save({ camera: transform ? { ...transform } : null }), [save]);
+  useEffect(() => { storedRef.current = JSON.stringify(writeFileView({ camera: restored, renderer: { board: display, isolated: { selectors: [...restoredIsolation] } }, signatures: SLICES })); }, []);
+  useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);
+  useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   // ---- tools ----------------------------------------------------------------
   const tools = useFlatTools({ toolModes: BOARD_TOOL_MODES, file, revision: workspace.resource.revision, ready: Boolean(index) });
@@ -257,21 +166,15 @@ function BoardSurface({ view, data, workspace, document, files, display, setDisp
   const viewRef = useRef(null);
 
   // What is lit (resolved references) and the ink under the pointer: painted over the board, never React state.
-  const highlightRef = useRef(sink.current.ink);
+  const highlightRef = useRef(NO_SELECTION);
   const hoveredInkRef = useRef([]);
   const paintRef = useRef(() => {});
   const requestPaint = useCallback(() => paintRef.current(), []);
-  // The file's selection painted here while this half is on screen: what it lights, then a paint.
-  useEffect(() => {
-    const own = sink.current;
-    own.highlight = ink => { highlightRef.current = ink; };
-    own.paint = () => paintRef.current();
-    highlightRef.current = own.ink;
-    paintRef.current();
-    return () => { own.highlight = null; own.paint = null; };
-  }, [sink]);
+  const scene = useMemo(() => (index ? createBoardScene(index, { t, onHighlight: ink => { highlightRef.current = ink; } }) : null), [index, t]);
+  const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
+  const { references, chips } = useBoardReferences({ scene, selection, resource: workspace.resource });
   // The overlay's colours are the theme's (`board2d/boardOverlay.js`): a highlight that reads on the canvas under it.
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
@@ -472,6 +375,11 @@ function BoardSurface({ view, data, workspace, document, files, display, setDisp
   }, [selectKey, selectRequest, index, document.loading, acknowledgeCommand]);
 
   // ---- Quick Edit, the keys and the live command surface ------------------------
+  const nameReference = useCallback(reference => {
+    const id = reference?.resource?.path === workspace.resource?.path && reference.target?.kind === "cad-selector" ? reference.target.selectors[0] : "";
+    const described = id ? scene?.describePart(id) : null;
+    return described ? { name: described.name, kind: described.glyph } : "";
+  }, [workspace.resource?.path, scene]);
   // The copy key, while Annotate is not up: the selection's references, comma-joined after the file.
   const path = workspace.resource?.kind === "workspace-file" ? workspace.resource.path : "";
   const copySelection = () => {
@@ -526,7 +434,7 @@ function BoardSurface({ view, data, workspace, document, files, display, setDisp
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, boardView: viewChoice }) : [];
+  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : [];
   const sidebar = layered || index ? <>
     {index ? <BoardSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
       onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> : null}
@@ -556,5 +464,5 @@ function BoardSurface({ view, data, workspace, document, files, display, setDisp
 
 export default function BoardRenderer(props) {
   const { data, ...view } = props;
-  return <BoardFile key={JSON.stringify([view.source.id, view.file.path])} view={view} data={data} />;
+  return <BoardSurface key={JSON.stringify([view.source.id, view.file.path])} view={view} data={data} />;
 }

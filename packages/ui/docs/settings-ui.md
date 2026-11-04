@@ -725,14 +725,8 @@ toggles it and leaves the menu open (`onSelect` prevents the close). Clicking ou
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has two view controls, each a
 stock dropdown from its own tile, hinted by its name (`board/BoardDisplay.jsx`): **Display**, the
-mode on screen's glyph, led (where the server draws a board in 3D) by **View** — **2D** and **3D**, a
-radio group of its own under a muted **View** label, then a rule — then its layer presets (Board,
-Copper, Assembly, Placement, and Custom while it applies) as a radio group under a muted **Display
-modes** label, a choice in either closing it. View is Display's rows, not a tile as Projection is:
-it chooses the picture, as the modes do, and is the file's, kept with its view; in 3D the board is a
-3D view (its Display the 3D modes and Grid, after the same View rows: `RendererShell`'s `displayLead`;
-Projection and Preview as every 3D view has), and while KiCad makes the model the shared loading
-screen shows with the Display tile over it, View alone, so 2D is one choice away; then
+mode on screen's glyph, its layer presets (Board, Copper, Assembly, Placement, and Custom while
+it applies) as a radio group under a muted **Display modes** label, a choice closing it; then
 **Settings**, a sliders glyph, its switches under a muted **Settings** label — Copper pours (while
 copper is drawn) and View from below, checkbox items — then a rule and **Other layers**, KiCad's
 high-contrast modes, a radio group under its muted label: **Shown**, **Dimmed** or **Hidden** (every

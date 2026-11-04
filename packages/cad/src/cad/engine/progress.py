@@ -79,7 +79,6 @@ STAGES: dict[str, dict[str, str]] = {
     "inspect-measure": {"measure": "Measuring parts"},
     "update": {"install": "Installing the update", "build123d": "Installing build123d",
                "apps": "Updating the apps", "restart": "Restarting"},
-    "board-model": {"queued": "Waiting for KiCad", "kicad": "Preparing KiCad", "export": "Drawing the board in 3D"},
 }
 KINDS = tuple(STAGES)
 # The least time between two frames of one stage's count, in seconds; a stage's own frame is never held.

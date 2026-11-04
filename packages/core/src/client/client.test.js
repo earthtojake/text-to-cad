@@ -309,26 +309,6 @@ test('a board KiCad is still refilling and plotting is asked for again after the
   client.dispose();
 });
 
-test('a board in 3D is asked for once without waiting, or waited for with its stages heard, then read by its key', async () => {
-  const replies = [{ state: 'queued', progress: { kind: 'board-model', stage: 'queued' }, retryMs: 0 },
-    { state: 'exporting', progress: { kind: 'board-model', stage: 'export' }, retryMs: 0 },
-    { state: 'ready', key: 'k1', modelled: ['U1'], missing: ['R1'] }];
-  const asked = [];
-  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
-    if (options.method === 'POST') return opened('kicad_pcb');
-    asked.push(String(url));
-    const reply = replies.shift();
-    return Response.json(reply, { status: reply.state === 'ready' ? 200 : 202 });
-  } });
-  assert.equal(await client.boardModel('/b/blinky.kicad_pcb', { wait: false }), null);
-  const heard = [];
-  const made = await client.boardModel('/b/blinky.kicad_pcb', { onProgress: frame => heard.push(frame.stage) });
-  assert.deepEqual(heard, ['export']);
-  assert.deepEqual(made, { url: 'http://one.test/api/v1/documents/kicad_pcb/d1/glb?key=k1', key: 'k1', modelled: ['U1'], missing: ['R1'] });
-  assert.ok(asked.every(url => url.endsWith('/glb?prepare=1')), asked.join());
-  client.dispose();
-});
-
 test('an engine document is read through this server, with the client\'s fetch, once the engine holds it, its import heard meanwhile', async () => {
   // The engine's progress event of the import (`cad/engine/progress.py`), handed on as it came.
   const importing = { kind: 'import', stage: 'collect', job: 'a.step', outputs: [], detail: '', done: 120, total: 628, elapsedMs: 3100 };

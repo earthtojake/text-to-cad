@@ -14,13 +14,11 @@ import { GridIcon } from "../view-settings/DisplayModeOptions.js";
  * submenu): the file's modes, then, after a rule, the Grid switch, which every mode draws.
  *
  * @param {{ mode: { value: string, options: { value: string, label: string, Icon?: Function }[], onChange(value: string): void },
- *   grid: { value: boolean, onChange(value: boolean): void }, lead?: import("react").ReactNode }} props
- *   `lead`: the renderer's own rows before the modes, ending in their rule (a board's View: 2D or 3D).
+ *   grid: { value: boolean, onChange(value: boolean): void } }} props
  */
-export function DisplayMenuItems({ mode, grid, lead = null }) {
+export function DisplayMenuItems({ mode, grid }) {
   const { t } = useI18n();
   return <>
-    {lead}
     <DropdownMenuRadioGroup aria-label={t("display.mode")} value={mode.value} onValueChange={mode.onChange}>
       {mode.options.map(({ value, Icon }) => <DropdownMenuRadioItem key={value} value={value} data-display-mode-option={value}>
         {Icon ? <Icon className="size-4" /> : null}{t(`mode.${value}`)}
@@ -40,7 +38,7 @@ export function DisplayMenuItems({ mode, grid, lead = null }) {
  * mode chosen closes it; the Grid switch leaves it open. Projection is a menu of its own
  * (`ProjectionPopover.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
  */
-export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid, lead = null }) {
+export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid }) {
   const { t } = useI18n();
   const tileClass = useStripButtonClass();
   const current = mode.options.find(option => option.value === mode.value) || mode.options[0];
@@ -56,7 +54,6 @@ export default function DisplayPopover({ disabled = false, boundary = null, tool
     {/* Closes with no exit animation, so a quick second press always reaches the tile. */}
     <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} collisionBoundary={boundary || undefined} aria-label={t("display.label")}
       className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
-      {lead}
       <DropdownMenuLabel className="text-muted-foreground">{t("display.label")}</DropdownMenuLabel>
       <DisplayMenuItems mode={mode} grid={grid} />
     </DropdownMenuContent>

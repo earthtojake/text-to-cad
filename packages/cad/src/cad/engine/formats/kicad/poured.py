@@ -29,7 +29,7 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-__all__ = ["Refill", "cached", "folder", "key", "payload", "plot", "prune", "warning_of"]
+__all__ = ["Refill", "cached", "folder", "key", "payload", "plot", "warning_of"]
 
 #: What refills a copy: ``refill(board, out_dir)`` writes KiCad's refill of ``board`` into ``out_dir`` and
 #: answers the refilled file's path; it raises (any ``Exception``) when it cannot.
@@ -93,13 +93,12 @@ def _keep(path: Path, board_key: str, data: bytes) -> None:
         put(target, lambda staged: staged.write_bytes(gzip.compress(data, 1, mtime=0)), compare=False)
     except OSError:
         return  # a cache that cannot be written is no cache: the payload is still answered
-    prune(target.parent)
+    _prune(target.parent)
 
 
-def prune(kept: Path) -> None:
-    """Every other key's folder beside ``kept`` (a key's ``folder``) removed: a board's document keeps what was
-    made of its bytes as they are now, never of bytes it no longer has (the plot, its DRC, its exports, its
-    3D model)."""
+def _prune(kept: Path) -> None:
+    """Every other key's folder beside ``kept`` removed: a board's document keeps what was made of its
+    bytes as they are now, never of bytes it no longer has."""
     import shutil
 
     for other in kept.parent.iterdir() if kept.parent.is_dir() else ():

@@ -41,7 +41,7 @@ from pathlib import Path
 from ._program import KicadRunError, private_run, project_as_found, ready
 from ._program import quiet as _quiet
 
-__all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export", "missing_parts"]
+__all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export"]
 
 #: What can be exported, in the order they are listed to a person.
 EXPORTS = ("gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf")
@@ -118,13 +118,6 @@ def _step_written(to: str, completed: subprocess.CompletedProcess, step: Path) -
             and step.is_file())
 
 
-def missing_parts(said: str) -> list[str]:
-    """The references of the parts kicad-cli said it could add no 3D model for (``Could not add 3D model for
-    R1.``: the model file was not found), once each, in reference order (``C2`` before ``C10``)."""
-    return sorted(set(re.findall(r"Could not add 3D model for (\S+?)\.$", said, re.MULTILINE)),
-                  key=lambda ref: (re.sub(r"\d+", "", ref), int(re.sub(r"\D", "", ref) or 0)))
-
-
 def _missing_models(to: str, completed: subprocess.CompletedProcess, step: Path) -> str | None:
     """The warning for the parts a written STEP or GLB holds no body of -- a model file not found, or a
     model only in VRML -- whatever kicad-cli's exit status (0 when every model was only not found); else
@@ -132,7 +125,8 @@ def _missing_models(to: str, completed: subprocess.CompletedProcess, step: Path)
     if to not in ("step", "glb") or not step.is_file():
         return None
     said = f"{completed.stdout}\n{completed.stderr}"
-    parts = missing_parts(said)
+    parts = sorted(set(re.findall(r"Could not add 3D model for (\S+?)\.$", said, re.MULTILINE)),
+                   key=lambda ref: (re.sub(r"\d+", "", ref), int(re.sub(r"\D", "", ref) or 0)))
     vrml = said.count("Cannot use VRML models when exporting to non-mesh formats.")
     if not parts and not vrml:
         return None

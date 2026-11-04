@@ -7,12 +7,6 @@
  */
 export default {
   "board.text.board": "Board",
-  "board.text.view": "View",
-  "board.text.board_view": "Board view",
-  "board.text.view_2d": "2D",
-  "board.text.view_3d": "3D",
-  "board.text.couldn_t_draw_the_board_in_3d": "Couldn’t draw the board in 3D",
-  "board.text.not_replayed_in_3d": "A 3D view of a board is not replayed: the note carries what is selected",
   "board.text.copper": "Copper",
   "board.text.assembly": "Assembly",
   "board.text.placement": "Placement",
@@ -377,9 +371,6 @@ export default {
   "progress.update.build123d": "Installing build123d",
   "progress.update.apps": "Updating the apps",
   "progress.update.restart": "Restarting",
-  "progress.board-model.queued": "Waiting for KiCad",
-  "progress.board-model.kicad": "Preparing KiCad",
-  "progress.board-model.export": "Drawing the board in 3D",
 
   // Display: its tile and menu, the modes (`DisplayModeOptions.js`, by value) and the Grid switch.
   "display.label": "Display",

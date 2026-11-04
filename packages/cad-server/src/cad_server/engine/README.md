@@ -1843,13 +1843,6 @@ plan cameras, annotation and measurements. Its render-service handle holds only 
 board plot or parsed model is persisted. It refuses Preview, pose and transparent output.
 No KiCad is required to view a board; KiCad's own CLI (kicode's, the `kicad` integration's) performs DRC
 and exports.
-A board's 3D view is KiCad's GLB of it (`cad.kicad._model`: `kicad-cli pcb export glb` with the body, copper,
-silkscreen, solder mask and parts' models), made by the viewer's `board_models.BoardModels` in the
-background (`GET .../kicad_pcb/<id>/glb`): never on a request's thread, one board at a time in a process
-of its own at a low priority (`_internal/boards.model`, in KiCad's environment, made on first need), the
-board asked for last first, a stale revision's make killed; kept gzipped beside the plot
-(`<key>/model.glb.gz`, with `model.json`: the parts it has a body of and those whose model file was not
-found) and pruned with it. A board's snapshot draws its 2D picture alone.
 A `.kicad_sch` is drawn the same way, one sheet a picture: `formats/kicad/schematic_plot.py` rereads
 the hierarchy from its project's root and builds the page the display names (`{sheet, border,
 appearance}`: the root, `/`, unless it names another; the page's edge off unless asked; light or
