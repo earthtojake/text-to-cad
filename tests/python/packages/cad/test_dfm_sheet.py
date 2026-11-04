@@ -405,5 +405,131 @@ class TypeSideTest(unittest.TestCase):
                     self.assertEqual(len(hits), 1, finding.location)
 
 
+def checked(shape: bd.Shape, **options):
+    """The whole check of a live shape, as an agent's script runs it."""
+    from cad import build123d as cb
+
+    return cb.sheet_metal(shape, **options)
+
+
+def failed(result, rule: str) -> list[dict]:
+    return [failure for outcome in result.measurements["rules"]["outcomes"] if outcome["rule"] == rule
+            and outcome["status"] == "failed" for failure in outcome["failures"]]
+
+
+def _boxes_bracket() -> bd.Part:
+    """A 2 mm bracket of two boxes unioned: a sharp corner, no bend radius (base on z = 0, wall at x = 0)."""
+    part = (bd.Pos(20, 15, 1) * bd.Box(40, 30, 2) + bd.Pos(1, 15, 15) * bd.Box(2, 30, 30)).clean()
+    part.label = "boxes"
+    return part
+
+
+class ModellingMistakeTest(unittest.TestCase):
+    """The mistakes an agent writing build123d makes: no wrong part or flat pattern reads as a pass."""
+
+    def test_a_sharp_cornered_bracket_is_a_sharp_bend_and_its_flat_is_incomplete(self) -> None:
+        result = checked(_boxes_bracket(), material="steel", thickness=2)
+        self.assertFalse(result.ok)
+        (corner,) = result.measurements["sharp_bends"]["items"]
+        self.assertEqual((corner["kind"], corner["angle_deg"]), ("sharp", 90.0))
+        by_code = {f.code: f for f in result.findings}
+        self.assertIn("inside radius r >= t and an outside radius r + t at the corner", by_code["sheet.sharp_bend"].hint)
+        part = result.measurements["parts"]["items"][0]
+        self.assertAlmostEqual(part["flat_material_fraction"], 1200 / 2040, places=4)  # the wall is not in it
+        self.assertNotIn("sheet.flat_incomplete", by_code)  # the sharp bend says why the flat is short
+        with self.assertRaisesRegex(ValueError, "without a bend"):
+            sheet.unfold(_boxes_bracket())
+
+    def test_a_short_flat_is_an_error_where_nothing_else_says_why(self) -> None:
+        part = {"thickness_mm": 2.0, "is_sheet": True, "location": "p/face 1", "flat_material_fraction": 0.8}
+        alone = {f.code for f in sheet_rules.findings({"parts": {"items": [part]}}, {"rules": "generic"}, False)}
+        self.assertIn("sheet.flat_incomplete", alone)
+        sharp = {"parts": {"items": [part]}, "sharp_bends": {"items": [{"kind": "sharp", "location": "p/face 2",
+                                                                         "thickness_mm": 2.0, "angle_deg": 90.0}]}}
+        codes = {f.code for f in sheet_rules.findings(sharp, {"rules": "generic"}, False)}
+        self.assertEqual(codes & {"sheet.flat_incomplete", "sheet.sharp_bend"}, {"sheet.sharp_bend"})
+
+    def test_a_round_on_one_side_of_a_corner_says_which_radius_is_missing(self) -> None:
+        part = _boxes_bracket()
+        inner = [e for e in part.edges().filter_by(bd.Axis.Y) if abs(e.center().X - 2) < 1e-6 and abs(e.center().Z - 2) < 1e-6]
+        result = checked(part.fillet(2, inner), material="steel", thickness=2)
+        rounds = [item for item in result.measurements["sharp_bends"]["items"] if item["kind"] != "sharp"]
+        self.assertEqual([(item["kind"], item["inside_radius_mm"]) for item in rounds], [("inside_only", 2.0)])
+        messages = [f.message for f in result.findings if f.code == "sheet.sharp_bend"]
+        self.assertTrue(any("no outside radius of 4 mm" in message for message in messages), messages)
+        self.assertEqual(failed(result, "sheet.uniform_thickness"), [])  # the round is the sharp bend's, said once
+
+    def test_a_well_made_bracket_is_whole(self) -> None:
+        result = checked(bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "L"), material="steel",
+                         thickness=2)
+        self.assertTrue(result.ok, [f.message for f in result.findings])
+        self.assertEqual(result.measurements["sharp_bends"]["items"], [])
+        self.assertAlmostEqual(result.measurements["parts"]["items"][0]["flat_material_fraction"], 1.0, delta=0.002)
+        self.assertNotIn("sheet sheet", result.summary)
+
+    def test_a_hole_across_the_tangent_line_is_a_hole_in_the_bend(self) -> None:
+        for x in (39.5, 40.5):  # the tangent line at x = 40: half in the flange, half in the bend, either way
+            part = bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "L") - bd.Pos(x, 25, 0) * bd.Cylinder(1.5, 100)
+            report = measured(part, material="steel")
+            (hole,) = items(report, "holes")
+            self.assertTrue(hole["in_bend"], hole)
+            (near,) = items(report, "hole_to_bend")
+            self.assertEqual(near["distance_tangent_mm"], 0.0)
+            codes = {f.code for f in checked(part, material="steel").findings}
+            self.assertTrue({"sheet.hole_to_bend", "sheet.hole_in_bend"} <= codes, codes)
+
+    def test_a_slot_across_a_bend_leaves_one_bend_line_unfolded_whole(self) -> None:
+        part = bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "L") - bd.Pos(40, 25, 4) * bd.Box(12, 3, 12)
+        report = measured(part)
+        p = items(report, "parts")[0]
+        self.assertEqual(p["bend_count"], 2)
+        self.assertIsNone(p["unfold_note"])  # no loop of flanges, no seam
+        self.assertAlmostEqual(p["flat_material_fraction"], 1.0, delta=0.002)
+        self.assertEqual(len(p["flat_bend_lines"]), 2)
+        self.assertEqual(items(report, "notches"), [])  # the second strip is in the flat: no gap where it was
+
+    def test_a_hem_is_judged_by_its_own_rule(self) -> None:
+        hem = bent([("line", 40), ("bend", 180, 0.5), ("line", 8)], 1.0, 30, "hem")  # inside diameter = t
+        result = checked(hem, material="steel", thickness=1)
+        self.assertEqual(failed(result, "sheet.bend_radius"), [])
+        lid = bent([("line", 8), ("bend", 180, 0.5), ("line", 25), ("bend", 90, 1.0), ("line", 60)], 1.0, 50, "lid")
+        self.assertNotIn("sheet.bend_radii_mixed", {f.code for f in checked(lid, thickness=1).findings})
+
+    def test_sendcutsend_names_its_radius_and_does_not_contradict_it(self) -> None:
+        # 5052 at the 0.080 in gauge, bent at the calculator's 0.038 in: nothing about the radius
+        t, r = 0.080 * 25.4, 0.038 * 25.4
+        good = checked(bent([("line", 40), ("bend", 90, r), ("line", 30)], t, 50, "scs"), material="5052",
+                       rules="sendcutsend")
+        self.assertEqual(failed(good, "sheet.bend_radius") + failed(good, "sheet.bend_radius_shop"), [])
+        # 2 mm steel (0.074 in) bent at r = t: the error, and the radius to model in mm and inches
+        off = checked(bent([("line", 40), ("bend", 90, 2.0), ("line", 30)], 2.0, 50, "scs"), material="steel",
+                      rules="sendcutsend")
+        self.assertTrue(failed(off, "sheet.bend_radius_shop"))
+        (shop,) = [f for f in off.findings if f.code == "sheet.bend_radius_shop"]
+        self.assertIn("steel 0.074 in, 1.6 mm (0.063 in)", shop.hint)
+        (differs,) = [f for f in off.findings if f.code == "sheet.bend_radius_differs"]
+        self.assertIn("1.6 mm (0.063 in)", differs.hint)
+
+    def test_thickness_departures_say_how_thick_against_the_sheet(self) -> None:
+        plate = bd.Pos(0, 0, 1) * bd.Box(80, 50, 2) + bd.Pos(0, 0, 2.5) * bd.Box(20, 20, 1)  # a 3 mm patch
+        plate.label = "patched"
+        result = checked(plate)
+        thicker = [f.message for f in result.findings if f.code == "sheet.uniform_thickness"]
+        self.assertEqual(len(thicker), 5)  # its top and its four sides, each 1 mm above the sheet
+        for message in thicker:
+            self.assertIn("local thickness (the sheet's is the maximum) 3 mm is over the 2 mm maximum", message)
+        # a wall 3 mm thick where the bracket is 2: its skins, not its end caps, whose rays run along it
+        wall = bent([("line", 40), ("bend", 90, 2), ("line", 30)], 2.0, 50, "L") + bd.Pos(44.5, 25, 19) * bd.Box(1, 50, 30)
+        found = items(measured(wall.clean()), "not_sheet")
+        self.assertTrue([item for item in found if item["local_thickness_mm"] == 3.0])
+        self.assertFalse([item for item in found if abs(item["xyz"][2] - 34) < 1e-6])  # the wall's top cap
+        block = bd.fillet(bd.Box(60, 40, 20).edges(), 3)
+        block.label = "block"
+        machined = checked(block)
+        self.assertTrue(machined.measurements["not_sheet"]["items"])  # the facts stay
+        self.assertNotIn("sheet.uniform_thickness", {f.code for f in machined.findings})
+        self.assertEqual(failed(machined, "sheet.uniform_thickness"), [])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -284,6 +284,57 @@ def _overlaps(pieces: list[_Piece], tolerance: float = 1e-4) -> list[dict[str, A
     return found
 
 
+def _unique(pieces: list[_Piece]) -> list[_Piece]:
+    """The pieces less exact copies of another entity's (the same kind through the same points, either way)."""
+    kept: list[_Piece] = []
+    seen: dict[tuple[Any, ...], str] = {}
+    for piece in pieces:
+        if not piece.closed:
+            grid = [tuple(point) for point in np.round(piece.points / (10 * _JOIN)).astype(np.int64).tolist()]
+            key = (piece.kind, *min(grid, grid[::-1]))
+            if seen.get(key, piece.handle) != piece.handle:
+                continue  # another entity's copy (one entity doubling back on itself is a zero-area loop)
+            seen.setdefault(key, piece.handle)
+        kept.append(piece)
+    return kept
+
+
+def _unexplained(problems: list[dict[str, Any]], overlaps: list[dict[str, Any]],
+                 pieces: list[_Piece]) -> list[dict[str, Any]]:
+    """The open-geometry items an overlap does not explain: a copy of a curve laid on another meets it at
+    three ends (or leaves a dangling end on it), which is the overlap's one defect, reported there."""
+    if not overlaps:
+        return problems
+    by_handle: dict[str, list[_Piece]] = {}
+    for piece in pieces:
+        by_handle.setdefault(piece.handle, []).append(piece)
+    kept = []
+    for problem in problems:
+        point = np.array(problem["xyz"][:2], dtype=float)
+        handles = set(problem.get("handles") or ())
+        explained = False
+        for overlap in overlaps:
+            pair = set(overlap["handles"])
+            if not handles & pair:
+                continue
+            others = pair - handles or pair
+            if any(_off(point, piece) <= 10 * _JOIN for handle in others for piece in by_handle.get(handle, ())):
+                explained = True
+                break
+        if not explained:
+            kept.append(problem)
+    return kept
+
+
+def _off(point: np.ndarray, piece: _Piece) -> float:
+    """How far a point lies from a piece's polyline."""
+    a, b = piece.points[:-1], piece.points[1:]
+    d = b - a
+    length = np.maximum((d * d).sum(axis=1), 1e-300)
+    s = np.clip(((point - a) * d).sum(axis=1) / length, 0.0, 1.0)
+    return float(np.min(np.linalg.norm(a + s[:, None] * d - point, axis=1))) if len(a) else math.inf
+
+
 def _interval(piece: _Piece) -> tuple[float, float]:
     start = piece.start if piece.sweep >= 0 else piece.start + piece.sweep
     return start % (2 * math.pi), abs(piece.sweep)
@@ -430,9 +481,11 @@ def measure(document_type: str, source: Any, process: str, options: dict[str, An
         report["findings"] = findings
         report["partial"], report["partial_sections"] = False, []
         return report
-    chains, problems = _chain(pieces)
-    families["open_geometry"] = problems
+    # an exact copy of a curve is cut twice (overlaps says so) but bounds nothing: the contours are chained
+    # without it, so the outline it doubles is still the part's
+    chains, problems = _chain(_unique(pieces))
     families["overlaps"] = _overlaps(pieces)
+    families["open_geometry"] = _unexplained(problems, families["overlaps"], pieces)
     loops: list[plane.Loop] = []
     for chain in chains:
         loop = _loop(chain)

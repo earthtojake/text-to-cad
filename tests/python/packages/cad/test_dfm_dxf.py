@@ -106,8 +106,9 @@ class CutFileTest(unittest.TestCase):
         self.assertEqual(set(by_code) - CLEAN_CODES, planted)  # every planted defect, and nothing else
         measured = result.measurements
         ends = sorted(tuple(item["xyz"][:2]) for item in measured["open_geometry"]["items"])
-        # the open square's two ends, and the doubled line's own two ends mid-side
-        self.assertEqual(ends, [(10.0, 10.0), (10.0, 20.0), (45.0, 10.0), (55.0, 10.0)])
+        # the open square's two ends; the doubled line's own two ends lie on the side it overlaps, which is that
+        # one defect (overlaps), not open geometry to close
+        self.assertEqual(ends, [(10.0, 10.0), (10.0, 20.0)])
         overlap = next(item for item in measured["overlaps"]["items"] if item["kind"] == "partial")
         self.assertAlmostEqual(overlap["length_mm"], 10.0, places=6)
         self.assertEqual(overlap["xyz"][:2], [50.0, 10.0])
@@ -118,6 +119,16 @@ class CutFileTest(unittest.TestCase):
         self.assertGreaterEqual(run["segments"], 60)
         self.assertEqual(len(measured["contour_crossings"]["items"]), 2)  # two circles cross twice
         self.assertTrue(all(item["location"].startswith("layer 0, ") for item in measured["overlaps"]["items"]))
+
+    def test_a_side_drawn_twice_is_one_overlap_and_the_outline_stays_the_part(self) -> None:
+        def build(msp, _):
+            _plate(msp, 100, 60)
+            msp.add_line((0, 0), (100, 0))   # the outline's bottom side again, end to end
+        result = self.check(self.write("doubled", build), thickness=2.0)
+        self.assertEqual(self.codes(result) - CLEAN_CODES, {"sheet.overlapping_curves"})  # no open contour to close
+        self.assertEqual(result.measurements["open_geometry"]["items"], [])
+        (part,) = result.measurements["parts"]["items"]
+        self.assertEqual((part["flat_length_mm"], part["flat_width_mm"]), (100.0, 60.0))
 
     def test_units_inches_scale_and_unset_units_withhold_every_size_rule(self) -> None:
         def build(msp, _):

@@ -105,12 +105,12 @@ def corpus() -> list[Case]:
                       near=12))
     block = bd.fillet(bd.Box(60, 40, 20).edges(), 3)
     cases.append(Case("filleted_machined_block", _labelled(block, "block"),
-                      [("sheet.not_sheet", None), ("sheet.uniform_thickness", None), ("sheet.thickness_max", None)]))
+                      [("sheet.not_sheet", None), ("sheet.thickness_max", None)]))  # no thickness verdicts after it
     points = [[(x * 20, y * 20, 5 * ((x - 1.5) ** 2 * 0.3 + (y - 1) ** 2 * 0.2)) for y in range(3)] for x in range(4)]
     shell = bd.Solid.thicken(bd.Face.make_surface_from_array_of_points(points), 2.0)
     cases.append(Case("freeform_shell", _labelled(shell, "shell"), [("sheet.not_sheet", None)]))
     cases.append(Case("tight_short_hem", bent([("line", 40), ("bend", 180, 0.25), ("line", 3)], 1.0, 30, "hem"),
-                      [("sheet.hem_diameter", None), ("sheet.hem_return", None), ("sheet.bend_radius", None)]))
+                      [("sheet.hem_diameter", None), ("sheet.hem_return", None)]))  # a hem's radius: hem_diameter
     kit = bd.Compound(children=[_labelled(_hole(_hole(_bracket("fine"), 15, 15, 5), 15, 35, 5), "fine"),
                                 bd.Pos(0, 100, 0) * _labelled(_hole(_bracket("near"), 35, 25, 4), "near")])
     kit.label = "kit"
@@ -144,7 +144,8 @@ def corpus() -> list[Case]:
     # 2 mm mild steel is 0.074 in (14 ga): its calculator row's 1.6 mm radius, 0.320 in formed flange and
     # 0.472 in die judge a flange 4 mm past an R1 bend run into the plate without reliefs
     cases.append(Case("scs_2mm_steel_short_flange", tabbed(t=2.0, r=1.0, height=4.0, label="scs2"),
-                      [("sheet.bend_radius_shop", None), ("sheet.flange_length", (2.5, 0, 5)),
+                      [("sheet.bend_radius_shop", None), ("sheet.bend_radius_differs", None),
+                       ("sheet.flange_length", (2.5, 0, 5)),
                        ("sheet.bend_relief_depth", (0, 15, 2)), ("sheet.bend_relief_depth", (0, -15, 2))],
                       options=dict(rules="sendcutsend", material="mild steel")))
     good_scs = _labelled(_hole(_bracket("scsok", t=3.175, r=3.175, base=40, wall=30), 15, 25, 5), "scsok")
@@ -152,6 +153,17 @@ def corpus() -> list[Case]:
     thin = _labelled(_hole(_plate("thin", t=0.8), -50 + 2.2, 0, 2.0), "thin")  # 1.2 mm from the edge
     cases.append(Case("protolabs_thin_edge", thin, [("sheet.hole_to_edge", (-47.8, 0, 0.4))],
                       options=dict(rules="protolabs")))
+    # the modelling mistakes an agent makes most: a bracket of two boxes, a sharp corner and no bend radius; a
+    # hole drilled across the bend's tangent line; a slot cut across a bend, the bend line in two
+    sharp = (bd.Pos(20, 25, 1) * bd.Box(40, 50, 2) + bd.Pos(1, 25, 15) * bd.Box(2, 50, 30)).clean()
+    cases.append(Case("sharp_cornered_bracket", _labelled(sharp, "boxes"),
+                      [("sheet.sharp_bend", None)]))  # it says why the flat is short: no flat_incomplete
+    across = _hole(_bracket("across"), 39.5, 25, 3)  # the tangent line at x = 40 runs through it
+    cases.append(Case("hole_across_tangent_line", _labelled(across, "across"),
+                      [("sheet.hole_to_bend", (40, 25, 0)), ("sheet.hole_in_bend", None)], near=3))
+    slotted = _bracket("slotted") - bd.Pos(40, 25, 4) * bd.Box(12, 3, 12)
+    cases.append(Case("slot_across_bend", _labelled(slotted, "slotted"), [("sheet.hole_to_bend", (42.8, 25, 1.2))],
+                      near=3))
     return cases
 
 

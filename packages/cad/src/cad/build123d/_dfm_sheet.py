@@ -42,7 +42,7 @@ from cad.build123d import _dfm_brep as brep
 __all__ = ["FAMILIES", "Unfolded", "measure", "unfold"]
 
 #: The report's families, in order.
-FAMILIES = ("parts", "not_sheet", "bends", "flanges", "channels", "reliefs", "hems", "curls", "holes",
+FAMILIES = ("parts", "not_sheet", "sharp_bends", "bends", "flanges", "channels", "reliefs", "hems", "curls", "holes",
             "hole_spacing", "hole_to_bend", "notches", "tabs", "webs", "gaps")
 ITEM_CAP = 300
 _PARALLEL = 0.9995
@@ -179,6 +179,7 @@ class _HoleLoop:
     xyz: np.ndarray
     in_bend: bool = False
     countersink: float | None = None
+    ref: str | None = None      # where no face's wire gave it (read back from the flat): the face it lies on
 
 
 def _matrix(rotation: np.ndarray, translation: np.ndarray) -> np.ndarray:
@@ -240,8 +241,10 @@ def _adjacency(part: brep.Part) -> list[_Join]:
     props: dict[int, Any] = {}
     found: list[_Join] = []
     for index in range(1, ancestry.Extent() + 1):
+        listed = ancestry.FindFromIndex(index)  # iterating an OCCT list from Python costs milliseconds an item
         owners: list[Any] = []
-        for owner in ancestry.FindFromIndex(index):
+        for owner in ([] if listed.Size() == 0 else [listed.First()] if listed.Size() == 1
+                      else [listed.First(), listed.Last()] if listed.Size() == 2 else list(listed)):
             if not any(owner.IsSame(other) for other in owners):
                 owners.append(owner)
         if len(owners) != 2:
@@ -280,7 +283,7 @@ def _samples(face: Any, count: int) -> list[brep.Sample]:
     from OCP.gp import gp_Pnt, gp_Vec
     from OCP.TopLoc import TopLoc_Location
 
-    box = face.bounding_box()
+    box = face.bounding_box(optimal=False)  # a mesh tolerance: the optimal box costs seconds on a large part
     brep._triangulated(face, max(1e-3, 0.02 * max(box.size.X, box.size.Y, box.size.Z)))
     location = TopLoc_Location()
     triangulation = BRep_Tool.Triangulation_s(face.wrapped, location)
@@ -438,6 +441,9 @@ class _Analysis:
         self.wall_of: dict[int, int] = {}
         self.partners: dict[int, set[int]] = {}
         self.not_sheet: list[dict[str, Any]] = []
+        self.off_edges: set[int] = set()          # cut edges of a stretch off the sheet's thickness
+        self.sharp: list[dict[str, Any]] = []     # corners joined without a bend (sharp_bends)
+        self.explained: set[int] = set()          # not_sheet faces a sharp_bends item names
         self.bends: list[_Bend] = []
         self.flanges: list[_Flange] = []
         self.side: set[int] = set()
@@ -571,10 +577,16 @@ class _Analysis:
             near = [b for b in near if b in paired]
             if any(c in self.partners.get(b, ()) for b in near for c in near):
                 self.edge_set.add(a)
+        # a face square to two opposite planar faces is a cut edge of whatever lies between them, whatever its
+        # thickness: a stretch off the sheet's thickness is judged on its skins, not on its edges' rays, which
+        # run along the stretch to its far end
+        for a in self.hits:
+            if a not in paired and a not in self.countersinks and a not in self.edge_set and self._between_opposites(a):
+                self.off_edges.add(a)
         sheet = paired | self.edge_set | set(self.countersinks)
         self.sheet_fraction = float(self.areas[[a - 1 for a in sheet]].sum() / self.areas.sum()) if sheet else 0.0
         for a, hs in self.hits.items():
-            if a in sheet and a not in self.skins:
+            if (a in sheet and a not in self.skins) or a in self.off_edges:
                 continue
             valid = [h for h in hs if h.distance is not None and h.face not in self.countersinks]
             if a in self.skins:
@@ -588,6 +600,13 @@ class _Analysis:
                                 sum(h.area for h in off) / sampled * self.areas[a - 1])
                 continue
             kind = "unpaired"
+            step = self._step(a, thickness, tol)
+            if step is not None:
+                # the side of a boss, patch or pocket: its rays run across the feature, so its height off the skin
+                # beside it is what it adds to (or takes from) the sheet
+                kind, local, point = step
+                self._not_sheet(a, kind, local, abs(local - thickness), point, self.areas[a - 1])
+                continue
             if valid:
                 worst = max(valid, key=lambda h: abs(h.distance - thickness))
                 local, deviation, point = worst.distance, abs(worst.distance - thickness), worst.point
@@ -600,6 +619,59 @@ class _Analysis:
                 centre = self.faces[a - 1].center()
                 point = np.array([centre.X, centre.Y, centre.Z])
             self._not_sheet(a, kind, local, max(deviation, tol), point, self.areas[a - 1])
+
+    def _step(self, a: int, thickness: float, tol: float) -> tuple[str, float, np.ndarray] | None:
+        """For a face standing square on a skin beside it (a plane square to it, a cylinder about its normal):
+        thicker or thinner, the sheet's thickness plus or less the face's height off that skin, and its
+        middle."""
+        surface = self.surfaces[a - 1]
+        if surface.kind not in ("plane", "cylinder"):
+            return None
+        for b in self.neighbors[a]:
+            if b not in self.skins:
+                continue
+            normal = np.array(self.surfaces[b - 1].normal)
+            square = (abs(float(np.dot(surface.normal, normal))) < 0.01 if surface.kind == "plane"
+                      else abs(float(np.dot(surface.axis, normal))) > _PARALLEL)
+            if not square:
+                continue
+            points = self._boundary([a], per_edge=5)
+            heights = (points - np.array(self.surfaces[b - 1].origin)) @ normal
+            high, low = float(heights.max()), float(heights.min())
+            centre = self.faces[a - 1].center()
+            middle = np.array([centre.X, centre.Y, centre.Z])
+            if high > tol:
+                return "thicker", thickness + high, middle
+            if -thickness + tol < low < -tol:  # through the sheet it is a cut's wall, not a pocket's
+                return "thinner", thickness + low, middle
+        return None
+
+    def _between_opposites(self, a: int) -> bool:
+        """Whether face ``a`` (a plane or a cylinder) stands square between two opposite planar faces it
+        touches, facing away from each other and nearer than its own rays run: the cut edge of a stretch of
+        plate, whose rays run along the stretch."""
+        surface = self.surfaces[a - 1]
+        if surface.kind not in ("plane", "cylinder"):
+            return False
+        sides = []
+        for b in self.neighbors[a]:
+            other = self.surfaces[b - 1]
+            if other.kind != "plane" or b in self.edge_set:
+                continue  # a cut edge's neighbours across the sheet are its skins, never two other cut edges
+            normal = np.array(other.normal)
+            square = (abs(float(np.dot(surface.normal, normal))) < 0.01 if surface.kind == "plane"
+                      else abs(float(np.dot(surface.axis, normal))) > _PARALLEL)
+            if square:
+                sides.append((normal, np.array(other.origin)))
+        # opposite, and facing away from each other: material between them (a pocket's walls face each other);
+        # and nearer each other than the face's own rays run: across the stretch, not along it (a boss's top
+        # lies between its sides too, but its rays cross less than the sides are apart)
+        along = [h.distance for h in self.hits.get(a, ()) if h.distance is not None]
+        if not along:
+            return False
+        reach = float(np.median(along))
+        return any(float(p @ q) < -_PARALLEL and float((oq - op) @ p) < 0.0 and -float((oq - op) @ p) < 0.5 * reach
+                   for i, (p, op) in enumerate(sides) for q, oq in sides[i + 1:])
 
     def _largest_circle(self, ordinal: int) -> float:
         from OCP.BRepAdaptor import BRepAdaptor_Curve
@@ -615,8 +687,12 @@ class _Analysis:
     def _not_sheet(self, ordinal: int, kind: str, local: float | None, deviation: float, point: Any,
                    area: float) -> None:
         self.not_sheet.append({"kind": kind, "surface": self.surfaces[ordinal - 1].kind,
-                               "local_thickness_mm": _r(local), "deviation_mm": _r(deviation),
-                               "area_mm2": _r(area, 3), "location": self.ref(ordinal), "xyz": _xyz(point)})
+                               "local_thickness_mm": _r(local), "sheet_thickness_mm": _r(self.thickness),
+                               "deviation_mm": _r(deviation), "area_mm2": _r(area, 3),
+                               # a verdict's: None on a part that is not sheet, or a face a sharp_bends item
+                               # explains (the round of a corner modelled without a bend)
+                               "judged": True, "location": self.ref(ordinal), "xyz": _xyz(point),
+                               "face": int(ordinal)})
 
     # -- bends --------------------------------------------------------------------------------------------
 
@@ -656,6 +732,84 @@ class _Analysis:
             bend = self._bend(number, members, flange_of)
             if bend is not None:
                 self.bends.append(bend)
+
+    def find_sharp(self) -> None:
+        """Corners joined without a bend (``sharp_bends``): two skins at an angle meeting at an edge (a sharp
+        corner: ``Box + Box``, a shelled box), a round on one side of a corner with no concentric round a
+        thickness across (``inside_only``, ``outside_only``), and skins no bend joins to the unfolded side
+        (``unjoined``). Their flanges are not in the flat pattern."""
+        if self.thickness is None or not self.skins:
+            return
+        t = float(self.thickness)
+        kept = set(self.side) | {b for a in self.side for b in self.partners.get(a, ())}
+        dropped = self.skins - kept
+        sharp = []
+        for edge in self.edges:
+            a, b = edge.faces
+            if edge.smooth or a not in self.skins or b not in self.skins or b in self.partners.get(a, ()):
+                continue
+            na, nb = np.array(self.surfaces[a - 1].normal), np.array(self.surfaces[b - 1].normal)
+            if abs(float(na @ nb)) >= _PARALLEL:
+                continue
+            sharp.append((edge, math.degrees(math.acos(max(-1.0, min(1.0, float(na @ nb)))))))
+        corners = _Sets()
+        for i, (first, _) in enumerate(sharp):
+            corners.add(i)
+            for j in range(i):
+                apart = np.linalg.norm(np.array(first.midpoint) - np.array(sharp[j][0].midpoint))
+                if apart <= 2.5 * t and abs(sharp[i][1] - sharp[j][1]) < 1.0:
+                    corners.join(i, j)
+        reached: set[int] = set()
+        for group in corners.groups():
+            edges = [sharp[i][0] for i in group]
+            faces = sorted({f for edge in edges for f in edge.faces})
+            reached.update(faces)
+            where = next((f for f in faces if f in dropped), faces[0])
+            self.sharp.append({"kind": "sharp", "angle_deg": _r(sharp[group[0]][1]), "inside_radius_mm": 0.0,
+                               "outside_radius_mm": 0.0, "thickness_mm": _r(t), "edge_count": len(edges),
+                               "location": self.ref(where), "faces": [self.ref(f) for f in faces],
+                               "xyz": _xyz(edges[0].midpoint)})
+        for a in self.hits:
+            surface = self.surfaces[a - 1]
+            if surface.kind != "cylinder" or a in self.bend_faces or a in self.edge_set or a in self.off_edges:
+                continue
+            axis = np.array(surface.axis)
+            normals = [np.array(self.surfaces[b - 1].normal) for b in self.neighbors[a]
+                       if b in self.skins and abs(float(np.dot(self.surfaces[b - 1].normal, axis))) < 0.01]
+            if not any(abs(float(p @ q)) < _PARALLEL for i, p in enumerate(normals) for q in normals[i + 1:]):
+                continue
+            radius = float(surface.radius)
+            concave = bool(surface.concave)
+            if not concave and radius <= t + self.tolerance:
+                continue  # a round no bend's outside could be (a broken edge): not_sheet judges it
+            faces = sorted(b for b in self.neighbors[a] if b in self.skins)
+            reached.update(faces)
+            self.explained.add(a)
+            centre = self.faces[a - 1].center()
+            self.sharp.append({"kind": "inside_only" if concave else "outside_only",
+                               "angle_deg": None, "inside_radius_mm": _r(radius) if concave else None,
+                               "outside_radius_mm": None if concave else _r(radius), "thickness_mm": _r(t),
+                               "edge_count": 0, "location": self.ref(a),
+                               "faces": [self.ref(f) for f in [a, *faces]], "xyz": _xyz((centre.X, centre.Y, centre.Z))})
+        unjoined = sorted(dropped - reached)
+        if unjoined:
+            largest = max(unjoined, key=lambda f: self.areas[f - 1])
+            centre = self.faces[largest - 1].center()
+            self.sharp.append({"kind": "unjoined", "angle_deg": None, "inside_radius_mm": None,
+                               "outside_radius_mm": None, "thickness_mm": _r(t), "edge_count": 0,
+                               "location": self.ref(largest), "faces": [self.ref(f) for f in unjoined],
+                               "xyz": _xyz((centre.X, centre.Y, centre.Z))})
+
+    def flat_fraction(self) -> float | None:
+        """The flat pattern's area, at K = 0.5 (each placed bend's strip widened to its mid-thickness arc), over
+        the part's volume over its thickness: 1 where the flat holds all of the part's material."""
+        if self.flat is None or not self.thickness:
+            return None
+        t = float(self.thickness)
+        neutral = float(self.flat.area) + sum(bend.span * (0.5 - bend.k) * t * (bend.w1 - bend.w0)
+                                               for bend in self.bends if bend.frame is not None)
+        volume = float(self.part.shape.volume)
+        return neutral / (volume / t) if volume > 0 else None
 
     def _coplanar(self, a: int, b: int) -> bool:
         sa, sb = self.surfaces[a - 1], self.surfaces[b - 1]
@@ -756,6 +910,13 @@ class _Analysis:
                     continue
                 child_number = next((f for f in bend.flanges if f != current.number), None)
                 if child_number is not None and self.flanges[child_number].to_flat is not None:
+                    twin = self._twin(bend, current, self.flanges[child_number])
+                    if twin is not None:
+                        # a bend line a cut interrupts: one more stretch of the bend that placed the child, laid
+                        # out along the same line in the flat, with its own strip
+                        self._place(bend, current, None)
+                        bend.child = child_number
+                        continue
                     cycles += 1
                     bend.placed = True
                     continue
@@ -798,6 +959,39 @@ class _Analysis:
                 loop, _, _ = _wire_loop(wire.wrapped, face.wrapped)
                 loop.label = "hole"
                 self.flat_loops.append(loop)
+        self._holes_from_flat()
+
+    def _holes_from_flat(self) -> None:
+        """The flat pattern's holes that no face's inner wire gave: a hole crossing a bend's tangent line is
+        part of the flange's and the bend's outer wires, and a hole only once they are fused."""
+        recorded = [hole.loop.centroid() for hole in self.holes if len(hole.loop.points)]
+        for loop in self.flat_loops:
+            if loop.label != "hole" or len(loop.points) < 3:
+                continue
+            if recorded and plane.inside(np.array(recorded), [loop]).any():
+                continue
+            centre = loop.centroid()
+            ref, xyz = self.locate(centre)
+            in_bend = any(_in_zone(bend, point) for bend in self.bends for point in loop.points)
+            self.holes.append(_HoleLoop(loop, [], np.array(xyz), in_bend, None, ref))
+
+    def _twin(self, bend: _Bend, parent: _Flange, child: _Flange) -> _Bend | None:
+        """The bend that placed ``child`` from ``parent`` when ``bend`` is another stretch of its line: about the
+        same axis, of the same radius and angle, turning ``parent`` into ``child`` the same way."""
+        twin = next((other for other in self.bends if other.number == child.via), None)
+        if twin is None or twin.parent != parent.number or twin.frame is None:
+            return None
+        if abs(float(twin.axis @ bend.axis)) < _PARALLEL:
+            return None
+        offset = bend.origin - twin.origin
+        tolerance = 1e-4 * max(1.0, twin.radius_side)
+        if float(np.linalg.norm(offset - twin.axis * float(offset @ twin.axis))) > tolerance:
+            return None
+        if abs(bend.radius_side - twin.radius_side) > tolerance or abs(bend.span - twin.span) > 1e-4:
+            return None
+        if bend.flanges.get(parent.number) is None or bend.flanges.get(child.number) is None:
+            return None
+        return twin
 
     def _longest_direction(self, flange: _Flange) -> np.ndarray:
         best, direction = -1.0, None
@@ -1164,8 +1358,8 @@ def _holes(analysis: _Analysis, outer: list[plane.Loop]) -> tuple[list[dict], li
         item = {"kind": kind, "size_mm": _r(size), "diameter_mm": _r(size) if kind == "round" else None,
                 "length_mm": _r(length), "edge_distance_mm": _r(edge), "in_bend": hole.in_bend,
                 "countersunk": hole.countersink is not None, "countersink_diameter_mm": _r(hole.countersink),
-                "location": analysis.ref(hole.location_faces[0]),
-                "faces": [analysis.ref(a) for a in hole.location_faces], "xyz": _xyz(hole.xyz)}
+                "location": hole.ref or analysis.ref(hole.location_faces[0]),
+                "faces": [analysis.ref(a) for a in hole.location_faces] or [hole.ref], "xyz": _xyz(hole.xyz)}
         holes.append(item)
         best = None
         for bend in analysis.bends:
@@ -1264,8 +1458,8 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     analysis.probe()
     analysis.classify()
     t = analysis.thickness
-    box = sorted([part.shape.bounding_box().size.X, part.shape.bounding_box().size.Y,
-                  part.shape.bounding_box().size.Z])
+    size = part.shape.bounding_box().size  # once: the optimal box of a large part costs seconds
+    box = sorted([size.X, size.Y, size.Z])
     largest = max(analysis.skins, key=lambda a: analysis.areas[a - 1]) if analysis.skins else 1
     item: dict[str, Any] = {
         "name": part.name, "thickness_mm": _r(t), "given_thickness_mm": options.get("thickness"),
@@ -1285,18 +1479,32 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
         item["why"] = analysis.why
     out["not_sheet"] = analysis.not_sheet
     out["parts"] = [item]
+
+    def settle() -> None:
+        # the facts stay; a part that is not sheet, or a round a sharp_bends item names, gets no thickness verdict
+        for record in analysis.not_sheet:
+            if not is_sheet or record.get("face") in analysis.explained:
+                record["judged"] = None
+            record.pop("face", None)
+
     if not is_sheet:
+        settle()
         for family in FAMILIES:
             out.setdefault(family, [])
         return out
     try:
         analysis.find_bends()
         out["bends"] = [_bend_item(analysis, bend) for bend in analysis.bends]
+        analysis.find_sharp()
+        out["sharp_bends"] = analysis.sharp
+        item["sharp_bend_count"] = len(analysis.sharp)
     except Exception as error:  # noqa: BLE001 - one family's failure is reported, the rest measured
-        for family in ("bends", "flanges", "channels", "reliefs", "hems", "curls", "holes", "hole_spacing",
+        settle()
+        for family in ("sharp_bends", "bends", "flanges", "channels", "reliefs", "hems", "curls", "holes", "hole_spacing",
                        "hole_to_bend", "notches", "tabs", "webs", "gaps"):
             out[family] = error
         return out
+    settle()
     out["curls"] = [{"inside_radius_mm": b["inside_radius_mm"], "outside_radius_mm": b["outside_radius_mm"],
                      "angle_deg": b["angle_deg"], "location": b["location"], "xyz": b["xyz"]}
                     for b in out["bends"] if b["kind"] == "curl"]
@@ -1322,6 +1530,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
                     flat_overlap_mm2=_r(analysis.overlap, 3) or None,
                     neutral_area_ratio=_r(float(part.shape.volume) / t / analysis.flat.area
                                           if analysis.flat is not None and analysis.flat.area > 0 else None, 5),
+                    flat_material_fraction=_r(analysis.flat_fraction(), 5),
                     flat_bend_lines=[[_r(v, 3) for v in (*_frame_points(b, np.array([b.allowance / 2] * 2),
                                                                        np.array([b.w0, b.w1]))[0],
                                                          *_frame_points(b, np.array([b.allowance / 2] * 2),
@@ -1380,7 +1589,7 @@ def _part(part: brep.Part, options: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-_SORT = {"not_sheet": ("deviation_mm", True), "bends": ("radius_to_thickness", False),
+_SORT = {"not_sheet": ("deviation_mm", True), "sharp_bends": (None, False), "bends": ("radius_to_thickness", False),
          "flanges": ("length_tangent_mm", False), "reliefs": ("width_mm", False), "holes": ("size_mm", False),
          "hole_spacing": ("distance_mm", False), "hole_to_bend": ("distance_tangent_mm", False),
          "notches": ("width_mm", False), "tabs": ("width_mm", False), "webs": ("width_mm", False),
@@ -1458,9 +1667,21 @@ def _unfolded(shape: Any, thickness: float | None, k_factor: float | None, mater
         if thickness is not None and abs(analysis.thickness - float(thickness)) > max(0.01, 0.005 * float(thickness)):
             raise ValueError(f"{part.name or 'the shape'} is {analysis.thickness:.4g} mm thick, not {float(thickness):g}")
         analysis.find_bends()
+        analysis.find_sharp()
+        name = part.name or "the shape"
+        if analysis.sharp:
+            places = ", ".join(corner["location"] for corner in analysis.sharp[:4])
+            raise ValueError(f"{name} does not unfold as modelled: {len(analysis.sharp)} corner(s) are modelled "
+                             f"without a bend (at {places}); model an inside radius r >= t and an outside radius "
+                             "r + t at each corner, about one axis")
         analysis.unfold()
         if analysis.flat is None:
-            raise ValueError(f"{part.name or 'the shape'} did not unfold: {analysis.unfold_note}")
+            raise ValueError(f"{name} did not unfold: {analysis.unfold_note}")
+        fraction = analysis.flat_fraction()
+        if fraction is not None and abs(fraction - 1.0) > rules_side.FLAT_MATERIAL_SLACK:
+            raise ValueError(f"{name}'s flat pattern holds {100 * fraction:.0f}% of its material, so it is not its "
+                             "blank: a stretch off the sheet's thickness, or a flange or a bend that did not unfold "
+                             "(check it with cad.build123d.sheet_metal)")
         lines, tangents = [], []
         for bend in analysis.bends:
             if bend.frame is None:
