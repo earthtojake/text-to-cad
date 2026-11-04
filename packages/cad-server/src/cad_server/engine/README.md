@@ -152,10 +152,11 @@ A model's worker is a separate process, holding its memo and live kernel objects
 structures and buffers, never live kernel objects (law 20).
 The daemon takes its HTTP application -- the CAD Viewer's and the CAD app's -- from the server's
 composition root (`daemon.HTTP_FACTORY`, `cad_server._internal.engine_host`); the library's engine imports
-no application module. Beside OCP, build123d, bd_materials,
-threejs_materials and numpy it imports Pillow
-(the renderer's rasteriser) and ezdxf (build123d's own DXF library, which the DXF export writes and
-checks a drawing with), and a test holds that list (law 3). The application serves the built
+no application module. Beside the library's own dependencies (numpy) it imports the `build123d`
+extra's -- OCP, build123d, bd_materials, threejs_materials, Pillow (the renderer's rasteriser) and
+ezdxf (build123d's own DXF library, which the DXF export writes and checks a drawing with) -- in the
+base its workers run in, and an integration's extra only in that integration's environment; a test
+holds each extra's list (law 3). The application serves the built
 viewer's one page on that listener, every document at `/<id>`. Document routes run in
 process, with no network relay. Kernel reads, topology, poses and meshes run in
 reader/mesh subprocesses; even an inline-mesh request stays outside the daemon. The daemon's own
@@ -860,7 +861,7 @@ in. Its structure says how long the parse took and which process made it
 
 ## Document types and integrations
 
-The words are the library README's (**Definitions**, laws 24 to 28); this is how they work.
+The words are the library README's (**Definitions**, laws 24 to 29); this is how they work.
 
 **The registry.** `cad.registry` is one table, the standard library alone: `DOCUMENT_TYPES` (each a
 `DocumentTypeEntry`: `id`, `title`, `extensions`, `mime`, `view`, `content`, `operations` -- each an

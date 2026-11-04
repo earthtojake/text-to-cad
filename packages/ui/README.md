@@ -15,6 +15,10 @@ binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. The CAD app's surrounding host controls
 remain its own.
 
+**The viewer is read-only.** It never writes a document or its file: writing belongs to the
+agent and the code, and every viewer tool (Select, Measure, Annotate, Quick Edit, the filters
+and displays) exists to show the person the design and to give the agent feedback.
+
 ## Ownership and dependencies
 
 UI may import `@cad/core` and browser-safe React dependencies. It must not

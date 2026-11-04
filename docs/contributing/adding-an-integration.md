@@ -5,7 +5,7 @@ An **integration** is our support for one third-party tool, named for the tool's
 things: one extra, `cad[<name>]`, grouping the dependencies our code for it needs; our code for it --
 helpers that take its objects, producers and operations; and a process kind: in-process, separate
 process, or both. The definitions and laws are the library's README
-([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 24 to 28); the
+([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions** and laws 24 to 29); the
 mechanism is the engine README's **Document types and integrations**.
 
 An integration usually makes or checks a document type, and adding a type has its own guide:
