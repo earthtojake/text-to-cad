@@ -98,7 +98,9 @@ class UndercutTest(unittest.TestCase):
     def test_an_external_groove_needs_two_slides(self) -> None:
         part = bd.Cylinder(15, 20) - (bd.Cylinder(16, 4) - bd.Cylinder(12, 4))
         (item,) = _check(part).measurements["undercuts"]["items"]
-        self.assertEqual((item["release"], sorted(item["side_actions"])), ("side_action", ["+x", "-x"]))
+        # A round groove: any two opposite slides in the parting plane release it, +-x or +-y alike.
+        self.assertEqual(item["release"], "side_action")
+        self.assertIn(sorted(item["side_actions"]), (["+x", "-x"], ["+y", "-y"]))
         self.assertLess(item["stroke_mm"], 10.0, "each half travels its own half, not the whole diameter")
 
     def test_inside_undercuts_take_a_lifter_or_a_collapsing_core(self) -> None:
