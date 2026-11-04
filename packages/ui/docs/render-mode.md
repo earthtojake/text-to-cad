@@ -215,7 +215,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `mesh` | STL, 3MF | Yes |
 | `robot` | URDF, SRDF, SDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
-| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities) |
+| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities), drawn in the app's theme |
 
 A view without them has no Display or Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.

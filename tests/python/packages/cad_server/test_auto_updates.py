@@ -223,6 +223,8 @@ class AutomaticTest(Fixture):
         self.assertEqual(self.runs()[1], [["setup", "--engine-update"], ""], "its whole setup: the apps' plugins")
         self.assertEqual(self.job.snapshot()["target"], "1.1.1")
         self.assertIsNone(self.job.status()["automatic"])
+        # It says it is restarting a moment before it asks for the drain: await the ask, never race it.
+        self.until(lambda: self.engine.drained, "the drain asked")
         (then,) = self.engine.drained
         then()  # drained: its helper starts
         self.spawned.assert_called_once_with("1.1.1", port=4567, previous="1.1.0")
@@ -235,6 +237,7 @@ class AutomaticTest(Fixture):
             started = self.job.start(SimpleNamespace(port=4567, retire=self.engine.drain))
         self.assertEqual((started["state"], started["target"]), ("working", "1.1.1"))
         self.until(lambda: self.job.snapshot()["state"] == "restarting", "the switch, though the engine is busy")
+        self.until(lambda: self.engine.drained, "the drain asked")
         self.assertEqual(len(self.engine.drained), 1, "the drain still waits for what is in flight")
 
     def test_a_failure_says_nothing_and_that_release_is_not_tried_again_for_a_day(self) -> None:

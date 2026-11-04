@@ -7,8 +7,11 @@
  * the pane's surround, then what the tools draw over it (`overlay`), in the same frame, so a capture of
  * the canvas holds it too.
  *
- * The surround is the renderer's (`surround(colorScheme)`): a board's is its own dark canvas whatever
- * the theme; a schematic's sheet lies on the app's neutral background, its paper drawn by the plot.
+ * The plot is drawn in the view's theme (`colorScheme`, `drawPlot`'s `theme`: a board's palette and
+ * canvas, a schematic's paper and ink), and a switch of theme draws the rasters again from the payload
+ * already held: nothing is asked of the server. The surround is the renderer's
+ * (`surround(colorScheme)`): a board's canvas reaches past the board; a schematic's sheet lies on the
+ * app's neutral grey.
  *
  * The pane says whether what it shows is final — drawn at the scale it is shown at — as
  * `data-board-settled` on its element, written as it paints (no render): a zoom is `false` until
@@ -34,12 +37,9 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's box.
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
- * @param {object|null} [options.thumbnailView]  `drawPlot`'s `view` for a card's picture (a schematic's appearance); none, the plot as made.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, thumbnailView = null }) {
-  const thumbnailViewRef = useRef(thumbnailView);
-  thumbnailViewRef.current = thumbnailView;
+  onTap = null, onHover = null, onDrag = null, onDoubleTap = null }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -63,17 +63,18 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     fitBox: fitBoardBounds, clearStrip: true, onDrag, onDoubleTap, middlePan: true, orbitPan: true });
   const { requestPaint, paintNow, encode } = view;
 
-  // One raster cache per plot and view: a new revision or a new set of layers starts afresh.
+  // One raster cache per plot, view and theme: a new revision, a new set of layers or a switch of
+  // theme starts afresh, drawn here from the payload already held.
   useEffect(() => {
     if (!plot) return undefined;
-    const rasters = createPlotRasters({ layout: plot.layout, onChange: requestPaint, view: drawViewRef.current });
+    const rasters = createPlotRasters({ layout: plot.layout, onChange: requestPaint, view: drawViewRef.current, theme: colorScheme });
     rastersRef.current = rasters;
     requestPaint();
     return () => {
       if (rastersRef.current === rasters) rastersRef.current = null;
       rasters.dispose();
     };
-  }, [plot, requestPaint, drawViewKey]);
+  }, [plot, requestPaint, drawViewKey, colorScheme]);
 
   /** Paint the frame final now: the view drawn at its own scale, not a patch scaled while it rests. */
   const settle = useCallback(() => {
@@ -87,9 +88,10 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
 
   /**
    * The plot on its own, for a library card: fitted whole to `width` × `height` with the view's
-   * margin, drawn as a snapshot draws it but on nothing round it — a board's area in its canvas
-   * colour, a sheet's paper, the rest clear, so the card's own backdrop is all there is behind it, in
-   * either theme, as a STEP's or a drawing's card picture is. The pane's view is left as it is.
+   * margin, drawn as a light snapshot draws it but on nothing round it — a board's area in the light
+   * canvas, a sheet's light paper, the rest clear, so the card's own backdrop is all there is behind
+   * it. One picture for both themes, as a drawing's is: a dark card turns it dark, its hues kept
+   * (`library/ModelLibrary.tsx`'s drawing treatment). The pane's view is left as it is.
    */
   const thumbnail = useCallback(({ width, height }) => new Promise((resolve, reject) => {
     const current = plotRef.current;
@@ -100,8 +102,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error(`The browser cannot draw the ${noun}’s picture.`)); return; }
     clearSurface(context, { width: canvas.width, height: canvas.height });
-    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board",
-      view: thumbnailViewRef.current });
+    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme: "light" });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error(`The browser could not encode this ${noun} as a PNG.`));

@@ -19,12 +19,12 @@ import SCHEMATIC from './__fixtures__/schematic.plot.json';
 // shows are decided here.
 
 const frames = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number }>);
-const drawn = vi.hoisted(() => [] as Array<{ appearance?: string }>);
+const drawn = vi.hoisted(() => [] as Array<string>);
 vi.mock('@cad/core/lib/plot2d/index.js', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return {
     ...actual,
-    drawPlot: (_ctx: unknown, _layout: unknown, { view }: { view: any }) => { if (view) drawn.push(view); },
+    drawPlot: (_ctx: unknown, _layout: unknown, { theme }: { theme: string }) => { drawn.push(theme); },
     drawPlotImages: (_ctx: unknown, _layout: unknown, { transform }: { transform: any }) => { frames.push({ ...transform }); }
   };
 });
@@ -127,7 +127,7 @@ it('opens on the root sheet, read with the index, drawn in the theme, with a Hie
   const { pane } = view;
   await onSheet(pane, '/');
   expect(reads).toEqual(['?sheet=%2F']);
-  await waitFor(() => expect(drawn.some(one => one.appearance === 'light')).toBe(true));
+  await waitFor(() => expect(drawn.includes('light')).toBe(true));
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
@@ -220,7 +220,7 @@ it("Select's filter is KiCad's boxes, each its name alone; without Pins a press 
 it('in the dark theme the sheet is drawn dark', async () => {
   const view = await open({ colorScheme: 'dark' });
   await onSheet(view.pane, '/');
-  await waitFor(() => expect(drawn.some(one => one.appearance === 'dark')).toBe(true));
+  await waitFor(() => expect(drawn.includes('dark')).toBe(true));
   expect((await controllerOf(view)).readState().schematicDisplay.appearance).toBe('dark');
   view.dispose();
 });

@@ -178,13 +178,16 @@ block picks every part in it, a net picks the whole net. Each arrives as a refer
 **Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
 Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Dim
 other layers and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
-draws the same.
+draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
+light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
-Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
-`board`, `copper`, `assembly`, and `placement`:
+Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
+theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
+light unless the display says `dark`, as every snapshot is:
 
 ```bash
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
+cad kicad_pcb snapshot board.kicad_pcb tmp/copper-dark.png --display copper,dark
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","dim":true,"zones":0.3}'

@@ -63,9 +63,6 @@ const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
 // The app's neutral grey round the sheet: a shade off the light theme's paper, the dark theme's own background.
 const SURROUND = Object.freeze({ light: "#E5E5E5", dark: "#292929" });
 const surroundOf = scheme => SURROUND[scheme === "dark" ? "dark" : "light"];
-// A library card's picture is kept, not redrawn when the theme changes: the sheet on KiCad's own paper,
-// as a document's card is, which reads on either theme's card.
-const CARD_VIEW = Object.freeze({ appearance: "light" });
 const PICK_PX = 6;
 const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX);
 const finite = value => typeof value === "number" && Number.isFinite(value);
@@ -121,7 +118,8 @@ function SchematicSurface({ view, data }) {
   const { toolMode, selectTool, annotating, measuring, annotation, measure } = tools;
   const [filter, setFilter] = useState(SCHEMATIC_SELECT_KINDS);
   const changeFilter = useCallback(next => { setFilter(readSchematicFilter(next)); selectTool(SCHEMATIC_TOOL.SELECT); }, [selectTool]);
-  const drawView = useMemo(() => ({ appearance: colorScheme }), [colorScheme]);
+  // The sheet as KiCad draws it: no page edge, in the theme (`usePlotView`'s `colorScheme`).
+  const drawView = null;
 
   const indexRef = useRef(index);
   indexRef.current = index;
@@ -331,7 +329,7 @@ function SchematicSurface({ view, data }) {
 
   const plotView = usePlotView({
     plot, restored, colorScheme, surround: surroundOf, noun: "schematic", onViewMoved: rememberView, drawView, overlay,
-    onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag, onDoubleTap: handlers.doubleTap, thumbnailView: CARD_VIEW
+    onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag, onDoubleTap: handlers.doubleTap
   });
   viewRef.current = plotView;
   paintRef.current = plotView.requestPaint;

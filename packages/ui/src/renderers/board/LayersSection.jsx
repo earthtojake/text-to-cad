@@ -4,7 +4,7 @@ const THROUGH_KEYS = {"vias": "board.text.vias", "ratsnest": "board.text.ratsnes
 import { useMemo } from "react";
 import { Eye, EyeOff, Layers } from "lucide-react";
 import {
-  boardActiveLayer, boardDisplayLayers, boardLayerActivatable, boardLayerGroups, layerColor, toggleBoardLayer
+  boardActiveLayer, boardDisplayLayers, boardLayerActivatable, boardLayerGroups, boardPalette, toggleBoardLayer
 } from "@cad/core/lib/plot2d/index.js";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -40,7 +40,7 @@ function LayerEye({ id, hidden, onToggle }) {
  * leaves bright (its filled dot after its name; until one is pressed, KiCad's own, the copper facing
  * the eye). How the layers are drawn — Dim other layers and the zones' and tracks' opacities — is
  * Display's (`BoardDisplay.jsx`), in the toolbar. A layer has nothing under it, so its one glyph is
- * its colour (KiCad's, `plot2d/theme.js`), on the section title's line with the groups' labels
+ * its colour (KiCad's, in the view's theme: `plot2d/theme.js`), on the section title's line with the groups' labels
  * (`kit/inspector/layerRows.jsx`). A layer hidden or shown and the active one are the board's
  * Display (`plot2d/boardDisplay.js`'s `layers` and `active`), the one object `cad <type> snapshot
  * --display` draws, so the view and a snapshot never disagree; a set the mode does not draw reads
@@ -50,7 +50,8 @@ function LayerEye({ id, hidden, onToggle }) {
  *   display: ReturnType<typeof import("@cad/core/lib/plot2d/index.js").readBoardDisplay>,
  *   onDisplayChange(display: object): void }} props
  */
-export default function LayersSection({ sheet, display, onDisplayChange }) {
+export default function LayersSection({ sheet, display, onDisplayChange, colorScheme = "light" }) {
+  const palette = boardPalette(colorScheme);
   const { t } = useI18n();
   const groups = useMemo(() => boardLayerGroups(sheet).map(group => ({ ...group, label: t(GROUP_KEYS[group.id]) })), [sheet, t]);
   const counts = useMemo(() => new Map(sheet.layers.map(layer => [layer.id, layer.items.length])), [sheet, t]);
@@ -76,7 +77,7 @@ export default function LayersSection({ sheet, display, onDisplayChange }) {
             hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover);
           return <li key={layer.id} className="min-w-0">
             <TreeRowSurface dense className="group/row gap-0 pr-0" style={{ paddingLeft: LAYER_ROW_INSET_PX, "--row-actions": ROW_ACTIONS_WIDTH }} data-layer-row={layer.id}>
-              <LayerSwatch color={layerColor(layer.id)} />
+              <LayerSwatch color={palette.layer(layer.id)} />
               {activatable ? <button type="button" className={cn(labelClass, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
                 aria-label={t("board.text.make_active", { name })} aria-pressed={isActive} data-layer-activate={layer.id}
                 onClick={() => change({ active: layer.id })}>{label}</button>
