@@ -66,10 +66,12 @@ and assets, so the app does not scan another package's source.
   (Position); the engine serves the document, never a frame of it.
 - **Loud failure**: a missing entry, an unresolvable ref, or a file the engine
   cannot read surfaces as an alert — never a silently wrong scene.
-- **The viewer is read-only**: it never writes a document or its file. Writing
-  belongs to the agent and the code; every viewer tool (Select, Measure,
-  Annotate, Quick Edit, the filters and displays) exists to show the person the
-  design and to give the agent feedback.
+- **The viewer is read-only**: it never changes a design. It writes no
+  document's content and no file of one (an export downloads a new file; the
+  home's Delete removes the engine's record and cache of a document, never its
+  file). Changing a design belongs to the agent and the code; every viewer tool
+  (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to
+  show the person the design and to give the agent feedback.
 
 ## Launching
 

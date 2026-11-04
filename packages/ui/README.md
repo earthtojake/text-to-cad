@@ -15,9 +15,11 @@ binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. The CAD app's surrounding host controls
 remain its own.
 
-**The viewer is read-only.** It never writes a document or its file: writing belongs to the
-agent and the code, and every viewer tool (Select, Measure, Annotate, Quick Edit, the filters
-and displays) exists to show the person the design and to give the agent feedback.
+**The viewer is read-only.** It never changes a design: it writes no document's content and no
+file of one (an export is a download of a new file; the home's Delete removes the engine's record
+and cache of a document, never its file). Changing a design belongs to the agent and the code, and
+every viewer tool (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to show
+the person the design and to give the agent feedback.
 
 ## Ownership and dependencies
 
