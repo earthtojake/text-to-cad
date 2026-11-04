@@ -44,8 +44,15 @@ __all__ = ["measure"]
 
 #: Items a family lists, at most (worst first); the rest are counted.
 CAP = 300
+#: Samples: ``--samples`` spread over the faces by area, each face at least ``SAMPLE_FLOOR`` -- fewer when
+#: the floor alone would pass ``SAMPLE_CAP`` (a part of thousands of faces gets one each) -- and at most 400.
+SAMPLE_FLOOR = 4
+SAMPLE_CAP = 6000
 #: A flat ceiling is under this many degrees from horizontal.
 FLAT_DEG = 5.0
+#: Flat ceilings whose span is refined to the exact farthest point (600 samples, then a climb with the face's
+#: classifier), the largest first; the rest are read on their own samples (to about their spacing).
+REFINED_CEILINGS = 40
 #: A cylinder round an axis by at least this many degrees is a hole or a pin (a fillet is 90, a slot's end 180).
 ROUND_DEG = 250.0
 #: Gaps are reported up to this width, mm (every published minimum is under 1 mm).
@@ -131,6 +138,9 @@ class Context:
         self._grids: dict[int, Any] = {}
         total = sum(float(face.area) for part in self.parts for face in part.faces()) or 1.0
         budget = int(options.get("samples") or 2000)
+        faces = sum(len(part.faces()) for part in self.parts)
+        # every face gets at least SAMPLE_FLOOR samples while the floor costs at most SAMPLE_CAP in all
+        floor = max(1, min(SAMPLE_FLOOR, SAMPLE_CAP // max(1, faces)))
         for index, part in enumerate(self.parts):
             infos = []
             for ordinal, face in enumerate(part.faces(), start=1):
@@ -138,9 +148,13 @@ class Context:
                 # sampling's deflection, then again on the triangulation the sampling made, which is tight
                 rough = face.bounding_box(optimal=False)
                 area = float(face.area)
-                count = int(min(400, max(4, round(budget * area / total))))
+                count = int(min(400, max(floor, round(budget * area / total))))
                 deflection = max(1e-3, 0.02 * max(rough.size.X, rough.size.Y, rough.size.Z))
                 samples = brep.samples(face, count, deflection) if area > 0 else []
+                if len(samples) > count:
+                    # a face of many triangles gives a sample per triangle: keep ``count``, spread over them
+                    keep = np.unique(np.linspace(0, len(samples) - 1, count).round().astype(int))
+                    samples = [samples[k] for k in keep]
                 box = face.bounding_box(optimal=False)
                 info = FaceInfo(index, ordinal, face, brep.surface(face), area, float(box.min.Z), float(box.max.Z))
                 info.box = box
@@ -241,6 +255,7 @@ class Context:
                                              p.shape.bounding_box(optimal=False).size.Y,
                                              p.shape.bounding_box(optimal=False).size.Z])) for p in self.parts)
             deflection = min(0.25, max(0.005, 5e-4 * size))
+            self._deflection = deflection
             Vs, Fs, Os, offset = [], [], [], 0
             for index, part in enumerate(self.parts):
                 V, F, O = brep.triangles(part.shape, deflection)
@@ -255,35 +270,92 @@ class Context:
         return self.ref(owner >> 20, owner & 0xFFFFF)
 
     def measure_rays(self) -> None:
-        """Every sample's wall (a ray into the material) and gap (a ray out of it, up to ``GAP_CEILING``)."""
+        """Every sample's wall (a ray into the material) and gap (a ray out of it, up to ``GAP_CEILING``), the
+        rays of a part cast together (``_first_hits``)."""
         if getattr(self, "_rayed", False):
             return
         self._rayed = True
         for part, infos in enumerate(self.faces):
             rays = self.rays(part)
-            shape = self.parts[part]
-            for info in infos:
+            owners = [(info, k) for info in infos for k in range(len(info.samples))]
+            if not owners:
+                continue
+            points = np.array([info.samples[k].point for info, k in owners])
+            normals = np.array([info.samples[k].normal for info, k in owners])
+            walls = _first_hits(rays, points, -normals, 1e-5, 1e9)
+            gaps = _first_hits(rays, points, normals, 1e-5, GAP_CEILING)
+            for (info, k), wall, gap in zip(owners, walls, gaps):
                 adjacent = self.adjacent(part, info.ordinal)
-                for k, sample in enumerate(info.samples):
-                    hit = rays.first(sample.point, -sample.normal, skip=1e-5)
-                    if hit is not None:
-                        other = shape.face_ordinal(hit[1])
-                        # a ray landing on a face that meets its own at a convex corner measures the corner;
-                        # at a knife edge (under KNIFE_DEG) it measures the sliver, which is real
-                        corner = any(not edge.concave and not edge.smooth and edge.angle_deg >= mo.KNIFE_DEG
-                                     for edge in adjacent.get(other, ()))
-                        if not corner:
-                            info.thickness.append((hit[0], k, other))
-                    hit = rays.first(sample.point, sample.normal, skip=1e-5, end=GAP_CEILING)
-                    if hit is not None:
-                        other = shape.face_ordinal(hit[1])
-                        same = other == info.ordinal or other in adjacent or (
-                            info.group is not None and self.info(part, other).group == info.group)
-                        if not same:
-                            info.gap.append((hit[0], k, other))
+                if wall is not None:
+                    other = wall[1] + 1
+                    # a ray landing on a face that meets its own at a convex corner measures the corner;
+                    # at a knife edge (under KNIFE_DEG) it measures the sliver, which is real
+                    corner = any(not edge.concave and not edge.smooth and edge.angle_deg >= mo.KNIFE_DEG
+                                 for edge in adjacent.get(other, ()))
+                    if not corner:
+                        info.thickness.append((wall[0], k, other))
+                if gap is not None:
+                    other = gap[1] + 1
+                    same = other == info.ordinal or other in adjacent or (
+                        info.group is not None and self.info(part, other).group == info.group)
+                    if not same:
+                        info.gap.append((gap[0], k, other))
+
+
+def _first_hits(rays: brep.Rays, origins: np.ndarray, directions: np.ndarray, start: float, end: float,
+                chunk: int = 64) -> list[tuple[float, int] | None]:
+    """The nearest crossing beyond ``start`` (up to ``end``) of each ray: its distance and the face's index in
+    ``rays.faces`` (its ordinal less one), or None. The rays' slab tests against every face box run a chunk
+    at a time (``Rays`` tests one ray at a time); each ray then intersects its boxes' faces exactly, nearest
+    box first, until no nearer crossing can follow."""
+    from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+
+    lows, highs = rays.boxes[:, :3], rays.boxes[:, 3:]
+    found: list[tuple[float, int] | None] = []
+    for begin in range(0, len(origins), chunk):
+        o = origins[begin:begin + chunk, None, :]
+        d = directions[begin:begin + chunk] / np.maximum(np.linalg.norm(directions[begin:begin + chunk], axis=1,
+                                                                         keepdims=True), 1e-300)
+        d3 = d[:, None, :]
+        flat = np.abs(d3) <= 1e-300
+        with np.errstate(divide="ignore", invalid="ignore"):
+            inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d3))
+            t1, t2 = (lows[None] - o) * inverse, (highs[None] - o) * inverse
+        lo = np.where(flat, -np.inf, np.minimum(t1, t2))
+        hi = np.where(flat, np.inf, np.maximum(t1, t2))
+        across = np.all(~flat | ((lows[None] <= o) & (o <= highs[None])), axis=2)
+        enter, leave = lo.max(axis=2), hi.min(axis=2)
+        mask = across & (enter <= leave) & (leave >= start) & (enter <= end)
+        for r in range(mask.shape[0]):
+            index = np.flatnonzero(mask[r])
+            if not len(index):
+                found.append(None)
+                continue
+            entries = np.maximum(enter[r, index], start)
+            order = np.argsort(entries)
+            line = gp_Lin(gp_Pnt(*map(float, o[r, 0])), gp_Dir(*map(float, d[r])))
+            best: tuple[float, int] | None = None
+            for face, entry in zip(index[order], entries[order]):
+                if best is not None and entry > best[0]:
+                    break
+                intersector = rays._intersector(int(face))
+                intersector.Perform(line, start, best[0] if best is not None else end)
+                if not intersector.IsDone():
+                    continue
+                for k in range(1, intersector.NbPnt() + 1):
+                    w = float(intersector.WParameter(k))
+                    if start <= w <= end and (best is None or w < best[0]):
+                        best = (w, int(face))
+            found.append(best)
+    return found
 
 
 # --- families -------------------------------------------------------------------------------------------------
+
+
+#: The kernel's boolean-argument check (self-intersections too) runs on the parts while their faces add up
+#: to this many; the rest get its topology check alone (BRepCheck), a fraction of the cost.
+SOUND_FACES = 200
 
 
 def _solid(ctx: Context) -> dict[str, Any]:
@@ -295,6 +367,7 @@ def _solid(ctx: Context) -> dict[str, Any]:
     from cad.build123d import _geometry
 
     items = []
+    checked = 0
     for index, part in enumerate(ctx.parts):
         solids = part.solids()
         inner = closed = 0
@@ -316,16 +389,23 @@ def _solid(ctx: Context) -> dict[str, Any]:
                 closed += int(BRep_Tool.IsClosed_s(explorer.Current()))
                 explorer.Next()
         issues: list[str] = []
+        faces = len(ctx.faces[index])
+        check = "boolean" if checked + faces <= SOUND_FACES else "topology"
         try:
-            sound: bool | None = bool(_geometry.is_sound(part.shape))
-            if not sound:
-                issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)}) or ["boolean check"]
+            if check == "boolean":
+                checked += faces
+                sound: bool | None = bool(_geometry.is_sound(part.shape))
+                if not sound:
+                    issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)}) or ["boolean check"]
+            else:
+                issues = sorted({issue.code for issue in _geometry.topology_errors(part.shape)})
+                sound = not issues
         except Exception:  # noqa: BLE001 - a check the kernel cannot finish is no verdict
             sound = None
         items.append({"part": part.name or part.owner or f"part {index + 1}", "location": ctx.ref(index, 1),
                       "xyz": _xyz(part.shape.bounding_box(optimal=False).center()), "solids": len(solids), "shells": shells,
                       "closed": bool(solids) and closed == shells, "inner_shells": inner, "sound": sound,
-                      "issues": issues, "volume_mm3": _r(float(part.shape.volume), 3),
+                      "issues": issues, "check": check, "volume_mm3": _r(float(part.shape.volume), 3),
                       "area_mm2": _r(float(part.shape.area), 3), "occurrences": part.occurrences})
     return {"items": items, "part_count": len(items), "body_count": sum(item["solids"] for item in items),
             "volume_mm3": _r(sum(item["volume_mm3"] or 0.0 for item in items), 3),
@@ -404,6 +484,10 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
 
     found = []
     cos_flat = math.cos(math.radians(FLAT_DEG))
+    flats = [info for infos in ctx.faces for info in infos
+             if info.surface.kind == "plane" and info.surface.normal is not None
+             and info.surface.normal[2] < -cos_flat and not ctx.on_plate(info.zmin)]
+    refined = {id(info) for info in sorted(flats, key=lambda info: -info.area)[:REFINED_CEILINGS]}
     for part, infos in enumerate(ctx.faces):
         edges = ctx.parts[part].edges()
         for info in infos:
@@ -424,7 +508,8 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
                     points = _edge_points(edges[edge.ordinal - 1], step)
                     starts.append(points[:-1])
                     ends.append(points[1:])
-            points = np.array([s.point for s in brep.samples(info.face, 600)])
+            fine = id(info) in refined
+            points = np.array([s.point for s in (brep.samples(info.face, 600) if fine else info.samples)])
             face = info.face.wrapped
 
             def inside(candidates: np.ndarray, face: Any = face) -> np.ndarray:
@@ -436,11 +521,11 @@ def _flat_ceilings(ctx: Context) -> list[dict[str, Any]]:
 
             a = np.vstack(starts) if starts else np.zeros((0, 3))
             b = np.vstack(ends) if ends else np.zeros((0, 3))
-            spread = mo.span(points, a, b, inside=inside, refine=2.0 * step)
+            spread = mo.span(points, a, b, inside=inside if fine else None, refine=2.0 * step if fine else None)
             kind = {"bridge": "bridge", "cantilever": "cantilever"}.get(spread["kind"], "ceiling")
             found.append({"part": part, "ordinal": info.ordinal, "kind": kind,
                           "length_mm": _r(spread["length_mm"], 4), "reach_mm": _r(spread["reach_mm"], 4),
-                          "supporting_edges": supported, "area_mm2": _r(info.area, 3),
+                          "supporting_edges": supported, "area_mm2": _r(info.area, 3), "refined": fine,
                           "height_mm": _r(z - ctx.z0, 4), "angle_deg": _r(math.degrees(math.acos(min(1.0, -n[2]))), 3),
                           "location": ctx.ref(part, info.ordinal),
                           "xyz": _xyz(spread["xyz"] or info.samples[0].point)})
@@ -542,9 +627,37 @@ def _orientation(axis: np.ndarray) -> str:
     return "vertical" if tilt < 10.0 else "horizontal" if tilt > 80.0 else "inclined"
 
 
-def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
-    from cad.build123d._dfm_brep import inside
+def _inside(ctx: Context, part: int, points: list[np.ndarray]) -> list[bool]:
+    """Whether each point lies inside a solid of ``part``: one classifier per solid, made once (making one is
+    most of a query's cost on a large solid)."""
+    from OCP.BRepClass3d import BRepClass3d_SolidClassifier
+    from OCP.gp import gp_Pnt
+    from OCP.TopAbs import TopAbs_IN
 
+    cache = ctx.__dict__.setdefault("_classifiers", {})
+    if part not in cache:
+        cache[part] = [BRepClass3d_SolidClassifier(solid.wrapped)
+                       for solid in (ctx.parts[part].solids() or [ctx.parts[part].shape])]
+    found = []
+    for point in points:
+        state = False
+        for classifier in cache[part]:
+            classifier.Perform(gp_Pnt(*map(float, point)), 1e-6)
+            if classifier.State() == TopAbs_IN:
+                state = True
+                break
+        found.append(state)
+    return found
+
+
+def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
+    cache = ctx.__dict__.setdefault("_round_cache", {})
+    if concave not in cache:
+        cache[concave] = _measure_rounds(ctx, concave)
+    return [dict(item) for item in cache[concave]]
+
+
+def _measure_rounds(ctx: Context, concave: bool) -> list[dict[str, Any]]:
     items = []
     for index, group in ctx.rounds_of(concave):
         part = group.part
@@ -559,9 +672,7 @@ def _round_items(ctx: Context, concave: bool) -> list[dict[str, Any]]:
             item["depth_mm"] = _r(length, 4)
             ends = [group.origin + group.axis * (group.lo - 1e-3 * max(1.0, group.radius)),
                     group.origin + group.axis * (group.hi + 1e-3 * max(1.0, group.radius))]
-            solids = ctx.parts[part].solids() or [ctx.parts[part].shape]
-            closed = [any(inside(solid, [end])[0] for solid in solids) for end in ends]
-            item["through"] = not any(closed)
+            item["through"] = not any(_inside(ctx, part, ends))
             item["channel"] = bool(length >= 5.0 * 2.0 * group.radius)
             up = np.array([0.0, 0.0, 1.0]) - group.axis * float(group.axis[2])
             top = 1.0
@@ -663,38 +774,145 @@ def _face_at(ctx: Context, part: int, point: np.ndarray) -> int:
     return found
 
 
+#: Clearances: each side of a pair of parts is read as at most this many points of its triangulation (a
+#: voxel thinning, one point per cell), the face pairs nearest on them measured exactly, at most
+#: ``CLEARANCE_FACES`` per pair, and at most ``OVERLAP_BOOLEANS`` touching pairs' overlap volume by boolean.
+CLEARANCE_POINTS = 1500
+CLEARANCE_FACES = 3
+#: Exact face-pair queries a document gets, at most, spent on the nearest pairs first (about 30 ms each on
+#: B-spline faces); the rest keep their triangulations' distance, ``exact: false``.
+EXACT_QUERIES = 90
+OVERLAP_BOOLEANS = 4
+#: A pair whose triangulations stay this far apart (less their sampling's margin) is above every published
+#: clearance (all under 1 mm): its distance is the triangulations', ``exact: false``, with the margin.
+EXACT_BELOW = 1.5
+
+
+def _thinned(points: np.ndarray, owners: np.ndarray, budget: int) -> tuple[np.ndarray, np.ndarray, float]:
+    """At most about ``budget`` of ``points`` (one per cube of a side chosen for it), their owners, the side."""
+    if len(points) <= budget:
+        return points, owners, 0.0
+    lo, hi = points.min(axis=0), points.max(axis=0)
+    side = float(np.prod(np.maximum(hi - lo, 1e-9)) / budget) ** (1.0 / 3.0)
+    for _ in range(12):
+        keys = np.floor((points - lo) / side).astype(np.int64)
+        _, keep = np.unique(keys, axis=0, return_index=True)
+        if len(keep) <= budget:
+            return points[keep], owners[keep], side
+        side *= 1.3
+    return points[keep], owners[keep], side
+
+
+def _near_pairs(pa: np.ndarray, pb: np.ndarray, within: float) -> tuple[float, np.ndarray, np.ndarray, np.ndarray]:
+    """The least distance between the clouds, and every pair (i, j, d) within ``within`` of it, nearest first."""
+    best = math.inf
+    found_i, found_j, found_d = [], [], []
+    for start in range(0, len(pa), 512):
+        d = np.linalg.norm(pa[start:start + 512, None, :] - pb[None, :, :], axis=2)
+        best = min(best, float(d.min()))
+        i, j = np.nonzero(d <= best + within)
+        found_i.append(i + start)
+        found_j.append(j)
+        found_d.append(d[i, j])
+    i, j, d = np.concatenate(found_i), np.concatenate(found_j), np.concatenate(found_d)
+    keep = d <= best + within
+    order = np.argsort(d[keep], kind="stable")
+    return best, i[keep][order], j[keep][order], d[keep][order]
+
+
 def _clearances(ctx: Context) -> dict[str, Any]:
+    """The least distance between each pair of parts within ``reach``: their triangulations (thinned to a
+    points budget) find the nearest faces, BRepExtrema measures those face pairs exactly."""
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    from OCP.Extrema import Extrema_ExtFlag_MIN
+
     from cad.build123d import _geometry
 
     items, reach = [], 5.0
-    boxes = [part.shape.bounding_box(optimal=False) for part in ctx.parts]
+    V, F, O = ctx.mesh()
+    part_of = O >> 20
+    clouds = []
+    for part in range(len(ctx.parts)):
+        mine = part_of == part
+        tri = V[F[mine]]
+        points = np.vstack([tri.reshape(-1, 3), tri.mean(axis=1)])
+        owners = np.concatenate([np.repeat(O[mine] & 0xFFFFF, 3), O[mine] & 0xFFFFF])
+        clouds.append((points, owners))
+    boxes = [(c[0].min(axis=0), c[0].max(axis=0)) if len(c[0]) else (None, None) for c in clouds]
+    booleans = 0
+    exact_pairs = 0
+    candidates: list[tuple[Any, ...]] = []
     for a in range(len(ctx.parts)):
         for b in range(a + 1, len(ctx.parts)):
-            ba, bb = boxes[a], boxes[b]
-            gap = max(0.0, ba.min.X - bb.max.X, bb.min.X - ba.max.X, ba.min.Y - bb.max.Y, bb.min.Y - ba.max.Y,
-                      ba.min.Z - bb.max.Z, bb.min.Z - ba.max.Z)
-            if gap > reach:
+            (la, ha), (lb, hb) = boxes[a], boxes[b]
+            if la is None or lb is None or float(np.max(np.maximum(la - hb, lb - ha))) > reach:
                 continue
-            closest = _geometry.closest_points(ctx.parts[a].shape, ctx.parts[b].shape)
-            if closest.distance > reach:
+            # each cloud where the other's box (and the reach) is: the rest cannot be nearest
+            ina = np.all((clouds[a][0] >= lb - reach) & (clouds[a][0] <= hb + reach), axis=1)
+            inb = np.all((clouds[b][0] >= la - reach) & (clouds[b][0] <= ha + reach), axis=1)
+            if not ina.any() or not inb.any():
                 continue
-            pa = np.array([closest.point_a.X, closest.point_a.Y, closest.point_a.Z])
-            pb = np.array([closest.point_b.X, closest.point_b.Y, closest.point_b.Z])
-            overlap = None
-            if closest.distance <= 1e-6:
+            pa, oa, sa = _thinned(clouds[a][0][ina], clouds[a][1][ina], CLEARANCE_POINTS)
+            pb, ob, sb = _thinned(clouds[b][0][inb], clouds[b][1][inb], CLEARANCE_POINTS)
+            spacing = max(sa, sb, ctx._deflection * 4)
+            margin = 2.0 * spacing + ctx._deflection
+            rough, ii, jj, _ = _near_pairs(pa, pb, margin + 0.5)
+            if rough > reach + margin:
+                continue
+            keys = oa[ii].astype(np.int64) * (1 << 21) + ob[jj].astype(np.int64)
+            _, first = np.unique(keys, return_index=True)
+            nearest = np.sort(first)[:CLEARANCE_FACES]
+            candidates.append((rough, margin, a, b, [(int(oa[ii[k]]), int(ob[jj[k]])) for k in nearest],
+                               pa[ii[0]], pb[jj[0]]))
+    # exact where it can decide a verdict, the nearest pairs first, within the document's budget
+    for rough, margin, a, b, faces, q1, q2 in sorted(candidates, key=lambda row: row[0]):
+        if rough - margin > EXACT_BELOW or exact_pairs + len(faces) > EXACT_QUERIES:
+            items.append({"location": ctx.ref(a, faces[0][0]), "xyz": _xyz((q1 + q2) / 2.0),
+                          "distance_mm": _r(rough, 5), "kind": "gap" if rough > margin else "near",
+                          "overlap_mm3": None, "exact": False, "uncertainty_mm": _r(margin, 4),
+                          "faces": [ctx.ref(b, faces[0][1])],
+                          "parts": [ctx.parts[a].name or ctx.parts[a].owner,
+                                    ctx.parts[b].name or ctx.parts[b].owner]})
+            continue
+        best = None
+        for fa, fb in faces:
+            query = BRepExtrema_DistShapeShape(ctx.info(a, fa).face.wrapped, ctx.info(b, fb).face.wrapped,
+                                               Extrema_ExtFlag_MIN)
+            exact_pairs += 1
+            if query.IsDone() and query.NbSolution() and (best is None or query.Value() < best[0]):
+                p1, p2 = query.PointOnShape1(1), query.PointOnShape2(1)
+                best = (float(query.Value()), fa, fb, np.array([p1.X(), p1.Y(), p1.Z()]),
+                        np.array([p2.X(), p2.Y(), p2.Z()]))
+        if best is None or best[0] > reach:
+            continue
+        distance, fa, fb, p1, p2 = best
+        overlap = None
+        if distance <= 1e-6:
+            # touching faces: the parts touch, or one runs into the other (a sample of one inside the other)
+            probes = [s.point - s.normal * 1e-3 for info in ctx.faces[a] for s in info.samples[:1]][:40]
+            if any(_inside(ctx, b, probes)):
+                overlap = math.nan
+            if booleans < OVERLAP_BOOLEANS:
+                booleans += 1
                 try:
                     overlap = float(_geometry.overlap_volume(ctx.parts[a].shape, ctx.parts[b].shape))
                 except Exception:  # noqa: BLE001 - a boolean that fails leaves the overlap unmeasured
-                    overlap = None
-            kind = "gap" if closest.distance > 1e-6 else ("overlap" if (overlap or 0) > 1e-6 else "contact")
-            items.append({"location": ctx.ref(a, _face_at(ctx, a, pa)), "xyz": _xyz((pa + pb) / 2.0),
-                          "distance_mm": _r(closest.distance, 5), "kind": kind, "overlap_mm3": _r(overlap, 4),
-                          "faces": [ctx.ref(b, _face_at(ctx, b, pb))],
-                          "parts": [ctx.parts[a].name or ctx.parts[a].owner, ctx.parts[b].name or ctx.parts[b].owner]})
+                    pass
+        kind = "gap" if distance > 1e-6 else ("overlap" if overlap is not None and (
+            math.isnan(overlap) or overlap > 1e-6) else "contact")
+        items.append({"location": ctx.ref(a, fa), "xyz": _xyz((p1 + p2) / 2.0), "distance_mm": _r(distance, 5),
+                      "kind": kind, "exact": True, "overlap_mm3": None if overlap is None or math.isnan(overlap) else _r(overlap, 4),
+                      "faces": [ctx.ref(b, fb)],
+                      "parts": [ctx.parts[a].name or ctx.parts[a].owner, ctx.parts[b].name or ctx.parts[b].owner]})
     items, count = _capped(items, lambda item: item["distance_mm"])
     return {"items": items, "count": count, "part_count": len(ctx.parts), "reported_below_mm": reach,
-            "min_mm": items[0]["distance_mm"] if items else None,
-            "method": "exact minimum distance between each pair of parts (BRepExtrema)"}
+            "min_mm": items[0]["distance_mm"] if items else None, "exact_face_pairs": exact_pairs,
+            "budget": {"points_per_side": CLEARANCE_POINTS, "face_pairs_per_pair": CLEARANCE_FACES,
+                       "exact_queries": EXACT_QUERIES,
+                       "overlap_booleans": OVERLAP_BOOLEANS, "exact_below_mm": EXACT_BELOW},
+            "method": "each pair of parts' triangulations (thinned to points_per_side) find their nearest faces; "
+                      "BRepExtrema measures those face pairs exactly where the triangulations come within "
+                      f"{EXACT_BELOW:g} mm (plus their margin); farther pairs keep the triangulations' distance"}
 
 
 def _grid(ctx: Context, part: int) -> tuple[Any, list[mo.Cavity], np.ndarray, float] | None:
@@ -799,14 +1017,14 @@ def _trapped(ctx: Context) -> dict[str, Any]:
             for cavity in cavities:
                 if cavity["k"] is not None and cavity["k"] in marks and any(m in (-1,) for m in marks):
                     cavity["holes"].append(group)
+        # every wall sample's outside, labelled at once: the cavity (if any) each wall faces
+        rows = [(t, info.ordinal, info.samples[k]) for info in ctx.faces[part] for t, k, _ in info.thickness]
+        facing = (labels[grid.index(np.array([s.point + s.normal * 0.75 * grid.pitch for _, _, s in rows]))]
+                  if rows else np.zeros(0, dtype=int))
         for cavity in cavities:
             walls = []
             if cavity["k"] is not None:
-                for info in ctx.faces[part]:
-                    for t, k, _ in info.thickness:
-                        sample = info.samples[k]
-                        if label(sample.point + sample.normal * 0.75 * grid.pitch) == cavity["k"]:
-                            walls.append((t, info.ordinal))
+                walls = [(rows[i][0], rows[i][1]) for i in np.flatnonzero(facing == cavity["k"])]
             for ordinal in cavity["faces"]:
                 walls += [(t, ordinal) for t, _, _ in ctx.info(part, ordinal).thickness]
             diameters = sorted(2.0 * group.radius for group in cavity["holes"])
