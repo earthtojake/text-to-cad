@@ -12,7 +12,6 @@ import { ROW_NAME_UNDER_ACTIONS, TreeRowLabel, TreeRowSurface, treeRowActionsCla
 import { cn } from "@cad/ui/utils";
 import { LAYER_ROW_INSET_PX, LayerSwatch } from "../kit/inspector/layerRows.jsx";
 import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
-import { BoardLayerDisplaySettings, BoardViewSettings } from "./BoardDisplay.jsx";
 
 // The room the eye takes at a row's right end: the row's `--row-actions`.
 const ROW_ACTIONS_WIDTH = "1.5rem";
@@ -34,9 +33,7 @@ function LayerEye({ id, hidden, onToggle }) {
 
 /**
  * A board's **Layers**, a tab of the view's panel (`kit/shell/FlatPanel.jsx`), as KiCad's Appearance
- * panel's Layers tab: its settings together at the top — the **View** (its preset and side,
- * `BoardDisplay.jsx`) and the **Layer display** (the others, the pours, the zones' and tracks'
- * opacities) — then every layer the
+ * panel's Layers tab, a list as Altium's Layers panel is: every layer the
  * board's picture holds, grouped as KiCad lists them — Front (outermost first), Inner, Back, then
  * Other (the user layers and the outline, the board's area, the vias, the drill holes, the ratsnest
  * and the pads' and vias' names) — each with its colour, its name, how many things it draws, and an
@@ -46,7 +43,8 @@ function LayerEye({ id, hidden, onToggle }) {
  * colour (KiCad's, in the view's theme: `plot2d/theme.js`, `kit/inspector/layerRows.jsx`). While the
  * panel's search is up, the layers whose names match, and nothing else. Everything here is the
  * board's Display (`plot2d/boardDisplay.js`), the one object `cad <type> snapshot --display` draws,
- * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom.
+ * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. How the
+ * board is drawn — its preset, side, other layers and opacities — is the view cluster's (`BoardDisplay.jsx`).
  *
  * @param {{ sheet: { layers: { id: string, kind: string, side: string, items: unknown[] }[] },
  *   display: ReturnType<typeof import("@cad/core/lib/plot2d/index.js").readBoardDisplay>,
@@ -91,16 +89,8 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
     return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
-  // The settings together over the list, on the panel's line both sides (16px: where a layer group's
-  // name and a swatch start, and where the eyes end); the rule between the two sections runs the
-  // panel's width, as every rule in it does.
-  return <div className="flex flex-col gap-1 pt-1 text-tiny">
-    {/* Its labels are short words (Preset, Side, Others): a 3rem column, the rest the controls'. */}
-    <div className="pb-1 [&_[data-settings-section]>h2>*]:px-4 [&_[data-settings-section-body]>*]:px-4 [&_[data-settings-section-body]>*]:grid-cols-[3rem_minmax(0,1fr)]" data-board-settings="">
-      <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
-      <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
-    </div>
-    <div className="border-t border-border px-2 pt-1" aria-label={t("board.text.board_layers")} data-board-layers="">
+  return <div className="flex flex-col pt-1 text-tiny">
+    <div className="px-2" aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
         <li className="flex h-6 items-center text-muted-foreground" style={{ paddingLeft: LAYER_ROW_INSET_PX }} aria-hidden="true">{group.label}</li>
         {group.layers.map(row)}

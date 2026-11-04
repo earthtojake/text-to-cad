@@ -1,4 +1,9 @@
 import { useI18n } from "@cad/ui/i18n";
+import { FlipHorizontal2, SlidersHorizontal } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@cad/ui/primitives/popover";
+import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
+import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../../lib/floatingSurface.js";
+import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../kit/tools/stripTouch.js";
 import {
   BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -12,23 +17,27 @@ import {
 import { SUB_TOOLBAR_SLIDER_CLASS } from "../kit/tools/SubToolbar.jsx";
 
 /**
- * A board's view settings (`settings-ui.md`), the only ones a board has, because its picture is a
- * choice: two settings sections of the panel's **Layers** tab (`LayersSection.jsx`), where KiCad's
- * Appearance panel keeps them, as the settings form's rows are (a label in its muted column, the
- * control filling the rest; a choice a Select, a range a slider and its committed value).
+ * A board's view controls (`settings-ui.md`), the only ones a board has, because its picture is a
+ * choice: the view cluster at the canvas's bottom-right (`FlatViewFrame.jsx`'s `viewControls`), apart
+ * from the strip's tools, as SOLIDWORKS' Heads-up View toolbar, Onshape's render menu under its
+ * view cube and Fusion's navigation bar keep them. Two tiles:
  *
- * - **View**, over the layer list: **Preset**, the modes (`plot2d/boardDisplay.js`'s layer sets,
- *   KiCad's layer presets: Board, Copper, Assembly, Placement), and **Custom** while the layers' eyes
- *   have left the mode's set (choosing the mode goes back to it); **Side**, Top or Bottom (the board
- *   mirrored, its back layers on top).
- * - **Layer display**, under it, KiCad's Layer Display Options: **Others**, every layer but the active
- *   one (a press on its row chooses it) **Shown**, **Dimmed** or **Hidden** — the board's outline and
- *   the holes through an active copper layer at full strength either way (`plot2d/plot.js`'s
- *   `focusedLayers`); Ctrl+H (⌘H) cycles them while the board has the keyboard, as KiCad's does —
- *   **Pours** (while copper is drawn), and the **Zones**' (60%) and **Tracks**' (100%) opacities.
+ * - **Flip** (KiCad's View ▸ Flip Board): the board seen from below, mirrored, its back layers on top,
+ *   and back; pressed while it is from below.
+ * - **Display**, a popover of settings sections, as the settings form's rows are (a label in its
+ *   muted column, the control filling the rest): **Display** — **Preset**, the modes
+ *   (`plot2d/boardDisplay.js`'s layer sets, KiCad's layer presets: Board, Copper, Assembly,
+ *   Placement), and **Custom** while the Layers tab's eyes have left the mode's set (choosing the mode
+ *   goes back to it); then **Layer display**, KiCad's Layer Display Options: **Others**, every layer
+ *   but the active one (a press on its row in the Layers tab chooses it) **Shown**, **Dimmed** or
+ *   **Hidden** — the board's outline and the holes through an active copper layer at full strength
+ *   either way (`plot2d/plot.js`'s `focusedLayers`); Ctrl+H (⌘H) cycles them while the board has the
+ *   keyboard, as KiCad's does — **Pours** (while copper is drawn), and the **Zones**' (60%) and
+ *   **Tracks**' (100%) opacities.
  *
- * The contract — `{ mode, side, poured, layers, active, others, zones, tracks }` — is core's, shared
- * with `cad <type> snapshot --display`, so what is drawn here is drawn there, and kept with the file's view.
+ * The layer list itself is the panel's Layers tab (`LayersSection.jsx`). The contract — `{ mode, side,
+ * poured, layers, active, others, zones, tracks }` — is core's, shared with `cad <type> snapshot
+ * --display`, so what is drawn here is drawn there, and kept with the file's view.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 
@@ -81,19 +90,17 @@ function Opacity({ id, label, name, value, onChange }) {
 }
 
 /**
- * **View**: the preset and the side.
+ * **Display**: the preset.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
  */
-export function BoardViewSettings({ display, sheet, onChange }) {
+function BoardPresetSettings({ display, sheet, onChange }) {
   const { t } = useI18n();
   const choice = boardDisplayChoice(display, sheet);
   const presets = BOARD_MODE_OPTIONS.map(({ value, labelKey }) => [value, t(labelKey)]);
   if (choice.value === CUSTOM) presets.push([CUSTOM, t("board.text.custom")]);
-  return <FileSheetSettingsSection title={t("board.text.view")} sectionId="board-view">
+  return <FileSheetSettingsSection title={t("display.label")} sectionId="board-display">
     <Choice label={t("board.text.preset")} name={t("board.text.board_display_mode")} value={choice.value} options={presets}
       onChange={value => { if (value !== CUSTOM) onChange(selectBoardMode(display, value)); }} data={{ "data-board-display": choice.value }} />
-    <Choice label={t("board.text.side")} name={t("board.text.board_side")} value={display.side === "bottom" ? "bottom" : "top"}
-      options={[["top", t("board.text.top")], ["bottom", t("board.text.bottom")]]} onChange={side => onChange({ ...display, side })} data={{ "data-board-side": display.side }} />
   </FileSheetSettingsSection>;
 }
 
@@ -101,7 +108,7 @@ export function BoardViewSettings({ display, sheet, onChange }) {
  * **Layer display**: the other layers, the pours and the opacities.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
  */
-export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
+function BoardLayerDisplaySettings({ display, sheet, onChange }) {
   const { t } = useI18n();
   return <FileSheetSettingsSection title={t("board.text.layer_display")} sectionId="board-layer-display">
     <Choice label={t("board.text.others")} name={t("board.text.other_layers")} value={display.others}
@@ -116,4 +123,35 @@ export function BoardLayerDisplaySettings({ display, sheet, onChange }) {
     <Opacity id="tracks" label={t("board.text.tracks")} name={t("board.text.track_opacity")}
       value={display.tracks ?? BOARD_DISPLAY_DEFAULTS.tracks} onChange={tracks => onChange({ ...display, tracks })} />
   </FileSheetSettingsSection>;
+}
+
+/**
+ * The board's view cluster: Flip, then Display and its popover. `touch`: a phone's 36px tiles.
+ * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void,
+ *   disabled?: boolean, touch?: boolean }} props
+ */
+export function BoardViewControls({ display, sheet, onChange, disabled = false, touch = false }) {
+  const { t } = useI18n();
+  const tile = touch ? TOUCH_STRIP_BUTTON_CLASS : STRIP_BUTTON_CLASS;
+  const below = display.side === "bottom";
+  return <div role="group" aria-label={t("board.text.view_controls")} data-board-view-controls=""
+    className={cn("pointer-events-auto inline-flex items-center gap-0.5 rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}>
+    <ToolbarButton label={t("board.text.flip_board")} tooltipSide="top" className={tile} active={below} aria-pressed={below} disabled={disabled}
+      onClick={() => onChange({ ...display, side: below ? "top" : "bottom" })} data-board-side={display.side}>
+      <FlipHorizontal2 aria-hidden="true" />
+    </ToolbarButton>
+    <Popover modal={false}>
+      <PopoverTrigger asChild>
+        <ToolbarButton label={t("display.label")} tooltipSide="top" className={tile} disabled={disabled} data-board-display-button="">
+          <SlidersHorizontal aria-hidden="true" />
+        </ToolbarButton>
+      </PopoverTrigger>
+      {/* A settings form over the canvas: the menus' surface, the form's rows, 15rem for a slider beside its value. */}
+      <PopoverContent side="top" align="end" sideOffset={6} collisionPadding={8} aria-label={t("display.label")} data-board-display-menu=""
+        className={cn(FLOATING_SURFACE_CLASS, "w-60 p-1 text-tiny data-[state=closed]:animate-none!")}>
+        <BoardPresetSettings display={display} sheet={sheet} onChange={onChange} />
+        <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onChange} />
+      </PopoverContent>
+    </Popover>
+  </div>;
 }

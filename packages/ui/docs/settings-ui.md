@@ -282,7 +282,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; no view controls (its Display is its panel's Layers tab) |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; no view controls on the strip (its Flip and Display are the view cluster's, at the canvas's bottom-right) |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
@@ -629,19 +629,24 @@ the narrower for it (the strip stays at the view's centre, panel open or not). N
   unconnected pins) is a label: only a row's chevron opens or shuts it. It opens as its blocks and "Nets
   (N)", a block of several parts and the Nets shut; a pick on the picture opens its row's owners and
   scrolls it into view. A selected net is lit and the rest stepped back, as KiCad's net highlight.
-- **The Layers** (`board/LayersSection.jsx`), KiCad's Appearance panel's Layers tab: its settings
-  together at the top (settings sections, `board/BoardDisplay.jsx`) — **View**: **Preset**, the modes
-  as a Select (Board, Copper, Assembly, Placement, and Custom while the eyes have left the mode's
-  set), and **Side**, Top or Bottom; **Layer display**: **Others** (KiCad's high-contrast modes, a
-  Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and with a
-  copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H) cycles
-  them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and the
-  **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed values — then, under
-  a rule, the layers, grouped Front, Inner, Back, Other, each its colour, name, count and eye, a press
-  on a board layer's row making it the active layer (a filled dot after its name), drawn on top. Its
-  rows are the settings form's (see [Display settings](#display-settings-and-section-primitives)). All
-  of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
-  draws too; the board has no view controls on the strip.
+- **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
+  Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
+  making it the active layer (a filled dot after its name), drawn on top. How the board is drawn is
+  the view cluster's (below), not the panel's.
+- **The view cluster** (`FlatViewFrame.jsx`'s `viewControls`, `board/BoardDisplay.jsx`): how the
+  picture is drawn, apart from the strip's tools — as SOLIDWORKS' Heads-up View toolbar, Onshape's
+  render menu under its view cube and Fusion's navigation bar keep it — at the canvas's bottom-right,
+  8px in (on a phone, just over Quick Edit's peek), on the strip's surface and its tiles. A board's:
+  **Flip board** (lucide's FlipHorizontal2, pressed while the board is seen from below, mirrored, its
+  back layers on top), then **Display** (a sliders glyph), a popover of the settings form's rows:
+  **Display** — **Preset**, the modes as a Select (Board, Copper, Assembly, Placement, and Custom while
+  the Layers tab's eyes have left the mode's set) — and **Layer display**: **Others** (KiCad's
+  high-contrast modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the
+  outline, and with a copper layer active every drill and via through it, stay at full strength;
+  **Ctrl+H** (⌘H) cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is
+  drawn), and the **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed
+  values. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot
+  --display` draws too. A schematic has none: its colours are the theme's.
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
   the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
@@ -769,7 +774,7 @@ label. Checks sit at the row's right end. Choosing a mode closes the menu; ticki
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
-settings are its panel's Layers tab (see [A flat view's panel](#the-file-sidebar-and-the-tool-stack)),
+settings are its view cluster at the canvas's bottom-right (see [A flat view's panel](#the-file-sidebar-and-the-tool-stack)),
 and it has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1218,7 +1223,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   a note; in an empty box it closes the box and is also the viewer's own Escape
   (it clears the selection). ⌘C or Ctrl+C with none of its text selected is the
   viewer's copy.
-- **Ctrl+H** (⌘H) on a KiCad board cycles the Layers tab's Others, Shown, Dimmed, Hidden and round, as
+- **Ctrl+H** (⌘H) on a KiCad board cycles Display's Others, Shown, Dimmed, Hidden and round, as
   KiCad's high-contrast key does, while the board has the keyboard (as Escape's viewer, above); no
   other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
 - **⌘\\** (Ctrl+\\) on a KiCad board or schematic shows and hides its panel, and **/** opens it with

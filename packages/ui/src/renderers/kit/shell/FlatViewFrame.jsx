@@ -21,7 +21,8 @@ import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH, FLAT_PANEL_MIN_WIDTH, FlatPanelPil
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
  * its panel docked at the left (`FlatPanel.jsx`: search, then a tab per list), and on the canvas
  * beside it the strip at the top centre — the view's centre, open panel or not — with the tool's row
- * and the update under it, Quick Edit at
+ * and the update under it, the view cluster at the canvas's bottom-right (`viewControls`: how the
+ * picture is drawn, a board's flip and Display), Quick Edit at
  * the top-right, the loading cover and the alert card, laid out as every view's
  * (`RendererShell.jsx`'s), from the kit's parts. The renderer brings the picture (its canvases and
  * layers, `children`, in the pane the canvas view measures: `containerRef`), its tools
@@ -87,7 +88,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   chromeHidden: boolean, loading: boolean, loadingLabel: string, updating: boolean, updateStatus: { pending: boolean, label: string },
  *   tools: object[], toolRow?: import("react").ReactNode, views?: object[],
  *   panel?: { kind: string, label: string, searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode }[] } | null,
- *   panelControl?: { current: object | null },
+ *   panelControl?: { current: object | null }, viewControls?: import("react").ReactNode,
  *   toolStack: object, onToolStackChange(patch: object): void, notice?: import("react").ReactNode,
  *   quickEdit: object | null, alert: object | null, cardAlert: object | null, alertDismissal: { dismissed: boolean, dismiss(): void },
  *   shown: boolean, onReload?: () => void }} props
@@ -95,7 +96,7 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, loading, loadingLabel,
-  updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
+  updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, viewControls = null, toolStack, onToolStackChange, notice = null, quickEdit,
   alert, cardAlert, alertDismissal, shown, onReload }) {
   const toolsHidden = chromeHidden || compact;
   const sided = Boolean(panel?.tabs.length);
@@ -234,6 +235,12 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
             {compact || !quickEdit ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile} {...quickEdit} />}
           </ViewportTopRight>
         </PreviewChrome>
+        {/* The view cluster: how the picture is drawn, apart from the strip's tools, at the canvas's
+            bottom-right (on a phone, just over Quick Edit's peek). */}
+        {viewControls && !toolsHidden ? <StripTouchProvider value={mobile}><div className="pointer-events-none absolute z-20 flex"
+          style={{ right: INSET, bottom: mobile ? `calc(var(--cad-quick-edit-peek, 0px) + ${INSET})` : INSET }} data-cad-view-cluster="">
+          {viewControls}
+        </div></StripTouchProvider> : null}
         {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
         {sided && !toolsHidden && !open ? <FlatPanelPill touch={mobile} onOpen={() => setOpen(true)} /> : null}
         {/* Where there is no strip (a compact host), the picture catching up says so at the top centre. */}
