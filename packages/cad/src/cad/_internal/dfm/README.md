@@ -61,7 +61,9 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   more, and `rules.outcomes` lists every one.
 - **Items** are sorted worst first and capped (a few hundred), with the family's `count`. Every figure is
   finite: the result is JSON (`allow_nan=False`), and a report that is not is `not_finite`.
-- The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target`.
+- The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target`, a
+  document with no part that has a face `document_empty`; a part with no face beside others (an empty
+  label an exporter left) is skipped and said, `empty_parts` (info).
 
 The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
 `cad.build123d.cnc(shape)`, `sheet_metal`, `molding`, `printing` (the same `CheckResult`, refs as the
