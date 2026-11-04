@@ -124,7 +124,7 @@ the two disagree, the engine's README is right.
 ## The design laws
 
 These are LAWS, not conventions: a change that violates them is wrong even when it works.
-Each of the 29 says, after its title, what it binds: *every document*; *models* (a model's document,
+Each of the 31 says, after its title, what it binds: *every document*; *models* (a model's document,
 built from code, in memory, no file of its own); *file documents* (a document that is a file read as
 it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf); or *the package*
 (the distributions alike).
@@ -476,21 +476,12 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     *The signature rule* decides where a helper goes: one taking only paths, plain values or our own types
     goes under the document type; one taking a third-party library's objects goes under that integration.
 
-27. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
-    A producer is the engine's: a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`, `@threemf`,
-    `@dxf`) declares a persistent script's output, the function is a model the engine builds, and the
-    registry's producers -- each a type, a matcher, the code that writes it and its integration -- decide
-    which makes the file of the returned value, which is written again from the model whenever it runs. A
-    matcher reads the value's type names and modules, never importing a library to ask. Exactly one producer
-    per return type per document type; a return none takes fails loudly, naming the types the document is
-    made of and the integration that would add more. An edit is a file's own: the file is the source, and
-    `with <type>.edit(path) as document:` opens it in its tool, in the caller's process, hands the block the
-    tool's live document, and saves it where it is at the block's end only when the block changed it, and
-    not at all when the block raises (a KiCad board's and schematic's, `kicad_pcb.edit` and `kicad_sch.edit`,
-    through KiCad's IPC API, one KiCad per project for both). An edit declares nothing, writes no other file
-    and is never a model: what is made from an edited file (a STEP, Gerbers, a check) is an explicit call
-    afterwards (`kicad_pcb.export`, `kicad_pcb.drc`). A type has a decorator or an edit, never both; the
-    registry says which (`Producer`, `Edit`).
+27. **A decorator works out its producer from what the function returns.** *The package.* A file decorator declares a
+    persistent script's output; the registry's producers -- each a type, a matcher, the code that writes
+    it and its integration -- decide which makes the file of the returned value. A matcher reads the
+    value's type names and modules, never importing a library to ask. Exactly one producer per return
+    type per document type; a return none takes fails loudly, naming the types the document is made of and
+    the integration that would add more.
 
 28. **The CLI is `cad <document_type> <operation> <file>`.** *Every document.* `export` and `snapshot` are shared by every
     type that has them (and `inspect` and `read` where a type has them); every other operation is named
@@ -514,7 +505,30 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     runner of one operation (`cad._internal.operation`; the server's `_internal/integration_env.py`).
     No module of the server imports an integration's code: the runner does, in whichever process
     runs it. A function of the library called where its integration is missing says which extra to
-    add, or to run the script with `cad run`.
+    add, or to run the script with `cad run`. A command line an integration's extra installs
+    (`kicad-cli`, the registry's `commands`) runs the same way: `cad run kicad-cli …` adds the extra,
+    and the integration's `_command` module runs the environment's own command there, headless in
+    private homes, never one on PATH.
+
+30. **A typed command wraps a tool only where it adds something.** *The package.* `cad <type>
+    <operation>` runs a tool's command for a reason the tool's own line lacks: one result shape (law 28's
+    findings, the files an export wrote), a safety guarantee (a board's folder left as found, a refused
+    output path), or parity with the viewer (the same check, the same export). Everything else of the
+    tool is its own command line, run through `cad run` (`cad run kicad-cli pcb render …`), which the
+    skill documents with the tool's own flags at the pinned version; no typed command is added to
+    rename one.
+
+31. **A producer regenerates a file from code; an edit changes a native file in place.** *The package.*
+    A producer is the engine's (law 27): a file decorator (`@model`, `@xbf`, `@step`, `@glb`, `@stl`,
+    `@threemf`, `@dxf`) declares a persistent script's output, the function is a model the engine builds,
+    and the file is written again from the model whenever it runs. An edit is a native file's own: the file
+    is the source, and `with <type>.edit(path) as document:` opens it in its tool, in the caller's process,
+    hands the block the tool's live document, and saves it where it is at the block's end only when the
+    block changed it, and not at all when the block raises (a KiCad board's and schematic's,
+    `kicad_pcb.edit` and `kicad_sch.edit`, through KiCad's IPC API, one KiCad per project for both). An
+    edit declares nothing, writes no other file and is never a model: what is made from an edited file (a
+    STEP, Gerbers, a check) is an explicit call after the block (`kicad_pcb.export`, `kicad_pcb.drc`). A
+    type has a decorator or an edit, never both; the registry says which (`Producer`, `Edit`).
 
 
 ## Agent operations
@@ -591,9 +605,10 @@ src/cad/
                          #   alone) and inspect; its flat still engine/render/schematic.py;
                          #   erc, export and edit, the kicad integration's
   kicad/                 # the kicad integration, kicode: its kicad-cli found and run (_program,
-                         #   on _internal/programs), an edit of a board or a schematic through
-                         #   its headless api-server and KiPy (_session), DRC (_check), its exports (_export),
-                         #   a schematic's ERC and exports (_schematic)
+                         #   on _internal/programs), `cad run kicad-cli` (_command), an edit of
+                         #   a board or a schematic through its headless api-server and KiPy
+                         #   (_session), DRC (_check), its exports (_export), a schematic's ERC
+                         #   and exports (_schematic)
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
                          #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
                          #   printing (overhangs, walls, support), orientations (ranked) -- each

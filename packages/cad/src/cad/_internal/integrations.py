@@ -3,8 +3,8 @@
 The registry (``cad.registry.INTEGRATIONS``) is the one place each integration's modules, distributions and
 extra are listed, and its document types say which of their functions need which integration. This module is the
 view of it the server's ``cad run`` reads to work out a script's integrations from its imports (a static
-scan, no code run), to add one a resolution pulled in through another package, and to give a requirement
-its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
+scan, no code run), and a command's from its name (``kicad-cli`` is the kicad integration's), to add one a
+resolution pulled in through another package, and to give a requirement its indexes; a program run with one missing says, in one line, which extra brings it (``missing``).
 
 The standard library alone: the server's command and a model's process both read it, and neither loads
 any integration to do so.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "for_distribution", "for_module", "for_name", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "for_command", "for_distribution", "for_module", "for_name", "missing"]
 
 
 @dataclass(frozen=True)
@@ -23,13 +23,16 @@ class Integration:
     program imports of it (``modules``), the distributions that are it, which a resolution may pull in
     through another package (``distributions``, as PEP 503 normalizes their names), and the
     package indexes and folders of wheels its packages come from beside the default index (``indexes``,
-    ``find_links``: none today, a hook for packaged binaries)."""
+    ``find_links``: none today, a hook for packaged binaries), the commands its extra puts in an environment
+    (``commands``: ``kicad-cli``) and the library's module that runs one (``runner``: ``cad.kicad._command``)."""
 
     extra: str
     modules: tuple[str, ...]
     distributions: tuple[str, ...]
     indexes: tuple[str, ...] = ()
     find_links: tuple[str, ...] = ()
+    commands: tuple[str, ...] = ()
+    runner: str | None = None
 
 
 def _normal(name: str) -> str:
@@ -49,7 +52,8 @@ def _from_registry() -> dict[str, Integration]:
             continue
         distributions = tuple(dict.fromkeys(_normal(item) for item in integration.identity))
         found[integration.extra] = Integration(integration.extra, integration.modules, distributions, integration.indexes,
-                                               integration.find_links)
+                                               integration.find_links, integration.commands,
+                                               f"cad.{name}._command" if integration.commands else None)
     return found
 
 
@@ -111,6 +115,15 @@ def for_distribution(name: str) -> str | None:
     """The integration a distribution (any spelling of its name) is part of, or None."""
     normal = _normal(name)
     return next((key for key, found in INTEGRATIONS.items() if normal in found.distributions), None)
+
+
+def for_command(name: str) -> str | None:
+    """The integration that declares the command ``name`` (``kicad-cli``, or ``kicad-cli.exe`` as Windows spells
+    it), or None: a bare command ``cad run`` runs, no path."""
+    if "/" in name or "\\" in name:
+        return None
+    bare = name[:-4] if name.lower().endswith(".exe") else name
+    return next((key for key, found in INTEGRATIONS.items() if bare in found.commands), None)
 
 
 def missing(error: BaseException) -> str | None:

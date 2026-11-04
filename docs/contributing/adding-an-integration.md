@@ -67,6 +67,16 @@ an integration.
       the minimum version checked; run headless with a private home and no display;
       one missing-tool result saying the install hint. Only the program itself is ever run, never a
       desktop app or a wrapper that starts one; test each rule.
+- [ ] **The tool's own commands**, when its extra puts a command line in an environment (kicode's
+      `kicad-cli`): name each in the registry entry's `commands`, and give the integration a `_command`
+      module (`cad/<name>/_command.py`, `main(argv)`, argv the command's name and its arguments) that
+      runs it headless in the integration's private homes, the environment's own command first (the one
+      beside its Python) and never one on `PATH`, its arguments, stdio and exit code the tool's. `cad
+      run <command> …` then adds the extra as `--with cad[<name>]` would and runs that module in the
+      integration's environment (`cad_server.cli.run`; `cad.kicad._command` is the example). A typed
+      command wraps one only where it adds something (the library's law 30); the skill documents the
+      rest as `cad run <command> …`. Test that the bare command adds the integration, in the unit suite,
+      and that it runs, in the job that installs the tool.
 - [ ] **Licensing**: the tool's license allows how we call it (a library we import, a program we run)
       and how it would ship; say which in the pull request.
 - [ ] **A CI job** where its tests need the tool installed, reached by a runner under `scripts/test/`

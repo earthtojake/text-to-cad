@@ -90,6 +90,10 @@ class Integration:
     identity: tuple[str, ...] = ()
     indexes: tuple[str, ...] = ()
     find_links: tuple[str, ...] = ()
+    #: The commands its extra puts in an environment (``kicad-cli``), each the tool's own command line:
+    #: ``cad run <command>`` makes the integration's environment for one and runs it there, through the
+    #: integration's ``_command`` module (``cad.<name>._command``), headless in private homes.
+    commands: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -296,7 +300,7 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                                         "KiCad 9 or newer (a nightly's, 10.99, for kicad_pcb.edit and kicad_sch.edit)",
                     "CAD_KICAD_CLI"),
         modules=("kicode",), distributions=("kicode",),
-        identity=("kicode", "kicode-pcb", "kicode-sch")),
+        identity=("kicode", "kicode-pcb", "kicode-sch"), commands=("kicad-cli",)),
     "trimesh": Integration(
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "

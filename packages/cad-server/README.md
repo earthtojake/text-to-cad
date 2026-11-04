@@ -8,7 +8,8 @@ installs them all.
 Models are written against the library, `cad`, which the server imports without
 its CAD kernel: the kernel lives in the environments the server makes, on first need, for models and
 its own kernel processes, `cad[build123d]` at the server's own release. `cad run` runs a program as
-`uv run` does, with cad pinned at the server's release and the integrations its imports use.
+`uv run` does, with cad pinned at the server's release and the integrations its imports use; a tool's
+own command an integration declares (`cad run kicad-cli …`) gets that integration and runs headless.
 
 The mechanisms its laws constrain are [`src/cad_server/engine/README.md`](src/cad_server/engine/README.md).
 
@@ -115,7 +116,8 @@ them; none written in the last seven days; and the release folders but the curre
 before, a release an update failed to move to among them, `_internal/releases.py`); `cad run` a program exactly as `uv run` runs it -- uv run's
 options, a script's `# /// script` header, a project -- with cad pinned at this release and the
 integrations its imports use (`_internal/extras.py`, `_internal/scan.py`, by the library's registry), in an
-environment the engine makes, its own folder last on its path; `cad requirement [INTEGRATION ...]` the
+environment the engine makes, its own folder last on its path, and a command an integration declares
+(`kicad-cli`) with that integration, through its `_command` module, headless; `cad requirement [INTEGRATION ...]` the
 exact requirement a Python of a program's own installs this release's cad by
 (`cad[build123d]==<release>`); `cad viewer` the engine page launcher;
 `cad setup`, which the install command `curl -fsSL https://texttocad.dev/install.sh | sh` runs, sets
