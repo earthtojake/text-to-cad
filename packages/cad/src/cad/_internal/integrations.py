@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-__all__ = ["INTEGRATIONS", "Integration", "decorated", "for_distribution", "for_module", "missing"]
+__all__ = ["INTEGRATIONS", "Integration", "decorated", "for_distribution", "for_module", "for_name", "missing"]
 
 
 @dataclass(frozen=True)
@@ -76,12 +76,40 @@ def _namespaces() -> dict[str, str]:
 
 
 def for_module(name: str) -> str | None:
-    """The integration whose modules hold ``name`` (a module's dotted name: its top level decides), or whose
-    namespace in the library it is (``cad.build123d``, ``cad.kicad._session``: the registry's), or None."""
+    """The integration whose modules hold ``name`` (a module's dotted name: its top level decides), or the one
+    a name of the library's needs (``for_name``), or None."""
     parts = name.split(".")
     if parts[0] in _LIBRARY:
-        return _namespaces().get(parts[1]) if len(parts) > 1 else None
+        return for_name(name)
     return next((key for key, found in INTEGRATIONS.items() if parts[0] in found.modules), None)
+
+
+def for_name(name: str) -> str | None:
+    """The integration a program that uses the library's name ``name`` needs in its own process, worked out
+    from where each is declared: an earlier spelling read as the name it is now (the alias table,
+    ``cad._internal.aliases.current``: ``cad.read_step`` is ``cad.step.read``, ``cad.ap242`` is
+    ``cad.build123d``); then an integration's namespace (``cad.build123d``, ``cad.kicad._session``: the
+    registry's), a document type's reader (``cad.step.read``: its ``reader_integration``) and a type's
+    operation that runs in the caller (``cad.step.dfm``: trimesh; never one the engine runs, as
+    ``cad.step.export``). None for any other name: a type itself (``cad.step``), the model contract."""
+    from cad._internal.aliases import current
+    from cad.registry import DOCUMENT_TYPES, INTEGRATIONS as REGISTERED
+
+    parts = current(name).split(".")
+    if parts[0] not in _LIBRARY or len(parts) < 2:
+        return None
+    namespace = _namespaces().get(parts[1])
+    if namespace is not None:
+        return namespace
+    entry = DOCUMENT_TYPES.get(parts[1])
+    if entry is None or len(parts) < 3:
+        return None
+    if parts[2] == "read":
+        needed = entry.reader_integration
+    else:
+        operation = entry.operation(parts[2])
+        needed = operation.integration if operation is not None and not operation.engine else None
+    return REGISTERED[needed].extra if needed is not None else None
 
 
 def for_distribution(name: str) -> str | None:

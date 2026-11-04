@@ -129,18 +129,37 @@ _SOCKET_PATH_MAX = 100
 @contextmanager
 def _socket(folder: Path) -> Iterator[Path]:
     """The api-server's address, a plain path: a socket file on POSIX, the name of a named pipe on Windows
-    (where no file appears). Inside the private folder, unless that path is longer than a socket's may be:
-    then in a folder of its own under /tmp (only this user's), removed afterwards. A path too long would
-    have kicad-cli say it listens and never bind."""
+    (where no file appears). The first of these whose path fits a socket's (a path too long would have
+    kicad-cli say it listens and never bind): inside the private folder; in a short folder of its own
+    directly in the temporary folder (``TMPDIR``, which a sandbox lets a program write); in one under /tmp
+    (only this user's), which a sandbox may refuse. A folder of its own is removed afterwards. None fits:
+    ``KicadRunError`` in one line, naming the cause and what to do."""
     path = folder / "api.sock"
-    if sys.platform.startswith("win") or len(os.fsencode(path)) <= _SOCKET_PATH_MAX:
+    if sys.platform.startswith("win") or _fits(path):
         yield path
         return
-    short = Path(tempfile.mkdtemp(prefix="cad-kicad-", dir="/tmp"))
-    try:
-        yield short / "api.sock"
-    finally:
-        shutil.rmtree(short, ignore_errors=True)
+    why: list[str] = []
+    for parent in dict.fromkeys((tempfile.gettempdir(), "/tmp")):
+        if not _fits(Path(parent) / "k12345678" / "api.sock"):  # mkdtemp's name: its prefix and eight letters
+            why.append(f"{parent} is too deep")
+            continue
+        try:
+            short = Path(tempfile.mkdtemp(prefix="k", dir=parent))
+        except OSError as error:
+            why.append(f"{parent} refused a folder ({error.strerror or error})")
+            continue
+        try:
+            yield short / "api.sock"
+        finally:
+            shutil.rmtree(short, ignore_errors=True)
+        return
+    raise KicadRunError(f"a board script's KiCad api-server listens on a socket whose path is at most {_SOCKET_PATH_MAX} "
+                        f"bytes, and no folder here gives one ({'; '.join(why)}): set TMPDIR to a shorter folder this "
+                        "program may write, then run it again")
+
+
+def _fits(path: Path) -> bool:
+    return len(os.fsencode(path)) <= _SOCKET_PATH_MAX
 
 
 @contextmanager

@@ -49,11 +49,14 @@ PROCESS_KINDS = ("in-process", "separate", "both")
 
 @dataclass(frozen=True)
 class Operation:
-    """One operation a type implements: what it does, and the integration it needs (None: our own code alone)."""
+    """One operation a type implements: what it does, the integration it needs (None: our own code alone), and
+    whether the engine runs it (``engine``: ``cad.engine.api``'s, in the daemon, whose base holds that
+    integration), so a program that calls it needs none of its own; else it runs in the calling process."""
 
     name: str
     summary: str
     integration: str | None = None
+    engine: bool = False
 
 
 @dataclass(frozen=True)
@@ -134,6 +137,9 @@ class DocumentTypeEntry:
     #: engine's models' (build123d's).
     decorator_integration: str | None = None
     reader: bool = False
+    #: The integration its reader needs in the process that calls it (None: our own code alone): a STEP's,
+    #: an xbf's and an STL's read hands a model build123d's objects, through the kernel memo.
+    reader_integration: str | None = None
     wire: str = ""
 
     def __post_init__(self) -> None:
@@ -144,6 +150,8 @@ class DocumentTypeEntry:
         for operation in self.operations:
             if operation.name not in OPERATIONS:
                 raise ValueError(f"{self.id}: {operation.name!r} is not an operation ({', '.join(OPERATIONS)})")
+        if self.reader_integration is not None and not self.reader:
+            raise ValueError(f"{self.id}: a reader_integration with no reader")
         if not self.wire:
             object.__setattr__(self, "wire", self.id)
         if self.decorator and self.decorator_integration is None:
@@ -173,12 +181,12 @@ _KERNEL = "build123d"
 
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
                                        "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance meshes an .stl or a "
-                                       ".3mf finer", _KERNEL)
-_EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)")
-_SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL)
+                                       ".3mf finer", _KERNEL, engine=True)
+_EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)", engine=True)
+_SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL, engine=True)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
-                                         "element or part is and what made it", _KERNEL)
-_INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL)
+                                         "element or part is and what made it", _KERNEL, engine=True)
+_INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL, engine=True)
 # The manufacturing check every 3D type shares (``cad._internal.manufacturing``), measured with trimesh.
 _DFM = Operation("dfm", "measure it for manufacturing: injection molding (--process molding: draft, undercuts, "
                         "projected area) or 3D printing (--process printing: walls, overhangs, support); "
@@ -197,14 +205,16 @@ _TYPES = (
         "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
                       "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        reader_integration=_KERNEL),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM), decorator=True, reader=True,
+        reader_integration=_KERNEL),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
-        (_EXPORT_MESH, _SNAPSHOT, _DFM), decorator=True, reader=True),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM), decorator=True, reader=True, reader_integration=_KERNEL),
     DocumentTypeEntry(
         "glb", "GLB", "a binary glTF scene of triangle meshes", (".glb",), "model/gltf-binary", "mesh",
         ("triangles", "assembly", "names", "colours", "materials", "animations"),

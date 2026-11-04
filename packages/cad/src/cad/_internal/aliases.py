@@ -7,7 +7,11 @@ naming the new path: ``cad.read_step is deprecated; use cad.step.read``. A modul
 every ``__all__`` and every document but this table and the migration guide; a test pins the table.
 
 A build's stderr is the model's log, and a model's own process imports its script first, so the
-warning reaches the person or the agent who ran it: in their terminal, before the worker's build.
+warning reaches the person or the agent who ran it: in their terminal, before the worker's build. That
+process owns the line: the worker that builds the program's models imports the same script again
+(``cad.engine.build``) with these warnings ignored, each still counting as said, so a run says each
+alias once; an alias only a model's body spells, which runs in the worker alone, the worker says. A file
+under the working folder is named relative to it, as the person wrote it (``arm.py:2``), in either process.
 """
 
 from __future__ import annotations
@@ -21,7 +25,7 @@ from pkgutil import resolve_name as _resolve
 import warnings
 from typing import Any
 
-__all__ = ["CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "lookup", "warn"]
+__all__ = ["CadDeprecationWarning", "MODULE_ALIASES", "NAME_ALIASES", "current", "lookup", "warn"]
 
 
 class CadDeprecationWarning(FutureWarning):
@@ -85,12 +89,54 @@ _SKIPPED = (os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "<froze
 
 
 def warn(old: str, new: str) -> None:
-    """Say once per process that ``old`` is deprecated, naming ``new``, at the caller's line."""
+    """Say once per process that ``old`` is deprecated, naming ``new``, at the caller's line: the first frame
+    outside the library and the import system, its file relative to the working folder when it lies in it.
+    The warnings filters still decide (``-W error`` raises it), and one they ignore counts as said."""
     if old in _WARNED:
         return
     _WARNED.add(old)
-    warnings.warn(f"{old} is deprecated; use {_ADVICE.get(old, new)}", CadDeprecationWarning,
-                  skip_file_prefixes=_SKIPPED)
+    message = f"{old} is deprecated; use {_ADVICE.get(old, new)}"
+    frame = sys._getframe(1)
+    while frame is not None and frame.f_code.co_filename.startswith(_SKIPPED):
+        frame = frame.f_back
+    if frame is None:
+        warnings.warn(message, CadDeprecationWarning, stacklevel=2)
+        return
+    found = frame.f_globals
+    warnings.warn_explicit(message, CadDeprecationWarning, _shown(frame.f_code.co_filename), frame.f_lineno,
+                           module=found.get("__name__", "<string>"), registry=found.setdefault("__warningregistry__", {}))
+
+
+def _shown(filename: str) -> str:
+    """A file as the person names it: relative to the working folder when it lies inside it, else as given."""
+    if not os.path.isabs(filename):
+        return filename
+    try:
+        relative = os.path.relpath(os.path.realpath(filename), os.path.realpath(os.getcwd()))
+    except (OSError, ValueError):  # no working folder, another drive (Windows)
+        return filename
+    return filename if relative.startswith(os.pardir) else relative
+
+
+def current(dotted: str) -> str:
+    """The library's name ``dotted`` (``cad.read_step``, ``cad.ap242.posed``, ``cadgen.memo``) as it is spelled
+    now, by this table alone, without importing anything (``cad.step.read``, ``cad.build123d.posed``,
+    ``cad.build123d.memo``); a name that is no alias, as it is, ``cadgen`` read as ``cad``. What a static
+    scan of a program reads its integrations by (``cad._internal.integrations.for_name``)."""
+    parts = dotted.split(".")
+    if parts[0] == "cadgen":
+        parts[0] = "cad"
+    for size in range(len(parts), 1, -1):
+        module = MODULE_ALIASES.get(".".join(parts[:size]))
+        if module is not None:
+            parts = [*module.split("."), *parts[size:]]
+            break
+    for size in range(len(parts) - 1, 0, -1):
+        target = NAME_ALIASES.get(".".join(parts[:size]), {}).get(parts[size])
+        if target is not None:
+            parts = [*target.split("."), *parts[size + 1:]]
+            break
+    return ".".join(parts)
 
 
 def lookup(owner: str, name: str) -> Any:

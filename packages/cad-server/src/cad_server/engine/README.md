@@ -437,8 +437,12 @@ verbosity) key nothing. What it adds is two things:
   core); else a static scan of the program, with `ast`, and of the local modules it imports -- in its
   folder, its package, its project, following absolute and relative imports and the imports inside
   function bodies -- each module's top level looked up in the table (`build123d` and `OCP`: the
-  build123d integration; `kicode`: the kicad integration), and each of cad's decorators it applies
-  (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
+  build123d integration; `kicode`: the kicad integration), each of cad's names it imports or uses by the
+  name it spells (`step.read`, `from cad.step import read`, 0.10's `read_step`: an alias read as the name
+  it is now), which needs what the registry says (a type's reader its `reader_integration`, a STEP's
+  build123d; an operation the calling process runs its integration, a `dfm` trimesh; one the engine
+  runs, an `export`, none; a type alone, `from cad import step`, none), and each of cad's decorators it
+  applies (`@cad.kicad_pcb`, or a `kicad_pcb` imported from cad) (`cad_server._internal.scan`); with what a
   project's requirement of cad names, and a requirement that is an integration's own distribution
   (`--with build123d`). `--with cad[...]` adds to either. None found: the core alone. A header or
   project that pins cad to another release is refused before anything is made, in one line naming

@@ -38,8 +38,8 @@ explains any other failure.
 
 1. Get the part. Call the model: `enclosure()`, imported from the model's script,
    is built by text-to-cad's server (a replay when the server already holds it), and
-   its `.shape` is the part. For a part with no model, read its file: `read_step` for a
-   STEP, `read_xbf` for an xbf, anchored on `Path(__file__).parent`. Any build123d
+   its `.shape` is the part. For a part with no model, read its file: `step.read` for a
+   STEP, `xbf.read` for an xbf, anchored on `Path(__file__).parent`. Any build123d
    shape works. The drawing documents geometry, it does not build it.
 2. Write `<name>_drawing.py` beside the model, from
    [the template](references/sheet-api.md#template). Import the model facts the

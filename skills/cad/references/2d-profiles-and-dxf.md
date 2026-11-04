@@ -185,8 +185,8 @@ nothing.
 
 ### 3. Flat pattern of an imported STEP
 
-For a vendor `.step`/`.stp` with no Python source. Read it with `step.read` (`read_step`), or convert
-it once (`cad step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `read_xbf`, which
+For a vendor `.step`/`.stp` with no Python source. Read it with `step.read`, or convert
+it once (`cad step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `xbf.read`, which
 is faster. Like every file a run reads, it is an input: replacing it re-runs the drawing. Which planar
 faces define the cut profile is a judgment about the part.
 
