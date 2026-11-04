@@ -153,7 +153,7 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   a source tree). A server of a newer release than the engine's -- an app whose plugin
   moved ahead -- says a release is out too, with no request (`updates.see`). While this
   install is behind, the navbar shows the shared blue `UpdateButton`
-  (`@cad/ui/update`), an icon and nothing else, first among its controls, over a
+  (`@cad/ui/update`), an icon and nothing else, last and outermost of its controls, over a
   file and over the home; the file handler, which has no navbar, shows it in its corner,
   under Full size. A launch carries the notice the server last read, so the button draws
   with the page; the page reads it again (`/api/v1/server`) when the person comes back to
