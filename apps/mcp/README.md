@@ -146,8 +146,9 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   directly, with no file registry. `cad_show` targets the thread’s tab unless it names
   the sidebar’s view. A session closing removes its sidebar views; stale views expire
   by the same heartbeat rule as other views.
-- **Two requests to the network: the version check, and analytics with consent.**
-  Both go to `api.texttocad.dev` (`apps/api`). At most once an hour, the server
+- **Two requests to the network of its own: the version check, and analytics with consent.**
+  Both go to `api.texttocad.dev` (`apps/api`); installing a release, the person's update or an automatic
+  patch update, downloads it from PyPI as `cad update` does. At most once an hour, the server
   reads the version feed (`cad_server/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CAD_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). A server of a newer release than the engine's -- an app whose plugin
