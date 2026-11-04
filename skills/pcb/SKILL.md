@@ -72,8 +72,8 @@ ERC and look at each sheet ([schematic](references/schematic.md)) before laying 
 to it after. For creation or structured edits read [native files](references/board-api.md). For parts and
 footprints read [parts](references/parts.md). To place and route a board, read
 [layout](references/layout.md): start from the schematic's netlist, place one part or functional
-group at a time, route octolinear by hand (never an autorouter) with widths for each net's current,
-and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
+group at a time ([placement](references/placement.md) says in what order and where), route
+octolinear by hand (never an autorouter) with widths for each net's current, and check each step with `cad kicad_pcb drc` and a script of the layout's own properties. KiCad's file coordinates are millimetres, **y down**;
 footprint-local positions and rotations must be transformed into the board frame. Use a net's
 actual pad positions when routing. Check the datasheet's pin numbers, footprint orientation and
 connector mating side; a plausible-looking layout does not establish electrical correctness.
@@ -154,7 +154,9 @@ neighbours of every fix (a moved capacitor can open a clearance elsewhere). Neve
 person's behalf.
 
 Export only the requested deliverables from the saved revision you checked; see
-[manufacturing and STEP](references/manufacturing.md).
+[manufacturing and STEP](references/manufacturing.md). A DRC or ERC error blocks writing fabrication
+files (Gerbers, drill, placement, BOM, ODB++, IPC-2581) unless the person explicitly says to go ahead;
+the report then names every error they went ahead with.
 
 ## Show the model
 

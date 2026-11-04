@@ -84,6 +84,29 @@ every `uuid`: references and the board's links to its symbols are made of them. 
 drawing lives in the file's `lib_symbols`; a new symbol needs its entry there. Its reference is the
 `instances` entry for its sheet's path. After each edit, read it back, draw it and check it.
 
+## Draw it cleanly
+
+The netlist proves the connections; the picture proves a person can read them. Check both after each
+edit: `kicad_sch.read` or `cad kicad_sch inspect` for what connects, and a `cad kicad_sch snapshot` of
+each sheet changed for how it reads, iterating on the picture until nothing overlaps or runs long.
+
+- Join buses and long runs with labels; wire local passives (pull-ups, decoupling, a filter) to their
+  pins with real wires.
+- Draw supplies as power symbols, ground pointing down and positive supplies up, with a `PWR_FLAG`
+  where the supply enters (its connector or regulator), not anywhere on the net.
+- Group an IC's decoupling capacitors on one supply symbol and one ground symbol, not one each.
+- Box each subcircuit (the power input, an MCU and its passives) in a rectangle with a short title.
+- Give every value its unit: `10k`, `100nF`, `4.7uH`.
+- Name a differential pair's two nets with matching suffixes, `+`/`-` or `P`/`N` (`USB_D+`,
+  `USB_D-`): that is how KiCad finds the pair.
+- After redrawing a symbol, prove every pin kept its number, name and type: compare
+  `{(pin.ref, pin.number): (pin.name, pin.type) for pin in sch.pins}` before and after.
+- Lay out a new symbol's pins as KiCad's library conventions do
+  ([KLC S4.2](https://klc.kicad.org/symbol/s4/s4.2/)): inputs left, outputs right, power at the top,
+  ground at the bottom; a converter's power input left and its output right.
+
+Report the liberties taken: a symbol redrawn, a sheet split or merged, a choice the documents left open.
+
 ## Into the board, and back
 
 The board takes its parts and nets from the schematic's netlist:

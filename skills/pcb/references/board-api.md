@@ -32,3 +32,14 @@ sibling `.kicad_dru`. Preserve them through edits. Consult the installed version
 [custom rules manual](https://docs.kicad.org/9.0/en/pcbnew/pcbnew.html#custom_design_rules)
 before adding constraints. DRC checks only declared rules; compare them with the selected fab,
 copper weight and electrical needs. Record the source of adopted limits.
+
+## Board scripts
+
+Updating a footprint through KiCad's IPC API replaces its whole definition (pads, graphics, 3D
+models) and sets its layer and lock. Edit only footprints read back from the board
+(`b.get_footprints()`), changed and sent with `b.update_items(...)`: KiPy sends their full body. Never
+build a new `FootprintInstance` from an id and a position to update an existing one; it wipes that
+footprint's pads and graphics.
+
+KiCad writes a STEP or GLB export through a temporary file of a fixed name in the output folder, so
+two exports into one folder at once can collide. Give each board script's exports a folder of its own.
