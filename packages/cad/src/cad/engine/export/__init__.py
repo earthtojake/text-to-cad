@@ -8,6 +8,15 @@ file's triangles (``.glb``, ``.stl``, ``.3mf``: ``export/mesh_file.py``). A
 derived file a decorator declares and a file ``cad export`` asks for are the same
 call, so the same document writes the same bytes.
 
+An STL or a 3MF is meshed at the engine's one tolerance, the viewer's, from the one mesh cache,
+unless the export gives its own (``tolerance``: a ceiling on the linear deflection in millimetres,
+for a print file whose fits are finer than a quarter per cent of the part): then each part is meshed
+again, at the finer of its own and the ceiling (``engine/mesh.py``), for that file alone, never
+cached, and the file says it (``tolerance_of``, ``export/mesh.py``); a face the mesher leaves
+without triangles is told by name (``told``), since which faces it leaves changes with the
+deflection. No other kind is
+meshed by the export (a GLB is the viewer's own mesh), so no other takes one.
+
 The file holds the document as its code built it: every part, placed where the document
 places it, in its colours, with its motion. No translation selects a part or a state: a
 posed or partial file is a function in the model's code. A mesh file is a source of the other
@@ -36,7 +45,8 @@ from typing import Any, Callable
 
 from cad.engine.atomic_replace import put
 
-__all__ = ["KINDS", "ExportRefused", "Kind", "Source", "View", "kind_of", "refused", "translate"]
+__all__ = ["KINDS", "MIN_TOLERANCE", "TOLERANT", "ExportRefused", "Kind", "Source", "View", "kind_of", "refused",
+           "tolerance_of", "translate"]
 
 
 class ExportRefused(ValueError):
@@ -81,6 +91,10 @@ LABELS = {"xbf": "xbf", "step": "STEP", "glb": "GLB", "stl": "STL", "threemf": "
 # The date of every entry of a zip the package writes (a 3MF): a file is a function of
 # what it holds, never of the clock it was written by (zipfile stamps each entry with the time).
 ZIP_DATE = (1980, 1, 1, 0, 0, 0)
+# The kinds an export's own tolerance meshes, and the finest it takes, in millimetres: a micron,
+# finer than any printer resolves, past which a part's triangles run to millions.
+TOLERANT = ("stl", "threemf")
+MIN_TOLERANCE = 0.001
 
 
 def refused(source: Any, destination: Any) -> str | None:
@@ -98,6 +112,24 @@ def refused(source: Any, destination: Any) -> str | None:
         article = "an" if kind == "stl" else "a"
         return f"{article} {LABELS[kind]} is not written from another {LABELS[kind]}: the file already is one"
     return None
+
+
+def tolerance_of(tolerance: Any, destinations: Any = ()) -> float | None:
+    """An export's own tolerance checked, in millimetres, or None for the engine's: a number of at
+    least ``MIN_TOLERANCE``, and every destination an STL or a 3MF, refused by name before anything is
+    written."""
+    if tolerance is None:
+        return None
+    if isinstance(tolerance, bool) or not isinstance(tolerance, (int, float)):
+        raise ExportRefused(f"tolerance is a number of millimetres, not {tolerance!r}")
+    value = float(tolerance)
+    if not value >= MIN_TOLERANCE or value == float("inf"):
+        raise ExportRefused(f"tolerance is at least {MIN_TOLERANCE:g} mm, not {tolerance!r}")
+    for destination in destinations:
+        if kind_of(destination) not in TOLERANT:
+            raise ExportRefused(f"{Path(destination).name}: a tolerance meshes an STL or a 3MF; export the "
+                                f"{LABELS[kind_of(destination)]} without one")
+    return value
 
 
 def kind_of(path: Any) -> str:
@@ -357,6 +389,8 @@ class View:
     placements: list[Placed]
     tree: dict[str, Any]
     matrices: list[Any]  # every instance's world matrix, by instance index
+    tolerance: float | None = None  # the export's own, in mm; None meshes at the engine's (``export/mesh.py``)
+    unmeshed: dict[str, int] | None = None  # at the export's own tolerance: faces left without triangles, by part
 
     @property
     def prototypes(self) -> list[dict[str, Any]]:
@@ -394,16 +428,17 @@ def _instances(node: dict[str, Any]) -> list[int]:
 # --- the one call ------------------------------------------------------------------------------
 
 
-def translate(document: Any, kind: str | None, path: Any, *, log: Callable[[str], None] | None = None,
-              check: Callable[[Path], None] | None = None) -> int:
+def translate(document: Any, kind: str | None, path: Any, tolerance: float | None = None,
+              told: Callable[[str], None] | None = None, *, check: Callable[[Path], None] | None = None) -> int:
     """Write ``document`` (a ``Source``, or the path of an ``.xbf``/``.step`` or a mesh file) to ``path``
-    as ``kind`` (from the suffix when None); returns the file's size. The translation lands only where
-    the file does not hold its bytes already (``put``): a file written again the same is left as it
-    is. Every declared file is written this way too, after the build or the take-up that made its
-    document (``build``). A file that would not carry whole the PMI the code made is refused by name
-    (``pmi.refuse_dropped``); what one of a document another system wrote leaves out is said to
-    ``log``. ``check`` reads the file staged before it lands (an atomic kind's, a STEP's): one it
-    refuses (raises) is not written, and the file there keeps its bytes."""
+    as ``kind`` (from the suffix when None), an STL or a 3MF meshed to within ``tolerance`` (mm) when
+    one is given; returns the file's size. The translation lands only where the file does not hold its
+    bytes already (``put``): a file written again the same is left as it is. Every declared file is
+    written this way too, after the build or the take-up that made its document (``build``). A file
+    that would not carry whole the PMI the code made is refused by name (``pmi.refuse_dropped``).
+    ``told`` hears what one of a document another system wrote leaves out, and each part it left faces
+    of without triangles. ``check`` reads the file staged before it lands (an atomic kind's, a STEP's):
+    one it refuses (raises) is not written, and the file there keeps its bytes."""
     from cad.engine import pmi
 
     path = Path(path)
@@ -412,6 +447,7 @@ def translate(document: Any, kind: str | None, path: Any, *, log: Callable[[str]
         raise ExportRefused(f"no export {kind!r}; the kinds are {', '.join(KINDS)}")
     if path.suffix.lower() not in KINDS[kind].suffixes:
         raise ExportRefused(f"{path.name}: a {kind} export ends in {' or '.join(KINDS[kind].suffixes)}")
+    tolerance = tolerance_of(tolerance, [path])
     if not isinstance(document, Source):
         why = refused(document, path)
         if why:
@@ -425,14 +461,18 @@ def translate(document: Any, kind: str | None, path: Any, *, log: Callable[[str]
             raise ExportRefused("an xbf is not written from another xbf: the document already is one")
         if path.resolve() == source.path.resolve():
             raise ExportRefused("export the migrated document to a different XBF path; the original is preserved")
+    if tolerance is not None and source.mesh:
+        raise ExportRefused(f"{source.name} is a mesh: its triangles are the file's, and no tolerance meshes it again")
     view = source.view()
     pmi.refuse_dropped(view, kind)
-    for entry, why in pmi.dropped(view, kind) if log is not None else ():
-        log(f"warning: pmi: {path.name}: {entry['id']} is not carried whole: {why}")
+    for entry, why in pmi.dropped(view, kind) if told is not None else ():
+        told(f"warning: pmi: {path.name}: {entry['id']} is not carried whole: {why}")
+    view.tolerance = tolerance
     path.parent.mkdir(parents=True, exist_ok=True)
     spec = KINDS[kind]
     if not spec.atomic:
-        return spec.write(view, path)
+        spec.write(view, path)
+        return path.stat().st_size
 
     def write(temporary: Path) -> None:
         spec.write(view, temporary)
@@ -440,4 +480,8 @@ def translate(document: Any, kind: str | None, path: Any, *, log: Callable[[str]
             check(temporary)
 
     _written, size = put(path, write)
+    if told is not None:
+        for name, faces in (view.unmeshed or {}).items():
+            told(f"{path.name}: {faces} face{'s' if faces != 1 else ''} of {name} left without triangles "
+                 f"meshing to within {tolerance:g} mm")
     return size

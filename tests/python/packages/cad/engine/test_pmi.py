@@ -1066,7 +1066,7 @@ def pmi_plate():
         result = verify(read(self.xbf), self.step)
         self.assertEqual((result["matched"], result["total"], result["problems"]), (3, 3, []))
         said: list[str] = []
-        export.translate(self.xbf, "step", self.folder / "again.step", log=said.append)
+        export.translate(self.xbf, "step", self.folder / "again.step", told=said.append)
         self.assertEqual([line for line in said if "pmi" in line], [])
         self.assertEqual(dropped(export.Source.read(self.xbf).view(), "step"), [])
 
@@ -1291,7 +1291,7 @@ class ViewTest(_Folder):
         self.assertNotIn("Section A-A", text)
         self.assertEqual(document.Loaded(self.step).structure()["pmi_views"], [])
         said: list[str] = []
-        export.translate(self.xbf, "step", self.folder / "again.step", log=said.append)
+        export.translate(self.xbf, "step", self.folder / "again.step", told=said.append)
         self.assertEqual([line for line in said if "pmi" in line], [])
         self.assertEqual(dropped(export.Source.read(self.xbf).view(), "step"), [])
         # A part given views alone: its STEP is written, carrying no PMI, and exported again, written.

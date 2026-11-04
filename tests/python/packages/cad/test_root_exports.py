@@ -94,7 +94,8 @@ class RootExports(unittest.TestCase):
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
         shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its
-        name. No ``id=``: an id is derived; no ``store=``: every document is kept alike."""
+        name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
+        ``store=``: every document is kept alike."""
         import inspect
 
         parameters = inspect.signature(cad.engine.model.model).parameters
@@ -103,7 +104,8 @@ class RootExports(unittest.TestCase):
             ("animations", inspect.Parameter.KEYWORD_ONLY)])
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf"):
             with self.subTest(kind=kind):
-                self.assertEqual(list(inspect.signature(getattr(cad, kind)).parameters), ["out", "name"])
+                self.assertEqual(list(inspect.signature(getattr(cad, kind)).parameters),
+                                 ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

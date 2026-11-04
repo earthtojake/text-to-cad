@@ -527,7 +527,7 @@ again.
 | `refs.py` | references to geometry: the ref grammar and the element-name pattern it reads (`ELEMENT_NAME`, kernel-free), occurrence paths, resolution by name in the latest build, for `inspect` and the viewer (**References**) |
 | `step_style.py` | standard STEP surface reflectance/transparency written to styled geometry and read as an approximate PBR appearance |
 | `export/` | `translate` and the kind registry (`__init__`); STEP through the XCAF writer (`step`); a STEP's semantic PMI read back without OCCT and checked against the document's (`ap242`); placements and meshes from the one mesh cache (`mesh`); a mesh file read as a document of triangles, no kernel (`mesh_file`); GLB, 3MF, binary STL (`glb`, `threemf`, `stl`); a planar document's drawing through build123d's DXF exporter, with the drawing checks (`dxf`); a motion baked into a glTF clip (`motion`); a view made a document again, for a STEP of a document held without its XCAF document and an xbf written from a STEP (`tree`) |
-| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance, element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
+| `mesh.py`, `mesh_format.py` | per-part tessellation at a quarter per cent tolerance (or an STL's or a 3MF's own, **Mesh**), element facts, a part's facts as a whole (`measured`: volume, solids, box); the part buffer, its wire format and edge classes (`mesh_format`, kernel-free) |
 | `serve.py` | HTTP: structure JSON and one binary buffer per part; each part's facts by geometry key, measured in batches (`FactCache`, `Server.measure`); the meshing pool and its queues (`Mesher`); a STEP read in a reader process, held by its bytes |
 | `windows_spawn.py` | on Windows, the spawn pools' processes in the base started by its real interpreter, told the environment (`__PYVENV_LAUNCHER__`): a venv's `python.exe` is a launcher, which never passes the pool's handles on (CPython's bpo-35797) |
 | `snapshot.py` | `cad snapshot`: one dispatcher by suffix -- a document, a mesh file, a robot or a DXF drawn by OCCT (`render/`) into a PNG; a script's model drawn from its worker's memory |
@@ -556,9 +556,10 @@ again.
 ```
 cad run [--with REQ]... SCRIPT.py            the models the script explicitly calls (and python SCRIPT.py
                                              in an environment of the library's, with its kernel)
-cad export SRC DST [DST ...] [--json]
+cad export SRC DST [DST ...] [--tolerance MM] [--json]
                                              SRC an .xbf, a .step, a document id, or a mesh
-                                             (.glb, .stl, .3mf: to the other two mesh kinds)
+                                             (.glb, .stl, .3mf: to the other two mesh kinds);
+                                             --tolerance meshes an .stl or a .3mf at MM (Mesh)
 cad snapshot SRC OUT.png [--display MODE|exploded=A|JSON] [--grid] [--camera C|authored | --view NAME]
                 [--pose NAME|JSON] [--annotation FILE] [--measurements FILE]
                 [--width W --height H | --size-profile P] [--json]
@@ -976,8 +977,12 @@ engine's folder is, FIFOs among them. Windows keeps its loopback port and port f
 shown first, in the same hello (`daemon._admitted`, **The door's protocol** below). The engine's
 folder (law 2; `places.default_engine_dir`) is one only the user can make: `cad-engine` in `$XDG_RUNTIME_DIR`, else in the user's own temporary folder (on macOS
 the one the system names, `/var/folders/...`, whatever `$TMPDIR` a sandbox sets, so a sandboxed client
-finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows, in the
-temporary folder. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
+finds the engine started outside; elsewhere `$TMPDIR`), else `/tmp/cad-<uid>`; on Windows
+`~\.local\state\cad-engine`, beside the state folder: the temporary folder is in the local application
+data, which Windows virtualizes for every process an app package starts (the Claude desktop app's CAD
+server, and the engine it starts), so a port file written there would reach no other app. 0.10.0's was
+there, and for one release the engine writes its port file there too (`daemon._mirror`), for a 0.10.0
+CAD app's server still running. 0.8 kept its engines in `cadgen-engine`, so no client of either release reaches the
 other's door.
 
 - **The door.** The daemon makes one FIFO beside its lock, `engine.door` (`places.door_path`), and
@@ -1188,8 +1193,8 @@ file's time on disk, a model's run), each row carrying both; a model's script is
 **The cache.** For every model and shape document -- never a file's, which is its own
 file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its host names
 ([cache.py](cache.py); `places.cache_dir`: `CAD_CACHE_DIR`, else
-`$XDG_CACHE_HOME/cad` or `%LOCALAPPDATA%\cad`, else `~/.cache/cad`; releases before
-0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
+`$XDG_CACHE_HOME/cad`, else `~/.cache/cad`, on Windows too, where 0.10.0 kept it in
+`%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
 author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's
@@ -1807,7 +1812,10 @@ changed or new one fails in one line naming the folder and its mode.
   placement, looks through the materials extension (base materials, `pbmetallic` display
   properties, painted triangles naming their own); **STL**: binary, every placed triangle.
   Their meshes are the process's one mesh cache's (`serve.MESHES`), the viewer's: a part the
-  build meshed for the viewer is not meshed again for a GLB, nor the other way round.
+  build meshed for the viewer is not meshed again for a GLB, nor the other way round. An STL or a
+  3MF at an export's own tolerance (**Mesh**) is meshed again for that file and says so: the STL's
+  header ends `(meshed within 0.01 mm)`, the 3MF's `Description` metadata reads `Meshed to
+  within 0.01 mm`.
 - **DXF** (`export/dxf.py`): a planar document -- a model whose body returns a sketch, a face,
   wires or edges -- drawn by build123d's own `ExportDXF` (ezdxf), in millimetres, each edge
   where the document places it one entity, so a curve stays an ARC, CIRCLE, ELLIPSE or SPLINE.
@@ -2702,7 +2710,7 @@ materials apart are prototypes apart, the second its own topology over the same 
 
 ## Mesh
 
-One tolerance, configurable nowhere: a linear deflection of
+One tolerance for everything the engine holds and draws, configurable nowhere: a linear deflection of
 `(Lx + Ly + Lz) / 300 * 0.25` of the part's own bounding box (0.25 %, half
 FreeCAD's default Deviation of 0.5 %, so a large arc's outline is not drawn
 in corners) and FreeCAD's angular deflection of 28.5 degrees, both absolute,
@@ -2728,6 +2736,25 @@ key does not make it, the parts naming it are keyed apart, by the key and their
 own keys together (a placement's look kept apart is such a copy, and keeps one key
 with its first). The daemon's caches are shared by every document it serves, so a
 file never lends its part another document's key, and never its mesh or facts.
+
+An STL or a 3MF export may give its own tolerance instead: `cad export ID part.stl --tolerance
+0.01`, `export(doc, "part.3mf", tolerance=0.01)`, `@stl("part.stl", tolerance=0.01)`. It is an
+absolute ceiling on the linear deflection in millimetres, at least 0.001 (`export.MIN_TOLERANCE`),
+the angle unchanged: for a print whose fits are finer than a quarter per cent of the part (an 85 mm
+tube is 47 segments round at the engine's tolerance, its facets 0.095 mm deep; 205 and 0.005 mm at
+0.01). Each part is meshed at the finer of its own deflection and the ceiling, so a tolerance never
+makes a part coarser than the viewer draws it -- most of a robot's parts are under 60 mm across,
+where a quarter per cent is already finer than 0.05 mm, and meshed coarser their faces were seen to
+lose triangles. It is meshed for that file alone and never cached, so the viewer, the snapshot and
+every other export keep the engine's mesh; the file says what it was meshed to
+(**Translation formats**). It is refused by name for any other kind (a GLB is the viewer's own
+mesh) and for a mesh file's source, whose triangles are the file's. Since which faces the mesher
+leaves without triangles changes with the tolerance, the export names each part it left faces of,
+and how many. The cost is the triangles: a tenth of the deflection is about three times the
+segments round a curve and ten times the triangles of a doubly curved face, on the large parts
+alone. Measured on 2026-11-03 on a 600-part robot arm (a 439 MB STEP), a whole-assembly STL at
+0.01 mm was 1.33 million triangles against 1.02 million, 66 MB against 51, in about the same 30 s
+and 0.8 GB.
 
 Every edge has a class read from the B-rep: 1 feature (two faces at an angle),
 2 tangent (two faces meeting at least G1), 3 seam (a face closing on itself),
