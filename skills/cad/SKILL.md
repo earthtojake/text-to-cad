@@ -362,19 +362,23 @@ none (6061 is machined, cast or bent); a thickness with a metal ("2 mm steel") i
 1. **Before the first line**, read the process reference's *Design it*: the limits the generic rules
    judge, as build123d. Build them in -- walls drafted along the pull, a bend's inside radius, a
    pocket's corner radii, walls at the material's minimum -- so the first check passes or nearly.
-2. **Record the process in the model.** Give each part its material (`part.material =
-   metals.aluminum()`: the check reads it when `--material` is not given) and put the check's command
-   line, with the flags the person's shop sets, in the script's module docstring:
+2. **Record the process in the model.** Give each part its material with its process:
+   `part.material = metals.aluminum(process=machined())`, `plastics.abs_(process=molded())`,
+   `plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`, `mjf()`, `slm()` for metal powder bed,
+   `vat()` for resin; from `bd_materials.processes`). The check reads both when `--process` and
+   `--material` are not given: `cad model dfm "$ID"` alone checks the part for what it says it is.
+   Sheet metal has no process there: give `--process sheet`. The flags the person's shop sets go in
+   the script's module docstring, so the next session and every edit run the same check:
 
    ```python
    """A motor mount, CNC milled from 6061 on 3 axes.
 
-   Check: cad model dfm "$ID" --process cnc --tools 3,6,10
+   Check: cad model dfm "$ID" --tools 3,6,10
    """
    ```
 
-   The next session, and every edit, runs the same check. Process-specific flags that change the
-   verdicts (`--axes`, `--tools`, `--pull`, `--thickness`, `--technology`) belong in that line.
+   Process-specific flags that change the verdicts (`--axes`, `--tools`, `--pull`, `--thickness`,
+   `--build-volume`) belong in that line.
 3. **After every run**, the check with the same flags, on the part's own id (each part model has its
    own document; an assembly's check judges nothing a part's does not, and names the assembly in
    every ref). An error -- a limit the part breaks as drawn -- is fixed before anything else is

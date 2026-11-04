@@ -29,8 +29,10 @@ is named; the reference's table and a machine datasheet move them):
   SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
 - **Fits.** Mating parts 0.3 mm apart for FDM in practice (the generic rule warns under 0.76), SLS 0.3,
   SLA 0.5; walls are judged per part, clearances per pair.
-- Within the printer: `--build-volume 256x256x256` for the person's machine; the material on the
-  part, `part.material = plastics.petg()`, for the warping materials.
+- Within the printer: `--build-volume 256x256x256` for the person's machine. The material and the
+  process on the part, `part.material = plastics.petg(process=fdm(layer_height_mm=0.2))` (`sls()`,
+  `mjf()`, `slm()` for metal powder bed, `vat()` for resin): `cad model dfm "$ID"` then needs no
+  `--process`, `--technology` or `--layer-height`.
 
 ## Check it
 

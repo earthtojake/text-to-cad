@@ -35,7 +35,8 @@ Network's guides; a shop's set moves them):
 - **Undercuts.** A feature that will not pull straight -- a side hole, a snap hook, a lip under a rim --
   takes a side action or a lifter (a warning, a cost) and one nothing frees is an error: avoid it, or
   plan the action with the person.
-- The resin on the part: `part.material = plastics.abs_()`; the check reads it.
+- The resin and the process on the part: `part.material = plastics.abs_(process=molded())`
+  (`bd_materials.processes`); `cad model dfm "$ID" --pull z` then needs no `--process` or `--material`.
 
 ## Check it
 

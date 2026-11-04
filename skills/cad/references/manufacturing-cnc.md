@@ -27,7 +27,8 @@ What a part built for milling has from its first line, so its first check passes
   T-slot or dovetail unless the person planned the cutter; no closed void.
 - **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
   at least 1.2 mm wide, cross holes radial; a flat, a keyway or an off-axis hole is live tooling.
-- The material on the part: `part.material = metals.aluminum()`; the check reads it.
+- The material and the process on the part: `part.material = metals.aluminum(process=machined())`
+  (`bd_materials.processes`); `cad model dfm "$ID"` then needs no `--process` or `--material`.
 
 ## Check it
 

@@ -41,8 +41,9 @@ thickness `t`; a shop's set or bend table moves them):
   five times their width; webs between cut-outs at least `t`.
 - **Hems and channels.** A hem's inside diameter at least `t` and its return `6t`; a channel's base at
   least twice its flange height, so a punch fits.
-- Stock 0.5 to 6 mm bent (10 mm cut flat); the material on the part, `part.material = metals.steel()`
-  or the alloy's factory; `--thickness` when the person named the gauge.
+- Stock 0.5 to 6 mm bent (10 mm cut flat); the material on the part (`part.material =
+  metals.mild_steel()` or the alloy's factory: the check reads it); `--thickness` when the person named
+  the gauge. `bd_materials` has no sheet process, so the check always takes `--process sheet`.
 
 ## Check it
 
