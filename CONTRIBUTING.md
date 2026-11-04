@@ -56,7 +56,7 @@ environment's interpreter for direct CLI calls:
 ```bash
 scripts/bundle/bundle.sh
 ./.venv/bin/python -m cad_server.cli xbf snapshot --help
-./.venv/bin/python -m cad_server.cli urdf check --help
+./.venv/bin/python -m cad_server.cli urdf validate --help
 ```
 
 The engine draws CAD snapshots with OCCT in an OpenGL context; a native KiCad board's
@@ -110,7 +110,7 @@ build123d and the rest; the library's required dependency is numpy alone), so th
 checkout's `.venv` carries the CAD kernel and is its own base environment: the server
 makes no base for it (`cad_server/_internal/base.py`), and nothing makes an environment ahead of need
 (not `cad setup`, `cad doctor` or an update). The library comes with its `trimesh` extra too, so `cad
-<type> check --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
+<type> dfm --process` measures in the `.venv` and the server makes no `cad[trimesh]` environment for
 it (`cad_server/_internal/integration_env.py`). `cad run` of a program whose imports use another set of
 cad's integrations than build123d alone (none, or kicad), or that names packages of its own, runs in an
 environment uv makes from the checkout's source tree, editable (`cad_server/_internal/extras.py`), from
@@ -379,7 +379,7 @@ diff content: a comment in a module selects what the module's code would.
 | api | `apps/api`, `test-api.sh` | `npm --prefix apps/api test`: the version feed's and the telemetry receiver's tests (no install) |
 | docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (lint, Next build, icon verification) and the animated brand marks |
 | packaging | `packages/cad`, `packages/cad-server`, `packages/cad-mcp`, `packages/aliases`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts, `tests/browser`, the viewer scripts | clean bundle, layout, wheel contents, installed CLI behavior; then, for anything the served client or the backend reads, the launch smoke test and the format/camera gates on that bundle through the real backend |
-| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py` and `pcb.py`; the server's `kicad/`, `pcb.py` and `cli/pcb_drc.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh` with the KiCad nightly installed from its PPA (`CAD_KICAD_CLI` names the real `kicad-cli`, not the `kicad-cli-nightly` wrapper): DRC, the exports and a STEP and mesh round trip of a saved board (viewing and drawing a board need no KiCad and are the package suites') |
+| KiCad boards | KiCad's code (the library's `engine/formats/kicad`, `engine/render/board.py`, `kicad/` and `kicad_pcb/`; the server's `cli/kicad_pcb.py`), `tests/python/packages/kicad`, `test-kicad.sh` | `test-kicad.sh`: kicode in the environment of `cad[kicad]`, made as the server makes it: DRC, every export, a STEP and mesh round trip and a board script (viewing and drawing a board need no KiCad and are the package suites') |
 
 Everything runs for `VERSION`, `package.json`, `package-lock.json`,
 `requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,

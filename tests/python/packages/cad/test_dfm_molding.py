@@ -253,7 +253,7 @@ class CandidatesAndPartsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "tray.step"
             bd.export_step(_tray(), str(path))
-            from_file = cad.step.check(path, process="molding", material="abs").measurements
+            from_file = cad.step.dfm(path, process="molding", material="abs").measurements
         live = _check(_tray()).measurements
         for family in ("draft", "undercuts", "parting"):
             self.assertEqual(len(from_file[family]["items"]), len(live[family]["items"]), family)

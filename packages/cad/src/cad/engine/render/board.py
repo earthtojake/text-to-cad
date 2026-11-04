@@ -380,7 +380,7 @@ class Held:
     def draw(self, still: Any):
         import numpy as np
         from PIL import Image
-        from cad.engine.formats.kicad.plot import build_plot
+        from cad.engine.formats.kicad.poured import plot as poured_plot
         from cad.engine.render.drawing import paint_ink, plan_view
         from cad.engine.render.overlay import REFERENCE_HEIGHT, paint_measurements
         from cad.engine.render.service import finished
@@ -389,7 +389,11 @@ class Held:
         started = time.perf_counter()
         refusals(still, self.path.name)
         display = display_options(still.display)
-        payload = build_plot(self.path)
+        # The pours KiCad refilled, as the viewer draws them: what the engine kept for these bytes (``poured``).
+        payload = poured_plot(self.path)
+        pours = payload.get("pours") or {}
+        if not pours.get("refilled") and pours.get("warning") and pours["warning"] not in self.warnings:
+            self.warnings.append(pours["warning"])
         sheet = payload["sheets"][0]
         layers = sheet["layers"]
         if display["layers"] is not None:

@@ -29,21 +29,23 @@ from cad_server._internal.cli_from_function import (JSON_FLAG_DEST, NotDerivable
 # The manifest: robot namespace -> exactly the verbs it exports. A robot description is an
 # authored file, so there is nothing to declare; each format's snapshot is the engine's.
 PUBLIC_SURFACE: dict[str, tuple[str, ...]] = {
-    "cad.urdf": ("check",),
-    "cad.srdf": ("check",),
-    "cad.sdf": ("check",),
+    "cad.urdf": ("validate",),
+    "cad.srdf": ("validate",),
+    "cad.sdf": ("validate",),
 }
 
 # Commands whose parser is GENERATED from the verb it calls. No allowlist is possible here:
 # the parser has no independent existence.
 MIRRORS: dict[str, tuple[str, str]] = {
-    "sdf check": ("cad.sdf", "check"),
-    "srdf check": ("cad.srdf", "check"),
-    # KiCad's design rule check of a saved board: the kicad integration's, the server's, since it runs kicad-cli.
-    "kicad_pcb check": ("cad_server.kicad.check", "check"),
-    # A 3D type's manufacturing check, and a DXF's as a sheet's cut file: one signature for every type.
-    **{f"{document_type} check": (f"cad.{document_type}", "check")
-       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf")},
+    "sdf validate": ("cad.sdf", "validate"),
+    "srdf validate": ("cad.srdf", "validate"),
+    # KiCad's design rule check of a saved board: the document type's, run by the kicad integration's kicad-cli.
+    "kicad_pcb drc": ("cad.kicad_pcb", "drc"),
+    # KiCad's electrical rules check of a saved schematic: the document type's, run by the kicad integration's kicad-cli.
+    "kicad_sch erc": ("cad.kicad_sch", "erc"),
+    # A 3D type's manufacturing check: the trimesh integration's, one signature for every 3D type.
+    **{f"{document_type} dfm": (f"cad.{document_type}", "dfm")
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf")},
 }
 
 # The engine snapshot's options (``cad.engine.snapshot``).
@@ -56,19 +58,29 @@ SNAPSHOT = frozenset({"document", "out", "job", "display", "grid", "camera", "wi
 ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is repeatable, and a
     # repeatable key/value map is outside the derivable set.
-    "urdf check": frozenset({"path", "strict", "packages", "verbose"}),
+    "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli): each type's operations, and its process control.
+    # A document's export (a model's, an xbf's, a STEP's) meshes an STL or a 3MF to a tolerance; a mesh's, to
+    # the other mesh kinds, meshes nothing.
+    **{f"{document_type} export": frozenset({"source", "destinations", "tolerance", "json"})
+       for document_type in ("model", "xbf", "step")},
     **{f"{document_type} export": frozenset({"source", "destinations", "json"})
-       for document_type in ("xbf", "step", "stl", "glb", "threemf")},
+       for document_type in ("stl", "glb", "threemf")},
     **{f"{document_type} snapshot": SNAPSHOT
-       for document_type in ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")},
+       for document_type in ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf",
+                             "kicad_pcb")},
     # A KiCad board's exports, kicad-cli's, from a fixed list into a folder; and its summary, the library's.
     "kicad_pcb export": frozenset({"board", "to", "out"}),
     "kicad_pcb inspect": frozenset({"board"}),
+    # A KiCad schematic's: its exports, kicad-cli's; its summary and what a reference names; its still, the
+    # engine's snapshot with the sheet to draw and its page's edge.
+    "kicad_sch export": frozenset({"schematic", "to", "out"}),
+    "kicad_sch inspect": frozenset({"schematic", "ref"}),
+    "kicad_sch snapshot": SNAPSHOT | {"sheet", "border"},
     **{f"{document_type} inspect": frozenset({"document", "ref", "query", "json"})
-       for document_type in ("xbf", "step", "glb")},
+       for document_type in ("model", "xbf", "step", "glb")},
     "serve": frozenset({"document", "port"}),
     "status": frozenset({"json"}),
     "stop": frozenset({"json"}),
@@ -154,13 +166,14 @@ class Manifest(unittest.TestCase):
         # same answer as any unknown command.
         for command in ("build", "step build", "step compile", "stl build", "3mf build", "3mf snapshot", "glb build",
                         "store", "daemon", "daemon status", "where", "install", "mcp", "export", "snapshot", "inspect",
-                        "urdf validate", "sdf validate", "srdf validate", "pcb drc"):
+                        "urdf check", "sdf check", "srdf check", "stl check", "xbf check", "kicad_pcb check",
+                        "kicad_sch check", "pcb drc"):
             self.assertNotIn(command, _commands())
         for module in ("cad_server.cli.build", "cad.engine.shape_input", "cad_server.cli.step_build", "cad_server.cli.step_snapshot", "cad_server.cli.stl_build",
                        "cad_server.cli.where", "cad_server.cli.store", "cad_server.cli.daemon", "cad_server.cli.daemon_status", "cadgen.store", "cadgen.daemon",
                        "cad_server.cli.install", "cad_server.cli.mcp", "cad_server.cli.export", "cad_server.cli.snapshot",
-                       "cad_server.cli.inspect", "cad_server.cli.urdf check", "cad_server.cli.sdf check",
-                       "cad_server.cli.srdf check"):
+                       "cad_server.cli.inspect", "cad_server.cli.urdf_validate", "cad_server.cli.sdf_validate",
+                       "cad_server.cli.srdf_validate", "cad_server.kicad.schematic"):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 
@@ -174,7 +187,7 @@ class Manifest(unittest.TestCase):
         return code, out.getvalue(), err.getvalue()
 
     def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
-        for noun, verbs in {"urdf": ("check", "snapshot"), "srdf": ("check", "snapshot")}.items():
+        for noun, verbs in {"urdf": ("validate", "snapshot"), "srdf": ("validate", "snapshot")}.items():
             for rest in (("bogus",), ()):
                 with self.subTest(noun=noun, rest=rest):
                     code, out, err = self._dispatch(noun, *rest)
@@ -190,14 +203,14 @@ class Manifest(unittest.TestCase):
     def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
         code, out, err = self._dispatch("urdf", "--help")
         self.assertEqual((0, ""), (code, err))
-        self.assertIn("\n  check ", out)
+        self.assertIn("\n  validate ", out)
         self.assertNotIn("export", out.split("operations:")[1])
 
     def test_an_unknown_noun_lists_every_command(self):
         code, out, err = self._dispatch("frobnicate", "export")
         self.assertEqual(2, code)
         self.assertIn("unknown command 'frobnicate'", err)
-        for command in ("xbf ", "urdf ", "snapshot, check", "viewer", "serve"):
+        for command in ("model ", "xbf ", "urdf ", "snapshot, validate", "viewer", "serve"):
             self.assertIn(command, err)
 
     def test_a_name_that_is_not_a_verb_raises_the_plain_attribute_error(self):

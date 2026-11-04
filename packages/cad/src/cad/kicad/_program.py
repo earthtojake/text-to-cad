@@ -1,33 +1,36 @@
-"""Find a user-installed ``kicad-cli``, KiCad's command line, and ask it its version. Viewing boards
-requires no KiCad installation.
+"""Find ``kicad-cli``, KiCad's command line, and ask it its version. Viewing boards requires no KiCad.
 
-The ``kicad`` integration's probe (``cad.registry.INTEGRATIONS["kicad"]``), run by the server's one
+The ``kicad`` integration's probe (``cad.registry.INTEGRATIONS["kicad"]``), run by the library's one
 helper for the external programs our code runs (``cad._internal.programs``), the standard library
-alone, so the library's ``@kicad_pcb`` and the server's commands find and run it the same way. The server never
-starts KiCad itself: what this finds is always an executable named exactly ``kicad-cli``
-(``kicad-cli.exe`` on Windows) -- ``CAD_KICAD_CLI``, refused unless it names one, then ``kicad-cli`` on
-PATH, then the command line inside the usual macOS or Windows installation -- never ``kicad``, a
-wrapper (``kicad-cli-nightly``) or a desktop launcher. Every run of it is headless and reads, writes or
-locks nothing of the person's: it gets homes of its own (``headless_env``).
+alone, so the library's ``@kicad_pcb``, ``cad.kicad_pcb.drc`` and ``export`` and the server's commands
+find and run it the same way. The ``kicad-cli`` run is the integration's own: kicode's
+(``kicode.executable()``, the ``cad[kicad]`` extra's), or the file ``CAD_KICAD_CLI`` names, refused unless
+it is a ``kicad-cli`` (``kicad-cli.exe`` on Windows). A person's own KiCad is never run -- not on PATH,
+not in ``/Applications`` or Program Files: it registers a Dock app and reads their settings -- and never
+``kicad``, a wrapper (``kicad-cli-nightly``) or a desktop launcher. Every run of it is headless and reads,
+writes or locks nothing of the person's: it gets homes of its own (``headless_env``), kicode's
+(``kicode.environment``) for kicode's kicad-cli.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
-import sys
+import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Any
 
 from cad.registry import INTEGRATIONS
 
 from cad._internal import programs
-from cad._internal.programs import version_tuple
+from cad._internal.programs import version_tuple  # noqa: F401 - the tests' and callers' comparison
 
 __all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError",
-           "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint", "kicad_version",
-           "private_run", "project_as_found", "quiet"]
+           "carried", "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint",
+           "kicad_version", "packaged", "private_run", "project_as_found", "quiet", "ready"]
 
 # What kicad-cli says on stderr that says nothing about the board.
 _NOISE = ("Fontconfig error",)
@@ -37,18 +40,22 @@ class KicadRunError(RuntimeError):
     """``kicad-cli`` failed; the message carries what it said."""
 
 
+# macOS's file-attribute lookup of an output that is not there yet, logged by kicad-cli's process.
+_LOGGED = ("Error retrieving source file attributes",)
+
+
 def quiet(text: str) -> str:
     """What kicad-cli said, without its noise."""
-    return "\n".join(line for line in (text or "").splitlines() if line.strip() and not line.startswith(_NOISE))
+    return "\n".join(line for line in (text or "").splitlines()
+                     if line.strip() and not line.startswith(_NOISE) and not any(said in line for said in _LOGGED))
 
 _PROBE = INTEGRATIONS["kicad"].probe
 assert _PROBE is not None
 # The one program the server runs of KiCad's, by its file name on each platform.
 CLI_NAMES = ("kicad-cli", "kicad-cli.exe")
-# KiCad's own homes, beside the ones every program run gets (``programs.headless_env``). Without the
-# documents and cache ones KiCad 10 still writes ``~/.local/share/kicad/<ver>`` and ``~/.cache/kicad/<ver>``.
-# ``KICAD_STOCK_DATA_HOME`` is left alone: a user's KiCad finds its stock libraries and schemas by it,
-# and only a packaged kicad-cli would need it set.
+# KiCad's own homes for a kicad-cli ``CAD_KICAD_CLI`` names, beside the ones every program run gets
+# (``programs.headless_env``); kicode's own kicad-cli gets kicode's (``kicode.environment``), which sets the
+# same three and, on Linux, where the packaged build finds its stock data and plugins.
 _HOMES = {"KICAD_CONFIG_HOME": "settings", "KICAD_DOCUMENTS_HOME": "documents", "KICAD_CACHE_HOME": "cache"}
 
 
@@ -60,26 +67,46 @@ def install_hint() -> str:
     return _PROBE.install_hint
 
 
-def _installed() -> list[Path]:
-    """The command line inside the usual installation folders, newest version first: the binary in
-    the macOS bundle (never the app, never ``open``), and ``bin/kicad-cli.exe`` under Program Files."""
-    if sys.platform == "darwin":
-        return [Path("/Applications/KiCad/KiCad.app/Contents/MacOS/kicad-cli")]
-    if sys.platform.startswith("win"):
-        folder = Path(os.environ.get("ProgramFiles", "C:/Program Files")) / "KiCad"
-        if folder.is_dir():
-            versions = sorted(folder.iterdir(), key=lambda path: version_tuple(path.name), reverse=True)
-            return [version / "bin" / "kicad-cli.exe" for version in versions]
-    return []
+def _kicode() -> Any:
+    """kicode (the ``cad[kicad]`` extra), or None where this environment lacks it."""
+    try:
+        import kicode  # pyrefly: ignore[missing-import] - the kicad extra
+    except ImportError:
+        return None
+    return kicode
 
 
-#: ``kicad-cli`` as the helper runs it.
-KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: _installed(), homes=_HOMES,
-                                     title="KiCad 9")
+def packaged() -> Path | None:
+    """kicode's kicad-cli, where this environment holds kicode; else None."""
+    kicode = _kicode()
+    if kicode is None:
+        return None
+    try:
+        return Path(kicode.executable())
+    except (AttributeError, OSError):  # a wheel not for this platform says FileNotFoundError
+        return None
+
+
+def carried() -> bool:
+    """Whether this process runs KiCad itself: ``CAD_KICAD_CLI`` names one, or it holds kicode."""
+    return bool(os.environ.get(_PROBE.override, "").strip()) or packaged() is not None
+
+
+def _is_packaged(cli: Path) -> bool:
+    found = packaged()
+    try:
+        return found is not None and Path(cli).resolve() == found.resolve()
+    except OSError:
+        return False
+
+
+#: ``kicad-cli`` as the helper runs it: the override, then kicode's, never PATH or an installation's.
+KICAD = programs.Program.from_probe(_PROBE, names=CLI_NAMES, installed=lambda: [p for p in (packaged(),) if p],
+                                     homes=_HOMES, title="KiCad 9", search_path=False)
 #: What a board script needs beyond a check's or an export's kicad-cli: its headless api-server.
-API_SERVER_HINT = ("a @kicad_pcb board script runs kicad-cli's headless api-server, which only a KiCad nightly "
-                   "(10.99) has for now; a check or an export needs only KiCad 9 or newer. Install a nightly from "
-                   "https://www.kicad.org/download/, or set CAD_KICAD_CLI to a nightly's kicad-cli")
+API_SERVER_HINT = ("a @kicad_pcb board script runs kicad-cli's headless api-server, which kicode's kicad-cli (cad[kicad]) "
+                   "and a KiCad nightly's (10.99) have; a check or an export needs only KiCad 9 or newer. Unset "
+                   "CAD_KICAD_CLI to run kicode's, or set it to a nightly's kicad-cli")
 KICAD_MINIMUM = KICAD.minimum
 
 
@@ -88,8 +115,9 @@ def _missing(error: programs.ProgramMissing) -> KicadMissingError:
 
 
 def find_kicad_cli() -> Path:
-    """The ``kicad-cli`` to run: ``CAD_KICAD_CLI`` when it is set (a ``kicad-cli`` that is a file,
-    else refused), else ``kicad-cli`` on PATH, else the one inside the platform's usual installation."""
+    """The ``kicad-cli`` to run: ``CAD_KICAD_CLI`` when it is set (a ``kicad-cli`` that is a file, else
+    refused), else kicode's (``kicode.executable()``), else ``KicadMissingError`` saying to install
+    ``cad[kicad]``. Never one on PATH or in KiCad's installation folders."""
     try:
         return programs.find(KICAD)
     except KicadMissingError:
@@ -98,19 +126,25 @@ def find_kicad_cli() -> Path:
         raise _missing(error) from None
 
 
-def headless_env(root: str | os.PathLike) -> dict[str, str]:
-    """The environment every ``kicad-cli`` run gets (``programs.headless_env``), with KiCad's own homes,
-    ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``, inside
-    ``root`` too."""
+def headless_env(root: str | os.PathLike, cli: Path | None = None) -> dict[str, str]:
+    """The environment a ``kicad-cli`` run gets (``programs.headless_env``: no display, every home inside
+    ``root``), with KiCad's own homes inside ``root`` too: kicode's variables (``kicode.environment``) for
+    kicode's kicad-cli -- ``cli``, or none named where this environment holds kicode -- else
+    ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``."""
+    kicode = _kicode()
+    if kicode is not None and (cli is None or _is_packaged(cli)):
+        env = programs.headless_env(root)
+        env.update(kicode.environment(root))
+        return env
     return programs.headless_env(root, _HOMES)
 
 
 @contextmanager
-def private_run(prefix: str = "cad-kicad-") -> Iterator[tuple[Path, dict[str, str]]]:
-    """A private folder and the headless environment inside it, for one ``kicad-cli`` run; the folder
-    (with whatever KiCad left in it) is removed afterwards. Yields ``(folder, env)``."""
-    with programs.private_run(prefix, _HOMES) as run:
-        yield run
+def private_run(prefix: str = "cad-kicad-", cli: Path | None = None) -> Iterator[tuple[Path, dict[str, str]]]:
+    """A private folder and the headless environment inside it (``headless_env``), for one ``kicad-cli``
+    run; the folder (with whatever KiCad left in it) is removed afterwards. Yields ``(folder, env)``."""
+    with tempfile.TemporaryDirectory(prefix=prefix, ignore_cleanup_errors=True) as scratch:
+        yield Path(scratch), headless_env(scratch, cli)
 
 
 # The project files kicad-cli makes beside a board it only reads, when they are missing: its local settings
@@ -135,15 +169,30 @@ def project_as_found(board: Path) -> Iterator[None]:
 
 
 def kicad_version(cli: Path) -> str | None:
-    """What ``kicad-cli version`` says it is (``9.0.1``), run headless; None when it does not run."""
-    return programs.version(KICAD, cli)
+    """What ``cli`` is (``10.99.0``): kicode's version for kicode's kicad-cli, else what ``kicad-cli
+    version`` says, run headless; None when it does not run."""
+    kicode = _kicode()
+    if kicode is not None and _is_packaged(cli):
+        return str(kicode.KICAD_VERSION)
+    with private_run("cad-kicad-version-", cli) as (_folder, env):
+        try:
+            done = subprocess.run([str(cli), "version"], env=env, stdin=subprocess.DEVNULL, capture_output=True,
+                                  text=True, timeout=60, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+    if done.returncode != 0:
+        return None
+    match = re.search(r"(\d+\.\d+\.\d+)", f"{done.stdout}\n{done.stderr}")
+    return match.group(1) if match else None
 
 
 def check_api_server(cli: Path) -> Path:
-    """``cli`` when it has the headless ``api-server`` a board script runs: ``kicad-cli api-server --help``,
-    run headless, lists its ``--socket``. Else ``KicadMissingError``, before any server is started: a stable
-    KiCad's kicad-cli has no such command."""
-    with private_run("cad-kicad-probe-") as (_folder, env):
+    """``cli`` when it has the headless ``api-server`` a board script runs: kicode's always has; another's
+    (``CAD_KICAD_CLI``) is asked, ``kicad-cli api-server --help`` run headless listing its ``--socket``.
+    Else ``KicadMissingError``, before any server is started: a stable KiCad's kicad-cli has no such command."""
+    if _is_packaged(cli):
+        return cli
+    with private_run("cad-kicad-probe-", cli) as (_folder, env):
         try:
             done = subprocess.run([str(cli), "api-server", "--help"], env=env, stdin=subprocess.DEVNULL,
                                   capture_output=True, text=True, timeout=60, check=False)
@@ -160,3 +209,10 @@ def check_version(cli: Path, version: str | None) -> str:
         return programs.check_version(KICAD, cli, version)
     except programs.ProgramMissing as error:
         raise _missing(error) from None
+
+
+def ready() -> Path:
+    """The ``kicad-cli`` to run, found and its version checked: ``find_kicad_cli`` then ``check_version``."""
+    cli = find_kicad_cli()
+    check_version(cli, kicad_version(cli))
+    return cli

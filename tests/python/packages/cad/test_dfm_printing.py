@@ -287,7 +287,7 @@ class StepTest(unittest.TestCase):
             part = tunnel(8.0)
             part.label = "tunnel"
             bd.export_step(part, str(path))
-            result = cad.step.check(path, process="printing", technology="sla")
+            result = cad.step.dfm(path, process="printing", technology="sla")
         self.assertEqual(result.measurements["source"]["measured_as"], "brep")
         bridge = items(result, "bridges", kind="bridge")[0]
         self.assertAlmostEqual(bridge["length_mm"], 8.0, places=4)
@@ -343,7 +343,7 @@ class MeshopsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "drained.stl"
             bd.export_stl(tunnel(8.0) + bd.Pos(50, 0, 0) * drained, str(path), tolerance=0.01)
-            result = cad.stl.check(path, process="printing", technology="sla")
+            result = cad.stl.dfm(path, process="printing", technology="sla")
         report = result.measurements
         bridge = near(result, "bridges", (0, 0, 6), 12.0, kind="bridge")
         self.assertAlmostEqual(bridge["length_mm"], 8.0, delta=0.05)

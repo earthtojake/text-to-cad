@@ -1,10 +1,12 @@
-"""Real KiCad file commands and ordinary CAD exports; no samples, IPC server or user state."""
+"""Real KiCad file commands (kicode's kicad-cli, in the environment of ``cad[kicad]``) and ordinary CAD exports;
+no samples, IPC server or user state."""
 import math
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
+from tests.python.support import kicode
 from tests.python.support.engine_daemon import isolate
 
 # Stable KiCad 9 syntax, a 40 x 30 mm board, 1.6 mm total stack including copper/mask at (10,20), one off-centre 2 mm hole.
@@ -28,20 +30,19 @@ class NativeFiles(unittest.TestCase):
             root = Path(folder)
             board = root / "board.kicad_pcb"
             board.write_text(BOARD, encoding="utf-8")
-            from cad.kicad_pcb import read_board
-            from cad_server.kicad.check import check as drc
-            from cad.kicad._program import check_version, find_kicad_cli, headless_env, kicad_version
+            from cad.kicad_pcb import read as read_board
             from cad.engine.api import export
             import build123d as bd
-            cli = find_kicad_cli()
-            check_version(cli, kicad_version(cli))
+            def drc(path):
+                return kicode.call(self, "drc", path)
+            cli = kicode.kicad_cli(self)
             original = board.read_bytes()
             result = drc(board)
-            self.assertTrue(result.ok, result)
+            self.assertTrue(result["ok"], result)
             self.assertEqual(board.read_bytes(), original)
             self.assertEqual(read_board(board).part("H1").at, (17, 29))
             step = root / "board.step"
-            env = headless_env(root / "kicad")  # no display, no homes of the person's
+            env = kicode.environment(self, root / "kicad")  # no homes of the person's
             def exported():
                 subprocess.run([str(cli), "pcb", "export", "step", "--force", "--board-only",
                     "--user-origin", "10x20mm", "-o", str(step), str(board)], env=env,
@@ -72,7 +73,7 @@ class NativeFiles(unittest.TestCase):
             # The native file is editable independently; the same path must be reread on export.
             board.write_text(BOARD.replace('(end 50 50)', '(end 55 50)').replace('(at 17 29)', '(at 19 31)'), encoding="utf-8")
             self.assertEqual(read_board(board).part("H1").at, (19, 31))
-            self.assertTrue(drc(board).ok)
+            self.assertTrue(drc(board)["ok"])
             changed = exported()
             self.assertAlmostEqual(changed.bounding_box().size.X, 45, places=4)
             cylinder = changed.faces().filter_by(bd.GeomType.CYLINDER)[0].bounding_box().center()

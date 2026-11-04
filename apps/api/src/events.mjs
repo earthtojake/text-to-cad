@@ -84,7 +84,7 @@ const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const CHUNK_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 const KINDS_6 = new Set([...KINDS, 'xbf']);
-const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb']);
+const KINDS_8 = new Set([...KINDS_6, 'model', 'kicad_pcb', 'kicad_sch']);
 const VIAS = new Set(['script', 'command']);
 const FEATURES = new Set(['assembly', 'declared_mesh', 'kinematics', 'animation', 'drawing', 'quick_edit']);
 // What a person used in a CAD view (`cad_server/analytics.py`: `CONTROLS`, the page's own in `@cad/ui`'s
@@ -135,6 +135,7 @@ export const CONTROLS = new Set([
   'theme_system', 'theme_light', 'theme_dark', 'language', 'feedback',
   // Export, by format.
   'export_step', 'export_stl', 'export_threemf', 'export_glb', 'export_dxf', 'export_xbf', 'export_original',
+  'export_gerbers', 'export_drill', 'export_pos', 'export_bom', 'export_odb', 'export_ipc', 'export_pdf',
   // The home.
   'home_search', 'home_filter_all', 'home_filter_models', 'home_filter_files', 'home_layout_grid', 'home_layout_list',
   'home_open', 'home_pick', 'home_copy_path', 'home_copy_link', 'home_reveal', 'home_pin', 'home_unpin', 'home_delete', 'home_delete_cancel',

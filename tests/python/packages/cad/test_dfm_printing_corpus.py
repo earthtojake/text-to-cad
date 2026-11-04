@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """3D printing's planted-defect corpus: parts built with known defects -- and clean controls -- checked for
-every technology through ``cad.step.check`` (and a mesh path through ``cad.stl.check``), each rule's
+every technology through ``cad.step.dfm`` (and a mesh path through ``cad.stl.dfm``), each rule's
 verdicts compared with the construction: which rules must fire, where, and that nothing else does.
 
 The ground truth is here, beside the parts: each planted defect is (rule id, the technologies whose
@@ -237,7 +237,7 @@ class CorpusTest(unittest.TestCase):
         tally, started, facts = Tally(), time.monotonic(), {}
         for name, (_, step, planted, _) in self.parts.items():
             for technology in ALL:
-                result = cad.step.check(step, process="printing", technology=technology, samples=SAMPLES)
+                result = cad.step.dfm(step, process="printing", technology=technology, samples=SAMPLES)
                 self.assertFalse(result.measurements.get("partial"), f"{name} {technology}: "
                                  f"{result.measurements.get('partial_sections')}")
                 tally.score(name, result, planted, technology)
@@ -263,7 +263,7 @@ class CorpusTest(unittest.TestCase):
                 stl = folder / f"{name}-{label}.stl"
                 bd.export_stl(document, str(stl), tolerance=tolerance, angular_tolerance=0.5 if label == "coarse" else 0.1)
                 for technology in (("fdm", "sla") if label == "fine" else ("fdm",)):
-                    result = cad.stl.check(stl, process="printing", technology=technology, samples=SAMPLES)
+                    result = cad.stl.dfm(stl, process="printing", technology=technology, samples=SAMPLES)
                     self.assertFalse(result.measurements.get("partial"), result.measurements.get("partial_sections"))
                     tally.score(f"{name}-{label}", result, planted, technology)
         print(f"\nprinting corpus, meshes ({time.monotonic() - started:.1f} s)\n{tally.table()}", file=sys.stderr)

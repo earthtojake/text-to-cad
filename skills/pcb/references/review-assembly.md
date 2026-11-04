@@ -15,7 +15,7 @@ Skip this file for a bare board the user solders by hand, and say so.
 A board alone has no bill of materials: a project keeps its part list as
 data (reference, value, footprint, part number) and writes the BOM CSV from it;
 a board drawn in KiCad has its schematic's BOM. Review whichever exists, against
-the board read back ($pcb's `read_board` lists every part with its value and
+the board read back ($pcb's `kicad_pcb.read` lists every part with its value and
 footprint):
 
 | Check | Read it as |

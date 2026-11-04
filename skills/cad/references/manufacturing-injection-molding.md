@@ -17,13 +17,13 @@ thresholds.
 
 ## Measure it
 
-`cad <type> check --process molding` measures draft, undercuts and projected area along a pull:
+`cad <type> dfm --process molding` measures draft, undercuts and projected area along a pull:
 
 ```bash
-cad step check part.step --process molding --pull z
-cad xbf check "$ID" --process molding --pull y --json
-cad stl check part.stl --process molding --units mm
-cad step check part.step --process molding --candidates
+cad step dfm part.step --process molding --pull z
+cad model dfm "$ID" --process molding --pull y --json
+cad stl dfm part.stl --process molding --units mm
+cad step dfm part.step --process molding --candidates
 ```
 
 ```text
@@ -153,7 +153,7 @@ from measured area, not by eye.
 ### Not measured here
 
 **Wall thickness.** Measure it on the CAD model, or on the mesh with a tool
-that casts rays (`cad <type> check --process printing` reports
+that casts rays (`cad <type> dfm --process printing` reports
 `measurements.wall_thickness`), and trust only the thin end of a ray cast: one
 ray along the face normal reads a plate's LENGTH rather than its thickness. The
 thin end — the minimum and the thin samples — is what it gets right, and the
@@ -195,7 +195,7 @@ and obtain applicable guidance rather than reusing thermoplastic limits blindly.
 The following numbers are illustrative inputs, not default process limits.
 
 If a side wall has measured 0.5 degree draft (`measurements.draft.min_wall_draft`
-from `cad step check part.step --process molding --pull <axis>`) relative to the
+from `cad step dfm part.step --process molding --pull <axis>`) relative to the
 confirmed pull and the selected texture/tooling specification requires 2 degrees,
 report the shortfall for that wall. Without a confirmed pull direction, report
 draft as unverified rather than failing every vertical-looking face.

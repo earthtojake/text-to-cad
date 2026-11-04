@@ -1,4 +1,4 @@
-"""The manufacturing check of a mesh, measured with trimesh: what ``cad.<type>.check(source,
+"""The manufacturing check of a mesh, measured with trimesh: what ``cad.<type>.dfm(source,
 process=...)`` runs for an STL, a 3MF or a GLB once its options are resolved
 (``cad._internal.manufacturing``).
 

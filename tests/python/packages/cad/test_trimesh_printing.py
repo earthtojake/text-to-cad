@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""3D printing's measurements (``cad.trimesh._printing``) and its check (``cad.<type>.check(...,
+"""3D printing's measurements (``cad.trimesh._printing``) and its check (``cad.<type>.dfm(...,
 process="printing")``).
 
 Each part is built with build123d so the correct answer is known from the
@@ -147,7 +147,7 @@ class FormatCoverageTest(unittest.TestCase):
             cad.stl.export(stl, tmp / "box.3mf", tmp / "box.glb")
             for kind, path in (("stl", stl), ("threemf", tmp / "box.3mf"), ("glb", tmp / "box.glb")):
                 with self.subTest(kind=kind):
-                    result = getattr(cad, kind).check(path, process="printing")
+                    result = getattr(cad, kind).dfm(path, process="printing")
                     facts = result.measurements["mesh"]
                     self.assertTrue(result.ok)
                     self.assertAlmostEqual(facts["volume_mm3"], 6000.0, delta=1.0)
@@ -178,7 +178,7 @@ class DegenerateMeshTest(unittest.TestCase):
 
 def _checked(path, **options) -> tuple[bool, dict]:
     """Check the way a skill run does: whether it passed, and what it measured."""
-    result = cad.stl.check(path, process="printing", **options)
+    result = cad.stl.dfm(path, process="printing", **options)
     return result.ok, result.measurements
 
 
@@ -208,14 +208,14 @@ class CheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             tmp = Path(td)
             path = _stl(_wedge(30.0), tmp, "wedge30")
-            result = cad.stl.check(path, process="printing", candidates=True)
+            result = cad.stl.dfm(path, process="printing", candidates=True)
 
         self.assertEqual(len(result.measurements["orientations"]["candidates"]), 6)
         self.assertIn("orientations ranked", result.summary)
 
     def test_an_overhang_is_said_where_it_is(self) -> None:
         with tempfile.TemporaryDirectory() as td:
-            result = cad.stl.check(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
+            result = cad.stl.dfm(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
 
         self.assertTrue(result.ok, "a fact, not a verdict")
         overhang = next(f for f in result.findings if f.code == "overhangs")
@@ -307,7 +307,7 @@ class ResilienceTest(unittest.TestCase):
                 faces=[[0, 1, 2]],
                 process=False,
             ).export(str(path))
-            result = cad.stl.check(path, process="printing")
+            result = cad.stl.dfm(path, process="printing")
         payload = result.measurements
 
         self.assertIn("error", payload["support_volume"])

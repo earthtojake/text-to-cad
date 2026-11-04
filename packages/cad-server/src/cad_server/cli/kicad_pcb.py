@@ -1,4 +1,4 @@
-"""``cad kicad_pcb <operation>``: the KiCad PCB document type's commands (export, snapshot, inspect, check).
+"""``cad kicad_pcb <operation>``: the KiCad PCB document type's commands (export, snapshot, inspect, drc).
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.kicad_pcb <operation> ...`` runs what the ``cad`` command does.

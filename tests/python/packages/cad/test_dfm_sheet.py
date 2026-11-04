@@ -395,7 +395,7 @@ class TypeSideTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "bracket.step"
             bd.export_step(part, str(path))
-            result = step.check(path, process="sheet")
+            result = step.dfm(path, process="sheet")
             codes = {f.code for f in result.findings}
             self.assertTrue({"sheet.bend_radius", "sheet.hole_to_bend", "sheet.hole_diameter"} <= codes, codes)
             structure = Loaded(path).structure()

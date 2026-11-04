@@ -3,7 +3,9 @@
 A check script reads a board under ``cad run`` and the server plots one in its own process, where
 the CAD kernel is not installed; KiCad is never required to read a board. Static, over the AST, so
 a lazy or function-local import counts too. (Drawing a board, ``render/board.py``, is Pillow's and
-outside this family.)
+outside this family.) ``cad.kicad_pcb.drc`` and ``export`` hand the board to the kicad integration,
+imported when they run: its DRC and exports, which import nothing but the standard library and kicode's
+names, and kicode only where kicad-cli is run.
 """
 
 from __future__ import annotations
@@ -35,7 +37,10 @@ class KicadReaderIsStdlibPure(unittest.TestCase):
         offenders = sorted(f"{path.relative_to(SOURCE)}: {name}" for path in FAMILY for name in imported(path)
                            if name != "__future__" and name.partition(".")[0] not in sys.stdlib_module_names
                            and name != OWN and not name.startswith(OWN + ".")
-                           and name != "cad._internal.document_type")  # cad.kicad_pcb is a DocumentType
+                           and name not in ("cad._internal.document_type",  # cad.kicad_pcb is a DocumentType
+                                            "cad.results", "cad.kicad._check", "cad.kicad._export",
+                                            # poured's cache, under the board's document id
+                                            "cad.engine.places", "cad.engine.atomic_replace", "cad.engine.ids"))
         self.assertEqual(offenders, [])
 
 

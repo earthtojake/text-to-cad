@@ -77,7 +77,7 @@ built-in profiles.
 
    This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
    sliced 3MF, into that folder. The command line reads `.stl`,
-   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad xbf export <id> part.3mf`, or `cad step export part.step part.3mf`).
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF first (for a text-to-cad model, `cad model export <id> part.3mf`, or `cad step export part.step part.3mf`).
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
 
@@ -106,7 +106,7 @@ Connect is still in development, use Bambu Studio.
 | --- | --- |
 | A sliced `.gcode.3mf`, from OrcaSlicer's command line or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
 | A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
-| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad xbf export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
+| A model with no slice: `.3mf`, `.stl` or `.step` (from a text-to-cad model: `cad model export <id> part.3mf`) | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
 ### Open a file in Bambu Connect
 

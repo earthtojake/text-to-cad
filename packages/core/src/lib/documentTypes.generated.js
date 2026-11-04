@@ -6,7 +6,10 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "export",
     "snapshot",
     "inspect",
-    "check"
+    "dfm",
+    "drc",
+    "erc",
+    "validate"
   ],
   "views": [
     "document",
@@ -16,6 +19,21 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
     "plot"
   ],
   "documentTypes": [
+    {
+      "id": "model",
+      "title": "model",
+      "wire": "model",
+      "extensions": [],
+      "mime": "",
+      "view": "document",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "dfm"
+      ],
+      "decorator": true
+    },
     {
       "id": "xbf",
       "title": "XBF",
@@ -29,7 +47,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -47,7 +65,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -63,7 +81,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -80,7 +98,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -96,7 +114,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "operations": [
         "export",
         "snapshot",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -111,7 +129,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "drawing",
       "operations": [
         "snapshot",
-        "check"
+        "dfm"
       ],
       "decorator": true
     },
@@ -126,7 +144,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -141,7 +159,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -156,7 +174,7 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
       "view": "robot",
       "operations": [
         "snapshot",
-        "check"
+        "validate"
       ],
       "decorator": false
     },
@@ -173,9 +191,26 @@ export const DOCUMENT_TYPE_REGISTRY = Object.freeze({
         "export",
         "snapshot",
         "inspect",
-        "check"
+        "drc"
       ],
       "decorator": true
+    },
+    {
+      "id": "kicad_sch",
+      "title": "KiCad schematic",
+      "wire": "kicad_sch",
+      "extensions": [
+        ".kicad_sch"
+      ],
+      "mime": "text/plain; charset=utf-8",
+      "view": "plot",
+      "operations": [
+        "export",
+        "snapshot",
+        "inspect",
+        "erc"
+      ],
+      "decorator": false
     }
   ]
 });

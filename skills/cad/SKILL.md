@@ -17,12 +17,12 @@ the page the person has open updates. Files are exports, made when asked.
 | --- | --- | --- |
 | **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
-| **Export STEP, STL, 3MF, GLB or xbf** | `cad xbf export <id> <file>`. | [Exports](references/exports.md) |
-| **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad xbf export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
+| **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
+| **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
 | **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
-| **Resolve a reference from a prompt** | `cad xbf inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
+| **Resolve a reference from a prompt** | `cad model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
-| **See a model, a view or a pose** | `cad xbf snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
+| **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
 | **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
 | **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
@@ -157,14 +157,14 @@ is the script's folder; two explicit names in it must differ.
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
   project models by calling them, never by reading a file the project exported.
-- **References** to faces, edges and parts come from `cad xbf inspect <id> [ref]`, and the
+- **References** to faces, edges and parts come from `cad model inspect <id> [ref]`, and the
   body picks the same element with build123d's selectors; verify with a snapshot when in
   doubt ([references](references/inspection-and-validation.md#references)).
 - **A shape with no function** (a notebook cell, a REPL) is handed over:
   `model(shape, name="plate")` returns the same handle, and no command builds it again.
 - **The server never reruns code.** A restart reopens every document from the server's
   cache, as last built. When the cache holds no file of one (deleted by hand, or never
-  saved), the page, `cad xbf inspect <id>` and `cad_show` print the command that brings it
+  saved), the page, `cad model inspect <id>` and `cad_show` print the command that brings it
   back (`cad run src/bracket.py`). Run it.
 - Model units are millimetres, +Z up.
 - An image without a scale sets no fit dimension, and a drawing's units, projection and
@@ -179,7 +179,7 @@ written, so a change made after it is in the file only once it is written again.
 when the person asks for it:
 
 ```bash
-cad xbf export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
+cad model export "$ID" STEP/bracket.step STL/bracket.stl GLB/bracket.glb 3MF/bracket.3mf
 ```
 
 A project with standing deliverables gets an `exports.py` that imports its models and
@@ -188,7 +188,8 @@ calls `export(x, path, ...)` on each (`x` a model call's handle); running it rew
 and nothing else: a posed file is a model that returns the posed assembly
 (`posed(arm(), "folded")`), and a part on its own is the part's own model. A DXF is the export of a
 model that returns 2D geometry, a profile or a flat pattern, and a solid is refused
-([2D profiles and DXF](references/2d-profiles-and-dxf.md)).
+([2D profiles and DXF](references/2d-profiles-and-dxf.md)). An STL or 3MF for printing a part with fits takes
+`--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
 code, or to compose it in another project with `read_xbf`. A restart needs none: the
@@ -223,7 +224,7 @@ slash, one element by its name (`f:`, `e:`, `v:`) or its number (`face 7`). The 
 viewer copies them. When a prompt names one, resolve it with `cad <type> inspect`:
 
 ```bash
-cad xbf inspect "$ID" "bracket/face 7"
+cad model inspect "$ID" "bracket/face 7"
 ```
 
 It answers in JSON what the ref names, placed where its occurrence stands: an element's
@@ -242,7 +243,7 @@ path. Save inline JSON to a temporary `.snapshot.json`, and draw the view the pe
 drew their ink in, ink included:
 
 ```bash
-cad xbf snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 Inspect supplied annotations before editing. Without annotations, the captured view is
@@ -269,16 +270,16 @@ can be checked:
 
 | The change | Check it with |
 | --- | --- |
-| A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad xbf inspect`; never by restating the constant, never by code after the call in the script |
+| A number the person gave: a bound, a distance, a volume | An assert inside the model's body on what the geometry measures, or `cad model inspect`; never by restating the constant, never by code after the call in the script |
 | A number the design implies: a clearance, a fit, a mass | A check script that calls the model ([below](#check-scripts)) |
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
-| A reference the prompt names | `cad xbf inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
-| A 2D profile or DXF | `cad xbf export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
+| A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
+| A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
 
 ```bash
-cad xbf snapshot "$ID" tmp/review.png
-cad xbf snapshot "$ID" tmp/top.png --camera top --display hidden-line
-cad xbf snapshot "$ID" tmp/open.png --pose open
+cad model snapshot "$ID" tmp/review.png
+cad model snapshot "$ID" tmp/top.png --camera top --display hidden-line
+cad model snapshot "$ID" tmp/open.png --pose open
 ```
 
 A snapshot draws the document as the viewer does, rendered by OCCT, and writes nothing but the PNG.
@@ -317,7 +318,7 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
   fits named on purpose, and a part meant to rest on another touches it when their `closest_points`
   distance is 0. Both describe the parts as built, not a pose
   ([measurements](references/inspection-and-validation.md#measurements)).
-- `cad xbf inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
+- `cad model inspect "$ID" <assembly label>` weighs an assembly (the label it was given, which is also
   the root name `inspect "$ID"` prints): each part's volume times its material's density, and the
   parts that have no material.
 
@@ -329,14 +330,14 @@ review each one the same way:
 
 | Process | Reference | Measure with |
 | --- | --- | --- |
-| CNC milling and turning | [CNC machining](references/manufacturing-cnc.md) | `cad step inspect` or `cad xbf inspect`: radii, depths, walls |
-| Sheet cutting and bending | [Sheet metal](references/manufacturing-sheet-metal.md) | `cad step inspect` or `cad xbf inspect`: thickness, bend radii, hole-to-bend distances |
-| Injection molding | [Injection molding](references/manufacturing-injection-molding.md) | `cad <type> check --process molding --pull z`: draft, undercuts, projected area |
-| 3D printing: FDM, SLS, SLA/DLP, metal PBF, MJF | [3D printing](references/manufacturing-printing.md) | `cad <type> check --process printing --angle-limit 45`: overhangs, walls, support volume |
+| CNC milling and turning | [CNC machining](references/manufacturing-cnc.md) | `cad step inspect` or `cad model inspect`: radii, depths, walls |
+| Sheet cutting and bending | [Sheet metal](references/manufacturing-sheet-metal.md) | `cad step inspect` or `cad model inspect`: thickness, bend radii, hole-to-bend distances |
+| Injection molding | [Injection molding](references/manufacturing-injection-molding.md) | `cad <type> dfm --process molding --pull z`: draft, undercuts, projected area |
+| 3D printing: FDM, SLS, SLA/DLP, metal PBF, MJF | [3D printing](references/manufacturing-printing.md) | `cad <type> dfm --process printing --angle-limit 45`: overhangs, walls, support volume |
 
 ```bash
-cad step check part.step --process molding --pull z
-cad xbf check "$ID" --process printing --angle-limit 45 --candidates
+cad step dfm part.step --process molding --pull z
+cad model dfm "$ID" --process printing --angle-limit 45 --candidates
 ```
 
 A check reports facts, never a verdict: its `OK` means every family was measured, not that the part
@@ -356,7 +357,7 @@ screenshot supports a suspected issue, not a measured pass or fail. A model's so
 describe design intent: verify that they match the file being reviewed before treating them as
 evidence. Never infer alloy, resin, strength or stock thickness from a rendering's material or colour.
 
-Measure a text-to-cad model with `cad xbf inspect "$ID" '<ref>'` (a face's radius, area and box; an
+Measure a text-to-cad model with `cad model inspect "$ID" '<ref>'` (a face's radius, area and box; an
 edge's length) or a check script that calls the model; measure a STEP with `cad step inspect part.step
 '<ref>'`. Measure draft and undercuts, or walls and overhangs, with the process's check in the
 table above. If a required feature cannot be measured, use supplied dimensions with their
@@ -404,9 +405,9 @@ without editing tools, give a specific change list.
 
 | The change | Check it with |
 | --- | --- |
-| A radius, a distance, a depth or a thickness | `cad xbf inspect "$ID" '<ref>'` on the new revision, against the limit the finding cited |
-| Draft, an undercut, a pull | `cad xbf check "$ID" --process molding` on the new revision, with the same `--pull` as before |
-| A wall, an overhang, an orientation | `cad xbf check "$ID" --process printing` on the new revision, with the same `--angle-limit` as before |
+| A radius, a distance, a depth or a thickness | `cad model inspect "$ID" '<ref>'` on the new revision, against the limit the finding cited |
+| Draft, an undercut, a pull | `cad model dfm "$ID" --process molding` on the new revision, with the same `--pull` as before |
+| A wall, an overhang, an orientation | `cad model dfm "$ID" --process printing` on the new revision, with the same `--angle-limit` as before |
 | A feature moved or resized | The same measurement on it and on its neighbours: a moved hole can open a finding beside it |
 | The file a shop takes | The exported file itself, inspected or checked again: never the model alone |
 

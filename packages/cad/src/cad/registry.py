@@ -9,8 +9,14 @@ An **integration** is our support for one third-party tool, named for the tool's
 extra (``cad[<name>]``) grouping what our code for it needs, our code for it (helpers that take its
 objects, producers and operations), and a process kind. A **producer** is code that makes a document
 type from some input; many integrations may produce one type, each stating which parts of the type's
-content it provides. The **operations** are a fixed set: ``export``, ``snapshot``, ``inspect`` and
-``check``.
+content it provides. The **operations** are a closed set (``OPERATIONS``): ``export`` and ``snapshot``,
+shared by every type that has them, ``inspect`` where a type has it, and the rest named for what they do --
+``dfm`` a 3D type's manufacturing check, ``drc`` a board's design rule check, ``erc`` a schematic's electrical
+rules check, ``validate`` a robot description's conformance check.
+
+``model`` is the one type with no file: a model built from code and held in the engine's memory,
+addressed by its document id or the handle its call returns (``@model`` declares one); ``xbf`` is the
+``.xbf`` file the engine writes of one.
 
 Kernel-free, the standard library alone: the server imports this module, and so does every page's
 build through the generated JavaScript. A producer's matcher reads a value's type names and modules,
@@ -31,8 +37,9 @@ __all__ = ["DOCUMENT_TYPES", "INTEGRATIONS", "OPERATIONS", "PROCESS_KINDS", "VIE
            "Integration", "Operation", "Probe", "Producer", "by_extension", "declarer_for", "decorators_taking", "help_text", "integrations_of", "producer_for", "producers_for",
            "type_of"]
 
-#: The operations, a fixed set shared by every type; each type implements those that make sense for it.
-OPERATIONS = ("export", "snapshot", "inspect", "check")
+#: The operations, a closed set: ``export`` and ``snapshot`` shared by every type that has them, ``inspect``
+#: where a type has it, and the others named for what they do -- each a type implements where it makes sense.
+OPERATIONS = ("export", "snapshot", "inspect", "dfm", "drc", "erc", "validate")
 #: How a type is viewed: an engine document (a B-rep scene the engine serves), a triangle mesh, a 2D
 #: drawing, a robot description, a plot.
 VIEWS = ("document", "mesh", "drawing", "robot", "plot")
@@ -108,8 +115,9 @@ class Producer:
 @dataclass(frozen=True)
 class DocumentTypeEntry:
     """One document type: its id, its name as people write it, its extensions (the first the one a
-    written file takes), its MIME type, how it is viewed, the content it carries, its operations, and
-    whether it has a decorator (``@<id>("out.<ext>")``) and a reader (``<id>.read``).
+    written file takes; none for ``model``, which has no file), its MIME type, how it is viewed, the
+    content it carries, its operations, and whether it has a decorator (``@<id>("out.<ext>")``) and a
+    reader (``<id>.read``).
 
     ``wire`` is the spelling the frozen protocols carry for it -- the HTTP API's document kinds
     (``/api/v1/documents/<kind>/...``) and the analytics schemas -- which is the id but for
@@ -145,8 +153,13 @@ class DocumentTypeEntry:
 
     @property
     def suffix(self) -> str:
-        """The extension a file of this type is written with."""
-        return self.extensions[0]
+        """The extension a file of this type is written with ("" for a type with no file: ``model``)."""
+        return self.extensions[0] if self.extensions else ""
+
+    @property
+    def has_file(self) -> bool:
+        """Whether a document of this type is a file (every type's but ``model``'s, held in memory)."""
+        return bool(self.extensions)
 
     def operation(self, name: str) -> Operation | None:
         return next((operation for operation in self.operations if operation.name == name), None)
@@ -161,7 +174,8 @@ class DocumentTypeEntry:
 _KERNEL = "build123d"
 
 _EXPORT_DOCUMENT = Operation("export", "write the document to other files, each kind by its suffix "
-                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf)", _KERNEL)
+                                       "(.step, .glb, .stl, .3mf, .dxf, .xbf); --tolerance meshes an .stl or a "
+                                       ".3mf finer", _KERNEL)
 _EXPORT_MESH = Operation("export", "write the mesh to the other mesh kinds (.glb, .stl, .3mf)")
 _SNAPSHOT = Operation("snapshot", "draw it as the CAD Viewer does, into a PNG", _KERNEL)
 _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its build closure; with a ref, what one "
@@ -169,12 +183,12 @@ _INSPECT_DOCUMENT = Operation("inspect", "what the document holds, then its buil
 _INSPECT_GLB = Operation("inspect", "its nodes, meshes and animations", _KERNEL)
 # The manufacturing check every 3D type shares (``cad._internal.manufacturing``): exact geometry measured on
 # its B-rep by the build123d integration, a mesh by the trimesh integration; a DXF checked as a cut file.
-_CHECK_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
+_DFM_SUMMARY = ("check it can be made: CNC machining (--process cnc), sheet metal (sheet), injection molding "
                   "(molding) or 3D printing (printing), measured and judged against a cited rule set (--rules)")
-_CHECK_EXACT = Operation("check", _CHECK_SUMMARY + ", each finding at a face's ref", "build123d", "manufacturing")
-_CHECK_MESH = Operation("check", "check it can be molded (--process molding) or 3D printed (printing), measured "
+_DFM_EXACT = Operation("dfm", _DFM_SUMMARY + ", each finding at a face's ref", "build123d", "manufacturing")
+_DFM_MESH = Operation("dfm", "check it can be molded (--process molding) or 3D printed (printing), measured "
                                  "as a mesh and judged against a cited rule set (--rules)", "trimesh", "manufacturing")
-_CHECK_CUT = Operation("check", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "
+_DFM_CUT = Operation("dfm", "check it as a sheet's cut file (--process sheet): closed contours, nothing cut "
                                 "twice, features against the kerf and the thickness, the sheet's size", "build123d",
                        "manufacturing")
 
@@ -183,51 +197,65 @@ _DOCUMENT_CONTENT = ("geometry", "assembly", "names", "colours", "materials", "e
 
 _TYPES = (
     DocumentTypeEntry(
-        "xbf", "XBF", "the engine's own document: an XCAF document saved as BinXCAF, with its build closure",
-        (".xbf",), "application/octet-stream", "document",
+        "model", "model", "a model built from code and held in the engine's memory, with no file behind it: "
+                          "addressed by its document id (python SCRIPT.py prints it) or the handle its call returns",
+        (), "", "document", (*_DOCUMENT_CONTENT, "animations", "build closure"),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True),
+    DocumentTypeEntry(
+        "xbf", "XBF", "the engine's own document saved as a file: an XCAF document as BinXCAF, with its build "
+                      "closure", (".xbf",), "application/octet-stream", "document",
         (*_DOCUMENT_CONTENT, "animations", "build closure"),
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _CHECK_EXACT), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True, reader=True),
     DocumentTypeEntry(
         "step", "STEP", "an ISO 10303 (AP242) exchange file of exact geometry", (".step", ".stp"),
         "application/step", "document", _DOCUMENT_CONTENT,
-        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _CHECK_EXACT), decorator=True, reader=True),
+        (_EXPORT_DOCUMENT, _SNAPSHOT, _INSPECT_DOCUMENT, _DFM_EXACT), decorator=True, reader=True),
     DocumentTypeEntry(
         "stl", "STL", "a binary STL of one triangle mesh", (".stl",), "model/stl", "mesh", ("triangles",),
-        (_EXPORT_MESH, _SNAPSHOT, _CHECK_MESH), decorator=True, reader=True),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, reader=True),
     DocumentTypeEntry(
         "glb", "GLB", "a binary glTF scene of triangle meshes", (".glb",), "model/gltf-binary", "mesh",
         ("triangles", "assembly", "names", "colours", "materials", "animations"),
-        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _CHECK_MESH), decorator=True),
+        (_EXPORT_MESH, _SNAPSHOT, _INSPECT_GLB, _DFM_MESH), decorator=True),
     DocumentTypeEntry(
         "threemf", "3MF", "a 3D Manufacturing Format package of triangle meshes", (".3mf",), "model/3mf", "mesh",
         ("triangles", "assembly", "names", "colours", "materials"),
-        (_EXPORT_MESH, _SNAPSHOT, _CHECK_MESH), decorator=True, wire="3mf"),
+        (_EXPORT_MESH, _SNAPSHOT, _DFM_MESH), decorator=True, wire="3mf"),
     DocumentTypeEntry(
         "dxf", "DXF", "a 2D drawing of a planar document", (".dxf",), "application/dxf", "drawing",
-        ("2D geometry", "layers"), (_SNAPSHOT, _CHECK_CUT), decorator=True),
+        ("2D geometry", "layers"), (_SNAPSHOT, _DFM_CUT), decorator=True),
     DocumentTypeEntry(
         "urdf", "URDF", "a robot description (ROS's Unified Robot Description Format)", (".urdf",),
         "application/xml; charset=utf-8", "robot", ("links", "joints", "inertials", "mesh references"),
-        (Operation("check", "check it for conformance: structure, joints, inertials, mesh references"), _SNAPSHOT)),
+        (Operation("validate", "check it for conformance: structure, joints, inertials, mesh references"), _SNAPSHOT)),
     DocumentTypeEntry(
         "srdf", "SRDF", "a MoveIt semantic robot description, read against its URDF", (".srdf",),
         "application/xml; charset=utf-8", "robot",
         ("planning groups", "end effectors", "group states", "disabled collision pairs", "virtual joints"),
-        (Operation("check", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
+        (Operation("validate", "check it against its URDF: every name, chain, state and disabled pair"), _SNAPSHOT)),
     DocumentTypeEntry(
         "sdf", "SDF", "an SDFormat world or model (Gazebo's Simulation Description Format)", (".sdf",),
         "application/xml; charset=utf-8", "robot", ("worlds", "models", "links", "joints", "mesh references"),
-        (Operation("check", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
+        (Operation("validate", "check it for conformance, and with gz sdf --check where it is installed"), _SNAPSHOT)),
     DocumentTypeEntry(
         "kicad_pcb", "KiCad PCB", "a KiCad printed circuit board, read with the .kicad_pro beside it", (".kicad_pcb",),
         "text/plain; charset=utf-8", "plot",
         ("board outline", "layers", "footprints", "pads", "nets", "tracks", "vias", "zones", "design rules"),
-        (Operation("export", "write its fabrication outputs with KiCad: gerbers, drill, pos or step, into a folder",
-                   "kicad"),
+        (Operation("export", "write its fabrication and 3D outputs with KiCad into a folder: gerbers, drill, pos, bom, "
+                             "step, glb, odb, ipc2581, pdf or dxf", "kicad"),
          Operation("snapshot", "draw it flat, as the CAD Viewer's board view does, into a PNG"),
          Operation("inspect", "what the board holds: its format, thickness, size, layers, parts and nets"),
-         Operation("check", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
-                   "kicad")), decorator=True, decorator_integration="kicad"),
+         Operation("drc", "KiCad's design rule check: errors and unconnected items fail it, warnings are said",
+                   "kicad")), decorator=True, decorator_integration="kicad", reader=True),
+    DocumentTypeEntry(
+        "kicad_sch", "KiCad schematic", "a KiCad schematic, read with every sheet of its project's hierarchy",
+        (".kicad_sch",), "text/plain; charset=utf-8", "plot",
+        ("sheets", "symbols", "pins", "fields", "wires", "buses", "labels", "junctions", "no-connects", "nets"),
+        (Operation("export", "write it with KiCad: a pdf, an svg per sheet, the netlist or a BOM, into a folder", "kicad"),
+         Operation("snapshot", "draw one sheet flat, as KiCad's schematic editor shows it, into a PNG"),
+         Operation("inspect", "what the schematic holds: its sheets, parts and nets; with a ref, what that names"),
+         Operation("erc", "KiCad's electrical rules check: errors fail it, warnings are said", "kicad")),
+        reader=True),
 )
 
 #: Every document type, by id, in the table's order.
@@ -243,16 +271,19 @@ INTEGRATIONS: Mapping[str, Integration] = MappingProxyType({
                        "ezdxf", "pillow"),
         identity=("build123d", "cadquery-ocp", "cadquery-ocp-novtk", "cadquery-ocp-proxy")),
     "kicad": Integration(
-        "kicad", "KiCad's command line, kicad-cli: the server runs it, headless, for a board's design rule check "
-                 "and its fabrication exports, and its IPC API, which a board script edits through", extra="kicad",
-        process="separate",
-        # A check or an export runs kicad-cli 9 or newer; a board script its headless api-server, a nightly's
-        # alone for now (cad.kicad._program.check_api_server refuses one without it before starting it).
-        probe=Probe("kicad-cli", "9.0", "a check or an export needs KiCad 9 or newer, a @kicad_pcb board script a "
-                                        "KiCad nightly (10.99, for kicad-cli's api-server): install one from "
-                                        "https://www.kicad.org/download/, or set CAD_KICAD_CLI to its kicad-cli",
+        "kicad", "KiCad's command line, kicad-cli, and its IPC API, both kicode's: a board's design rule check and "
+                 "its fabrication exports run kicad-cli, headless, and a board script edits through the API",
+        extra="kicad", process="separate",
+        # kicad-cli is kicode's (the extra's), or the one CAD_KICAD_CLI names: a check or an export runs 9 or
+        # newer, a board script needs its headless api-server (kicode's has it; another's is asked,
+        # cad.kicad._program.check_api_server, before it starts). A person's own KiCad is never run.
+        probe=Probe("kicad-cli", "9.0", "kicad-cli comes with cad's kicad integration, cad[kicad] (kicode), which the "
+                                        "cad command installs on first need (a script run with cad run: name "
+                                        "cad[kicad] in its header); or set CAD_KICAD_CLI to a kicad-cli of "
+                                        "KiCad 9 or newer (a nightly's, 10.99, for a @kicad_pcb board script)",
                     "CAD_KICAD_CLI"),
-        modules=("kipy",), distributions=("kicad-python",), identity=("kicad-python",)),
+        modules=("kicode",), distributions=("kicode",),
+        identity=("kicode", "kicode-pcb", "kicode-sch")),
     "trimesh": Integration(
         "trimesh", "trimesh, the triangle-mesh library: a 3D document's manufacturing check measures its mesh with "
                    "it -- injection molding's draft, undercuts and projected area, 3D printing's walls, overhangs "
@@ -342,7 +373,7 @@ def help_text(document_type: str) -> str:
     """A type's help, worked out from this table: what it is, the content it carries, its operations and
     what writes it."""
     entry = DOCUMENT_TYPES[document_type]
-    lines = [f"{entry.id}: {entry.summary} ({', '.join(entry.extensions)})",
+    lines = [f"{entry.id}: {entry.summary}" + (f" ({', '.join(entry.extensions)})" if entry.has_file else ""),
              f"carries: {', '.join(entry.content)}"]
     lines.append("operations:")
     width = max((len(operation.name) for operation in entry.operations), default=0)
@@ -352,7 +383,12 @@ def help_text(document_type: str) -> str:
         needs = f" [{operation.integration}]" if operation.integration else ""
         lines.append(f"  {name.ljust(width)}  {operation.summary}{needs}")
     producers = producers_for(entry.id)
-    if producers:
+    if producers and not entry.has_file:
+        lines.append("made by:")
+        for producer in producers:
+            lines.append(f"  @{entry.id} on a function returning {producer.accepts.removesuffix(' a model returns')} "
+                         f"({producer.integration}: {', '.join(producer.provides)})")
+    elif producers:
         lines.append("written by:")
         for producer in producers:
             lines.append(f"  @{entry.id}(\"out{entry.suffix}\") of {producer.accepts} "

@@ -1,7 +1,8 @@
 """The build123d integration's producers: a build123d shape made into each document type it writes.
 
-One producer per document type a decorator writes (``@xbf``, ``@step``, ``@glb``, ``@stl``,
-``@threemf``, ``@dxf``) and the document of an ``@model``, each registered in ``cad.registry``. A
+The document every model makes (``model``, held in the engine's memory) and one producer per document
+type a decorator writes (``@xbf``, ``@step``, ``@glb``, ``@stl``, ``@threemf``, ``@dxf``), each registered
+in ``cad.registry``. A
 producer's matcher reads the returned value's type names and modules alone -- ``build123d``'s
 ``Shape`` anywhere in its class's ancestry -- so asking which producer takes a value imports no
 kernel. The writer is the engine code the file comes from: the XCAF document the engine makes of
@@ -31,6 +32,9 @@ _DOCUMENT = ("geometry", "assembly", "names", "colours", "materials", "element n
 _TRANSLATE = "cad.engine.export.translate"
 
 PRODUCERS: tuple[Producer, ...] = (
+    # The model's own document, held in the engine's memory: what every model makes, declared files or none.
+    Producer("model", "build123d", _ACCEPTS, is_shape, "cad.engine.document",
+             (*_DOCUMENT, "animations", "build closure")),
     Producer("xbf", "build123d", _ACCEPTS, is_shape, "cad.engine.document",
              (*_DOCUMENT, "animations", "build closure")),
     Producer("step", "build123d", _ACCEPTS, is_shape, _TRANSLATE, _DOCUMENT),

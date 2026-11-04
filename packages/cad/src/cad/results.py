@@ -1,9 +1,9 @@
-"""The operations' shared result types: what every type's ``check`` returns, typed.
+"""The operations' shared result types: what every check returns, typed.
 
-Every ``check`` (``cad.urdf.check``, ``cad.sdf.check``, ``cad.srdf.check``, ``cad.stl.check``, ...)
+Every check -- ``dfm``, ``drc``, ``erc`` and ``validate`` (``cad.urdf.validate``, ``cad.stl.dfm``, ``cad.kicad_pcb.drc``, ...) --
 answers with a ``CheckResult`` -- whether it passed, the file, its findings, each with a severity, a code
 and a location, and what it measured, where it measures -- rather than a loose dict, so the library call
-and the CLI carry the SAME shape: ``cad <type> check --json`` is ``dataclasses.asdict`` of the value the library returned.
+and the CLI carry the SAME shape: ``cad <type> dfm --json`` is ``dataclasses.asdict`` of the value the library returned.
 ``ValidationResult`` and ``ValidationIssue``, their 0.10 names, are aliases that take the 0.10 call shapes
 (``ValidationIssue(severity, message, element=, code=, hint=)``, ``ValidationResult(ok, path, issues=,
 summary=)``) and make these.
@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-__all__ = ["CheckFinding", "CheckResult"]
+__all__ = ["CheckFinding", "CheckResult", "ExportResult"]
 
 
 def _display(path: Path | None) -> str:
@@ -32,7 +32,7 @@ def _display(path: Path | None) -> str:
 
 @dataclass(frozen=True)
 class CheckFinding:
-    """One finding of a ``check``.
+    """One finding of a check (``dfm``, ``drc``, ``erc``, ``validate``).
 
     ``code`` and ``hint`` carry what the checkers already produce: the skills
     teach fixing findings BY CODE, so dropping the code at the result boundary
@@ -62,7 +62,7 @@ class CheckFinding:
 
 @dataclass(frozen=True)
 class CheckResult:
-    """The outcome of one ``check``."""
+    """The outcome of one check (``dfm``, ``drc``, ``erc``, ``validate``)."""
 
     ok: bool
     path: Path
@@ -87,6 +87,21 @@ class CheckResult:
             blocking = sum(1 for finding in self.findings if finding.severity == "error")
             lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
         return lines
+
+
+@dataclass(frozen=True)
+class ExportResult:
+    """The outcome of an ``export`` that writes files of its own kinds (``cad.kicad_pcb.export``): the
+    source, what it was exported as, the files written, and what was said beside (a part without its 3D
+    model), one line each."""
+
+    path: Path
+    to: str
+    written: tuple[Path, ...] = field(default_factory=tuple)
+    warnings: tuple[str, ...] = field(default_factory=tuple)
+
+    def human_lines(self) -> list[str]:
+        return [*(f"warning: {line}" for line in self.warnings), *(f"wrote {path}" for path in self.written)]
 
 
 class _ValidationIssue(CheckFinding):

@@ -9,7 +9,7 @@ Slicing and sending a print to a printer is the print3d skill's ($print3d).
 ## Process limits
 
 Design-rule limits per additive process, for comparison against the facts
-`cad <type> check --process printing` measures. Values are conservative defaults
+`cad <type> dfm --process printing` measures. Values are conservative defaults
 from published process design guides and consistent with ISO/ASTM 52910
 (general DfAM guidance) and ISO/ASTM 52911-1 (laser powder bed fusion of
 metals). Machine-, material-, and parameter-specific datasheets override
@@ -49,7 +49,7 @@ category structure (feature limits §6.5, support structures §6.7).
 
 ## What the check measures today
 
-`cad <type> check --process printing` returns measured values for **min
+`cad <type> dfm --process printing` returns measured values for **min
 supported wall**, **min unsupported wall** (both from the thickness field) and
 **self-supporting angle** (from the overhang map). Those rows can be compared
 directly against the limits above.
@@ -66,13 +66,13 @@ mating clearance would otherwise record the fit gap as a wall.
 
 ## Measure it
 
-`cad <type> check --process printing` measures overhangs, wall thickness and support volume, and
+`cad <type> dfm --process printing` measures overhangs, wall thickness and support volume, and
 with `--candidates` ranks the six axis-aligned build orientations:
 
 ```bash
-cad stl check part.stl --process printing --angle-limit 45
-cad xbf check "$ID" --process printing --angle-limit 30 --json
-cad step check part.step --process printing --angle-limit 45 --candidates
+cad stl dfm part.stl --process printing --angle-limit 45
+cad model dfm "$ID" --process printing --angle-limit 30 --json
+cad step dfm part.step --process printing --angle-limit 45 --candidates
 ```
 
 ```text

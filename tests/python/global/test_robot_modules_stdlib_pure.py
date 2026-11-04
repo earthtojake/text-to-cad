@@ -65,6 +65,7 @@ ALLOWED_CADGEN = {
     "cad.results",  # the typed line protocol: dataclasses and pathlib only
     "cad.registry",  # the document types and integrations: stdlib only
     "cad._internal.document_type",  # cad.<type> as one object, every name loaded on first use
+    "cad.engine.ids",  # what a document id is: re and os alone
     # A 3D type's manufacturing check (no robot type's): its signature and options, stdlib only; trimesh
     # is imported in the function that measures.
     "cad._internal.manufacturing",
@@ -86,7 +87,7 @@ ALLOWED_CADGEN = {
     "cad.engine.mesh_uri",
 }
 
-# What importing the family must not drag in. `cad urdf check` runs on machines with
+# What importing the family must not drag in. `cad urdf validate` runs on machines with
 # none of these installed.
 HEAVY_AT_IMPORT = ("OCP", "build123d", "playwright", "numpy", "ezdxf")
 

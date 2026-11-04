@@ -54,7 +54,7 @@ class TheTableIsTheSource(unittest.TestCase):
                 if integration.probe is not None:
                     self.assertTrue(integration.probe.minimum and integration.probe.install_hint)
                 self.assertTrue(integration.modules and integration.distributions)
-        self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kipy", "os"]))
+        self.assertEqual(("build123d", "kicad"), registry.integrations_of(["build123d.topology", "kicode", "os"]))
         self.assertEqual("kicad", registry.DOCUMENT_TYPES["kicad_pcb"].decorator_integration)
         self.assertEqual("build123d", registry.DOCUMENT_TYPES["step"].decorator_integration)
         self.assertIsNone(registry.DOCUMENT_TYPES["urdf"].decorator_integration)
@@ -89,7 +89,8 @@ class TheTableIsTheSource(unittest.TestCase):
         # A board script's step is the kicad integration's, a shape's the build123d one's: one producer each,
         # and @step declared on a board script by the kicad producer (``declarer_for``).
         self.assertEqual("kicad", registry.producer_for("step", script).integration)
-        self.assertEqual("kicad", registry.declarer_for("step", script).integration)
+        for kind in ("step", "glb", "dxf"):
+            self.assertEqual("kicad", registry.declarer_for(kind, script).integration)
         self.assertIsNone(registry.declarer_for("step", lambda: None), "a function under @step is the engine's model")
         self.assertEqual("kicad", registry.declarer_for("kicad_pcb", lambda board: None).integration)
 

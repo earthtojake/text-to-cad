@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cad"
-version = "0.10.0"
+version = "0.10.3"
 description = "CAD models as Python: the library a model imports, built into documents (.xbf) and the STEP, GLB, STL, 3MF and DXF they declare, with the CAD kernel as its build123d extra."
 readme = "README.md"
 license = "MIT"
@@ -69,14 +69,12 @@ build123d = [
   "ezdxf",
   "pillow",
 ]
-# The kicad integration's extra: KiCad's IPC API client (kipy, MIT), which a @kicad_pcb board script's
-# function is handed the open board of. kicad-cli itself is the person's KiCad, found by the library's
-# finder (cad.kicad._program), never a dependency. Pinned exactly: 0.8.0 targets KiCad 10.0 and reads and
-# edits the nightly's boards, though its check_version() calls a nightly server a future version (never
-# called). The pin moves to a build matched to the kicad-cli we ship, on our own package index, once that
-# package (kicad-cli-bin) exists.
+# The kicad integration's extra: kicode, KiCad's headless command line (kicad-cli) and its IPC API client
+# (KiPy, as `kicode`) in one package -- what a check, an export and a @kicad_pcb board script run; a
+# person's own KiCad is never run. Pinned exactly: one KiCad nightly's build (kicode-pcb, the board side,
+# 55-85 MB a platform, and kicode-sch, the schematic side a BOM reads), whose kicad-cli and KiPy match.
 kicad = [
-  "kicad-python==0.8.0",
+  "kicode==10.99.0.dev20261031",
 ]
 # The trimesh integration's extra: the manufacturing check measures a 3D document's mesh with trimesh
 # (cad.trimesh). Bounded above because the measurements reach past its loaders into its graph, ray and

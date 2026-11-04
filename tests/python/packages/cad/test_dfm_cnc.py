@@ -27,7 +27,7 @@ def _check(shape: Any, **options: Any) -> Any:
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "part.step"
         bd.export_step(shape, str(path))
-        return cad.step.check(path, process="cnc", **options)
+        return cad.step.dfm(path, process="cnc", **options)
 
 
 def _part(shape: Any, label: str = "part") -> Any:

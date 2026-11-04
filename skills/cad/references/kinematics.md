@@ -285,8 +285,8 @@ apart, a cover vanishing, a part spinning for show) is an animation of the GLB:
 A pose is drawn on demand:
 
 ```bash
-cad xbf snapshot "$ID" tmp/open.png --pose open
-cad xbf snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
+cad model snapshot "$ID" tmp/open.png --pose open
+cad model snapshot "$ID" tmp/elbow_45.png --pose '{"elbow": 45}'
 ```
 
 `--pose` takes a mechanism state's name, or joint and coupling values as JSON (a turn

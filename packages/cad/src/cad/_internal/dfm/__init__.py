@@ -1,6 +1,6 @@
 """The manufacturing check's processes, type side: their options, their rule sets and what their findings say.
 
-A manufacturing check (``cad.<type>.check(source, process=...)``, ``cad._internal.manufacturing``) is two
+A manufacturing check (``cad.<type>.dfm(source, process=...)``, ``cad._internal.manufacturing``) is two
 layers. The **measurement** is an integration's: exact geometry -- a STEP, an xbf, a document the engine
 holds -- is measured on its B-rep by the build123d integration (``cad.build123d._dfm_*``), a mesh -- an STL,
 a 3MF, a GLB -- by the trimesh integration (``cad.trimesh``); each answers a report of plain data, facts

@@ -114,7 +114,7 @@ def main(argv: list[str] | None = None) -> int:
             for process in processes:
                 start = time.perf_counter()
                 try:
-                    result = cad.step.check(path, process=process)
+                    result = cad.step.dfm(path, process=process)
                     row = row_of(path, process, result, time.perf_counter() - start)
                 except Exception as error:  # noqa: BLE001 - a check that raises is a row, not the batch's end
                     row = {"file": str(path), "bytes": path.stat().st_size, "process": process,

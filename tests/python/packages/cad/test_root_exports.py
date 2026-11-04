@@ -20,9 +20,9 @@ HEAVY = ("OCP", "build123d")
 # The engine's own surface (``cad.engine``), which the library's namespaces are made of.
 ENGINE = ("model", "xbf", "step", "glb", "stl", "threemf", "dxf", "memo", "paint",
           "read_step", "read_xbf", "read_mesh")
-# The root: the model, the version, the deprecation's class, and the document types.
-TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
-ROOT = ("model", "__version__", "CadDeprecationWarning", *TYPES)
+# The root: the version, the deprecation's class, and the document types (``model`` the one with no file).
+TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
+ROOT = ("__version__", "CadDeprecationWarning", *TYPES)
 # The build123d integration's names: our helpers that take build123d's objects.
 NAMESPACES = {
     "cad.build123d": ("mechanism_state", "configuration_sequence", "gear_pair", "rack_and_pinion_pair", "screw_pair",
@@ -48,7 +48,8 @@ class RootExports(unittest.TestCase):
 
         self.assertEqual(sorted(ROOT), sorted(cad.__all__))
         self.assertEqual(sorted(cad.engine.__all__), sorted(ENGINE))
-        self.assertIs(cad.model, cad.engine.model)
+        # ``model`` is a type with no file: its decorator is the engine's model, its operations a model's.
+        self.assertEqual(cad.model.__call__.__doc__.split(":")[0], "``@model`` or ``@model(name=...)``")
         for name in ("Material", "materials"):
             self.assertFalse(hasattr(cad.engine, name), f"materials come from bd_materials: {name}")
         for name in TYPES:
@@ -57,7 +58,8 @@ class RootExports(unittest.TestCase):
         self.assertIs(cad.step.read, cad.engine.model.read_step)
         self.assertIs(cad.xbf.read, cad.engine.read_xbf)
         self.assertIs(cad.stl.read, cad.engine.read_mesh)
-        self.assertIs(cad.urdf.check, cad.urdf.__dict__["check"])
+        self.assertIs(cad.urdf.validate, cad.urdf.__dict__["validate"])
+        self.assertIs(cad.kicad_pcb.read, cad.kicad_pcb.__dict__["read"])
         self.assertTrue(cad.xbf.export.__doc__.endswith(api.export.__doc__))
 
     def test_what_the_root_says_of_its_types_is_what_it_has(self):
@@ -121,18 +123,23 @@ class RootExports(unittest.TestCase):
     def test_model_declares_a_function_or_hands_a_shape_over_and_a_decorator_takes_its_path(self):
         """``model`` is one name of two forms: a decorator (``@model``, ``@model(name=)``) and the
         shape form (``model(shape, name=, animations=)``); a file decorator takes its path and its
-        name. No ``id=``: an id is derived; no ``store=``: every document is kept alike."""
+        name, and an STL's or a 3MF's its mesh tolerance. No ``id=``: an id is derived; no
+        ``store=``: every document is kept alike."""
         import inspect
 
-        parameters = inspect.signature(cad.engine.model.model).parameters
-        self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
-            ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
-            ("animations", inspect.Parameter.KEYWORD_ONLY)])
+        for declare in (cad.engine.model.model, cad.model.__call__):
+            parameters = inspect.signature(declare).parameters
+            self.assertEqual([(name, p.kind) for name, p in parameters.items()], [
+                ("target", inspect.Parameter.POSITIONAL_ONLY), ("name", inspect.Parameter.KEYWORD_ONLY),
+                ("animations", inspect.Parameter.KEYWORD_ONLY)])
         for kind in ("xbf", "step", "glb", "stl", "threemf", "dxf", "kicad_pcb"):
             with self.subTest(kind=kind):
                 if kind != "kicad_pcb":  # a board script's decorator is the kicad integration's, not the engine's
-                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters), ["out", "name"])
-                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name"])
+                    self.assertEqual(list(inspect.signature(getattr(cad.engine, kind)).parameters),
+                                     ["out", "name", *(["tolerance"] if kind in ("stl", "threemf") else [])])
+                # The type's decorator passes an STL's or a 3MF's mesh tolerance to the engine's; any other
+                # type's engine decorator refuses it, as Python refuses an unknown keyword.
+                self.assertEqual(list(inspect.signature(getattr(cad, kind).__call__).parameters), ["out", "name", "tolerance"])
 
     def test_a_types_decorator_takes_its_path_by_position_or_by_out_as_0_10s_did(self):
         """``@step(out="...")`` is the engine README's own spelling: the type's decorator takes ``out`` either
@@ -155,14 +162,22 @@ class RootExports(unittest.TestCase):
     def test_a_board_script_takes_no_decorator_but_its_own(self):
         """A @kicad_pcb board script is never made a model: a decorator no producer of its type declares for
         it is refused at decoration, naming the ones that take it."""
-        from cad import glb, kicad_pcb, step, stl, xbf
+        from cad import dxf, glb, kicad_pcb, step, stl, threemf, xbf
 
         script = kicad_pcb("board.kicad_pcb")(lambda board: None)
-        for decorator in (xbf, glb, stl):
+        for decorator in (xbf, stl, threemf):
             with self.subTest(decorator=decorator), self.assertRaises(TypeError) as caught:
                 decorator(f"board{decorator.entry.suffix}")(script)
-            self.assertIn("one takes @step", str(caught.exception))
-        self.assertIs(script, step("board.step")(script))
+            self.assertIn("one takes @step, @glb, @dxf", str(caught.exception))
+        # The board's STEP and GLB (the board and its parts) and its DXF (outline and holes), each written by
+        # kicad-cli from the saved board, in the order they are stacked, innermost first.
+        self.assertIs(script, step("board.step")(glb("board.glb")(dxf("board.dxf")(script))))
+        self.assertEqual([(kind, path.name) for kind, path in script.outputs],
+                         [("step", "board.step"), ("glb", "board.glb"), ("dxf", "board.dxf")])
+        with self.assertRaises(TypeError):
+            glb("again.glb")(script)  # declared twice
+        with self.assertRaisesRegex(ValueError, r"must end in \.glb"):
+            glb("board.step")(kicad_pcb("other.kicad_pcb")(lambda board: None))
 
     def test_a_name_the_root_never_had_is_pythons_own_error(self):
         # No backwards compatibility: a retired name is no name, and says nothing about history.

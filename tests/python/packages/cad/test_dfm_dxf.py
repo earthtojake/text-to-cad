@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-"""A sheet's cut file checked (``cad.dxf.check(path, process="sheet")``, ``cad.build123d._dfm_dxf``): units,
+"""A sheet's cut file checked (``cad.dxf.dfm(path, process="sheet")``, ``cad.build123d._dfm_dxf``): units,
 closed contours, curves cut twice, crossings, degenerate loops, annotation and stray geometry on cut layers,
 curves drawn as chords, islands that fall out, and the features measured against the thickness and the
 kerf -- each planted in a file written here with ezdxf, beside a clean control, with the place it was
@@ -42,7 +42,7 @@ class CutFileTest(unittest.TestCase):
         return path
 
     def check(self, path: Path, **options):
-        return dxf.check(path, process="sheet", **options)
+        return dxf.dfm(path, process="sheet", **options)
 
     def codes(self, result) -> set[str]:
         return {finding.code for finding in result.findings}

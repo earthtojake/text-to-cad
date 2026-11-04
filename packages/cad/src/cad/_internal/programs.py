@@ -5,8 +5,10 @@ program's name, the oldest version our code supports, what to say when it is mis
 that names it outright. This module is the one way the server finds and runs such a program:
 
 * **Found**, by the probe's variable first (refused unless the file it names has the program's own
-  name: never a desktop app, a wrapper or a launcher), then ``PATH``, then the places the program's own
-  installer puts it (``Program.installed``). Only a file of the program's name is ever returned.
+  name: never a desktop app, a wrapper or a launcher), then ``PATH`` (unless the program is one the
+  integration carries itself, ``search_path`` false), then the places it is put (``Program.installed``:
+  its installer's, or the package of the integration's extra that carries it). Only a file of the
+  program's name is ever returned.
 * **Checked**: its version, asked of it headless, at least the probe's minimum.
 * **Run headless**: no display to reach (``DISPLAY``, ``WAYLAND_DISPLAY`` removed), and every home it
   reads or writes inside a private folder removed afterwards (``private_run``), so a run neither opens a
@@ -56,6 +58,9 @@ class Program:
     version_args: tuple[str, ...] = ("version",)
     #: What the program is called where a person reads its minimum ("KiCad 9"); its name and minimum without it.
     title: str = ""
+    #: Whether a copy on ``PATH`` is run: false for a program the integration's extra carries (kicode's
+    #: kicad-cli), where a person's own copy is never run.
+    search_path: bool = True
 
     @classmethod
     def from_probe(cls, probe, **options) -> "Program":
@@ -70,7 +75,7 @@ class Program:
 
 def find(program: Program) -> Path:
     """The copy of ``program`` to run: its override when that is set (a file of the program's name, else
-    refused), else the program on ``PATH``, else the one its installer put in the usual place."""
+    refused), else the program on ``PATH`` (``search_path``), else the one in its usual place."""
     explicit = os.environ.get(program.override, "").strip()
     if explicit:
         path = Path(explicit).expanduser()
@@ -80,7 +85,7 @@ def find(program: Program) -> Path:
         if path.is_file():
             return path
         raise ProgramMissing(f"{program.override} names {path}, which is not a file: {program.install_hint}")
-    found = shutil.which(program.name)
+    found = shutil.which(program.name) if program.search_path else None
     if found and program.is_named(Path(found)):
         return Path(found)
     for candidate in program.installed():

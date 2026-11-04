@@ -419,7 +419,9 @@ def run_files(files: list[str], top: str, jobs: int, verbose: bool, print_weight
                 env = {**os.environ, **shared, "CAD_ENGINE_DIR": os.path.join(engines, f"e{index}"),
                        "CAD_STATE_DIR": os.path.join(engines, f"s{index}"),
                        "CAD_CACHE_DIR": os.path.join(engines, f"c{index}"),
-                       "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}")}
+                       "CAD_LAUNCHER_DIR": os.path.join(engines, f"l{index}"),
+                       # A board is drawn as saved, no kicode fetched, but where a suite runs KiCad (test-kicad.sh).
+                       "CAD_KICAD_REFILL": os.environ.get("CAD_KICAD_REFILL", "0")}
                 register(env["CAD_STATE_DIR"])
                 futures.append(pool.submit(run_one, path, env))
             for future in concurrent.futures.as_completed(futures):

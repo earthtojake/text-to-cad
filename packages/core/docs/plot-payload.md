@@ -1,11 +1,19 @@
 # The plot payload (schema 4)
 
 `GET /api/v1/documents/kicad_pcb/<id>/plot` (the board opened by its absolute path) and `cad <type> snapshot` draw a KiCad board from
-one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` alone (no KiCad process) and
-drawn by `@cad/core/lib/plot2d` on a 2D canvas. The payload is geometry per layer; what
+one payload, built by `cad.engine.formats.kicad.plot` from the `.kicad_pcb` and drawn by
+`@cad/core/lib/plot2d` on a 2D canvas. Its pours are KiCad's refill of them, not the fills the file
+saved, which go stale: KiCad refills the zones of a temporary copy of the board (kicode's headless
+api-server, in the environment of `cad[kicad]`) and the plot is drawn from the copy's bytes, under the
+board's own name and project (`cad.engine.formats.kicad.poured`, the one function the page and the
+snapshot share); the person's file is never written. The payload is geometry per layer; what
 colour a layer is drawn in is the renderer's (`plot2d/theme.js`, KiCad's default theme). It is a
-function of the saved board and companion project bytes. Every request rereads them; no
-parsed-board cache is kept. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
+function of the board's, its project's and its rules' bytes (and the plotting code): the engine keeps
+it by a sha256 of them (`poured.key`; in memory, and gzipped under `<cache>/kicad/<key>/`), so a changed
+file is a new key and nothing stale is served. The route answers 202 `{"state": "plotting", "retryMs"}`
+while it is made (the client asks again), `etag: "<key>"` with every 200 and 304 to a request naming it,
+`cache-control: no-store` as every engine answer, and the body zstd- or gzip-coded for a browser that
+accepts it. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
 a mismatch is refused by name on both sides.
 
 The picture is KiCad's PCB editor's with the display it opens a board with: every layer shown, the
@@ -24,7 +32,28 @@ board is the board alone, which the fit frames.
     "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
     "layers": [ { "id": "area", "kind": "area", "side": "both", "items": [ ... ] }, ... ]
   }],
-  "board": { ... }                 // the board's index, in sheet millimetres
+  "board": { ... },                // the board's index, in sheet millimetres
+  "pours": { "refilled": true }    // KiCad refilled them; else { "refilled": false, "warning": "why" }: as saved
+}
+```
+
+## The DRC beside it
+
+`GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, kept by the
+same key and made off the request the same way (202 `{"state": "checking", "retryMs"}` while it runs):
+the `CheckResult` `cad kicad_pcb check --json` prints, as data.
+
+```jsonc
+{
+  "ok": false, "path": "/boards/blinky.kicad_pcb", "summary": "",
+  "findings": [ { "severity": "error", "code": "unconnected_items", "message": "...", "location": "(20, 23.175) mm", "hint": null } ],
+  "measurements": { "drc": [ {
+    "check": "unconnected",          // violation, unconnected or parity
+    "severity": "error", "type": "unconnected_items", "description": "Missing connection between items",
+    "at": [20.0, 23.175],            // the first item's position: millimetres in KiCad's frame, y down
+    "items": [ { "uuid": "...", "description": "Pad 2 [LED] of D1 on F.Cu", "pos": [20.0, 23.175],
+                 "ref": "#D1.2" } ]   // the board reference it names, where the index has one
+  } ] }
 }
 ```
 
@@ -175,3 +204,58 @@ page origin (0, 0) lies on the sheet, so the viewer's index (`board2d/boardIndex
 position and every reference (`#net:VBUS@x40.1y21.6`, `#@x3.5y3.5`, `#F.Cu@x1y2..x3y4`) back in
 KiCad's own frame, millimetres, y down: a point the viewer copies pastes straight into a script's
 `Vector2.from_xy_mm`.
+
+## The schematic payload
+
+`GET /api/v1/documents/kicad_sch/<id>/plot` and `cad kicad_sch snapshot` draw a KiCad schematic
+from the same shape, built by `cad.engine.formats.kicad.schematic_plot` from the sheet files alone:
+`kind: "schematic"`, one entry of `sheets` per sheet instance, in page order, each a page. A
+schematic's frame is KiCad's own: millimetres, y down, the page's top-left corner at (0, 0), so a
+point the viewer reads off a page is the one the file holds; `width` and `height` are the page's
+(`page` its box, as a board's), and `background` KiCad's schematic canvas. A page adds `path` (the
+sheet's, `/` the root, `/Power/`), `number` (its page number), `file` and `title` (its title block's
+fields, as data: the drawing sheet itself is not drawn).
+
+```jsonc
+{
+  "schemaVersion": 4,
+  "kind": "schematic",
+  "generator": "eeschema 9.0",
+  "sheets": [{
+    "name": "/", "path": "/", "number": "1", "file": "divider.kicad_sch", "title": {"title": "Divider"},
+    "width": 297.0, "height": 210.0, "background": "#F5F4EF", "page": [0.0, 0.0, 297.0, 210.0],
+    "layers": [ { "id": "wires", "kind": "wire", "side": "both", "items": [ ... ] }, ... ]
+  }],
+  "warnings": [],                   // a sheet file not there, a symbol the file does not embed
+  "schematic": { ... }              // the index, in each sheet's page millimetres
+}
+```
+
+The layers, bottom to top, each present only where it draws something but `page`: `page` (kind
+`sheet`: the page's edge, a hairline flagged `page`; a view leaves it off unless asked), `notes`
+(`notes`: free text, text boxes and graphics), `sheets` (`sheet_box`: the hierarchical sheets' boxes,
+their names, files and pins, `role` `name`, `file`, `field` or `pin`), `symbols` (`symbol`: each body
+from the drawing the file embeds, its fills first), `pins` (`pin`), `wires` (`wire`), `buses` (`bus`,
+and the bus entries), `junctions` (`junction`), `no_connects` (`no_connect`), `pin_numbers`
+(`pin_number`), `pin_names` (`pin_name`), `fields` (`field`: a symbol's shown fields, `field` its name,
+`Reference`, `Value` or another) and `labels` (`label`: `label` its kind, `local`, `global` or
+`hierarchical`, the flags' outlines and their text). Items are the board's primitives (`path`,
+`poly`, `circle`, `text`), with the board's flags where they mean the same -- `ref` (`#R1`, `#R1.2` a
+pin, `#sheet:/Load/` a sheet's box), `net`, `id` (the uuid KiCad saved it with) -- and two of a
+schematic's own: `fill: "background"` on a symbol body KiCad fills with its device background, and
+`color` (`#rrggbb`, with `opacity`) where the file gives an item a colour of its own. What colour a
+layer is drawn in is the renderer's, KiCad's default schematic theme (`render/schematic.py` on the
+server's side). Text is Hershey Simplex at KiCad's positions, a field centred in the box KiCad gives
+it and read horizontally or vertically as KiCad turns it; a pin's name and number sit as the
+symbol's `pin_names` offset places them.
+
+`schematic` is `cad.engine.formats.kicad.schematic.SchematicIndex.as_json()`: `sheets` (path, name,
+file, page, parent, `at` and `size` on the parent, `pins` with their nets), `parts` (ref, value,
+footprint, lib id, `mpn`, fields, `units`: each placed unit's sheet, `at`, angle, mirror, id), `pins`
+(part, number, name, electrical type, sheet, `at`, net), `wires` (kind `wire` or `bus`, sheet, points,
+net, id), `junctions`, `labels` (kind, text, sheet, `at`, angle, shape, net, id; a power symbol's net
+as kind `power`), `no_connects`, `bus_entries` and `nets` (name, pins as `R1.2`, the sheets it reaches),
+every net named as KiCad names it, the board's names.
+
+Not drawn: images, tables, KiCad's drawing sheet (frame and title block), and line styles (a dashed
+stroke is drawn solid).

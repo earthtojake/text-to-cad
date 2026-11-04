@@ -2,7 +2,7 @@
 candidates and projected area along one pull, and the candidate pulls ranked.
 
 Facts, never verdicts: nothing here compares a figure against a resin's, a
-texture's or a tool's limit. ``cad.<type>.check(..., process="molding")`` turns
+texture's or a tool's limit. ``cad.<type>.dfm(..., process="molding")`` turns
 the report into findings (``cad.trimesh._check``); ``cad.trimesh.molding`` and
 ``cad.trimesh.pulls`` hand it back as data.
 

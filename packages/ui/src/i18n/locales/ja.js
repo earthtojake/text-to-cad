@@ -124,6 +124,8 @@ export default {
   "export.preparing": "{name} を準備中…",
   "export.dismiss": "エクスポートの状態を非表示",
   "export.failed": "エクスポートに失敗しました",
+  "export.format.drill": "ドリル",
+  "export.format.position": "部品配置",
 
   "app.start.notAnswering": "CAD ビューアーが応答しません",
   "app.engine.notRunning": "CAD が動いていません。",

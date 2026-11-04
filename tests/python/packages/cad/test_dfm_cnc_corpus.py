@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """The CNC check's planted-defect corpus: parts built here with known defects and clean controls, each
-written to a STEP in a temporary folder and checked through ``cad.step.check`` as a person would.
+written to a STEP in a temporary folder and checked through ``cad.step.dfm`` as a person would.
 
 The ground truth is the construction's: each case names the rules that must fail and the box (world
 millimetres) of the feature they must fail at -- a failure's face, read back by the engine's own loader
@@ -377,7 +377,7 @@ class CorpusTest(unittest.TestCase):
                 bd.export_step(case.build(), str(path), unit=case.unit)
             else:
                 bd.export_step(case.build(), str(path))
-            result = cad.step.check(path, process="cnc", **case.options)
+            result = cad.step.dfm(path, process="cnc", **case.options)
             document = brep.read("step", path)
             faces = {part.ref("face", n): face for part in document.parts
                      for n, face in enumerate(part.faces(), start=1)}

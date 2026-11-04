@@ -1,4 +1,4 @@
-"""``cad glb <operation>``: the GLB document type's commands (export, snapshot, inspect).
+"""``cad glb <operation>``: the GLB document type's commands (export, snapshot, inspect, dfm).
 
 The operations and their options are ``cad_server.cli.document_types``', from the registry
 (``cad.registry``); ``python -m cad_server.cli.glb <operation> ...`` runs what the ``cad`` command does.

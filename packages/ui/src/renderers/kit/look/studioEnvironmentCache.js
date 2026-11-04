@@ -1,5 +1,3 @@
-import * as THREE from 'three';
-
 // Per GPU device (`studioEnvironmentCacheFor`: every view of the shared device draws from one, so the
 // editor can prepare what Preview will show), else per viewport: at most one preparing worker
 // and three owned PMREM textures.
@@ -53,15 +51,9 @@ export function createStudioEnvironmentCache({ maxEntries = 3 } = {}) {
         // after the settings paint, but PMREM itself is synchronous there.
         resource = studio.createEnvironmentResource(renderer, configuration, { size });
       } else {
-        const { data, width, height } = await pixels(configuration, size, signal);
+        const read = await pixels(configuration, size, signal);
         signal?.throwIfAborted();
-        const texture = new THREE.DataTexture(data, width, height, THREE.RGBAFormat, THREE.HalfFloatType);
-        texture.mapping = THREE.CubeUVReflectionMapping;
-        texture.minFilter = texture.magFilter = THREE.LinearFilter;
-        texture.colorSpace = THREE.LinearSRGBColorSpace;
-        texture.needsUpdate = true;
-        let released = false;
-        resource = { identity, texture, dispose() { if (!released) { released = true; texture.dispose(); } } };
+        resource = studio.environmentResourceFromPixels(renderer, identity, read);
       }
       if (disposed || signal?.aborted) { resource.dispose(); throw new DOMException('Viewer closed', 'AbortError'); }
       entries.set(identity, resource);

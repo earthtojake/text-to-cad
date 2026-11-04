@@ -12,7 +12,7 @@ prints each one's id and page:
 
 ```
 cd planetary_gear_assembly && python planetary_gear_assembly.py
-cad xbf snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
+cad model snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the run printed
 ```
 
 | Script | Model | What it is |
@@ -42,7 +42,7 @@ cad xbf snapshot "$ID" gear.png --pose half_cycle      # ID: the id: line the ru
 
 - `@step(out="../../STEP/<group>/<name>.step")` became `@model`. `build123d` is
   imported directly. Nothing else reads these models' STEP, so no model declares
-  one; `cad xbf export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
+  one; `cad model export <id> STEP/<name>.step` writes one on demand. The docs hero's GLB
   is the planetary gear's, written by hand with `cad <type> export`.
 - No model calls another. `link_robot`'s arm and pin and `research_humanoid`'s
   hands are plain functions called in the one body (the hand models' two scripts

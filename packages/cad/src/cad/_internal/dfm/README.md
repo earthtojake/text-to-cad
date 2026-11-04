@@ -1,6 +1,6 @@
 # The manufacturing checks
 
-`cad.<type>.check(source, process=...)` and `cad <type> check SRC --process cnc|sheet|molding|printing`:
+`cad.<type>.dfm(source, process=...)` and `cad <type> dfm SRC --process cnc|sheet|molding|printing`:
 whether a part can be made by a process, and what to change where it cannot. This is the mechanism; the
 library README's **Manufacturing checks** says what the check is for and how it is called.
 
@@ -60,7 +60,7 @@ for a verdict, a `hint` saying what to change), `summary` and `measurements`, th
   finite: the result is JSON (`allow_nan=False`), and a report that is not is `not_finite`.
 - The source unreadable is `document_unreadable` or `mesh_unreadable`, a missing file `invalid_target`.
 
-The Python functions: `cad.<type>.check(path_or_id, process=..., ...)`; on a live shape
+The Python functions: `cad.<type>.dfm(path_or_id, process=..., ...)`; on a live shape
 `cad.build123d.cnc(shape)`, `sheet_metal`, `molding`, `printing` (the same `CheckResult`, refs as the
 engine would name its document) and `cad.build123d.unfold(shape, k_factor=)`; on a mesh a program holds
 `cad.trimesh.molding(mesh)`, `pulls`, `printing`, `orientations` (the report as data).
@@ -208,7 +208,7 @@ narrow gaps; turning: ID groove depth beyond the bore, parting/chucking allowanc
 ## Sheet metal
 
 A STEP, an xbf or a live shape (`cad.build123d.sheet_metal(shape)`) is measured on its exact B-rep
-(`cad.build123d._dfm_sheet`); a DXF cut file (`cad dxf check FILE --process sheet`) with ezdxf
+(`cad.build123d._dfm_sheet`); a DXF cut file (`cad dxf dfm FILE --process sheet`) with ezdxf
 (`cad.build123d._dfm_dxf`). A mesh is refused (a sheet's radii and thickness are not on a mesh). Options:
 `--thickness` (the stock's, compared with the measured; a mismatch is `sheet.thickness_mismatch`),
 `--k-factor` (default: SendCutSend's calculator K for its own gauges with `--rules sendcutsend`, else Hubs's
@@ -350,7 +350,7 @@ are read from the outside mold line (stated in each rule's note).
 
 ## Injection molding
 
-`cad <type> check SRC --process molding [--pull z|-y|x,y,z] [--wall-limit 45] [--zero-tol 0.05]
+`cad <type> dfm SRC --process molding [--pull z|-y|x,y,z] [--wall-limit 45] [--zero-tol 0.05]
 [--cavities N] [--material abs|pc|...] [--rules generic|protolabs|hubs|xometry|none] [--candidates]`
 
 A STEP, an xbf or a model's document is measured on its B-rep (`cad.build123d._dfm_molding`); every item
@@ -435,7 +435,7 @@ PP 0.035-0.150, PS 0.035-0.150 PPS 0.020-0.180, polyurethane 0.080-0.750, long-f
 
 ### The check
 
-`cad <type> check --process printing` (`cad.step.check(..., process="printing")`,
+`cad <type> dfm --process printing` (`cad.step.dfm(..., process="printing")`,
 `cad.build123d.printing(shape, ...)`) measures a part as it stands on the plate (its lowest point, Z up) for one
 technology: `--technology fdm|sls|sla|mjf|pbf` (default `fdm`; `pbf` is metal powder bed fusion, DMLS/SLM).
 Options: `--build-volume XxYxZ` (mm; default the rule set's machine for the technology), `--angle-limit` (deg from

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 
 """Injection molding's planted-defect corpus: parts built with a known defect, and clean controls, checked
-the way an agent checks them (``cad.step.check(..., process="molding")``, and an STL of some of them through
-``cad.stl.check``), every verdict compared with the construction's ground truth.
+the way an agent checks them (``cad.step.dfm(..., process="molding")``, and an STL of some of them through
+``cad.stl.dfm``), every verdict compared with the construction's ground truth.
 
 The ground truth is the construction's, here: each part says which rules must fail and in what region (a
 box in millimetres: a finding's place -- its face's centre for a ref, its x, y, z for a mesh -- must fall in
@@ -309,14 +309,14 @@ class MoldingCorpusTest(unittest.TestCase):
                 bd.export_step(shape.scale(1 / 25.4), str(step), unit=bd.Unit.IN)
             else:
                 bd.export_step(shape, str(step))
-            result = cad.step.check(str(step), process="molding", rules=case.rules, material="abs")
+            result = cad.step.dfm(str(step), process="molding", rules=case.rules, material="abs")
             cls.results[case.name] = result
             _score(case.name, result, case.expect, case.absent, _Places(step), cls.tallies)
             if case.mesh:
                 stl = root / f"{case.name}.stl"
                 tolerance, angular = (0.2, 0.6) if case.mesh == "coarse" else (0.01, 0.1)
                 bd.export_stl(shape, str(stl), tolerance=tolerance, angular_tolerance=angular)
-                meshed = cad.stl.check(str(stl), process="molding", rules=case.rules, material="abs")
+                meshed = cad.stl.dfm(str(stl), process="molding", rules=case.rules, material="abs")
                 cls.results[f"{case.name}.stl"] = meshed
                 _score(f"{case.name}.stl ({case.mesh})", meshed,
                        case.expect if case.mesh_expect is None else case.mesh_expect,

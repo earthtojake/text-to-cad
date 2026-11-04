@@ -15,10 +15,11 @@ KiCad's boards and the `kicad` integration together.
 
 How an integration gets installed on a person's computer is covered for a Python library alone: `cad
 run` makes a program's environment with the integrations its imports use, and an operation the `cad`
-command runs that needs one its own environment lacks (a 3D type's `check`, the `trimesh`
+command runs that needs one its own environment lacks (a 3D type's `dfm`, the `trimesh`
 integration's) runs in the environment of that integration, made once by the engine the same way
-(`cad_server/_internal/integration_env.py`). An external program is the person's to install, found by
-its probe; `cad doctor` reports no integration, and this guide does not decide how either will.
+(`cad_server/_internal/integration_env.py`). An external program that ships as a Python package (KiCad's
+`kicad-cli`, in kicode) is its integration's extra and installs the same way; any other is the person's to
+install, found by its probe. `cad doctor` reports no integration.
 
 ## Is it really an integration?
 
@@ -56,13 +57,14 @@ an integration.
 - [ ] **Producer registration.** Each producer is `(type, matcher, writer, integration)`, with what it
       accepts and which parts of the type's content it provides. A producer whose decorator does more
       than the engine's model declares it (`declare`, for the targets `decorates` takes): KiCad's
-      `@kicad_pcb` board script, and the `@step` stacked on one. A matcher reads type names and
+      `@kicad_pcb` board script, and the `@step`, `@glb` and `@dxf` stacked on one. A matcher reads type names and
       modules, never imports the library. Exactly one producer per return type per document type
       (`tests/python/packages/cad/test_registry.py`).
 - [ ] **An external program's probe and headless rules**: found through the library's one helper
       (`packages/cad/src/cad/_internal/programs.py`, the standard library alone, which the server's
-      commands import too) -- the override, then `PATH`, then the places the tool
-      installs itself; the minimum version checked; run headless with a private home and no display;
+      commands import too) -- the override, then `PATH` (never, for a program the extra carries:
+      `search_path=False`), then the places the tool installs itself or the extra's package;
+      the minimum version checked; run headless with a private home and no display;
       one missing-tool result saying the install hint. Only the program itself is ever run, never a
       desktop app or a wrapper that starts one; test each rule.
 - [ ] **Licensing**: the tool's license allows how we call it (a library we import, a program we run)

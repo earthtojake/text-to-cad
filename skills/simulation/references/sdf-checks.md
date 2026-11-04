@@ -1,6 +1,6 @@
 # SDF validation and smoke tests
 
-Every created or modified `.sdf` is validated with `cad sdf check <file.sdf>` before the task is reported complete. The validator collects all findings in one pass (severity, code, XML path); `--strict` fails on warnings and `--json` emits a machine-readable document. The bundled validation is dependency-light and intended to catch common structural errors. It is not a replacement for libsdformat, Gazebo, or target-simulator validation.
+Every created or modified `.sdf` is validated with `cad sdf validate <file.sdf>` before the task is reported complete. The validator collects all findings in one pass (severity, code, XML path); `--strict` fails on warnings and `--json` emits a machine-readable document. The bundled validation is dependency-light and intended to catch common structural errors. It is not a replacement for libsdformat, Gazebo, or target-simulator validation.
 
 ## Validation model
 
@@ -167,15 +167,15 @@ Use smoke tests after the SDF passes bundled validation. The goal is to catch si
 ### Bundled validation
 
 ```bash
-cad sdf check path/to/model.sdf
-cad sdf check path/to/model.sdf --strict
+cad sdf validate path/to/model.sdf
+cad sdf validate path/to/model.sdf --strict
 ```
 
 Use `--strict` when warnings should block handoff. It is safe on any machine: the default `--gz-check auto` notes a missing `gz` as `info` rather than a finding against the file, so `--strict` fails only on the document's own warnings.
 
 ### SDFormat parser check
 
-`cad sdf check` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
+`cad sdf validate` already runs `gz sdf --check` whenever `gz` is on PATH. Run it directly to read the parser's own output:
 
 ```bash
 gz sdf --check path/to/model.sdf
@@ -184,7 +184,7 @@ gz sdf --check path/to/model.sdf
 or make it mandatory, so a missing `gz` is an error instead of a note:
 
 ```bash
-cad sdf check path/to/model.sdf --gz-check required
+cad sdf validate path/to/model.sdf --gz-check required
 ```
 
 Use the exact simulator environment that will consume the file when possible.

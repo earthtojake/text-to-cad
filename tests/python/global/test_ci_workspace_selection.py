@@ -299,7 +299,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         library = "packages/cad/src/cad/engine/formats/kicad/plot.py"
         self.assertEqual(jobs_for(library), GATED - {"core-js", "web", "mcp", "api", "docs"})
         self.assertEqual(tests_for(library)["cadgen_tests"], [CADGEN])
-        self.assertIn("kicad", jobs_for("packages/cad-server/src/cad_server/kicad/cli.py"))
+        self.assertIn("kicad", jobs_for("packages/cad/src/cad/kicad/_check.py"))
         # The KiCad suite and its runner are that job's alone: no package job collects them.
         for path in ("tests/python/packages/kicad/test_native_files.py", "scripts/test/test-kicad.sh"):
             with self.subTest(path=path):

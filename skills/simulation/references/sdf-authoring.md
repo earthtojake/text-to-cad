@@ -13,7 +13,7 @@ Prefer `version="1.12"` for new outputs unless the target consumer constrains th
 5. If the model describes a robot that already has a URDF, derive the SDF from that URDF rather than re-authoring geometry from scratch (see [interoperability.md](interoperability.md#sdf-from-a-urdf)).
 6. For every pose and axis, state the frame in which it is expressed. Write `relative_to` / `expressed_in` explicitly wherever ambiguity would otherwise remain (see [sdf-frames.md](sdf-frames.md)).
 7. Author the XML per the golden skeletons in [sdf-examples.md](sdf-examples.md). Compute derived numbers — inertia tensors, unit conversions — with formulas or a throwaway helper script; never freehand them ([inertials.md](inertials.md)). Mesh URIs and scale: [meshes.md](meshes.md).
-8. Validate with `cad sdf check <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof ([sdf-checks.md](sdf-checks.md)).
+8. Validate with `cad sdf validate <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof ([sdf-checks.md](sdf-checks.md)).
 9. Show new or modified `.sdf` files ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 10. Run available smoke tests (`gz sdf --check`, simulator load; [sdf-checks.md](sdf-checks.md#smoke-tests)).
 11. Report assumptions, skipped checks, unresolved resource paths, and target-specific compatibility risks ([guardrails.md](guardrails.md#the-report)).

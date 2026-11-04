@@ -775,6 +775,17 @@ class ApplyReadBackAndTakeBack(Fixture):
         undo = providers.uninstall_plan(home.detect(), None, machine=home.machine, folder=home.folder)
         self.assertEqual([(step.app, step.action) for step in undo], [("gemini", "remove")])
 
+    def test_a_retired_loose_skill_in_a_plugin_app_s_folder_is_deleted(self) -> None:
+        home = self.make(("gemini",))
+        retired = home.skill(home.home / ".gemini" / "skills", providers.RETIRED_SKILLS[0])
+        (step,) = [step for step in home.plan() if step.action == "remove duplicate"]
+        self.assertEqual(step.edit, {"op": "remove", "path": str(retired), "unlock": True})
+        ok, (record,) = providers.apply(step, home.machine, aside=self.root / "aside")
+        self.assertTrue(ok)
+        self.assertFalse(retired.exists())
+        self.assertFalse((self.root / "aside").exists(), "deleted, not moved aside")
+        self.assertEqual(record["kind"], "remove")
+
     def test_a_loose_skill_moved_aside_leaves_the_skills_cli_s_record_too(self) -> None:
         # `npx skills update` installs again what its record names once the repository's skills change: a loose
         # copy from GitHub, moved aside, goes from it; one it installed from the plugin folder stays.
@@ -808,18 +819,30 @@ class SkillsForAgentsWithoutAPlugin(Fixture):
                          sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md")))
         self.assertFalse(set(providers.RETIRED_SKILLS) & set(providers.SKILLS))
 
-    def test_a_retired_skill_of_ours_is_moved_aside_and_an_uninstall_removes_one_a_later_install_left(self) -> None:
-        # The Skills CLI adds skills and never removes one: what an earlier release shipped stays loaded.
+    def test_a_retired_skill_of_ours_is_deleted_and_an_uninstall_removes_one_a_later_install_left(self) -> None:
+        # The Skills CLI adds skills and never removes one: what an earlier release shipped stays loaded. Nothing
+        # ships it any more, so it is deleted, not moved aside, and its record from GitHub goes with it.
         home = self.make(("npx",))
         self.agents(home, "windsurf")
+        home.machine.environ.pop("XDG_STATE_HOME", None)
         folder = home.home / ".codeium" / "windsurf" / "skills"
         retired = home.skill(folder, providers.RETIRED_SKILLS[0])
+        lock = providers.skills_lock(home.machine)
+        lock.parent.mkdir(parents=True, exist_ok=True)
+        lock.write_text(json.dumps({"version": 3, "skills": {retired.name: {"source": providers.REPOSITORY,
+                                                                            "sourceType": "github"}}}), encoding="utf-8")
         where = providers.shown(folder, home.machine)
         steps = home.plan()
         self.assertIn(("remove retired", f"{retired.name} in {where}: text-to-cad {RELEASE} no longer ships it"),
                       [(step.action, step.subject) for step in steps])
-        home.apply([step for step in steps if step.action == "remove retired"])
+        (step,) = [step for step in steps if step.action == "remove retired"]
+        self.assertEqual(step.edit, {"op": "remove", "path": str(retired), "unlock": True})
+        ok, (record,) = providers.apply(step, home.machine, aside=self.root / "aside")
+        self.assertTrue(ok)
         self.assertFalse(retired.exists())
+        self.assertFalse((self.root / "aside").exists(), "deleted, not moved aside")
+        self.assertEqual(json.loads(lock.read_text(encoding="utf-8"))["skills"], {})
+        self.assertEqual((record["kind"], record["unlocked"]), ("remove", str(lock)))
         # Another's skill by that name is not ours to move.
         home.skill(folder, providers.RETIRED_SKILLS[0], ours=False)
         self.assertNotIn("remove retired", [step.action for step in home.plan()])

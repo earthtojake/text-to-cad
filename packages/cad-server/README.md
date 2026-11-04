@@ -28,7 +28,7 @@ src/cad_server/
                          #   absolute path (backend), a file's catalog row (scanner), the explorer's reads (folders), the model library
                          #   every CAD view shares (recents), a STEP's and an .xbf's serve
                          #   by the engine and in-process document reads (documents), a DXF's
-                         #   payload (drawings), a KiCad board's plot (plots), a robot's
+                         #   payload (drawings), a KiCad board's or schematic's plot (plots), a robot's
                          #   (robots), Quick Edit's packets (prompt_files)
   mcp/                   # the engine's MCP endpoint: its JSON-RPC vocabulary (protocol),
                          #   engine sessions (http), tools and launches (server), the agent
@@ -40,11 +40,9 @@ src/cad_server/
                          #   articulation, its visuals in rest space, the facts a person
                          #   reads off it; held in memory
   drawing_payload.py     # a DXF flattened by ezdxf for the viewer's pane
-  kicad/                 # the kicad integration: the installed kicad-cli found and checked
-                         #   (install, on the one helper for external programs,
-                         #   the library's cad._internal.programs), KiCad's design rule check (`cad kicad_pcb
-                         #   check`: check, cli) and its fabrication exports (`cad kicad_pcb
-                         #   export`: export), each run headless in private homes
+  kicad/                 # a KiCad schematic's electrical rules check and exports (`cad kicad_sch
+                         #   check|export`: schematic), by the kicad integration's kicad-cli, headless
+                         #   in private homes
   jobs.py                # the agent operations' and the viewer exports' admission, progress,
                          #   waiting and cancellation
   analytics.py           # telemetry: usage counts and crash reports, on by default once
@@ -79,21 +77,24 @@ src/cad_server/
 ## Commands
 
 A document type's commands are `cad <document_type> <operation> <file>`, one id per type as the
-library's registry names it (`cad.registry`): `cad xbf export`, `cad step snapshot`, `cad glb inspect`,
-`cad urdf check`, and the rest `cad --help` lists, grouped by type. `export`, `snapshot` and `inspect`
-are the engine's verbs (`snapshot` draws every file the viewer opens, a DXF or a robot among them), and
-`check` a type's checks (its findings, each a severity, a code and a location; `--json`); `cad <type>
+library's registry names it (`cad.registry`): `cad model export <id>`, `cad xbf export`, `cad step snapshot`,
+`cad glb inspect`, `cad urdf validate`, and the rest `cad --help` lists, grouped by type. `model` is a model
+the engine holds, by its document id, with no file; every other type takes a file of its own. `export`,
+`snapshot` and `inspect` are the engine's verbs, shared by every type that has them (`snapshot` draws every
+file the viewer opens, a DXF or a robot among them); every other operation is named for what it does --
+`dfm`, `drc`, `erc`, `validate` -- each a check (its findings, each a severity, a code and a location;
+`--json`); `cad <type>
 --help` lists a type's operations, `cad <type> <operation> --help` its options, and a file of another
 type is refused by name (`cli/document_types.py`, each type's module `cli/<type>.py`). A KiCad board's
-`check` and `export` are the `kicad` integration's: `cad kicad_pcb check` is KiCad's design rule check
+`drc` and `export` are the `kicad` integration's: `cad kicad_pcb drc` is KiCad's design rule check
 (it fails on errors or unconnected items, says the warnings, and answers `kicad_failed` when KiCad refuses
 the board) and `cad kicad_pcb export BOARD --to gerbers|drill|pos|step -o DIR` its fabrication outputs,
 each by the installed `kicad-cli`, found by the one helper for the external programs our code runs
 (the library's `cad._internal.programs`: `CAD_KICAD_CLI`, refused unless it names a `kicad-cli`, else `kicad-cli` on
 PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
 headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
-`.kicad_*` file, and viewing a board needs no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
-check SRC --process cnc|sheet|molding|printing`, and `cad dxf check FILE --process sheet` of a cut file) is
+`.kicad_*` file, and viewing a board needs no KiCad. A 3D type's `dfm` (`cad model|xbf|step|stl|glb|threemf
+dfm SRC --process cnc|sheet|molding|printing`, and `cad dxf dfm FILE --process sheet` of a cut file) is
 the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
 STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
 `trimesh` integration, and judged against a cited rule set (`--rules`), every measurement and every rule's
@@ -134,8 +135,13 @@ the `cad` command, which runs the current installation, else the one registered 
 (`_internal/proxy.py`). The CAD app an agent
 host starts is `cad-mcp`, of the `cad-mcp` distribution, which reaches this server.
 
-The state folder is `cad` in the platform's place for state (`cad-state` on Windows),
-the cache folder `cad` in its place for caches. On a computer an earlier release (0.8, named
+The state folder is `cad` in the platform's place for state, the cache folder `cad` in its
+place for caches; on Windows they are where Linux keeps them, `~\.local\state\cad` and
+`~\.cache\cad`, never in the local application data, which Windows virtualizes for every process
+an app package (the Claude desktop app) starts. Where 0.10.0 kept them there (`cad-state` and `cad`
+in `%LOCALAPPDATA%`), the same commands move the settings, the documents' records and their bytes,
+Recents, the receipt, the page token and the port the engine remembers once, `cad setup` stops 0.10.0's
+engine by its own `cad stop`, and `cad doctor --prune` removes the rest a week after its last write. On a computer an earlier release (0.8, named
 cadgen) set up, `cad setup`, `cad doctor` and a registration move what this release keeps of the
 earlier state folder into this one, each thing once and only where this one has none of it: the
 settings, the documents' records, Recents and the setup receipt (`cad.engine.places.adopt`); the

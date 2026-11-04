@@ -345,11 +345,19 @@ class TabServerTest(_Session):
         self.assertEqual(event["launch"]["model"], str(board))
         status, opened = self.http("POST", "/api/v1/documents", {"path": str(board)})
         self.assertEqual((status, opened["kind"]), (201, "kicad_pcb"))
-        status, first = self.http("GET", f"{opened['api']}/plot")
+        def plotted():
+            # Made off the request: a 202 while it is, asked again as the page does.
+            for _ask in range(200):
+                status, body = self.http("GET", f"{opened['api']}/plot")
+                if status != 202:
+                    return status, body
+            return status, body
+
+        status, first = plotted()
         self.assertEqual(status, 200)
         board.write_text(BOARD.replace('(width 1) (layer "F.Cu") (net "VBUS")',
                                        '(width 0.5) (layer "F.Cu") (net "VBUS")'), encoding="utf-8")
-        status, changed = self.http("GET", f"{opened['api']}/plot")
+        status, changed = plotted()
         self.assertEqual(status, 200)
         self.assertNotEqual(first, changed)
         self.assertEqual(self.opened, [])
@@ -1244,8 +1252,8 @@ class ToolArgumentsTest(unittest.TestCase):
             return schema["enum"][0]
         kind = schema.get("type")
         kind = kind[0] if isinstance(kind, list) else kind
-        return {"string": str(self.tmp / "out.png"), "integer": schema.get("minimum", 0), "boolean": False,
-                "object": {}, "array": []}[kind]
+        return {"string": str(self.tmp / "out.png"), "integer": schema.get("minimum", 0),
+                "number": schema.get("minimum", 0), "boolean": False, "object": {}, "array": []}[kind]
 
     def test_every_schema_property_is_one_its_handler_takes(self) -> None:
         for catalog in CATALOGS:

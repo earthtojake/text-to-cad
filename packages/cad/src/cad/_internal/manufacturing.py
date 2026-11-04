@@ -1,8 +1,8 @@
-"""The manufacturing check every 3D document type shares: ``cad.<type>.check(source, process=...)``.
+"""The manufacturing check every 3D document type shares: ``cad.<type>.dfm(source, process=...)``.
 
-``stl``, ``threemf``, ``glb``, ``step`` and ``xbf`` each answer ``check`` with the same function, made
-for the type here (``check_for``): its signature takes a path (or, for a document the engine holds, its
-id or handle) and plain values alone, so it is the type's (the signature rule). Four processes, each a
+``model``, ``stl``, ``threemf``, ``glb``, ``step``, ``xbf`` and, as a sheet's cut file, ``dxf`` each answer
+``dfm`` with the same function, made for the type here (``dfm_for``): its signature takes a path (or, for a
+model, its document id or handle) and plain values alone, so it is the type's (the signature rule). Four processes, each a
 module of ``cad._internal.dfm`` (its options, rule sets, findings and summary):
 
 - ``cnc``, milling and turning: internal corners, pockets and slots, walls, holes, tool access per setup,
@@ -14,7 +14,7 @@ module of ``cad._internal.dfm`` (its options, rule sets, findings and summary):
 - ``printing``, 3D printing by a technology: walls, features, overhangs, bridges, holes, trapped volumes,
   build volume and support, or with ``candidates`` the orientations ranked.
 
-**Two layers.** The measurement is an integration's: a STEP, an xbf and a document the engine holds are
+**Two layers.** The measurement is an integration's: a STEP, an xbf and a model's document are
 measured on their B-rep, exactly, by the build123d integration (``cad.build123d._dfm_check``), each
 finding at a ref ``cad xbf inspect`` resolves (``plate/face 7``); an STL, a 3MF and a GLB by the trimesh
 integration (``cad.trimesh._check``), each finding at ``x, y, z``. The report is the result's
@@ -39,12 +39,12 @@ from typing import Any
 from cad._internal import dfm
 from cad.results import CheckFinding, CheckResult
 
-__all__ = ["BREP_TYPES", "DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "check_for", "finish", "options"]
+__all__ = ["BREP_TYPES", "DEFAULTS", "OPTIONS", "PROCESSES", "UNITS_MM", "dfm_for", "finish", "options"]
 
 PROCESSES = dfm.PROCESSES
 #: The types measured on their B-rep (the build123d integration); the rest are meshes (trimesh), but a DXF,
 #: a sheet's cut file, checked by the build123d integration's DXF library (ezdxf).
-BREP_TYPES = ("step", "xbf")
+BREP_TYPES = ("model", "step", "xbf")
 CUT_TYPES = ("dxf",)
 #: Length units a mesh file may carry, as a factor to millimetres. An STL is unitless, so the caller says
 #: which one; the other types declare theirs.
@@ -61,6 +61,7 @@ DEFAULTS = {**dfm.COMMON, **{name: value for given in OPTIONS.values() for name,
 # The types that declare their own units, read as millimetres: a units option is the STL's alone.
 _DECLARED = {"threemf": "a 3MF declares its unit", "glb": "a GLB is in glTF's metres",
              "step": "a STEP declares its units", "xbf": "an xbf is in millimetres",
+             "model": "a model is in millimetres",
              "dxf": "a DXF declares its units ($INSUNITS)"}
 # The processes that rank candidates: the pulls, the orientations.
 _RANKED = ("molding", "printing")
@@ -76,7 +77,7 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *, c
     process, a pull beside ``candidates`` (which ranks every pull), ``candidates`` of a process that ranks
     none, a units the type does not take, a rule set the process has not, or a value out of range."""
     if process is None:
-        raise ValueError(f"cad.{document_type}.check measures for a process: give --process "
+        raise ValueError(f"cad.{document_type}.dfm measures for a process: give --process "
                          f"{', '.join(PROCESSES[:-1])} or {PROCESSES[-1]}")
     module = dfm.module(process)
     if document_type in CUT_TYPES and process != "sheet":
@@ -106,20 +107,9 @@ def options(document_type: str, process: str | None, given: dict[str, Any], *, c
     materials.resolve(resolved.get("material"))
     if "mesh" not in module.MEASURED_FROM and document_type not in (*BREP_TYPES, *CUT_TYPES):
         raise ValueError(f"a {process} check measures exact geometry -- radii, axes, thicknesses -- that a mesh "
-                         f"does not hold: check the part's STEP or xbf (cad step check, cad xbf check)")
+                         f"does not hold: check the part's STEP, xbf or model (cad step dfm, cad xbf dfm, cad model dfm)")
     module.validate(resolved, document_type)
     return resolved
-
-
-def _own(document_type: str, source: Any) -> None:
-    """A file of another type refused by name (``part.glb is a glb, not a stl: use cad.glb``)."""
-    if not isinstance(source, (str, os.PathLike)):
-        return
-    from cad.registry import type_of
-
-    found = type_of(source)
-    if found is not None and found.id != document_type:
-        raise ValueError(f"{os.fspath(source)} is a {found.id}, not a {document_type}: use cad.{found.id}")
 
 
 def _label(source: Any) -> Path:
@@ -192,10 +182,10 @@ def measure(document_type: str, source: Any, process: str, resolved: dict[str, A
     return finish(label, {"process": process, **report}, process, resolved, candidates)
 
 
-def check_for(document_type: str) -> Any:
-    """``cad.<document_type>.check``: the manufacturing check, for a source of that type."""
+def dfm_for(document_type: str) -> Any:
+    """``cad.<document_type>.dfm``: the manufacturing check, for a source of that type."""
 
-    def check(
+    def dfm(
         source: Path,
         *,
         process: str | None = None,
@@ -226,13 +216,15 @@ def check_for(document_type: str) -> Any:
         """Check a part for a manufacturing process: CNC machining, sheet metal, injection molding or 3D printing.
 
         A STEP, an xbf or a model's document is measured on its exact geometry, each finding at a face ref
-        (cad xbf inspect DOC REF resolves it); a mesh (STL, 3MF, GLB) as triangles, at x, y, z. The
+        (cad xbf inspect DOC REF resolves it); a mesh (STL, 3MF, GLB) as triangles, at x, y, z; a DXF as a
+        sheet's cut file. The
         measurements are facts; the verdicts are a rule set's (--rules, generic by default: a starting
         point, no shop's limits), each finding coded by its rule, with the limit, the source and what to
         change. A rule broken is an error, as is a family that could not be measured; --rules none reports
         facts alone. --json carries every measurement and every rule's outcome.
 
-        source: the file to check (a .step, .xbf, .stl, .3mf or .glb, or a document id the engine holds).
+        source: what to check: a file of the type (a .step, .xbf, .stl, .3mf, .glb, or a .dxf cut file), or a
+          model's document id the engine holds (cad model dfm), or the handle its call returns.
         process: cnc, sheet, molding or printing.
         rules: the rule set the verdicts come from: generic (default), a shop's (protolabs, hubs, xometry, sendcutsend: those the process has), or none.
         material: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits.
@@ -266,7 +258,9 @@ def check_for(document_type: str) -> Any:
                  "build_volume": build_volume, "angle_limit": angle_limit, "samples": samples,
                  "layer_height": layer_height, "nozzle": nozzle}
         resolved = options(document_type, process, given, candidates=candidates)
-        _own(document_type, source)
+        from cad._internal.document_type import refuse_other
+
+        refuse_other(document_type, source)
         assert process is not None
         try:
             return measure(document_type, source, process, resolved, candidates)
@@ -278,6 +272,6 @@ def check_for(document_type: str) -> Any:
                 raise
             raise ModuleNotFoundError(said, name=error.name) from None
 
-    check.__module__ = f"cad.{document_type}"
-    check.__qualname__ = "check"
-    return check
+    dfm.__module__ = f"cad.{document_type}"
+    dfm.__qualname__ = dfm.__name__ = "dfm"
+    return dfm

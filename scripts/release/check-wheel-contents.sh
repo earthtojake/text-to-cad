@@ -50,7 +50,7 @@ LIBRARY_REQUIRED=(
   "cad/_internal/lazy_kernel.py"
   "cad-lazy-kernel.pth"
   # The document types and their registry, and the robot checks' library: a packaging regression
-  # here would ship a server whose `cad urdf check` cannot import.
+  # here would ship a server whose `cad urdf validate` cannot import.
   "cad/registry.py"
   "cad/_internal/document_type.py"
   "cad/_internal/aliases.py"

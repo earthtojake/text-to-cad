@@ -27,7 +27,7 @@ Keep the simulator document aligned with the upstream robot-description source w
 
 **Derive, don't re-author.** When a robot already has a URDF, the SDF model for that robot is derived from it: same link/joint names, same tree, same limits, same inertials, same mesh assets. Translate mechanically — URDF joint `<origin>` becomes the SDF joint `<pose relative_to="parent_link">`, and each child link gets `<pose relative_to="joint_name">0 0 0 0 0 0</pose>` (the frame-graph pattern in [sdf-examples.md](sdf-examples.md#two-link-model-with-an-explicit-joint-frame)) — or use `gz sdf -p robot.urdf` as a starting point when Gazebo tooling is available, then review its output against this skill's contract. Independently re-authoring the same robot in SDF creates divergence that no validator catches. Record the source URDF (path and revision) in the SDF ledger comment.
 
-Joint names colliding with link names break URDF-to-SDF conversion; `cad urdf check` warns about them.
+Joint names colliding with link names break URDF-to-SDF conversion; `cad urdf validate` warns about them.
 
 Upstream robot-description data usually owns:
 

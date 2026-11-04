@@ -1,7 +1,7 @@
 """``cad.srdf``: the SRDF document type (``cad.registry``), a MoveIt2 semantic description.
 
-No decorator, for the reason :mod:`cad.urdf` gives. ``cad srdf check`` is a generated
-MIRROR of :func:`check`; ``cad srdf snapshot`` draws one.
+No decorator, for the reason :mod:`cad.urdf` gives. ``cad srdf validate`` is a generated
+MIRROR of :func:`validate`; ``cad srdf snapshot`` draws one.
 
 An SRDF is only meaningful against its URDF. ``urdf=`` (``--urdf``) names it; without it, the
 paired URDF is found from the SRDF's robot name and directory, and a missing pairing is itself
@@ -14,12 +14,12 @@ from pathlib import Path
 
 from cad.results import CheckResult
 
-__all__ = ["check"]
+__all__ = ["validate"]
 
 SUFFIX = ".srdf"
 
 
-def check(
+def validate(
     path: Path,
     *,
     strict: bool = False,

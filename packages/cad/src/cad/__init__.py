@@ -1,12 +1,13 @@
 """cad: CAD models as Python, built by its engine (``cad.engine``) into documents and the files they
 declare.
 
-The root holds ``model``, ``__version__``, ``CadDeprecationWarning`` and the document types, one object
-each (``cad.registry``): ``xbf``, ``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``,
-``srdf`` and ``kicad_pcb``. A type is its decorator where it has one (``@step("arm.step")``, a board
+The root holds ``__version__``, ``CadDeprecationWarning`` and the document types, one object each
+(``cad.registry``): ``model`` (a model built from code, held in the engine's memory, with no file), ``xbf``,
+``step``, ``glb``, ``stl``, ``threemf``, ``dxf``, ``urdf``, ``sdf``, ``srdf``, ``kicad_pcb`` and
+``kicad_sch``. A type is its decorator where it has one (``@model``, ``@step("arm.step")``, a board
 script's ``@kicad_pcb("board.kicad_pcb")``), its reader where it has one (``step.read``) and its
-operations, one to one with the ``cad <type> <operation>`` commands (``.export``, ``.snapshot``,
-``.inspect``, ``.check``). Our helpers that take build123d's objects are
+operations, one to one with the ``cad <type> <operation>`` commands: ``.export`` and ``.snapshot``,
+``.inspect``, and those named for what they do (``.dfm``, ``.drc``, ``.erc``, ``.validate``). Our helpers that take build123d's objects are
 the build123d integration's, ``cad.build123d`` (``memo``, ``paint``, the AP242 mechanism, a GLB's
 ``animation``, measurements, flat patterns); those that take trimesh's are the trimesh integration's,
 ``cad.trimesh`` (a mesh's manufacturing measurements: ``molding``, ``pulls``, ``printing``,
@@ -50,7 +51,7 @@ del _install_font_guard
 # and a process the server did not start -- a model's own, in the CAD kernel environment -- counts nothing.
 
 # The document types (``cad.registry.DOCUMENT_TYPES``), each a subpackage that is a ``DocumentType``.
-_TYPES = ("xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb")
+_TYPES = ("model", "xbf", "step", "stl", "glb", "threemf", "dxf", "urdf", "srdf", "sdf", "kicad_pcb", "kicad_sch")
 
 # The integrations' namespaces (``cad.registry.INTEGRATIONS``): our helpers that take each tool's objects.
 _INTEGRATIONS = ("build123d", "kicad", "trimesh")
@@ -58,7 +59,6 @@ _INTEGRATIONS = ("build123d", "kicad", "trimesh")
 __all__ = [
     "__version__",
     "CadDeprecationWarning",
-    "model",
     *_TYPES,
 ]
 
@@ -74,10 +74,6 @@ def __getattr__(name: str):
         import importlib
 
         return importlib.import_module(f"{__name__}.{name}")
-    if name == "model":
-        import cad.engine as _engine
-
-        return _engine.model
     if name == "__version__":
         return _resolve_version()
     from cad._internal.aliases import lookup
@@ -95,8 +91,7 @@ def __dir__() -> list[str]:
 if _TYPE_CHECKING:
     # Mirrors the lazy __getattr__ above so type checkers and editors see the root without importing
     # OCP. Every name here must have a branch there.
-    from cad import dxf, glb, kicad_pcb, sdf, srdf, step, stl, threemf, urdf, xbf
-    from cad.engine.model import model
+    from cad import dxf, glb, kicad_pcb, kicad_sch, model, sdf, srdf, step, stl, threemf, urdf, xbf
 
 
 @_cache

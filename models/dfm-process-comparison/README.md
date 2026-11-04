@@ -64,10 +64,10 @@ python scripts/verify.py
 From the repository root, run these for `baseline` and `fdm`:
 
 ```sh
-cad stl check models/dfm-process-comparison/STL/fdm.stl --process printing --angle-limit 45 --json
-cad stl check models/dfm-process-comparison/STL/fdm.stl --process printing --candidates --angle-limit 45 --json
-cad stl check models/dfm-process-comparison/STL/injection.stl --process molding --pull z --json
-cad stl check models/dfm-process-comparison/STL/injection.stl --process molding --candidates --json
+cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --angle-limit 45 --json
+cad stl dfm models/dfm-process-comparison/STL/fdm.stl --process printing --candidates --angle-limit 45 --json
+cad stl dfm models/dfm-process-comparison/STL/injection.stl --process molding --pull z --json
+cad stl dfm models/dfm-process-comparison/STL/injection.stl --process molding --candidates --json
 ```
 
 (The checks above were run with the skills' measurement scripts these commands replaced; the figures are

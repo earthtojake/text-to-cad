@@ -68,18 +68,21 @@ _MODELS: dict[str, "Model"] = {}
 
 @dataclass(frozen=True)
 class Output:
-    """One file a model declares: its kind and path (None requests the CLI default)."""
+    """One file a model declares: its kind and path (None requests the CLI default), and an STL's
+    or a 3MF's own mesh tolerance in mm (None: the engine's)."""
 
     kind: str
     out: str | None
+    tolerance: float | None = None
 
 
 @dataclass(frozen=True)
 class Target:
-    """One file a build writes: its kind and its path."""
+    """One file a build writes: its kind, its path and its mesh tolerance (``Output``'s)."""
 
     kind: str
     path: Path
+    tolerance: float | None = None
 
 
 def check_output(kind: str, out: Any, where: str) -> None:
@@ -286,7 +289,7 @@ class Model:
     def plan(self) -> list[Target]:
         """The files a build of this model writes: what its decorators declare (law 10), the
         xbf first, then the derived files in the order the decorators are written."""
-        return [Target(output.kind, self._path(output.kind, output.out))
+        return [Target(output.kind, self._path(output.kind, output.out), output.tolerance)
                 for output in sorted(self.outputs, key=lambda output: output.kind != "xbf")]
 
     # --- the verbs, through the daemon (``cad.engine.api``) -----------------------------
@@ -408,33 +411,49 @@ def model(target: Any = None, /, *, name: str | None = None, animations: Any = N
     from cad.engine import api
 
     caller = sys._getframe(1)
-    while caller.f_back is not None and caller.f_code.co_filename == __file__:
+    # Past this module and ``cad.model``'s own call of it (``cad._internal.document_type``): the program's line.
+    while caller.f_back is not None and (caller.f_code.co_filename == __file__
+                                         or caller.f_globals.get("__name__") == "cad._internal.document_type"):
         caller = caller.f_back
     return api.hand_over(target, name, animations=animations, frame=caller)
 
 
 def _decorator(kind: str) -> Callable[..., Any]:
-    def decorate(out: Any, *, name: str | None = None) -> Any:
+    def declare(out: Any, name: str | None, tolerance: float | None) -> Any:
         if out is None:
             raise TypeError(f"@{kind} requires an output path")
         check_output(kind, out, f"@{kind}(out=...)")
         if name is not None:
             check_name(name)
+        if tolerance is not None:
+            from cad.engine.export import tolerance_of
+
+            tolerance = tolerance_of(tolerance, [out])
 
         def apply(target: Any) -> Model:
             model = target if isinstance(target, Model) else Model(target)
             model.declared(kind)
             if any(output.kind == kind for output in model.outputs):
                 raise TypeError(f"model {model.name!r} declares @{kind} twice")
-            model.outputs.insert(0, Output(kind, os.fspath(out)))
+            model.outputs.insert(0, Output(kind, os.fspath(out), tolerance))
             return model.named(name)
 
         return apply
 
+    # An STL and a 3MF take their own mesh tolerance (``export/__init__.py``); no other kind is meshed.
+    if kind in ("stl", "threemf"):
+        def decorate(out: Any, *, name: str | None = None, tolerance: float | None = None) -> Any:
+            return declare(out, name, tolerance)
+    else:
+        def decorate(out: Any, *, name: str | None = None) -> Any:
+            return declare(out, name, None)
+
     decorate.__name__ = kind
     decorate.__qualname__ = kind
     decorate.__doc__ = (f"Declare an explicit output: @{kind}(out='path{SUFFIXES[kind]}'), optionally named "
-                        "within the script folder by name=. The output path is required; decoration builds nothing.")
+                        "within the script folder by name=. The output path is required; decoration builds nothing."
+                        + (" tolerance= meshes it at an absolute tolerance in mm, as cad xbf export --tolerance does."
+                           if kind in ("stl", "threemf") else ""))
     return decorate
 
 
@@ -989,7 +1008,7 @@ def check_result(model: Model, result: Any) -> None:
     the model declares of it: today a model returns a build123d shape, the build123d integration's."""
     from cad.registry import producer_for
 
-    for kind in dict.fromkeys(("xbf", *(output.kind for output in model.outputs))):
+    for kind in dict.fromkeys(("model", *(output.kind for output in model.outputs))):
         producer_for(kind, result, where=f"model {model.identity}")
     if result.__dict__.get("_wrapped") is None:
         raise ValueError(f"model {model.identity} returned an empty shape")

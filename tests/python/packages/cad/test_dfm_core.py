@@ -98,7 +98,7 @@ class OptionsTest(unittest.TestCase):
                 manufacturing.options("step", process, given)
 
     def test_exact_processes_refuse_a_mesh_and_a_dxf_is_a_cut_file(self) -> None:
-        with self.assertRaisesRegex(ValueError, "check the part's STEP or xbf"):
+        with self.assertRaisesRegex(ValueError, "check the part's STEP, xbf or model"):
             manufacturing.options("stl", "sheet", {})
         with self.assertRaisesRegex(ValueError, "--process sheet"):
             manufacturing.options("dxf", "cnc", {})

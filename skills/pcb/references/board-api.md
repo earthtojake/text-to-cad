@@ -8,7 +8,7 @@ second live document or write it back. For file syntax use KiCad's
 When editing, preserve the format version, generator, UUIDs, project netclasses, unknown
 properties and footprint graphics. Parse S-expressions for structural changes; a global text
 replacement can change unrelated pads, text or graphics. Write atomically after validating
-balanced syntax, then read the new board and run KiCad's DRC. The read-only `read_board` API
+balanced syntax, then read the new board and run KiCad's DRC. The read-only `kicad_pcb.read` API
 is documented in [checks](checks.md); its index is not a lossless serializer.
 
 KiCad 9/10 footprints use `(at x y angle)`. KiCad 11 development files can use

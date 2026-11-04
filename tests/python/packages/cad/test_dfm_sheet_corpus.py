@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """Sheet metal's planted-defect corpus: parts built here with known defects, and clean controls, each
-written to a STEP and checked by ``cad.step.check(path, process="sheet")`` as a user's would be.
+written to a STEP and checked by ``cad.step.dfm(path, process="sheet")`` as a user's would be.
 
 The ground truth is the construction's: each part names the rule ids (and the measurement's finding
 codes) that must fire, and where (a point the failure's ``xyz`` must lie near), and every other code is a
@@ -187,7 +187,7 @@ class CorpusTest(unittest.TestCase):
                     bd.export_step(case.shape, str(path), unit=case.unit)
                 else:
                     bd.export_step(case.shape, str(path))
-                result = step.check(path, process="sheet", **case.options)
+                result = step.dfm(path, process="sheet", **case.options)
                 scale = 25.4 if case.unit == bd.Unit.IN else 1.0
                 structure = Loaded(path).structure()
                 events = _events(result)

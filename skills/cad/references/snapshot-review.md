@@ -25,8 +25,8 @@ mesh (`.stl`, `.3mf`, `.glb`), a robot (`.urdf`, `.sdf`, `.srdf`) or a drawing (
 script is never a source. Nothing is written but OUT.
 
 ```bash
-cad xbf snapshot "$ID" tmp/review.png
-cad xbf snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
+cad model snapshot "$ID" tmp/review.png
+cad model snapshot "$ID" tmp/review.png --display hidden-line --grid --camera top
 ```
 
 A face the mesher left without triangles is drawn without it and named in a
@@ -54,10 +54,10 @@ side view for a pattern or silhouette, or a clipped view for internal geometry. 
 fixed set of views proves every face or feature is correct.
 
 ```bash
-cad xbf snapshot "$ID" tmp/iso.png
-cad xbf snapshot "$ID" tmp/below_behind.png --camera 225:-30
-cad xbf snapshot "$ID" tmp/top.png --camera top
-cad xbf snapshot "$ID" tmp/front.png --camera front
+cad model snapshot "$ID" tmp/iso.png
+cad model snapshot "$ID" tmp/below_behind.png --camera 225:-30
+cad model snapshot "$ID" tmp/top.png --camera top
+cad model snapshot "$ID" tmp/front.png --camera front
 ```
 
 With no flags a snapshot is the `solid` display, Light appearance, an orthographic
@@ -119,7 +119,7 @@ millimetres, a robot's or a GLB's metres, a 3MF's declared unit) and `invert`; t
 cut is capped. Look straight at the cut:
 
 ```bash
-cad xbf snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
+cad model snapshot "$ID" tmp/cut.png --camera back --display '{"clip": {"enabled": true, "axis": "y", "at": 12.5}}'
 ```
 
 Hide and isolate leave parts out, as the viewer's do: `display.hidden` is a list of
@@ -129,7 +129,7 @@ Edit packet given to `--annotation` carries the person's own, which `--display` 
 override:
 
 ```bash
-cad xbf snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
+cad model snapshot "$ID" tmp/inside.png --display '{"mode": "solid", "hidden": ["lid"]}'
 ```
 
 ## Annotations and Quick Edit views
@@ -158,7 +158,7 @@ The views' cameras, the ink and the measurements are in the viewer's scene coord
 Draw the view a person drew their ink in, with the ink on the model:
 
 ```bash
-cad xbf snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
+cad model snapshot "$ID" tmp/quick_edit.png --annotation tmp/bracket.snapshot.json --camera authored
 ```
 
 `--annotation FILE` draws the ink over the model, each mark on its part wherever the
@@ -176,8 +176,8 @@ display, hidden and isolated parts and pose, the ink and the dimensions over eac
 into the files its outputs name:
 
 ```bash
-cad xbf snapshot --job tmp/bracket.snapshot.json
-cad xbf snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
+cad model snapshot --job tmp/bracket.snapshot.json
+cad model snapshot --job tmp/bracket.snapshot.json "$ID"   # the same views, of the document as it is now
 ```
 
 `--job` takes a packet, a job (`{input, camera, display, jointValues, outputs, ...}`)

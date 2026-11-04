@@ -296,6 +296,19 @@ test('a drawing still rendering is asked for again after the server\'s retryMs, 
   waiting.dispose();
 });
 
+test('a board KiCad is still refilling and plotting is asked for again after the server\'s retryMs', async () => {
+  const replies = [{ state: 'plotting', retryMs: 0 }, { schemaVersion: 4, kind: 'board', pours: { refilled: true } }];
+  let asked = 0;
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (_url, options) => {
+    if (options.method === 'POST') return opened('kicad_pcb');
+    asked += 1;
+    return Response.json(replies.shift(), { status: asked < 2 ? 202 : 200 });
+  } });
+  assert.deepEqual(await client.plotPayload('/b/blinky.kicad_pcb'), { schemaVersion: 4, kind: 'board', pours: { refilled: true } });
+  assert.equal(asked, 2);
+  client.dispose();
+});
+
 test('an engine document is read through this server, with the client\'s fetch, once the engine holds it, its import heard meanwhile', async () => {
   // The engine's progress event of the import (`cad/engine/progress.py`), handed on as it came.
   const importing = { kind: 'import', stage: 'collect', job: 'a.step', outputs: [], detail: '', done: 120, total: 628, elapsedMs: 3100 };

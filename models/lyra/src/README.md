@@ -17,9 +17,9 @@ URDF.
 ```
 python lyra.py                                    # prints each model's id: and view:
 python exports.py                                # the URDF's link meshes, 3MF/<link>.3mf
-cad xbf snapshot "$ID" lyra.png --pose fist         # ID: the lyra model's id: line
+cad model snapshot "$ID" lyra.png --pose fist         # ID: the lyra model's id: line
 cad urdf snapshot ../lyra.urdf urdf.png
-cad xbf export "$ID" GLB/lyra.glb                  # the five motions, baked as clips
+cad model export "$ID" GLB/lyra.glb                  # the five motions, baked as clips
 ```
 
 ## How it is built

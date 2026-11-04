@@ -1,4 +1,4 @@
-"""``cad <type> check --process molding|printing``: a 3D type's manufacturing check, as a command.
+"""``cad <type> dfm --process molding|printing``: a 3D type's manufacturing check, as a command.
 
 The measurements are the library's (``tests/python/packages/cad/test_trimesh_*.py``); this holds the
 command: its options, its one result shape, its refusals before anything is read, a STEP measured
@@ -21,12 +21,33 @@ import trimesh
 
 from cad_server._internal import integration_env
 from cad_server.cli.document_types import pull_value, type_main
+from tests.python.support import engine_daemon
+from tests.python.support.paths import add_sources
+
+SRC = add_sources()  # the three packages' sources, as PYTHONPATH names them
+
+# A model whose pocket has sharp in-plane corners: no end mill cuts them.
+POCKETED = """
+import build123d as bd
+from cad import model
+
+
+@model
+def plate():
+    part = bd.Box(40, 30, 10) - bd.Pos(0, 0, 3) * bd.Box(20, 10, 4.01)
+    part.label = "plate"
+    return part
+
+
+if __name__ == "__main__":
+    print(plate().id)
+"""
 
 
 def _run(document_type: str, *argv: str) -> tuple[int, str, str]:
     out, err = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-        code = type_main(document_type, ["check", *argv])
+        code = type_main(document_type, ["dfm", *argv])
     return code, out.getvalue(), err.getvalue()
 
 
@@ -70,7 +91,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertIn("a 3MF declares its unit", json.loads(out)["error"])
         code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "molding")
         self.assertEqual(code, 2)
-        self.assertIn("box.glb is a glb, not a stl: use cad glb check", err)
+        self.assertIn("box.glb is a glb, not a stl: use cad glb dfm", err)
 
     def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
         """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one."""
@@ -112,7 +133,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         from cad.registry import DOCUMENT_TYPES
         from cad_server._internal import base, extras
 
-        self.assertEqual({kind: DOCUMENT_TYPES[kind].operation("check").integration for kind in ("step", "stl")},
+        self.assertEqual({kind: DOCUMENT_TYPES[kind].operation("dfm").integration for kind in ("step", "stl")},
                          {"step": "build123d", "stl": "trimesh"})
         found = base.Environment(sys.executable, sys.prefix, True)
         with mock.patch.object(base, "ensure", return_value=found) as kernel, \
@@ -121,6 +142,36 @@ class ManufacturingCheckCommand(unittest.TestCase):
             self.assertEqual((kernel.call_count, other.call_count), (1, 0))
             integration_env.environment("trimesh", print)
             self.assertEqual((kernel.call_count, other.call_count), (1, 1))
+
+
+class ModelTest(unittest.TestCase):
+    """A model's document, checked by its id as a check script does: built by the engine (the runner's, this
+    file's own), read back through it, every finding at a ref the engine's inspect resolves to the face."""
+
+    def test_a_model_is_checked_by_its_id_and_its_refs_resolve(self) -> None:
+        import os
+
+        import cad
+
+        with tempfile.TemporaryDirectory(prefix="cad-dfm-model-") as folder:
+            script = Path(folder) / "plate.py"
+            script.write_text(POCKETED, encoding="utf-8")
+            built = engine_daemon.run([sys.executable, str(script)], cwd=folder,
+                                      env={**os.environ, "PYTHONPATH": str(SRC)})
+            self.assertEqual(built.returncode, 0, built.stderr)
+            ident = built.stdout.strip().splitlines()[-1]
+            result = cad.model.dfm(ident, process="cnc", material="aluminum")
+            sharp = [f for f in result.findings if f.code == "cnc.internal_corner_sharp"]
+            self.assertTrue(sharp, [f.code for f in result.findings])
+            self.assertFalse(result.ok)
+            face = cad.model.inspect(ident, sharp[0].location)
+            self.assertEqual(face["kind"], "edge" if " edge " in f" {sharp[0].location} " else "face")
+            code, out, _ = _run("model", ident, "--process", "cnc", "--json")
+            self.assertEqual(code, 1)
+            self.assertIn("cnc.internal_corner_sharp", {f["code"] for f in json.loads(out)["findings"]})
+            refused, said, _ = _run("xbf", ident, "--process", "cnc", "--json")
+            self.assertEqual(refused, 1)
+            self.assertIn("use cad model dfm", json.loads(said)["error"])
 
 
 if __name__ == "__main__":

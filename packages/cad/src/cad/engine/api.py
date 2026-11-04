@@ -195,10 +195,11 @@ class Document:
             raise TypeError(f"{verb} of {self.name}: the body that calls it is building it; {verb} the "
                             "document the model call returns, once the build is done")
 
-    def export(self, *destinations: Any) -> list[Written]:
-        """``export(handle, *destinations)``: the document written to each destination."""
+    def export(self, *destinations: Any, tolerance: float | None = None) -> list[Written]:
+        """``export(handle, *destinations)``: the document written to each destination; an STL or a
+        3MF meshed to within ``tolerance`` (mm) when one is given, as ``export`` does."""
         self._outside("export")
-        return _said(_exporting(self, destinations), destinations)
+        return _said(_exporting(self, destinations, tolerance=tolerance), destinations)
 
     def snapshot(self, out: Any, *, display: Any = None, camera: Any = None, grid: bool = False,
                  pose: Any = None, width: int | None = None, height: int | None = None,
@@ -494,7 +495,7 @@ def _source(source: Any) -> dict[str, Any]:
     return {"path": str(path)}
 
 
-def export(source: Any, *destinations: Any,
+def export(source: Any, *destinations: Any, tolerance: float | None = None,
            log: Callable[[str], None] | None = None, daemon: bool = True,
            progress: Callable[[dict], None] | None = None) -> list[Written]:
     """Write a document to each destination, its kind from its suffix (``.xbf``, ``.step``,
@@ -505,7 +506,11 @@ def export(source: Any, *destinations: Any,
     with no CAD kernel loaded (a mesh has no B-rep: no xbf, STEP or DXF is made from one). Several
     destinations read the document once. The file holds what the code built: no option selects a part or a state
     (``README``, the law of options). ``daemon=False`` does it in this process, cold. A GLB
-    carries every configuration sequence the document defines, as a clip. A call the program's own
+    carries every configuration sequence the document defines, as a clip. An STL and a 3MF are
+    meshed at the engine's one tolerance, the viewer's (a quarter per cent of each part), unless
+    ``tolerance`` gives an absolute ceiling in millimetres (at least ``export.MIN_TOLERANCE``), for a
+    print whose fits are finer: each part is then meshed again at the finer of the two for these
+    files, and each file says it; every destination is then an STL or a 3MF. A call the program's own
     code makes (``python exports.py``) says each file, as ``cad <type> export`` does. Where the export is
     goes, frame by frame, to ``progress`` (``progress.py``: its ``read`` of a file source, each
     destination's ``write``), as ``_built`` takes it: by default a bar on stderr when it is a
@@ -516,7 +521,7 @@ def export(source: Any, *destinations: Any,
     if bar is not None:
         log = bar.around(log or (lambda _text: None))  # a line of the log goes above the bar
     try:
-        return _said(_exporting(source, destinations, log, daemon, frames), destinations)
+        return _said(_exporting(source, destinations, log, daemon, frames, tolerance), destinations)
     finally:
         if bar is not None:
             bar.close()
@@ -524,10 +529,10 @@ def export(source: Any, *destinations: Any,
 
 def _said(written: list[Written], destinations: tuple) -> list[Written]:
     """``written``, a line said of each file when the call is the program's own (the first frame
-    outside this module, past the verb's observer, is ``__main__``'s), as a model call's report is
-    said (``Model.__call__``)."""
+    outside this module and a document type's dispatch of it, past the verb's observer, is
+    ``__main__``'s), as a model call's report is said (``Model.__call__``)."""
     frame = sys._getframe(1)
-    while frame is not None and frame.f_globals.get("__name__") == __name__:
+    while frame is not None and frame.f_globals.get("__name__") in (__name__, "cad._internal.document_type"):
         frame = frame.f_back
     if frame is not None and frame.f_globals.get("__name__") == "__main__":
         from cad.engine.said import written as said_written
@@ -537,14 +542,15 @@ def _said(written: list[Written], destinations: tuple) -> list[Written]:
 
 
 def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | None = None, daemon: bool = True,
-               progress: Callable[[dict], None] | None = None) -> list[Written]:
-    from cad.engine.export import ExportRefused, kind_of
+               progress: Callable[[dict], None] | None = None, tolerance: float | None = None) -> list[Written]:
+    from cad.engine.export import ExportRefused, kind_of, tolerance_of
 
     if not destinations:
         raise ExportRefused("export names at least one destination")
     resolved = [Path(os.fspath(destination)).resolve() for destination in destinations]
     for destination in resolved:
         kind_of(destination)
+    tolerance = tolerance_of(tolerance, resolved)
     source = _called(source, daemon)
     spec = _source(source)
     if "path" in spec:
@@ -556,8 +562,13 @@ def _exporting(source: Any, destinations: tuple, log: Callable[[str], None] | No
                 raise ExportRefused(why)
     cwd = str(source.cwd) if isinstance(source, Document) else os.getcwd()
     shown = log or (lambda _text: None)
-    order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd}
+    order = {"op": "export", "source": spec, "destinations": [str(path) for path in resolved], "cwd": cwd,
+             **({"tolerance": tolerance} if tolerance is not None else {})}
     done = _exported(order, spec, shown, daemon, progress)
+    if tolerance is not None and any(row.get("tolerance") != tolerance for row in done["files"]):
+        # A server of a release before the tolerance writes the files at its own, and says no tolerance.
+        raise EngineError(f"the CAD server running meshed {', '.join(Path(p).name for p in destinations)} at its "
+                          "own tolerance: it is older than this library. Update it (cad update) and export again")
     return [Written(Path(row["path"]), row["kind"], row["bytes"], row["seconds"], row.get("written", True))
             for row in done["files"]]
 
@@ -683,7 +694,8 @@ def _snapshot(source: Any, out: Path, *, display: Any, camera: Any, grid: bool, 
             found["document"] = spec["id"]  # what was drawn, by the id it was named by
         return Drawn(out, found["width"], found["height"], found)
     shown, framed, size = drawing.options(display, camera, grid, width, height, size_profile,
-                                          board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb")
+                                          board=Path(os.fspath(source)).suffix.lower() == ".kicad_pcb",
+                                          schematic=Path(os.fspath(source)).suffix.lower() == ".kicad_sch")
     found = drawing.snapshot(Path(os.fspath(source)), out, display=shown, camera=framed,
                              size=None if width is None and height is None and size_profile is None else size,
                              daemon=daemon, pose=drawing.parse_pose(pose) if isinstance(pose, str) else pose,
@@ -1086,7 +1098,8 @@ observers: list[Callable[[dict[str, Any]], None]] = []
 _HEARD = threading.local()  # what the daemon's answers said while a verb ran in this thread (``_heard``)
 _ENGINE = os.path.dirname(os.path.abspath(__file__)) + os.sep
 _SUFFIXES = {".xbf": "xbf", ".step": "step", ".stp": "step", ".glb": "glb", ".stl": "stl", ".3mf": "threemf",
-             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb"}
+             ".dxf": "dxf", ".urdf": "urdf", ".sdf": "sdf", ".srdf": "srdf", ".kicad_pcb": "kicad_pcb",
+             ".kicad_sch": "kicad_sch"}
 _FRAME = re.compile(r'  File "(?P<file>[^"]+)", line (?P<line>\d+), in (?P<function>\S.*)')
 _TYPE = re.compile(r"(?P<type>[A-Za-z_][A-Za-z0-9_.]*)(?::|$)")
 _DIED = re.compile(r"exited \((?P<status>-?\d+)\) during the build")  # the daemon's word (``services.WORKER``)

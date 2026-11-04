@@ -52,6 +52,10 @@ export function createBoardRenderer({ client, ...options }: BoardRendererOptions
       const prepared = await prepareWorkspaceEntry(client, context);
       return { ...prepared, data: { ...prepared.data, services } };
     },
-    load: () => import('./BoardRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<PreparedBoardDocument>> }>
+    // The renderer, with the file menu's Export of the board (`boardExport.jsx`).
+    load: async () => {
+      const [{ default: Board }, { withBoardExport }] = await Promise.all([import('./BoardRenderer.jsx'), import('./boardExport.jsx')]);
+      return { default: withBoardExport(Board) as ComponentType<FileRendererProps<PreparedBoardDocument>> };
+    }
   });
 }

@@ -92,7 +92,7 @@ A second run replays the model and changes nothing. Then a part with configurati
 
 ```bash
 cad run src/assembly.py
-cad xbf inspect "$ID"
+cad model inspect "$ID"
 ```
 
 Running the root builds its children in the same run, each keeping its own document;
@@ -102,7 +102,7 @@ what it was built from.
 
 | Need | Add |
 | --- | --- |
-| A file of a model | `cad xbf export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
+| A file of a model | `cad model export "$ID" STEP/assembly.step` when asked; `exports.py` when the person keeps files current. See [exports](exports.md). |
 | A variant | Another `@model` calling the part's helper with other values. |
 | Shared factory or hole pattern | A plain helper under `src/lib/`, with `src/lib/__init__.py`. |
 | Left/right geometry | Mirror inline, or separate models for independent files and reuse. |

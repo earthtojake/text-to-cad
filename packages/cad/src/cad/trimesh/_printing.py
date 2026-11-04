@@ -15,7 +15,7 @@ A mesh has no cylinders an axis names: holes, pins and embossed details are meas
 alone, so their rules say "not measured" of a mesh rather than pass it.
 
 Facts, never verdicts: nothing here compares a figure against a process's limit.
-``cad.<type>.check(..., process="printing")`` turns the report into findings
+``cad.<type>.dfm(..., process="printing")`` turns the report into findings
 (``cad.trimesh._check``); ``cad.trimesh.printing`` and ``cad.trimesh.orientations``
 hand it back as data.
 

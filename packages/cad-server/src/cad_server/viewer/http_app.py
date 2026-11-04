@@ -216,9 +216,10 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
                   "kinematics, POST pose, POST mesh")
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
-                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, source"}
-_KIND_ROUTES = {"model": _ENGINE_ROUTES,
-                **{entry.wire: _VIEW_ROUTES[entry.view] for entry in DOCUMENT_TYPES.values()}}
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, drc, source"}
+# A model's document has no file, so no source.
+_KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
+                for entry in DOCUMENT_TYPES.values()}
 # This start of the engine: a page that sees another one (``GET /api/v1/server``'s ``instance``) is
 # served by an engine that restarted since it loaded. One per process, the engine's.
 INSTANCE = secrets.token_hex(8)
@@ -274,10 +275,13 @@ class CadApp:
         from cad_server._internal.picker import available
 
         from .drawings import DrawingRenders
+        from .plots import BoardAnswers
         from .prompt_files import PromptFiles
 
         # The drawing route's renders, off the request and one per drawing (``drawings.py``).
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
+        # A board's plot and DRC, made with KiCad off the request and kept by its bytes (``plots.py``).
+        self.boards = BoardAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -869,12 +873,15 @@ class CadApp:
         if kind in ENGINE_KINDS:
             return self._engine_route(request, response, kind, ident, rest)
         if kind == "dxf" and rest == ["drawing"]:
-            return self._methods(request, {"GET": lambda: self._handle_drawing(response, path)})
-        if kind == "kicad_pcb" and rest == ["plot"]:
-            return self._methods(request, {"GET": lambda: self._handle_plot(response, path)})
+            return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
+        if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
+            return self._methods(request, {"GET": lambda: self._handle_board(request, response, path, rest[0])})
+        if kind == "kicad_sch" and rest == ["plot"]:
+            return self._methods(request, {"GET": lambda: self._handle_schematic(request, response, path)})
         if kind in ROBOT_KINDS and (rest == ["structure"] or (len(rest) == 2 and rest[0] == "parts")):
             mesh = rest[1] if len(rest) == 2 else None
-            return self._methods(request, {"GET": lambda: self._handle_robot(response, path, mesh, document_api(kind, ident))})
+            return self._methods(request, {"GET": lambda: self._handle_robot(request, response, path, mesh,
+                                                                             document_api(kind, ident))})
         raise ApiError(404, f"no route {request.path}", f"a {kind}'s routes are {_KIND_ROUTES[kind]}")
 
     def _engine_route(self, request, response, kind, ident, rest) -> None:
@@ -1294,37 +1301,60 @@ class CadApp:
 
     # --- routes ----------------------------------------------------------
 
-    def _handle_drawing(self, response, path):
+    def _handle_drawing(self, request, response, path):
         """``GET /api/v1/documents/dxf/<id>/drawing``: the ``.dxf`` flattened to 2D primitives
         (``drawings.py`` owns the rules); 202 while it renders.
 
         The payload is already JSON bytes, held in memory by the file's bytes,
         so it goes out through ``send_bytes`` rather than being decoded and
-        re-encoded on the way past.
+        re-encoded on the way past, compressed where the browser takes it (``compressed``).
         """
+        from .compressed import send
+
         status, body = self.drawings.response(path or "")
         if isinstance(body, bytes):
-            response.send_bytes(status, body, "application/json; charset=utf-8")
+            send(request, response, status, body, "application/json; charset=utf-8")
             return
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
 
-    def _handle_plot(self, response, path):
-        """``GET /api/v1/documents/kicad_pcb/<id>/plot``: a KiCad board drawn from its file, as geometry
-        per layer (``plots.py`` owns the rules). Each request reads the file as it is now: no board is
-        held. A file that is not a readable board is a 400 saying why (``PlotError``)."""
-        from .plots import plot_payload_response
+    def _handle_schematic(self, request, response, path):
+        """``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files,
+        every sheet a page of layers (``plots.py``). Each request reads the files as they are now, and the
+        answer is compressed where the browser takes it (``compressed``)."""
+        from .compressed import send
+        from .plots import schematic_payload_response
 
-        status, body = plot_payload_response(path or "")
+        status, body = schematic_payload_response(path or "")
         if isinstance(body, bytes):
-            response.send_bytes(status, body, "application/json; charset=utf-8")
+            send(request, response, status, body, "application/json; charset=utf-8")
             return
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
 
-    def _handle_robot(self, response, path, mesh, api):
+    def _handle_board(self, request, response, path, product):
+        """``GET /api/v1/documents/kicad_pcb/<id>/plot`` (the board as geometry per layer, its pours KiCad's
+        refill) and ``.../drc`` (KiCad's design rule check of it): ``plots.py`` owns the rules. Each is made
+        off the request and kept by the board's bytes, answered 202 while it is made, 304 for the key a
+        request names (``If-None-Match``), compressed where the browser takes it (``compressed``). A file
+        that is not a readable board is a 400 saying why (``PlotError``)."""
+        from .compressed import Coded, send
+
+        status, body, key = self.boards.response(product, path or "", if_none_match=request.header("if-none-match"))
+        tag = (("etag", f'"{key}"'),) if key else ()
+        if status == 304:
+            response.send_bytes(304, b"", "", tag)
+            return
+        if isinstance(body, Coded):
+            send(request, response, status, body, "application/json; charset=utf-8", tag)
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        response.send_json(status, body)
+
+    def _handle_robot(self, request, response, path, mesh, api):
         """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved
         for the page, or ``.../parts/<digest>`` one of the primitive meshes cadgen made for it
         (``robots.py`` owns both rules; ``api`` is where the document's reads are). Real work on a
@@ -1333,6 +1363,11 @@ class CadApp:
         from .robots import robot_response
 
         status, body, content_type = robot_response(path or "", mesh, api=api)
+        if isinstance(body, bytes) and content_type.startswith("application/json"):
+            from .compressed import send
+
+            send(request, response, status, body, content_type)
+            return
         if isinstance(body, bytes):
             response.send_bytes(status, body, content_type, RAW_FILE_HEADERS if content_type.startswith("model/") else ())
             return

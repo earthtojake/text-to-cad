@@ -127,6 +127,8 @@ export default {
   "export.preparing": "Preparing {name}…",
   "export.dismiss": "Dismiss export status",
   "export.failed": "Export failed",
+  "export.format.drill": "Drill",
+  "export.format.position": "Position",
 
   // The page before the viewer answers (`apps/web`'s starting view).
   "app.start.notAnswering": "The CAD Viewer is not answering",

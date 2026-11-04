@@ -2,26 +2,29 @@
 
 The board file is the source; the decorated function edits it::
 
-    from cad import kicad_pcb, step
+    from cad import dxf, kicad_pcb, step
 
     @step("board.step")                    # the saved board's STEP, by kicad-cli (--subst-models)
+    @dxf("board.dxf")                      # its outline and holes (a @glb stacks the same way)
     @kicad_pcb("board.kicad_pcb")          # beside the script, as the engine's decorators' paths are
-    def board(b):                          # b: kipy's open Board
+    def board(b):                          # b: KiPy's open Board (kicode.board.Board)
         ...
 
     if __name__ == "__main__":
         board()
 
 A call runs it: a private, headless ``kicad-cli api-server --socket <path> <board>`` (the finder and the
-private homes of ``_program``; a kicad-cli without ``api-server``, any stable KiCad's for now, refused
-before it starts; ``--socket`` takes a plain path, kipy the ``ipc://`` form), kipy connected to it (ready
+private homes of ``_program``: kicode's kicad-cli and ``kicode.environment``; one ``CAD_KICAD_CLI`` names
+without ``api-server``, any stable KiCad's for now, refused before it starts; ``--socket`` takes a plain
+path, KiPy the ``ipc://`` form), KiPy (kicode's, ``kicode.KiCad``) connected to it (ready
 when it answers, never when a path appears: Windows serves a named pipe, no file), the function handed the
 open board, the board saved when the function returns and nothing saved when it raises; then the server
-stopped and its folder removed, whatever happened. The files stacked on it (``@step``) are written from
-the saved board afterwards, each by its producer (``cad.registry``).
+stopped and its folder removed, whatever happened. The files stacked on it (``@step``, ``@glb``, ``@dxf``)
+are written from the saved board afterwards, each by its producer (``cad.registry``).
 
-kipy's ``KiCad.check_version()`` is never called: the PyPI client (0.8.0) targets KiCad 10.0 and calls a
-nightly server a future version, while it reads and edits a nightly's boards.
+KiPy's ``KiCad.check_version()`` is never called: kicode's KiPy is the one built with its kicad-cli, and a
+kicad-cli ``CAD_KICAD_CLI`` names may be another nightly's, which KiPy still reads and edits. Upstream
+``kipy`` is never imported: it and kicode register the same protobuf files and cannot share a process.
 """
 
 from __future__ import annotations
@@ -105,7 +108,13 @@ def declare(out: Any, *, name: str | None = None) -> Callable[[Callable[[Any], A
 
 
 def declare_output(kind: str, script: BoardScript, out: Any) -> BoardScript:
-    """A file stacked on a board script (``@step("board.step")``), written from its saved board."""
+    """A file stacked on a board script (``@step("board.step")``, ``@glb``, ``@dxf``), written from its saved
+    board. Its path ends in its type's extension, as the engine's decorators check theirs."""
+    from cad.registry import DOCUMENT_TYPES
+
+    extensions = DOCUMENT_TYPES[kind].extensions
+    if Path(os.fspath(out)).suffix.lower() not in extensions:
+        raise ValueError(f"@{kind}(out=...): the file must end in {' or '.join(extensions)}, not {os.fspath(out)!r}")
     path = _beside(script.function, out)
     if any(existing == kind for existing, _ in script.outputs):
         raise TypeError(f"board script {script.__name__!r} declares @{kind} twice")
@@ -175,28 +184,29 @@ def _stop(server: subprocess.Popen) -> None:
 
 
 def _kipy() -> Any:
-    """kipy's ``KiCad`` class, imported before any server is started: without it there is nothing to run."""
+    """KiPy's ``KiCad`` class (kicode's), imported before any server is started: without it there is nothing
+    to run."""
     try:
-        from kipy import KiCad  # pyrefly: ignore[missing-import] - the kicad extra, installed where a board script runs
+        from kicode import KiCad  # pyrefly: ignore[missing-import] - the kicad extra, installed where a board script runs
     except ImportError:
-        raise ImportError("a @kicad_pcb script edits its board through KiCad's IPC API, whose client is the "
-                          "kicad extra: install cad[kicad]") from None
+        raise ImportError("a @kicad_pcb script edits its board through KiCad's IPC API, whose client and kicad-cli "
+                          "are the kicad extra's (kicode): install cad[kicad], or run the script with cad run") from None
     return KiCad
 
 
 def _client(kicad: Any, socket: Path) -> Any:
-    """kipy, connected to the server's socket (its ``ipc://`` form)."""
+    """KiPy, connected to the server's socket (its ``ipc://`` form)."""
     return kicad(socket_path=f"ipc://{socket}", client_name="cad", timeout_ms=60000)
 
 
 def _connecting(error: BaseException) -> bool:
-    """Whether ``error`` is a connection not made yet: kipy's ``ConnectionError`` (its own class, by name) or
+    """Whether ``error`` is a connection not made yet: KiPy's ``ConnectionError`` (its own class, by name) or
     the operating system's."""
     return isinstance(error, OSError) or type(error).__name__ == "ConnectionError"
 
 
 def _board(kicad: Any, server: subprocess.Popen, log: Path) -> Any:
-    """The open board, once the server answers for it. Ready is a connection, on every OS: kipy dials the
+    """The open board, once the server answers for it. Ready is a connection, on every OS: KiPy dials the
     server and pings it until it answers (a connection error until it listens), and the server says it is
     not ready to reply until it has loaded the board. Any other refusal, a server that exits, or one that
     has not answered within ``START_SECONDS``, is a failure."""
@@ -206,7 +216,7 @@ def _board(kicad: Any, server: subprocess.Popen, log: Path) -> Any:
             kicad.ping()
             listened = True
             return kicad.get_board()
-        except Exception as error:  # noqa: BLE001 - kipy's errors, by kind and by the words it says while loading
+        except Exception as error:  # noqa: BLE001 - KiPy's errors, by kind and by the words it says while loading
             if not _connecting(error) and "not ready" not in str(error).lower():
                 raise
             if server.poll() is not None:
@@ -231,7 +241,7 @@ def run(script: BoardScript, *, cli: Path | None = None) -> BoardRun:
         check_version(cli, kicad_version(cli))
     check_api_server(cli)
     before = _format_of(board)
-    with private_run("cad-kicad-api-") as (folder, env), _socket(folder) as socket:
+    with private_run("cad-kicad-api-", cli) as (folder, env), _socket(folder) as socket:
         log = folder / "api-server.log"
         with log.open("w", encoding="utf-8") as said:
             server = subprocess.Popen([str(cli), "api-server", "--socket", str(socket), str(board)], env=env,
@@ -263,13 +273,31 @@ def _write_outputs(script: BoardScript, cli: Path, folder: Path) -> list[Path]:
     return written
 
 
-def write_step(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
-    """The saved board's STEP (``kicad-cli pcb export step --subst-models``), moved into place at ``out``."""
+def _write(to: str, suffix: str, board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's ``to`` export (``cad.kicad._export``: what is said beside it, a part without its 3D
+    model, said on stderr), moved into place at ``out``."""
     from ._export import export
 
-    made = export(board, "step", scratch / "step", cli=cli)
-    step = next(path for path in made if path.suffix.lower() == ".step")
+    made = export(board, to, scratch / to, cli=cli)
+    written = next(path for path in made if path.suffix.lower() == suffix)
     out.parent.mkdir(parents=True, exist_ok=True)
-    shutil.move(step, out)
+    shutil.move(written, out)
     print(f"wrote {out}", file=sys.stderr)
     return out
+
+
+def write_step(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's STEP (``kicad-cli pcb export step --subst-models``), moved into place at ``out``."""
+    return _write("step", ".step", board, out, cli=cli, scratch=scratch)
+
+
+def write_glb(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's GLB (``kicad-cli pcb export glb --subst-models``), moved into place at ``out``; the
+    parts written without a 3D model named, as the STEP's are."""
+    return _write("glb", ".glb", board, out, cli=cli, scratch=scratch)
+
+
+def write_dxf(board: Path, out: Path, *, cli: Path, scratch: Path) -> Path:
+    """The saved board's outline and drilled holes (``kicad-cli pcb export dxf``, Edge.Cuts, millimetres, as
+    ``cad kicad_pcb export --to dxf`` writes them), moved into place at ``out``."""
+    return _write("dxf", ".dxf", board, out, cli=cli, scratch=scratch)

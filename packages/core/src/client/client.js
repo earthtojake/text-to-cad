@@ -392,11 +392,19 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
     },
     async plotPayload(file, { signal } = {}) {
       // A `.kicad_pcb` drawn from its file on the SERVER, as geometry per layer and the board's
-      // index: a plain GET of the document's `plot`. The server reads the file on every request
-      // and keeps no board, so a saved edit is the next read's; the client only paints.
+      // index, its pours KiCad's refill of a copy: a plain GET of the document's `plot`. The server
+      // keeps it by the board's bytes, so a saved edit is the next read's; the client only paints.
+      // Bytes the server has not plotted yet it plots off the request (KiCad's refill, the plot),
+      // answering 202 { state: 'plotting', retryMs } until it has, and the client asks again after
+      // `retryMs`, as a drawing's does; each request's 10 s is the time the server may stay silent.
       if (!file) throw new Error('Missing file');
       const api = await documentApi(file, { signal, operation: 'plotting' });
-      return request(`${api}/plot`, { signal, timeoutMs: 180_000, operation: 'plotting' });
+      for (;;) {
+        const reply = await request(`${api}/plot`, { signal, timeoutMs: 10_000, operation: 'plotting' });
+        if (reply?.state !== 'plotting') return reply;
+        await pause(Math.min(Math.max(Number(reply.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
     },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
