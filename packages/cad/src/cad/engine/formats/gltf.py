@@ -33,6 +33,7 @@ import numpy as np
 
 # The container's constants as the engine's GLB writer declares them.
 from cad.engine.export.glb import BIN_CHUNK, JSON_CHUNK, MAGIC
+from cad.engine.errors import UserError
 
 __all__ = ["GltfError", "Part", "Read", "look_extensions", "material_of", "read_gltf"]
 
@@ -45,7 +46,7 @@ _Z_UP = np.array([[1.0, 0, 0, 0], [0, 0, -1.0, 0], [0, 1.0, 0, 0], [0, 0, 0, 1.0
 _MILLIMETRES = np.diag([1000.0, 1000.0, 1000.0, 1.0])
 
 
-class GltfError(ValueError):
+class GltfError(UserError, ValueError):
     """A file that does not read as a GLB, said by name."""
 
 

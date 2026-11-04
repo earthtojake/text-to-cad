@@ -109,6 +109,7 @@ import xml.etree.ElementTree as ET
 from cad.engine import mesh_uri
 from cad._internal.findings import format_findings
 from cad._internal.xml_common import children, display_path, local_name
+from cad.engine.errors import UserError
 
 __all__ = [
     "DRAWABLE_MESH_FORMATS",
@@ -181,7 +182,7 @@ _FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG = 1e-6
 _FOUR_BAR_ZERO_POSE_TOLERANCE_RAD = 1e-7
 
 
-class RobotReadError(ValueError):
+class RobotReadError(UserError, ValueError):
     """A description this cannot resolve, and what to change."""
 
 

@@ -40,7 +40,9 @@ class KicadReaderIsStdlibPure(unittest.TestCase):
                            and name not in ("cad._internal.document_type",  # cad.kicad_pcb is a DocumentType
                                             "cad.results", "cad.kicad._check", "cad.kicad._export",
                                             # poured's cache, under the board's document id
-                                            "cad.engine.places", "cad.engine.atomic_replace", "cad.engine.ids"))
+                                            "cad.engine.places", "cad.engine.atomic_replace", "cad.engine.ids",
+                                            # a board that does not read is the person's to fix (law 30)
+                                            "cad.engine.errors"))
         self.assertEqual(offenders, [])
 
 

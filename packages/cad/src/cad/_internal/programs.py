@@ -30,6 +30,7 @@ from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+from cad.engine.errors import UserError
 
 __all__ = ["DISPLAY", "Program", "ProgramMissing", "check_version", "find", "headless_env", "private_run",
            "version", "version_tuple"]
@@ -38,7 +39,7 @@ __all__ = ["DISPLAY", "Program", "ProgramMissing", "check_version", "find", "hea
 DISPLAY = ("DISPLAY", "WAYLAND_DISPLAY")
 
 
-class ProgramMissing(RuntimeError):
+class ProgramMissing(UserError, RuntimeError):
     """No usable copy of an external program: its words end in the program's install hint."""
 
 

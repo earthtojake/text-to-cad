@@ -7,11 +7,12 @@ import xml.etree.ElementTree as ET
 from cad.engine import mesh_uri
 from cad.sdf._validation import raise_for_validation_errors, validate_sdf_root
 from cad._internal.xml_common import duplicate_values, children, display_path, local_name
+from cad.engine.errors import UserError
 
 SDF_SUFFIX = ".sdf"
 
 
-class SdfSourceError(ValueError):
+class SdfSourceError(UserError, ValueError):
     pass
 
 

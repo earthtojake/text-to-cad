@@ -12,6 +12,7 @@ import re
 from pathlib import Path
 
 import numpy as np
+from cad.engine.errors import UserError
 
 __all__ = ["StlError", "read_stl"]
 
@@ -19,7 +20,7 @@ _FACET = np.dtype([("normal", "<f4", 3), ("corners", "<f4", (3, 3)), ("attribute
 _VERTEX = re.compile(rb"vertex\s+(\S+)\s+(\S+)\s+(\S+)")
 
 
-class StlError(ValueError):
+class StlError(UserError, ValueError):
     """A file that does not read as an STL, said by name."""
 
 

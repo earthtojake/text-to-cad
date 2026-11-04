@@ -8,13 +8,14 @@ from __future__ import annotations
 import secrets
 import threading
 import time
+from cad.engine.errors import UserError
 
 TERMINAL = frozenset({"ready", "succeeded", "failed", "cancelled", "expired"})
 STATUS_SECONDS = 86400
 MAX_JOBS = 16
 
 
-class JobError(ValueError):
+class JobError(UserError, ValueError):
     def __init__(self, message, status=400):
         super().__init__(message)
         self.status = status

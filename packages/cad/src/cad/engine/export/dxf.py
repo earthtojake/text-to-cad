@@ -51,6 +51,7 @@ from typing import Any, Iterable
 
 from cad.engine.atomic_replace import put
 from cad.engine.export import ExportRefused
+from cad.engine.errors import InternalError, UserError
 
 __all__ = ["DEFAULT_LAYER", "DrawingFinding", "DrawingValidationError", "DxfDeterminismError", "document_is_drawing",
            "drawing_apparatus", "dxf_bytes", "layer_allows_open_geometry", "layer_intent", "layer_table_intents",
@@ -72,7 +73,7 @@ _RESERVED = set('<>/\\":;?*|=`')
 _PIN = threading.Lock()
 
 
-class DxfDeterminismError(RuntimeError):
+class DxfDeterminismError(InternalError, RuntimeError):
     """The writer could not hold its bytes to the drawing: an ezdxf mechanism it pins is gone."""
 
 
@@ -337,7 +338,7 @@ class DrawingFinding:
         return f"[{self.severity}] {self.code}: {self.message}"
 
 
-class DrawingValidationError(ValueError):
+class DrawingValidationError(UserError, ValueError):
     def __init__(self, findings: list[DrawingFinding], *, label: str = "") -> None:
         self.findings = findings
         prefix = f"{label}: " if label else ""

@@ -85,6 +85,8 @@ ALLOWED_CADGEN = {
     # A mesh reference's scheme and local file, read the same way by the engine's stills
     # (which may import nothing of the library outside the engine): stdlib only.
     "cad.engine.mesh_uri",
+    # Whose an error is to fix (CadError, UserError, InternalError): stdlib only.
+    "cad.engine.errors",
 }
 
 # What importing the family must not drag in. `cad urdf validate` runs on machines with

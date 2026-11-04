@@ -74,6 +74,7 @@ import json
 import random
 import threading
 from pathlib import Path
+from cad.engine.errors import UserError
 
 __all__ = [
     "DRAWING_PAYLOAD_SCHEMA_VERSION",
@@ -120,7 +121,7 @@ _JIGGLE_SEED = 0x64786673
 _render_guard = threading.Lock()
 
 
-class DrawingReadError(ValueError):
+class DrawingReadError(UserError, ValueError):
     """A ``.dxf`` that cannot be turned into a payload, with the reason.
 
     A ``ValueError``, so the Viewer's GET funnel answers 400 with the message —

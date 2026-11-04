@@ -37,6 +37,7 @@ from typing import Any
 import xml.etree.ElementTree as ET
 
 import numpy as np
+from cad.engine.errors import UserError
 
 __all__ = ["Model", "ThreeMfError", "read_3mf"]
 
@@ -119,7 +120,7 @@ def _cut(data: bytes) -> tuple[bytes, list[bytes]]:
     return b"".join(pieces), bodies
 
 
-class ThreeMfError(ValueError):
+class ThreeMfError(UserError, ValueError):
     """A file that does not read as a 3MF, said by name."""
 
 

@@ -48,6 +48,7 @@ from stat import S_ISREG
 from typing import Any, Callable
 
 from cad.engine.ids import canonical, file_id
+from cad.engine.errors import UserError
 
 __all__ = ["BuildError", "build", "load_script"]
 
@@ -59,7 +60,7 @@ _DEPRECATED = r"cad(gen)?\.[\w.]+ is deprecated; use "
 LIBRARY_NAMES = frozenset({"cad", "cadgen"})
 
 
-class BuildError(Exception):
+class BuildError(UserError):
     """A request the build cannot run: no such script, no such model."""
 
 
@@ -400,16 +401,23 @@ RAISED_FRAMES = 64
 
 
 def _raised(error: BaseException) -> dict[str, Any]:
-    """``raised``: a failed report's error as facts -- its type's name (a built-in's, or ``module.Name``) and its
+    """``raised``: a failed report's error as facts -- its type's name (a built-in's, or ``module.Name``), whose it
+    is by its class (``owner``, ``cad.engine.errors.owner``: present only for a ``CadError``) and its
     whole traceback's frames, innermost last (each ``{file, line, function}``, the file as Python has it). The
     error text keeps the model's frames alone (``_model_traceback``); these are every frame, the library's
     included, so whoever reads the report can tell a mistake in the library's code from the model's own
     (the server's ``analytics.told_signature``, which decides both a crash report and a page's Report Issue)."""
+    from cad.engine.errors import owner
+
     kind = type(error)
     frames = [{"file": frame.filename, "line": int(frame.lineno or 0), "function": frame.name}
               for frame in traceback.extract_tb(error.__traceback__)]
-    return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
-            "frames": frames[-RAISED_FRAMES:]}
+    found = {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
+             "frames": frames[-RAISED_FRAMES:]}
+    who = owner(error)  # whose by its class (``cad.engine.errors``): first; absent, the server's frame rule decides
+    if who is not None:
+        found["owner"] = who
+    return found
 
 
 def _failed(error: BaseException) -> dict[str, Any]:

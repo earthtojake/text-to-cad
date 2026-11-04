@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from math import isfinite
 from typing import TYPE_CHECKING, Iterable
+from cad.engine.errors import UserError
 
 if TYPE_CHECKING:
     from build123d import Compound, Edge, Shape, Shell, Solid, Vector
@@ -24,7 +25,7 @@ __all__ = [
 Matrix3 = tuple[tuple[float, float, float], tuple[float, float, float], tuple[float, float, float]]
 
 
-class GeometryError(RuntimeError):
+class GeometryError(UserError, RuntimeError):
     """The kernel could not establish the requested geometric result."""
 
 

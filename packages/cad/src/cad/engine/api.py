@@ -1229,10 +1229,13 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
         if _TRACEBACK in text:
             return {**_read(text), **told}
         return {"type": None, "frames": [], **told, "refused": text != "no engine daemon"}
+    from cad.engine.errors import owner
+
+    whose = {"owner": who} if (who := owner(error)) is not None else {}  # by its class first (``cad.engine.errors``)
     if getattr(error, "_engine_refusal", False):  # the worker's refusal, raised here as its type (``_failed``)
         kind = type(error)
         return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
-                "frames": [], **told, "refused": True}
+                "frames": [], **told, "refused": True, **whose}
     refusals = tuple(kind for kind in (getattr(sys.modules.get(module), name, None) for module, name in _REFUSALS)
                      if isinstance(kind, type))
     frames = [{"file": frame.f_code.co_filename, "line": int(line or 0), "function": frame.f_code.co_name}
@@ -1240,18 +1243,19 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     kind = type(error)
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
-            "refused": isinstance(error, refusals), "here": True}
+            "refused": isinstance(error, refusals), "here": True, **whose}
 
 
 def told_error(report: dict[str, Any]) -> dict[str, Any]:
-    """A failed build report's error as the verbs tell it (``observers``' ``error``): its type and frames,
-    innermost last -- the whole traceback the build kept (``build._raised``), else what its text shows --
+    """A failed build report's error as the verbs tell it (``observers``' ``error``): its type, whose it is by its
+    class where the build said (``owner``, ``cad.engine.errors``) and its frames, innermost last -- the whole traceback the build kept (``build._raised``), else what its text shows --
     and whether it was the engine's own, writing a file (``trace``). The server reads it to tell a mistake
     in the library's code from the model's: for a crash report, and for whether a page offers to report
     the failure (``cad_server.analytics.told_signature``, the one rule for both)."""
     trace = report.get("trace")
     raised = report.get("raised")
-    found = dict(raised) if isinstance(raised, dict) and raised.get("frames") else _read(trace or report.get("error") or "")
+    found = dict(raised) if isinstance(raised, dict) and (raised.get("frames") or raised.get("owner")) \
+        else _read(trace or report.get("error") or "")
     return {**found, "engine": bool(trace), "refused": False, "here": False}
 
 

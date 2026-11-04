@@ -77,6 +77,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from cad.engine.atomic_replace import replace_atomic, staging
+from cad.engine.errors import UserError
 
 __all__ = ["SnapshotRefused", "Still", "authored", "by_id", "draw", "draw_pictures", "job_input", "job_pictures",
            "options", "parse_annotation", "parse_camera", "parse_display", "parse_measurements", "parse_pose",
@@ -126,7 +127,7 @@ PADDING, PADDING_RANGE = 0.04, (0.0, 0.15)
 RENDER_SCALE_RANGE = (1.0, 3.0)
 
 
-class SnapshotRefused(ValueError):
+class SnapshotRefused(UserError, ValueError):
     """A request the snapshot will not draw, said before anything renders."""
 
 

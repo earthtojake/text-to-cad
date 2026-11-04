@@ -117,6 +117,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 import numpy as np
+from cad.engine.errors import UserError
 
 __all__ = ["CONFIGURATIONS", "COUPLINGS", "GUID", "MOTIONS", "Coupling", "KinematicsError", "Link", "LinkWorlds", "Mechanism",
            "Motion", "Pair", "Timeline", "block", "configuration_sequence", "gear_pair", "harvest", "mechanism_state",
@@ -161,7 +162,7 @@ _BY_ENTITY = {entity: kind for kind, (entity, _dofs) in KINDS.items()}
 _STRING_KEYS = ("schema", "angle_unit", "length_unit", "entity")
 
 
-class KinematicsError(ValueError):
+class KinematicsError(UserError, ValueError):
     """A mechanism the engine will not keep or pose, said by name."""
 
     # A joint's value outside its range (``_checked``): the joint, the value, its unit and the range.

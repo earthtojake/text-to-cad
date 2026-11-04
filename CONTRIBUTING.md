@@ -553,6 +553,47 @@ the package. `apps/web` is a client package with a boundary of its own
 (`apps/web/scripts/selfContained.test.mjs`): it imports @cad/core and @cad/ui by their public exports; relative
 imports remain inside its directory.
 
+## Errors: Whose They Are To Fix
+
+The rule is the library's law 30 (`packages/cad/README.md`); the mechanism is the engine
+README's **Whose an error is** (`packages/cad-server/src/cad_server/engine/README.md`). In short:
+**an error is the person's if it is a `UserError` (`cad.engine.errors`); every other error is ours.** It
+decides whether a failed build offers Report Issue and whether telemetry counts a crash, so a
+wrong class is a wrong issue in the tracker or a bug nobody hears of.
+
+When you write code in `packages/cad` or `packages/cad-server`:
+
+- **Refusing what the person gave** (a bad value, a path that is not there, a file that does not
+  read, a request the engine will not serve): raise a `UserError` subclass whose message says what
+  is wrong and, where it can, what to do instead. Use the module's existing refusal
+  (`ExportRefused`, `SnapshotRefused`, `FormatError`, `KinematicsError`, `RefError` ...) or add one:
+  `class ThingRefused(UserError, ValueError)`. Keep the built-in base a refusal already had, so no
+  `except` of it breaks. Check the value where it arrives; never let it fail a later line, which
+  reads as our bug -- correctly, since we should have checked.
+- **A state our own code cannot go on from** (a branch that "cannot happen", a dependency
+  mechanism we pin that is gone): raise `InternalError` (or a subclass), not `RuntimeError`, and
+  not `assert`, which `python -O` drops.
+- **Never** catch a person's error and raise it again as an `InternalError`, or catch our own and
+  raise it again as a `UserError`, to change the verdict. Wrap only to add what the message lacks,
+  and keep the class's owner.
+- **Never** decide "is this our bug" anywhere else -- not in the UI, not in a command, not in
+  telemetry. Read `cad.engine.errors.owner`, or the fields that carry it (`raised.owner` in a build's
+  report, `reportable` on the page's record).
+- A new **wrapper that forwards a person's call into a library** (as the memo forwards build123d's
+  calls) goes in `analytics._PASSING` until the fallback is gone, or the person's mistakes there
+  read as ours.
+
+Tests: `tests/python/packages/cad/engine/test_errors.py` holds the class rule and the refusal classes;
+`tests/python/packages/cad_server/engine/test_failure_reportable.py` holds the verdicts through real
+builds. A new refusal class goes in the first; a new kind of failure a page shows, in the second.
+
+**The migration still open.** About 315 plain `raise ValueError(...)`/`raise TypeError(...)` and 25
+`raise RuntimeError(...)` in the two packages carry no class yet, and the frame fallback decides
+them. Convert them module by module: a refusal becomes a `UserError` subclass, an impossible state
+an `InternalError`. When none is left, the fallback (`analytics.BUGS`, the `raise`-line check,
+`_PASSING`) is deleted and an error that is no `CadError` escaping cadgen's own code is ours; the
+person's own code is then marked where cadgen calls it, so what escapes it is theirs.
+
 ## Working On The Packages In This Repo
 
 - `scripts/test/test-python.sh` (or path-targeted `unittest`) for the engine

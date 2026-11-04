@@ -150,6 +150,7 @@ from typing import Any, Callable, Mapping
 
 from cad_server._internal.api import api_url
 from cad._internal.atomic_replace import replace_atomic, temp_suffix
+from cad.engine.errors import owner as _owner
 from cad_server._internal.file_lock import state
 from cad_server.settings import read_section, settings_path, update_section
 
@@ -454,6 +455,9 @@ CRASHES_PENDING = 16  # past this many different crashes waiting, a process coun
 # mistake in these words too ("@step must return a build123d Shape" is a TypeError). So cadgen code that takes what the
 # person gave it -- a value, a colour, a path -- checks it and says so at a raise:
 # Python's error from using it unchecked would read as cadgen's own mistake.
+# This is the FALLBACK. Whose an error is goes first by its class (``cad.engine.errors``): a ``UserError`` is never a
+# crash, and any other ``CadError`` always is, wherever it was raised. Only an error that is no ``CadError`` --
+# Python's, a library's, the person's -- is decided by the frame rule below.
 BUGS = (AttributeError, LookupError, TypeError, NameError, AssertionError, ZeroDivisionError, RecursionError,
         NotImplementedError)
 _RAISED = re.compile(r"(?:^|:)\s*raise\b")
@@ -986,11 +990,15 @@ def signature(error: BaseException, where: str, *, tool: str | None = None, hand
         return None
     if _installation_gone(error):  # cadgen's own files removed under it: no crash
         return None
-    if bugs_only and not isinstance(error, BUGS):  # before reading any frame: a failure is never kept waiting
+    who = _owner(error)  # by its class first (``cad.engine.errors``); ``None``: the frame rule decides
+    if who == "user":  # the person's to fix: never a crash
+        return None
+    if bugs_only and who is None and not isinstance(error, BUGS):  # before reading any frame: never kept waiting
         return None
     frames, decisive = _named_frames([(frame.f_code.co_filename, frame.f_code.co_qualname, int(line or 0))
                                       for frame, line in traceback.walk_tb(error.__traceback__)])
-    if bugs_only and not (decisive is not None and decisive[0] is not None and _mistake(error, decisive[1], decisive[2])):
+    if bugs_only and who is None and not (decisive is not None and decisive[0] is not None
+                                          and _mistake(error, decisive[1], decisive[2])):
         return None
     frames = frames[-MAX_FRAMES:]
     if isinstance(error, RecursionError) and _their_cycle(frames):
@@ -1068,16 +1076,26 @@ def told_signature(found: Mapping[str, Any], where: str, *, handled: bool = True
     Python had it, a function and a line -- the engine's verbs tell a worker's error so (``cad.engine.api``).
     A mistake in cadgen's own code, named as ``signature`` names one, or ``None``. Never raises."""
     try:
-        kind = _builtin(found.get("type"))
-        if where not in WHERE or kind is None or not issubclass(kind, BUGS):
+        who = found.get("owner")  # whose by its class, as the build told it (``cad.engine.errors.owner``)
+        if where not in WHERE or who == "user":
             return None
+        name = found.get("type")
+        kind = _builtin(name)
         frames, decisive = _named_frames(_told_frames(found))
-        if decisive is None or decisive[0] is None or _RAISED.search(linecache.getline(decisive[1], decisive[2])):
-            return None
+        if who != "ours":  # no ``CadError``: the frame rule decides
+            if kind is None or not issubclass(kind, BUGS):
+                return None
+            if decisive is None or decisive[0] is None or _RAISED.search(linecache.getline(decisive[1], decisive[2])):
+                return None
         frames = frames[-MAX_FRAMES:]
-        if issubclass(kind, RecursionError) and _their_cycle(frames):
+        if kind is not None and issubclass(kind, RecursionError) and _their_cycle(frames):
             return None
-        return {"where": where, "type": kind.__qualname__, "handled": bool(handled), "frames": frames}
+        if kind is not None:
+            typename = kind.__qualname__
+        else:  # a ``CadError`` of cadgen's own, by its module: never a name of the person's
+            ours = isinstance(name, str) and _TYPE.fullmatch(name) and name.partition(".")[0] in OUR_PACKAGES
+            typename = name if ours else "<?>"
+        return {"where": where, "type": typename, "handled": bool(handled), "frames": frames}
     except Exception:  # noqa: BLE001 - a crash that cannot be named is not sent
         LOG.debug("could not name a told crash", exc_info=True)
         return None
@@ -1155,7 +1173,11 @@ def _whose(error: BaseException) -> tuple[str | None, tuple[str, str, int] | Non
 
 
 def _bug(error: BaseException, decisive: tuple[str, str, int] | None) -> bool:
-    """A mistake in cadgen's own code: what ``signature(bugs_only=True)`` reports as a crash."""
+    """A mistake in cadgen's own code: what ``signature(bugs_only=True)`` reports as a crash -- by its class
+    first (``cad.engine.errors``), else by the frame rule."""
+    who = _owner(error)
+    if who is not None:
+        return who == "ours"
     return decisive is not None and decisive[0] == "ours" and _mistake(error, decisive[1], decisive[2])
 
 

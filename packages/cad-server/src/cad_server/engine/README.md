@@ -818,16 +818,8 @@ Nor does the day: the creation date the BinXCAF driver writes in the file's
 header is always `01/01/2000` (`document.WRITTEN_DATE`, put over the driver's in
 place), so two cold builds of the same code are the same bytes on any day.
 If a body raises, the error is reported with the model's frames and the
-previous files stay. The report also keeps the error's whole traceback as facts (`raised`,
-`build._raised`: its type and every frame, the library's included), and the daemon decides
-from them whether the failure is a mistake in cadgen's own code (`reportable`,
-`daemon._reportable`) by the rule telemetry counts a build's crash by
-(`analytics.told_signature`), so the tracker hears of what telemetry would: an error Python
-raised in cadgen's code at a line that is no `raise`, past the memo's and the history's wrappers
-of build123d's calls. The model's own code, a library it called, the kernel refusing a call and
-cadgen refusing what it was given are the model's to correct. The page's record of the failed
-build carries `reportable`, and the card offers Report Issue only where it is not `false`; a
-worker that died under the build is reportable. The program's own call prints those frames once on stderr, then `failed
+previous files stay. The report also says whose the error is to fix (`raised`, **Whose an
+error is**, below), and the page's record of the failed build carries `reportable` from it. The program's own call prints those frames once on stderr, then `failed
 <script>::<model>`, and nothing else; the call still raises (`EngineError`), so a caller may catch
 it, and left uncaught it ends the program with status 1 without its traceback again
 (`model._told`). A call the engine never served -- none runs and this shell's sandbox cannot
@@ -3208,6 +3200,45 @@ as `same`, `differs: <where>`, or `follows <function>` for one whose result hold
 that differs. A function whose result differs is marked to run on every call for the
 worker's life (`memo.always()`), the bodies that call it with it, and a model that calls it
 is not taken by its key. A verifying build does not ask the previous document.
+
+## Whose an error is
+
+The library's law 30. One rule decides whether an error is the person's or cadgen's, and it
+decides two things: whether a page offers **Report Issue** for a failed build, and whether
+telemetry counts a crash. Nothing else may decide either.
+
+**The rule, by class first** (`cad.engine.errors.owner`). A `UserError` is the person's: their model,
+their input or their request must change. Any other `CadError` -- `InternalError` above all -- is
+cadgen's. That answer stands wherever the error was raised and whatever its frames say.
+
+**The fallback, by frames** (`analytics.told_signature`, `analytics.signature`), for an error that
+is no `CadError`: one Python raised, a library's, or the person's own code's. It reads the
+traceback's innermost frame that is cadgen's or the person's (a library's and the standard
+library's frames pass the error to their caller; so do the memo's and the history's wrappers of
+build123d's calls when they passed the call on, `analytics._PASSING`). The person's frame: theirs.
+cadgen's frame: cadgen's only when the error is one of Python's words for a mistake in code
+(`analytics.BUGS`) on a line that is no `raise`; a `raise` there is a refusal. A worker that died
+under a build is cadgen's. The fallback shrinks as cadgen's plain `raise ValueError` and
+`raise RuntimeError` become `UserError` and `InternalError`; it goes once none is left.
+
+**How it travels.**
+
+| Step | Where | What |
+|---|---|---|
+| A build fails in a worker | `build._raised` | The failed report keeps `raised`: the error's type, `owner` when the class says (`"user"` or `"ours"`), and its whole traceback's frames, innermost last (at most 64). The report's `error` text keeps the model's frames alone, as the person reads it |
+| A child model fails | `build._build` | Its parent's report takes the child's `raised` |
+| The verbs tell what failed | `api.told_error` | `raised` as the facts the observers hear (`api.observers`), the same for a script's own call and the daemon |
+| The daemon marks the page | `daemon._reportable` | `reportable` on the failed build's record: `told_signature` of those facts is a crash. A worker that died: `true` |
+| The page shows it | `@cad/ui`'s `buildFailedAlert` | `reportable: false` shows no Report Issue; `true` says the error comes from CAD itself; a record without it (an engine before it) is reportable |
+| Telemetry counts it | `engine_telemetry`, `analytics.told_signature` | The same answer: a crash, its type cadgen's own name (`cad.engine.errors.InternalError`) or Python's, its frames with the person's code one `<user>` |
+
+A command's own error, raised in the server's process, goes through `analytics.signature`, which
+applies the same rule to the error itself: a `UserError` is never a crash.
+
+**Known and accepted.** cadgen's bug that hands the person a wrong value, which their own code then
+fails on, reads as theirs: no rule that cannot read intent can tell. Until a raise of cadgen's
+carries a class, an error the fallback cannot see as a mistake -- a stray `RuntimeError`, a
+`ValueError` from a failed unpacking -- reads as the person's; its error still shows whole.
 
 ## Known and accepted
 

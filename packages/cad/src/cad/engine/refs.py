@@ -42,6 +42,7 @@ import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterator
+from cad.engine.errors import UserError
 
 __all__ = ["ELEMENT_NAME", "Hit", "RefError", "Selector", "parse", "path_text", "placed_facts", "resolve_structure"]
 
@@ -66,7 +67,7 @@ _STEP = (rf";(?:(?:(?:M|MG[fev]|G[fev]|U)(?:{_NAME_NUMBER})?|L):{_FEATURE_NAME}(
 ELEMENT_NAME = re.compile(rf"[fev]:(?:[0-9a-f]{{12}}|{_ATOM}(?:{_STEP})*)")
 
 
-class RefError(ValueError):
+class RefError(UserError, ValueError):
     """A ref that names nothing in the document, or several things where it names one."""
 
 
