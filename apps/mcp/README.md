@@ -1,8 +1,9 @@
 # CAD app (MCP Apps)
 
 The page an agent host renders for CAD: the same `@cad/ui` FileViewer and
-renderers `apps/web` composes, behind a different host — an MCP Apps bridge
-instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
+renderers `apps/web` composes (`cadRenderers`: every format the viewer opens, a KiCad board and
+schematic among them, and the file handler's extensions with them: `cad_server/mcp/server.py`'s
+`EXTENSIONS`), behind a different host — an MCP Apps bridge instead of an HTTP origin. The installation's engine serves its tools, page resource and HTTP routes.
 `cad-mcp` is the stateless stdio shim that agent hosts launch: it ensures that
 engine, then forwards JSON-RPC to `/mcp` using its installation token. Each shim
 negotiates a separate MCP session. Closing a shim releases that session and leaves

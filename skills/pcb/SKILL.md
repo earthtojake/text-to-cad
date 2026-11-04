@@ -1,6 +1,6 @@
 ---
 name: pcb
-description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards in the CAD Viewer.
+description: Create, edit, lay out and review native KiCad circuit boards (.kicad_pcb) and their schematics (.kicad_sch) - parts and nets, ERC, placement and routing, DRC, and a review before ordering (fab limits, decoupling, track width for current, assembly and BOM sourcing for JLCPCB, PCBWay or another fab); exports fabrication files, the netlist and BOM, or STEP for enclosure design. Shows boards and schematics in the CAD Viewer.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -200,3 +200,23 @@ at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawi
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
 exports remain authoritative for fabrication. For an enclosure use KiCad's STEP export, not a
 solid inferred from the 2D plot.
+
+## Schematic views
+
+`cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
+selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy** is KiCad's Hierarchy
+Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the trail under
+the toolbar goes back up. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
+junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
+The **Circuit** lists the parts by the sheet they are placed on, each with its pins, and the nets with
+the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows
+that sheet. Each arrives as a schematic reference (`#R1`, `#R1.2`, `#net:/MID`, `#sheet:/Power/`,
+`#wire:<uuid>`; [schematic](references/schematic.md) says what each names). The schematic follows the
+app's theme: KiCad's paper and ink in light, a dark sheet with light ink of the same hues in dark. No
+drawing sheet or title block is drawn. ERC findings are not drawn: run `cad kicad_sch erc`. The file
+menu's Export offers KiCad's PDF, SVGs, netlist and BOM. Snapshots use `cad kicad_sch snapshot`, and
+a Quick Edit packet carries the sheet and theme the view showed:
+
+```bash
+cad kicad_sch snapshot board.kicad_sch tmp/power.png --display '{"sheet":"/Power/","appearance":"dark"}'
+```
