@@ -75,5 +75,5 @@ an integration.
 - [ ] **Tests** follow the repository's rules: every test reached by CI, fixtures built by the tests
       in temporary folders, never reading `models/`; a test that needs the tool runs only in the job
       that installs it, and says so by name where it skips.
-- [ ] **Skill install notes**: the skill that uses it says how to get the tool, in its setup block,
-      the way the server's setup block is said.
+- [ ] **Skill notes**: the skill that uses it says what the tool is and when it is fetched, after its
+      setup block (the setup block itself is the shared text every skill carries word for word).

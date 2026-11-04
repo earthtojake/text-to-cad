@@ -11,8 +11,8 @@ adding one has its own guide: [Adding an integration](adding-an-integration.md).
 [walkthrough](#walkthrough-a-type-and-its-integration-together-kicad) below adds both at once, with
 KiCad's boards as the example.
 
-How an integration gets installed on a person's computer is not covered yet: no release installs
-one on demand, and this guide does not decide how one will.
+How an integration reaches a person's computer is the integration guide's: its extra is installed
+where a command or a program first needs it.
 
 ## Checklist
 
