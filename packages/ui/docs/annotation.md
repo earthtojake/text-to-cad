@@ -2,7 +2,7 @@
 
 The drawing tools — Pencil and Shapes — are the CAD viewer's own ink, with no drawing SDK behind it. A view has one
 annotation: its marks are projected into the model in 3D, so they stay where they
-were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot and DXF renderers offer them
+were drawn from every angle, lying on the surface they were drawn on. The engine document, GLB, mesh, robot, DXF and board renderers offer them
 ([Pencil and Shapes](cad-renderer.md#pencil-and-shapes)).
 
 ## Pieces

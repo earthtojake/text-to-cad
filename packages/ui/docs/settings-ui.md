@@ -83,8 +83,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   itself where nothing in it can open (the web viewer's), else each such entry — the card's Browser
   needs no source and stays enabled, its Finder disabled. The source's apps and Default app are
   disabled the same way; an export on disk still opens. Open in's entries are one list, each with
-  whether it opens now and why not (`openInMenu`). There is no Copy link: a page's link carries its
-  credential. No ⋯ where there is nothing. The home has no file and no ⋯. The name has
+  whether it opens now and why not (`openInMenu`). No ⋯ where there is nothing. The home has no file and no ⋯. The name has
   no right-click menu and there are no crumbs. The left's controls sit edge to edge, spaced
   by their own padding alone: the logo's 24px button, Back, Forward and the ⋯ in 20px ones,
   and the name 4px in from its edges, so about 7px separate one glyph from the next. Right,
@@ -277,11 +276,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 
 | File | Tool strip, left to right |
 | --- | --- |
-| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, Display and Preview |
-| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
-| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, Display and Preview |
-| 3MF | Select, Pencil, Shapes, Measure; Clip, Display and Preview |
-| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Display and Preview |
+| STEP | Select, Pencil, Shapes, Measure; Explode (two or more parts), Clip, Projection, Display and Preview |
+| URDF / SRDF / SDF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
+| GLB | Select, Pencil, Shapes, Measure; Explode (several rigid nodes that draw), Clip, Projection, Display and Preview |
+| 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
+| STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits), Pencil, Shapes, Measure; Display |
 
