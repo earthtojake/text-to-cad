@@ -63,7 +63,7 @@ The stages keep ownership narrow:
   as the other: three sorts each object back to front and draws a two-sided one back faces first,
   OCCT draws them as they were displayed, which is most of what still differs.
 - `captureModel` draws the scene headless and returns its pictures, with no filesystem
-  writes. the engine's stills are OCCT's (`cad <type> snapshot`); this headless scene is what the
+  writes. The engine's stills are OCCT's (`cad <type> snapshot`); this headless scene is what the
   renderer parity measurement drives beside OCCT (`scripts/bench/occt_parity.py`).
 
 ## Modules

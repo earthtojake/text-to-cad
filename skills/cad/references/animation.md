@@ -17,12 +17,12 @@ joints, mechanism states, couplings and configuration sequences, read
 
 Two layers, each true to its format:
 
-- **A configuration sequence** (`cad.ap242`'s `configuration_sequence`, a motion on
+- **A configuration sequence** (`cad.build123d`'s `configuration_sequence`, a motion on
   the page) is the mechanism's: joint values over time, kept in the document as STEP
   AP242's configuration sequence. Every GLB of the model carries it as a clip, and the
   page's Motion section plays it. A robot's gait, a door's opening, an engine's running
   belong here.
-- **An animation** (`cad.gltf`'s `animation`) is the GLB's: glTF channels
+- **An animation** (`cad.build123d`'s `animation`) is the GLB's: glTF channels
   (translation, rotation, scale) on the parts a GLB places, and the mechanism's forward
   kinematics at given times. It is no part of the mechanism: the viewer's page and a
   STEP show nothing of it, and an exported `.xbf` only records its compiled tracks for a
@@ -36,7 +36,7 @@ The rules:
   animation's job, and the Position panel would show a slider for each.
 - **Animations are GLB-only.** `cad model export "$ID" model.glb`,
   `model.export(part(), "model.glb")` and `cad xbf export model.xbf model.glb` from an xbf the
-  model exported all bake them, the same bytes. `read_xbf` imports a part's geometry
+  model exported all bake them, the same bytes. `xbf.read` imports a part's geometry
   without them.
 - **`.hide` is a scale trick.** glTF has no visibility channel, so a hidden part is
   scaled to 0. Use `.scale(parts, to=1, start=t, end=t, interpolation="STEP")` to bring

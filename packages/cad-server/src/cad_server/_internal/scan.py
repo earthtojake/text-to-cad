@@ -4,9 +4,15 @@ imports -- in its folder, its package, or its project -- following each absolute
 names a local file, the imports inside functions too (a model's body imports its kernel there).
 
 Each module a program imports is looked up in the library's table of integrations
-(``cad._internal.integrations``: ``build123d`` and ``OCP`` are the build123d integration's, ``kipy`` the
-kicad integration's), by its top level; and so is each of cad's decorators it applies (``@cad.kicad_pcb``,
-or a ``kicad_pcb`` imported from cad). Nothing is imported, and a module of no local file is passed over.
+(``cad._internal.integrations``: ``build123d`` and ``OCP`` are the build123d integration's, ``kicode`` the
+kicad integration's), by its top level; and so is each of cad's names it imports or uses, by the dotted name
+it spells (``from cad.step import read``, ``step.read`` with ``step`` imported from cad, ``cad.read_step``):
+an earlier spelling is read as the name it is now, by the alias table, and a name needs what the registry
+says it does -- an integration's namespace that integration, a document type's reader its
+``reader_integration`` (a STEP's: build123d), an operation the calling process runs its integration (a
+``dfm``: trimesh), one the engine runs none (``for_name``) -- and each of cad's decorators it applies
+(``@cad.kicad_pcb``, or a ``kicad_pcb`` imported from cad). A type alone (``from cad import step``) needs
+nothing. Nothing is imported, and a module of no local file is passed over.
 An import made by name at run time (``importlib.import_module``) is not seen: the program's run says which
 extra it lacks, in one line, and its header names it.
 """
@@ -49,6 +55,18 @@ def _package_root(folder: Path) -> Path:
 def _package_of(path: Path) -> Path:
     """The folder a relative import of the file ``path`` counts from: its own."""
     return path.parent
+
+
+def _dotted(node: ast.expr, bound: dict[str, str]) -> str | None:
+    """The library's dotted name an expression spells (``step.read`` with ``step`` bound to ``cad.step``:
+    ``cad.step.read``), or None for one rooted at no name bound to cad."""
+    attributes: list[str] = []
+    while isinstance(node, ast.Attribute):
+        attributes.append(node.attr)
+        node = node.value
+    if not isinstance(node, ast.Name) or node.id not in bound:
+        return None
+    return ".".join([bound[node.id], *reversed(attributes)])
 
 
 class _Reader:
@@ -98,46 +116,45 @@ class _Reader:
         self.queue.append(resolved)
 
     def read(self, source: str, path: Path) -> None:
-        """One file's imports and decorators (see the module); a file that does not parse is passed over:
-        Python says what is wrong with it when it runs."""
-        from cad._internal.integrations import decorated
+        """One file's imports, its uses of cad's names and its decorators (see the module); a file that does
+        not parse is passed over: Python says what is wrong with it when it runs."""
+        from cad._internal.aliases import current
+        from cad._internal.integrations import decorated, for_name
 
         try:
             tree = ast.parse(source, filename=str(path))
         except (SyntaxError, ValueError):
             return
-        library: set[str] = set()  # the names cad is bound to here
-        imported: dict[str, str] = {}  # a name bound to one of cad's own names, and that name
+        bound: dict[str, str] = {}  # a name bound here to one of cad's own, and that name's dotted path
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     self.module(alias.name)
-                    if alias.name in LIBRARY:
-                        library.add(alias.asname or alias.name)
+                    top = alias.name.split(".")[0]
+                    if top in LIBRARY:  # ``import cad.step`` binds ``cad``; ``import cad.step as s``, ``s``
+                        bound[alias.asname or top] = alias.name if alias.asname else top
             elif isinstance(node, ast.ImportFrom):
                 if node.level:
                     self.relative(path, node.level, node.module, [alias.name for alias in node.names])
                 elif node.module:
                     self.module(node.module)
-                    if node.module in LIBRARY:
-                        for alias in node.names:
-                            imported[alias.asname or alias.name] = alias.name
-                            self.module(f"{node.module}.{alias.name}")  # ``from cad import build123d``
-                    else:
-                        for alias in node.names:  # ``from pkg import module``: a local module too
-                            self.module(f"{node.module}.{alias.name}")
+                    for alias in node.names:  # ``from cad import read_step``; ``from pkg import module``: local too
+                        self.module(f"{node.module}.{alias.name}")
+                        if node.module.split(".")[0] in LIBRARY:
+                            bound[alias.asname or alias.name] = f"{node.module}.{alias.name}"
         for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute):  # ``step.read``, ``cad.read_step``, ``c.step.dfm``
+                dotted = _dotted(node, bound)
+                key = for_name(dotted) if dotted else None
+                if key is not None:
+                    self.found.add(key)
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                 continue
             for decorator in node.decorator_list:
                 target = decorator.func if isinstance(decorator, ast.Call) else decorator
-                name = None
-                if isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name) \
-                        and target.value.id in library:
-                    name = target.attr
-                elif isinstance(target, ast.Name) and target.id in imported:
-                    name = imported[target.id]
-                key = decorated(name) if name else None
+                dotted = _dotted(target, bound)
+                parts = current(dotted).split(".") if dotted else []
+                key = decorated(parts[1]) if len(parts) == 2 else None  # ``@cad.kicad_pcb``, ``@board``
                 if key is not None:
                     self.found.add(key)
 

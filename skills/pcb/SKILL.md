@@ -175,8 +175,10 @@ area, a box on the layer the person works on. The sidebar's **Circuit** lists th
 schematic blocks their footprints record (by kind on a board that records none) and the nets: a
 block picks every part in it, a net picks the whole net. Each arrives as a reference
 ([checks](references/checks.md#references) says what each names and how to resolve it). The
-**Layers** tab sets the active layer (drawn on top), Dim other layers, and the zones' and tracks'
-opacity; they are the display, so a Quick Edit's packet draws the same.
+**Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
+Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Dim
+other layers and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
+draws the same.
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit. Display modes are
 `board`, `copper`, `assembly`, and `placement`:

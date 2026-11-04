@@ -19,8 +19,10 @@
  * **The view transform is drawing2d's** (`../drawing2d/transform.js`): one uniform scale and a
  * translation, with fit, zoom and pan already written there. drawing2d's model space is y UP;
  * a plot's page is that model space with y negated, so `modelBounds` is the page box flipped
- * and `fitTransform(layout.modelBounds, …)` frames a plot exactly as it frames a drawing. With
- * that flip, a transform maps page to screen as `screen = page * scale + offset` on both axes.
+ * and `fitTransform(layout.modelBounds, …)` frames a plot as it frames a drawing — with a board's
+ * wider margin (`boardFitMargin`: the 3D views' room round a model) and clear of the tool strip,
+ * `fitPlotTransform`. With that flip, a transform maps page to screen as
+ * `screen = page * scale + offset` on both axes.
  *
  * **A frame** (`drawPlot`) is the canvas filled with the sheet's background, then the layers a
  * `view` chooses, in its order: every layer by default (KiCad's default view), or the layers the
@@ -36,7 +38,7 @@
  * pans in a few milliseconds. The pane keeps rasters of a view made with this same function and
  * paints them with `drawPlotImages`.
  */
-import { fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
+import { DRAWING_FIT_MARGIN, fitTransform, modelToScreen, screenToModel } from "../drawing2d/transform.js";
 import { textStrokes } from "./strokeFont.js";
 import { DIM_OPACITY, HOLE_COLORS, ZONE_OPACITY, itemColor, layerColor, netnameColor } from "./theme.js";
 import { isTrack, trackNameDetail, trackNames } from "./trackNames.js";
@@ -284,17 +286,41 @@ export function layoutPlot(payload) {
   });
 }
 
+/** The share of a pane's smaller side a board's fit leaves on each side: the 3D views' default framing's room. */
+export const BOARD_FIT_MARGIN_SHARE = 0.06;
+
+/**
+ * The room a board's fit leaves round it, in pane pixels: 6% of the pane's smaller side, never less
+ * than drawing2d's 16px — the breathing room a STEP's default view has, more than a drawing's
+ * fixed gutter. `cad kicad_pcb snapshot` frames with the same (`render/board.py`).
+ *
+ * @param {number} width
+ * @param {number} height
+ * @returns {number}
+ */
+export function boardFitMargin(width, height) {
+  return Math.max(DRAWING_FIT_MARGIN, BOARD_FIT_MARGIN_SHARE * Math.min(width, height));
+}
+
 /**
  * The view that frames the sheet — the board's outline — in a `width` x `height` pane:
- * drawing2d's fit, through the flip. What the file draws past the outline is drawn where it falls.
+ * drawing2d's fit, through the flip, with a board's margin (`boardFitMargin`) and, where the view's
+ * tool strip lies over its top, `top` pixels clear of it. What the file draws past the outline is
+ * drawn where it falls. The board view's first view, its double-click and its card all fit so.
  *
  * @param {PlotLayout} layout
  * @param {number} width
  * @param {number} height
+ * @param {{ top?: number }} [options]
  * @returns {DrawingTransform}
  */
-export function fitPlotTransform(layout, width, height) {
-  return fitTransform(layout.modelBounds, width, height);
+export function fitPlotTransform(layout, width, height, { top = 0 } = {}) {
+  return fitBoardBounds(layout.modelBounds, width, height, { top });
+}
+
+/** `fitPlotTransform` for a box of the board's (its outline, model space, y up). */
+export function fitBoardBounds(bounds, width, height, { top = 0 } = {}) {
+  return fitTransform(bounds, width, height, { margin: boardFitMargin(width, height), top });
 }
 
 /**
@@ -728,6 +754,21 @@ function checkTransform(transform, who) {
 }
 
 /**
+ * The background under the board alone, for a picture on a card: its area (the outline filled, its
+ * cutouts open) in the sheet's background, nothing round it — the board's shape, never a box of
+ * canvas. A board with no outline fills its sheet.
+ */
+function drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCtor }) {
+  const area = sheet.layers.find((layer) => layer.kind === "area");
+  if (!area?.items.length) {
+    ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
+    return;
+  }
+  pageSpace(ctx, transform, pixelRatio, mirrorX);
+  for (const item of area.items) fill(ctx, pathOf(ctx, item, PathCtor, mirrorX != null), item.holes ? "evenodd" : undefined);
+}
+
+/**
  * Draw one frame of a plot: the canvas in the sheet's background, then the layers `view` chooses,
  * in its order, each item in KiCad's colours, all in page space under the view. Nothing is clipped
  * to the sheet: an item past the outline is drawn where it falls, as KiCad draws it.
@@ -740,14 +781,17 @@ function checkTransform(transform, who) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {PlotLayout} layout
  * @param {{ transform: DrawingTransform, pixelRatio?: number, view?: PlotView|null, detail?: number,
- *   viewport?: readonly [number, number], Path2D?: any }} options
+ *   viewport?: readonly [number, number], backdrop?: "canvas" | "board", Path2D?: any }} options
  *   `detail` is the CSS pixels per millimetre the view shows, for the labels' level of detail
  *   (`transform.scale` when omitted: a raster drawn at device scale passes its view's own), and
  *   `viewport` the millimetres it shows across and down, for where the tracks' names fall (what the
  *   canvas shows when omitted: a raster larger than its view passes the view's own).
+ *   `backdrop`: `"canvas"`, the canvas the sheet's background everywhere (the view, a snapshot), or
+ *   `"board"`, the board's own area alone, the rest left clear (a library card's picture).
  *   `Path2D` is injectable so this module is exercised in `node --test` with a recording double.
  */
-export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, detail = null, viewport = null, Path2D: PathCtor = globalThis.Path2D }) {
+export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, detail = null, viewport = null, backdrop = "canvas",
+  Path2D: PathCtor = globalThis.Path2D }) {
   checkTransform(transform, "drawPlot");
   const visible = shownRect(ctx, transform, pixelRatio);
   const across = viewport ?? (visible ? [visible[2] - visible[0], visible[3] - visible[1]] : null);
@@ -768,7 +812,8 @@ export function drawPlot(ctx, layout, { transform, pixelRatio = 1, view = null, 
     if (shown && !rectsOverlap(shown, layout.extent)) continue;
     pageSpace(ctx, transform, pixelRatio, null);
     ctx.fillStyle = sheet.background;
-    if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
+    if (backdrop === "board") drawBoardBackdrop(ctx, sheet, { transform, pixelRatio, mirrorX, PathCtor });
+    else if (visible) ctx.fillRect(visible[0], visible[1], visible[2] - visible[0], visible[3] - visible[1]);
     else ctx.fillRect(sheet.x, sheet.y, sheet.width, sheet.height);
     for (const layer of viewedLayers(sheet, view)) {
       pageSpace(ctx, transform, pixelRatio, mirrorX);

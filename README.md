@@ -31,8 +31,8 @@ Gemini and Grok.
 
 1. Your agent writes each model as a Python script with [build123d](https://github.com/gumyr/build123d), built on [Open CASCADE](https://dev.opencascade.org).
 2. Running the script, `python model.py`, builds the model with text-to-cad's
-   server into an `.xbf` document (its parts, names, colours, materials and joints)
-   and the STEP, GLB, STL or 3MF files the script declares. The server keeps each
+   server into a document it holds in memory (its parts, names, colours, materials
+   and joints) and the STEP, GLB, STL or 3MF files the script declares. The server keeps each
    model's work in memory, so an edit rebuilds only what it changed.
 3. The CAD viewer shows the model in your agent app or your browser, and follows
    every rebuild.
@@ -65,12 +65,12 @@ Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
 
 ## 🧰 Skills
 
-Install the library to give agents focused workflows for CAD, fabrication,
-robot description files, simulation, and local review.
+The plugin gives agents focused workflows for CAD, circuit boards, fabrication
+and robots for simulation.
 
 | Skill        | Summary                                                                                                                                            | Source                                              |
 | ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| CAD          | Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built into XBF documents with STEP, STL, 3MF, GLB and DXF exports. | [skills/cad](skills/cad/SKILL.md)                   |
+| CAD          | Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built by text-to-cad's server and exported as STEP, STL, 3MF, GLB, DXF or xbf files. | [skills/cad](skills/cad/SKILL.md)                   |
 | Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
 | PCB          | Checks KiCad schematics (ERC), edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP. | [skills/pcb](skills/pcb/SKILL.md)                   |
 | Simulation   | Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF. | [skills/simulation](skills/simulation/SKILL.md)     |

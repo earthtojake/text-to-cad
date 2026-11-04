@@ -77,12 +77,10 @@
     @apply border-border outline-ring/50;
   }
 
+  /* What a file opening shows: the page's own background, plain and opaque — no glow, no blur,
+   * nothing of what is behind it seen through. */
   .cad-loading-overlay {
-    background:
-      radial-gradient(circle at 50% 14%, color-mix(in srgb, var(--primary) 18%, transparent) 0%, transparent 38%),
-      linear-gradient(180deg, color-mix(in srgb, var(--ui-loading-overlay) 72%, transparent) 0%, var(--ui-loading-overlay-strong) 100%);
-    -webkit-backdrop-filter: blur(14px) saturate(1.12);
-    backdrop-filter: blur(14px) saturate(1.12);
+    background: var(--background);
   }
 
   ::selection {

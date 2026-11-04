@@ -175,7 +175,7 @@ Behind it, Background is a studio backdrop rather than a flat fill: its color li
 toward white behind the middle of the frame, shaded toward the corners (more for a dark
 color) and above the horizon. Its opacity carries the gradient; at zero it draws nothing.
 Light Render defaults to a pure white background and retains the slightly gray
-floor (`#e7e7e5`); dark Render's background and floor are one charcoal (`#202226`), never
+floor (`#e7e7e5`); dark Render's background and floor are one neutral charcoal (`#222222`), never
 black. Explicit background colors still override the mode default.
 Pose and animation passes publish current placed bounds before
 drawing, and so does the exploded view wherever it comes to rest (a slider move,
@@ -215,6 +215,7 @@ alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`
 | `mesh` | STL, 3MF | Yes |
 | `robot` | URDF, SRDF, SDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+| `board` | KiCad board | No Preview: drawn flat; its Display is the board's own (mode, side, pours, layers, Dim, the zones' and tracks' opacities) |
 
 A view without them has no Display or Preview control, not a disabled one, and a
 request for Preview leaves its normal view as it is.

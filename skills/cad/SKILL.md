@@ -19,12 +19,12 @@ the page the person has open updates. Files are exports, made when asked.
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
 | **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
 | **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
-| **Use a vendor STEP, an xbf or a scan in a model** | `read_step`, `read_xbf` or `read_mesh` in the body. | [Inputs](references/model-contract.md#inputs) |
+| **Use a vendor STEP, an xbf or a scan in a model** | `step.read`, `xbf.read` or `stl.read` in the body. | [Inputs](references/model-contract.md#inputs) |
 | **Resolve a reference from a prompt** | `cad model inspect <id> '<ref>'`. | [References](references/inspection-and-validation.md#references) |
 | **Measure or check geometry** | A check script that calls the model. | [Inspection](references/inspection-and-validation.md) |
 | **See a model, a view or a pose** | `cad model snapshot <id> out.png`. | [Snapshots](references/snapshot-review.md) |
-| **Articulate a mechanism** | build123d joints in the body, then `cad.ap242`. | [Kinematics](references/kinematics.md) |
-| **Explode, reveal or showcase a model** | `cad.gltf`'s `animation()` in the body. | [Animation](references/animation.md) |
+| **Articulate a mechanism** | build123d joints in the body, then `cad.build123d`. | [Kinematics](references/kinematics.md) |
+| **Explode, reveal or showcase a model** | `cad.build123d`'s `animation()` in the body. | [Animation](references/animation.md) |
 | **Open an existing XBF, STEP/STP, STL, 3MF, GLB or DXF** | Show it to the user. | [Show the model](#show-the-model) |
 | **Can it be machined, cut and bent, molded or printed?** | The part's model or file, its material and the shop's rules. | [Can it be made?](#can-it-be-made) |
 
@@ -65,7 +65,7 @@ dependencies and lock. A run that stops on an import or a requirement says what 
 line. [Environments](references/environments.md) has the details: `--with`, projects and their locks,
 private indexes and the network.
 
-Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
+Command-line paths, and the paths `step.read`, `xbf.read`, `stl.read` and a type's `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor
 them on `__file__` in code that must run from any folder.
 
@@ -153,7 +153,7 @@ is the script's folder; two explicit names in it must differ.
   integers. Import `metals` from `bd_materials`; assign a native material with
   `part.material = metals.aluminum()`
   ([colour and materials](references/build123d-modeling.md#colour-and-materials)).
-- **Inputs** are `read_step`, `read_xbf` and `read_mesh` in the body, and any file its
+- **Inputs** are `step.read`, `xbf.read` and `stl.read` in the body, and any file its
   Python opens, each tracked by its bytes. The clock, environment variables and
   randomness are not seen: a body is a function of its code and its inputs. Compose
   project models by calling them, never by reading a file the project exported.
@@ -192,10 +192,10 @@ model that returns 2D geometry, a profile or a flat pattern, and a solid is refu
 `--tolerance MM`, about a tenth of its smallest clearance ([print tolerance](references/exports.md#print-tolerance)).
 
 The xbf, text-to-cad's own document, is Save As: export one only to share a model without its
-code, or to compose it in another project with `read_xbf`. A restart needs none: the
+code, or to compose it in another project with `xbf.read`. A restart needs none: the
 server's own cache reopens every document it built, as last built. A vendor STEP is
 converted to an xbf once
-(`cad step export vendor/motor.step vendor/motor.xbf`) and read with `read_xbf`, many
+(`cad step export vendor/motor.step vendor/motor.xbf`) and read with `xbf.read`, many
 times faster than parsing the STEP.
 
 ## Projects built around exported files
@@ -208,7 +208,7 @@ run, by a file decorator in place of `@model` (`@step("../STEP/bracket.step")`, 
 the script), or `exports.py` or `cad <type> export` follows the run. Show the file's page, not
 the model's: it follows the file on disk, updating when a run rewrites the file.
 Verification reads the file: `cad <type> snapshot` or `cad <type> inspect` with its path, or
-`read_step` in a check. The costs keep the default the default: each iteration pays the
+`step.read` in a check. The costs keep the default the default: each iteration pays the
 file's translation and the page's re-read, a STEP parsed again; a file names no model, so a
 ref picked on its page has no `made_by` and a Quick Edit from it no way back into the code;
 and the model's page stays the better place to look while editing.

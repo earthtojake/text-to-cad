@@ -202,7 +202,7 @@ subcommand (`cad <document_type> <operation>` or `cad <verb>`, or `python -m cad
 script is not on PATH), and `python <model>.py` builds the models its Python control flow explicitly calls.
 The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is the library's now (`cad.urdf`, `cad.sdf`, `cad.srdf`), run
-by `cad urdf|sdf|srdf check`, so they need the server like everything else.
+by `cad urdf|sdf|srdf validate`, so they need the server like everything else.
 
 ## Test In Agent Apps
 
@@ -1231,19 +1231,12 @@ original granular source history remains at `history/0.5.0-source`.
 The old publish transformation and mirror workflow are retired. Use the
 current release workflow above for future releases.
 
-## Iteration Loop
+## Writing A Skill
 
-1. Edit the relevant skill under `skills/<skill-name>/`.
-2. Keep skill instructions narrow and executable: say when the skill applies,
-   what inputs it expects, what it produces, and how to validate the work.
-3. Prefer small files in `references/` and reusable scripts in `scripts/` over
-   long inline instructions.
-4. Add or update focused fixtures or tests when skill behavior changes so
-   regressions are measurable.
-5. Validate with the smallest relevant check before broad repo checks.
-
-Generated artifacts should not become skill logic unless they are intentional
-fixtures. Prefer source files plus deterministic regeneration.
+What a skill is, what goes in it, how it is written and the shared blocks the tests pin are
+[Writing a skill](docs/contributing/writing-a-skill.md). Edit the skill under `skills/<name>/`,
+test it in an agent app ([Test In Agent Apps](#test-in-agent-apps)), and run the smallest check
+that covers the change before the broad ones.
 
 ## Common Dev Checks
 

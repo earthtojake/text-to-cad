@@ -1247,7 +1247,7 @@ class Daemon:
                 order = {"id": 1, "op": "result", "script": source["script"], "name": source["function"],
                          "cwd": request.get("cwd")}
             else:
-                send({"failed": f"{ident} is a file's document: read_xbf or read_step reads its shape"})
+                send({"failed": f"{ident} is a file's document: xbf.read or step.read reads its shape"})
                 return
             return self._call({**request, "source": source}, order, send, payload)
         if op == "result":

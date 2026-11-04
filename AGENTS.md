@@ -110,7 +110,8 @@ which points both at the checkout.
 - `models/` ([README](models/README.md)): the corpus of models, plain files, each
   built with `python model.py`; nothing installs it.
 - `docs/install.md`: installing by hand, app by app, updates, and what the install command does;
-  `docs/contributing/`: [adding a document type](docs/contributing/adding-a-document-type.md) and
+  `docs/contributing/`: [writing a skill](docs/contributing/writing-a-skill.md),
+  [adding a document type](docs/contributing/adding-a-document-type.md) and
   [adding an integration](docs/contributing/adding-an-integration.md);
   `docs/migrations/`: the hand-migration guides between releases
   ([0.10 to next, a draft](docs/migrations/migrating-0.10-to-next.md),

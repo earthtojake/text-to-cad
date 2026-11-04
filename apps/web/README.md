@@ -242,8 +242,8 @@ This app exports no components. Other hosts use `@cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
 `@cad/ui/renderers/xbf` for `.step`, `.stp` and `.xbf`, for `.dxf` `@cad/ui/renderers/dxf`, for `.glb`
 `@cad/ui/renderers/glb`, for `.stl` and `.3mf` `@cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot` (`CadViewer` registers all
-five with the same client and preferences, as it does for the MCP app); all loading,
+for `.urdf`, `.srdf` and `.sdf` `@cad/ui/renderers/robot`, and for `.kicad_pcb` `@cad/ui/renderers/board`
+(`CadViewer` registers all six with the same client and preferences, as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package: the root workspace builds UI's ESM, declarations, CSS and worker assets before building
 the app, with no source alias or JSX loader. Web supplies its file source (`createCadFileSource`
@@ -407,7 +407,7 @@ engine's record of the file alone. From a file, Back to home in
 the menu the navbar's C logo opens leads back to it. The home has the same navbar, the same C
 logo (one 16px mark on every page) and the same menu (without Back to home, and with GitHub, Discord and X as
 over a file) at the left and
-the update button at the right while a newer text-to-cad is out. The home is a step of
+the update button at the right while a newer cad-server release is out. The home is a step of
 the browser's history, as a file is: the browser's Back and Forward walk between them (the
 navbar draws no arrows of its own here). A `/<id>` the server knows no file for, and no model the engine
 holds, shows "This model is no longer held" with the engine's words -- the command that builds it
@@ -491,7 +491,7 @@ and the web stay consistent without host-specific copies of those controls.
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the logo (the C mark, on the home and over a file alike), which opens the app menu, then the open file's name (no glyph),
-which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer text-to-cad
+which opens the name menu (Models and Files), with its ⋯; at the right the blue update button, while a newer cad-server release
 is out, and Export over a file that writes formats. The app menu holds Back to home (the home), the
 person's settings (Language — Automatic or a named language —, Telemetry, Theme), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
@@ -501,7 +501,7 @@ in Preview the navbar gives way to Preview's own bar. This host
 supplies the links (`src/host/viewerLinks.js`): its version (with its build's id,
 `v0.10.0-dev.b80844940`, for any build but the release's own), the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: the server's
+links open in a new tab. A newer cad-server release is the blue update button's, at the navbar's right as in the CAD app: the server's
 hourly version check, read from `/api/v1/server` with the server's description as the page
 starts (`main.tsx`) and again whenever the person comes back to it. A press updates
 (`POST /api/v1/local/update`): the engine installs the release, updates each agent app and restarts on it,

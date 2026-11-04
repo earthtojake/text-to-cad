@@ -10,7 +10,7 @@ snapshot share); the person's file is never written. The payload is geometry per
 colour a layer is drawn in is the renderer's (`plot2d/theme.js`, KiCad's default theme). It is a
 function of the board's, its project's and its rules' bytes (and the plotting code): the engine keeps
 it by a sha256 of them (`poured.key`; in memory, and gzipped under `<cache>/kicad/<key>/`), so a changed
-file is a new key and nothing stale is served. The route answers 202 `{"state": "plotting", "retryMs"}`
+file is a new key. The route answers 202 `{"state": "plotting", "retryMs"}`
 while it is made (the client asks again), `etag: "<key>"` with every 200 and 304 to a request naming it,
 `cache-control: no-store` as every engine answer, and the body zstd- or gzip-coded for a browser that
 accepts it. `schemaVersion` is `cad.engine.formats.kicad.PLOT_SCHEMA_VERSION` = `plot2d.PLOT_SCHEMA_VERSION`;
@@ -29,7 +29,7 @@ board is the board alone, which the fit frames.
   "generator": "pcbnew 10.99",     // what wrote the file, for words
   "unrouted": 1,                   // connections still to make: the ratsnest's lines
   "sheets": [{
-    "name": "blinky", "width": 40.0, "height": 30.0, "background": "#001023",
+    "name": "blinky", "width": 40.0, "height": 30.0, "background": "#292929",
     "layers": [ { "id": "area", "kind": "area", "side": "both", "items": [ ... ] }, ... ]
   }],
   "board": { ... },                // the board's index, in sheet millimetres
@@ -41,7 +41,7 @@ board is the board alone, which the fit frames.
 
 `GET /api/v1/documents/kicad_pcb/<id>/drc` is KiCad's design rule check of the saved board, kept by the
 same key and made off the request the same way (202 `{"state": "checking", "retryMs"}` while it runs):
-the `CheckResult` `cad kicad_pcb check --json` prints, as data.
+the `CheckResult` `cad kicad_pcb drc --json` prints, as data.
 
 ```jsonc
 {
@@ -62,7 +62,8 @@ the `CheckResult` `cad kicad_pcb check --json` prints, as data.
 One sheet, in millimetres, y DOWN: KiCad's own frame moved so the board's outline (`Edge.Cuts`)
 has its top-left corner at (0, 0); `width` and `height` are the outline's box. A board with no
 outline is framed on everything it draws, 1 mm around. Every coordinate is rounded to four
-decimals. The sheet is what the renderer frames; the whole canvas is its background, KiCad's. It
+decimals. The sheet is what the renderer frames; the whole canvas is its background (the viewer's
+neutral dark grey, `#292929`, where KiCad's theme has navy). It
 clips nothing: an item past the outline — a fab note off the edge, as KiCad draws one — is drawn
 where it falls (`layoutPlot`'s `extent` is the box of everything drawn).
 
@@ -153,11 +154,11 @@ What each thing becomes:
   a white wall; a blind or buried via's hole the two colours of its end layers), and their net (a
   blind via's layer pair too, `2-3`) a `label` on `names`. A via that names no drill (KiCad 5) takes
   its net class's.
-- **Pours** are the fills KiCad saved, `poly` with `pour: true` and `net`, and their drawn outline
-  as a closed hairline `path` with KiCad's border hatch (`pairs`: an edge hatch's short strokes or a
-  full hatch's lines, every pitch). A teardrop has no outline. A rule area (keepout) is its outline
-  and hatch on every layer it keeps out of, and no fill. The author must refill changed zones in
-  KiCad and save them; the reader does not repair stale fills.
+- **Pours** are the fills of the bytes the plot is drawn from (KiCad's refill; the fills the file
+  saved where the refill failed, which `pours` says), `poly` with `pour: true` and `net`, and their
+  drawn outline as a closed hairline `path` with KiCad's border hatch (`pairs`: an edge hatch's short
+  strokes or a full hatch's lines, every pitch). A teardrop has no outline. A rule area (keepout) is
+  its outline and hatch on every layer it keeps out of, and no fill.
 - **Graphics** (`gr_*`, `fp_*`: lines, rectangles, circles, arcs, polygons, curves) are `path`s of
   their stroke width, or a `poly` with that width when filled; a footprint's carry `ref`.
 - **Dimensions** (aligned, orthogonal, leader, centre, radial, and KiCad 5's) are the lines KiCad

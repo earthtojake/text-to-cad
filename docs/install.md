@@ -425,7 +425,10 @@ app's plugin names: an app whose plugin is behind or ahead uses that server all 
 same. An app runs its updated plugin from the session it starts after the update.
 Each release is kept in a folder of its own in text-to-cad's state folder
 (`releases/<release>`): the one before the current stays, to go back to should the
-new one not start, and older ones go at the next update. `cad doctor` says
+new one not start, and older ones go at the next update. A release whose update failed
+and went back is removed once the release before is running again (it is still not tried
+again by itself for a day), and `cad doctor --prune` removes any release folder but the
+current one and the one before. `cad doctor` says
 which releases are there, which one is current, the release the server runs, the
 plugin folder's, and where each app's plugin comes from and its release.
 

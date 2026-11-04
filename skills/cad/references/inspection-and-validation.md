@@ -38,7 +38,7 @@ def bracket():
 
 ## Opening geometry
 
-A model's `.shape`, `step.read(path)` and `read_xbf(path)` return a build123d tree.
+A model's `.shape`, `step.read(path)` and `xbf.read(path)` return a build123d tree.
 Each node's `location` is relative to its parent. `.children`, `.descendants` and
 `.leaves` expose those nodes without accumulating ancestor placements. Before comparing
 parts in different sub-assemblies, copy these helpers into the project's check script:

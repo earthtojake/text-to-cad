@@ -239,7 +239,7 @@ timings of the run as it happened. `CAD_ENGINE_BODIES=0` turns replay off, and
 What a body reads is an input of its run, by the file's bytes, and a changed file
 re-runs the body that read it:
 
-- **`read_step(path)` and `xbf.read(path)`** copy a document's geometry into the model as
+- **`step.read(path)` and `xbf.read(path)`** copy a document's geometry into the model as
   a build123d compound tree: each assembly a `Compound`, each part named, coloured and
   given its material as the file has them, each element keeping the name the file gives
   it. An xbf's joints, mechanism states, sequences and animations are not imported: a part is a
@@ -247,7 +247,7 @@ re-runs the body that read it:
   CAD tool's multi-file export) is refused by name, here and in the CAD Viewer and
   `cad <type> export`: export it again from its CAD tool as one file.
 - **A vendor STEP is converted once**: `cad step export vendor.step vendor.xbf` writes an
-  xbf of it, which `read_xbf` reads many times faster than `read_step` parses the STEP
+  xbf of it, which `xbf.read` reads many times faster than `step.read` parses the STEP
   (seconds against most of a minute for a large assembly), with the same names. Keep the
   xbf beside the STEP and read the xbf.
 - **`stl.read(path)`** reads an `.stl` as data, never a shape: `vertices`, `triangles`,
@@ -256,12 +256,12 @@ re-runs the body that read it:
 - **Every file the body's Python opens** for reading is an input too: `open`,
   `json.load`, `Path.read_text`, `np.loadtxt`. A file opened only for writing is not.
 - **build123d's `import_step`, `import_brep` and `import_stl`** are inputs by the file's
-  bytes as the server's readers are. Prefer `read_step` (names, colours, materials, the
-  assembly tree) and `read_xbf` (fastest); `import_stl` makes a mesh, which no model
-  holds: measure it with `read_mesh`.
+  bytes as the server's readers are. Prefer `step.read` (names, colours, materials, the
+  assembly tree) and `xbf.read` (fastest); `import_stl` makes a mesh, which no model
+  holds: measure it with `stl.read`.
 - **A read past the server runs the body on every run**: OCCT's readers driven directly
   (`BRepTools.Read_s`, `STEPControl_Reader`, ...) read files where the server cannot hear
-  them. Use `read_step`, `read_xbf`, `read_mesh` or build123d's importers.
+  them. Use `step.read`, `xbf.read`, `stl.read` or build123d's importers.
 - **Compose project models by calling them.** A file the project exported is a
   deliverable, not an input: reading it ties a model to an export's moment.
 

@@ -253,6 +253,31 @@ class ChoosingTest(unittest.TestCase):
         self.assertTrue(self.spec("--with", "build123d", "plain.py").integrations == ("build123d",),
                         "a requirement that is an integration's distribution is that integration")
 
+    def test_a_name_of_cad_s_needs_what_the_registry_and_the_alias_table_say(self) -> None:
+        # A model that reads a STEP and never imports build123d itself still needs it (the reader's integration,
+        # the registry's), however the read is spelled: 0.11's, a module's import of it, and 0.10's alias.
+        from cad_server._internal import scan
+
+        for code, found in (
+                ("from cad import model, step\n@model\ndef h():\n    return step.read('p.step')\n", {"build123d"}),
+                ("from cad import model, read_step\n@model\ndef h():\n    return read_step('p.step')\n", {"build123d"}),
+                ("import cad.step\ncad.step.read('p.step')\n", {"build123d"}),
+                ("from cad.step import read\n", {"build123d"}),
+                ("import cad as c\nc.read_xbf('p.xbf')\n", {"build123d"}),
+                ("from cad import stl\nstl.read('p.stl')\n", {"build123d"}),
+                ("from cad import memo\n", {"build123d"}),
+                ("from cad.ap242 import posed\n", {"build123d"}),
+                ("from cad import step\nstep.dfm('p.step')\n", {"trimesh"}),
+                # The engine runs a type's export, snapshot and inspect: the program needs none of its own.
+                ("from cad import step\nstep.export('p.step', 'p.glb')\n", set()),
+                ("from cad import export\nexport('p.xbf', 'p.step')\n", set()),
+                ("from cad import kicad_pcb\nkicad_pcb.read('b.kicad_pcb')\n", set())):
+            with self.subTest(code=code):
+                self.assertEqual(scan.scan(code=code, cwd=self.folder), found)
+        self.write("read.py", "from pathlib import Path\nfrom cad import model, step\n\n@model\ndef holder():\n"
+                              "    return step.read(Path(__file__).parent / 'part.step')\n")
+        self.assertTrue(self.spec("read.py").default(), "a STEP read runs on the base: cad[build123d]")
+
     def test_a_header_that_names_cad_decides_the_integrations_outright(self) -> None:
         self.write("forced.py", """\
             # /// script

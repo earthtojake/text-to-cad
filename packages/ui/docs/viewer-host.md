@@ -39,7 +39,7 @@ its own way to full size as a navbar action (the CAD app's Full size, `CadViewer
 menu (the navbar's ⋯) offers only where it is given: `copy-path` and `reveal` act on its file on
 disk (a model's: its script, `sourceFile`), and `browser` opens the document's page in the person's
 browser (its path or a model's id; the CAD app's, where a launch carried the web viewer's page).
-The ⋯ draws them as Copy path and Open in › Browser and the file manager by its name; a home
+The ⋯ draws them as Copy path, Copy link and Open in › Browser and the file manager by its name; a home
 card's ⋯ offers Copy path, Copy link and Reveal (a model's card, Copy link alone). `copy-link` copies
 the document's page with a fresh link, `<engine origin>/<document id>?token=<link>`; an entry may carry
 its document's `id` (a home card's does). `createCadFileActions({ link: { origin, client } })` makes it
@@ -88,13 +88,14 @@ are for reading and maintaining the contracts.
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@cad/ui/renderers/dxf` |
+| `BoardRendererOptions` (KiCad boards, drawn flat; declines camera and Display commands), `BoardLiveController`, `BoardLiveState` | [Board registration](../src/renderers/board/index.ts) | `@cad/ui/renderers/board` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@cad/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@cad/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@cad/ui/host` |
 | `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail`, `ageLabel`, `lastActivity` (a host's home, under the navbar, the library alone: one control row of 24px controls — Recent, then at the right the type filter ("All ▾": All, Models, Files, where both are listed), the search, the grid/list switch and, where `pick` is given (a computer with a file chooser), Open — then the documents opened or built before, pinned first, then by last activity (the later of a row's `opened` and `updated`), as tiles (the picture, its kind's glyph, its name and its age with no verb) or as a table's rows (Name, then `updated` and `created` as ages); every model a card and a row of its own, never tied to its script (the library's `script` is not read); on each a pin toggle and one ⋯ menu: Open, a file's Copy path and Reveal where `fileActions` can (a model has neither), Pin or Unpin, then Delete, which asks first (`change("delete")` for a model, `change("remove")` for a file) and takes the card off at once; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@cad/ui/library` |
-| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
+| `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the six CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal, Open in's file manager), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, X, GitHub, Discord, where a new issue opens, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@cad/ui/links` |
 | `buildId` (for an app's Vite config: which build this is, "" for the release's own, whose environment names its version in `CAD_RELEASE`, else the checkout's commit) | [Build id](../scripts/build-id.mjs) | `@cad/ui/build-id` |
@@ -179,8 +180,8 @@ A renderer can publish `FileNavigationAction[]` through
 while a person has put away an alert card the model survives: the card's own icon in its
 colour, named after the alert, which brings the card back (`useAlertDismissal`,
 `kit/status/ViewerAlertCard.jsx`). The
-shared navbar shows these at its right, after the host's update button and before the
-host's actions. Each action declares its icon, accessible label, an
+shared navbar shows these first at its right, before the host's actions and, outermost, the
+host's update button. Each action declares its icon, accessible label, an
 optional shorter hover `hint`, disabled state and invocation callback. Registration belongs to the mounted
 file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
@@ -274,8 +275,8 @@ A reference contains a workspace-file identity (the file's absolute path,
 `cad-model` identity (a document the engine holds by its id alone: `path` is the id), or an
 HTTP(S) URL plus a tagged
 selection: `whole-resource`, `text-range`, or `cad-selector`. Text positions are
-zero-based UTF-16 with an exclusive end. CAD selectors use core's validated
-the engine's grammar, not STEP entity numbers. Preserve a revision when available;
+zero-based UTF-16 with an exclusive end. CAD selectors use the engine's
+grammar, validated by core, not STEP entity numbers. Preserve a revision when available;
 references do not promise to survive edits. Shared serialization handles quoting.
 
 `formatPromptMessage(context, { attachmentPath })` is the one
@@ -357,7 +358,7 @@ answers `{ inline: compactJson }` or `{ snapshot: absolutePath }`, and `read(pat
 `@cad/core/client` posts to `POST /api/v1/local/prompt-files`, which validates the packet in memory and returns inline JSON or writes the larger
 snapshot and returns its path with HTTP 200. The client advertises `acceptInline: true`;
 requests without it always receive a saved path, so already-open clients remain compatible. There is no render worker
-or polling endpoint. Guarded `GET /api/v1/local/prompt-files/<name>` serves JSON only;
+or polling endpoint. Guarded `GET /api/v1/local/prompt-files/<name>` serves JSON only.
 The files
 are scratch in the system's temporary directory and outlive the viewer until the
 system clears them. The response and persisted snapshot name input and output
@@ -385,7 +386,8 @@ direction at the card's aspect, on its own (no floor, grid or axes, whatever the
 person turned on) and on transparency, so it suits either scheme, off to the side of the view, so
 the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
-of its own). A view that goes before it settles rejects it. `useModelThumbnail`
+of its own, and a KiCad board its fitted board, its area in the canvas colour and nothing round it,
+`drawPlot`'s `backdrop: "board"`). A view that goes before it settles rejects it. `useModelThumbnail`
 keeps one per revision of a file per mounted view (a model rebuilt while it is
 open is pictured again once its new revision is drawn), and only for the file the
 view still shows. A model's document is pictured as a file is, by its id: its catalog
@@ -518,11 +520,10 @@ show another document: Models, where the host hands FileViewer its library (`rec
 browsed (`files.list` and `files.search`) from the file's folder or a model's `folder`; it is
 plain text where there is neither; the ⋯ offers Copy path and Reveal in Finder / Show in Explorer / Show in file
 manager, each where `fileActions` can do it, and is absent where it can do none (no
-right-click on the name). Right, only what a host or a file adds: the host's update button
-first (`update`, while its install is behind), the renderer's navigation actions, and last
-the host's actions (`navbarActions`: the web viewer's Export; `CadViewer` puts the host's
-`fullSize` before it and `openInBrowser` after it, the CAD app's Full size and Open in
-browser). The navbar holds no settings and none of the view's controls.
+right-click on the name). Right, only what a host or a file adds: the renderer's navigation
+actions first, then the host's actions (`navbarActions`: `CadViewer` hands it the host's
+`fullSize`, the CAD app's Full size), and last, outermost, the host's update button (`update`,
+while its install is behind). The navbar holds no settings and none of the view's controls.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
@@ -579,7 +580,7 @@ server decides, once, whether a device was updated (`cad_server/whats_new.py`). 
 view (the engine gone, an update restarting).
 `@cad/ui/update` is the update button both apps share, from the server's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
-first among the navbar's right-hand controls, over every file and over the home; a host with no
+last and outermost of the navbar's right-hand controls, over every file and over the home; a host with no
 navbar puts it in its corner, as the CAD app's file handler does), an icon and nothing else, with
 no popover; and `useUpdate(calls, initial)`, which starts on the notice the host already has (a CAD
 app's launch carries it; the web page reads it with its server's description, `GET /api/v1/server`,

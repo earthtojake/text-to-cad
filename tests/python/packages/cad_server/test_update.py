@@ -80,10 +80,13 @@ class SwitchTest(Fixture):
         self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.1.0", "1.2.0"])
         self.assertEqual(switch.last()["to"], "1.2.0")
 
-    def test_a_release_whose_engine_does_not_answer_is_switched_back(self) -> None:
-        for version in ("1.1.0", "1.2.0"):
+    def test_a_release_whose_engine_does_not_answer_is_switched_back_and_its_folder_goes(self) -> None:
+        from cad_server import auto_updates
+
+        for version in ("1.0.0", "1.1.0", "1.2.0"):
             self.release(version)
         installations.point("1.1.0")
+        auto_updates.attempt("1.2.0", now=1000.0)  # an automatic update's, which the failure is kept on
         tried, started = self.started({"1.1.0"})
         kept: list = []  # update.json as each release's engine is started: the one before reads the failure
         with started as stood_in, mock.patch.object(client, "wait_gone", return_value=True), \
@@ -103,8 +106,40 @@ class SwitchTest(Fixture):
         self.assertEqual((kept[1]["ok"], kept[1]["to"], kept[1]["error"]), (False, "1.2.0", done["error"]),
                          "the failure is kept before the release before's engine starts again")
         asked.assert_any_call({"op": "stop"}, start=False)  # whatever of the new release answered, stopped first
-        self.assertEqual(len(releases.listing()), 2, "nothing is removed when the switch fails")
-        self.assertFalse(switch.last()["ok"])
+        self.assertEqual(sorted(release["version"] for release in releases.listing()), ["1.0.0", "1.1.0"],
+                         "the release it failed to move to goes; the current one and the one before stay")
+        self.assertEqual(sorted(record["version"] for record in installations.records()), ["1.0.0", "1.1.0"])
+        self.assertEqual((switch.last()["ok"], switch.last()["to"]), (False, "1.2.0"), "the failure stays recorded")
+        self.assertEqual(auto_updates.attempted()["release"], "1.2.0")
+        self.assertFalse(auto_updates.due("1.2.0", auto_updates.attempted(), 1000.0 + 60),
+                         "an automatic update does not try it again by itself any sooner")
+
+    def test_a_failed_release_a_process_runs_from_goes_as_the_engine_tends_itself(self) -> None:
+        # A `cad update` runs the switch from the release it moves to: that folder stays until it has ended,
+        # then the restored engine, tending itself, removes it.
+        from cad_server._internal import engine_host
+
+        for version in ("1.0.0", "1.1.0", "1.2.0"):
+            self.release(version)
+        installations.point("1.1.0")
+        tried, started = self.started({"1.1.0"})
+        live = {"1.2.0"}
+        with started, mock.patch.object(client, "wait_gone", return_value=True), \
+                mock.patch.object(client, "request", return_value=None), \
+                mock.patch.object(releases, "running", side_effect=lambda folder: Path(folder).name in live):
+            done = switch.switch("1.2.0", port=4321, previous="1.1.0", told=lambda _line: None)
+            self.assertTrue(done["restored"])
+            self.assertEqual(releases.failed(), "1.2.0", "kept while the process that ran the switch runs")
+            with mock.patch.object(update.UPDATE, "automatic") as automatic:
+                engine_host.automatic(None)
+            automatic.assert_called_once()
+            self.assertTrue(releases.where("1.2.0").is_dir())
+            live.clear()
+            with mock.patch.object(update.UPDATE, "automatic"):
+                engine_host.automatic(None)
+        self.assertEqual(sorted(release["version"] for release in releases.listing()), ["1.0.0", "1.1.0"])
+        self.assertIsNone(releases.failed())
+        self.assertFalse(switch.last()["ok"], "the failure stays recorded")
 
     def test_with_no_engine_running_the_next_client_starts_the_release(self) -> None:
         self.release("1.1.0")
@@ -173,6 +208,20 @@ class SwitchTest(Fixture):
 
 
 class ReleaseFoldersTest(Fixture):
+    def test_the_release_before_is_the_last_switch_s_else_the_newest_older_one(self) -> None:
+        for version in ("0.9.0", "1.0.0", "1.1.0", "1.2.0"):
+            self.release(version)
+        installations.point("1.1.0")
+        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"}, "the newest older one")
+        switch._record({"from": "0.9.0", "to": "1.1.0", "ok": True})
+        self.assertEqual(releases.kept(), {"1.1.0", "0.9.0"}, "the one the last switch to it came from")
+        switch._record({"from": "1.1.0", "to": "1.2.0", "ok": False, "error": "it exited 3"})
+        self.assertEqual(releases.kept(), {"1.1.0", "1.0.0"})
+        self.assertEqual(releases.discard("1.1.0"), [], "never the current release")
+        self.assertEqual(releases.discard("1.0.0"), [], "never the one before")
+        with mock.patch.object(releases, "running", return_value=False):
+            self.assertEqual(releases.discard("1.2.0"), [str(releases.where("1.2.0"))])
+
     def test_a_folder_a_process_runs_from_is_kept(self) -> None:
         for version in ("1.0.0", "1.1.0"):
             self.release(version)

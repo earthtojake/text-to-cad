@@ -79,21 +79,21 @@ the drawing (3D, off the plane, a failed drawing check), naming which. An existi
 neither: hand it straight to a snapshot or the viewer.
 
 Drawings delivered after every change go in an `exports.py` beside them that imports each drawing
-and calls `export(drawing, path)` (the model function itself, or the handle its call returns), with
+and calls `model.export(drawing, path)` (the model function itself, or the handle its call returns), with
 paths anchored on `__file__`:
 
 ```python
 # src/exports.py
 from pathlib import Path
 
-from cad import export
+from cad import model
 
 from gasket import gasket
 
 ROOT = Path(__file__).resolve().parent.parent
 
 if __name__ == "__main__":
-    export(gasket, ROOT / "DXF/gasket.dxf")
+    model.export(gasket, ROOT / "DXF/gasket.dxf")
 ```
 
 In a project built around its exported files, `@dxf("../DXF/gasket.dxf")` (from `cad`, relative to
@@ -185,8 +185,8 @@ nothing.
 
 ### 3. Flat pattern of an imported STEP
 
-For a vendor `.step`/`.stp` with no Python source. Read it with `step.read` (`read_step`), or convert
-it once (`cad step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `read_xbf`, which
+For a vendor `.step`/`.stp` with no Python source. Read it with `step.read`, or convert
+it once (`cad step export vendor_panel.step vendor_panel.xbf`) and read the xbf with `xbf.read`, which
 is faster. Like every file a run reads, it is an input: replacing it re-runs the drawing. Which planar
 faces define the cut profile is a judgment about the part.
 

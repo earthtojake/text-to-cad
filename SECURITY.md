@@ -91,9 +91,9 @@ MCP Apps hosts keep out of the model's context, and refuses a call without it
 before anything routes the request. Agents reach none of the viewer's routes.
 The page answers only messages from its host's window.
 
-**Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF or SRDF
-written by someone else is untrusted input. The server reads it in separate
-processes and bounds its work: assembly, node and block expansion, archive
+**Files from others.** A STEP, xbf, GLB, STL, 3MF, DXF, URDF, SDF, SRDF, KiCad board or
+schematic written by someone else is untrusted input. The server reads it in separate
+processes (a KiCad file off its request threads, its refill in KiCad's own process) and bounds its work: assembly, node and block expansion, archive
 unpacking, and buffer reads. It fetches nothing a file names over the network.
 `cad sdf validate` runs `gz sdf --check` on a document that names a remote
 reference only when asked (`--gz-remote`).
