@@ -1585,7 +1585,8 @@ The shared dark UI and the tools view's canvas are neutral greys, no hue, as Fig
 Code's dark themes are: the tokens at chroma 0 on the shadcn lightness steps, the canvas
 Preview's stage mid-tone `#272727` (its stage runs `#2e2e2e` to `#222222`), so the two views
 read as one look, and a board's canvas the app's dark background (`#292929`); light app
-appearance selects its light basis.
+appearance selects its light basis, a board's the app's white with its light palette
+(`plot2d/theme.js`), drawn again in the browser when the theme switches.
 The shared loading star and the marks use blue branding.
 
 ## Inspect, Render and live revisions

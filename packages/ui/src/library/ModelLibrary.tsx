@@ -121,8 +121,9 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = fal
     return () => { active = false; observer.disconnect(); };
   }, [item.path, item.thumbnail, item.missing, item.updated, load]);
   // A drawing's picture is its line work on nothing, in the light theme's pen (`useDrawingView`'s
-  // `thumbnail`): a dark card turns it light, its colours kept.
-  const drawing = /\.dxf$/i.test(item.path) ? "" : undefined;
+  // `thumbnail`), and a board's its light palette on nothing (`useBoardView`'s): a dark card turns
+  // either dark, its colours' hues kept.
+  const drawing = /\.(dxf|kicad_pcb)$/i.test(item.path) ? "" : undefined;
   return <span className="cad-library-thumbnail" ref={element} data-drawing={drawing}>
     {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
     {opening ? <span className="cad-library-opening"><Spinner aria-label={t("home.openingAria", { name: item.name })} /></span> : null}

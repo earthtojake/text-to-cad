@@ -22,25 +22,40 @@
 import { pageToScreen } from "../plot2d/plot.js";
 import { boardAirwires } from "./airwires.js";
 
-/** The viewer's highlight (the CAD views' ink highlight), and how the rest steps back for a net. */
-export const BOARD_OVERLAY_COLORS = Object.freeze({
-  selection: "#8dc5ff",
-  hover: "rgba(141, 197, 255, 0.55)",
-  dim: "rgba(0, 8, 20, 0.6)",
+/**
+ * The overlay's colours in each theme: the highlight (the CAD views' ink highlight; on the light
+ * canvas the same blue darkened to 4.5:1, as `plot2d/theme.js` darkens a layer), what a lit item is
+ * filled with, how the rest of the board steps back for a net — darkened on the dark canvas, washed
+ * toward white on the light one — and Placement's pads (KiCad's F.Cu and B.Cu; a through-hole pad
+ * is the side looked at), its holes and its airwires: thin, under everything a person points at.
+ */
+const overlayTheme = (selection, rgb, { dim, airwire }) => Object.freeze({
+  selection,
+  hover: `rgba(${rgb}, 0.55)`,
+  dim,
+  part: `rgba(${rgb}, 0.10)`,
+  partPad: `rgba(${rgb}, 0.35)`,
+  zone: `rgba(${rgb}, 0.12)`,
+  copperZone: `rgba(${rgb}, 0.18)`,
+  // A text's, a dimension's value's and an area's box: lit, and the board still read through it.
+  box: `rgba(${rgb}, 0.16)`,
+  // The box being dragged: lighter still, so the board under it reads while it is drawn.
+  draft: `rgba(${rgb}, 0.1)`,
+  placementFront: "rgba(200, 52, 52, 0.9)",
+  placementBack: "rgba(77, 127, 196, 0.9)",
+  placementHole: "#000000",
+  airwire
 });
-const PART_FILL = "rgba(141, 197, 255, 0.10)";
-const PART_PAD_FILL = "rgba(141, 197, 255, 0.35)";
-const ZONE_FILL = "rgba(141, 197, 255, 0.12)";
-const COPPER_ZONE_FILL = "rgba(141, 197, 255, 0.18)";
-// A text's, a dimension's value's and an area's box: lit, and the board still read through it.
-const BOX_FILL = "rgba(141, 197, 255, 0.16)";
-// The box being dragged: lighter still, so the board under it reads while it is drawn.
-const DRAFT_FILL = "rgba(141, 197, 255, 0.1)";
-// Placement's pads, KiCad's default theme's F.Cu and B.Cu (a through-hole pad is the side looked at),
-// and its airwires: thin, light, under everything a person points at.
-const PLACEMENT_PAD_FILL = Object.freeze({ front: "rgba(200, 52, 52, 0.9)", back: "rgba(77, 127, 196, 0.9)" });
-const AIRWIRE_COLOR = "rgba(232, 238, 245, 0.8)";
-const PLACEMENT_HOLE_FILL = "#000000";
+export const BOARD_OVERLAY_THEMES = Object.freeze({
+  dark: overlayTheme("#8dc5ff", "141, 197, 255", { dim: "rgba(0, 0, 0, 0.6)", airwire: "rgba(232, 238, 245, 0.8)" }),
+  light: overlayTheme("#447ab0", "68, 122, 176", { dim: "rgba(255, 255, 255, 0.7)", airwire: "rgba(80, 86, 94, 0.8)" })
+});
+/** The overlay's colours for a colour scheme: `"light"`, or anything else for dark. */
+export function boardOverlayColors(scheme) {
+  return scheme === "light" ? BOARD_OVERLAY_THEMES.light : BOARD_OVERLAY_THEMES.dark;
+}
+/** The dark theme's, as the overlay draws without a theme. */
+export const BOARD_OVERLAY_COLORS = BOARD_OVERLAY_THEMES.dark;
 // Dots (vias, junctions, a pin's end) are filled a few dozen to a path.
 const DOTS_PER_PATH = 64;
 
@@ -148,20 +163,20 @@ const trackWidth = (view, minimum) => (track) => Math.max(minimum * view.px, tra
 const viaRadius = (view, minimum) => (via) => Math.max(minimum * view.px, via.diameter / 2);
 
 /** Placement's layer: every pad, the side looked at drawn last, the holes, and the airwires of every net without a pour. */
-function placementLayer(ctx, view, index) {
+function placementLayer(ctx, view, index, colors) {
   const looked = view.mirrorX == null ? "top" : "bottom";
   const near = [];
   const far = [];
   for (const pad of index.padShapes) (pad.side === "both" || pad.side === looked ? near : far).push(pad);
-  for (const [list, color] of [[far, looked === "top" ? PLACEMENT_PAD_FILL.back : PLACEMENT_PAD_FILL.front],
-    [near, looked === "top" ? PLACEMENT_PAD_FILL.front : PLACEMENT_PAD_FILL.back]]) {
+  for (const [list, color] of [[far, looked === "top" ? colors.placementBack : colors.placementFront],
+    [near, looked === "top" ? colors.placementFront : colors.placementBack]]) {
     ctx.fillStyle = color;
     for (const pad of list) if (pad.polygon.length > 2 && view.shows(pad.box)) draw(ctx, pad.polygon, true, { fill: true });
   }
-  dots(ctx, view, [...index.padShapes.filter((pad) => pad.drill > 0), ...index.holes], PLACEMENT_HOLE_FILL,
+  dots(ctx, view, [...index.padShapes.filter((pad) => pad.drill > 0), ...index.holes], colors.placementHole,
     (hole) => (hole.drill || hole.diameter) / 2);
   const poured = (name) => index.nets.get(name)?.zones.length > 0;
-  strokes(ctx, view, boardAirwires(index).filter((wire) => !poured(wire.net)), AIRWIRE_COLOR, () => view.px);
+  strokes(ctx, view, boardAirwires(index).filter((wire) => !poured(wire.net)), colors.airwire, () => view.px);
 }
 
 // ---- screen space: what keeps its size in pixels ---------------------------------
@@ -184,19 +199,19 @@ function crosshair(ctx, view, [x, y], color, size = 7) {
  * `crosshairs` for the caller to draw once the context is in pixels again. `shapesOf(pad)`: a pin's
  * pads (`index.shapesOf`).
  */
-export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, shapesOf = null, crosshairs = null }) {
+export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, shapesOf = null, crosshairs = null, fills = BOARD_OVERLAY_COLORS }) {
   if (!resolved) return;
   const kind = resolved.kind;
   const pinPads = shapesOf || ((pad) => pad.part.pads.filter((shape) => shape.number === pad.number));
   if (kind === "part") {
     const part = resolved.part;
-    polygons(ctx, view, [{ polygon: part.outline, box: part.box }], { color, width: 2 * weight, fill: PART_FILL });
-    polygons(ctx, view, part.pads, { color, width: 1, fill: PART_PAD_FILL });
+    polygons(ctx, view, [{ polygon: part.outline, box: part.box }], { color, width: 2 * weight, fill: fills.part });
+    polygons(ctx, view, part.pads, { color, width: 1, fill: fills.partPad });
   } else if (kind === "pad") {
     polygons(ctx, view, pinPads(resolved.pad), { color, width: 1.5 * weight, fill: color });
   } else if (kind === "net") {
     const net = resolved.net;
-    polygons(ctx, view, net.zones.map((zone) => ({ polygon: zone.outline, box: zone.box })), { color, width: 1.5, fill: ZONE_FILL });
+    polygons(ctx, view, net.zones.map((zone) => ({ polygon: zone.outline, box: zone.box })), { color, width: 1.5, fill: fills.zone });
     strokes(ctx, view, net.tracks, color, trackWidth(view, 2));
     dots(ctx, view, net.vias, color, viaRadius(view, 2.5));
     polygons(ctx, view, net.pads.flatMap(pinPads), { color, width: 1, fill: color });
@@ -205,23 +220,23 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
     if (item?.kind === "track") strokes(ctx, view, [item], color, trackWidth(view, 3));
     else if (item?.kind === "via") dots(ctx, view, [item], color, viaRadius(view, 3));
     // A zone named by its uuid is the zone on each of its layers: one outline.
-    else if (item?.kind === "zone") polygons(ctx, view, [{ polygon: item.outline, box: item.box }], { color, width: 2, fill: COPPER_ZONE_FILL });
+    else if (item?.kind === "zone") polygons(ctx, view, [{ polygon: item.outline, box: item.box }], { color, width: 2, fill: fills.copperZone });
     // Copper and a point are a place: its crosshair; an item named by its uuid is the item alone.
     if (kind === "copper" || kind === "point") crosshairs?.push({ at: resolved.page || toPage(resolved.at), color });
   } else if (kind === "text") {
-    polygons(ctx, view, [resolved.item], { color, width: 1.5 * weight, fill: BOX_FILL });
+    polygons(ctx, view, [resolved.item], { color, width: 1.5 * weight, fill: fills.box });
   } else if (kind === "dimension") {
     const item = resolved.item;
     strokes(ctx, view, item.lines.map((points) => ({ points, box: item.box })), color, () => 2 * view.px);
-    if (item.polygon.length > 2) polygons(ctx, view, [{ polygon: item.polygon, box: item.box }], { color, width: 1, fill: BOX_FILL });
+    if (item.polygon.length > 2) polygons(ctx, view, [{ polygon: item.polygon, box: item.box }], { color, width: 1, fill: fills.box });
   } else if (kind === "shape") {
     const item = resolved.item;
-    if (item.filled) polygons(ctx, view, [{ polygon: item.points, box: item.box }], { color, width: 2 * weight, fill: BOX_FILL });
+    if (item.filled) polygons(ctx, view, [{ polygon: item.points, box: item.box }], { color, width: 2 * weight, fill: fills.box });
     else strokes(ctx, view, [{ points: item.closed ? [...item.points, item.points[0]] : item.points, box: item.box }], color,
       () => Math.max(3 * view.px, item.width));
   } else if (kind === "area") {
     const [x0, y0, x1, y1] = resolved.box;
-    polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box: resolved.box }], { color, width: 1.5 * weight, fill: BOX_FILL });
+    polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box: resolved.box }], { color, width: 1.5 * weight, fill: fills.box });
   }
 }
 
@@ -230,9 +245,9 @@ export function drawResolved(ctx, view, resolved, { color, toPage, weight = 1, s
  * selection, a translucent rectangle in a solid outline (what an area names is what lies wholly
  * inside it, as KiCad's left-to-right box takes).
  */
-function draftBox(ctx, view, box, color) {
+function draftBox(ctx, view, box, color, fill) {
   const [x0, y0, x1, y1] = box;
-  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1.5, fill: DRAFT_FILL });
+  polygons(ctx, view, [{ polygon: [[x0, y0], [x1, y0], [x1, y1], [x0, y1]], box }], { color, width: 1.5, fill });
 }
 
 /**
@@ -242,7 +257,7 @@ function draftBox(ctx, view, box, color) {
  * @param {CanvasRenderingContext2D} ctx
  * @param {ReturnType<typeof import("./boardIndex.js").createBoardIndex>} index
  * @param {{ transform: object, pixelRatio?: number, width: number, height: number, hover?: object|null,
- *   selection?: object[], dim?: boolean, mirrorX?: number|null, colors?: typeof BOARD_OVERLAY_COLORS,
+ *   selection?: object[], dim?: boolean, mirrorX?: number|null, colors?: Partial<typeof BOARD_OVERLAY_COLORS>,
  *   placement?: boolean }} frame
  *   `mirrorX`: the page x the board is mirrored about (the view from the bottom), or null.
  *   `placement`: a board's Placement display, its pads and airwires drawn here.
@@ -251,15 +266,15 @@ function draftBox(ctx, view, box, color) {
 export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width, height, hover = null, selection = [], dim = false,
   mirrorX = null, colors = null, placement = false, draft = null }) {
   if (!ctx || !index || !transform || !(transform.scale > 0)) return;
-  colors = colors || BOARD_OVERLAY_COLORS;
+  colors = { ...BOARD_OVERLAY_COLORS, ...colors };
   const view = createView(transform, { width, height, mirrorX });
   const shapesOf = index.shapesOf || null;
   const crosshairs = [];
-  const highlight = (resolved, options) => drawResolved(ctx, view, resolved, { ...options, toPage: index.toPage, shapesOf, crosshairs });
+  const highlight = (resolved, options) => drawResolved(ctx, view, resolved, { ...options, toPage: index.toPage, shapesOf, crosshairs, fills: colors });
   ctx.save();
   if (placement) {
     pageSpace(ctx, view, pixelRatio);
-    placementLayer(ctx, view, index);
+    placementLayer(ctx, view, index, colors);
   }
   ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
   if (dim && selection.length) {
@@ -267,7 +282,7 @@ export function drawBoardOverlay(ctx, index, { transform, pixelRatio = 1, width,
     ctx.fillRect(0, 0, width, height);
   }
   pageSpace(ctx, view, pixelRatio);
-  if (draft) draftBox(ctx, view, draft, colors.selection);
+  if (draft) draftBox(ctx, view, draft, colors.selection, colors.draft);
   for (const resolved of selection) highlight(resolved, { color: colors.selection, weight: 1.25 });
   if (placement) {
     const nets = new Set(selection.filter((resolved) => resolved.kind === "net").map((resolved) => resolved.net.name));

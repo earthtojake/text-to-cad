@@ -4,12 +4,13 @@
  * a tap, a drag and the pointer resting over it for the tool in hand, and the 3D views' pans: the
  * middle or the right button's drag, or a drag with Ctrl, Cmd or Shift; a drag the tool does not
  * take pans too), painting the board from the rasters kept of it
- * (`boardRasters.js`) on KiCad's canvas, then what the tools draw over it (`overlay`), in the same
+ * (`boardRasters.js`) on its theme's canvas, then what the tools draw over it (`overlay`), in the same
  * frame, so a capture of the canvas holds it too.
  *
- * The whole pane is the board's background, the viewer's neutral dark grey (the plot's, the app's
- * dark `--background`), whatever the theme: KiCad draws a board on one dark canvas, which reaches
- * past the board.
+ * The whole pane is the board's canvas in the view's theme (`plot2d/theme.js`'s `boardPalette`: the
+ * app's light or dark `--background`), which reaches past the board as KiCad's does, and the board
+ * is drawn in that theme's palette. A switch of theme draws the rasters again from the payload
+ * already held: nothing is asked of the server.
  *
  * The pane says whether what it shows is final — drawn at the scale it is shown at — as
  * `data-board-settled` on its element, written as it paints (no render): a zoom is `false` until
@@ -17,13 +18,12 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import { clearSurface } from "@cad/core/lib/drawing2d/index.js";
-import { drawPlot, fitBoardBounds, fitPlotTransform } from "@cad/core/lib/plot2d/index.js";
+import { boardPalette, drawPlot, fitBoardBounds, fitPlotTransform } from "@cad/core/lib/plot2d/index.js";
 import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { createBoardRasters } from "./boardRasters.js";
 
-/** The canvas around the board: the board's own background, before a board has loaded too. */
-const KICAD_CANVAS = "#292929";
-const surroundColor = (plot) => plot?.layout.sheets[0]?.background || KICAD_CANVAS;
+/** The canvas around the board, before a board has loaded too: the theme's (`plot2d/theme.js`). */
+const surroundColor = (scheme) => boardPalette(scheme).background;
 
 /**
  * @param {object} options
@@ -50,7 +50,7 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
   const overlayRef = useRef(overlay);
   overlayRef.current = overlay;
   const paint = useCallback((ctx, { width, height, pixelRatio, transform, element }) => {
-    clearSurface(ctx, { width, height, pixelRatio, background: surroundColor(plotRef.current) });
+    clearSurface(ctx, { width, height, pixelRatio, background: surroundColor(schemeRef.current) });
     const rasters = rastersRef.current;
     if (!rasters || !transform) return;
     const final = rasters.paint(ctx, { transform, width, height, pixelRatio });
@@ -63,17 +63,18 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     onDrag, middlePan: true, orbitPan: true });
   const { containerRef, schemeRef, requestPaint, paintNow, encode } = view;
 
-  // One raster cache per board and Display: a new revision or a new set of layers starts afresh.
+  // One raster cache per board, Display and theme: a new revision, a new set of layers or a switch of
+  // theme starts afresh, drawn here from the payload already held.
   useEffect(() => {
     if (!plot) return undefined;
-    const rasters = createBoardRasters({ layout: plot.layout, onChange: requestPaint, view: drawViewRef.current });
+    const rasters = createBoardRasters({ layout: plot.layout, onChange: requestPaint, view: drawViewRef.current, theme: colorScheme });
     rastersRef.current = rasters;
     requestPaint();
     return () => {
       if (rastersRef.current === rasters) rastersRef.current = null;
       rasters.dispose();
     };
-  }, [plot, requestPaint, drawViewKey]);
+  }, [plot, requestPaint, drawViewKey, colorScheme]);
 
   /** Paint the frame final now: the view drawn at its own scale, not a patch scaled while it rests. */
   const settle = useCallback(() => {
@@ -87,9 +88,10 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
 
   /**
    * The board on its own, for a library card: fitted whole to `width` × `height` with the view's
-   * margin, drawn as a snapshot draws it but on nothing round it — the board's area in the canvas
-   * colour, the rest clear, so the card's own backdrop is all there is behind the board's shape, in
-   * either theme, as a STEP's or a drawing's card picture is. The pane's view is left as it is.
+   * margin, drawn as a light snapshot draws it but on nothing round it — the board's area in the
+   * light canvas, the rest clear, so the card's own backdrop is all there is behind the board's
+   * shape. One picture for both themes, as a drawing's is: a dark card turns it dark, its hues kept
+   * (`library/ModelLibrary.tsx`'s drawing treatment). The pane's view is left as it is.
    */
   const thumbnail = useCallback(({ width, height }) => new Promise((resolve, reject) => {
     const current = plotRef.current;
@@ -100,7 +102,7 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error("The browser cannot draw the board’s picture.")); return; }
     clearSurface(context, { width: canvas.width, height: canvas.height });
-    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board" });
+    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board", theme: "light" });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("The browser could not encode this board as a PNG."));

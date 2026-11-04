@@ -17,7 +17,7 @@ import {
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
-import { DIM_OPACITY, HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, layerColor, netnameColor } from "./theme.js";
+import { DIM_OPACITY, HOLE_COLORS, NAME_COLORS, ZONE_OPACITY, boardPalette, layerColor, netnameColor } from "./theme.js";
 
 // A tiny board in the payload's own shape (`docs/plot-payload.md`): a 40 x 30 mm sheet, its
 // area, a courtyard, one pad on each copper layer, a track, a pour with its fill and outline, a via's
@@ -194,6 +194,21 @@ test("a card's picture is the board on nothing: its area in the canvas colour, i
   const plain = recorder(800, 600);
   drawPlot(plain.ctx, bare, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D: plain.Path2D, backdrop: "board" });
   assert.deepEqual(plain.calls.find(([name]) => name === "fillRect"), ["fillRect", "#292929", 0, 0, 40, 30]);
+});
+
+test("a frame takes its theme: the light canvas and palette, or the dark, from the one payload", () => {
+  const layout = layoutPlot(BOARD);
+  const frame = (theme) => {
+    const { ctx, calls, Path2D } = recorder(800, 600);
+    drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D, theme });
+    return { canvas: calls.find(([name]) => name === "fillRect")[1], drawn: painted(calls).map(([kind, , style]) => (kind === "fill" ? style.fill : style.stroke)) };
+  };
+  const light = frame("light"), dark = frame("dark");
+  assert.deepEqual([light.canvas, dark.canvas], [boardPalette("light").background, boardPalette("dark").background]);
+  assert.ok(light.drawn.includes(boardPalette("light").layer("F.SilkS")) && !light.drawn.includes(boardPalette("dark").layer("F.SilkS")));
+  assert.ok(dark.drawn.includes(boardPalette("dark").layer("F.SilkS")));
+  // Without a theme: the payload's own canvas and KiCad's colours.
+  assert.equal(frame(null).canvas, "#292929");
 });
 
 test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", () => {

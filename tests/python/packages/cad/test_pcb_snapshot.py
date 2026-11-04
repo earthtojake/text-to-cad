@@ -62,6 +62,8 @@ class BoardJobReplayTest(unittest.TestCase):
         packet = workspace / "board.snapshot.json"
         packet.write_text(json.dumps({"annotation": str(annotation), "jobs": [
             job("top", {"mode": "board", "side": "top", "poured": True}),
+            # The view's theme as the viewer's packet carries it: KiCad's colours on the dark canvas.
+            job("darktop", {"mode": "board", "side": "top", "poured": True, "appearance": "dark"}),
             job("below", {"mode": "copper", "side": "bottom", "poured": False}),
             job("assembly", {"mode": "assembly"}),
             job("placement", {"mode": "placement"}),
@@ -81,11 +83,11 @@ class BoardJobReplayTest(unittest.TestCase):
         cls.images = {p.stem: Image.open(p).convert("RGB") for p in workspace.glob("*.png")}
 
     def test_each_view_is_written_at_its_size(self) -> None:
-        self.assertEqual(9, len(self.result))
+        self.assertEqual(10, len(self.result))
         # Every key the command line prints a snapshot by, as every other kind's report has it.
         for drawn in self.result:
             self.assertIs(False, drawn.report["preview"])
-        self.assertEqual(["assembly", "below", "dim", "lit", "nozones", "outline", "placement", "top", "unpoured"], sorted(self.images))
+        self.assertEqual(["assembly", "below", "darktop", "dim", "lit", "nozones", "outline", "placement", "top", "unpoured"], sorted(self.images))
         for name, image in self.images.items():
             self.assertEqual(SIZE, (image.width, image.height), name)
 
@@ -118,7 +120,7 @@ class BoardJobReplayTest(unittest.TestCase):
 
     def test_what_the_prompt_named_is_lit_and_what_names_nothing_said(self) -> None:
         lit, top = self.images["lit"], self.images["top"]
-        blue = (141, 197, 255)
+        blue = (68, 122, 176)  # the light theme's highlight: the viewer's blue darkened to read on white
         for x, y in ((20, 15), (35.825, 15)):  # the VBUS track, R1's pad 2
             point = on_screen(x, y)
             self.assertTrue(near(lit.getpixel(point), blue, 40), f"lit at ({x}, {y}): {lit.getpixel(point)}")
@@ -128,13 +130,28 @@ class BoardJobReplayTest(unittest.TestCase):
         [report] = [drawn.report for drawn in self.result if Path(drawn.path).stem == "lit"]
         self.assertTrue(any("is not lit: blinky.kicad_pcb has no via" in warning for warning in report["warnings"]), report["warnings"])
 
-    def test_the_window_is_the_camera_s(self) -> None:
-        top = self.images["top"]
+    def test_the_window_is_the_camera_s_on_the_canvas_of_its_appearance(self) -> None:
+        top, dark = self.images["top"], self.images["darktop"]
         # The plan view frames the sheet with a millimetre to spare above and below: the corners are the
-        # surround, KiCad's canvas (the board's background), off the page the board is drawn on.
-        self.assertTrue(near(top.getpixel((2, 2)), (41, 41, 41), 30), f"KiCad's canvas: {top.getpixel((2, 2))}")
-        # On the board, where nothing is drawn, the board's area shadow lies over that canvas (KiCad's 35% grey).
-        self.assertTrue(near(top.getpixel(on_screen(30, 26)), (62, 62, 62), 30), f"the board's area: {top.getpixel(on_screen(30, 26))}")
+        # surround, the canvas of the still's appearance — light as every snapshot is unless it says dark.
+        self.assertTrue(near(top.getpixel((2, 2)), (255, 255, 255), 6), f"the light canvas: {top.getpixel((2, 2))}")
+        self.assertTrue(near(dark.getpixel((2, 2)), (41, 41, 41), 30), f"the dark canvas: {dark.getpixel((2, 2))}")
+        # On the board, where nothing is drawn, the board's area: a shade darker than white, a shade lighter than the dark grey.
+        self.assertTrue(near(top.getpixel(on_screen(30, 26)), (237, 237, 237), 12), f"the board's area: {top.getpixel(on_screen(30, 26))}")
+        self.assertTrue(near(dark.getpixel(on_screen(30, 26)), (62, 62, 62), 30), f"the board's area: {dark.getpixel(on_screen(30, 26))}")
+        # KiCad's copper is its red in both: the VBUS track.
+        track = on_screen(30, 15)
+        self.assertTrue(near(top.getpixel(track), dark.getpixel(track), 25), f"the copper: {top.getpixel(track)} / {dark.getpixel(track)}")
+
+    def test_a_display_string_takes_a_mode_and_an_appearance_as_every_snapshot_s(self) -> None:
+        from cad.engine.render.board import display_options
+        from cad.engine.snapshot import SnapshotRefused
+
+        self.assertEqual(("copper", "dark"), tuple(display_options("copper,dark")[key] for key in ("mode", "appearance")))
+        self.assertEqual(("board", "dark"), tuple(display_options("dark")[key] for key in ("mode", "appearance")))
+        self.assertEqual("light", display_options("copper")["appearance"])
+        with self.assertRaises(SnapshotRefused):
+            display_options("copper,assembly")
 
 
 class BoardDisplayTest(unittest.TestCase):
