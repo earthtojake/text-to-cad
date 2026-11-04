@@ -92,7 +92,18 @@ def _keep(path: Path, board_key: str, data: bytes) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         put(target, lambda staged: staged.write_bytes(gzip.compress(data, 1, mtime=0)), compare=False)
     except OSError:
-        pass  # a cache that cannot be written is no cache: the payload is still answered
+        return  # a cache that cannot be written is no cache: the payload is still answered
+    _prune(target.parent)
+
+
+def _prune(kept: Path) -> None:
+    """Every other key's folder beside ``kept`` removed: a board's document keeps what was made of its
+    bytes as they are now, never of bytes it no longer has."""
+    import shutil
+
+    for other in kept.parent.iterdir() if kept.parent.is_dir() else ():
+        if other != kept and other.is_dir():
+            shutil.rmtree(other, ignore_errors=True)
 
 
 def _with_pours(payload: dict[str, Any], pours: dict[str, Any]) -> bytes:

@@ -92,6 +92,10 @@ class PlotRules(unittest.TestCase):
         status, changed, other = self.answered(answers)
         self.assertEqual((status, refill.calls), (200, 2))
         self.assertNotEqual(other, key)
+        # The board's document keeps what was made of its bytes as they are now, never of the old ones.
+        from cad.engine.formats.kicad.poured import folder
+
+        self.assertEqual(sorted(path.name for path in folder(self.board, other).parent.iterdir()), [other])
 
     def test_without_kicad_the_board_is_plotted_as_saved_and_says_so(self) -> None:
         refill = Refill(fails=True)

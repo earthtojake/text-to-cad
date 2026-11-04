@@ -37,8 +37,9 @@ NAME_ALIASES: dict[str, dict[str, str]] = {
         "read_mesh": "cad.stl.read",
         "memo": "cad.build123d.memo",
         "paint": "cad.build123d.paint",
-        # A model's export, its handle's or its id's: a file's is its own type's (cad.step.export, ...).
-        "export": "cad.model.export",
+        # 0.10's export, which took any source (a handle, an id, or a file): the engine's, so a 0.10
+        # exports.py keeps writing a file's exports too; a new one names its type's (cad.model.export, ...).
+        "export": "cad.engine.api.export",
         "snapshot": "cad.engine.api.snapshot",
         "inspect": "cad.engine.api.inspect",
     },
