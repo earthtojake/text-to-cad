@@ -535,6 +535,19 @@ it("a switch of theme draws the board again in that theme's canvas and palette, 
   dispose();
 });
 
+it("a board's card picture is drawn in both themes, on nothing but the board, the dark one carried beside the light", async () => {
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  themes.length = 0;
+  const picture = await controller.thumbnail({ width: 480, height: 360 });
+  expect(picture).toBeInstanceOf(Blob);
+  expect(picture.dark).toBeInstanceOf(Blob);
+  expect([...themes].sort()).toEqual(['dark', 'light']);
+  dispose();
+});
+
 it('Display and Settings are stock menus: a mode closes Display; View from below and the pours leave Settings open, and are kept through a change of mode', async () => {
   const user = userEvent.setup({ skipHover: true, pointerEventsCheck: 0 });
   const view = await open();

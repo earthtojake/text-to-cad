@@ -74,6 +74,8 @@ export interface CadRecent {
   pinned: boolean; missing: boolean;
   /** The picture's name (its content's), and when it was taken. */
   thumbnail: string | null; pictured: number | null;
+  /** Its picture in the dark theme's own colours, where its view draws one (a board's); null or absent: `thumbnail` in both. */
+  thumbnailDark?: string | null;
   /** A CAD file on disk, or a document built from code: a model's, or a shape a program handed over. */
   kind: 'file' | 'model' | 'shape';
   /** A model's or a shape's: the script it was built from (a shape's home). */
@@ -230,13 +232,13 @@ export interface CadWorkspaceService {
    * A change to the library (`open`, `pin`, `unpin`, `thumbnail`; `remove` a file's entry, its file
    * untouched; `delete` a model, its entry and the engine's copy): the library as it now is.
    */
-  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
-  /** Keep a model's picture in the library. */
-  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'delete' | 'thumbnail'; path: string; png?: string; dark?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library, and its dark theme's beside it where the picture carries one (`dark`: a board's). */
+  keepThumbnail(png: Blob & { dark?: Blob }, path: string): Promise<CadRecent[]>;
   /** A library picture, of the row it is of (its document's id, the picture's name), as a data URL; null when there is none. */
-  thumbnail(model: { id?: string; thumbnail?: string | null }, options?: CadRequestOptions): Promise<string | null>;
+  thumbnail(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: CadRequestOptions & { scheme?: 'light' | 'dark' }): Promise<string | null>;
   /** The URL of a library picture (`GET /api/v1/documents/<id>/thumbnail`), versioned by the picture's name. */
-  thumbnailUrl(model: { id?: string; thumbnail?: string | null }): string;
+  thumbnailUrl(model: { id?: string; thumbnail?: string | null; thumbnailDark?: string | null }, options?: { scheme?: 'light' | 'dark' }): string;
   /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
   pick(): Promise<string | null>;
   /** Show a file, by its absolute path, in the desktop's file manager. */

@@ -144,7 +144,7 @@ export default function ModelView({ launch, sequence, alone = false, bridge, cli
       return first ? Promise.resolve(first.map(libraryRow)) : client.recents();
     },
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: model => client.thumbnail(model),
+    thumbnail: (model, scheme) => client.thumbnail(model, { scheme }),
     open: async entry => { navigate(normalizePath(entry.path)); },
     // Open, with the desktop's chooser where this computer has one: what it picks is shown in place.
     ...(launch.pick ? { pick: async () => { const picked = await client.pick(); if (picked) navigate(normalizePath(picked)); } } : {}),

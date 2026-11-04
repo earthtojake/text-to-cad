@@ -117,7 +117,7 @@ export default function App({ client, server, tabStore, notice = null, language:
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => client.recents(),
     change: (action, entry) => client.changeRecents({ action, path: entry.path }),
-    thumbnail: model => Promise.resolve(client.thumbnailUrl(model)),
+    thumbnail: (model, scheme) => Promise.resolve(client.thumbnailUrl(model, { scheme })),
     open: async entry => { await show(entry.path); },
     ...(server.pick ? { pick: async () => { const picked = await client.pick(); if (picked) await show(picked); } } : {}),
   }), [client, server.pick, show]);

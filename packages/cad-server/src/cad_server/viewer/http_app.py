@@ -60,10 +60,20 @@ import threading
 _EXPORTS_LOCK = threading.Lock()
 
 POST_GUARD_HEADER = "x-cad-viewer"
-# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
-_LIBRARY_BODY_LIMIT = 768 * 1024
+# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, its dark theme's beside it where
+# its view draws one, and room for the rest.
+_LIBRARY_BODY_LIMIT = 1536 * 1024
 # A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.
 _THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
+
+
+def _dark_thumbnail(payload):
+    """A thumbnail change's dark theme's picture (``dark``, base64, as ``png``), where its view drew one."""
+    from .recents import thumbnail_png
+
+    return thumbnail_png(payload["dark"]) if payload.get("dark") else None
+
+
 _CAD_EXTENSIONS = ", ".join(sorted(VIEWER_EXTENSIONS))
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
@@ -681,7 +691,7 @@ class CadApp:
             return self._methods(request, {"GET": lambda: self._relay(request, response, f"/api/doc/{ident}/version",
                                                                       request.query)})
         if rest[1:] == ["thumbnail"]:
-            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident)})
+            return self._methods(request, {"GET": lambda: self._thumbnail(response, ident, request.query.get("scheme"))})
         if rest[1:] == ["exports"]:
             return self._methods(request, {"POST": lambda: self._export(request, response, ident)})
         raise ApiError(404, f"no route {request.path}", _ROUTES_HINT)
@@ -1157,7 +1167,7 @@ class CadApp:
         return self._picker
 
     def _change_recents(self, payload) -> None:
-        """A change to the library -- ``{action, path, png?}``, a file by its absolute path, a model by
+        """A change to the library -- ``{action, path, png?, dark?}``, a file by its absolute path, a model by
         its id (its entry's ``path``). A file opened is
         also counted for analytics, and so is a model's page, under its own ``model`` kind; a model's entry
         is the engine's, written when it builds, so only when a page opened it (``open``), pinning, its
@@ -1175,7 +1185,7 @@ class CadApp:
             elif action == "delete":
                 self.delete_document(ident)
             elif action == "thumbnail":
-                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")))
+                self.recents.thumbnail(ident, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
             elif action == "open":
                 # The page of a document the library holds: a file shown, as a file's is (``files``).
                 if self.recents.opened(ident) is not None and self.analytics is not None:
@@ -1198,7 +1208,7 @@ class CadApp:
         elif action == "remove":
             self.recents.remove(key)
         elif action == "thumbnail":
-            self.recents.thumbnail(key, thumbnail_png(payload.get("png")))
+            self.recents.thumbnail(key, thumbnail_png(payload.get("png")), _dark_thumbnail(payload))
         else:
             raise ValueError(f"unknown recents action {action!r}")
 
@@ -1210,14 +1220,16 @@ class CadApp:
 
         delete(self.recents.registry, ident)
 
-    def _thumbnail(self, response, ident):
+    def _thumbnail(self, response, ident, scheme=None):
         """``GET /api/v1/documents/<id>/thumbnail``: the picture the library keeps of the document, by
-        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``)."""
+        its record (the PNG named by its content: ``recents.RecentStore.thumbnail``); with
+        ``?scheme=dark``, its dark theme's where it has one, else that same picture."""
         try:
             record = self.recents.registry.get(ident) if is_id(ident) else None
         except OSError:
             record = None
-        name = str(((record or {}).get("preview") or {}).get("thumbnail") or "")
+        preview = (record or {}).get("preview") or {}
+        name = str((scheme == "dark" and preview.get("thumbnailDark")) or preview.get("thumbnail") or "")
         png = self.recents.read_thumbnail(name) if _THUMBNAIL_NAME.fullmatch(name) else None
         if png is None:
             raise ApiError(404, f"no picture of {ident}", "a document's picture is taken when its page shows it")
