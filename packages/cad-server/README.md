@@ -93,11 +93,13 @@ each by the installed `kicad-cli`, found by the one helper for the external prog
 PATH, else the one in the usual macOS or Windows installation, at the version the probe names) and run
 headless with no display and private homes; the server never starts KiCad's app, Open in never opens a
 `.kicad_*` file, and viewing a board needs no KiCad. A 3D type's `check` (`cad xbf|step|stl|glb|threemf
-check SRC --process molding|printing`) is the `trimesh` integration's manufacturing check: injection
-molding's draft, undercuts and projected area along `--pull`, or 3D printing's overhangs, walls and
-support, `--candidates` ranking the pulls or the orientations, every measurement under `--json`; it runs
-in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
-engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`). `cad serve`,
+check SRC --process cnc|sheet|molding|printing`, and `cad dxf check FILE --process sheet` of a cut file) is
+the manufacturing check: CNC machining, sheet metal, injection molding or 3D printing, measured exactly on a
+STEP's or an xbf's B-rep by the `build123d` integration (findings at face refs) or on a mesh by the
+`trimesh` integration, and judged against a cited rule set (`--rules`), every measurement and every rule's
+outcome under `--json`; it runs in this process where its environment holds the type's integration, else in
+that integration's environment (the base for build123d, `cad[trimesh]` made once by the engine, as `cad
+run` makes a program's: `_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
 installation registered, the `cad` command written, whether the CAD kernel environment is made, the engine started;
 the releases on disk, the current one, the engine's and each app's plugin's) and what earlier releases

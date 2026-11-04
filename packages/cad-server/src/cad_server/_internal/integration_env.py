@@ -1,10 +1,12 @@
 """An operation the ``cad`` command runs where the integration it needs is installed.
 
-A 3D type's ``check`` is the trimesh integration's (``cad.registry``): the library measures the mesh
-with trimesh. The command's own environment -- the server's installation -- holds the library without
-it, so the operation runs in the environment of that integration instead: ``cad[<integration>]`` at
-the installation's release, made once by the device's engine outside any sandbox and used again, as
-``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from uv's cache). Its
+A type's manufacturing ``check`` is its integration's (``cad.registry``): a mesh's, trimesh's; a STEP's, an
+xbf's and a DXF's, build123d's. The command's own environment -- the server's installation -- holds the
+library without them, so the operation runs in the environment of that integration instead: for build123d,
+the installation's base, the environment the engine's kernel processes run in (``base``); for another,
+``cad[<integration>]`` at the installation's release, made once by the device's engine outside any sandbox
+and used again, as ``cad run`` makes a program's (``cad_server._internal.extras``: offline first, from uv's
+cache). Its
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
@@ -49,8 +51,13 @@ def environment(integration: str, told: Callable[[str], None]) -> str:
     from cad_server._internal import base, extras
 
     try:
-        found = extras.ensure(base.Installation.here(), extras.Spec(integrations=(integration,)), told=told,
-                              engine=True)
+        if integration == base.EXTRA:  # the kernel's own: the base the engine's kernel processes run in
+            found = base.ensure(base.Installation.here(), told=told, engine=True)
+            if found is None:
+                raise base.Refused("the CAD kernel's environment could not be made")
+        else:
+            found = extras.ensure(base.Installation.here(), extras.Spec(integrations=(integration,)), told=told,
+                                  engine=True)
     except (base.Refused, OSError) as error:
         raise Failed(str(error) if isinstance(error, base.Refused) else f"{error.strerror or error}") from None
     return found.python

@@ -106,6 +106,22 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertEqual((refused, made.call_count), (1, 1), "a refusal makes no environment")
         self.assertIn("--samples is not molding's", json.loads(said)["error"])
 
+    def test_exact_geometry_runs_in_the_base_and_a_mesh_in_trimeshs(self) -> None:
+        """A STEP's check is build123d's, whose environment is the base the engine's kernel runs in: no second
+        environment of the kernel is made for it; a mesh's is trimesh's own."""
+        from cad.registry import DOCUMENT_TYPES
+        from cad_server._internal import base, extras
+
+        self.assertEqual({kind: DOCUMENT_TYPES[kind].operation("check").integration for kind in ("step", "stl")},
+                         {"step": "build123d", "stl": "trimesh"})
+        found = base.Environment(sys.executable, sys.prefix, True)
+        with mock.patch.object(base, "ensure", return_value=found) as kernel, \
+                mock.patch.object(extras, "ensure", return_value=found) as other:
+            integration_env.environment("build123d", print)
+            self.assertEqual((kernel.call_count, other.call_count), (1, 0))
+            integration_env.environment("trimesh", print)
+            self.assertEqual((kernel.call_count, other.call_count), (1, 1))
+
 
 if __name__ == "__main__":
     unittest.main()

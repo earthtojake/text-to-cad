@@ -72,8 +72,9 @@ makes an edit cost what it changed, documents and their exports, kinematics and 
 materials, references to geometry, snapshots drawn by OCCT; the CAD Viewer (`cad viewer [FILE]`: a
 launcher for the engine’s one page, every document at `/<id>`, every file read by its absolute path); CAD beside an agent's chat (`cad-mcp`: a stateless stdio peer of the engine’s
 HTTP MCP endpoint, with tools and the app page owned by the engine); the URDF, SDF and SRDF checks; a 3D
-document's manufacturing check (`cad.<type>.check(source, process="molding"|"printing")`, measured with
-trimesh); and engineering drawings (`@eng_drawing`).
+document's manufacturing check (`cad.<type>.check(source, process="cnc"|"sheet"|"molding"|"printing")`:
+exact geometry measured by the build123d integration, a mesh by trimesh, judged against cited rule sets); and
+engineering drawings (`@eng_drawing`).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily, never at
 `import cad`), and nothing of the server's or the shim's. Never app code, never JavaScript.
@@ -529,15 +530,17 @@ src/cad/
                          #   _internal/programs), a board script through its headless api-server
                          #   and kipy (_session), its exports (_export) and producers
   trimesh/               # the trimesh integration: a mesh's manufacturing measurements -- molding
-                         #   (draft, undercuts, projection along a pull), pulls (the pulls ranked),
-                         #   printing (overhangs, walls, support), orientations (ranked) -- each
-                         #   taking a trimesh.Trimesh and answering its report as data (_molding,
-                         #   _printing), and the check every 3D type runs with them (_check)
+                         #   (draft, undercuts, walls, projection along a pull), pulls (the pulls ranked),
+                         #   printing (overhangs, walls, trapped volumes, support), orientations (ranked) --
+                         #   each taking a trimesh.Trimesh and answering its report as data (_molding,
+                         #   _printing), and the check every mesh type runs with them (_check)
   build123d/             # the build123d integration: memo, paint, the AP242 mechanism
                          #   (mechanism_state, configuration_sequence, gear_pair,
                          #   rack_and_pinion_pair, screw_pair, posed), a GLB's animation,
                          #   measurements of native geometry (_geometry), flat patterns (_flatten),
-                         #   and the producers it registers (_producers)
+                         #   the manufacturing checks of exact geometry (_dfm_brep, the core; _dfm_cnc,
+                         #   _dfm_sheet with unfold, _dfm_molding, _dfm_printing; _dfm_dxf, a cut file;
+                         #   _dfm_check, the entry), and the producers it registers (_producers)
   engine/                # the engine's library half: models and the worker every build runs
                          #   in, documents, exports, the mesh, references, the OCCT stills, the
                          #   client every command reaches the server by, and where things are
@@ -546,8 +549,10 @@ src/cad/
   eng_drawing.py         # @eng_drawing: Sheets and Views over a part, one PDF (open: a future
                          #   pdf document type)
   _internal/             # DocumentType (document_type), a 3D type's manufacturing check: its
-                         #   signature and options, the trimesh integration's measuring imported
-                         #   when it runs (manufacturing), the runner of one operation the server's
+                         #   signature and options, its integration's measuring imported when it
+                         #   runs (manufacturing), each process's options, rule sets and findings
+                         #   (dfm/, its README the mechanism), the numpy geometry both integrations'
+                         #   checks share (meshops_*), the runner of one operation the server's
                          #   command hands an environment that holds its integration (operation),
                          #   the earlier spellings (aliases), the
                          #   external programs our code runs, found and run headless (programs), the
@@ -582,39 +587,57 @@ the server runs and a model's process never does. No KiCad IPC client is bundled
 
 ## Manufacturing checks
 
-A 3D document's `check` measures it for a manufacturing process, with the `trimesh` integration
-(`cad[trimesh]`): `cad.stl.check`, `cad.threemf.check`, `cad.glb.check`, `cad.step.check` and
-`cad.xbf.check`, one to one with `cad <type> check --process molding|printing`. The source is a file of
-the type or, for `xbf`, a document the engine holds (its id, or the handle a model's call returns), so a
-check script measures the model it builds:
+A 3D document's `check` says whether a part can be made by a process, and what to change where it cannot:
+`cad.step.check`, `cad.xbf.check`, `cad.stl.check`, `cad.threemf.check` and `cad.glb.check`, one to one with
+`cad <type> check SRC --process cnc|sheet|molding|printing`, and a DXF's, `cad dxf check FILE --process
+sheet`, as a sheet's cut file. The source is a file of the type or, for `xbf`, a document the engine holds
+(its id, or the handle a model's call returns), so a check script measures the model it builds:
 
 ```python
-from cad import stl, xbf
-from part import part                  # a model
+from cad import step, xbf
+from cad.build123d import cnc
+from part import part                                          # a model
 
-result = xbf.check(part(), process="molding", pull="-z")    # draft, undercuts, projected area
-stl.check("part.stl", process="printing", angle_limit=40)  # overhangs, walls, support
-stl.check("part.stl", process="molding", candidates=True)  # the pulls ranked: x, y, z, principal axes
-result.ok, result.findings, result.measurements["draft"]["min_wall_draft"]
+xbf.check(part(), process="cnc", material="aluminum", axes=3)  # corners, pockets, holes, walls, setups
+step.check("bracket.step", process="sheet", rules="sendcutsend", material="5052")
+step.check("cover.step", process="molding", pull="z", material="abs")   # draft, undercuts, ribs, clamp
+step.check("housing.step", process="printing", technology="sla")         # walls, pins, trapped resin
+cnc(shape, turning=True)                                       # a live build123d shape, the same result
 ```
 
-The figures are facts, never verdicts: nothing compares them against a resin's, a printer's or a tool's
-limit. The answer is a `cad.results.CheckResult`: `measurements` every family measured, its findings
-what they show -- warnings (`zero_draft_walls`, `undercut_candidates`, `overhangs`, `units_suspect`,
-`not_watertight`, `several_bodies`, `coarse_curved_face`), each at the place it was measured (`x, y, z`
-in millimetres), and errors for what could not be measured (`measurement_failed`, `mesh_unreadable`,
-`not_finite`, `invalid_target`), which alone fail it. Each option belongs to a process: molding's
-`pull` (`z`, `-y`, `x,y,z`; default `z`), `wall_limit` (45 degrees) and `zero_tol` (0.05); printing's
-`angle_limit` (45) and `samples` (2000); `units` (`mm`, `cm`, `m`, `in`, `ft`) an STL's alone, the
-other types declaring their own; `candidates` either's. An option of the other process is refused by
-name. A mesh is measured as the viewer reads it: an STL as it is, a 3MF's or a GLB's objects placed in
-millimetres, Z up, and a STEP or an xbf as the engine tessellates it.
+- **CNC machining** (`--axes 3|4|5`, `--turning`, `--tools`, `--stock`): holes (drill sizes, depth, drill
+  points, counterbores, threads), pockets and slots, internal corners against tool radius and depth, sharp
+  internal edges no tool makes, walls and gaps, tool access per setup direction and the setups it needs,
+  undercuts, voids, stock; turned parts' axis, diameters, bores, grooves and live-tooling features.
+- **Sheet metal** (`--thickness`, `--k-factor`, `--bend-radius`, `--kerf`, `--sheet-size`): constant
+  thickness, bends, flanges, reliefs, hems, holes and their distances to edges, holes and bends (in each
+  convention), notches, tabs and webs, measured on the part unfolded with its K-factor
+  (`cad.build123d.unfold`); a DXF's contours, overlaps, crossings, annotation and small features.
+- **Injection molding** (`--pull`, `--cavities`): per-face draft, undercuts and the side action, lifter or
+  collapsible core each needs, wall thickness and thick sections, ribs, bosses, internal corners, projected
+  area and a clamp-force estimate, the parting, the mold envelope; `--candidates` ranks the pulls.
+- **3D printing** (`--technology fdm|sls|sla|mjf|pbf`, `--build-volume`, `--layer-height`, `--nozzle`):
+  walls supported and not, gaps, holes, pins, embossed and engraved detail, overhangs, bridges and
+  cantilevers, clearances between parts, trapped volumes and their escape holes, build-volume fit, bed
+  contact and warping, stair-stepping, support; `--candidates` ranks orientations.
 
-Measured as a mesh, a curved face's draft is read from its facets, which are chords: the report says how
-far its facets disagree (`spread_deg`) and when to export finer. The trimesh integration's functions
-measure a mesh a program already holds, answering the same report as data:
+**Facts, then verdicts.** A STEP, an xbf or a model's document is measured exactly on its B-rep (the
+`build123d` integration), each finding at a face ref that `cad xbf inspect DOC REF` resolves
+(`plate/face 7`); a mesh by the `trimesh` integration (`cad[trimesh]`), each at `x, y, z` in millimetres.
+The measurements are facts and always reported (`measurements`). The verdicts are a rule set's
+(`--rules`): `generic` by default, a starting point drawn from published guides that says in every verdict
+it is no shop's; a shop's own (`protolabs`, `hubs`, `xometry`, `sendcutsend`, where the process has one);
+or `none`. A failing rule is a finding coded by its id, at its place, naming its limit and source, with a
+hint saying what to change; an error is a limit the part breaks, a warning a recommendation; every rule's
+outcome, its source and every failure are `measurements["rules"]`, and a figure not measured is never a
+pass. An error fails the check, as does a family that could not be measured (`measurement_failed`).
+`--material` picks a material's limits; `units` is an STL's alone, the other types declaring their own; an
+option of another process is refused by name. Every family, its JSON, every rule with its source and what
+each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
+
+The trimesh integration's functions measure a mesh a program already holds, answering its report as data:
 `cad.trimesh.molding(mesh, pull="z")`, `cad.trimesh.pulls(mesh)`, `cad.trimesh.printing(mesh)` and
-`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` (any file trimesh reads, an `.obj`
-or a `.ply` among them) and never changing it. A script run with `cad run` that imports `trimesh` or
-`cad.trimesh` gets the integration; one that only calls `cad.<type>.check` names it in its header
-(`cad[trimesh]`), and a check without it says so in one line.
+`cad.trimesh.orientations(mesh)`, each taking a `trimesh.Trimesh` and never changing it. A script run with
+`cad run` that imports `trimesh` or `cad.trimesh` gets that integration and one that imports `build123d`
+gets the other; one that only calls `cad.<type>.check` names the integration in its header (`cad[trimesh]`
+for a mesh), and a check without it says so in one line.
