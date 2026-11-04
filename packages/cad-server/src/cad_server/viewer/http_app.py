@@ -226,7 +226,7 @@ _ENGINE_ROUTES = ("structure, parts/<key> (/faces|edges|vertices/<ordinal>, /gro
                   "kinematics, POST pose, POST mesh")
 # What each kind's collection answers, by how its document type is viewed (``cad.registry``).
 _VIEW_ROUTES = {"document": _ENGINE_ROUTES + ", source", "drawing": "drawing, source",
-                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, drc, source"}
+                "robot": "structure, parts/<digest>, source", "mesh": "source", "plot": "plot, drc, glb, source"}
 # A model's document has no file, so no source.
 _KIND_ROUTES = {entry.wire: _VIEW_ROUTES[entry.view] if entry.has_file else _ENGINE_ROUTES
                 for entry in DOCUMENT_TYPES.values()}
@@ -285,6 +285,7 @@ class CadApp:
         from cad_server._internal.picker import available
 
         from .drawings import DrawingRenders
+        from .board_models import BoardModels
         from .plots import BoardAnswers
         from .prompt_files import PromptFiles
 
@@ -292,6 +293,8 @@ class CadApp:
         self.drawings = DrawingRenders(on_crash=lambda error: self._crashed(error, bugs_only=True))
         # A board's plot and DRC, made with KiCad off the request and kept by its bytes (``plots.py``).
         self.boards = BoardAnswers(on_crash=lambda error: self._crashed(error, bugs_only=True))
+        # A board in 3D, KiCad's GLB of it, made in the background one board at a time (``board_models.py``).
+        self.board_models = BoardModels(key=self.boards.key, on_crash=lambda error: self._crashed(error, bugs_only=True))
         # The engine's documents (an .xbf, a STEP): each served off the request, and the page's
         # reads dispatched directly to its document server (``documents.py``).
         self.engine_documents = documents or EngineDocuments(on_crash=lambda error: self._crashed(error, bugs_only=True))
@@ -900,6 +903,8 @@ class CadApp:
             return self._engine_route(request, response, kind, ident, rest)
         if kind == "dxf" and rest == ["drawing"]:
             return self._methods(request, {"GET": lambda: self._handle_drawing(request, response, path)})
+        if kind == "kicad_pcb" and rest == ["glb"]:
+            return self._methods(request, {"GET": lambda: self._handle_board_model(request, response, path)})
         if kind == "kicad_pcb" and rest in (["plot"], ["drc"]):
             return self._methods(request, {"GET": lambda: self._handle_board(request, response, path, rest[0])})
         if kind == "kicad_sch" and rest == ["plot"]:
@@ -1385,6 +1390,35 @@ class CadApp:
         if status >= 400 and "hint" not in body:
             body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
         response.send_json(status, body)
+
+    def _handle_board_model(self, request, response, path):
+        """``GET /api/v1/documents/kicad_pcb/<id>/glb``: the board in 3D, KiCad's GLB of it, made in the
+        background one board at a time and kept by the board's bytes (``board_models.py`` owns the rules):
+        ``?prepare=1`` says where it is and never waits; without, its bytes once made (gzip-coded where the
+        browser takes it, ``etag: "<key>"``, 304 for it), else the same 202 or 400."""
+        from .compressed import chosen
+
+        models = self.board_models
+        if (request.query.get("prepare") or "") not in ("", "0"):
+            status, body, key = models.status(path or "")
+        else:
+            status, body, key = models.response(path or "", if_none_match=request.header("if-none-match"))
+        tag = (("etag", f'"{key}"'),) if key else ()
+        if status == 304:
+            response.send_bytes(304, b"", "", tag)
+            return
+        if isinstance(body, bytes):
+            # Kept gzipped: sent so to a browser that takes gzip, else (or for a part of it: a tunnel's Range) as is.
+            accept = request.header("accept-encoding") or ""
+            if chosen(accept) is not None and "gzip" in accept.lower() and not request.header("range"):
+                response.send_bytes(200, body, "model/gltf-binary",
+                                    (*tag, ("content-encoding", "gzip"), ("vary", "accept-encoding")))
+            else:
+                response.send_bytes(200, models.identity(body), "model/gltf-binary", tag)
+            return
+        if status >= 400 and "hint" not in body:
+            body = {**body, "hint": _FUNNEL_HINTS.get(status, _ROUTES_HINT)}
+        send_json(response, status, body, tag)
 
     def _handle_robot(self, request, response, path, mesh, api):
         """``GET /api/v1/documents/<urdf|srdf|sdf>/<id>/structure``: the robot description resolved

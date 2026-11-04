@@ -163,6 +163,8 @@ const DOUBLE_PRESS_MS = 600;
  *   `inkTouches`: what the model is under a point of the view, `(clientX, clientY) => [{ part, ref? }]` —
  *   the part, with the face or edge there as a prompt reference where the renderer can name one: what
  *   Annotate records a mark as touching. Without it, a mark touches parts alone.
+ *   `displayLead`: the renderer's own rows at the head of Display's menu (and of a phone's More submenu), ending in
+ *   their rule: a board's View, 2D or 3D, the way back to its 2D picture (`board/BoardDisplay.jsx`).
  *   `previewView`: Preview's own, while it is open (`shell.previewing`), for a 3D view: the scene the
  *   renderer built for it (`scene`, its family's builder over the editor's geometry, null until it can be
  *   drawn), what drives that scene from inside Preview's viewport (`overlay(viewport, drawn)`, given
@@ -173,7 +175,8 @@ const DOUBLE_PRESS_MS = 600;
  */
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
-  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null }) {
+  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
+  displayLead = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -606,9 +609,9 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                         <DropdownMenuRadioItem value="perspective"><PerspectiveProjectionIcon className="size-4" />{t("projection.perspective")}</DropdownMenuRadioItem>
                       </DropdownMenuRadioGroup> },
                     { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
-                      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
+                      tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} lead={displayLead} />,
                       // In a phone's More, a standard nested submenu of the same list: the modes, then Grid.
-                      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
+                      submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} lead={displayLead} /> },
                     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
                       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
                   ] : []} />

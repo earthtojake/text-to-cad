@@ -272,6 +272,14 @@ export interface CadWorkspaceService {
    * hierarchy's index out (the viewer reads it with the first sheet it shows).
    */
   plotPayload(file: string, options?: CadRequestOptions & { sheet?: string; index?: boolean }): Promise<CadPlotPayload>;
+  /**
+   * A `.kicad_pcb` in 3D, KiCad's GLB of it, made by the server in the background and kept by the board's bytes (its
+   * document's `glb`). `wait: false` asks for it and answers null until it is made; otherwise it is waited for,
+   * `onProgress` hearing each stage (`{ kind: "board-model", stage }`). Made: where its bytes are read, and the parts it
+   * has a body of (`modelled`) and lacks one of (`missing`), by reference.
+   */
+  boardModel?(file: string, options?: CadRequestOptions & { wait?: boolean; onProgress?(frame: { kind: string; stage: string }): void }):
+    Promise<{ url: string; key: string; modelled: string[]; missing: string[] } | null>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
   /** A robot description resolved for the page (`cad_server.robot_payload`): its document's `structure`. */

@@ -4,6 +4,12 @@
  */
 export default {
   "board.text.board": "기판",
+  "board.text.view": "보기",
+  "board.text.board_view": "기판 보기",
+  "board.text.view_2d": "2D",
+  "board.text.view_3d": "3D",
+  "board.text.couldn_t_draw_the_board_in_3d": "기판을 3D로 그릴 수 없습니다",
+  "board.text.not_replayed_in_3d": "기판의 3D 보기는 재현되지 않습니다. 메모에는 선택한 항목이 담깁니다",
   "board.text.copper": "구리",
   "board.text.assembly": "조립",
   "board.text.placement": "배치",
@@ -351,6 +357,9 @@ export default {
   "progress.update.build123d": "build123d 설치 중",
   "progress.update.apps": "앱 업데이트 중",
   "progress.update.restart": "다시 시작하는 중",
+  "progress.board-model.queued": "KiCad 대기 중",
+  "progress.board-model.kicad": "KiCad 준비 중",
+  "progress.board-model.export": "기판을 3D로 그리는 중",
 
   "display.label": "표시",
   "display.mode": "표시 모드",

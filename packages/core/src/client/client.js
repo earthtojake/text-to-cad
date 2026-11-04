@@ -431,6 +431,28 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    async boardModel(file, { signal, onProgress, wait = true } = {}) {
+      // A `.kicad_pcb` in 3D, KiCad's own GLB of it (its body, copper, silkscreen, mask and parts' models),
+      // made by the SERVER in the background, one board at a time, the one asked for last first, and kept
+      // by the board's bytes: `GET <document>/glb?prepare=1` says where it is and never waits. With `wait`
+      // false it is only asked for (a board's 2D view, once drawn, so 3D is usually ready when it is
+      // wanted) and answers null until it is made; otherwise the client asks again after `retryMs`,
+      // `onProgress` hearing each answer's stage, until it is made. Made: where its bytes are read (the
+      // key in the URL, so a new revision is a new URL), what parts it has a body of and which it lacks.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'board-model' });
+      for (;;) {
+        const reply = await request(`${api}/glb?prepare=1`, { signal, timeoutMs: 10_000, operation: 'board-model' });
+        if (reply?.state === 'ready') {
+          return { url: viewerOriginUrl(origin, `${api}/glb?key=${encodeURIComponent(reply.key)}`), key: reply.key,
+            modelled: reply.modelled || [], missing: reply.missing || [] };
+        }
+        if (!wait) return null;
+        if (reply?.progress && typeof onProgress === 'function') onProgress(reply.progress);
+        await pause(Math.min(Math.max(Number(reply?.retryMs) || 0, 0), DRAWING_RETRY_MAX_MS), signal);
+        if (disposed) throw abortError();
+      }
+    },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
       // reading, the client only paints. A plain GET of the document's `drawing`, derived data

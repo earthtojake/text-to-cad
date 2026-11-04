@@ -181,6 +181,18 @@ other layers and the zones' and tracks' opacity. They are the display, so a Quic
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
+Display's **View** switches the board between **2D**, the layer picture above, and **3D**: KiCad's own
+3D model of the board (its body, copper, silkscreen, solder mask and the parts' 3D models, as
+`kicad-cli pcb export glb` draws them), on the same 3D stage as any GLB: orbit, the view cube,
+Projection, Measure, Explode, Clip and Preview. The server makes the model in the background once the
+2D board has drawn, one board at a time, and keeps it beside the board's plot until the board
+changes, so 3D is usually ready when it is chosen; until it is, the view says where KiCad is. A part
+whose model file KiCad does not find is not drawn (kicode carries none of KiCad's 3D libraries, so a
+footprint naming `${KICAD9_3DMODEL_DIR}` draws nothing; models beside the project do). The Circuit,
+the selection and Quick Edit are the board's in both: a click on a part in 3D picks it (`#U3`), and a
+part picked in 2D or in the Circuit is lit in 3D. A Quick Edit sent from 3D carries what is selected
+but no view: a board's snapshot draws the 2D picture.
+
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
 theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is
 light unless the display says `dark`, as every snapshot is:

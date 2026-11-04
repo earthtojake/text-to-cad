@@ -233,7 +233,7 @@ class PlotRoute(unittest.TestCase):
         self.assertNotEqual(headers["etag"], tag)
         # Its routes are its plot, its DRC and its source; another kind's read is a 404 naming them.
         status, _, body = self.request("GET", f"{api}/drawing")
-        self.assertEqual((status, json.loads(body)["hint"]), (404, "a kicad_pcb's routes are plot, drc, source"))
+        self.assertEqual((status, json.loads(body)["hint"]), (404, "a kicad_pcb's routes are plot, drc, glb, source"))
 
     def test_a_schematic_answers_every_sheet_a_page(self) -> None:
         schematic = write_schematic(self.folder / "divider")

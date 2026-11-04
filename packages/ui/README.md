@@ -335,6 +335,11 @@ copies all of them through the host's clipboard.
 The native `.kicad_pcb` renderer lives in `src/renderers/board/`, using the same file service,
 selection, Measure, annotation and Quick Edit host capabilities as the other renderers.
 It consumes the core plot payload; authoring and DRC belong to KiCad and the `cad` command.
+Its Display's View chooses 2D (the plot) or 3D (`Board3DView.jsx`, loaded on first need): KiCad's GLB of
+the board, which the client asks the server for in the background once the 2D board has drawn
+(`client.boardModel`), on the 3D stage (`RendererShell`, its `displayLead` slot carrying View), with the
+board's Circuit, selection and Quick Edit; a part picked in either is the other's (KiCad names each part's
+node by its reference).
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterChecklist.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the

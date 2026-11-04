@@ -1,5 +1,5 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { FlipHorizontal2, Layers2, PaintBucket, SlidersHorizontal, SunDim } from "lucide-react";
+import { Box, FlipHorizontal2, Layers2, PaintBucket, SlidersHorizontal, Square, SunDim } from "lucide-react";
 import {
   BOARD_DISPLAY_DEFAULTS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
@@ -37,6 +37,12 @@ import { AssemblyModeIcon, BoardModeIcon, CopperModeIcon, PlacementModeIcon, Tra
  * A phone's More has a submenu of each, in the same order. The contract — `{ mode, side, poured,
  * layers, active, dim, zones, tracks }` — is core's, shared with `cad <type> snapshot --display`, so
  * what is drawn here is drawn there, and kept with the file's view.
+ *
+ * Where the server draws a board in 3D, Display leads with **View**, under a muted label, **2D** and
+ * **3D** as a radio group of their own, then a rule (`BoardViewItems`): the same rows lead the 3D view's
+ * Display (`Board3DView.jsx`), above its modes, so the way back is where the way in was. It is a choice of
+ * picture, as the modes are, and the file's (kept with its view), not a camera's, so it is Display's
+ * rows and no tile of its own as Projection is; in 3D the modes are a 3D view's and Projection is there.
  */
 export { BOARD_DISPLAY_DEFAULTS, readBoardDisplay };
 
@@ -80,6 +86,31 @@ function OpacityRow({ id, Icon, label, name, value, onChange }) {
   </div>;
 }
 
+/** The two pictures of a board, as View's rows name them. */
+export const BOARD_VIEW_OPTIONS = Object.freeze([
+  Object.freeze({ value: "2d", labelKey: "board.text.view_2d", Icon: Square }),
+  Object.freeze({ value: "3d", labelKey: "board.text.view_3d", Icon: Box }),
+]);
+
+/**
+ * View's rows, leading a board's Display in 2D and in 3D: a muted label, 2D and 3D as a radio group, then a
+ * rule. Choosing closes the menu, as a mode does.
+ * @param {{ boardView: { value: "2d" | "3d", onChange(value: "2d" | "3d"): void } }} props
+ */
+export function BoardViewItems({ boardView, rule = true }) {
+  const { t } = useI18n();
+  return <>
+    <DropdownMenuLabel className="text-muted-foreground">{t("board.text.view")}</DropdownMenuLabel>
+    <DropdownMenuRadioGroup aria-label={t("board.text.board_view")} value={boardView.value}
+      onValueChange={value => { if (value !== boardView.value) boardView.onChange(value === "3d" ? "3d" : "2d"); }}>
+      {BOARD_VIEW_OPTIONS.map(({ value, labelKey, Icon }) => <DropdownMenuRadioItem key={value} value={value} data-board-view-option={value}>
+        <Icon className="size-4" />{t(labelKey)}
+      </DropdownMenuRadioItem>)}
+    </DropdownMenuRadioGroup>
+    {rule ? <DropdownMenuSeparator /> : null}
+  </>;
+}
+
 /** The mode on screen, or Custom, as the Display tile and its rows name it. */
 export function boardDisplayChoice(display, sheet) {
   if (boardDisplayIsCustom(display, sheet)) return { value: CUSTOM, labelKey: "board.text.custom", Icon: Layers2 };
@@ -91,10 +122,11 @@ export function boardDisplayChoice(display, sheet) {
  * the modes alone.
  * @param {{ display: ReturnType<typeof readBoardDisplay>, sheet: object | null, onChange(display: object): void }} props
  */
-export function BoardDisplayItems({ display, sheet, onChange }) {
+export function BoardDisplayItems({ display, sheet, onChange, boardView = null }) {
   const { t } = useI18n();
   const choice = boardDisplayChoice(display, sheet);
   return <>
+    {boardView ? <BoardViewItems boardView={boardView} /> : null}
     <DropdownMenuLabel className="text-muted-foreground">{t("board.text.display_modes")}</DropdownMenuLabel>
     <DropdownMenuRadioGroup aria-label={t("board.text.board_display_mode")} value={choice.value}
       onValueChange={value => { if (value !== CUSTOM) onChange(selectBoardMode(display, value)); }}>
@@ -140,7 +172,7 @@ export function BoardSettingsItems({ display, sheet, onChange }) {
 }
 
 /** A board's view-control tile and its menu: its glyph, its name as its hint, opening `children`. */
-function BoardMenuTile({ label, hint, Icon, disabled, tileProps, contentProps, className, children }) {
+export function BoardMenuTile({ label, hint, Icon, disabled, tileProps, contentProps, className, children }) {
   const tileClass = useStripButtonClass();
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>
@@ -157,12 +189,12 @@ function BoardMenuTile({ label, hint, Icon, disabled, tileProps, contentProps, c
 }
 
 /** The Display tile: the mode on screen's glyph, opening the modes (`BoardDisplayItems`). */
-export function BoardDisplayPopover({ display, sheet, onChange, disabled = false }) {
+export function BoardDisplayPopover({ display, sheet, onChange, disabled = false, boardView = null }) {
   const { t } = useI18n();
   const choice = boardDisplayChoice(display, sheet);
   return <BoardMenuTile label={t("display.modeCurrent", { mode: t(choice.labelKey) })} hint={t("display.label")} Icon={choice.Icon}
     disabled={disabled} tileProps={{ "data-board-display": choice.value }} contentProps={{ "data-board-display-menu": "" }} className="w-44">
-    <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} />
+    <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} boardView={boardView} />
   </BoardMenuTile>;
 }
 
@@ -177,15 +209,26 @@ export function BoardSettingsPopover({ display, sheet, onChange, disabled = fals
 }
 
 /**
+ * The Display tile while a board's 3D model is made, or could not be: View alone, the way back to 2D.
+ */
+export function boardViewOnlyControls({ boardView, t = english }) {
+  const tile = <BoardMenuTile label={t("display.modeCurrent", { mode: t("board.text.view_3d") })} hint={t("display.label")} Icon={Box}
+    tileProps={{ "data-board-display": "3d" }} contentProps={{ "data-board-display-menu": "" }} className="w-44">
+    <BoardViewItems boardView={boardView} rule={false} />
+  </BoardMenuTile>;
+  return [{ id: "display", label: t("display.label"), icon: <Box />, tile, submenu: () => <BoardViewItems boardView={boardView} rule={false} /> }];
+}
+
+/**
  * The strip's view controls for a board, Display then Settings: each its tile, and in a phone's
  * More, a submenu of the same rows.
  */
-export function boardViewControls({ display, sheet, onChange, disabled, t = english }) {
+export function boardViewControls({ display, sheet, onChange, disabled, boardView = null, t = english }) {
   const Icon = boardDisplayChoice(display, sheet).Icon;
   return [{
     id: "display", label: t("display.label"), icon: <Icon />, disabled,
-    tile: <BoardDisplayPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} />,
-    submenu: () => <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} />
+    tile: <BoardDisplayPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} boardView={boardView} />,
+    submenu: () => <BoardDisplayItems display={display} sheet={sheet} onChange={onChange} boardView={boardView} />
   }, {
     id: "settings", label: t("preview.settingsTitle"), icon: <SlidersHorizontal />, disabled,
     tile: <BoardSettingsPopover display={display} sheet={sheet} onChange={onChange} disabled={disabled} />,

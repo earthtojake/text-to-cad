@@ -4,6 +4,12 @@
  */
 export default {
   "board.text.board": "基板",
+  "board.text.view": "ビュー",
+  "board.text.board_view": "基板のビュー",
+  "board.text.view_2d": "2D",
+  "board.text.view_3d": "3D",
+  "board.text.couldn_t_draw_the_board_in_3d": "基板を 3D で描画できませんでした",
+  "board.text.not_replayed_in_3d": "基板の 3D ビューは再現されません。メモには選択したものが含まれます",
   "board.text.copper": "銅箔",
   "board.text.assembly": "実装",
   "board.text.placement": "配置",
@@ -351,6 +357,9 @@ export default {
   "progress.update.build123d": "build123d をインストールしています",
   "progress.update.apps": "アプリを更新しています",
   "progress.update.restart": "再起動しています",
+  "progress.board-model.queued": "KiCad を待っています",
+  "progress.board-model.kicad": "KiCad を準備しています",
+  "progress.board-model.export": "基板を 3D で描画しています",
 
   "display.label": "表示",
   "display.mode": "表示モード",

@@ -43,6 +43,10 @@ let copied: string[] = [];
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 const UNREADABLE = 'broken.kicad_pcb is not a KiCad board: a .kicad_pcb starts with (kicad_pcb ...)';
 let readPlot: () => Response | Promise<Response> = () => json(BOARD);
+// The board's 3D model: being made, unless a test says otherwise; each ask of the server noted in order.
+const MAKING = { state: 'exporting', progress: { kind: 'board-model', stage: 'export' }, retryMs: 20 };
+let readModel: () => Response | Promise<Response> = () => json(MAKING, 202);
+let asked: string[] = [];
 const DESTINATION = { kind: 'clipboard', available: true };
 const context2d = new Proxy({}, { get: (_target, key) => (key === 'canvas' ? undefined : key === 'measureText' ? (text: string) => ({ width: text.length * 7 }) : noop), set: () => true });
 
@@ -53,6 +57,8 @@ beforeEach(() => {
   canvases.length = 0;
   copied = [];
   readPlot = () => json(BOARD);
+  readModel = () => json(MAKING, 202);
+  asked = [];
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => clearTimeout(handle));
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }));
@@ -79,7 +85,8 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
       return json({ documents: [{ entry: { kind: 'kicad_pcb', file, url: `/${name}`, hash: 'one', bytes: 4096 }, revision: 'one' }] });
     }
     if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
-    if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/plot')) return readPlot();
+    if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/plot')) { asked.push('plot'); return readPlot(); }
+    if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/glb')) { asked.push(`glb${url.search}`); return readModel(); }
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -567,11 +574,13 @@ it('Display and Settings are stock menus: a mode closes Display; View from below
   expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' })).toBeTruthy();
   await user.keyboard('{Escape}');
   await waitFor(() => expect(menuShown('Settings')).toBeNull());
-  // Display: the modes alone, under their label; a mode closes it.
+  // Display: View (2D or 3D), then the modes, each under its label; a mode closes it.
   await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
   const menu = await openMenu('Display');
-  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['Display modes']);
-  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
+  expect([...menu.querySelectorAll('[data-slot=dropdown-menu-label]')].map(label => label.textContent)).toEqual(['View', 'Display modes']);
+  expect(within(within(menu).getByRole('group', { name: 'Board view' })).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['2D', '3D']);
+  expect(within(within(menu).getByRole('group', { name: 'Board display mode' })).getAllByRole('menuitemradio').map(item => item.textContent))
+    .toEqual(['Board', 'Copper', 'Assembly', 'Placement']);
   expect(within(menu).queryAllByRole('menuitemcheckbox')).toEqual([]);
   expect(within(menu).queryAllByRole('slider')).toEqual([]);
   await user.click(within(menu).getByRole('menuitemradio', { name: 'Copper' }));
@@ -631,4 +640,76 @@ it('paints after a StrictMode remount, as the development app mounts it', async 
   const { pane, dispose } = await open('blinky.kicad_pcb', { strict: true });
   await opened(pane);
   dispose();
+});
+
+it('the 2D board is drawn first, never waiting on its 3D model, which is then asked for in the background', async () => {
+  let answer: (response: Response) => void = noop;
+  readPlot = () => new Promise<Response>(resolve => { answer = resolve; });
+  const { pane, dispose } = await open();
+  await waitFor(() => expect(asked).toContain('plot'));
+  // Nothing of 3D is asked for while the board is read.
+  expect(asked.filter(name => name.startsWith('glb'))).toEqual([]);
+  answer(json(BOARD));
+  await opened(pane);
+  // Drawn while the model is still being made; asked for once, then left to the server.
+  await waitFor(() => expect(asked).toContain('glb?prepare=1'));
+  expect(asked.indexOf('plot')).toBeLessThan(asked.indexOf('glb?prepare=1'));
+  expect(pane.querySelector('[data-board-model]')).toBeNull();
+  dispose();
+});
+
+it("View's 3D waits on the shared loading screen with View over it; 2D again is the 2D view as it was, the choice the file's", async () => {
+  const user = userEvent.setup();
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
+  await user.click(within(await openMenu('Display')).getByRole('menuitemradio', { name: 'Copper' }));
+  await waitFor(() => expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Copper' })).toBeTruthy());
+  const before = { ...frames.at(-1) };
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Copper' }));
+  await user.click(within(await openMenu('Display')).getByRole('menuitemradio', { name: '3D' }));
+  await waitFor(() => expect(pane.querySelector('[data-board-model="waiting"]')).not.toBeNull());
+  expect(await within(pane).findByText('Drawing the board in 3D')).toBeTruthy();
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.view?.value).toBe('3d'));
+  expect(pane.querySelector('[data-board-surface]')).toBeNull();
+  // The way back is where the way in was: Display's View.
+  await user.click(within(pane).getByRole('button', { name: 'Display mode: 3D' }));
+  const menu = await openMenu('Display');
+  expect(within(menu).getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['2D', '3D']);
+  await user.click(within(menu).getByRole('menuitemradio', { name: '2D' }));
+  await opened(pane);
+  expect(within(strip(pane)).getByRole('button', { name: 'Display mode: Copper' })).toBeTruthy();
+  expect(frames.at(-1)).toEqual(before);
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.view?.value).toBe('2d'));
+  dispose();
+});
+
+it('a 3D model KiCad could not make is the alert card, View still over it', async () => {
+  const user = userEvent.setup();
+  readModel = () => json({ error: 'KiCad could not draw the board in 3D: kicad-cli pcb export glb failed' }, 400);
+  const { pane, dispose } = await open();
+  await opened(pane);
+  await user.click(within(strip(pane)).getByRole('button', { name: 'Display mode: Board' }));
+  await user.click(within(await openMenu('Display')).getByRole('menuitemradio', { name: '3D' }));
+  expect(await within(pane).findByText('Couldn’t draw the board in 3D')).toBeTruthy();
+  expect(within(pane).getByRole('button', { name: 'Display mode: 3D' })).toBeTruthy();
+  dispose();
+});
+
+it("a KiCad GLB's parts are its nodes named by their references: what a 3D pick selects, and what a board selection lights", async () => {
+  const THREE = await import('three');
+  const { boardPartNodes } = await import('../../../dist/renderers/board/Board3DView.js');
+  const { createBoardIndex } = await import('@cad/core/lib/board2d/boardIndex.js');
+  const { layoutPlot } = await import('@cad/core/lib/plot2d/index.js');
+  const index = createBoardIndex(BOARD.board, layoutPlot(BOARD).sheets[0]);
+  const mesh = (id: string) => Object.assign(new THREE.Mesh(), { userData: { partId: id } });
+  const part = (name: string, ...ids: string[]) => { const group = new THREE.Group(); group.name = name; const shape = new THREE.Group(); shape.name = '=>[0:1:1:3]'; shape.add(...ids.map(mesh)); group.add(shape); return group; };
+  const root = new THREE.Group();
+  // R1 and D1 as KiCad writes them, a part KiCad has no reference for, and the board's own mesh.
+  root.add(part('R1', 'n2'), part('D1', 'n4', 'n5'), part('X9', 'n7'), mesh('n9'));
+  const { nodes, refOf } = boardPartNodes({ document: { scene: root } }, index);
+  expect([...nodes.keys()]).toEqual(['R1', 'D1']);
+  expect(nodes.get('D1').ids).toEqual(['n4', 'n5']);
+  expect([refOf.get('n5'), refOf.get('n9'), refOf.get('n7')]).toEqual(['D1', undefined, undefined]);
 });

@@ -142,6 +142,34 @@ class SharedTestBoard(unittest.TestCase):
                          sorted(path.name for path in self.root.iterdir()), "the board's folder as found")
 
 
+class BoardInThreeD(unittest.TestCase):
+    """The CAD Viewer's 3D view of a board: KiCad's GLB with its copper, silkscreen and mask, each part's node
+    named by its reference, a part whose model file is missing named as missing (``cad.kicad._model``)."""
+
+    def test_the_parts_are_named_and_the_missing_ones_said(self):
+        import json
+        import subprocess
+
+        with tempfile.TemporaryDirectory(prefix="kicad-3d-") as folder:
+            root = Path(folder)
+            # R1's model is a box beside the board; H1's names a file that is not there.
+            (root / "box.wrl").write_text("#VRML V2.0 utf8\nShape { geometry Box { size 1 1 1 } }\n", encoding="utf-8")
+            board = root / "two.kicad_pcb"
+            board.write_text(BOARD.replace('(pad "2" smd rect (at 0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask")))',
+                                           '(pad "2" smd rect (at 0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask"))\n  (model "${KIPRJMOD}/box.wrl"))')
+                             .replace('(layers "*.Cu" "*.Mask")))', '(layers "*.Cu" "*.Mask"))\n  (model "${KIPRJMOD}/gone.step")))'),
+                             encoding="utf-8")
+            saved = board.read_bytes()
+            done = subprocess.run([kicode.python(self), "-P", "-m", "cad.kicad._model", str(board), str(root / "out")],
+                                  capture_output=True, text=True, timeout=600, check=False)
+            self.assertEqual(0, done.returncode, done.stderr)
+            made = json.loads(done.stdout.strip().splitlines()[-1])
+            self.assertEqual((["R1"], ["H1"]), (made["modelled"], made["missing"]), made)
+            self.assertTrue(Path(made["glb"]).is_file())
+            self.assertEqual(saved, board.read_bytes(), "the board is read, never written")
+            self.assertEqual(sorted(path.name for path in root.iterdir()), ["box.wrl", "out", "two.kicad_pcb"])
+
+
 class StepWithoutModels(unittest.TestCase):
     """A part whose 3D model is missing, or only in VRML, leaves the STEP without that part's body: a
     warning naming it, not a failure, although kicad-cli exits 2 for it."""
