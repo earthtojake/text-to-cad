@@ -233,4 +233,4 @@ LOOK = Look(
                     specular=0.08, shininess=0.35),
 )
 
-DRAWING = Drawing(light=("#ffffff", "#171717"), dark=("#27292d", "#fafafa"), line_width=1.0, margin=16.0)
+DRAWING = Drawing(light=("#ffffff", "#171717"), dark=("#292929", "#fafafa"), line_width=1.0, margin=16.0)

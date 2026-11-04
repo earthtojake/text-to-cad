@@ -1581,10 +1581,11 @@ one between them (`lib/floatingSurface.js`); every scroll region is the
 `ScrollArea` primitive. A submenu is portaled, never drawn inside its parent menu, which that
 surface makes a containing block.
 
-The shared dark UI and the tools view's canvas take Preview's cool blue-grey (hue 264): the
-tokens at chroma 0.008 on the shadcn lightness steps, the canvas Preview's stage mid-tone
-`#25272b` (its stage runs `#2c2e31` to `#202226`), so the two views read as one look; light
-app appearance selects its light basis.
+The shared dark UI and the tools view's canvas are neutral greys, no hue, as Figma's and VS
+Code's dark themes are: the tokens at chroma 0 on the shadcn lightness steps, the canvas
+Preview's stage mid-tone `#272727` (its stage runs `#2e2e2e` to `#222222`), so the two views
+read as one look, and a board's canvas the app's dark background (`#292929`); light app
+appearance selects its light basis.
 The shared loading star and the marks use blue branding.
 
 ## Inspect, Render and live revisions

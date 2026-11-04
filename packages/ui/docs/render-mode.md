@@ -175,7 +175,7 @@ Behind it, Background is a studio backdrop rather than a flat fill: its color li
 toward white behind the middle of the frame, shaded toward the corners (more for a dark
 color) and above the horizon. Its opacity carries the gradient; at zero it draws nothing.
 Light Render defaults to a pure white background and retains the slightly gray
-floor (`#e7e7e5`); dark Render's background and floor are one charcoal (`#202226`), never
+floor (`#e7e7e5`); dark Render's background and floor are one neutral charcoal (`#222222`), never
 black. Explicit background colors still override the mode default.
 Pose and animation passes publish current placed bounds before
 drawing, and so does the exploded view wherever it comes to rest (a slider move,

@@ -8,7 +8,7 @@
    "name": "blinky",
    "width": 40.0,
    "height": 30.0,
-   "background": "#001023",
+   "background": "#292929",
    "layers": [
     {
      "id": "area",

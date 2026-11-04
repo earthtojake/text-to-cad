@@ -7,8 +7,9 @@
  * (`boardRasters.js`) on KiCad's canvas, then what the tools draw over it (`overlay`), in the same
  * frame, so a capture of the canvas holds it too.
  *
- * The whole pane is the board's background, KiCad's canvas colour, whatever the theme: KiCad draws
- * a board on one dark canvas, which reaches past the board.
+ * The whole pane is the board's background, the viewer's neutral dark grey (the plot's, the app's
+ * dark `--background`), whatever the theme: KiCad draws a board on one dark canvas, which reaches
+ * past the board.
  *
  * The pane says whether what it shows is final — drawn at the scale it is shown at — as
  * `data-board-settled` on its element, written as it paints (no render): a zoom is `false` until
@@ -20,8 +21,8 @@ import { drawPlot, fitBoardBounds, fitPlotTransform } from "@cad/core/lib/plot2d
 import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { createBoardRasters } from "./boardRasters.js";
 
-/** KiCad's canvas around the board: the board's own background, before a board has loaded too. */
-const KICAD_CANVAS = "#001023";
+/** The canvas around the board: the board's own background, before a board has loaded too. */
+const KICAD_CANVAS = "#292929";
 const surroundColor = (plot) => plot?.layout.sheets[0]?.background || KICAD_CANVAS;
 
 /**

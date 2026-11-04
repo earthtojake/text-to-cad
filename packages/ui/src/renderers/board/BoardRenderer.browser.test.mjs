@@ -93,7 +93,7 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
   const background = hex(BOARD.sheets[0].background);
   assert.ok(near(pixel(fitted, 2, 2), background, 12), `KiCad's canvas round the board: ${pixel(fitted, 2, 2)}`);
   const [cornerX, cornerY] = at([1, 1]);
-  assert.ok(near(pixel(fitted, cornerX, cornerY), [35, 45, 58], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
+  assert.ok(near(pixel(fitted, cornerX, cornerY), [62, 62, 62], 12), `the board's area over it: ${pixel(fitted, cornerX, cornerY)}`);
   const [trackX, trackY] = at([30, 15]);
   assert.ok(red(pixel(fitted, trackX, trackY)), `the track: ${pixel(fitted, trackX, trackY)}`);
   // R1 pad 2 (35.825, 15): drawn as the board draws it, until a press selects it and lights it.
