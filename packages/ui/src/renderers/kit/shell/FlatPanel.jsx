@@ -182,8 +182,13 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
             event.currentTarget.parentElement?.querySelector(`[data-flat-panel-tab="${CSS.escape(next.id)}"]`)?.focus();
           }}
           className={cn("h-6 rounded-md px-2 text-tiny transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
-            on ? "bg-accent font-medium text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")}>
-          {entry.label}
+            on ? "bg-accent text-foreground" : "text-muted-foreground hover:bg-accent/50 hover:text-foreground")}>
+          {/* The open tab's name is medium weight; every tab is as wide as its name in that weight (an
+              unseen copy holds it), so choosing one moves nothing. */}
+          <span className="grid justify-items-center">
+            <span aria-hidden="true" className="invisible col-start-1 row-start-1 font-medium">{entry.label}</span>
+            <span className={cn("col-start-1 row-start-1", on && "font-medium")} data-flat-panel-tab-name="">{entry.label}</span>
+          </span>
         </button>;
       })}
     </div>

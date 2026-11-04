@@ -184,7 +184,7 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   // The search field and the collapse button on the boxes' line, 8px in, as the tabs' buttons below them.
   expect(head.style.padding).toBe('8px 8px 6px');
   expect(searchBox(pane).placeholder).toBe('Parts, nets, layers');
-  expect(within(aside).getAllByRole('tab').map(tab => [tab.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Layers', 'false']]);
+  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
   expect(tabBody(pane, 'circuit').hidden).toBe(false);
   expect(tabBody(pane, 'layers').hidden).toBe(true);
@@ -214,7 +214,7 @@ it('a board without its index is the picture and its Layers alone: no tools, no 
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
   expect(within(pane).queryAllByRole('button', { name: 'Select' })).toEqual([]);
-  expect(within(panel(pane)).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['Layers']);
+  expect(within(panel(pane)).getAllByRole('tab').map(tab => tab.querySelector('[data-flat-panel-tab-name]')!.textContent)).toEqual(['Layers']);
   tap(pane, [34.175, 15]);
   expect(box(pane)).toBeNull();
 

@@ -608,8 +608,8 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
 - **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
   the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; then **Hide
   panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
-- **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent, the others
-  muted; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
+- **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
+  weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
