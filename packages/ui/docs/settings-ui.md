@@ -612,8 +612,10 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   muted; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
-- **One gutter.** The head, the tabs and every list start 8px in from the panel's edges: the search
-  box, a tab and a row's background all begin on that line, and a settings label too.
+- **One gutter, one text line.** The head, the tabs and every list start 8px in from the panel's
+  edges: the search box, a tab's button and a row's background begin on that line, and the controls
+  end 8px from the right. What is read inside them starts 16px in: the search icon, a tab's name, a
+  settings heading and label, a layer group's name, a row's first glyph (a chevron, a swatch).
 - **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
   a board's parts in the schematic blocks their footprints record (a sheet's name without
   `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its
@@ -624,19 +626,19 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   unconnected pins) is a label: only a row's chevron opens or shuts it. It opens as its blocks and "Nets
   (N)", a block of several parts and the Nets shut; a pick on the picture opens its row's owners and
   scrolls it into view. A selected net is lit and the rest stepped back, as KiCad's net highlight.
-- **The Layers** (`board/LayersSection.jsx`), KiCad's Appearance panel's Layers tab: **View** (a
-  settings section, `board/BoardDisplay.jsx`: **Preset**, the modes as a Select — Board, Copper,
-  Assembly, Placement, and Custom while the eyes have left the mode's set — and **Side**, Top or
-  Bottom); then the layers, grouped Front, Inner, Back, Other, each its colour, name, count and eye, a
-  press on a board layer's row making it the active layer (a filled dot after its name), drawn on top;
-  then **Layer display**: **Others** (KiCad's high-contrast modes, a Select: every layer but the active
-  one **Shown**, **Dimmed** or **Hidden**; the outline, and with a copper layer active every drill and
-  via through it, stay at full strength; **Ctrl+H** (⌘H) cycles them while the board has the keyboard),
-  **Pours** (a checkbox, while copper is drawn), and the **Zones**' (60%) and **Tracks**' (100%)
-  opacities, sliders with their committed values. Its rows are the settings form's (see
-  [Display settings](#display-settings-and-section-primitives)). All of it is the board's Display
-  (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display` draws too; the board has no view
-  controls on the strip.
+- **The Layers** (`board/LayersSection.jsx`), KiCad's Appearance panel's Layers tab: its settings
+  together at the top (settings sections, `board/BoardDisplay.jsx`) — **View**: **Preset**, the modes
+  as a Select (Board, Copper, Assembly, Placement, and Custom while the eyes have left the mode's
+  set), and **Side**, Top or Bottom; **Layer display**: **Others** (KiCad's high-contrast modes, a
+  Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and with a
+  copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H) cycles
+  them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and the
+  **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed values — then, under
+  a rule, the layers, grouped Front, Inner, Back, Other, each its colour, name, count and eye, a press
+  on a board layer's row making it the active layer (a filled dot after its name), drawn on top. Its
+  rows are the settings form's (see [Display settings](#display-settings-and-section-primitives)). All
+  of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
+  draws too; the board has no view controls on the strip.
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
   the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.

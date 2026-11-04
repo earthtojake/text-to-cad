@@ -33,14 +33,15 @@ function LayerEye({ id, hidden, onToggle }) {
 
 /**
  * A board's **Layers**, a tab of the view's panel (`kit/shell/FlatPanel.jsx`), as KiCad's Appearance
- * panel's Layers tab: the **View** (its preset and side, `BoardDisplay.jsx`), then every layer the
+ * panel's Layers tab: its settings together at the top — the **View** (its preset and side,
+ * `BoardDisplay.jsx`) and the **Layer display** (the others, the pours, the zones' and tracks'
+ * opacities) — then every layer the
  * board's picture holds, grouped as KiCad lists them — Front (outermost first), Inner, Back, then
  * Other (the user layers and the outline, the board's area, the vias, the drill holes, the ratsnest
  * and the pads' and vias' names) — each with its colour, its name, how many things it draws, and an
  * eye that hides or shows it in the view; a press on a board layer's row makes it the **active**
  * layer, the one drawn on top and the one Others keeps bright (its filled dot after its name; until
- * one is pressed, KiCad's own, the copper facing the eye); then **Layer display** (the others, the
- * pours, the zones' and tracks' opacities). A layer has nothing under it, so its one glyph is its
+ * one is pressed, KiCad's own, the copper facing the eye). A layer has nothing under it, so its one glyph is its
  * colour (KiCad's, in the view's theme: `plot2d/theme.js`, `kit/inspector/layerRows.jsx`). While the
  * panel's search is up, the layers whose names match, and nothing else. Everything here is the
  * board's Display (`plot2d/boardDisplay.js`), the one object `cad <type> snapshot --display` draws,
@@ -89,14 +90,18 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
     return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
+  // The settings together over the list, their text on the list's line (a section's own 8px, and 8px more):
+  // where a layer group's name and a swatch start.
   return <div className="flex flex-col gap-1 pt-1 text-tiny">
-    <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
+    <div className="pb-1 pl-2" data-board-settings="">
+      <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
+      <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
+    </div>
     <div className="border-t border-border px-2 pt-1" aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
         <li className="flex h-6 items-center text-muted-foreground" style={{ paddingLeft: LAYER_ROW_INSET_PX }} aria-hidden="true">{group.label}</li>
         {group.layers.map(row)}
       </ul>)}
     </div>
-    <div className="border-t border-border pt-1"><BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} /></div>
   </div>;
 }

@@ -158,7 +158,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     <div className="flex shrink-0 items-center gap-1" style={{ padding: `${GUTTER_PX}px ${GUTTER_PX}px 6px` }} data-flat-panel-head="">
       {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
       <TreeFilterInput label={searchLabel} placeholder={searchPlaceholder} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
-        inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border px-0.5 shadow-none" data-flat-panel-search="" />
+        inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border pl-px pr-0.5 shadow-none" data-flat-panel-search="" />
       {page ? null : <ToolbarButton label={t("flatPanel.hide")} shortcut={flatPanelShortcut(platform)} tooltipSide="bottom" className={STRIP_BUTTON_CLASS} aria-expanded onClick={onClose} data-flat-panel-toggle="">
         <PanelLeftClose aria-hidden="true" />
       </ToolbarButton>}
