@@ -8,6 +8,7 @@
 - ``wall_thickness``: rays into the material, per body; ``gaps``: rays out of it to a facing wall of the
   same body; ``clearances``: the least distance between bodies;
 - ``trapped_volumes``: cavities from a voxel field (``cad._internal.meshops_printing``) and their openings;
+- ``knife_edges``: sharp convex creases (under 45 deg) chained into edges;
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster's column fill), ``sections``;
   the candidate orientations ranked (``orientations``).
 
@@ -265,7 +266,10 @@ def _cover(mesh: trimesh.Trimesh, inward: bool, reach: float | None = None) -> t
     if not len(rays):
         return np.zeros(0), np.zeros((0, 3)), np.zeros((0, 3)), np.zeros(0, dtype=int), np.zeros(0, dtype=int)
     length = np.linalg.norm(np.asarray(locations).reshape(-1, 3) - origins[rays], axis=1)
-    facing = np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) > 0.5 if inward else \
+    # a wall's far face looks away from the ray; one square to it (a corner) does not, one under KNIFE_DEG
+    # off parallel (a knife edge's other face) does, as the exact path counts it
+    square = float(np.cos(np.radians(mo.KNIFE_DEG)))
+    facing = np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) > square if inward else \
         np.einsum("ij,ij->i", mesh.face_normals[hit], directions[rays]) < -0.5
     keep = (length > 1e-3) & facing & (length < (reach or float(np.linalg.norm(mesh.extents))))
     return length[keep], origins[rays][keep], normals[rays][keep], faces[rays][keep], hit[keep]
@@ -404,9 +408,10 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
 
     thickness = np.linalg.norm(locations - origins[ray_ids], axis=1)
     diag = float(np.linalg.norm(mesh.extents))
-    # a wall's two faces look away from each other; a ray that lands on a face meeting its own at a sharp
-    # edge (the far side of a knife edge, within 60 deg of square to it) measures the edge, not a wall
-    opposing = np.einsum("ij,ij->i", mesh.face_normals[hit_tri], directions[ray_ids]) > 0.5
+    # a wall's two faces look away from each other; a ray that lands on a face meeting its own at a corner
+    # (KNIFE_DEG or more between them) measures the corner, not a wall -- a knife edge's sliver is counted
+    opposing = np.einsum("ij,ij->i", mesh.face_normals[hit_tri], directions[ray_ids]) > \
+        float(np.cos(np.radians(mo.KNIFE_DEG)))
     valid = (thickness > 1e-3) & (thickness < diag) & opposing
     thickness = thickness[valid]
 
@@ -651,6 +656,40 @@ def _stair_facts(mesh: trimesh.Trimesh, layer: float) -> dict:
             "area_mm2": _r(float(areas[shallow].sum()), 2)}
 
 
+def _knife_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
+    """The sharp convex creases between triangles whose material angle is under ``KNIFE_DEG``, chained into
+    edges where they share corners: each chain's length, least angle and thin depth (as the exact path's)."""
+    from cad._internal.dfm import printing as rules
+
+    minimum = rules.wall_minimum(options)
+    material = 180.0 - np.degrees(mesh.face_adjacency_angles)
+    sharp = mesh.face_adjacency_convex & (material < mo.KNIFE_DEG)
+    items = []
+    if sharp.any():
+        pairs = mesh.face_adjacency_edges[sharp]
+        angle = material[sharp]
+        chains = trimesh.graph.connected_components(pairs, min_len=1)
+        chain_of = np.full(len(mesh.vertices), -1)
+        for k, chain in enumerate(chains):
+            chain_of[np.asarray(chain, dtype=int)] = k
+        owner = chain_of[pairs[:, 0]]
+        lengths = np.linalg.norm(mesh.vertices[pairs[:, 0]] - mesh.vertices[pairs[:, 1]], axis=1)
+        for k in np.unique(owner):
+            mine = owner == k
+            least = float(angle[mine].min())
+            length = float(lengths[mine].sum())
+            middle = mesh.vertices[pairs[mine]].reshape(-1, 3).mean(axis=0)
+            depth = mo.thin_depth(minimum, least)
+            items.append({"xyz": _p(middle), "angle_deg": _r(least, 3), "length_mm": _r(length, 4),
+                          "thickness_mm": 0.0, "thin_depth_mm": _r(depth, 4),
+                          "thin_area_mm2": _r(depth * length if depth else None, 4)})
+    items.sort(key=lambda item: item["angle_deg"])
+    return {"items": items[:CAP], "count": len(items), "knife_below_deg": mo.KNIFE_DEG, "min_wall_mm": minimum,
+            "length_mm": _r(sum(item["length_mm"] for item in items), 4),
+            "method": "convex creases between triangles whose material angle is under knife_below_deg, chained by "
+                      "shared corners"}
+
+
 def _build_volume_facts(mesh: trimesh.Trimesh, options: dict) -> dict:
     from cad._internal.dfm import printing as rules
 
@@ -730,6 +769,7 @@ def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, options: di
         "clearances": _safe(_clearance_facts, mesh),
         "build_volume": _safe(_build_volume_facts, mesh, resolved),
         "bed": _safe(_bed_facts, mesh),
+        "knife_edges": _safe(_knife_facts, mesh, resolved),
         "stair_stepping": _safe(_stair_facts, mesh, resolved["layer"]),
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }

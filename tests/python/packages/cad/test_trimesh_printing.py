@@ -217,7 +217,8 @@ class CheckTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             result = cad.stl.check(_stl(_wedge(30.0), Path(td), "wedge30"), process="printing")
 
-        self.assertTrue(result.ok, "a fact, not a verdict")
+        # the overhang is a fact, not a verdict; what fails the wedge is its 30 deg tip, a knife edge
+        self.assertEqual({f.code for f in result.findings if f.severity == "error"}, {"printing.knife_edge"})
         overhang = next(f for f in result.findings if f.code == "overhangs")
         self.assertEqual(overhang.severity, "warning")
         self.assertEqual(len(overhang.location.split(", ")), 3)
