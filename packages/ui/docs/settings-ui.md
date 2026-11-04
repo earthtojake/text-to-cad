@@ -690,14 +690,13 @@ Its panels follow these rules:
   folded) and an X where it has something to remove. Every small button in a heading is 20px,
   2px apart and 4px from the edge.
 
-- **Surfaces.** Three, defined once (`lib/floatingSurface.js`), with one border: the
-  tool strip, its sub-toolbars and the stack's panels, which stay up beside the model, share
-  `FLOATING_CHROME_SURFACE_CLASS` — the background at 30% and barely blurred
-  (1px), so the model behind them is easy to make out; every menu and popover
-  over the viewport, the app menu and Display included, share `FLOATING_SURFACE_CLASS` (the
-  background at 75%, blurred), so their text never competes with the model; and the file
-  sidebar, mostly text but up for as long as the file is open, is between them
-  (`FILE_SIDEBAR_SURFACE_CLASS`: 55%, a 4px blur).
+- **Surfaces.** Three, defined once (`lib/floatingSurface.js`), each the popover's colour (a step
+  off the app's background, lighter in the dark theme) with one border, nearly opaque, so chrome
+  reads over any canvas — a flat view's, which is the app's own background, and a 3D scene's alike:
+  the tool strip, its sub-toolbars, the stack's panels and a collapsed panel's pill share
+  `FLOATING_CHROME_SURFACE_CLASS` (90%, a small blur, a medium shadow); the file sidebar's panel,
+  mostly text, `FILE_SIDEBAR_SURFACE_CLASS` (92%); every menu and popover over the viewport, the app
+  menu and Display included, `FLOATING_SURFACE_CLASS` (95%, blurred).
 - **Scrolling.** Every scroll region in the viewer's chrome — the file sidebar, a panel's
   body, the stack's column, the explorer, a menu, the alert card — is the
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay

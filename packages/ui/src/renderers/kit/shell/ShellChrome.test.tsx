@@ -458,7 +458,7 @@ async function enterPreview(user: ReturnType<typeof userEvent.setup>) {
 }
 const previewSettings = () => screen.queryByRole('region', { name: 'Preview settings' });
 
-it("three surfaces: the strip, the sidebar's tiles and the stack share the light chrome surface; the sidebar's panel and Preview's settings, read while they are up, are between; Display's dropdown is the most opaque", async () => {
+it("three surfaces: the strip, the sidebar's tiles and the stack share the chrome surface; the sidebar's panel and Preview's settings, read while they are up, are more opaque; Display's dropdown is the most opaque", async () => {
   const user = userEvent.setup({ skipHover: true });
   frame();
   expect(new Set([FLOATING_CHROME_SURFACE_CLASS, FILE_SIDEBAR_SURFACE_CLASS, FLOATING_SURFACE_CLASS]).size).toBe(3);
