@@ -204,9 +204,9 @@ solid inferred from the 2D plot.
 ## Schematic views
 
 `cad viewer --json board.kicad_sch` opens a schematic a sheet at a time, with the board view's
-selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy** is KiCad's Hierarchy
-Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the trail under
-the toolbar goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
+selection, Measure, annotations and Quick Edit. The sidebar's **Hierarchy**, after the Circuit, is KiCad's
+Hierarchy Navigator: a press shows that sheet. A double-click on a sheet symbol enters it, and the
+Hierarchy goes back up; a sheet shown again is where it was left. Select works as KiCad's: a click picks a symbol, pin, wire, label, sheet,
 junction or no-connect, as its Selection Filter ticks them, and a drag picks what lies inside the box.
 The **Circuit** lists the parts by the sheet they are placed on, each with its pins, and the nets with
 the pins on them. A net picked there lights across the sheet shown, and a part on another sheet shows

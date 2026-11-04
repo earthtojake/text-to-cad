@@ -124,7 +124,6 @@ export default {
   "schematic.text.hierarchy": "階層",
   "schematic.text.schematic_sheets": "電路圖頁",
   "schematic.text.show_sheet": "顯示圖頁 {name}",
-  "schematic.text.sheet_trail": "從根圖頁到此圖頁",
   "schematic.text.reading_schematic": "正在讀取電路圖",
   "schematic.text.updating_schematic": "正在更新電路圖…",
   "schematic.text.schematic_file": "電路圖：{file}，圖頁 {sheet}",

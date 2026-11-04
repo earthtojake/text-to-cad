@@ -123,7 +123,6 @@ export default {
   "schematic.text.hierarchy": "階層",
   "schematic.text.schematic_sheets": "回路図のシート",
   "schematic.text.show_sheet": "シート {name} を表示",
-  "schematic.text.sheet_trail": "ルートからこのシートまで",
   "schematic.text.reading_schematic": "回路図を読み込み中",
   "schematic.text.updating_schematic": "回路図を更新中…",
   "schematic.text.schematic_file": "回路図: {file}、シート {sheet}",

@@ -58,7 +58,6 @@ test("the index resolves every kind of reference to what it names and the sheets
   assert.deepEqual(index.order, ["/", "/Load/"]);
   assert.equal(index.sheetName("/"), "divider");
   assert.deepEqual(index.childrenOf("/"), ["/Load/"]);
-  assert.deepEqual(index.trail("/Load/"), ["/", "/Load/"]);
   const of = (selector) => { const found = index.resolve(selector); return found && [found.kind, found.selector, found.sheets]; };
   assert.deepEqual(of("#R1"), ["part", "#R1", ["/"]]);
   assert.deepEqual(of("#C1.1"), ["pin", "#C1.1", ["/Load/"]]);

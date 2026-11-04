@@ -283,7 +283,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
 | KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Display, Settings |
-| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). Under the strip, below the root, the trail of sheets from the root to the one shown |
+| KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
@@ -557,18 +557,18 @@ net is lit and the rest of the board stepped back, as KiCad's net highlight — 
 layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
 active layer (a filled dot after its name), drawn on top, the one Settings' Dim other layers leaves
 bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
-draws too; a KiCad schematic's **Hierarchy** and **Circuit** (`schematic/SheetsSection.jsx`,
-`schematic/SchematicSection.jsx`): the Hierarchy is KiCad's Hierarchy Navigator, the root (by its
+draws too; a KiCad schematic's **Circuit** and, for more than one sheet, **Hierarchy** (`schematic/SchematicSection.jsx`,
+`schematic/SheetsSection.jsx`): the Hierarchy is KiCad's Hierarchy Navigator, the root (by its
 file's name) and the sheets each places, in page order, each row its page number, every sheet open,
-the sheet shown lit; a press on a row shows that sheet; the Circuit is the board's tree
+the sheet shown lit; a press on a row shows that sheet, the way back up from one entered (no trail under the strip); the Circuit is the board's tree
 (`kit/inspector/CircuitTree.jsx`, its rules alike), its blocks the sheets the parts are placed on and
 each part's pins under it, a press showing the sheet what it picked is on; and, after them, the shell's own **Animation** for a
 file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
 sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
 section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
-drawing's, a board's), a board's Circuit lucide's CircuitBoard, a schematic's Hierarchy three
-sheets in a tree and its Circuit a resistor's zigzag, Position's a spline, Animation's a
+drawing's, a board's), a Circuit lucide's CircuitBoard (a board's, a schematic's: one tree), a schematic's Hierarchy three
+sheets in a tree, Position's a spline, Animation's a
 clapperboard, any other section's a page named for it (a section names its own with `ToolPanel`'s
 `icon`; no two tiles of a file share one). Preview has no file sidebar: every
 section stays mounted, out of sight, and a routine plays from Preview's playbar.

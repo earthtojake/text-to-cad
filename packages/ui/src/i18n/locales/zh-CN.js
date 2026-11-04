@@ -124,7 +124,6 @@ export default {
   "schematic.text.hierarchy": "层次结构",
   "schematic.text.schematic_sheets": "原理图图纸",
   "schematic.text.show_sheet": "显示图纸 {name}",
-  "schematic.text.sheet_trail": "从根图纸到此图纸",
   "schematic.text.reading_schematic": "正在读取原理图",
   "schematic.text.updating_schematic": "正在更新原理图…",
   "schematic.text.schematic_file": "原理图：{file}，图纸 {sheet}",

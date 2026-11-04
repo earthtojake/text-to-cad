@@ -145,24 +145,22 @@ it('opens on the root sheet, read with the index, drawn in the theme, with a Hie
   view.dispose();
 });
 
-it('a sheet is shown from the Hierarchy, by a double-click on its symbol, and back up from its trail, each read once, each kept where it was left', async () => {
+it('a sheet is shown from the Hierarchy and by a double-click on its symbol, each read once, each kept where it was left', async () => {
   const user = userEvent.setup();
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
-  expect(pane.querySelector('[data-schematic-trail]')).toBeNull();
   // The root zoomed in before leaving it: coming back finds it as it was left.
   await zoomIn(pane);
   const left = { ...frames.at(-1)! };
   await user.click(within(pane).getByRole('button', { name: 'Show sheet Load' }));
   await onSheet(pane, '/Load/');
   expect(reads).toEqual(['?sheet=%2F', '?sheet=%2FLoad%2F&index=0']);
-  // Below the root, the trail: the root a button back up, the sheet shown its name.
-  const trail = pane.querySelector<HTMLElement>('[data-schematic-trail]')!;
-  expect(trail.textContent).toBe('dividerLoad');
+  // No trail under the strip: the Hierarchy is the way back up.
+  expect(pane.querySelector('[data-schematic-trail]')).toBeNull();
   const fitted = { ...frames.at(-1)! };
   expect(fitted.scale).toBeLessThan(left.scale);
-  await user.click(within(trail).getByRole('button', { name: 'divider' }));
+  await user.click(within(pane).getByRole('button', { name: 'Show sheet divider' }));
   await onSheet(pane, '/');
   await waitFor(() => expect(frames.at(-1)).toEqual(left));
   // The sheet's symbol, double-clicked, enters it: read before, so read no more.

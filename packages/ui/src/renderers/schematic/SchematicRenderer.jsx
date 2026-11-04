@@ -25,7 +25,6 @@ import { usePlotView } from "../kit/viewport/usePlotView.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import SchematicSection from "./SchematicSection.jsx";
 import SchematicSelectFilter from "./SchematicSelectFilter.jsx";
-import SheetTrail from "./SheetTrail.jsx";
 import SheetsSection from "./SheetsSection.jsx";
 import { useSchematicReferences } from "./schematicReferences.jsx";
 import { createSchematicScene } from "./schematicScene.js";
@@ -46,10 +45,10 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
  * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
  * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
- * drawn, as a board draws none. Its sidebar is the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
- * Navigator: a press shows that sheet) and the Circuit (`SchematicSection.jsx`, a board's tree rules);
- * a double-click on a sheet symbol enters its sheet, and the trail under the strip (`SheetTrail.jsx`)
- * goes back up. Each sheet keeps its view for the session: going back to one finds it where it was left.
+ * drawn, as a board draws none. Its sidebar is the Circuit (`SchematicSection.jsx`, a board's tree rules)
+ * and, for a schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
+ * Navigator: a press shows that sheet, the way back up from one entered); a double-click on a sheet
+ * symbol enters its sheet. Each sheet keeps its view for the session: going back to one finds it where it was left.
  * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic has no view controls: it has no layers, and its colours are the theme's.
  * A selected net is lit across the sheet shown, the rest stepped back, as KiCad's net highlight.
  */
@@ -190,7 +189,7 @@ function SchematicSurface({ view, data }) {
     };
   }
 
-  // ---- showing a sheet: from the Hierarchy, the trail, a double-click, a pick on another sheet ----
+  // ---- showing a sheet: from the Hierarchy, a double-click, a pick on another sheet ----
   // What a press asked to see on a sheet not yet shown: framed once that sheet is drawn.
   const pendingFrame = useRef(null);
   const showSheet = useCallback((path, frameSelectors = null) => {
@@ -445,12 +444,11 @@ function SchematicSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <SchematicSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  const trail = index && shownSheet ? index.trail(shownSheet) : [];
-  const toolRow = <>{row}{trail.length > 1 ? <SheetTrail index={index} trail={trail} onShow={showSheet} /> : null}</>;
+  const toolRow = row;
   const sidebar = index ? <>
-    {index.order.length > 1 ? <SheetsSection index={index} shown={shownSheet} onShow={showSheet} onHover={selector => selection.hover(selector)} /> : null}
     <SchematicSection index={index} selection={selection} isolated={isolation.isolated} onIsolate={isolation.toggle} onFrame={frameSelectors}
       onSelect={() => selectTool(SCHEMATIC_TOOL.SELECT)} />
+    {index.order.length > 1 ? <SheetsSection index={index} shown={shownSheet} onShow={showSheet} onHover={selector => selection.hover(selector)} /> : null}
   </> : null;
   const cursor = measuring ? "cursor-crosshair" : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 

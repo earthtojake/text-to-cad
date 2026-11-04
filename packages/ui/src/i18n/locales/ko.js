@@ -123,7 +123,6 @@ export default {
   "schematic.text.hierarchy": "계층",
   "schematic.text.schematic_sheets": "회로도 시트",
   "schematic.text.show_sheet": "시트 {name} 보기",
-  "schematic.text.sheet_trail": "루트부터 이 시트까지",
   "schematic.text.reading_schematic": "회로도 읽는 중",
   "schematic.text.updating_schematic": "회로도 업데이트 중…",
   "schematic.text.schematic_file": "회로도: {file}, 시트 {sheet}",

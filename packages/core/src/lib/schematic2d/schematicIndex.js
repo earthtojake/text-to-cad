@@ -89,14 +89,8 @@ export function createSchematicIndex(schematic) {
 
   /** The path a sheet's children are entered by: its own children, in page order. */
   const childrenOf = (path) => (sheets.get(path)?.children || EMPTY).slice().sort((a, b) => natural(sheets.get(a).page, sheets.get(b).page));
-  /** The sheets from the root down to `path`, the root first. */
-  function trail(path) {
-    const chain = [];
-    for (let at = sheets.get(canonicalSheetPath(path)); at; at = at.parent ? sheets.get(at.parent) : null) chain.unshift(at.path);
-    return chain;
-  }
   return { root: root?.path || "/", rootName, sheets, order: order.map((sheet) => sheet.path), parts, pins, nets, items,
-    sheetName, childrenOf, trail, resolve };
+    sheetName, childrenOf, resolve };
 }
 
 // ---- one drawn sheet -------------------------------------------------------------

@@ -126,7 +126,6 @@ export default {
   "schematic.text.hierarchy": "Hierarchy",
   "schematic.text.schematic_sheets": "Schematic sheets",
   "schematic.text.show_sheet": "Show sheet {name}",
-  "schematic.text.sheet_trail": "Sheets from the root to this one",
   "schematic.text.reading_schematic": "Reading schematic",
   "schematic.text.updating_schematic": "Updating schematic…",
   "schematic.text.schematic_file": "Schematic: {file}, sheet {sheet}",
