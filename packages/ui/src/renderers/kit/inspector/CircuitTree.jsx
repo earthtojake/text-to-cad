@@ -4,7 +4,7 @@ import { Eye } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
 import {
-  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DENSE_ICON_CLASS, TreeRowChevron, TreeRowGuides,
+  ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides,
   TreeRowLabel, TreeRowSurface, treeRowActionsClass, useTreeRowHeight
 } from "@cad/ui/primitives/tree-row";
 import { TreeFilterHighlight } from "@cad/ui/primitives/tree-filter";
@@ -13,9 +13,6 @@ import { useFlatPanel } from "../shell/FlatPanel.jsx";
 import { useTreeSearch } from "./modelTreeSearch.js";
 import { openUntilChoice } from "./treeExpansion.js";
 import VirtualRows, { revealRow } from "./VirtualRows.jsx";
-import { LAYER_ROW_INSET_PX } from "./layerRows.jsx";
-// A row's first glyph on the panel's text line, 16px in, as a layer's swatch is (`kit/shell/FlatPanel.jsx`'s gutter and a row's inset).
-const ROW_INSET_PX = LAYER_ROW_INSET_PX;
 
 const EMPTY = Object.freeze([]);
 // The room the eye takes at a row's right end: the row's `--row-actions`.
@@ -78,9 +75,9 @@ function CircuitRow({ node, depth, branch, open, selected, isolated, toggle, cho
   const block = node.kind === "block";
   const eye = isolable(node);
   return <TreeRowSurface dense active={selected} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
-    style={{ paddingLeft: ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
+    style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
     onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
-    <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
+    <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
     {branch ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
       className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node)}>
       <TreeRowChevron expanded={open} />
@@ -106,7 +103,7 @@ function CircuitSearchRow({ match, selected, isolated, cursor, choose, hover, on
   const eye = isolable(node);
   return <TreeRowSurface dense active={selected} cursor={cursor} className="group/row relative gap-0 pr-0"
     style={eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : undefined} onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
-    <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} style={{ paddingLeft: ROW_INSET_PX }}
+    <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} style={{ paddingLeft: TREE_ROW_INSET_PX }}
       className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
       <KindGlyph kind={node.kind} glyphs={glyphs} />

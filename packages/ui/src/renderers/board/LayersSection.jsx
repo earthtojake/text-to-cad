@@ -90,10 +90,11 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
     return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
-  // The settings together over the list, their text on the list's line (a section's own 8px, and 8px more):
-  // where a layer group's name and a swatch start.
+  // The settings together over the list, their headings and labels on the list's line, 16px in, where
+  // a layer group's name and a swatch start; their controls end 8px in, and the rule between the two
+  // sections runs the panel's width, as every rule in it does.
   return <div className="flex flex-col gap-1 pt-1 text-tiny">
-    <div className="pb-1 pl-2" data-board-settings="">
+    <div className="pb-1 [&_[data-settings-section]>h2>*]:pl-4 [&_[data-settings-section-body]>*]:pl-4" data-board-settings="">
       <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
       <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
     </div>

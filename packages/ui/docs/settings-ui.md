@@ -614,8 +614,9 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **One gutter, one text line.** The head, the tabs and every list start 8px in from the panel's
   edges: the search box, a tab's button and a row's background begin on that line, and the controls
-  end 8px from the right. What is read inside them starts 16px in: the search icon, a tab's name, a
-  settings heading and label, a layer group's name, a row's first glyph (a chevron, a swatch).
+  end 8px from the right; every rule runs the panel's width. What is read inside them starts 16px
+  in: the search icon, a tab's name, a settings heading and label, a layer group's name and a
+  layer's swatch (a tree's rows keep the tree's own inset).
 - **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
   a board's parts in the schematic blocks their footprints record (a sheet's name without
   `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its

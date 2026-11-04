@@ -1,15 +1,12 @@
 import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useMemo, useState } from "react";
 import {
-  TREE_INDENT_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface
+  TREE_INDENT_PX, TREE_ROW_INSET_PX, TreeRowChevron, TreeRowGuides, TreeRowLabel, TreeRowSurface
 } from "@cad/ui/primitives/tree-row";
 import { cn } from "@cad/ui/utils";
 import { formatSheetSelector } from "@cad/core/lib/schematicRefs.js";
 import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
 import { buildSheetTree } from "./schematicTree.js";
-import { LAYER_ROW_INSET_PX } from "../kit/inspector/layerRows.jsx";
-// A row's first glyph on the panel's text line, 16px in, as a layer's swatch is (`kit/shell/FlatPanel.jsx`'s gutter and a row's inset).
-const ROW_INSET_PX = LAYER_ROW_INSET_PX;
 
 const ROW_NAME_CLASS = "flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
 
@@ -64,7 +61,7 @@ export default function SheetsSection({ index, shown, onShow, onHover = () => {}
   if (found) {
     return found.length ? <ul className="flex flex-col px-2 text-tiny" aria-label={t("schematic.text.schematic_sheets")} data-flat-panel-hit="">
       {found.map(node => <li key={node.id} className="min-w-0">
-        <TreeRowSurface dense active={node.path === shown} className="relative gap-0 pr-0" style={{ paddingLeft: ROW_INSET_PX }} data-schematic-sheet-row={node.path}
+        <TreeRowSurface dense active={node.path === shown} className="relative gap-0 pr-0" style={{ paddingLeft: TREE_ROW_INSET_PX }} data-schematic-sheet-row={node.path}
           onMouseEnter={() => onHover(formatSheetSelector(node.path))} onMouseLeave={() => onHover("")}>
           {nameButton(node, node.path === shown, "pl-1")}
         </TreeRowSurface>
@@ -75,9 +72,9 @@ export default function SheetsSection({ index, shown, onShow, onHover = () => {}
     {rows.map(({ node, depth, branch, open }) => {
       const active = node.path === shown;
       return <li key={node.id} role="treeitem" aria-level={depth + 1} aria-selected={active} aria-expanded={branch ? open : undefined} className="min-w-0">
-        <TreeRowSurface dense active={active} className="relative gap-0 pr-0" style={{ paddingLeft: ROW_INSET_PX + depth * TREE_INDENT_PX }}
+        <TreeRowSurface dense active={active} className="relative gap-0 pr-0" style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX }}
           data-schematic-sheet-row={node.path} onMouseEnter={() => onHover(formatSheetSelector(node.path))} onMouseLeave={() => onHover("")}>
-          <TreeRowGuides depth={depth} inset={ROW_INSET_PX} />
+          <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
           {branch ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
             className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node.id)}>
             <TreeRowChevron expanded={open} />
