@@ -24,7 +24,7 @@ is written in its body, and its document keeps it:
   `BallJoint` and `RigidJoint`, connected with `connect_to`. The values they are
   connected at are the **as-built state**, the pose every file of the model shows.
 
-The functions that say more are `cad.ap242`'s, named after the STEP AP242 entities
+The functions that say more are `cad.build123d`'s, named after the STEP AP242 entities
 they write (`from cad.build123d import mechanism_state, gear_pair`):
 
 - **Mechanism states** name other poses: `mechanism_state(assembly, name, **values)`.
