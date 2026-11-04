@@ -27,12 +27,28 @@ from typing import Any, Callable
 
 import numpy as np
 
-__all__ = ["Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
+__all__ = ["KNIFE_DEG", "thin_depth", "Cavity", "Crossings", "Grid", "ROTATIONS", "WEIGHTS", "angles", "ball_pad", "build_fit", "field_pitch", "fit", "in_triangles_xy", "inscribed", "raster_pitch", "sections", "spread_points", "cavities", "crossings", "down_to",
            "frame", "orientation_rows", "ranked", "rotation", "span", "support", "voxels"]
 
 # Lines of a raster are offset by these irrational fractions of the pitch, so no line runs exactly
 # through a vertex or along an edge of a mesh built on round numbers (each crossing counted once).
 _JITTER = (0.0763932 * (math.sqrt(5) - 1), 0.0447214 * (math.sqrt(3) - 1))
+
+
+#: A convex edge whose material angle is under this many degrees is a **knife edge**, not a corner. The
+#: material at distance ``d`` from an edge of angle ``a`` is ``2 d tan(a / 2)`` thick, so it is thinner than a
+#: minimum wall ``t`` for ``t / (2 tan(a / 2))`` from the edge: half a wall at a box's 90 deg corner (the one
+#: bead every corner is), 1.2 walls at 45 deg, 1.9 at 30, 5.7 at 10 -- past 45 deg the sliver under the
+#: minimum is deeper than a whole wall, which a printer cannot lay. 45 deg is also the slope the guides
+#: (Hubs FDM) hold self-supporting: a chamfer of 45 deg or more leaves no knife edge.
+KNIFE_DEG = 45.0
+
+
+def thin_depth(minimum: float | None, angle_deg: float) -> float | None:
+    """How far from an edge of material angle ``angle_deg`` the material stays thinner than ``minimum``."""
+    if minimum is None or not angle_deg > 0:
+        return None
+    return float(minimum) / (2.0 * math.tan(math.radians(angle_deg) / 2.0))
 
 
 def frame(V: np.ndarray, F: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

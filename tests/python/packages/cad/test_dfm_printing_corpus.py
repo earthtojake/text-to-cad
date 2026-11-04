@@ -83,7 +83,8 @@ def features():
 
 
 def spans():
-    """A 25 mm bridge, a 10 deg overhang and a 12 mm horizontal hole, three parts apart."""
+    """A 25 mm bridge, a 10 deg overhang (its tip a 10 deg knife edge) and a 12 mm horizontal hole, three
+    parts apart."""
     tunnel = bd.Box(40, 20, 10, align=A) - bd.Box(25, 40, 6, align=A)
     h = 30 * math.tan(math.radians(10))
     wedge = bd.Pos(30, 0, 0) * bd.Rotation(90, 0, 0) * bd.extrude(
@@ -95,8 +96,11 @@ def spans():
         ("printing.overhang_angle", ("fdm", "sla", "pbf"), (45, 0, 2.6), 16.0),
         ("printing.horizontal_hole_diameter", ("pbf",), (-45, 0, 10), 6.0),
         ("printing.bridge_length", ("fdm",), (-45, 0, 15), 6.0),
+        ("printing.knife_edge", ALL, (60, -5, 5.29), 6.0),
+        ("printing.wall_unsupported", ALL, (57, -5, 5), 8.0),
     ]
     mesh = [
+        ("printing.knife_edge", ALL, (60, -5, 5.29), 6.0),
         ("printing.bridge_length", ("fdm", "sla"), (0, 0, 6), 17.0),
         ("printing.overhang_angle", ("fdm", "sla"), (45, 0, 2.6), 16.0),
         ("printing.bridge_length", ("fdm",), (-45, 0, 15), 6.0),
@@ -139,6 +143,22 @@ def assembly():
     return _doc("assembly", a, b, c), planted, planted
 
 
+def knives():
+    """A phone stand's lip with a cable notch cut through it at 20 deg, which leaves a 20 deg knife edge 10 mm
+    long, and a 15 deg wedge standing apart."""
+    lip = bd.Box(40, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Box(40, 3, 10, align=A)
+    notch = bd.Pos(0, -1.5, 3) * bd.Rotation(0, 0, 20) * bd.Box(30, 30, 20, align=(bd.Align.MIN, bd.Align.MAX,
+                                                                                   bd.Align.MIN))
+    h = 20 * math.tan(math.radians(15))
+    wedge = bd.Pos(30, 0, 0) * bd.Rotation(90, 0, 0) * bd.extrude(
+        bd.make_face(bd.Polyline((0, 0), (20, 0), (0, h), (0, 0))), 10)
+    planted = [("printing.knife_edge", ALL, (8.24, 1.5, 8.0), 3.0),
+               ("printing.knife_edge", ALL, (50, -5, 0), 6.0)]
+    exact = planted + [("printing.wall_unsupported", ALL, (8.24, 1.5, 8.0), 6.0),   # the sliver itself
+                       ("printing.wall_unsupported", ALL, (45, -5, 1), 7.0)]
+    return _doc("knives", _named(lip - notch, "lip"), _named(wedge, "wedge")), exact, planted
+
+
 def bracket(scale: float = 1.0):
     """An L bracket, every edge rounded; ``scale`` 1 / 25.4 draws it in inches."""
     base = bd.Box(40, 30, 4, align=A) + bd.Pos(-18, 0, 4) * bd.Box(4, 30, 26, align=A)
@@ -152,8 +172,11 @@ def controls():
                    bd.Pos(0, 0, 20) * bd.Circle(13)])
     cup = bd.offset(cup.solids()[0], -2, openings=cup.faces().sort_by(bd.Axis.Z)[-1])
     tiny = bd.Pos(90, 0, 0) * bd.Box(1.5, 1.5, 1.5, align=A)
+    # the knife's control: the same lip square, its top edges chamfered 45 deg (135 deg of material each)
+    lip = bd.Box(40, 20, 3, align=A) + bd.Pos(0, 0, 3) * bd.Box(40, 3, 10, align=A)
+    lip = bd.Pos(0, 60, 0) * bd.chamfer(lip.edges().filter_by(bd.Axis.X).group_by(bd.Axis.Z)[-1], 1.0)
     return _doc("controls", _named(bracket(), "bracket"), _named(bd.Pos(50, 0, 0) * cup, "cup"),
-                _named(tiny, "tiny")), [], []
+                _named(tiny, "tiny"), _named(lip, "lip")), [], []
 
 
 def huge():
@@ -163,7 +186,7 @@ def huge():
     return _doc("huge", bd.Box(2000, 100, 4, align=A)), planted, None
 
 
-CORPUS = (features, spans, hollows, bar, assembly, controls, huge)
+CORPUS = (features, spans, hollows, knives, bar, assembly, controls, huge)
 
 
 def _failures(result) -> list[tuple[str, tuple[float, float, float] | None]]:
@@ -257,9 +280,10 @@ class CorpusTest(unittest.TestCase):
     def test_the_mesh_path_on_fine_and_coarse_triangles(self) -> None:
         tally, started = Tally(), time.monotonic()
         folder = Path(self.folder.name)
-        for name in ("features", "spans", "hollows", "bar", "assembly", "controls"):
+        for name in ("features", "spans", "hollows", "knives", "bar", "assembly", "controls"):
             document, _, _, planted = self.parts[name]
-            for tolerance, label in ((0.01, "fine"), (0.3, "coarse")):
+            coarse = ((0.3, "coarse"),) if name in ("spans", "knives", "controls") else ()
+            for tolerance, label in ((0.01, "fine"), *coarse):
                 stl = folder / f"{name}-{label}.stl"
                 bd.export_stl(document, str(stl), tolerance=tolerance, angular_tolerance=0.5 if label == "coarse" else 0.1)
                 for technology in (("fdm", "sla") if label == "fine" else ("fdm",)):

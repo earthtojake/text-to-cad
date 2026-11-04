@@ -20,6 +20,8 @@ families are measured on the B-rep, each item at the ref of the face that names 
 - ``trapped_volumes``: cavities -- every solid's inner shells, exactly, and from a voxel field the air
   a ball cannot reach from outside -- each with its volume, escape holes (the holes from it to outside,
   exactly), the wall around it;
+- ``knife_edges``: convex edges under 45 deg (``meshops_printing.KNIFE_DEG``), where the material thins to
+  nothing, with the depth it stays under the minimum wall;
 - ``build_volume``, ``bed``, ``stair_stepping``, ``support_volume`` (a raster of the triangulation),
   ``sections`` (thickest walls, cross-sections), ``scale``; with ``candidates`` the orientations ranked.
 
@@ -266,8 +268,11 @@ class Context:
                     hit = rays.first(sample.point, -sample.normal, skip=1e-5)
                     if hit is not None:
                         other = shape.face_ordinal(hit[1])
-                        acute = any(not edge.concave and not edge.smooth for edge in adjacent.get(other, ()))
-                        if not acute:
+                        # a ray landing on a face that meets its own at a convex corner measures the corner;
+                        # at a knife edge (under KNIFE_DEG) it measures the sliver, which is real
+                        corner = any(not edge.concave and not edge.smooth and edge.angle_deg >= mo.KNIFE_DEG
+                                     for edge in adjacent.get(other, ()))
+                        if not corner:
                             info.thickness.append((hit[0], k, other))
                     hit = rays.first(sample.point, sample.normal, skip=1e-5, end=GAP_CEILING)
                     if hit is not None:
@@ -893,6 +898,27 @@ def _stairs(ctx: Context) -> dict[str, Any]:
             "area_mm2": _r(float(bins.sum()), 2)}
 
 
+def _knife_edges(ctx: Context) -> dict[str, Any]:
+    """Every convex edge whose material angle (at its middle) is under ``KNIFE_DEG``: its length, angle, and how
+    deep from it the material is thinner than the technology's unsupported-wall minimum."""
+    minimum = rules.wall_minimum(ctx.options)
+    items = []
+    for part in range(len(ctx.parts)):
+        for edge in ctx.edges(part):
+            if edge.concave or edge.smooth or not edge.angle_deg < mo.KNIFE_DEG:
+                continue
+            depth = mo.thin_depth(minimum, edge.angle_deg)
+            items.append({"location": ctx.parts[part].ref("edge", edge.ordinal), "xyz": _xyz(edge.midpoint),
+                          "faces": [ctx.ref(part, ordinal) for ordinal in edge.faces],
+                          "angle_deg": _r(edge.angle_deg, 3), "length_mm": _r(edge.length, 4), "thickness_mm": 0.0,
+                          "thin_depth_mm": _r(depth, 4), "thin_area_mm2": _r(depth * edge.length if depth else None, 4)})
+    items, count = _capped(items, lambda item: item["angle_deg"])
+    return {"items": items, "count": count, "knife_below_deg": mo.KNIFE_DEG, "min_wall_mm": minimum,
+            "length_mm": _r(sum(item["length_mm"] for item in items), 4),
+            "method": "convex edges whose material angle at the middle is under knife_below_deg; the material at d "
+                      "from such an edge is 2 d tan(angle / 2) thick: thin_depth_mm is where it reaches min_wall_mm"}
+
+
 def _pitch(ctx: Context) -> float:
     return mo.raster_pitch(ctx.hi - ctx.lo)
 
@@ -995,7 +1021,8 @@ FAMILIES: tuple[tuple[str, Callable[[Context], dict[str, Any]]], ...] = (
     ("solid", _solid), ("scale", _scale), ("overhangs", _overhangs), ("bridges", _bridges),
     ("wall_thickness", _walls), ("gaps", _gaps), ("holes", _holes), ("pins", _pins), ("details", _details),
     ("clearances", _clearances), ("trapped_volumes", _trapped), ("build_volume", _build_volume), ("bed", _bed),
-    ("stair_stepping", _stairs), ("support_volume", _support), ("sections", _sections),
+    ("knife_edges", _knife_edges), ("stair_stepping", _stairs), ("support_volume", _support),
+    ("sections", _sections),
 )
 
 

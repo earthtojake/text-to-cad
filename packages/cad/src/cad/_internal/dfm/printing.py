@@ -6,7 +6,7 @@ jet fusion (``mjf``) and metal powder bed fusion (``pbf``: DMLS, SLM). The famil
 ref, on a mesh at ``x, y, z``): ``solid`` (validity; a mesh's ``mesh``), ``overhangs``, ``bridges``,
 ``wall_thickness``, ``pins``, ``holes``, ``details`` (embossed and engraved), ``gaps`` (narrow slots in one
 part), ``clearances`` (between parts), ``trapped_volumes`` (cavities and their escape holes), ``build_volume``,
-``bed`` (plate contact, warping), ``stair_stepping``, ``support_volume``, ``sections`` (thick sections and
+``bed`` (plate contact, warping), ``knife_edges`` (convex edges under 45 deg), ``stair_stepping``, ``support_volume``, ``sections`` (thick sections and
 cross-sections) and ``scale``; with ``candidates`` the orientations ranked (``orientations``).
 
 The powder processes (SLS, MJF) need no support: their overhangs are facts, never verdicts, and their
@@ -28,7 +28,7 @@ from cad.results import CheckFinding
 
 __all__ = ["BUILD_VOLUMES", "DEFAULT_ANGLE", "DEFAULT_LAYER", "MEASURED_FROM", "OPTIONS", "RULE_SETS", "TECHNOLOGIES",
            "angle_limit", "build_volume", "context", "findings", "layer_height", "machine_volume", "summary",
-           "validate"]
+           "validate", "wall_minimum"]
 
 #: The printing technologies: fused filament, selective laser sintering, stereolithography and DLP,
 #: multi jet fusion, metal powder bed fusion (DMLS, SLM).
@@ -280,6 +280,10 @@ def _generic_and_shop(name: str) -> tuple[Rule, ...]:
                     rows["engrave_w"], "widen it to at least {limit:g} mm", {"kind": "engrave"})
     found += _rules("printing.warp_length", "build_volume", "max_dimension_mm", "max", "mm", "part length",
                     rows["warp"], "keep walls near a uniform 3.2 mm and hollow thick sections; parts this long warp")
+    found += _rules("printing.knife_edge", "knife_edges", "thickness_mm", "min", "mm",
+                    "material at a knife edge (a convex edge under 45 deg)", rows["wall_u"],
+                    "blunt it -- a flat or round at least {limit:g} mm across -- or open its angle to 45 deg or more",
+                    note="the material thins to nothing at an acute edge: judged against the unsupported-wall minimum")
     found += _rules("printing.section_thickness", "sections", "thickness_mm", "max", "mm", "solid section thickness",
                     rows["section"], "hollow or lattice it under {limit:g} mm: thick metal sections warp")
     return tuple(found)
@@ -314,6 +318,19 @@ def angle_limit(resolved: dict[str, Any]) -> float:
     """The overhang angle the check counts support for: the one given, else the technology's."""
     given = resolved.get("angle_limit")
     return float(given) if given is not None else DEFAULT_ANGLE[resolved["technology"]]
+
+
+def wall_minimum(resolved: dict[str, Any]) -> float | None:
+    """The unsupported-wall minimum of the rule set (``generic``'s for ``--rules none``) for the technology:
+    what a knife edge's thin depth is measured against."""
+    for name in (resolved.get("rules") or "generic", "generic"):
+        rule_set = RULE_SETS.get(name)
+        for rule in rule_set.rules if rule_set else ():
+            if rule.id == "printing.wall_unsupported":
+                limit = rule.limit_for({"technology": resolved["technology"]})
+                if limit is not None:
+                    return limit
+    return None
 
 
 def layer_height(resolved: dict[str, Any]) -> float:

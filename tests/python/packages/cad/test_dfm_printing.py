@@ -78,7 +78,10 @@ class OverhangTest(unittest.TestCase):
         self.assertAlmostEqual(slope["angle_deg"], 30.0, places=6)
         self.assertAlmostEqual(slope["area_below_limit_mm2"], 12 * 30 / math.cos(math.radians(30)), places=3)
         self.assertIn("printing.overhang_angle", codes(result))
-        self.assertTrue(result.ok, "support is a warning, not a failure")
+        overhang = next(f for f in result.findings if f.code == "printing.overhang_angle")
+        self.assertEqual(overhang.severity, "warning", "support is a warning, not a failure")
+        errors = {f.code for f in result.findings if f.severity == "error"}
+        self.assertEqual(errors, {"printing.knife_edge", "printing.wall_unsupported"}, "the 30 deg tip is a knife")
 
     def test_powder_holds_every_overhang(self) -> None:
         result = check(wedge(30.0), "wedge", technology="sls")
@@ -108,6 +111,24 @@ class OverhangTest(unittest.TestCase):
         support = check(tee(), "tee").measurements["support_volume"]
         self.assertAlmostEqual(support["estimated_support_volume_mm3"], 2 * 10 * 10 * 20, delta=1.0)
         self.assertAlmostEqual(support["support_contact_mm2"], 200.0, delta=1.0)
+
+
+class KnifeEdgeTest(unittest.TestCase):
+    def test_an_acute_convex_edge_is_a_knife_and_a_corner_or_chamfer_is_not(self) -> None:
+        result = check(wedge(30.0), "wedge")
+        knife = items(result, "knife_edges")[0]
+        self.assertAlmostEqual(knife["angle_deg"], 30.0, places=6)
+        self.assertEqual((knife["length_mm"], knife["thickness_mm"]), (12.0, 0.0))
+        self.assertAlmostEqual(knife["thin_depth_mm"], 0.8 / (2 * math.tan(math.radians(15))), places=4,
+                               msg="Hubs FDM's 0.8 mm free wall reached 1.49 mm in from the edge")
+        self.assertRegex(knife["location"], r"^wedge/edge \d+$")
+        self.assertIn("printing.knife_edge", codes(result))
+        thin = items(result, "wall_thickness", supported=False)[0]
+        self.assertLess(thin["thickness_mm"], 0.8, "the sliver's rays are counted, not dropped as a corner's")
+        square = bd.chamfer(bd.Box(20, 20, 10, align=A).edges().group_by(bd.Axis.Z)[-1], 2.0)
+        clean = check(square, "chamfered")
+        self.assertEqual(items(clean, "knife_edges"), [], "90 deg corners and 45 deg chamfers")
+        self.assertTrue(clean.ok)
 
 
 class WallTest(unittest.TestCase):
