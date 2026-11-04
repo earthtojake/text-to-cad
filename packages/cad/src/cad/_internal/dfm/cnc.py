@@ -13,6 +13,7 @@ given (``--tools``) is the smallest tool's; without ``--tools`` the source's own
 
 from __future__ import annotations
 
+import dataclasses
 from typing import Any
 
 from cad._internal.dfm import materials
@@ -47,22 +48,53 @@ _NO_TOOLS = {"tools_given": False}
 _TOOLS = {"tools_given": True}
 
 
-def _corner_rules(source: str, sharp_note: str) -> tuple[Rule, ...]:
-    return (
-        Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", 1e-3, "mm",
-             "internal corner radius", source, when=_MILLING,
-             fix="give the corner a radius (at least a third of its depth), or a dog-bone relief, or plan EDM",
-             note=sharp_note),
-        Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm",
-             "internal corner radius", source, scale_by="min_tool_mm", when={**_MILLING, **_TOOLS},
-             item_when={"sharp": False},
-             fix="radius the corner to at least {limit:g} mm, the smallest tool's radius, or add a smaller tool",
-             note="a corner tighter than the smallest end mill's radius is not cut by it"),
-        Rule("cnc.sharp_internal_edge", "sharp_edges", "makeable", "min", 1, "ways",
-             "rotating tools that make this concave edge", source, when=_MILLING,
-             fix="round the edge, open the angle to 90 degrees or more where a face can be cut end-on, "
-                 "or plan EDM", note=sharp_note),
-    )
+#: Without ``--tools``, the radius a sharp corner or edge is told to take: a 2.5 mm end mill's, the smallest
+#: standard tool (Hubs: features under 2.5 mm are micro-machining; Xometry: the smallest standard tool).
+_SMALL_TOOL_RADIUS = 1.25
+#: What a failing item says of itself, appended to the message (``Rule.detail``).
+_CORNER_DETAIL = "{edge}, {height_mm:g} mm tall, {depth_mm:g} mm below the top"
+_EDGE_DETAIL = "{edge} between {between}, a {void_angle_deg:.0f}-degree void, at {xyz}"
+_ACROSS_DETAIL = {"walls": "to {opposite} at {xyz}", "gaps": "to {opposite} at {xyz}"}
+
+
+def _corner_rules(source: str, sharp_note: str, radius: Any = _SMALL_TOOL_RADIUS,
+                  by: str | None = None) -> tuple[Rule, ...]:
+    """A sharp vertical corner and a sharp concave edge, judged against the radius they must be given: half
+    the smallest tool with ``--tools``, else ``radius`` (a mapping chosen by the context key ``by``)."""
+    corner_fix = ("sharp vertical corner: give it a radius of at least {limit:g} mm (a third of the cavity's "
+                  "depth or more is better), or a dog-bone relief, or plan EDM")
+    acute_fix = ("its {void_angle_deg:.0f}-degree void is under 90, so no tool's end or side reaches its root: open "
+                 "it to 90 degrees or more, round it to at least {limit:g} mm, or plan EDM")
+    obtuse_fix = ("neither face at its {void_angle_deg:.0f}-degree void is a plane square to a machine direction, "
+                  "so no tool's corner makes it sharp: round it to at least {limit:g} mm (a ball end mill's "
+                  "radius), square one face to an approach direction, or give more axes")
+    found: list[Rule] = []
+    for when, scale, limit, key in (({**_MILLING, **_TOOLS}, "min_tool_mm", 0.5, None),
+                                    ({**_MILLING, **_NO_TOOLS}, None, radius, by)):
+        found += [
+            Rule("cnc.internal_corner_sharp", "internal_corners", "radius_mm", "min", limit, "mm",
+                 "sharp vertical corner radius", source, scale_by=scale, by=key, when=when,
+                 item_when={"sharp": True}, fix=corner_fix, note=sharp_note, detail=_CORNER_DETAIL),
+            Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
+                 "sharp concave edge (void under 90 degrees) radius", source, scale_by=scale, by=key, when=when,
+                 item_when={"acute": True}, fix=acute_fix, note=sharp_note, detail=_EDGE_DETAIL),
+            Rule("cnc.sharp_internal_edge", "sharp_edges", "radius_mm", "min", limit, "mm",
+                 "sharp concave edge (no face square to a machine direction) radius", source, scale_by=scale,
+                 by=key, when=when, item_when={"acute": False}, fix=obtuse_fix, note=sharp_note,
+                 detail=_EDGE_DETAIL)]
+    found.append(Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm",
+                      "internal corner radius", source, scale_by="min_tool_mm", when={**_MILLING, **_TOOLS},
+                      item_when={"sharp": False},
+                      fix="radius the corner to at least {limit:g} mm, the smallest tool's radius, or add a smaller "
+                          "tool", note="a corner tighter than the smallest end mill's radius is not cut by it"))
+    return tuple(found)
+
+
+def _knife_rule(source: str, limit: Any, by: str | None, note: str) -> Rule:
+    return Rule("cnc.knife_edge", "knife_edges", "thickness_mm", "min", limit, "mm",
+                "material at a knife edge (a convex edge under 45 deg)", source, severity="warning", by=by,
+                fix="blunt it -- a flat or round at least {limit:g} mm across -- or open its angle to 45 deg or more",
+                note=note)
 
 
 _GENERIC_RULES: tuple[Rule, ...] = (
@@ -92,11 +124,14 @@ _GENERIC_RULES: tuple[Rule, ...] = (
          fix="make the cavity no deeper than {limit:g} times its width", note="recommended cavity depth: 4x width"),
     Rule("cnc.wall_thickness", "walls", "thickness_mm", "min", {"metal": 0.5, "plastic": 1.0}, "mm",
          "wall thickness", "hubs-cnc", by="wall_class",
-         fix="thicken the wall to at least {limit:g} mm", note="feasible minimum walls: 0.5 mm metal, 1.0 mm plastic"),
+         fix="thicken the wall to at least {limit:g} mm",
+         note="feasible minimum walls: 0.5 mm metal, 1.0 mm plastic"),
     Rule("cnc.wall_thickness_recommended", "walls", "thickness_mm", "min", {"metal": 0.8, "plastic": 1.5}, "mm",
          "wall thickness", "hubs-cnc", severity="warning", by="wall_class",
          fix="thicken the wall to {limit:g} mm or more",
          note="recommended minimum walls: 0.8 mm metal, 1.5 mm plastic"),
+    _knife_rule("hubs-cnc", {"metal": 0.5, "plastic": 1.0}, "wall_class",
+                "the material thins to nothing at an acute convex edge: judged against the feasible wall"),
     Rule("cnc.hole_diameter_limit", "holes", "diameter_mm", "min", 0.05, "mm", "hole diameter", "hubs-cnc",
          fix="make the hole at least {limit:g} mm", note="micro-drills go down to 0.05 mm"),
     Rule("cnc.hole_diameter", "holes", "diameter_mm", "min", 1.0, "mm", "hole diameter", "hubs-cnc",
@@ -165,7 +200,9 @@ _PROTOLABS_ENVELOPE = {  # (length, width, height) of the largest part, per mate
     "hard/5": (254.0, 178.0, 44.45), "ss304/5": (107.95, 82.55, 95.25),
 }
 _PROTOLABS_RULES: tuple[Rule, ...] = (
-    *_corner_rules("protolabs-milling", "an inside corner is left with the radius of the tool that cuts it"),
+    # without --tools, the tool its narrowest milled line is cut with (0.018 in. soft, 0.033 in. hard): its radius
+    *_corner_rules("protolabs-milling", "an inside corner is left with the radius of the tool that cuts it",
+                   radius={"soft": 0.2286, "hard": 0.4191}, by="line_class"),
     Rule("cnc.internal_corner_radius", "internal_corners", "radius_mm", "min", 0.5, "mm", "internal corner radius",
          "protolabs-milling", scale_by="min_tool_mm", when={**_MILLING, **_TOOLS}, item_when={"sharp": False},
          fix="radius the corner to at least {limit:g} mm, the smallest tool's radius",
@@ -182,6 +219,7 @@ _PROTOLABS_RULES: tuple[Rule, ...] = (
     Rule("cnc.wall_thickness", "walls", "thickness_mm", "min", 0.51, "mm", "feature thickness", "protolabs-milling",
          severity="warning", when=_MILLING, fix="thicken the feature to {limit:g} mm or more",
          note="features recommended thicker than 0.020 in. (0.51 mm)"),
+    _knife_rule("protolabs-milling", 0.51, None, "features recommended thicker than 0.020 in. (0.51 mm)"),
     Rule("cnc.gap_width", "gaps", "width_mm", "min", {"soft": 0.457, "hard": 0.838}, "mm", "gap width",
          "protolabs-milling", by="hardness", when={**_MILLING, **_NO_TOOLS},
          fix="widen the gap to at least {limit:g} mm",
@@ -243,7 +281,8 @@ _XOMETRY_RULES: tuple[Rule, ...] = (
          "xometry-tips", severity="warning", when=_MILLING, note="cavity depth should not exceed 3 to 5 times "
                                                                   "its width: the lower bound"),
     Rule("cnc.wall_thickness", "walls", "thickness_mm", "min", 0.5, "mm", "feature thickness", "xometry-cnc",
-         note="minimum feature size 0.020 in. (0.50 mm)"),
+         fix="thicken the feature to at least {limit:g} mm", note="minimum feature size 0.020 in. (0.50 mm)"),
+    _knife_rule("xometry-cnc", 0.5, None, "minimum feature size 0.020 in. (0.50 mm)"),
     Rule("cnc.wall_thickness_recommended", "walls", "thickness_mm", "min", {"metal": 0.794, "plastic": 1.5}, "mm",
          "wall thickness", "xometry-tips", severity="warning", by="wall_class",
          note="standard minimum walls: 0.794 mm metal, 1.5 mm plastic"),
@@ -265,6 +304,15 @@ _XOMETRY_RULES: tuple[Rule, ...] = (
     Rule("cnc.turned_diameter", "turning", "max_diameter_mm", "max", 813.0, "mm", "turned diameter", "xometry-cnc",
          when=_TURNING, note="largest lathe part 32 in. in diameter"),
 )
+
+def _detailed(rules: tuple[Rule, ...]) -> tuple[Rule, ...]:
+    """Every wall and gap rule says the face across and the thinnest point."""
+    return tuple(dataclasses.replace(rule, detail=_ACROSS_DETAIL[rule.family])
+                 if rule.family in _ACROSS_DETAIL and not rule.detail else rule for rule in rules)
+
+
+_GENERIC_RULES, _HUBS_RULES = _detailed(_GENERIC_RULES), _detailed(_HUBS_RULES)
+_PROTOLABS_RULES, _XOMETRY_RULES = _detailed(_PROTOLABS_RULES), _detailed(_XOMETRY_RULES)
 
 _NOTE = "a starting point drawn from published guides (mostly Protolabs Network's), no shop's limits"
 RULE_SETS: dict[str, RuleSet] = {
@@ -346,6 +394,8 @@ def context(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
             "wall_class": material_class or "metal",
             "hardness": ("soft" if material_class == "plastic" or material in _SOFT else
                          "hard" if material in _HARD else None),
+            # the narrowest tool by hardness; with no material, the soft (laxer) one
+            "line_class": "hard" if material in _HARD else "soft",
             "envelope": _envelope(resolved.get("material"), material, material_class, axes),
             "lathe_material": "al_brass" if material in ("aluminum", "brass") else "other"}
 

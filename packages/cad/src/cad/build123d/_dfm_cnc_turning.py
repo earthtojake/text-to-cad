@@ -4,7 +4,7 @@ of it turns, its diameters, bores and grooves, and the features its live tooling
 **The axis** is the line most of the part's surfaces of revolution share: every cylinder, cone and torus
 names its axis; the line whose coaxial faces have the most area is taken. **Axisymmetry** is the share of the
 part's area on faces of revolution about it (coaxial cylinders, cones, tori, spheres centred on it) and on
-planes square to it. Every other face is **off-axis**: joined into features by their edges, each is a
+planes square to it whose every edge is a circle about it (a square plate's faces are no turned face). Every other face is **off-axis**: joined into features by their edges, each is a
 ``cross_hole`` (a hole on another axis: ``radial`` where its axis is square to the turning axis and meets it,
 ``off_axis`` otherwise -- the hole itself is marked so), a ``flat`` (one plane along the axis), a ``slot``
 (planes along the axis facing each other: a keyway), or a ``feature``.
@@ -43,6 +43,21 @@ def _on_axis(s: brep.Surface, origin: np.ndarray, axis: np.ndarray) -> bool:
     return False
 
 
+def _round(model: Model, ordinal: int, origin: np.ndarray, axis: np.ndarray) -> bool:
+    """Whether every edge of a plane square to the axis is a circle about it (a lathe faces it)."""
+    from OCP.BRepAdaptor import BRepAdaptor_Curve
+
+    for edge in model.face(ordinal).edges():
+        curve = BRepAdaptor_Curve(edge.wrapped)
+        first, last = curve.FirstParameter(), curve.LastParameter()
+        points = np.array([[p.X(), p.Y(), p.Z()] for p in (curve.Value(first + (last - first) * k / 8)
+                                                          for k in range(9))])
+        radii = _radial(points, origin, axis)
+        if float(radii.max() - radii.min()) > 1e-4 * max(1.0, float(radii.max())):
+            return False
+    return True
+
+
 def _radial(points: np.ndarray, origin: np.ndarray, axis: np.ndarray) -> np.ndarray:
     rel = points - origin
     return np.linalg.norm(rel - np.outer(rel @ axis, axis), axis=1)
@@ -67,7 +82,8 @@ def turned(model: Model, state: dict[str, Any], holes: list[dict[str, Any]]) -> 
     origin = np.asarray(chosen.origin, dtype=float)
     on = [i for i in range(1, model.n + 1) if _on_axis(model.surface(i), origin, axis)]
     on_set = set(on)
-    revolved_area = sum(model.mesh_area(i) for i in on)
+    revolved_area = sum(model.mesh_area(i) for i in on
+                        if model.surface(i).kind != "plane" or _round(model, i, origin, axis))
     total_area = sum(model.mesh_area(i) for i in range(1, model.n + 1))
     points = np.vstack([model.outline(i) for i in range(1, model.n + 1)])
     along = points @ axis

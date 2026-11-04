@@ -10,28 +10,42 @@ say which part and face they are at (``plate/face 7``). The families, and how ea
   lying along its normal is a pocket's floor; its walls are those faces and the faces along the normal joined
   to them by concave or tangent edges. Depth (floor to the walls' rim), depth from the part's top along the
   normal (what a tool must reach), width (the narrowest gap between opposite walls: exact rays from each
-  wall along its normal that land on another wall of the pocket), closed or open (a convex edge on the
-  floor's outer boundary opens it), the floor's root fillet radius.
+  wall along its normal that land on another wall of the pocket, the two walls named), closed or open (a
+  convex edge on the floor's outer boundary opens it), the floor's root fillet radius. A **through** cavity
+  has no floor (a window, a through slot, a cut-out): faces along a machine axis joined by concave or
+  tangent edges along it, one of them a concave cylinder along it (a radiused corner, a slot's end), none a
+  pocket's; its depth is its walls' extent along the axis.
 - ``internal_corners``: a pocket's in-plane corners -- its concave cylinders along the tool axis (their
-  radius) and its sharp concave edges along the tool axis that no tool makes from another side (radius 0).
-  The floor-to-wall root is no corner: a flat end mill makes it sharp. Each against its depth and against
-  the largest tool that fits it (``--tools``, else a tool of twice its radius).
+  radius) and its sharp concave edges along the tool axis that no tool makes from another side (radius 0);
+  a through cavity's concave cylinders likewise. The floor-to-wall root is no corner: a flat end mill makes
+  it sharp. Each against its depth and against the largest tool that fits it (``--tools``, else a tool of
+  twice its radius); a radius is read to ``RADIUS_TOLERANCE``.
 - ``threads`` (``_dfm_cnc_holes``): modelled threads, freeform flanks wound about a cylinder's axis: major and
   minor diameters, pitch, length, internal or external. Their faces are a tap's: no other family reads them.
 - ``sharp_edges``: every other sharp concave edge that no rotating tool makes. A tool's corner makes one where
   one face is a floor or a ceiling square to an approach direction of the machine and the angle in the void
   is at least 90 degrees: an end mill where a ray from that face along the direction escapes the part, a
   T-slot cutter where the cavity the edge bounds opens along the direction somewhere; a dovetail cutter
-  makes a 45 or 60 degree one the same way, a chamfer mill a 60, 90 or 120 degree one along its bisector.
-  ``by_tool`` counts every concave edge by the tool that makes it.
+  makes a 45 or 60 degree one the same way, a chamfer mill a 60, 90 or 120 degree one along its bisector,
+  and a ball end mill one of ``BALL_VOID_DEG`` or more along a direction both faces look along. The floor or
+  ceiling must be a plane. ``by_tool`` counts every concave edge by the tool that makes it. An edge beside a
+  reported corner (sharing a vertex and a face with it: the corner's run through a small edge round) is
+  folded into that corner (``folded_edges``), not listed again.
 - ``walls``: the thickness under each face (an exact ray into the material from points sampled on it, to the
-  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height.
+  first face across that faces the other way), the thinnest per face under 5 mm, with the wall's height. The
+  listed items are then refined to the exact minimum distance between the face and the face across
+  (``BRepExtrema_DistShapeShape``), kept where that segment runs through the material near square to the
+  face. A face across that meets the face at a knife edge is no wall: ``knife_edges`` reports it.
 - ``gaps``: the width of the void in front of each face (the same ray outward), the narrowest per face under
-  10 mm: the slots and channels a tool must fit in.
+  10 mm: the slots and channels a tool must fit in; refined like walls, through the void.
+- ``knife_edges``: convex edges whose material angle is under ``KNIFE_DEG`` (printing's notion): the
+  material thins to nothing there, whatever a sampled wall would read.
 - ``access`` and ``setups``: which sampled points of each face a straight tool reaches from each of the
   machine's approach directions (exact rays along the direction must escape the part), the fewest
   directions that reach them all (greedy set cover) and the fixtures they need; the faces no direction
-  reaches, and whether any direction at all (a five-axis machine's) would.
+  reaches, and whether any direction at all (a five-axis machine's) would. Five axes try every direction a
+  four-axis machine would (each 15 degrees about each world axis) before probing the sphere, so they reach
+  at least what four do.
 - ``voids``: closed cavities inside the material (a solid's inner shells).
 - ``stock``: the part's box or ``--stock``, the material removed, the part's size sorted.
 - ``small_features``: the shortest edge, the smallest face, and the faces narrower than half a millimetre.
@@ -49,6 +63,7 @@ import numpy as np
 
 from cad._internal.dfm import Unmeasured
 from cad._internal.dfm import cnc as rules_side
+from cad._internal.meshops_printing import KNIFE_DEG
 from cad.build123d import _dfm_brep as brep
 from cad.build123d._dfm_cnc_holes import holes as find_holes
 from cad.build123d._dfm_cnc_holes import threads as find_threads
@@ -68,6 +83,17 @@ OPPOSED = -0.7
 V_MILLS = (60.0, 90.0, 120.0)
 #: Standard dovetail cutter angles, degrees (Hubs: 45 and 60).
 DOVETAILS = (45.0, 60.0)
+#: A sharp concave edge whose void angle is at least this many degrees is a ball end mill's: contouring
+#: along a direction both faces look along, the ball leaves a round in the crease that departs from the
+#: drawn edge by R (1 / sin(void / 2) - 1) -- 0.035 R at 150 degrees, 0.0006 R at 176 --, under a finish
+#: tolerance for any end mill a part this size is cut with. Below it the crease is a corner a radius must
+#: be drawn for. A judgement, not a guide's number: the owner's to confirm.
+BALL_VOID_DEG = 150.0
+#: A face with more edges than this (a web around many holes) is not refined to its exact wall: the least
+#: distance between faces costs with their edges, and over 200 listed items that is the check's budget.
+COMPLEX_EDGES = 16
+#: A corner's radius is read to this (mm): a radius within half of it of a tool's radius is that tool's.
+RADIUS_TOLERANCE = 0.01
 
 
 def measure(document: brep.Document, options: dict[str, Any], candidates: bool) -> dict[str, Any]:
@@ -81,13 +107,15 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
     families: dict[str, list[dict[str, Any]]] = {}
     scalars: dict[str, dict[str, Any]] = {}
     failed: dict[str, str] = {}
+    models: list[Model] = []
     for part in document.parts:
         try:
             model = Model(part)
         except Exception as error:  # noqa: BLE001 - a part that does not read is the report's to say
             failed.setdefault("model", f"{part.name}: {error}")
             continue
-        _measure_part(model, axes, turning, tools, stock, families, scalars, failed)
+        models.append(model)
+        _measure_part(model, len(models) - 1, axes, turning, tools, stock, families, scalars, failed)
     report: dict[str, Any] = {"machine": {"axes": axes, "turning": turning,
                                           "tools_mm": list(tools) if tools else None,
                                           "stock_mm": list(stock) if stock else None}}
@@ -100,6 +128,14 @@ def measure(document: brep.Document, options: dict[str, Any], candidates: bool) 
             continue
         items = families.get(name, [])
         items.sort(key=_ORDER.get(name, lambda item: 0))
+        if name in ("walls", "gaps"):
+            # the listed items only: an exact distance per item, not per face, keeps the budget on big parts
+            for item in items[:CAP]:
+                try:
+                    _refine(models[item["_model"]], item, outward=name == "gaps")
+                except Exception:  # noqa: BLE001 - a pair the kernel cannot measure keeps its sampled figure
+                    pass
+            items[:CAP] = sorted(items[:CAP], key=_ORDER[name])
         family = {"items": [_public(item) for item in items[:CAP]], "count": len(items), **scalars.get(name, {})}
         report[name] = family
     if "model" in failed:
@@ -113,7 +149,7 @@ def _public(item: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in item.items() if not key.startswith("_")}
 
 
-def _measure_part(model: Model, axes: int, turning: bool, tools: tuple[float, ...] | None,
+def _measure_part(model: Model, index: int, axes: int, turning: bool, tools: tuple[float, ...] | None,
                   stock: tuple[float, float, float] | None, families: dict[str, list[dict[str, Any]]],
                   scalars: dict[str, dict[str, Any]], failed: dict[str, str]) -> None:
     state: dict[str, Any] = {"axes": axes, "tools": tools, "stock": stock, "turning": turning}
@@ -141,6 +177,9 @@ def _measure_part(model: Model, axes: int, turning: bool, tools: tuple[float, ..
     state["void_faces"] = {face for void in voids for face in void["_faces"]}
     state["hole_faces"] = hole_faces | thread_faces
     families.setdefault("voids", []).extend(voids)
+    knives = run("knife_edges", lambda: _knife_edges(model, state)) or []
+    families.setdefault("knife_edges", []).extend(knives)
+    state["knife_pairs"] = {item["_pair"] for item in knives}
     access = run("access", lambda: _access(model, state))
     if access:
         families.setdefault("access", []).extend(access["items"])
@@ -152,13 +191,14 @@ def _measure_part(model: Model, axes: int, turning: bool, tools: tuple[float, ..
         state["rotary"] = None
     gaps = run("gaps", lambda: _gaps(model, state))
     if gaps is not None:
-        families.setdefault("gaps", []).extend(gaps)
+        families.setdefault("gaps", []).extend({**item, "_model": index} for item in gaps)
     walls = run("walls", lambda: _walls(model, state))
     if walls is not None:
-        families.setdefault("walls", []).extend(walls)
+        families.setdefault("walls", []).extend({**item, "_model": index} for item in walls)
     sharp = run("sharp_edges", lambda: _sharp_edges(model, state))
     state["unmakeable"] = sharp["unmakeable"] if sharp is not None else None
     reported: set[int] = set()
+    corners: list[dict[str, Any]] = []
     if not turning:
         pockets = run("pockets", lambda: _pockets(model, state))
         if pockets is not None:
@@ -172,8 +212,10 @@ def _measure_part(model: Model, axes: int, turning: bool, tools: tuple[float, ..
         totals = scalars.setdefault("sharp_edges", {"by_tool": {}})["by_tool"]
         for way, count in sharp["ways"].items():
             totals[way] = totals.get(way, 0) + count
-        # a pocket's sharp corner is reported once, as a corner of radius 0
-        families.setdefault("sharp_edges", []).extend(item for item in sharp["items"] if item["_edge"] not in reported)
+        # a pocket's sharp corner is reported once, as a corner of radius 0, and so are the short edges its
+        # run makes through a small edge round beside it
+        left = [item for item in sharp["items"] if item["_edge"] not in reported]
+        families.setdefault("sharp_edges", []).extend(_fold(model, left, corners))
     families.setdefault("stock", []).extend(run("stock", lambda: _stock(model, state)) or [])
     small = run("small_features", lambda: _small(model))
     if small is not None:
@@ -281,6 +323,21 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             candidates.append(d)
     probes = _probe_directions(model)
     if axes == 5:
+        # every direction a four-axis machine has, about each world axis, on the points the six miss: five
+        # axes reach at least what four do; the sphere's probe then takes what is left
+        for axis in np.eye(3):
+            for d in about(axis):
+                if any(abs(float(d @ known)) > SAME for known in candidates):
+                    continue
+                idx = np.flatnonzero(residual)
+                if not len(idx):
+                    break
+                r = np.zeros(len(points), dtype=bool)
+                r[idx] = _reach(model, points[idx], normals[idx], d)
+                if r.any():
+                    reach[len(candidates)] = r
+                    candidates.append(d)
+                    residual &= ~r
         for d, r in _probe(model, points, normals, owner_a, np.flatnonzero(residual), probes):
             reach[len(candidates)] = r
             candidates.append(d)
@@ -483,6 +540,7 @@ def _across(model: Model, state: dict[str, Any], outward: bool, cap: float) -> l
     skip = (state["hole_faces"] | state["void_faces"] if outward
             else state["void_faces"] | state["thread_faces"])
     found = []
+    knives = state.get("knife_pairs") or set()
     per_face: dict[int, list[tuple[float, int]]] = {}
     for i in range(1, model.n + 1):
         if i in skip:
@@ -500,6 +558,8 @@ def _across(model: Model, state: dict[str, Any], outward: bool, cap: float) -> l
                 continue
             if float(hit.normal @ n) >= OPPOSED:
                 continue
+            if not outward and frozenset((i, hit.face)) in knives:
+                continue  # material thinning to a knife edge: knife_edges reports it, not a wall's figure
             distance = hit.distance + LIFT
             hits.append((distance, hit.face))
             if best is None or distance < best[0]:
@@ -531,6 +591,102 @@ def _walls(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
                     height_to_thickness=round(height / thickness, 4) if height and thickness > 0 else None,
                     surface=model.surface(i).kind)
         items.append(item)
+    return items
+
+
+def _touching(model: Model, a: int, b: int) -> bool:
+    """Whether two faces share an edge or a vertex: their exact distance is then 0, no wall's."""
+    if any(other == b for _, other in model.neighbours(a)):
+        return True
+    ours = {tuple(np.round(v, 6)) for v in (np.array([x.X, x.Y, x.Z]) for x in model.face(a).vertices())}
+    return any(tuple(np.round(np.array([x.X, x.Y, x.Z]), 6)) in ours for x in model.face(b).vertices())
+
+
+def _refine(model: Model, item: dict[str, Any], outward: bool) -> None:
+    """The exact thickness (or width) of a listed wall (or gap): the least distance between its face and the
+    face across (``BRepExtrema_DistShapeShape``), taken where that segment leaves the face within ~45 degrees
+    of its normal (into the material for a wall, the void for a gap), the two faces' normals are opposed
+    there as across a wall (``OPPOSED``), and an exact ray along it from the face
+    meets the face across first, at that distance: sampled rays land a few points per face and miss the
+    thinnest line between two holes."""
+    from OCP.BRep import BRep_Tool
+    from OCP.BRepExtrema import BRepExtrema_DistShapeShape
+    from OCP.Extrema import Extrema_ExtFlag_MIN
+    from OCP.GeomAPI import GeomAPI_ProjectPointOnSurf
+
+    i, j = item.get("_face"), item.get("_opposite")
+    key = "width_mm" if outward else "thickness_mm"
+    if not i or not j or i == j or _touching(model, i, j):
+        return
+    si, sj = model.surface(i), model.surface(j)
+    if si.kind == sj.kind == "plane" and abs(float(np.asarray(si.normal) @ np.asarray(sj.normal))) > SAME:
+        return  # parallel planes: every ray between them is the same length, so the sampled one is exact
+    if len(model.adjacent.get(i, ())) > COMPLEX_EDGES:
+        return  # a face of many edges (a web around many holes): its sampled figure stands
+    across = model.face(j).wrapped
+    if len(model.adjacent.get(j, ())) > COMPLEX_EDGES:
+        # the face across's surface over its (u, v) box, four edges: a least distance found where the face
+        # is trimmed away (in one of its holes) fails the ray check below and the sampled figure stands
+        from OCP.BRepBuilderAPI import BRepBuilderAPI_MakeFace
+        from OCP.BRepTools import BRepTools
+
+        umin, umax, vmin, vmax = BRepTools.UVBounds_s(across)
+        made = BRepBuilderAPI_MakeFace(BRep_Tool.Surface_s(across), umin, umax, vmin, vmax, 1e-7)
+        if not made.IsDone():
+            return
+        across = made.Face()
+    dist = BRepExtrema_DistShapeShape(model.face(i).wrapped, across, Extrema_ExtFlag_MIN)
+    if not dist.IsDone() or dist.NbSolution() == 0 or dist.Value() >= float(item[key]) - 1e-6:
+        return
+    best = None
+    for k in range(1, dist.NbSolution() + 1):
+        a, b = dist.PointOnShape1(k), dist.PointOnShape2(k)
+        pa, pb = np.array([a.X(), a.Y(), a.Z()]), np.array([b.X(), b.Y(), b.Z()])
+        length = float(np.linalg.norm(pb - pa))
+        if length <= 1e-9 or (best is not None and length >= best[0]):
+            continue
+        projector = GeomAPI_ProjectPointOnSurf(a, BRep_Tool.Surface_s(model.face(i).wrapped))
+        if projector.NbPoints() == 0:
+            continue
+        u, v = projector.LowerDistanceParameters()
+        _, normal = brep.point_normal(model.face(i), u, v)
+        way = (pb - pa) / length
+        if float(way @ (normal if outward else -normal)) < -OPPOSED:
+            continue
+        # the two faces face each other there, as the sampled ray's did: a least distance across a convex
+        # round's chord (two faces square to each other, r sqrt 2 apart) is no wall
+        projector = GeomAPI_ProjectPointOnSurf(b, BRep_Tool.Surface_s(model.face(j).wrapped))
+        if projector.NbPoints() == 0:
+            continue
+        _, there = brep.point_normal(model.face(j), *projector.LowerDistanceParameters())
+        if float(normal @ there) >= OPPOSED:
+            continue
+        # nothing between: the ray from the face along the segment meets the face across first (a segment
+        # along a rim may graze the rim's own face: a hit within the tolerance of the far end is the far end)
+        hit = model.first(pa + way * LIFT, way)
+        if hit is None or (hit.face != j and abs(hit.distance + LIFT - length) > 1e-4):
+            continue
+        best = (length, pa)
+    if best is None or best[0] >= float(item[key]):
+        return
+    item[key] = round(best[0], 4)
+    item["xyz"] = brep.rounded(best[1])
+    item["refined"] = True
+    if not outward and item.get("height_mm"):
+        item["height_to_thickness"] = round(item["height_mm"] / best[0], 4)
+
+
+def _knife_edges(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
+    """Convex edges whose material angle is under ``KNIFE_DEG``: the material thins to nothing there."""
+    skip = state["thread_faces"]
+    items = []
+    for edge in model.edges:
+        if edge.concave or edge.smooth or not edge.angle_deg < KNIFE_DEG or set(edge.faces) & skip:
+            continue
+        items.append({"angle_deg": round(edge.angle_deg, 4), "length_mm": round(edge.length, 4), "thickness_mm": 0.0,
+                      "edge": model.part.ref("edge", edge.ordinal), "location": model.ref(edge.faces[0]),
+                      "faces": [model.ref(f) for f in edge.faces], "xyz": brep.rounded(edge.midpoint),
+                      "_pair": frozenset(edge.faces)})
     return items
 
 
@@ -599,7 +755,9 @@ def _sharp_edges(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         mid = np.asarray(edge.midpoint)
         unmakeable.add(edge.ordinal)
         items.append({"void_angle_deg": round(void, 4), "length_mm": round(edge.length, 4),
-                      "makeable": 0, "tangent": brep.rounded(edge.tangent, 4),
+                      "makeable": 0, "radius_mm": 0.0, "acute": bool(void < 89.9),
+                      "between": " and ".join(model.ref(f) for f in edge.faces),
+                      "tangent": brep.rounded(edge.tangent, 4),
                       "edge": model.part.ref("edge", edge.ordinal),
                       "location": model.ref(edge.faces[0]), "faces": [model.ref(f) for f in edge.faces],
                       "xyz": brep.rounded(mid), "_edge": edge.ordinal})
@@ -620,6 +778,8 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
     if void >= 89.9:
         faces = tuple(edge.faces)
         for na, nb, face in ((n1, n2, faces[0]), (n2, n1, faces[1])):
+            if model.surface(face).kind != "plane":
+                continue  # a floor or a ceiling is a plane: a curved face's normal at one point is no floor's
             inward = unit(nb - na * float(nb @ na))
             for d in (na, -na):
                 if not _allowed(state, d):
@@ -630,14 +790,54 @@ def _way(model: Model, state: dict[str, Any], edge: Any, n1: np.ndarray, n2: np.
                     return "slot_cutter"
     if any(abs(void - angle) < 0.5 for angle in DOVETAILS):
         faces = tuple(edge.faces)
-        for na in (n1, n2):
-            if _allowed(state, na) and any(sees(other, na) for other in cavity(faces)):
+        for na, face in ((n1, faces[0]), (n2, faces[1])):
+            if model.surface(face).kind == "plane" and _allowed(state, na) \
+                    and any(sees(other, na) for other in cavity(faces)):
                 return "dovetail_cutter"
     bisector = unit(n1 + n2)
     if any(abs(void - angle) < 0.5 for angle in V_MILLS) and _allowed(state, bisector):
         if model.escapes(mid, bisector, bisector):
             return "chamfer_mill"
+    if void >= BALL_VOID_DEG:
+        # a ball end mill contours the crease along any direction both faces look along
+        for d in (bisector, *WORLD):
+            if _allowed(state, d) and float(n1 @ d) > 0 and float(n2 @ d) > 0 and model.escapes(mid, bisector, d):
+                return "ball_mill"
     return None
+
+
+def _vertex_keys(shape: Any) -> set[tuple[float, ...]]:
+    return {tuple(np.round([v.X, v.Y, v.Z], 6)) for v in shape.vertices()}
+
+
+def _fold(model: Model, items: list[dict[str, Any]], corners: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The sharp edges left once those beside a reported corner -- sharing a vertex with it and a face with it
+    or with a round tangent to its faces: the corner's run through the small edge rounds at its end -- are
+    folded into that corner (``folded_edges``)."""
+    if not corners or not items:
+        return items
+    edges = model.part.edges()
+    edge_of = {edge.ordinal: edge for edge in model.edges}
+    near = []
+    for corner in corners:
+        if corner.get("_edge"):
+            shape = edges[corner["_edge"] - 1]
+            faces = set(edge_of[corner["_edge"]].faces)
+        else:
+            ordinal = int(corner["location"].rsplit(" ", 1)[1])
+            shape, faces = model.face(ordinal), {ordinal}
+        faces = faces | {other for face in faces for edge, other in model.neighbours(face) if edge.smooth}
+        near.append((corner, _vertex_keys(shape), faces))
+    kept = []
+    for item in items:
+        edge = edge_of[item["_edge"]]
+        keys = _vertex_keys(edges[edge.ordinal - 1])
+        owner = next((corner for corner, vertices, faces in near if keys & vertices and set(edge.faces) & faces), None)
+        if owner is None:
+            kept.append(item)
+        else:
+            owner.setdefault("folded_edges", []).append(item["edge"])
+    return kept
 
 
 # --- pockets and their corners ---------------------------------------------------------------------------
@@ -698,11 +898,7 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
                           if not (edge_of[o].concave or (edge_of[o].smooth and
                                                           (set(edge_of[o].faces) - {floor}) & fillets)))
         total = sum(lengths.values()) or 1.0
-        width = None
-        for wall in walls:
-            for distance, other in gaps.get(wall, []):
-                if other in walls and (width is None or distance < width):
-                    width = distance
+        width, pair = _narrowest(walls, gaps)
         closed = open_length / total < 1e-3
         kind = "closed" if closed else ("slot" if width is not None else "open")
         root = None
@@ -711,14 +907,17 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             radius = fs.minor_radius if fs.kind == "torus" else fs.radius
             if radius is not None:
                 root = radius if root is None else min(root, radius)
-        pocket = {"_floor": floor, "_walls": walls, "kind": kind, "depth_mm": round(depth, 4),
+        pocket = {"_floor": floor, "_walls": walls, "_fillets": fillets, "kind": kind, "depth_mm": round(depth, 4),
                   "depth_from_top_mm": round(top - level, 4),
                   "width_mm": round(width, 4) if width is not None else None,
                   "depth_to_width": round(depth / width, 4) if width else None,
                   "open_boundary_fraction": round(open_length / total, 4),
                   "floor_radius_mm": round(root, 4) if root is not None else None,
                   "axis": brep.rounded(d, 4), "aligned": _allowed({"axes": 3}, d),
-                  "wall_count": len(walls), "location": model.ref(floor),
+                  "wall_count": len(walls), "floor": model.ref(floor),
+                  # a pocket's figure that fails is its width, between these two walls: the place to fix
+                  "location": model.ref(pair[0]) if pair else model.ref(floor),
+                  "width_faces": [model.ref(f) for f in pair] if pair else None,
                   "faces": [model.ref(f) for f in sorted(walls | fillets | {floor})][:40],
                   "xyz": model.center(floor)}
         pockets.append(pocket)
@@ -728,7 +927,7 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             if ws.kind == "cylinder" and ws.concave and ("face", wall) not in seen_corners:
                 seen_corners.add(("face", wall))
                 low, high = model.extent(wall, d)
-                corners.append(_corner(model, float(ws.radius), high - low, top - low, tools, d, floor,
+                corners.append(_corner(model, float(ws.radius), high - low, top - low, tools, d, model.ref(floor),
                                        model.ref(wall), [model.ref(wall)], model.center(wall), None))
         for wall in walls:
             for edge, other in model.neighbours(wall):
@@ -742,7 +941,8 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
                 shape = model.part.edges()[edge.ordinal - 1]
                 points = np.array([[v.X, v.Y, v.Z] for v in shape.vertices()])
                 low, high = float((points @ d).min()), float((points @ d).max())
-                corners.append(_corner(model, 0.0, high - low, top - low, tools, d, floor, model.ref(edge.faces[0]),
+                corners.append(_corner(model, 0.0, high - low, top - low, tools, d, model.ref(floor),
+                                       model.ref(edge.faces[0]),
                                        [model.ref(f) for f in edge.faces], brep.rounded(edge.midpoint),
                                        edge.ordinal))
     # an open step reads two ways: its floor with the wall rising from it, or the wall end-on with the floor
@@ -758,23 +958,114 @@ def _pockets(model: Model, state: dict[str, Any]) -> dict[str, Any]:
             dropped.add(deeper["_floor"])
     kept = [pocket for pocket in pockets if pocket["_floor"] not in dropped]
     refs = {model.ref(floor) for floor in dropped}
-    return {"pockets": kept, "corners": [corner for corner in corners if corner["pocket"] not in refs]}
+    corners = [corner for corner in corners if corner["pocket"] not in refs]
+    claimed = {face for pocket in pockets for face in pocket["_walls"] | pocket["_fillets"] | {pocket["_floor"]}}
+    through, through_corners = _through(model, state, claimed, gaps)
+    return {"pockets": kept + through, "corners": corners + through_corners}
+
+
+def _narrowest(walls: set[int], gaps: dict[int, list[tuple[float, int]]]) -> tuple[float | None, tuple[int, int] | None]:
+    """The narrowest sampled gap between two of the walls, and the two walls."""
+    width, pair = None, None
+    for wall in walls:
+        for distance, other in gaps.get(wall, []):
+            if other in walls and (width is None or distance < width):
+                width, pair = distance, (wall, other)
+    return width, pair
+
+
+def _through(model: Model, state: dict[str, Any], claimed: set[int],
+             gaps: dict[int, list[tuple[float, int]]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """Cavities with no floor -- windows, through slots, cut-outs --, along each world axis: faces lying along
+    it joined by concave or tangent edges along it, none a floor pocket's, none meeting a plane square to the
+    axis by a concave edge (a floor or an end wall closes it), with at least one concave cylinder
+    along it that is no floor's root fillet (a smooth neighbour of it that is a plane seen end-on along its
+    own normal would make it one: a bull nose cuts that). Each cavity's corners are its concave cylinders;
+    its depth is its walls' extent along the axis, taken from the side that reaches it shallowest."""
+    skip = state["hole_faces"] | state["void_faces"] | state["thread_faces"] | claimed
+    tools = state["tools"]
+    pockets: list[dict[str, Any]] = []
+    corners: list[dict[str, Any]] = []
+    end_on: dict[int, bool] = {}
+
+    def seen_end_on(face: int) -> bool:
+        if face not in end_on:
+            s = model.surface(face)
+            n = unit(s.normal) if s.kind == "plane" else None
+            if n is None or not _allowed(state, n):
+                end_on[face] = False
+            else:
+                points, normals, _ = model.samples(face)
+                end_on[face] = bool(len(points)) and bool(model.escape_all(points[:8], normals[:8], n).any())
+        return end_on[face]
+
+    for d in (np.array([0.0, 0.0, 1.0]), np.array([1.0, 0.0, 0.0]), np.array([0.0, 1.0, 0.0])):
+        grouped: set[int] = set()
+        for seed in range(1, model.n + 1):
+            s = model.surface(seed)
+            if seed in skip or seed in grouped or s.kind != "cylinder" or not s.concave or not model.along(seed, d):
+                continue
+            group, frontier = {seed}, [seed]
+            while frontier:
+                face = frontier.pop()
+                for edge, other in model.neighbours(face):
+                    if other in group or other in skip or not (edge.concave or edge.smooth):
+                        continue
+                    if abs(float(np.asarray(edge.tangent) @ d)) > SAME and model.along(other, d):
+                        group.add(other)
+                        frontier.append(other)
+            grouped |= group
+            if any(edge.concave and model.surface(other).kind == "plane"
+                   and abs(float(np.asarray(model.surface(other).normal) @ d)) > SAME
+                   for face in group for edge, other in model.neighbours(face)):
+                continue  # closed at an end along the axis: a floor or an end wall, not a through cut
+            round_corners = [face for face in sorted(group)
+                             if model.surface(face).kind == "cylinder" and model.surface(face).concave
+                             and not any(edge.smooth and seen_end_on(other) for edge, other in model.neighbours(face))]
+            if not round_corners:
+                continue
+            sides = []
+            for sign in (1.0, -1.0):
+                way = d * sign
+                low = min(model.extent(face, way)[0] for face in group)
+                high = max(model.extent(face, way)[1] for face in group)
+                sides.append((model.part_extent(way)[1] - low, high - low, way))
+            reach, depth, way = min(sides, key=lambda side: side[0])
+            width, pair = _narrowest(group, gaps)
+            first = round_corners[0]
+            ref = model.ref(pair[0]) if pair else model.ref(first)
+            pockets.append({"_floor": None, "_walls": group, "kind": "through", "depth_mm": round(depth, 4),
+                            "depth_from_top_mm": round(reach, 4),
+                            "width_mm": round(width, 4) if width is not None else None,
+                            "depth_to_width": round(depth / width, 4) if width else None,
+                            "open_boundary_fraction": None, "floor_radius_mm": None,
+                            "axis": brep.rounded(way, 4), "aligned": True, "wall_count": len(group), "floor": None,
+                            "location": ref, "width_faces": [model.ref(f) for f in pair] if pair else None,
+                            "faces": [model.ref(f) for f in sorted(group)][:40], "xyz": model.center(first)})
+            for face in round_corners:
+                low, high = model.extent(face, way)
+                corners.append(_corner(model, float(model.surface(face).radius), high - low,
+                                       model.part_extent(way)[1] - low, tools, way, ref, model.ref(face),
+                                       [model.ref(face)], model.center(face), None))
+    return pockets, corners
 
 
 def _corner(model: Model, radius: float, height: float, depth: float, tools: tuple[float, ...] | None,
-            axis: np.ndarray, floor: int, location: str, faces: list[str], xyz: list[float],
+            axis: np.ndarray, pocket: str, location: str, faces: list[str], xyz: list[float],
             edge: int | None) -> dict[str, Any]:
+    sharp = radius <= 0.0
+    radius = round(radius / RADIUS_TOLERANCE) * RADIUS_TOLERANCE  # read to the tolerance: 1.4999 is 1.5
     if tools:
         fitting = [tool for tool in tools if tool <= 2 * radius + 1e-9]
         tool = max(fitting) if fitting else None
     else:
         tool = 2 * radius if radius > 0 else None
-    corner = {"radius_mm": round(radius, 4), "sharp": radius <= 0.0, "height_mm": round(height, 4),
+    corner = {"radius_mm": round(radius, 4), "sharp": sharp, "height_mm": round(height, 4),
               "depth_mm": round(depth, 4),
               "radius_to_depth": round(radius / height, 4) if height > 1e-9 else None,
               "tool_mm": round(tool, 4) if tool else None,
               "reach_ratio": round(depth / tool, 4) if tool else None,
-              "axis": brep.rounded(axis, 4), "pocket": model.ref(floor), "location": location, "faces": faces,
+              "axis": brep.rounded(axis, 4), "pocket": pocket, "location": location, "faces": faces,
               "xyz": xyz, "_edge": edge}
     if edge is not None:
         corner["edge"] = model.part.ref("edge", edge)
@@ -818,14 +1109,14 @@ def _small(model: Model) -> dict[str, Any]:
                                         "fine_faces": fine}}
 
 
-_FAMILIES = ("holes", "threads", "pockets", "internal_corners", "sharp_edges", "walls", "gaps", "access", "setups",
-             "voids",
-             "stock", "small_features")
+_FAMILIES = ("holes", "threads", "pockets", "internal_corners", "sharp_edges", "knife_edges", "walls", "gaps",
+             "access", "setups", "voids", "stock", "small_features")
 _ORDER: dict[str, Callable[[dict[str, Any]], Any]] = {
     "holes": lambda item: -(item["depth_to_diameter"] or 0),
     "pockets": lambda item: -(item["depth_to_width"] or 0),
     "internal_corners": lambda item: item["radius_mm"],
     "sharp_edges": lambda item: item["void_angle_deg"],
+    "knife_edges": lambda item: item["angle_deg"],
     "walls": lambda item: item["thickness_mm"],
     "gaps": lambda item: item["width_mm"],
     "access": lambda item: -item["unreached_fraction"],

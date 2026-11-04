@@ -267,6 +267,44 @@ def xometry_cavity() -> Any:
     return _labelled(part, "cavity")
 
 
+def windows() -> Any:
+    """A 10 mm plate (z -5 .. 5) with through windows: R0.5 corners at x = -25 (tighter than a 3 mm tool,
+    planted), R4 at x = 25 (control)."""
+    part = bd.Box(100, 50, 10)
+    part -= bd.Pos(-25, 0, -6) * bd.extrude(bd.RectangleRounded(30, 20, 0.5), 12)
+    part -= bd.Pos(25, 0, -6) * bd.extrude(bd.RectangleRounded(30, 20, 4), 12)
+    return _labelled(part, "windows")
+
+
+def through_slot() -> Any:
+    """A 3 mm slot through 20 mm (planted: 6.7 widths deep) beside a 10 mm one (control)."""
+    part = bd.Box(80, 40, 20)
+    part -= bd.Pos(-20, 0, -11) * bd.extrude(bd.SlotOverall(30, 3), 22)
+    part -= bd.Pos(20, 0, -11) * bd.extrude(bd.SlotOverall(30, 10), 22)
+    return _labelled(part, "through_slot")
+
+
+def webs() -> Any:
+    """6 mm holes through 10 mm: a pair at 6.4 mm pitch (a 0.4 mm web, planted), a pair at 9 mm (control)."""
+    part = bd.Box(60, 20, 10)
+    for x in (-23.2, -16.8, 14.5, 23.5):
+        part -= bd.Pos(x, 0, 0) * bd.Cylinder(3, 12)
+    return _labelled(part, "webs")
+
+
+def knife() -> Any:
+    """A block whose +x end is bevelled to an 18.4-degree knife edge (planted)."""
+    profile = bd.Polygon((0, 0), (40, 0), (40, 10), (30, 10), align=None)
+    return _labelled(bd.extrude(bd.Plane.XZ * profile, 15, both=True), "knife")
+
+
+def valley() -> Any:
+    """A block whose top is a 176-degree valley along y: a ball end mill's crease (a control)."""
+    rise = 30 * math.tan(math.radians(2))
+    profile = bd.Polygon((-30, 0), (30, 0), (30, 10 + rise), (0, 10), (-30, 10 + rise), align=None)
+    return _labelled(bd.extrude(bd.Plane.XZ * profile, 20, both=True), "valley")
+
+
 # --- the ground truth ------------------------------------------------------------------------------------
 
 CASES = [
@@ -294,13 +332,18 @@ CASES = [
     Case("grooves", grooves, {"material": "aluminum"},
          expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15)),
                  ("cnc.sharp_internal_edge", None, box(-40, 8.5, 9, 40, 25.4, 15))],
-         # the 30-degree groove narrows to nothing at its root: a gap no tool enters
+         # the 30-degree groove narrows to nothing at its root: a gap no tool enters; the dovetail's foot
+         # (y = -29.62) stands 0.38 mm from the part's side (y = -30): a real wall the exact distance finds
          allow=[("cnc.gap_width", None, box(-40, 4.2, 9, 40, 7.8, 15)),
-                ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15))]),
+                ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+                ("cnc.wall_thickness", None, box(-40, -30, 7, 40, -29.6, 7.1)),
+                ("cnc.wall_thickness_recommended", None, box(-40, -30, 7, 40, -29.6, 7.1))]),
     Case("grooves-5axis", grooves, {"material": "aluminum", "axes": 5},
          expect=[("cnc.sharp_internal_edge", None, box(-40, 4.2, 9, 40, 7.8, 15))],
          allow=[("cnc.gap_width", None, box(-40, 4.2, 9, 40, 7.8, 15)),
-                ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15))]),
+                ("cnc.gap_width_small", None, box(-40, 4.2, 9, 40, 7.8, 15)),
+                ("cnc.wall_thickness", None, box(-40, -30, 7, 40, -29.6, 7.1)),
+                ("cnc.wall_thickness_recommended", None, box(-40, -30, 7, 40, -29.6, 7.1))]),
     Case("voided", voided, {"material": "aluminum"},
          expect=[("cnc.enclosed_void", None, box(-5, -5, -5, 5, 5, 5))]),
     Case("six_sides", six_sides, {"material": "aluminum"}, expect=[("cnc.setups", None, None)]),
@@ -342,6 +385,20 @@ CASES = [
          expect=[("cnc.internal_corner_radius", None, box(-10, -7, 3, 10, 7, 6))]),
     Case("cavity-xometry", xometry_cavity, {"material": "aluminum", "rules": "xometry"},
          expect=[("cnc.pocket_depth_to_width", None, box(-15, -3, -1, 15, 3, 20))]),
+    Case("windows", windows, {"material": "aluminum", "tools": "3,6,10"},
+         expect=[("cnc.internal_corner_radius", None, box(-40, -10, -5, -10, 10, 5)),
+                 ("cnc.corner_radius_to_depth", None, box(-40, -10, -5, -10, 10, 5))]),
+    Case("through_slot", through_slot, {"material": "aluminum"},
+         expect=[("cnc.pocket_depth_to_width", None, box(-35, -1.5, -10, -5, 1.5, 10)),
+                 ("cnc.corner_reach", None, box(-35, -1.5, -10, -5, 1.5, 10)),
+                 ("cnc.corner_radius_to_depth", None, box(-35, -1.5, -10, -5, 1.5, 10))],
+         # the 10 mm slot's R5 ends are a quarter of its 20 mm depth: Hubs' third, a warning on the control too
+         allow=[("cnc.corner_radius_to_depth", None, box(5, -5, -10, 35, 5, 10))]),
+    Case("webs", webs, {"material": "aluminum"},
+         expect=[("cnc.wall_thickness", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5)),
+                 ("cnc.wall_thickness_recommended", None, box(-20.3, -0.1, -5, -19.7, 0.1, 5))]),
+    Case("knife", knife, {"material": "aluminum"}, expect=[("cnc.knife_edge", None, box(-0.1, -7.5, -0.1, 0.1, 7.5, 0.1))]),
+    Case("valley", valley, {"material": "aluminum"}),
     Case("cavity-hubs", xometry_cavity, {"material": "aluminum", "rules": "hubs"},
          allow=[("cnc.corner_radius_to_depth", None, box(-15, -3, -1, 15, 3, 20)),
                 ("cnc.corner_reach", None, box(-15, -3, -1, 15, 3, 20))]),

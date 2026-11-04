@@ -232,8 +232,9 @@ _ANALYTIC = ("plane", "cylinder", "cone", "sphere", "torus")
 
 def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], set[int]]:
     """Modelled threads: freeform faces wound about a cylinder's axis. A face that is not a plane, cylinder,
-    cone, sphere or torus is a thread's flank where the points along its edges and sampled on it sweep 350
-    degrees or more about some cylinder's axis within a narrow band of radius (under a third of it). Flanks
+    cone, sphere, torus or surface of revolution is a thread's flank where the points along its edges and
+    sampled on it sweep 350 degrees or more about some cylinder's axis within a narrow band of radius (under
+    a third of it), and a flank edge winds about it (a pitch: else no thread). Flanks
     on one axis are one thread: its major and minor diameters (the band), its length along the axis, its
     pitch (the axial advance per turn of the points' angle), internal where the cylinder nearest its minor
     radius is a hole's (a tap drill) and external where it is a boss's."""
@@ -253,8 +254,8 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
         return [], set()
     by_axis: dict[int, list[tuple[int, np.ndarray]]] = {}
     for i in range(1, model.n + 1):
-        if model.surface(i).kind in _ANALYTIC:
-            continue
+        if model.surface(i).kind in _ANALYTIC or model.surface(i).kind == "revolution":
+            continue  # a surface of revolution sweeps the full turn and is no helix: a revolved round, a pulley's
         points = np.vstack([model.edge_points(i, 129), model.samples(i)[0]])  # a helix sampled every few degrees
         if len(points) < 8:
             continue
@@ -303,6 +304,8 @@ def threads(model: Model, holes: list[dict[str, Any]]) -> tuple[list[dict[str, A
                     faces.append(other)
         faces = sorted(set(faces))
         pitch = _pitch(model, flanks[0][0], a, o)
+        if not pitch:
+            continue  # no flank edge winds half a turn: no thread
         length = float(along.max() - along.min())
         claimed |= set(faces)
         found.append({"internal": internal, "major_diameter_mm": round(major, 4), "minor_diameter_mm": round(minor, 4),
