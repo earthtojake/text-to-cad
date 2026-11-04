@@ -740,3 +740,34 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; on 
   expect(selected(await controllerOf(phone))).toEqual(['#J1']);
   phone.dispose();
 });
+
+it("a panel docking beside a board the person has moved neither zooms nor slides it; a board still at its fit refits to the room left", async () => {
+  // The pane's observers, run by hand: the pane's box is what the test says it is.
+  const observers: Array<() => void> = [];
+  vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { observers.push(callback); } observe() {} unobserve() {} disconnect() {} });
+  const box = (left: number, width: number) => vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockReturnValue(
+    { x: left, y: 0, left, top: 0, right: left + width, bottom: 700, width, height: 700, toJSON: noop } as DOMRect);
+  const { pane, dispose } = await open();
+  await opened(pane);
+  const resize = async (left: number, width: number) => { box(left, width); await act(async () => { for (const run of observers) run(); }); };
+  // Still the fit: a panel 200px wide docks, and the board refits to the 400px left beside it.
+  const fitted = { ...frames.at(-1)! };
+  await resize(200, 400);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeLessThan(fitted.scale));
+  await resize(0, 1200);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
+  // Moved (a middle-button pan): the panel docks, and the board keeps its scale and stays where it was on screen.
+  const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
+  const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
+  const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
+  fireEvent.pointerDown(canvas, { ...middle, ...at([20, 15]) });
+  fireEvent.pointerMove(canvas, { ...middle, ...at([25, 15]) });
+  fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
+  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
+  const moved = { ...frames.at(-1)! };
+  await resize(200, 400);
+  await waitFor(() => expect(frames.at(-1)).toEqual({ ...moved, offsetX: moved.offsetX - 200 }));
+  await resize(0, 1200);
+  await waitFor(() => expect(frames.at(-1)).toEqual(moved));
+  dispose();
+});

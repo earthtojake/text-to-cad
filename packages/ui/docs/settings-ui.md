@@ -656,7 +656,11 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
   width (`toolStack.panels.flat`: 216px at first, 200px to half the view, from a grip on its right
   edge, Left/Right by 16px).
-- **Open, it is always docked**: the canvas is the narrower for it, at any width. Under 1024px of
+- **Open, it is always docked**: the canvas is the narrower for it, at any width. Showing or hiding it
+  never zooms the picture: a view the person has moved keeps its scale and stays still on screen
+  (what was beside the panel is where it was), and a view still at its fit refits to the room it has
+  now (`kit/viewport/useFlatCanvasView.js`: a pane whose own edge moved, as against a window resized,
+  which keeps the zoom relative to the fit, centred). Under 1024px of
   view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**
   (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
   whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
