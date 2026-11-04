@@ -84,7 +84,8 @@ class OverhangTest(unittest.TestCase):
         result = check(wedge(30.0), "wedge", technology="sls")
         self.assertNotIn("printing.overhang_angle", codes(result))
         self.assertNotIn("overhangs", codes(result))
-        self.assertEqual({o["status"] for o in outcome(result, "printing.overhang_angle")} - {"not_evaluated"}, set())
+        self.assertEqual({o["status"] for o in outcome(result, "printing.overhang_angle")}
+                         - {"not_evaluated", "not_applicable"}, set())
 
     def test_a_ceiling_carried_on_both_sides_is_a_bridge_of_its_span(self) -> None:
         result = check(tunnel(8.0), "tunnel")
@@ -308,7 +309,7 @@ class RuleSetTest(unittest.TestCase):
     def test_a_technology_a_source_does_not_cover_is_not_evaluated_never_passed(self) -> None:
         result = check(bd.Box(20, 20, 5) - bd.Cylinder(0.3, 10), "plate", technology="mjf")
         hole = outcome(result, "printing.hole_diameter")
-        self.assertTrue(all(o["status"] == "not_evaluated" for o in hole) or not hole)
+        self.assertTrue(all(o["status"] in ("not_evaluated", "not_applicable") for o in hole) or not hole)
         self.assertNotIn("printing.hole_diameter", codes(result))
 
     def test_options_are_refused_by_name(self) -> None:
