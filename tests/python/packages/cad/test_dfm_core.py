@@ -72,10 +72,28 @@ class RulesTest(unittest.TestCase):
         rule = Rule("r", "f", "v", "max", 1.0, "mm", "v", "s")
         _, record = evaluate({"f": {"error": "boom"}}, _set(rule), {})
         self.assertEqual(record["outcomes"][0]["status"], "not_evaluated")
-        found, record = evaluate({"f": {"items": [{"v": float(i + 2)} for i in range(20)]}}, _set(rule), {})
-        self.assertEqual(len(found), 9)  # SHOWN_PER_RULE, then one counting the rest
+        items = [{"v": float(i + 2), "location": f"p/face {i}"} for i in range(20)]
+        found, record = evaluate({"f": {"items": items}}, _set(rule), {})
+        self.assertEqual(len(found), 9)  # SHOWN_PER_RULE refs, then one counting the rest
         self.assertEqual(found[0].message.split(" is ")[0], "v 21 mm")  # the worst first
         self.assertEqual(len(record["outcomes"][0]["failures"]), 20)
+
+    def test_failures_at_one_ref_are_one_finding_and_an_implied_warning_is_left_to_the_record(self) -> None:
+        error = Rule("e", "f", "v", "min", 1.0, "mm", "v", "s")
+        warning = Rule("w", "f", "v", "min", 2.0, "mm", "v", "s", severity="warning")
+        report = {"f": {"items": [{"v": 0.5, "location": "p/face 1"}, {"v": 0.2, "location": "p/face 1"},
+                                  {"v": 1.5, "location": "p/face 2"}]}}
+        found, record = evaluate(report, _set(warning, error), {})
+        # the two failures of the error at face 1 are one finding, the worst first, counting the other
+        errors = [f for f in found if f.code == "e"]
+        self.assertEqual([(f.location, f.message.split(" is ")[0]) for f in errors], [("p/face 1", "v 0.2 mm")])
+        self.assertIn("(and 1 more at this ref)", errors[0].message)
+        # the warning on face 1 is implied by the error there; face 2 fails the warning alone
+        self.assertEqual([f.location for f in found if f.code == "w"], ["p/face 2"])
+        # the record keeps every failure of both
+        by_rule = {o["rule"]: o for o in record["outcomes"]}
+        self.assertEqual(len(by_rule["e"]["failures"]), 2)
+        self.assertEqual(len(by_rule["w"]["failures"]), 3)
 
     def test_nothing_to_judge_passes_and_figures_a_source_lacks_are_not_applicable(self) -> None:
         holes = Rule("hole", "holes", "d", "min", 1.0, "mm", "hole", "s")
@@ -244,6 +262,98 @@ class RefsTest(unittest.TestCase):
         result = printing(kit)
         self.assertEqual([f.location for f in result.findings if f.code == "empty_parts"], ["nothing"])
         self.assertFalse(result.measurements["partial"])
+
+
+class DeclaredMaterialTest(unittest.TestCase):
+    """A check given no material judges by the one the parts declare, when they agree."""
+
+    def test_the_declared_material_is_read_and_said(self) -> None:
+        from bd_materials import metals
+        from cad.build123d import cnc
+
+        plate = bd.Box(40, 20, 6) - bd.Cylinder(4, 10)
+        plate.label, plate.material = "plate", metals.aluminum()
+        result = cnc(plate)
+        codes = {finding.code for finding in result.findings}
+        self.assertIn("material_declared", codes)
+        self.assertNotIn("cnc.material_assumed", codes)
+        self.assertEqual(result.measurements["rules"]["context"]["material"], "aluminum")
+        self.assertEqual(result.measurements["bodies"][0]["material"], "Alu_G6061_T6")
+        # a material given wins, and nothing is read
+        given = cnc(plate, material="steel")
+        self.assertEqual(given.measurements["rules"]["context"]["material"], "steel")
+        self.assertNotIn("material_declared", {finding.code for finding in given.findings})
+
+    def test_parts_that_disagree_are_judged_as_with_none(self) -> None:
+        from bd_materials import metals, plastics
+        from cad.build123d import cnc, molding
+
+        plate = bd.Box(40, 20, 6)
+        plate.label, plate.material = "plate", metals.aluminum()
+        clip = bd.Pos(0, 40, 0) * bd.Box(10, 10, 10)
+        clip.label, clip.material = "clip", plastics.abs_()
+        result = cnc(bd.Compound(children=[plate, clip]))
+        codes = {finding.code for finding in result.findings}
+        self.assertIn("material_mixed", codes)
+        self.assertIn("cnc.material_assumed", codes)
+        self.assertIsNone(result.measurements["rules"]["context"]["material"])
+        # a resin declared is the molding check's resin
+        molded = molding(clip, pull="z")
+        self.assertEqual(molded.measurements["rules"]["context"].get("resin"), "abs")
+        self.assertNotIn("resin_unknown", {finding.code for finding in molded.findings})
+
+
+class DetailTest(unittest.TestCase):
+    def test_a_rule_formats_the_item_and_the_context_into_its_detail_and_hint(self) -> None:
+        rule = Rule("c.edge", "edges", "makeable", "min", 1, "ways", "ways", "s",
+                    fix="round edge {edge} ({void_angle_deg:.0f} deg) to {limit:g} {unit}; shop radius {shop_r:g}",
+                    detail="edge {edge}, {void_angle_deg:.1f} deg at {xyz}")
+        report = {"edges": {"items": [{"makeable": 0, "location": "p/face 3", "edge": "p/edge 12",
+                                       "void_angle_deg": 176.04, "xyz": [1.0, 2.5, 0.0]}]}}
+        found, _ = evaluate(report, _set(rule), {"shop_r": 1.5})
+        self.assertEqual(found[0].message.split(" (")[-1].rstrip(")"), "edge p/edge 12, 176.0 deg at 1, 2.5, 0")
+        self.assertEqual(found[0].hint, "round edge p/edge 12 (176 deg) to 1 ways; shop radius 1.5")
+        # a name the item lacks leaves the text as written
+        bare = Rule("c.bare", "edges", "makeable", "min", 1, "ways", "ways", "s", fix="see {nothing}")
+        found, _ = evaluate(report, _set(bare), {})
+        self.assertEqual(found[0].hint, "see {nothing}")
+
+
+class SelectorTest(unittest.TestCase):
+    def test_a_rule_with_no_variant_for_the_selected_value_is_not_evaluated_and_a_silent_set_is_said(self) -> None:
+        sla = Rule("p.hole", "holes", "d", "min", 0.8, "mm", "hole", "s", when={"technology": ("sla",)})
+        sls = Rule("p.hole", "holes", "d", "min", 1.5, "mm", "hole", "s", when={"technology": ("sls",)})
+        other = Rule("p.turn", "turning", "d", "max", 1.0, "mm", "turned", "s", when={"turning": True})
+        rules = RuleSet("test", "printing", "Test", "1", (sla, sls, other), (SOURCE,), selector="technology")
+        report = {"holes": {"items": [{"d": 0.5, "location": "p/face 1"}]}}
+        found, record = evaluate(report, rules, {"technology": "fdm", "turning": False})
+        self.assertEqual(found, [])
+        hole = [o for o in record["outcomes"] if o["rule"] == "p.hole"]
+        self.assertEqual([(o["status"], o["reason"]) for o in hole],
+                         [("not_evaluated", "the rule set gives no limit for technology fdm")])
+        # a rule for another context stays not_applicable: it is not a missing figure
+        turn = next(o for o in record["outcomes"] if o["rule"] == "p.turn")
+        self.assertEqual(turn["status"], "not_applicable")
+        self.assertEqual(record["evaluated"], 0)
+        # with the technology the set knows, the rule judges
+        found, record = evaluate(report, rules, {"technology": "sla", "turning": False})
+        self.assertEqual([f.code for f in found], ["p.hole"])
+        self.assertEqual(record["evaluated"], 1)
+
+
+class SummaryTest(unittest.TestCase):
+    def test_a_failed_check_digests_what_failed_in_one_line(self) -> None:
+        from cad.build123d import molding
+
+        box = bd.Box(30, 20, 10); box.label = "box"
+        result = molding(box, pull="z", material="abs")
+        self.assertFalse(result.ok)
+        self.assertIn("failed: molding.draft_min x4", result.summary)  # every failure, not the findings shown
+        self.assertTrue(result.human_lines()[-1].startswith("FAILED box: "))
+        self.assertIn("molding.draft_min x4", result.human_lines()[-1])
+        # errors come first, then warnings, then the facts
+        order = [{"error": 0, "warning": 1, "info": 2}[f.severity] for f in result.findings]
+        self.assertEqual(order, sorted(order))
 
 
 if __name__ == "__main__":

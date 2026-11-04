@@ -3,11 +3,16 @@
 A rule whose limit differs by material reads the material's class (``metal``, ``plastic``) or the
 material's own name (a resin's wall range, its clamp pressure). Names are lowercase; each takes its
 common spellings as aliases. A material the table does not know is refused by name, with the list.
+
+A part's declared material (``part.material = metals.aluminum()``, a ``bd_materials.FinishedMaterial`` the
+document keeps) names the table's material too (``declared``): its family (``aluminum``, ``mild_steel``,
+``PETG``), else the first word of its name (``Alu_G6061_T6``), so a check given no ``--material`` judges
+by what the model says the part is made of.
 """
 
 from __future__ import annotations
 
-__all__ = ["CLASSES", "MATERIALS", "material_class", "resolve"]
+__all__ = ["CLASSES", "MATERIALS", "declared", "material_class", "resolve"]
 
 #: Each material, its class and the spellings it is also given.
 MATERIALS: dict[str, tuple[str, tuple[str, ...]]] = {
@@ -47,6 +52,10 @@ MATERIALS: dict[str, tuple[str, tuple[str, ...]]] = {
 }
 CLASSES = ("metal", "plastic")
 _ALIASES = {alias: name for name, (_, aliases) in MATERIALS.items() for alias in (name, *aliases)}
+#: bd_materials' families and name stems the table knows under another name.
+_FAMILIES = {"mild_steel": "steel", "alloy_steel": "steel", "tool_steel": "steel", "spring_steel": "steel",
+             "mildsteel": "steel", "alloysteel": "steel", "toolsteel": "steel", "springsteel": "steel",
+             "alu": "aluminum", "pa": "nylon", "pet": "petg"}
 
 
 def resolve(name: str | None) -> str | None:
@@ -63,3 +72,22 @@ def material_class(name: str | None) -> str | None:
     """``metal`` or ``plastic`` for a material the table knows, None for none."""
     resolved = resolve(name)
     return MATERIALS[resolved][0] if resolved else None
+
+
+def declared(material: object) -> str | None:
+    """The table's name for a part's declared material (a ``bd_materials.FinishedMaterial``: its
+    ``.material.family``, else the first word of its ``.name``), None for no material or one the table has no
+    name for (wood, glass, a custom material)."""
+    if material is None:
+        return None
+    physics = getattr(material, "material", None)
+    for candidate in (getattr(physics, "family", None), getattr(material, "name", None),
+                      getattr(physics, "name", None)):
+        if not isinstance(candidate, str) or not candidate:
+            continue
+        stem = candidate.strip().lower().replace("-", "_")
+        for key in (stem, stem.split("_")[0]):
+            found = _ALIASES.get(_FAMILIES.get(key, key))
+            if found is not None:
+                return found
+    return None

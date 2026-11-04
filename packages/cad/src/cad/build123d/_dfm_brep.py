@@ -48,6 +48,7 @@ class Part:
     occurrences: int = 1
     paths: tuple[str, ...] = ()
     face_names: dict[int, str] = field(default_factory=dict)
+    material: Any = None             # the part's declared material (a bd_materials FinishedMaterial), or None
     _faces: list[Any] | None = field(default=None, repr=False)
     _edges: list[Any] | None = field(default=None, repr=False)
     _face_map: Any = field(default=None, repr=False)
@@ -105,9 +106,14 @@ class Part:
         return list(self.shape.solids())
 
     def facts(self) -> dict[str, Any]:
-        """What a report says of the part itself: its name, its ref's owner, its box, volume and counts."""
+        """What a report says of the part itself: its name, its ref's owner, its declared material, its box,
+        volume and counts."""
+        from cad._internal.dfm import materials
+
         box = self.shape.bounding_box()
+        declared = getattr(self.material, "name", None)
         return {"name": self.name, "owner": self.owner, "occurrences": self.occurrences,
+                "material": str(declared) if declared else None, "material_table": materials.declared(self.material),
                 "bbox_mm": [round(box.size.X, 4), round(box.size.Y, 4), round(box.size.Z, 4)],
                 "bbox_min_mm": [round(box.min.X, 4), round(box.min.Y, 4), round(box.min.Z, 4)],
                 "volume_mm3": round(float(self.shape.volume), 4), "area_mm2": round(float(self.shape.area), 4),
@@ -167,7 +173,7 @@ def _loaded(loaded: Any) -> Document:
         instance = loaded.instances[int(payload["instance"])]
         placed = bd.Shape.cast(proto.shape.Moved(_trsf(instance.matrix)))
         part = Part(name=proto.name, owner=refs.owner_text(root, node), shape=placed, paths=(path,),
-                    face_names=dict(proto.face_names))
+                    face_names=dict(proto.face_names), material=getattr(proto, "material", None))
         first[prototype] = part
         order.append(part)
     empty = [part.owner or part.name for part in order if not part.faces()]
@@ -225,7 +231,7 @@ def parts_of(shape: Any, name: str | None = None) -> Document:
         leaf, where = leaves[int(node.payload["prototype"])]
         placed = leaf if where is None or node is root else bd.Shape.cast(leaf.wrapped.Located(where.wrapped))
         parts.append(Part(name=node.label, owner=refs.owner_text(root, node), shape=placed,
-                          paths=(refs.path_text(root, node),)))
+                          paths=(refs.path_text(root, node),), material=getattr(leaf, "material", None)))
     empty = [part.owner or part.name for part in parts if not part.faces()]
     return Document(name=tree["name"], parts=[part for part in parts if part.faces()], empty=empty)
 
@@ -293,46 +299,135 @@ def point_normal(face: Any, u: float, v: float, props: Any = None) -> tuple[np.n
 
 
 def surface(face: Any) -> Surface:
-    """The surface of a face (see ``Surface``)."""
+    """The surface of a face (see ``Surface``). A B-spline or Bezier face that IS a plane, cylinder, cone,
+    sphere or torus within a tight tolerance (``_canonical``) is read as that surface: ``extrude(taper=)``,
+    a loft, a fillet between such faces and many STEP exporters write analytic geometry as splines."""
     from OCP.BRepAdaptor import BRepAdaptor_Surface
 
     adaptor = BRepAdaptor_Surface(face.wrapped, True)
     kind = _kinds().get(adaptor.GetType(), "other")
+    geometry = None
+    if kind == "plane":
+        geometry = adaptor.Plane()
+    elif kind in ("cylinder", "cone", "sphere", "torus"):
+        geometry = {"cylinder": adaptor.Cylinder, "cone": adaptor.Cone, "sphere": adaptor.Sphere,
+                    "torus": adaptor.Torus}[kind]()
+    elif kind == "bspline":
+        found = _canonical(face)
+        if found is not None:
+            kind, geometry = found
+    if geometry is None:
+        return Surface(kind)
     if kind == "plane":
         u, v = _mid_uv(face)
         _, normal = point_normal(face, u, v)
-        origin = _xyz(adaptor.Plane().Location())
+        origin = _xyz(geometry.Location())
         return Surface("plane", normal=tuple(float(value) for value in normal), origin=origin)  # type: ignore[arg-type]
-    if kind in ("cylinder", "cone", "sphere", "torus"):
-        geometry = {"cylinder": adaptor.Cylinder, "cone": adaptor.Cone, "sphere": adaptor.Sphere,
-                    "torus": adaptor.Torus}[kind]()
-        if kind == "sphere":
-            origin = _xyz(geometry.Location())
-            axis = _xyz(geometry.Position().Direction())
-        else:
-            origin = _xyz(geometry.Axis().Location())
-            axis = _xyz(geometry.Axis().Direction())
-        radius = float(geometry.MajorRadius() if kind == "torus" else geometry.Radius() if kind != "cone"
-                       else geometry.RefRadius())
-        u, v = _mid_uv(face)
-        point, normal = point_normal(face, u, v)
-        o, a = np.array(origin), np.array(axis)
-        if kind == "sphere":
-            radial = point - o
-        elif kind == "torus":
-            along = point - o
-            ring = along - a * float(along @ a)
-            ring = ring / (np.linalg.norm(ring) or 1.0) * radius
-            radial = point - (o + ring)
-        else:
-            along = point - o
-            radial = along - a * float(along @ a)
-        size = float(np.linalg.norm(radial))
-        concave = None if size < 1e-12 else bool(float(normal @ (radial / size)) < 0.0)
-        return Surface(kind, origin=origin, axis=axis, radius=radius,
-                       half_angle_deg=math.degrees(geometry.SemiAngle()) if kind == "cone" else None,
-                       minor_radius=float(geometry.MinorRadius()) if kind == "torus" else None, concave=concave)
-    return Surface(kind)
+    if kind == "sphere":
+        origin = _xyz(geometry.Location())
+        axis = _xyz(geometry.Position().Direction())
+    else:
+        origin = _xyz(geometry.Axis().Location())
+        axis = _xyz(geometry.Axis().Direction())
+    radius = float(geometry.MajorRadius() if kind == "torus" else geometry.Radius() if kind != "cone"
+                   else geometry.RefRadius())
+    u, v = _mid_uv(face)
+    point, normal = point_normal(face, u, v)
+    o, a = np.array(origin), np.array(axis)
+    if kind == "sphere":
+        radial = point - o
+    elif kind == "torus":
+        along = point - o
+        ring = along - a * float(along @ a)
+        ring = ring / (np.linalg.norm(ring) or 1.0) * radius
+        radial = point - (o + ring)
+    else:
+        along = point - o
+        radial = along - a * float(along @ a)
+    size = float(np.linalg.norm(radial))
+    concave = None if size < 1e-12 else bool(float(normal @ (radial / size)) < 0.0)
+    return Surface(kind, origin=origin, axis=axis, radius=radius,
+                   half_angle_deg=math.degrees(geometry.SemiAngle()) if kind == "cone" else None,
+                   minor_radius=float(geometry.MinorRadius()) if kind == "torus" else None, concave=concave)
+
+
+#: A spline face within this share of its own size (its box's diagonal) of an analytic surface, and never
+#: more than ``_CANONICAL_MM``, is read as that surface.
+_CANONICAL_SHARE = 1e-6
+_CANONICAL_MM = 1e-4
+
+
+def _canonical(face: Any) -> tuple[str, Any] | None:
+    """The analytic surface a spline face lies on, if it lies on one within the tolerance: OCCT's canonical
+    recognition (``ShapeAnalysis_CanonicalRecognition``) for a plane, cylinder, cone or sphere, a fit of its
+    points for a torus. None for a free-form face."""
+    from OCP.gp import gp_Cone, gp_Cylinder, gp_Pln, gp_Sphere
+    from OCP.ShapeAnalysis import ShapeAnalysis_CanonicalRecognition
+
+    box = face.bounding_box()
+    tolerance = min(_CANONICAL_MM, max(1e-7, _CANONICAL_SHARE * float(box.diagonal)))
+    for kind, made, test in (("plane", gp_Pln, "IsPlane"), ("cylinder", gp_Cylinder, "IsCylinder"),
+                             ("cone", gp_Cone, "IsCone"), ("sphere", gp_Sphere, "IsSphere")):
+        try:
+            recognizer = ShapeAnalysis_CanonicalRecognition(face.wrapped)
+            geometry = made()
+            if getattr(recognizer, test)(tolerance, geometry) and 0.0 <= recognizer.GetGap() <= tolerance:
+                return kind, geometry
+        except Exception:  # noqa: BLE001 - a face the recognizer declines is free-form
+            continue
+    torus = _torus(face, tolerance)
+    return ("torus", torus) if torus is not None else None
+
+
+def _torus(face: Any, tolerance: float) -> Any:
+    """The torus a spline face lies on (a ``gp_Torus``), or None: its minor radius from the face's principal
+    curvature, the centres of its points' tubes on one circle (the spine), every point checked against the
+    torus they make."""
+    from OCP.BRepGProp import BRepGProp_Face
+    from OCP.BRepLProp import BRepLProp_SLProps
+    from OCP.BRepAdaptor import BRepAdaptor_Surface
+    from OCP.BRepTools import BRepTools
+    from OCP.gp import gp_Ax3, gp_Dir, gp_Pnt, gp_Torus
+
+    umin, umax, vmin, vmax = BRepTools.UVBounds_s(face.wrapped)
+    props = BRepGProp_Face(face.wrapped)
+    points, normals = [], []
+    for u in np.linspace(umin, umax, 6):
+        for v in np.linspace(vmin, vmax, 6):
+            point, normal = point_normal(face, float(u), float(v), props)
+            points.append(point)
+            normals.append(normal)
+    points, normals = np.array(points), np.array(normals)
+    curvature = BRepLProp_SLProps(BRepAdaptor_Surface(face.wrapped, True), (umin + umax) / 2, (vmin + vmax) / 2, 2,
+                                  1e-9)
+    if not curvature.IsCurvatureDefined():
+        return None
+    bend = max(abs(curvature.MaxCurvature()), abs(curvature.MinCurvature()))
+    if bend <= 1e-12:
+        return None
+    minor = 1.0 / bend
+    for side in (1.0, -1.0):
+        centres = points - side * minor * normals
+        middle = centres.mean(axis=0)
+        _, spread, frame = np.linalg.svd(centres - middle)
+        axis = frame[2]
+        if spread[1] <= 1e-9:
+            continue
+        flat = (centres - middle) @ np.stack([frame[0], frame[1]], axis=1)
+        # The circle through the centres (least squares): x^2 + y^2 = 2 a x + 2 b y + c.
+        system = np.column_stack([2 * flat, np.ones(len(flat))])
+        (a, b, c), *_ = np.linalg.lstsq(system, (flat ** 2).sum(axis=1), rcond=None)
+        major = math.sqrt(max(c + a * a + b * b, 0.0))
+        origin = middle + a * frame[0] + b * frame[1]
+        if major <= minor * 1e-6:
+            continue
+        rel = points - origin
+        height = rel @ axis
+        ring = np.linalg.norm(rel - np.outer(height, axis), axis=1)
+        if float(np.max(np.abs(np.hypot(ring - major, height) - minor))) <= tolerance:
+            frame3 = gp_Ax3(gp_Pnt(*map(float, origin)), gp_Dir(*map(float, axis)))
+            return gp_Torus(frame3, major, minor)
+    return None
 
 
 # --- edges -----------------------------------------------------------------------------------------------

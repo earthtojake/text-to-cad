@@ -14,7 +14,10 @@ applies only where the context matches ``when`` (elsewhere it is recorded ``not_
 and to the items matching ``item_when`` (``not_applicable`` too where no item carries the fields it reads: a
 mesh's walls, against a rule for supported walls). A family measured with nothing to judge -- no hole, no
 wall under its threshold -- passes, ``none found``. A figure that was not measured, or a family that was
-not, is no verdict: it is counted (``not_evaluated``), never passed.
+not, is no verdict: it is counted (``not_evaluated``), never passed. A set whose rules come in variants by
+one context key (``RuleSet.selector``: printing's ``technology``) has no figure for a value none of a rule
+id's variants names: that rule is ``not_evaluated`` too, and a set that evaluated nothing is said
+(``rules_none_evaluated``, a warning) rather than read as a pass.
 
 The standard library alone: the command resolves a rule set before it starts an environment.
 """
@@ -66,8 +69,9 @@ class Rule:
     scale_by: str | None = None  # the context key the limit is multiplied by
     when: Mapping[str, Any] = field(default_factory=dict)       # context key: value or tuple of values
     item_when: Mapping[str, Any] = field(default_factory=dict)  # item field: value or tuple of values
-    fix: str = ""               # what to change, formatted with value, limit, unit
+    fix: str = ""               # what to change, formatted with value, limit, unit, the context's and the item's plain values
     note: str = ""              # the source's own framing, paraphrased
+    detail: str = ""            # appended to the message, formatted the same: "edge {edge}, {void_angle_deg:.0f} deg"
 
     def __post_init__(self) -> None:
         if self.op not in ("min", "max"):
@@ -109,6 +113,10 @@ class RuleSet:
     sources: tuple[Source, ...]
     generic: bool = False
     note: str = ""
+    #: The context key the set's rules come in variants by (printing's ``technology``: one rule id, a limit and
+    #: a severity per technology). A rule id with no variant for the context's value is ``not_evaluated``
+    #: (the set gives no limit here: unverified), never ``not_applicable`` as a rule for another context is.
+    selector: str | None = None
 
     def __post_init__(self) -> None:
         known = {source.id for source in self.sources}
@@ -177,27 +185,44 @@ def _message(rule: Rule, rule_set: RuleSet, value: float, limit: float) -> str:
     relation = "under" if rule.op == "min" else "over"
     bound = "minimum" if rule.op == "min" else "maximum"
     source = rule_set.source(rule.source)
-    origin = (f"{rule_set.title}'s generic rule, no shop's" if rule_set.generic
+    origin = (f"generic rule from {source.publisher}, no shop's limit" if rule_set.generic
               else f"{source.publisher}, {source.title}")
     return f"{rule.what} {value:.4g} {rule.unit} is {relation} the {limit:.4g} {rule.unit} {bound} ({origin})"
 
 
-def _hint(rule: Rule, value: float, limit: float) -> str | None:
-    if not rule.fix:
-        return None
+def _format(template: str, rule: Rule, value: float, limit: float, context: Mapping[str, Any],
+            item: Mapping[str, Any]) -> str:
+    """``template`` with the failure's value and limit, its unit, the context's plain values and the failing
+    item's own (``{limit:g}``, ``{scs_radius_mm:.4g}``, ``{edge}``, ``{void_angle_deg:.0f}``; an item's ``xyz`` as
+    text); the text as written where a name is missing."""
+    fields = {key: found for key, found in context.items() if _plain(found)}
+    fields.update({key: found for key, found in item.items() if _plain(found)})
+    xyz = item.get("xyz")
+    if isinstance(xyz, (list, tuple)):
+        fields["xyz"] = ", ".join(f"{float(part):g}" for part in xyz)
     try:
-        return rule.fix.format(value=value, limit=limit, unit=rule.unit)
-    except (KeyError, IndexError, ValueError):
-        return rule.fix
+        return template.format(**fields, value=value, limit=limit, unit=rule.unit)
+    except (KeyError, IndexError, ValueError, TypeError):
+        return template
+
+
+def _hint(rule: Rule, value: float, limit: float, context: Mapping[str, Any], item: Mapping[str, Any]) -> str | None:
+    return _format(rule.fix, rule, value, limit, context, item) if rule.fix else None
 
 
 def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
              context: Mapping[str, Any]) -> tuple[list[CheckFinding], dict[str, Any]]:
-    """The verdicts of ``rule_set`` on ``report`` in ``context``: findings (one per failing item, at most
+    """The verdicts of ``rule_set`` on ``report`` in ``context``: findings (one per failing place, at most
     ``SHOWN_PER_RULE`` per rule, the rest counted in one more) and the record the report keeps of them
-    (``measurements["rules"]``: the set, every rule's outcome, every failure's value, limit and place)."""
+    (``measurements["rules"]``: the set, every rule's outcome, every failure's value, limit and place).
+
+    The record holds every failure. The findings are what a reader acts on, so they are fewer: failures of
+    one rule at one ref are one finding (``and N more at this ref``), and a warning on a figure that
+    already fails an error -- the same family, field and direction at the same place, a recommendation
+    beside the feasibility limit it exceeds -- is left to the record."""
     findings: list[CheckFinding] = []
     outcomes: list[dict[str, Any]] = []
+    shown: list[tuple[Rule, float, list[dict[str, Any]], dict[int, Mapping[str, Any]]]] = []
     for rule in rule_set.rules:
         if not rule.applies(context):
             # Recorded, never dropped: a rule that does not apply here is not a pass either.
@@ -223,6 +248,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             outcomes.append(outcome)
             continue
         failures: list[dict[str, Any]] = []
+        failing: dict[int, Mapping[str, Any]] = {}  # the item behind each failure, for its message; not recorded
         evaluated = unmeasured = 0
         for item in items:
             value = _number(item.get(rule.field))
@@ -232,6 +258,7 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             evaluated += 1
             if _fails(rule, value, limit):
                 failures.append({"value": value, "location": _where(item, rule), "xyz": item.get("xyz")})
+                failing[id(failures[-1])] = item
         failures.sort(key=lambda found: found["value"], reverse=rule.op == "max")
         # Measured and nothing to judge -- no hole, no wall under the family's own threshold -- is a pass: none
         # found. A figure the items do not carry is no pass.
@@ -241,13 +268,30 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
             outcome["reason"] = "none found: no feature it applies to" if not unmeasured else \
                 f"{rule.field} was not measured"
         outcomes.append(outcome)
-        for failure in failures[:SHOWN_PER_RULE]:
-            findings.append(CheckFinding(rule.severity, rule.id, _message(rule, rule_set, failure["value"], limit),
-                                         failure["location"], _hint(rule, failure["value"], limit)))
-        if len(failures) > SHOWN_PER_RULE:
+        if failures:
+            shown.append((rule, limit, failures, failing))
+    # Where an error names a figure at a place, a warning on the same figure there is implied.
+    failed_as_error = {(rule.family, rule.field, rule.op, failure["location"])
+                       for rule, _limit, failures, _items in shown if rule.severity == "error" for failure in failures}
+    for rule, limit, failures, failing in shown:
+        places: dict[str, list[dict[str, Any]]] = {}
+        for failure in failures:
+            if rule.severity == "warning" and (rule.family, rule.field, rule.op, failure["location"]) in failed_as_error:
+                continue
+            places.setdefault(failure["location"], []).append(failure)
+        for location, here in list(places.items())[:SHOWN_PER_RULE]:
+            worst = here[0]
+            item = failing.get(id(worst), {})
+            detail = f" ({_format(rule.detail, rule, worst['value'], limit, context, item)})" if rule.detail else ""
+            more = f" (and {len(here) - 1} more at this ref)" if len(here) > 1 else ""
             findings.append(CheckFinding(rule.severity, rule.id,
-                                         f"{len(failures) - SHOWN_PER_RULE} more of the same "
+                                         _message(rule, rule_set, worst["value"], limit) + detail + more,
+                                         location, _hint(rule, worst["value"], limit, context, item)))
+        if len(places) > SHOWN_PER_RULE:
+            findings.append(CheckFinding(rule.severity, rule.id,
+                                         f"{len(places) - SHOWN_PER_RULE} more of the same "
                                          f"(measurements.rules lists every one)", rule.family))
+    outcomes = _unselected(rule_set, context, outcomes)
     record = {
         "set": rule_set.name, "title": rule_set.title, "version": rule_set.version, "generic": rule_set.generic,
         "note": rule_set.note, "context": {key: value for key, value in context.items() if _plain(value)},
@@ -259,6 +303,39 @@ def evaluate(report: Mapping[str, Any], rule_set: RuleSet,
         "sources": [source.as_data() for source in rule_set.sources],
     }
     return findings, record
+
+
+def _unselected(rule_set: RuleSet, context: Mapping[str, Any], outcomes: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """``outcomes`` with a rule id whose every variant is for another value of the set's ``selector`` (and
+    nothing else) folded into one ``not_evaluated`` outcome: the set has no figure for this value."""
+    key = rule_set.selector
+    if key is None:
+        return outcomes
+    value = context.get(key)
+    by_id: dict[str, list[dict[str, Any]]] = {}
+    for outcome in outcomes:
+        by_id.setdefault(outcome["rule"], []).append(outcome)
+    rules_by_id: dict[str, list[Rule]] = {}
+    for rule in rule_set.rules:
+        rules_by_id.setdefault(rule.id, []).append(rule)
+    folded: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for outcome in outcomes:
+        ident = outcome["rule"]
+        variants = rules_by_id[ident]
+        selected_only = all(set(rule.when) == {key} for rule in variants)
+        if (selected_only and all(item["status"] == "not_applicable" for item in by_id[ident])):
+            if ident in seen:
+                continue
+            seen.add(ident)
+            first = variants[0]
+            folded.append({"rule": ident, "family": first.family, "field": first.field, "op": first.op,
+                           "unit": first.unit, "severity": first.severity, "source": first.source,
+                           "status": "not_evaluated",
+                           "reason": f"the rule set gives no limit for {key} {value}"})
+            continue
+        folded.append(outcome)
+    return folded
 
 
 def _plain(value: Any) -> bool:

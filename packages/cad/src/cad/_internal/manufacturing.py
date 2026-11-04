@@ -32,6 +32,7 @@ environment that holds the integration.
 from __future__ import annotations
 
 import json
+from collections import Counter
 import os
 from pathlib import Path
 from typing import Any
@@ -123,6 +124,10 @@ def _label(source: Any) -> Path:
     return Path(str(ident or getattr(source, "name", None) or source))
 
 
+_ORDER = {"error": 0, "warning": 1, "info": 2}
+_FIRST = frozenset({"not_watertight", "not_sound", "measurement_failed", "units_suspect"})
+
+
 def _failed(path: Path, message: str, code: str) -> CheckResult:
     return CheckResult(ok=False, path=path, findings=(CheckFinding("error", code, message),))
 
@@ -134,6 +139,7 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
     from cad._internal.dfm import _common, rules
 
     module = dfm.module(process)
+    resolved = _declared_material(report, resolved)
     found: list[CheckFinding] = [*_common.partial_findings(report), *_common.scale_findings(report),
                                  *(CheckFinding(**finding) for finding in report.pop("findings", None) or ()),
                                  *module.findings(report, resolved, candidates)]
@@ -143,6 +149,12 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
         verdicts, record = rules.evaluate(report, rule_set, module.context(report, resolved))
         report["rules"] = record
         found.extend(verdicts)
+        if not record["evaluated"] and record["outcomes"]:
+            found.append(CheckFinding(
+                "warning", "rules_none_evaluated",
+                f"the {rule_set.title} rule set judged nothing here: none of its rules has a limit for this "
+                f"part's context (every outcome is not_evaluated or not_applicable), so nothing is verified", "rules",
+                "give --rules generic, or a set that covers this technology or material"))
         if rule_set.generic:
             found.append(CheckFinding(
                 "info", "rules_generic",
@@ -156,11 +168,29 @@ def finish(label: Path, report: dict[str, Any], process: str, resolved: dict[str
     except ValueError as error:
         return _failed(label, f"a measurement was not a finite number, so the report is not JSON: {error}",
                        "not_finite")
+    # What blocks everything first (a mesh that is not watertight or not sound blocks slicing for every
+    # technology), then errors, warnings, and the facts and assumptions: what a reader acts on comes first.
+    found.sort(key=lambda finding: (finding.code not in _FIRST, _ORDER.get(finding.severity, 3)))
     ok = not any(finding.severity == "error" for finding in found)
     from cad._internal.validation_door import display_path
 
-    head = f"OK {display_path(label) if label.is_absolute() else label}: {process}"
-    line = f"{head} {module.summary(report, resolved, candidates)}" if ok else ""
+    measured = module.summary(report, resolved, candidates)
+    if ok:
+        line = f"OK {display_path(label) if label.is_absolute() else label}: {process} {measured}"
+        rules_record = report.get("rules") or {}
+        if rules_record and not rules_record.get("evaluated") and rules_record.get("outcomes"):
+            line += f"; nothing judged: the {rules_record.get('title')} rules have no limit for this part's context"
+    else:
+        # The failed line's digest: what was measured, then each failing rule with its count, so one line says
+        # what to fix before the findings are read.
+        failed: Counter[str] = Counter()
+        for outcome in (report.get("rules") or {}).get("outcomes") or ():
+            if outcome.get("status") == "failed" and outcome.get("severity") == "error":
+                failed[outcome["rule"]] += len(outcome.get("failures") or ())
+        for finding in found:
+            if finding.severity == "error" and finding.code and finding.code not in failed and "." not in finding.code:
+                failed[finding.code] += 1
+        line = f"{process} {measured}; failed: " + ", ".join(f"{code} x{count}" for code, count in failed.most_common())
     return CheckResult(ok=ok, path=label, findings=tuple(found), summary=line, measurements=report)
 
 
@@ -180,6 +210,29 @@ def measure(document_type: str, source: Any, process: str, resolved: dict[str, A
     except dfm.Unmeasured as failure:
         return _failed(label, failure.message, failure.code)
     return finish(label, {"process": process, **report}, process, resolved, candidates)
+
+
+def _declared_material(report: dict[str, Any], resolved: dict[str, Any]) -> dict[str, Any]:
+    """``resolved`` with the material the parts declare (``part.material = metals.aluminum()``, carried by the
+    document) where none was given and every part that declares one names the same material of the table;
+    the report says so (``material_declared``), or that the parts disagree (``material_mixed``: judged as
+    with no material)."""
+    if resolved.get("material") is not None:
+        return resolved
+    bodies = [body for body in report.get("bodies") or () if isinstance(body, dict)]
+    names = sorted({body["material_table"] for body in bodies if body.get("material_table")})
+    found = report.setdefault("findings", [])
+    if len(names) == 1:
+        declared = sorted({str(body["material"]) for body in bodies if body.get("material")})
+        found.append({"severity": "info", "code": "material_declared", "location": "bodies",
+                      "message": f"material {names[0]}, read from the part's declared material "
+                                 f"({', '.join(declared[:3])}): give --material to judge another"})
+        return {**resolved, "material": names[0]}
+    if len(names) > 1:
+        found.append({"severity": "info", "code": "material_mixed", "location": "bodies",
+                      "message": f"the parts declare different materials ({', '.join(names)}), so none is "
+                                 f"taken: give --material, or check each part on its own"})
+    return resolved
 
 
 def dfm_for(document_type: str) -> Any:
@@ -227,7 +280,8 @@ def dfm_for(document_type: str) -> Any:
           model's document id the engine holds (cad model dfm), or the handle its call returns.
         process: cnc, sheet, molding or printing.
         rules: the rule set the verdicts come from: generic (default), a shop's (protolabs, hubs, xometry, sendcutsend: those the process has), or none.
-        material: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits.
+        material: the part's material (aluminum, steel, stainless, abs, pc, nylon, ...): picks the material's limits;
+          default the material the part declares (part.material = metals.aluminum()), when every part agrees.
         units: the file's length units (mm, cm, m, in, ft), an STL's alone; default mm.
         axes: cnc: the milling machine's axes, 3, 4 or 5; default 3.
         turning: cnc: the part is turned on a lathe (its axis found), not milled.

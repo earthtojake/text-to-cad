@@ -700,8 +700,9 @@ or `none`. A failing rule is a finding coded by its id, at its place, naming its
 hint saying what to change; an error is a limit the part breaks, a warning a recommendation; every rule's
 outcome, its source and every failure are `measurements["rules"]`, and a figure not measured is never a
 pass. An error fails the check, as does a family that could not be measured (`measurement_failed`).
-`--material` picks a material's limits; `units` is an STL's alone, the other types declaring their own; an
-option of another process is refused by name. Every family, its JSON, every rule with its source and what
+`--material` picks a material's limits, and without it the material the parts declare is read
+(`part.material = metals.aluminum()`, when every part agrees: `material_declared`); `units` is an STL's alone, the
+other types declaring their own; an option of another process is refused by name. Every family, its JSON, every rule with its source and what
 each check cannot measure: [the manufacturing checks](src/cad/_internal/dfm/README.md).
 
 The trimesh integration's functions measure a mesh a program already holds, answering its report as data:

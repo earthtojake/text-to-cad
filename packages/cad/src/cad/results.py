@@ -85,7 +85,8 @@ class CheckResult:
             lines.append(self.summary or f"OK {_display(self.path)}")
         else:
             blocking = sum(1 for finding in self.findings if finding.severity == "error")
-            lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s)")
+            tail = f"; {self.summary}" if self.summary else ""
+            lines.append(f"FAILED {_display(self.path)}: {blocking or len(self.findings)} blocking finding(s){tail}")
         return lines
 
 
