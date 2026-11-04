@@ -21,7 +21,7 @@ from pathlib import Path
 from unittest import mock
 
 from cad_server import cli
-from cad_server._internal import channel as install_channel
+from cad_server._internal import channel as install_channel, file_lock
 from cad_server.analytics import (KEPT, NOTICE_ENV, PRIVACY_URL, Recorder, _post, choose, died, forget_pending, notice_text, notify, spool, status)
 from cad_server.cli import telemetry as telemetry_cli
 from cad_mcp.shim import initialize_params
@@ -634,7 +634,11 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(code, 200)
         self.assertEqual((off["share"], off["saved"]), (False, True))
         self.assertFalse(status(path=self.path)["sharing"])
-        self.assertNotIn("id", json.loads(self.path.read_text(encoding="utf-8"))["telemetry"])
+        # Read under the state folder's one lock: the deletion worker may be rewriting the file this
+        # moment, and Windows refuses to open a file while a rename replaces it.
+        with file_lock.state(self.path.parent):
+            kept = json.loads(self.path.read_text(encoding="utf-8"))["telemetry"]
+        self.assertNotIn("id", kept)
         # Wait for the actual deletion worker, not a clock interval.
         self.assertTrue(deleted.wait(10))
         deletion.stop()
