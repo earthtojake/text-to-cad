@@ -10,7 +10,7 @@ integrations), one part at a time.
 A worktree holds no built model (``models/`` is code; its STEP files are made by ``python model.py``),
 so point ``--root`` at a checkout that has built them, or at any folder of STEP files (KiCad's 3D
 models). Files are taken smallest first, ``--limit`` of them (``--max-mb`` caps a file's size), and the
-same order every run. Each row: the file, its size, the process, the wall time of the check, its
+same order every run (``--spread``: evenly across the sizes instead). Each row: the file, its size, the process, the wall time of the check, its
 ``ok``, how many findings of each severity, the rule ids that failed, the families that could not be
 measured, and the faces and parts the document holds; a check that raised records its error. The
 batch writes ``tmp/bench/dfm-<time>/rows.jsonl`` (appended after each check) and ``table.md`` (per
@@ -34,13 +34,19 @@ PROCESSES = ("cnc", "sheet", "molding", "printing")
 SUFFIXES = (".step", ".stp")
 
 
-def files(roots: Iterable[Path], limit: int | None, max_mb: float) -> list[Path]:
-    """The STEP files under ``roots``, smallest first (then by path), at most ``limit``, none over ``max_mb``."""
+def files(roots: Iterable[Path], limit: int | None, max_mb: float, spread: bool = False) -> list[Path]:
+    """The STEP files under ``roots``, smallest first (then by path), none over ``max_mb``: the ``limit``
+    smallest, or with ``spread`` ``limit`` of them evenly across the sizes."""
     found = {path.resolve() for root in roots for path in Path(root).rglob("*")
              if path.suffix.lower() in SUFFIXES and path.is_file()}
     chosen = sorted((path for path in found if path.stat().st_size <= max_mb * 1e6),
                     key=lambda path: (path.stat().st_size, str(path)))
-    return chosen[:limit] if limit else chosen
+    if not limit or limit >= len(chosen):
+        return chosen
+    if spread:
+        step = (len(chosen) - 1) / max(1, limit - 1)
+        return [chosen[round(index * step)] for index in range(limit)]
+    return chosen[:limit]
 
 
 def row_of(path: Path, process: str, result: Any, seconds: float) -> dict[str, Any]:
@@ -85,10 +91,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--process", action="append", choices=PROCESSES, help="a process to check (repeat; default all)")
     parser.add_argument("--limit", type=int, default=40, help="files, smallest first (0: all)")
     parser.add_argument("--max-mb", type=float, default=20.0, help="skip files over this many megabytes")
+    parser.add_argument("--spread", action="store_true", help="take --limit files evenly across the sizes")
     parser.add_argument("--out", type=Path, help="a fresh folder (default tmp/bench/dfm-<time>)")
     parser.add_argument("--dry-run", action="store_true", help="list the files and stop")
     args = parser.parse_args(argv)
-    chosen = files(args.root, args.limit or None, args.max_mb)
+    chosen = files(args.root, args.limit or None, args.max_mb, args.spread)
     processes = args.process or list(PROCESSES)
     if args.dry_run:
         for path in chosen:

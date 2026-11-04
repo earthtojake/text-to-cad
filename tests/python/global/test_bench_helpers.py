@@ -234,6 +234,7 @@ class DfmTableTest(unittest.TestCase):
             for name, size in (("b.step", 30), ("a.stp", 10), ("c.STEP", 20), ("d.txt", 1)):
                 (root / name).write_bytes(b"x" * size)
             self.assertEqual([path.name for path in dfm_bench.files([root], 2, 1.0)], ["a.stp", "c.STEP"])
+            self.assertEqual([path.name for path in dfm_bench.files([root], 2, 1.0, spread=True)], ["a.stp", "b.step"])
 
 
 if __name__ == "__main__":
