@@ -241,6 +241,18 @@ class PlotRoute(unittest.TestCase):
         self.assertEqual(status, 200, body[:400])
         payload = json.loads(body)
         self.assertEqual((payload["kind"], [page["path"] for page in payload["sheets"]]), ("schematic", ["/", "/Load/"]))
+        # The viewer reads the sheet on screen alone: with the hierarchy's index first, then without it.
+        api = self.opened(schematic, "kicad_sch")
+        status, _, body = self.request("GET", f"{api}/plot?sheet=/Load/")
+        page = json.loads(body)
+        self.assertEqual((status, [sheet["path"] for sheet in page["sheets"]]), (200, ["/Load/"]))
+        self.assertEqual([sheet["path"] for sheet in page["schematic"]["sheets"]], ["/", "/Load/"])
+        status, _, body = self.request("GET", f"{api}/plot?sheet=%2F&index=0")
+        page = json.loads(body)
+        self.assertEqual((status, [sheet["path"] for sheet in page["sheets"]], "schematic" in page), (200, ["/"], False))
+        status, _, body = self.request("GET", f"{api}/plot?sheet=/Power/")
+        self.assertEqual(status, 400, body[:400])
+        self.assertIn("has no sheet /Power/", json.loads(body)["error"])
 
     def test_a_file_that_is_no_board_is_a_400_saying_why(self) -> None:
         broken = self.folder / "broken.kicad_pcb"

@@ -1337,12 +1337,16 @@ class CadApp:
 
     def _handle_schematic(self, request, response, path):
         """``GET /api/v1/documents/kicad_sch/<id>/plot``: a KiCad schematic, its hierarchy read from its files,
-        every sheet a page of layers (``plots.py``). Each request reads the files as they are now, and the
-        answer is compressed where the browser takes it (``compressed``)."""
+        every sheet a page of layers (``plots.py``); ``?sheet=/Power/`` that sheet's page alone, ``index=0``
+        without the hierarchy's index. Each request reads the files as they are now, and the answer is
+        compressed where the browser takes it (``compressed``). A sheet the hierarchy has not is a 400."""
         from .compressed import send
         from .plots import schematic_payload_response
 
-        status, body = schematic_payload_response(path or "")
+        query = request.query
+        sheet = query.get("sheet") or None
+        index = (query.get("index") or "1") not in ("0", "false")
+        status, body = schematic_payload_response(path or "", sheet=sheet, index=index)
         if isinstance(body, bytes):
             send(request, response, status, body, "application/json; charset=utf-8")
             return

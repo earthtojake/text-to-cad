@@ -565,6 +565,8 @@ def _canonical(path: str) -> str:
     return "/" + "".join(f"{part}/" for part in parts)
 
 
-def schematic_payload_bytes(path: Path | str) -> bytes:
-    """The payload as compact JSON bytes, as the viewer's route answers it."""
-    return json.dumps(build_schematic_plot(path), separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+def schematic_payload_bytes(path: Path | str, *, sheets: Sequence[str] | None = None, index: bool = True) -> bytes:
+    """The payload as compact JSON bytes, as the viewer's route answers it (``build_schematic_plot``'s
+    ``sheets`` and ``index``)."""
+    return json.dumps(build_schematic_plot(path, sheets=sheets, index=index), separators=(",", ":"),
+                      ensure_ascii=False).encode("utf-8")

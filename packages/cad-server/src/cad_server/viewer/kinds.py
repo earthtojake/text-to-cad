@@ -42,7 +42,8 @@ EXPORTS = {"model": [*_SOLID, "xbf"], "step": [*_SOLID, "xbf"], "xbf": [*_SOLID,
            "glb": ["stl", "threemf"], "stl": ["threemf", "glb"], "3mf": ["stl", "glb"],
            "dxf": [], "urdf": [], "srdf": [], "sdf": [],
            "kicad_pcb": ["gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf"]}
-EXPORTS["kicad_sch"] = []  # a schematic's outputs are kicad-cli's (cad kicad_sch export), none the viewer's yet
+# A KiCad schematic's are KiCad's too (``cad kicad_sch export --to``, ``exports.SCHEMATIC``).
+EXPORTS["kicad_sch"] = ["pdf", "svg", "netlist", "bom"]
 
 
 def file_kind(path) -> str | None:
