@@ -145,11 +145,15 @@ document types', the integrations' and the CLI's.
    releases an update installed (`releases/<version>`: each one's environment, made by uv from its
    cache; the one before the current kept as the way back);
    never geometry and never source. In the
-   platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/` and
-   nowhere else there, each model document's bytes as it last built them: its own file, never a
-   declared or exported xbf (the same bytes), kept until a person deletes it -- nothing evicts it
-   -- and made again by a run of its script (a shape's by the program that handed it over), so a
-   restart opens every project at once; under `pycache/` the bytecode its own processes compile of the libraries they load
+   platform's cache folder (`~/.cache/cad`, on Windows too) it keeps, under `documents/`, the
+   engine's cache for documents, and nowhere else there: each model document's bytes as it last
+   built them, its own file, never a declared or exported xbf (the same bytes), made again by a run
+   of its script (a shape's by the program that handed it over), so a restart opens every project
+   at once; and, for a file document, the views derived from its bytes under that document, keyed by
+   those bytes (a KiCad board's plot, its refilled pours, its DRC and its kept exports:
+   `documents/<id>/kicad/<key>/`), so a changed file is a new entry and nothing stale is served --
+   every one regenerable, kept until the document is deleted (`cad delete`, the home's Delete), which
+   deletes it with them -- nothing evicts it; under `pycache/` the bytecode its own processes compile of the libraries they load
    (`PYTHONPYCACHEPREFIX`, a folder per installation), regenerable too, so nothing is written
    beside a library or a model; and under `base/` the environment the engine's kernel processes run in, an
    installation's base, `cad[build123d]` at its release, made by uv from its cache on first need, and
@@ -158,8 +162,8 @@ document types', the integrations' and the CLI's.
    current kept as the way back (the engine's **Running a model**). The code stays the only source of truth: a document is what its
    last run made, the engine never checks the code on disk against it, and nothing reruns -- when
    to run the code again is the agent's call. It writes no
-   sidecar, record of a build beside a model, index, memo, mesh or parsed document, and no derived file
-   beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
+   sidecar, record of a build beside a model, index, memo, mesh or parsed document (but the file
+   documents' derived views above, in the document cache), and no derived file beside an input. A model whose document -- in its warm worker, else the cache -- holds the closure the
    model has now is not run, whatever files it declares: they are exports of the document, written
    after it. Explicit viewer exports write only the requested
    artifact to managed temporary storage for delivery; no source or intermediate XBF

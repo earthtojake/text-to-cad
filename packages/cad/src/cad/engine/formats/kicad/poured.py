@@ -11,9 +11,11 @@ fails, the board is plotted as saved and the payload says so: ``pours`` is ``{"r
 The payload is a function of what it is read from, so it is kept by that (``key``): a sha256 of the board's
 bytes, its ``.kicad_pro``'s and its ``.kicad_dru``'s, and the source of the code that plots it (this
 package's modules). A changed file is a new key, so nothing stale is ever read. It is kept on disk, gzipped,
-under the engine's cache folder (``<cache>/kicad/<key>/plot.json.gz``: ``cached``), where the snapshot's
-render process reads what the engine plotted; a plot as saved (no refill) is never kept there, so a later
-run with KiCad refills it.
+in the engine's document cache beside the board's own document, under its document id (the board file's,
+``ids.file_id``) and its key (``<cache>/documents/<id>/kicad/<key>/plot.json.gz``: ``folder``, ``cached``), so
+deleting the document (``cad delete``, the home's Delete) deletes it too, and where the snapshot's render
+process reads what the engine plotted; a plot as saved (no refill) is never kept there, so a later run with
+KiCad refills it.
 """
 
 from __future__ import annotations
@@ -61,26 +63,31 @@ def key(path: Path | str, *, extra: bytes = b"") -> str:
     return digest.hexdigest()
 
 
-def folder(board_key: str) -> Path:
-    """Where what is made of the board of ``board_key`` is kept: ``<cache>/kicad/<key>``."""
+def folder(path: Path | str, board_key: str) -> Path:
+    """Where what is made of the board at ``path`` with ``board_key`` (``key``) is kept: under its document in
+    the engine's document cache, ``<cache>/documents/<the file's document id>/kicad/<key>``, which deleting
+    the document removes with it (``registry.Registry.delete``)."""
+    from cad.engine.ids import file_id
     from cad.engine.places import cache_dir
 
-    return cache_dir() / "kicad" / board_key
+    return cache_dir() / "documents" / file_id(path) / "kicad" / board_key
 
 
-def cached(board_key: str) -> bytes | None:
-    """The refilled payload kept for ``board_key`` (its JSON bytes), or None."""
+def cached(path: Path | str, board_key: str | None = None) -> bytes | None:
+    """The refilled payload kept for the board at ``path`` (``board_key``: its key, worked out when not
+    given), its JSON bytes, or None."""
     try:
-        return gzip.decompress((folder(board_key) / _PLOT).read_bytes())
+        return gzip.decompress((folder(path, board_key or key(path)) / _PLOT).read_bytes())
     except (OSError, EOFError, gzip.BadGzipFile):
         return None
 
 
-def _keep(board_key: str, data: bytes) -> None:
-    """``data`` kept for ``board_key``, written whole or not at all (``atomic_replace.put``)."""
+def _keep(path: Path, board_key: str, data: bytes) -> None:
+    """``data`` kept for the board at ``path`` with ``board_key``, written whole or not at all
+    (``atomic_replace.put``)."""
     from cad.engine.atomic_replace import put
 
-    target = folder(board_key) / _PLOT
+    target = folder(path, board_key) / _PLOT
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         put(target, lambda staged: staged.write_bytes(gzip.compress(data, 1, mtime=0)), compare=False)
@@ -104,7 +111,7 @@ def payload(path: Path | str, *, refill: Refill | None = None, board_key: str | 
 
     path = _checked(Path(path))
     board_key = board_key or key(path)
-    found = cached(board_key)
+    found = cached(path, board_key)
     if found is not None:
         return found, True
     why = f"{why}: the pours are drawn as the file saved them"
@@ -118,7 +125,7 @@ def payload(path: Path | str, *, refill: Refill | None = None, board_key: str | 
                       f"drawn as the file saved them"
             else:
                 body = _with_pours(build_plot(path, data), {"refilled": True})
-                _keep(board_key, body)
+                _keep(path, board_key, body)
                 return body, True
     return _with_pours(build_plot(path), {"refilled": False, "warning": why}), False
 

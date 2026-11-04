@@ -601,7 +601,7 @@ failure: the next asker makes it again.
 | `door.py` | how a client reaches the daemon on POSIX: the door, a named pipe, and a pair of pipes per connection (**The door**) |
 | `progress.py` | where a build is: the engine's stages heard where they begin, each body a model's body runs by name, the frames, and the terminal's bar |
 | `atomic_replace.py` | the one rename every written file is moved into place with: the library's bounded Windows retry, kept in the engine |
-| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
+| `cache.py` | the document cache: each model document's bytes in the cache folder (`documents/<id>/document.xbf`; a file document's derived views, a board's, beside it), saved when idle, at its drain and at shutdown, once per revision; the index a restart reads; kept until a person deletes it, with no cap (`Cache`) |
 | `registry.py` | the registry of documents in the user's state folder (`Registry`: `get`, `put`, `list`, `delete`), the user's page token (`token`, `put_token`), the engine's record (`engine`, `put_engine`: its rolled port), and the one owner of every write under that folder (`Folder`); the server's, on the records' shape (`records`), of the folders `places` names (`FACTORY`: a test's other registry) |
 | `identity.py` | identity beyond the formula, on records and file names alone (no kernel, no XBF read): an explicit name's claim in its folder (`claimed`), a shape refused a declared model's id (`handed`), a moved script's record re-attached (`reattach`, `repoint`, `relocated`), and the startup identity migration (`migrate`) |
 | `cli.py` | the verbs as commands, the server's: the operations `export`, `snapshot` and `inspect` (each type's, `cad <type> <operation>`), and `serve`, `status`, `stop`, `delete`, `server` (`parser_for`, `run`; also `python -m cad_server.engine VERB`), each said in `said`'s words |
@@ -1376,7 +1376,10 @@ file -- the engine keeps `documents/<id>/document.xbf` in the cache folder its h
 `%LOCALAPPDATA%\cad`; releases before 0.10 kept theirs in the same places named `cadgen`, which no build reads), written through a `registry.Folder` with `replace_atomic`, its record staying in the state
 folder. The bytes are the hold's (`document.to_bytes`: the document, its closure record and its
 compiled animations), the engine's own file always: a declared `@xbf` or an exported xbf is the
-author's, never used as the cache nor pointed at by it. The folder is shared with any 0.7 install's
+author's, never used as the cache nor pointed at by it. A file's document has no bytes there, but the views
+derived from its bytes go under it, keyed by them: a KiCad board's plot, refilled pours, DRC and kept exports,
+`documents/<id>/kicad/<key>/` (`formats/kicad/poured.folder`), regenerable, and removed with the document
+(`Registry.delete` removes `documents/<id>` whole). The folder is shared with any 0.7 install's
 store: the engine's cache reads, writes, sizes and removes only under `documents/` (its processes'
 bytecode is under `pycache/`), and lists, counts and removes nothing else there (`cad doctor
 --prune` removes 0.7's store once nothing has written it for seven days). It is written never on the run path:
@@ -1782,7 +1785,9 @@ of the file's warm render process; `daemon=False` serves each file once for all 
 `formats/kicad/plot.py` builds the plot payload from the board and its sibling project, its pours KiCad's
 refill of a copy (`formats/kicad/poured.py`: the server's `_internal/boards.refill`, kicode in the
 environment of `cad[kicad]`), kept by the bytes it reads (`poured.key`) in the engine's memory
-(`viewer/plots.py`) and gzipped under `<cache>/kicad/<key>/`, which a board's snapshot is drawn from too
+(`viewer/plots.py`) and gzipped in the document cache beside the board's document,
+`<cache>/documents/<its id>/kicad/<key>/` (with its DRC and its kept exports, `_internal/boards.py`; a
+`cad delete` of the board deletes them with it), which a board's snapshot is drawn from too
 (`renders.py` keeps it before the render process reads it; a payload drawn as saved says why in
 `pours` and in the snapshot's warnings). `render/board.py` paints the same layer primitives
 with Pillow in sheet millimetres, including top/bottom mirroring, Display presets, saved

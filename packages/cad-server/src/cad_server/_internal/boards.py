@@ -4,8 +4,10 @@ the board's bytes.
 The engine holds no kicode of its own; KiCad runs in the environment of ``cad[kicad]``
 (``integration_env``, made once, on first need, here in the engine: ``engine=False``), and every product
 is kept by the board's key (``cad.engine.formats.kicad.poured.key``: its bytes, its project's and rules',
-and the plotting code's), under ``<cache>/kicad/<key>/``, so a changed file is a new key and nothing stale
-is ever read:
+and the plotting code's), beside the board's document in the engine's document cache,
+``<cache>/documents/<the board's document id>/kicad/<key>/`` (``poured.folder``), so a changed file is a new
+key and nothing stale is ever read, and deleting the document (``cad delete``, the home's Delete) deletes
+them with it:
 
 * ``refill``: KiCad's refill of a copy's zones (``cad.kicad._refill``), which ``poured.payload`` plots the
   pours from (``CAD_KICAD_REFILL=0`` turns it off: the pours as saved, and no kicode fetched to draw a board;
@@ -84,7 +86,7 @@ def drc(board: Path, board_key: str) -> dict[str, Any]:
     """KiCad's DRC of the saved board, as ``cad kicad_pcb drc --json`` prints it: kept for ``board_key``."""
     from cad.engine.formats.kicad.poured import folder
 
-    kept = folder(board_key) / "drc.json"
+    kept = folder(board, board_key) / "drc.json"
     try:
         return json.loads(kept.read_text(encoding="utf-8"))
     except (OSError, ValueError):
@@ -107,23 +109,23 @@ def _write(target: Path, data: bytes) -> None:
         pass
 
 
-def exported(board_key: str, kind: str, filename: str) -> Path | None:
+def exported(board: Path, board_key: str, kind: str, filename: str) -> Path | None:
     """The download an earlier export of these bytes as ``kind`` made, kept; None for none."""
     from cad.engine.formats.kicad.poured import folder
 
     if kind not in KEPT:
         return None
-    path = folder(board_key) / "exports" / kind / filename
+    path = folder(board, board_key) / "exports" / kind / filename
     return path if path.is_file() else None
 
 
-def keep_export(board_key: str, kind: str, made: Path) -> None:
+def keep_export(board: Path, board_key: str, kind: str, made: Path) -> None:
     """The download ``made`` kept for these bytes as ``kind``."""
     from cad.engine.formats.kicad.poured import folder
 
     if kind not in KEPT:
         return
-    target = folder(board_key) / "exports" / kind / made.name
+    target = folder(board, board_key) / "exports" / kind / made.name
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
         partial = target.with_name(f".{target.name}.part")

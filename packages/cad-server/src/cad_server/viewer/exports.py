@@ -192,7 +192,7 @@ class ExportJobs(Jobs):
         board = Path(source["path"])
         # An export of these bytes made before is the same file (``boards.KEPT``): answered without KiCad.
         board_key = key(board)
-        kept = boards.exported(board_key, spec["format"], target.name)
+        kept = boards.exported(board, board_key, spec["format"], target.name)
         if kept is not None:
             shutil.copyfile(kept, target)
             return {"written": [str(target)], "warnings": [], "kept": True}
@@ -211,7 +211,7 @@ class ExportJobs(Jobs):
         pack(written, out, target)
         shutil.rmtree(out, ignore_errors=True)
         if key(board) == board_key:
-            boards.keep_export(board_key, spec["format"], target)
+            boards.keep_export(board, board_key, spec["format"], target)
         return {"written": [str(target)], "warnings": list(found.get("warnings") or ())}
 
     def create(self, payload):

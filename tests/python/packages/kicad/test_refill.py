@@ -35,7 +35,7 @@ class Refill(unittest.TestCase):
             self.assertEqual(saved, board.read_bytes(), "the person's file is never written")
             self.assertEqual(["blinky.kicad_pcb", "cache"], sorted(path.name for path in Path(folder).iterdir()))
             # Kept by the board's bytes: the next ask (a snapshot's render process) reads it without KiCad.
-            self.assertEqual(body, cached(key(board)))
+            self.assertEqual(body, cached(board, key(board)))
             self.assertEqual((body, True), payload(board))
             pours = [item for layer in json.loads(body)["sheets"][0]["layers"] for item in layer["items"]
                      if item.get("pour")]
