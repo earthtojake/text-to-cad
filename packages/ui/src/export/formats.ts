@@ -38,11 +38,21 @@ const BOARD: ExportChoice[] = [
   { format: 'dxf', label: 'DXF', extension: '-outline.dxf' },
 ];
 
+// A KiCad schematic's, each written by KiCad (`cad kicad_sch export --to <format>`): the PDF of every sheet,
+// an SVG a sheet (one .zip), KiCad's netlist and the BOM.
+const SCHEMATIC: ExportChoice[] = [
+  { format: 'pdf', label: 'PDF', extension: '.pdf' },
+  { format: 'svg', label: 'SVG', extension: '-svg.zip' },
+  { format: 'netlist', label: '', labelKey: 'export.format.netlist', extension: '.net' },
+  { format: 'bom', label: 'BOM', extension: '-bom.csv' },
+];
+
 /**
  * What the file on screen saves as, from its kind and what the view already holds, so the menu has
  * nothing to wait for: an engine document (a STEP, an xbf, a model held by its id) as STEP, STL,
  * 3MF, GLB and XBF, and DXF where the view draws it flat (`planar`); a mesh file as the other two
- * mesh kinds; a KiCad board as each of KiCad's fabrication, assembly and 3D files. A format a document
+ * mesh kinds; a KiCad board as each of KiCad's fabrication, assembly and 3D files; a KiCad schematic as
+ * KiCad's PDF, SVGs, netlist and BOM. A format a document
  * cannot be written in is its job's to refuse, saying why. Any other file has none.
  */
 export function exportChoices({ file, planar }: Pick<ExportView, 'file' | 'planar'>): ExportChoice[] {
@@ -53,5 +63,6 @@ export function exportChoices({ file, planar }: Pick<ExportView, 'file' | 'plana
   if (/\.stl$/i.test(file)) return [THREEMF, GLB];
   if (/\.3mf$/i.test(file)) return [STL, GLB];
   if (/\.kicad_pcb$/i.test(file)) return BOARD;
+  if (/\.kicad_sch$/i.test(file)) return SCHEMATIC;
   return [];
 }
