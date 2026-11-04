@@ -674,10 +674,14 @@ def _classify(pts: np.ndarray, nrm: np.ndarray, p: np.ndarray, cast: Cast, scale
         while left.any() and len(chosen) < 4:
             gain = (frees & left[None, :]).sum(axis=1) - penalty
             pick = int(np.argmax(gain))
-            if not axis[pick] and (axis & plain).any():
-                best_axis = int(np.argmax(np.where(axis & plain, gain, -np.inf)))
-                if gain[best_axis] >= 0.9 * gain[pick] and gain[best_axis] > 0:
-                    pick = best_axis
+            pool = axis & plain
+            if pool.any():
+                top = float(np.max(np.where(pool, gain, -np.inf)))
+                if top >= 0.9 * gain[pick] and top > 0:
+                    # Among world axes freeing about as many points (within a fiftieth: a symmetric part's
+                    # sampling decides the rest, and it differs from platform to platform), the first in
+                    # the candidates' order, so +x before +y on every machine.
+                    pick = int(np.flatnonzero(pool & (gain >= 0.98 * top))[0])
             if gain[pick] <= 0:
                 break
             chosen.append(pick)
