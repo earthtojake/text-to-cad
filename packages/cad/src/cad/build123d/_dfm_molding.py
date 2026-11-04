@@ -156,6 +156,7 @@ class _Geometry:
     _edges: list[Any] | None = None
     _rays: Any = None
     _mesh: Any = None
+    _intersectors: dict[int, Any] | None = None
     _vertices: dict[int, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -209,24 +210,60 @@ class _Geometry:
 
     def cast(self, origins: np.ndarray, directions: np.ndarray) -> np.ndarray:
         """The distance from each origin to the first face along its direction, inf for none."""
-        found = np.full(len(origins), np.inf)
-        skip = 1e-3 * self.eps
-        for index, (origin, direction) in enumerate(zip(origins, directions)):
-            hit = self.rays.first(origin, direction, skip=skip)
-            if hit is not None:
-                found[index] = hit[0]
-        return found
+        return self.cast_faces(origins, directions)[0]
 
     def cast_faces(self, origins: np.ndarray, directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """``cast``, with the ordinal of the face each ray first meets (0 for none)."""
-        found = np.full(len(origins), np.inf)
-        faces = np.zeros(len(origins), dtype=int)
+        """``cast``, with the ordinal of the face each ray first meets (0 for none). The rays are pruned all at
+        once by the faces' boxes (``Rays.boxes``, one slab test over every ray and box), then each meets its
+        candidate faces exactly, nearest box first, until no nearer crossing can follow."""
+        from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
+        from OCP.IntCurvesFace import IntCurvesFace_Intersector
+
+        o_all = np.asarray(origins, dtype=float).reshape(-1, 3)
+        d_all = np.asarray(directions, dtype=float).reshape(-1, 3)
+        d_all = d_all / np.where(np.linalg.norm(d_all, axis=1) > 0, np.linalg.norm(d_all, axis=1), 1.0)[:, None]
+        found = np.full(len(o_all), np.inf)
+        faces = np.zeros(len(o_all), dtype=int)
+        rays = self.rays
+        lows, highs = rays.boxes[None, :, :3], rays.boxes[None, :, 3:]
         skip = 1e-3 * self.eps
-        for index, (origin, direction) in enumerate(zip(origins, directions)):
-            hit = self.rays.first(origin, direction, skip=skip)
-            if hit is not None:
-                found[index] = hit[0]
-                faces[index] = self.part.face_ordinal(hit[1])
+        if self._intersectors is None:
+            self._intersectors = {}
+        for start in range(0, len(o_all), 256):
+            o, d = o_all[start:start + 256, None, :], d_all[start:start + 256, None, :]
+            flat = np.abs(d) <= 1e-300
+            with np.errstate(divide="ignore", invalid="ignore"):
+                inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d))
+                t1, t2 = (lows - o) * inverse, (highs - o) * inverse
+            lo = np.where(flat, -np.inf, np.minimum(t1, t2)).max(axis=2)
+            hi = np.where(flat, np.inf, np.maximum(t1, t2)).min(axis=2)
+            across = np.all(~flat | ((lows <= o) & (o <= highs)), axis=2)
+            mask = across & (lo <= hi) & (hi >= skip)
+            for row in range(mask.shape[0]):
+                index = np.flatnonzero(mask[row])
+                if not len(index):
+                    continue
+                entries = np.maximum(lo[row, index], skip)
+                order = np.argsort(entries)
+                ray = start + row
+                line = gp_Lin(gp_Pnt(*o_all[ray]), gp_Dir(*d_all[ray]))
+                best, which = math.inf, 0
+                for face, entry in zip(index[order], entries[order]):
+                    if entry > best:
+                        break
+                    intersector = self._intersectors.get(int(face))
+                    if intersector is None:
+                        intersector = self._intersectors[int(face)] = IntCurvesFace_Intersector(
+                            rays.faces[int(face)], 1e-7)
+                    intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
+                    if not intersector.IsDone():
+                        continue
+                    for k in range(1, intersector.NbPnt() + 1):
+                        w = float(intersector.WParameter(k))
+                        if skip <= w < best:
+                            best, which = w, int(face) + 1
+                if which:
+                    found[ray], faces[ray] = best, which
         return found, faces
 
     def vertices(self, ordinal: int) -> np.ndarray:
@@ -572,9 +609,8 @@ def _thickness_subset(geo: _Geometry) -> np.ndarray:
 def _thickness_part(geo: _Geometry) -> _Thickness:
     subset = _thickness_subset(geo)
     points, normals, owner = geo.points[subset], geo.normals[subset], geo.owner[subset]
-    ray = np.array([geo.rays.thickness(point, normal) or np.nan for point, normal in zip(points, normals)],
-                   dtype=float)
-    ray = np.where(np.isfinite(ray), ray, np.inf)
+    # the exact ray straight through, cast from just inside the face
+    ray = geo.cast(points - normals * geo.eps, -normals) + geo.eps
     vertices, triangles, owners = geo.mesh
     cap = np.full(len(geo.points), np.inf)
     for ordinal, surface in enumerate(geo.surfaces, start=1):
@@ -901,8 +937,9 @@ def _corners_part(geo: _Geometry, thick: _Thickness, nominal: float | None, used
     for ordinal, surface in enumerate(geo.surfaces, start=1):
         if surface.kind not in ("cylinder", "torus") or not surface.concave or ordinal in used:
             continue
-        joins = links.get(ordinal, [])
-        if len(joins) < 2 or not all(edge.smooth for _other, edge in joins):
+        # A fillet: joined tangentially to at least two faces (its ends may meet caps at sharp edges).
+        joins = [(other, edge) for other, edge in links.get(ordinal, []) if edge.smooth]
+        if len(joins) < 2:
             continue
         radius = float(surface.minor_radius if surface.kind == "torus" else surface.radius or 0.0)
         reference = wall(*(other for other, _edge in joins))

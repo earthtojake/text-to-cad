@@ -174,6 +174,11 @@ INNER_EDGES: list[Box3] = [_box((-29, -19, 1), (29, 19, 21))]
 
 CASES = [
     Case("clean_tray", tray, absent=CLEAN, mesh="coarse"),
+    Case("shallow_draft_tray", lambda: tray(draft=1.0), expect={"molding.draft": SIDES + INSIDES},
+         absent=tuple(rule for rule in CLEAN if rule != "molding.draft")),
+    Case("sealed_void", lambda: bd.Box(30, 30, 30, align=(bd.Align.CENTER, bd.Align.CENTER, bd.Align.MIN))
+         - bd.Pos(0, 0, 15) * bd.Sphere(6), expect={"molding.undercut_unreleasable": [_box((-7, -7, 8), (7, 7, 22))]},
+         absent=("molding.undercut",)),
     Case("undrafted_tray", lambda: tray(draft=0.0, fillet=0.0),
          expect={"molding.draft_min": SIDES + INSIDES, "molding.inside_corner_radius": INNER_EDGES},
          absent=("molding.undercut", "molding.thick_section", "molding.wall_min", "molding.wall_max",

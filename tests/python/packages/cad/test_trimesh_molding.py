@@ -830,5 +830,52 @@ class ZeroToleranceIsHonouredTest(unittest.TestCase):
             self.assertEqual(face["opens_toward"], "none")
 
 
+
+class SharedFamiliesTest(unittest.TestCase):
+    """The families a mesh shares with exact geometry (``meshops_molding``), each read off an STL of a part
+    whose answer is the construction's, at x, y, z."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        folder = tempfile.TemporaryDirectory()
+        cls.addClassCleanup(folder.cleanup)
+        plate = extrude(Rectangle(80, 60), 2, taper=3)
+        ribbed = plate + Pos(-15, 0, 5) * Box(2.0, 50, 6) + Pos(15, 0, 5) * Box(1.0, 50, 6)
+        bossed = plate + Pos(0, 0, 2) * Cylinder(4, 8, align=(Align.CENTER, Align.CENTER, Align.MIN)) \
+            - Pos(0, 0, 2) * Cylinder(1.5, 8, align=(Align.CENTER, Align.CENTER, Align.MIN))
+        holed = Box(30, 20, 20) - Pos(10, 0, 0) * Cylinder(3, 20, rotation=(0, 90, 0))
+        cls.reports = {}
+        for name, part in (("ribbed", ribbed), ("bossed", bossed), ("holed", holed)):
+            path = Path(folder.name) / f"{name}.stl"
+            export_stl(part, str(path), tolerance=0.01, angular_tolerance=0.1)
+            cls.reports[name] = cad.stl.check(str(path), process="molding", material="abs").measurements
+
+    def test_thickness_ribs_and_corners(self) -> None:
+        report = self.reports["ribbed"]
+        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 2.0, places=2)
+        ribs = sorted(report["ribs"]["items"], key=lambda rib: rib["thickness_mm"])
+        self.assertEqual([round(rib["thickness_mm"], 2) for rib in ribs], [1.0, 2.0])
+        self.assertEqual([round(rib["height_mm"], 2) for rib in ribs], [6.0, 6.0])
+        self.assertEqual([round(rib["thickness_ratio"], 2) for rib in ribs], [0.5, 1.0])
+        # A rib's sides at its root are the rib's to judge; its square ends meet the plate at sharp corners.
+        self.assertEqual(report["corners"]["count"], 4)
+        self.assertEqual({round(abs(corner["xyz"][1]), 1) for corner in report["corners"]["items"]}, {25.0})
+        self.assertTrue(report["notes"])
+
+    def test_a_boss_and_its_core(self) -> None:
+        (boss,) = self.reports["bossed"]["bosses"]["items"]
+        self.assertAlmostEqual(boss["od_mm"], 8.0, delta=0.05)
+        self.assertAlmostEqual(boss["id_mm"], 3.0, delta=0.05)
+        self.assertAlmostEqual(boss["height_mm"], 8.0, delta=0.01)
+
+    def test_a_side_hole_one_slide_and_a_flat_parting(self) -> None:
+        report = self.reports["holed"]
+        (item,) = report["undercuts"]["items"]
+        self.assertEqual((item["release"], item["side_actions"]), ("side_action", ["+x"]))
+        self.assertAlmostEqual(item["stroke_mm"], 15.0, delta=0.5, msg="the blind hole's depth")
+        self.assertTrue(report["parting"]["flat_parting_possible"])
+        self.assertAlmostEqual(report["envelope"]["items"][0]["span_major_mm"], 30.0, places=2)
+        self.assertGreater(report["clamp"]["tons"], 0)
+
 if __name__ == "__main__":
     unittest.main()

@@ -57,7 +57,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertRegex(out.splitlines()[-1], r"^OK .*box\.stl: printing: 6000 mm3, 1 body\(ies\); overhangs under 30 deg")
 
     def test_a_mistake_is_refused_before_anything_is_read(self) -> None:
-        for argv, words in (((str(self.box),), "give --process molding or printing"),
+        for argv, words in (((str(self.box),), "give --process cnc, sheet, molding or printing"),
                             ((str(self.box), "--process", "casting"), "not 'casting'"),
                             ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's"),
                             ((str(self.box), "--process", "printing", "--pull", "z"), "--pull is not printing's"),

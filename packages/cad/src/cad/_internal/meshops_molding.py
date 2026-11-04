@@ -149,14 +149,18 @@ def near_outline(projection: dict[str, Any], points: np.ndarray, band_cells: flo
     rows, cols = np.nonzero(outline)
     if not len(rows):
         return np.zeros(len(pts), dtype=bool)
-    reach = int(math.ceil(band_cells))
-    dilated = np.zeros_like(outline)
     height, width = outline.shape
-    for dy in range(-reach, reach + 1):
-        for dx in range(-reach, reach + 1):
-            if dx * dx + dy * dy > band_cells * band_cells:
-                continue
-            dilated[np.clip(rows + dy, 0, height - 1), np.clip(cols + dx, 0, width - 1)] = True
+    key = ("_dilated", float(band_cells))
+    dilated = projection.get(key)
+    if dilated is None:
+        reach = int(math.ceil(band_cells))
+        dilated = np.zeros_like(outline)
+        for dy in range(-reach, reach + 1):
+            for dx in range(-reach, reach + 1):
+                if dx * dx + dy * dy > band_cells * band_cells:
+                    continue
+                dilated[np.clip(rows + dy, 0, height - 1), np.clip(cols + dx, 0, width - 1)] = True
+        projection[key] = dilated
     index = np.floor((pts - projection["origin"]) / projection["cell"]).astype(int)
     inside = (index[:, 0] >= 0) & (index[:, 0] < width) & (index[:, 1] >= 0) & (index[:, 1] < height)
     found = np.zeros(len(pts), dtype=bool)
@@ -389,7 +393,7 @@ def _freed_after(points: np.ndarray, side: np.ndarray, pulls: Sequence[np.ndarra
             if len(found):
                 # Bisect between the last stroke that did not clear and this one.
                 lo, hi = np.full(len(found), previous), np.full(len(found), float(stroke))
-                for _ in range(7):
+                for _ in range(5):
                     mid = 0.5 * (lo + hi)
                     ok = clear(found, mid)
                     hi = np.where(ok, mid, hi)
@@ -438,6 +442,8 @@ def classify_undercut(points: np.ndarray, normals: np.ndarray, pull: np.ndarray,
     n = len(pts)
     frees = np.zeros((len(candidates), n), dtype=bool)
     for index, side in enumerate(candidates):
+        if index == len(lateral) and frees[:index].all(axis=1).any():
+            break  # one plain slide frees it all: no angled one is needed
         leans = nrm @ side >= -tol
         if leans.any():
             frees[index] = leans & ~np.isfinite(cast(pts, np.repeat(side[None, :], n, axis=0)))
@@ -487,7 +493,7 @@ def _strokes(points: np.ndarray, side: np.ndarray, pull: np.ndarray, cast: Cast,
     """How far a slide along ``side`` travels before each point clears a pull (``scale`` where none does)."""
     if not len(points):
         return np.zeros(0)
-    strokes = np.unique(np.concatenate([np.geomspace(max(scale * 2e-4, 1e-4), scale, 32), [scale]]))
+    strokes = np.unique(np.concatenate([np.geomspace(max(scale * 2e-4, 1e-4), scale, 20), [scale]]))
     freed = _freed_after(points, side, (pull, -pull), cast, strokes)
     return np.where(np.isfinite(freed), freed, scale)
 
