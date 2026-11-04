@@ -42,6 +42,9 @@ __all__ = ["measure"]
 #: Points sampled per part, spread over its faces by area (each face at least ``_LEAST_PER_FACE``).
 _SAMPLES = 2400
 _LEAST_PER_FACE = 12
+_FACE_POINTS = 6000
+#: Rays the undercut release search spends on one part, at most (largest features first).
+_RELEASE_RAYS = 200000
 _MOST_PER_FACE = 400
 #: The denser set of surface points the rolling ball is tested against.
 _BALL_POINTS = 6000
@@ -108,8 +111,10 @@ def _samples(face: Any, count: int) -> list[tuple[np.ndarray, np.ndarray, float]
     spacing = math.sqrt(total / max(1, count))
     longest = np.max(np.stack([np.linalg.norm(b - a, axis=1), np.linalg.norm(c - b, axis=1),
                                np.linalg.norm(a - c, axis=1)]), axis=0)
-    found: list[tuple[np.ndarray, np.ndarray, float]] = []
-    for (ia, ib, ic), area, edge in zip(corners, areas, longest):
+    # Every sub-triangle centre first (cheap), then as many as the face asks for, evenly, and only those
+    # mapped onto the surface.
+    picks: list[tuple[int, float, float, float]] = []
+    for index, ((ia, ib, ic), area, edge) in enumerate(zip(corners, areas, longest)):
         if area <= 0.0:
             continue
         cuts = int(min(24, max(1, math.ceil(max(edge / spacing, math.sqrt(area / spacing ** 2))))))
@@ -125,16 +130,30 @@ def _samples(face: Any, count: int) -> list[tuple[np.ndarray, np.ndarray, float]
         if wanted < len(weights):
             weights = [weights[k] for k in np.unique(np.linspace(0, len(weights) - 1, wanted).astype(int))]
         share = float(area) / len(weights)
-        for wa, wb in weights:
-            wc = 1.0 - wa - wb
-            if uvs is not None:
-                u, v = wa * uvs[ia] + wb * uvs[ib] + wc * uvs[ic]
-                point, normal = _dfm_brep.point_normal(face, float(u), float(v))
-            else:
-                point = wa * nodes[ia] + wb * nodes[ib] + wc * nodes[ic]
-                normal = np.cross(nodes[ib] - nodes[ia], nodes[ic] - nodes[ia])
-                normal = normal / (np.linalg.norm(normal) or 1.0)
-            found.append((point, normal, share))
+        picks.extend((index, wa, wb, share) for wa, wb in weights)
+    if len(picks) > max(count, 1):
+        # A face meshed finer than its share of points (a small face of a detailed part): its points thinned
+        # evenly to the share, each standing for the area it now covers, so the points grow with the area
+        # asked for, not with the triangles.
+        total_share = sum(pick[3] for pick in picks)
+        picks = [picks[k] for k in np.unique(np.linspace(0, len(picks) - 1, max(count, 1)).astype(int))]
+        scale = total_share / sum(pick[3] for pick in picks)
+        picks = [(index, wa, wb, share * scale) for index, wa, wb, share in picks]
+    from OCP.BRepGProp import BRepGProp_Face
+
+    props = BRepGProp_Face(face.wrapped)
+    found: list[tuple[np.ndarray, np.ndarray, float]] = []
+    for index, wa, wb, share in picks:
+        ia, ib, ic = corners[index]
+        wc = 1.0 - wa - wb
+        if uvs is not None:
+            u, v = wa * uvs[ia] + wb * uvs[ib] + wc * uvs[ic]
+            point, normal = _dfm_brep.point_normal(face, float(u), float(v), props)
+        else:
+            point = wa * nodes[ia] + wb * nodes[ib] + wc * nodes[ic]
+            normal = np.cross(nodes[ib] - nodes[ia], nodes[ic] - nodes[ia])
+            normal = normal / (np.linalg.norm(normal) or 1.0)
+        found.append((point, normal, share))
     return found
 
 
@@ -157,6 +176,9 @@ class _Geometry:
     _rays: Any = None
     _mesh: Any = None
     _intersectors: dict[int, Any] | None = None
+    _links: dict[int, list[tuple[int, Any]]] | None = None
+    _grids: dict | None = None
+    _by_face: Any = None
     _vertices: dict[int, np.ndarray] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -170,8 +192,11 @@ class _Geometry:
         self.diagonal = float(np.linalg.norm(self.hi - self.lo)) or 1.0
         self.eps = min(max(1e-4 * self.diagonal, 1e-5), 0.01)
         points, normals, weights, owner, spacing = [], [], [], [], []
+        # Each face at least _LEAST_PER_FACE points, fewer (down to two) on a part of many faces, so the points
+        # -- and the rays cast from them -- grow with the faces no faster than _FACE_POINTS in all.
+        least = max(2, min(_LEAST_PER_FACE, _FACE_POINTS // max(1, len(self.faces))))
         for ordinal, (face, area) in enumerate(zip(self.faces, self.areas), start=1):
-            count = int(min(_MOST_PER_FACE, max(_LEAST_PER_FACE, round(self.budget * area / total))))
+            count = int(min(_MOST_PER_FACE, max(least, round(self.budget * area / total))))
             found = _samples(face, count) if area > 0 else []
             for point, normal, share in found:
                 points.append(point)
@@ -208,14 +233,88 @@ class _Geometry:
     def ref(self, ordinal: int) -> str:
         return self.part.ref("face", int(ordinal))
 
+    def _mesh_crosses(self, ray: np.ndarray, face: np.ndarray, origins: np.ndarray, directions: np.ndarray
+                      ) -> np.ndarray:
+        """For (ray, face) pairs (face indices 0-based): whether the ray's line meets one of the face's
+        triangles (``mesh``), each widened by a tenth of itself, at or beyond the ray's start."""
+        if self._by_face is None:
+            vertices, triangles, owners = self.mesh
+            order = np.argsort(owners, kind="stable")
+            counts = np.bincount(owners, minlength=len(self.faces) + 1)[1:]
+            starts = np.concatenate([[0], np.cumsum(counts)[:-1]]).astype(int)
+            a, b, c = (vertices[triangles[order, k]] for k in range(3))
+            self._by_face = (starts, counts, a, b - a, c - a)
+        starts, counts, a, e1, e2 = self._by_face
+        per = counts[face]
+        # Only a face of few triangles is screened (a large face is one exact test, cheaper than its
+        # triangles); a face with none is left to the exact test.
+        meshed = (per > 0) & (per <= 48)
+        per = np.where(meshed, per, 0)
+        found = ~meshed
+        if not meshed.any():
+            return found
+        pair = np.repeat(np.arange(len(ray)), per)
+        tri = np.repeat(starts[face], per) + np.arange(int(per.sum())) - np.repeat(np.cumsum(per) - per, per)
+        d, o = directions[ray[pair]], origins[ray[pair]]
+        p = np.cross(d, e2[tri])
+        det = np.einsum("ij,ij->i", e1[tri], p)
+        good = np.abs(det) > 1e-18
+        inv = np.where(good, 1.0 / np.where(good, det, 1.0), 0.0)
+        tv = o - a[tri]
+        u = np.einsum("ij,ij->i", tv, p) * inv
+        q = np.cross(tv, e1[tri])
+        v = np.einsum("ij,ij->i", d, q) * inv
+        t = np.einsum("ij,ij->i", e2[tri], q) * inv
+        slack = 0.1
+        reach = 1e-3 * self.diagonal
+        hit = ~good | ((u >= -slack) & (v >= -slack) & (u + v <= 1 + slack) & (t > -reach))
+        np.logical_or.at(found, pair[hit], True)
+        return found
+
     def cast(self, origins: np.ndarray, directions: np.ndarray) -> np.ndarray:
         """The distance from each origin to the first face along its direction, inf for none."""
         return self.cast_faces(origins, directions)[0]
 
+    def _grid(self, direction: np.ndarray) -> Any:
+        """The faces' boxes seen along ``direction``: each box's shadow on the plane square to it, binned on a
+        grid, so a ray along it meets only the boxes over the cell its origin projects to (cached per
+        direction: the release search casts along a few dozen)."""
+        key = tuple(np.round(direction, 9))
+        if self._grids is None:
+            self._grids = {}
+        found = self._grids.get(key)
+        if found is not None:
+            return found
+        u, v = ops.basis(direction)
+        boxes = self.rays.boxes
+        corners = np.stack([np.stack([boxes[:, 0 + 3 * i], boxes[:, 1 + 3 * j], boxes[:, 2 + 3 * k]], axis=1)
+                            for i in (0, 1) for j in (0, 1) for k in (0, 1)], axis=1)       # (F, 8, 3)
+        pu, pv = corners @ u, corners @ v
+        low = np.stack([pu.min(axis=1), pv.min(axis=1)], axis=1)
+        high = np.stack([pu.max(axis=1), pv.max(axis=1)], axis=1)
+        origin = low.min(axis=0)
+        span = np.maximum(high.max(axis=0) - origin, 1e-9)
+        cells = int(min(128, max(4, 2 * math.sqrt(len(boxes)))))
+        size = span / cells
+        i0 = np.clip(((low - origin) / size).astype(int), 0, cells - 1)
+        i1 = np.clip(((high - origin) / size).astype(int), 0, cells - 1)
+        # Every (face, cell) its shadow covers, at once: a face's rows times its columns.
+        rows, cols = i1[:, 0] - i0[:, 0] + 1, i1[:, 1] - i0[:, 1] + 1
+        count = rows * cols
+        face = np.repeat(np.arange(len(boxes)), count)
+        local = np.arange(int(count.sum())) - np.repeat(np.cumsum(count) - count, count)
+        cell = (i0[face, 0] + local // cols[face]) * cells + (i0[face, 1] + local % cols[face])
+        order = np.argsort(cell, kind="stable")
+        bounds = np.searchsorted(cell[order], np.arange(cells * cells + 1))
+        found = (u, v, origin, size, cells, (face[order], bounds))
+        self._grids[key] = found
+        return found
+
     def cast_faces(self, origins: np.ndarray, directions: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-        """``cast``, with the ordinal of the face each ray first meets (0 for none). The rays are pruned all at
-        once by the faces' boxes (``Rays.boxes``, one slab test over every ray and box), then each meets its
-        candidate faces exactly, nearest box first, until no nearer crossing can follow."""
+        """``cast``, with the ordinal of the face each ray first meets (0 for none). Rays sharing one
+        direction meet only the boxes over their cell of that direction's grid (``_grid``); others are pruned
+        by every face's box at once; then each meets its candidate faces exactly, nearest box first, until no
+        nearer crossing can follow."""
         from OCP.gp import gp_Dir, gp_Lin, gp_Pnt
         from OCP.IntCurvesFace import IntCurvesFace_Intersector
 
@@ -224,46 +323,89 @@ class _Geometry:
         d_all = d_all / np.where(np.linalg.norm(d_all, axis=1) > 0, np.linalg.norm(d_all, axis=1), 1.0)[:, None]
         found = np.full(len(o_all), np.inf)
         faces = np.zeros(len(o_all), dtype=int)
+        if not len(o_all):
+            return found, faces
         rays = self.rays
-        lows, highs = rays.boxes[None, :, :3], rays.boxes[None, :, 3:]
+        boxes = rays.boxes
         skip = 1e-3 * self.eps
         if self._intersectors is None:
             self._intersectors = {}
-        for start in range(0, len(o_all), 256):
-            o, d = o_all[start:start + 256, None, :], d_all[start:start + 256, None, :]
+        # Rays grouped by direction: a group of a few or more casts over that direction's grid.
+        keys = np.round(d_all, 9)
+        groups: dict[tuple, list[int]] = {}
+        for ray, key in enumerate(map(tuple, keys)):
+            groups.setdefault(key, []).append(ray)
+        grid_of = {}
+        if len(boxes) > 64:
+            for key, members in groups.items():
+                if len(members) >= 4:
+                    grid_of[key] = self._grid(d_all[members[0]])
+
+        for key, members in groups.items():
+            members = np.asarray(members)
+            grid = grid_of.get(key)
+            # Every (ray, face) pair whose box the ray might cross: the faces over each ray's grid cell, or every
+            # face where the direction has no grid.
+            if grid is not None:
+                u, v, origin, size, cells, (binned, bounds) = grid
+                fa = (o_all[members] @ u - origin[0]) / size[0]
+                fb = (o_all[members] @ v - origin[1]) / size[1]
+                inside = (fa >= -1e-6) & (fa <= cells + 1e-6) & (fb >= -1e-6) & (fb <= cells + 1e-6)
+                members = members[inside]  # outside every box's shadow: the line meets no face
+                cell = (np.clip(fa[inside].astype(int), 0, cells - 1) * cells
+                        + np.clip(fb[inside].astype(int), 0, cells - 1))
+                counts = bounds[cell + 1] - bounds[cell]
+                ray = np.repeat(members, counts)
+                firsts = np.repeat(bounds[cell], counts)
+                face = binned[firsts + np.arange(int(counts.sum())) - np.repeat(np.cumsum(counts) - counts, counts)]
+            else:
+                ray = np.repeat(members, len(boxes))
+                face = np.tile(np.arange(len(boxes)), len(members))
+            if not len(ray):
+                continue
+            o, d = o_all[ray], d_all[ray]
+            lows, highs = boxes[face, :3], boxes[face, 3:]
             flat = np.abs(d) <= 1e-300
             with np.errstate(divide="ignore", invalid="ignore"):
                 inverse = np.where(flat, 0.0, 1.0 / np.where(flat, 1.0, d))
                 t1, t2 = (lows - o) * inverse, (highs - o) * inverse
-            lo = np.where(flat, -np.inf, np.minimum(t1, t2)).max(axis=2)
-            hi = np.where(flat, np.inf, np.maximum(t1, t2)).min(axis=2)
-            across = np.all(~flat | ((lows <= o) & (o <= highs)), axis=2)
-            mask = across & (lo <= hi) & (hi >= skip)
-            for row in range(mask.shape[0]):
-                index = np.flatnonzero(mask[row])
-                if not len(index):
+            lo = np.where(flat, -np.inf, np.minimum(t1, t2)).max(axis=1)
+            hi = np.where(flat, np.inf, np.maximum(t1, t2)).min(axis=1)
+            across = np.all(~flat | ((lows <= o) & (o <= highs)), axis=1)
+            keep = across & (lo <= hi) & (hi >= skip)
+            ray, face, enter = ray[keep], face[keep], np.maximum(lo[keep], skip)
+            if len(ray):
+                # The face's triangles first, every pair at once: a face none of whose triangles the ray
+                # meets (each widened by a tenth, beyond any chord's sag) it does not cross, and is left
+                # out of the exact intersections -- a ray through a row of contacts tests the few it hits.
+                crosses = self._mesh_crosses(ray, face, o_all, d_all)
+                ray, face, enter = ray[crosses], face[crosses], enter[crosses]
+            order = np.lexsort((enter, ray))
+            ray, face, enter = ray[order], face[order], enter[order]
+            cuts = np.flatnonzero(np.diff(ray)) + 1
+            for begin, stop in zip(np.concatenate([[0], cuts]), np.concatenate([cuts, [len(ray)]])):
+                if begin >= stop:
                     continue
-                entries = np.maximum(lo[row, index], skip)
-                order = np.argsort(entries)
-                ray = start + row
-                line = gp_Lin(gp_Pnt(*o_all[ray]), gp_Dir(*d_all[ray]))
+                index = int(ray[begin])
+                line = gp_Lin(gp_Pnt(*o_all[index]), gp_Dir(*d_all[index]))
                 best, which = math.inf, 0
-                for face, entry in zip(index[order], entries[order]):
-                    if entry > best:
+                for k in range(begin, stop):
+                    if enter[k] > best:
                         break
-                    intersector = self._intersectors.get(int(face))
+                    candidate = int(face[k])
+                    intersector = self._intersectors.get(candidate)
                     if intersector is None:
-                        intersector = self._intersectors[int(face)] = IntCurvesFace_Intersector(
-                            rays.faces[int(face)], 1e-7)
+                        intersector = self._intersectors[candidate] = IntCurvesFace_Intersector(
+                            rays.faces[candidate], 1e-7)
                     intersector.Perform(line, skip, best if math.isfinite(best) else 1e9)
                     if not intersector.IsDone():
                         continue
-                    for k in range(1, intersector.NbPnt() + 1):
-                        w = float(intersector.WParameter(k))
+                    for hit in range(1, intersector.NbPnt() + 1):
+                        w = float(intersector.WParameter(hit))
                         if skip <= w < best:
-                            best, which = w, int(face) + 1
+                            best, which = w, candidate + 1
                 if which:
-                    found[ray], faces[ray] = best, which
+                    found[index], faces[index] = best, which
         return found, faces
 
     def vertices(self, ordinal: int) -> np.ndarray:
@@ -290,12 +432,15 @@ class _Geometry:
         return self._vertices[ordinal]
 
     def neighbours(self) -> dict[int, list[tuple[int, Any]]]:
-        """Each face's neighbours across its edges, with the edge."""
+        """Each face's neighbours across its edges, with the edge (read once)."""
+        if self._links is not None:
+            return self._links
         found: dict[int, list[tuple[int, Any]]] = {}
         for edge in self.edges:
             a, b = edge.faces
             found.setdefault(a, []).append((b, edge))
             found.setdefault(b, []).append((a, edge))
+        self._links = found
         return found
 
 
@@ -497,10 +642,23 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
     trapped = _trap(geo, pull, zero_tol)
     groups = _features(geo, trapped)
     in_group = np.isin(geo.owner, [face for group in groups for face in group])
-    counted = trapped.trapped & in_group
+    trapped_mask = trapped.trapped & in_group
+
+    def counted_mask(group: list[int]) -> np.ndarray:
+        return trapped_mask & np.isin(geo.owner, group)
     items: list[dict[str, Any]] = []
-    for group in groups:
-        mine = counted & np.isin(geo.owner, group)
+    releases: dict = {}
+    spent = [0]
+
+    def counted(origins: np.ndarray, directions: np.ndarray) -> np.ndarray:
+        spent[0] += len(origins)
+        return geo.cast(origins, directions)
+
+    # The largest features first: a part of hundreds of them (a connector's contacts) spends its release
+    # rays (_RELEASE_RAYS) on the largest, and says which it did not search ("unknown").
+    order = sorted(groups, key=lambda group: -float(geo.weights[counted_mask(group)].sum()))
+    for group in order:
+        mine = counted_mask(group)
         area = float(geo.weights[mine].sum())
         per_face = {face: float(geo.weights[mine & (geo.owner == face)].sum()) for face in group}
         # The face that best names the undercut: the largest of those mostly trapped (a snap's underside,
@@ -515,22 +673,26 @@ def _undercut_part(geo: _Geometry, pull: np.ndarray, zero_tol: float, classify: 
                                 "blocked_by": [geo.ref(face) for face in
                                                sorted({int(f) for f in trapped.blocker[mine] if f and f not in group})]}
         if classify:
-            release = ops.classify_undercut(points, normals, pull, geo.cast, scale=geo.diagonal,
-                                            zero_tol_deg=zero_tol)
+            if spent[0] < _RELEASE_RAYS:
+                release = ops.classify_undercut(points, normals, pull, counted, scale=geo.diagonal,
+                                                zero_tol_deg=zero_tol, cache=releases)
+            else:
+                release = {"release": "unknown", "kind": None, "directions": [], "vectors": [], "angled": [],
+                           "stroke_mm": None}
             item.update(_release_fields(release, geo.points[mine], pull))
         items.append(item)
     items.sort(key=lambda item: -(item["trapped_area_mm2"] or 0))
     leaning = trapped.trapped & ~trapped.zero & in_group
     zero = trapped.trapped & trapped.zero & in_group
     largest_faces = []
-    for ordinal in sorted({int(f) for f in geo.owner[counted]}):
-        mine = counted & (geo.owner == ordinal)
+    for ordinal in sorted({int(f) for f in geo.owner[trapped_mask]}):
+        mine = trapped_mask & (geo.owner == ordinal)
         largest_faces.append({"location": geo.ref(ordinal), "area_mm2": _r(float(geo.weights[mine].sum()), 2),
                               "centroid_xyz": _xyz(geo.points[mine].mean(axis=0))})
     largest_faces.sort(key=lambda face: -(face["area_mm2"] or 0))
-    return {"items": items, "groups": groups, "area": float(geo.weights[counted].sum()),
+    return {"items": items, "groups": groups, "area": float(geo.weights[trapped_mask].sum()),
             "surface": float(geo.areas.sum()),
-            "faces": len({int(f) for f in geo.owner[counted]}), "leaning": float(geo.weights[leaning].sum()),
+            "faces": len({int(f) for f in geo.owner[trapped_mask]}), "leaning": float(geo.weights[leaning].sum()),
             "zero": float(geo.weights[zero].sum()), "largest": largest_faces}
 
 
@@ -578,6 +740,7 @@ def _undercuts(geos: list[_Geometry], pull: np.ndarray, zero_tol: float,
         "lifter_count": releases.count("lifter"),
         "collapsible_core_count": releases.count("collapsible_core"),
         "unreleasable_count": releases.count("none"),
+        "unsearched_count": releases.count("unknown"),
         "items": items[:_ITEMS],
     }
     if len(geos) > 1:
@@ -602,12 +765,18 @@ def _thickness_subset(geo: _Geometry) -> np.ndarray:
     if len(geo.points) <= _THICK_POINTS:
         return np.arange(len(geo.points))
     total = float(geo.areas.sum()) or 1.0
+    faces = len(geo.faces)
+    # Each face at least four points while the faces leave room, one while they still do, else by area alone
+    # (a part of thousands of small faces: its small faces unread, their walls their neighbours').
+    least = 4 if 4 * faces <= _THICK_POINTS else 1 if faces <= _THICK_POINTS else 0
     chosen = []
+    by_face = np.argsort(geo.owner, kind="stable")
+    bounds = np.searchsorted(geo.owner[by_face], np.arange(1, faces + 2))
     for ordinal, area in enumerate(geo.areas, start=1):
-        own = np.nonzero(geo.owner == ordinal)[0]
-        if not len(own):
+        own = by_face[bounds[ordinal - 1]:bounds[ordinal]]
+        want = int(min(len(own), max(least, round(_THICK_POINTS * area / total))))
+        if not want:
             continue
-        want = int(min(len(own), max(4, round(_THICK_POINTS * area / total))))
         chosen.append(own[np.unique(np.linspace(0, len(own) - 1, want).astype(int))])
     return np.concatenate(chosen) if chosen else np.arange(0)
 
@@ -669,6 +838,10 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
             median, low = ops.weighted_median(v[tidy], w[tidy]), ops.weighted_quantile(v[tidy], w[tidy], 0.1)
         per_face[ordinal] = {"median": median, "low": low, "max": float(v[top]), "at": geo.points[mine][top],
                              "narrow": narrow}
+    links = geo.neighbours()
+    nearest = ops.nearest_broad_all(list(range(1, len(geo.faces) + 1)),
+                                    lambda face: [o for o, _e in links.get(face, [])],
+                                    lambda face: face in per_face and not per_face[face]["narrow"])
     for ordinal, face in per_face.items():
         # A narrow face (a rib's top, a plate's end, a bore through a wall): every point is near an outside
         # edge and reads low, so it closes the wall its broad neighbours across those edges measure.
@@ -676,10 +849,7 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
             walls = [per_face[other]["median"] for other in convex.get(ordinal, set())
                      if other in per_face and not per_face[other]["narrow"]]
             if not walls:
-                links = geo.neighbours()
-                walls = [per_face[other]["median"] for other in ops.nearest_broad(
-                    ordinal, lambda face: [o for o, _e in links.get(face, [])],
-                    lambda face: face in per_face and not per_face[face]["narrow"])]
+                walls = [per_face[other]["median"] for other in nearest.get(ordinal, [])]
             if walls:
                 face["median"] = face["low"] = float(np.median(walls))
                 face["max"] = max(face["max"], face["median"])
@@ -811,16 +981,19 @@ def _ribs_part(geo: _Geometry, thick: _Thickness, drafts: list[_FaceDraft], nomi
     bases = {ordinal: _bases(geo, ordinal, links, np.asarray(geo.surfaces[ordinal - 1].normal)) for ordinal in planes}
     items: list[dict[str, Any]] = []
     seen: set[tuple[int, int]] = set()
-    for a in planes:
-        if not bases[a]:
-            continue
+    # Where rays from each candidate face, straight into the material, come out (the face opposite): one cast
+    # for every candidate's points together.
+    by_face = np.argsort(geo.owner, kind="stable")
+    bounds = np.searchsorted(geo.owner[by_face], np.arange(1, len(geo.faces) + 2))
+    standing = [a for a in planes if bases[a] and bounds[a] > bounds[a - 1]]
+    index = np.concatenate([by_face[bounds[a - 1]:bounds[a]] for a in standing]) if standing else np.zeros(0, int)
+    all_distance, all_hit = geo.cast_faces(geo.points[index] - geo.normals[index] * geo.eps, -geo.normals[index])
+    offsets = np.concatenate([[0], np.cumsum([bounds[a] - bounds[a - 1] for a in standing])]).astype(int)
+    for position, a in enumerate(standing):
         na = np.asarray(geo.surfaces[a - 1].normal)
         mine = geo.owner == a
-        if not mine.any():
-            continue
-        # Where rays from a, straight into the material, come out: the face opposite.
-        distance, hit = geo.cast_faces(geo.points[mine] - geo.normals[mine] * geo.eps, -geo.normals[mine])
-        distance = distance + geo.eps
+        distance = all_distance[offsets[position]:offsets[position + 1]] + geo.eps
+        hit = all_hit[offsets[position]:offsets[position + 1]]
         for b in sorted({int(face) for face in hit if face and face != a}):
             if (min(a, b), max(a, b)) in seen or b not in bases or not bases[b]:
                 continue

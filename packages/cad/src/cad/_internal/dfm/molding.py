@@ -79,7 +79,7 @@ CLAMP_SAFETY = 0.15
 _KN_PER_TON = 8.896443  # a US (short) ton-force in kilonewtons
 
 _MOLDED = ("+pull", "-pull", "none")
-_RELEASED = ("side_action", "lifter", "collapsible_core")
+_RELEASED = ("side_action", "lifter", "collapsible_core", "unknown")
 
 
 def _draft_rules(source: str, least: float, severity: str, preferred: tuple[float, str] | None = None
@@ -315,7 +315,9 @@ def findings(report: dict[str, Any], resolved: dict[str, Any], candidates: bool)
         counts = ", ".join(f"{undercuts[key]} {words}" for key, words in
                            (("side_action_count", "side action(s)"), ("lifter_count", "lifter(s)"),
                             ("collapsible_core_count", "collapsible core(s)"),
-                            ("unreleasable_count", "with no release")) if undercuts.get(key))
+                            ("unreleasable_count", "with no release"),
+                            ("unsearched_count", "not searched (the part's release budget spent)"))
+                           if undercuts.get(key))
         found.append(CheckFinding(
             "warning", "undercut_candidates",
             f"{undercuts['candidate_area_mm2']:g} mm2 ({undercuts['candidate_area_pct_of_surface']:g}% of the "

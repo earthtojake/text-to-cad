@@ -1246,11 +1246,12 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
         top = int(np.argmax(v))
         per[int(region)] = {"median": median, "low": low, "max": float(v[top]), "at": points[mine][top],
                             "narrow": narrow}
+    nearest = ops.nearest_broad_all(list(range(regions.count)), lambda r: list(regions.links.get(r, {})),
+                                    lambda r: r in per and not per[r]["narrow"])
     for region, face in per.items():
         if face["narrow"]:
             # It takes the wall of the broad regions nearest it; where none is near, its own widest reading.
-            near = ops.nearest_broad(region, lambda r: list(regions.links.get(r, {})),
-                                     lambda r: r in per and not per[r]["narrow"])
+            near = nearest.get(region, [])
             if near:
                 face["median"] = face["low"] = float(np.median([per[o]["median"] for o in near]))
                 face["max"] = max(face["max"], face["median"])
