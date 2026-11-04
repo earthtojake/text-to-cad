@@ -8,6 +8,8 @@ tests build a tiny profile tree of their own, shaped like Orca's.
 
 from __future__ import annotations
 
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
@@ -112,6 +114,57 @@ class OrcaPresetsTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as raised:
                 orca_presets.complete(index, "machine", "No Such Printer")
             self.assertIn("--list machine", str(raised.exception))
+
+    def test_presets_with_a_byte_order_mark_are_read(self) -> None:
+        # Snapmaker ships its fdm_process_common.json so, and other vendors ship a parent of that name.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            write(root, "Other/process/common.json", {"type": "process", "name": "acme_process",
+                                                      "instantiation": "false", "wall_loops": "5"})
+            for relative in ("Acme/process/common.json", "Acme/process/fine.json"):
+                path = root / relative
+                path.write_text(path.read_text(encoding="utf-8"), encoding="utf-8-sig")
+            index, selectable = orca_presets.index_presets([root])
+            self.assertIn(("process", "0.20mm @Acme"), selectable)
+            process, _ = orca_presets.complete(index, "process", "0.20mm @Acme")
+            self.assertEqual(process["wall_loops"], "2")
+
+    def test_a_preset_file_that_fails_to_parse_is_named(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            (root / "Acme/process/broken.json").write_text("{", encoding="utf-8")
+            with contextlib.redirect_stderr(io.StringIO()) as stderr:
+                orca_presets.index_presets([root])
+            self.assertIn("broken.json", stderr.getvalue())
+
+    def test_a_filament_several_vendors_ship_is_the_one_listing_the_printer(self) -> None:
+        # Bambu Lab and Snapmaker both ship `Generic PETG`, each for its own printers. "Able" sorts first.
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root / "profiles")
+            for vendor, printer in (("Able", "Able Two 0.4 nozzle"), ("Acme", "Acme One 0.4 nozzle")):
+                write(root / "profiles", f"{vendor}/filament/petg.json",
+                      {"type": "filament", "name": "Generic PETG", "from": "system", "instantiation": "true",
+                       "compatible_printers": [printer], "filament_vendor": [vendor]})
+            subprocess.run([sys.executable, str(SCRIPT), "--profiles", str(root / "profiles"),
+                            "--printer", "Acme One 0.4 nozzle", "--process", "0.20mm @Acme",
+                            "--filament", "Generic PETG", "--out", str(root / "out")],
+                           check=True, capture_output=True, env={"HOME": str(root), "PATH": ""})
+            filament = json.loads((root / "out/filament-1.json").read_text(encoding="utf-8"))
+            self.assertEqual(filament["filament_vendor"], ["Acme"])
+
+    def test_a_preset_several_vendors_ship_and_none_lists_the_printer_is_the_nearest(self) -> None:
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            profile_tree(root)
+            for vendor in ("Able", "Acme"):
+                write(root, f"{vendor}/filament/petg.json", {"type": "filament", "name": "Generic PETG"})
+            index, _ = orca_presets.index_presets([root])
+            printer = ("Acme One 0.4 nozzle", root / "Acme/machine/acme.json")
+            self.assertEqual(orca_presets.locate(index, "filament", "Generic PETG", printer),
+                             root / "Acme/filament/petg.json")
 
 
 if __name__ == "__main__":
