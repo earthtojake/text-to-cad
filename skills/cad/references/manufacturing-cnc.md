@@ -4,6 +4,31 @@ The evidence, the rules, the review and how to check a redesign are SKILL.md's
 [Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
 to milling and turning.
 
+## Design it
+
+What a part built for milling has from its first line, so its first check passes or nearly (the
+`generic` set's numbers, from Protolabs Network's guide; a shop's set or `--tools` moves them):
+
+- **Stock and setups.** Start from the blank (`--stock`, else the part's box) and put the features on
+  as few sides as can be: each side a tool must face is a setup, four at most.
+- **Pockets, slots and windows.** Vertical walls on a flat floor (or none: a window). Every vertical
+  internal corner gets a radius -- at least half the smallest end mill (1.25 mm with no `--tools`),
+  and a third of the cavity's depth where the design allows -- never a sharp corner, which no round
+  tool cuts: `part = part.fillet(r, part.edges().filter_by(bd.Axis.Z).filter_by(inside_the_pocket))`
+  after the cut. Depth at most four times the width (a tool reaches three to four diameters). The
+  floor-to-wall root may stay sharp. A hex or an odd-angle socket cannot be milled sharp: give its
+  corners a radius or call out a broach.
+- **Holes.** Standard drill diameters (6.8 mm for M8, 4.2 for M5, 6.6 for an M6 clearance; `cnc.drill_size`
+  names the nearest), depth at most four diameters, and a thread as its tap-drill hole with a callout,
+  not modelled.
+- **Walls and gaps.** Walls 0.8 mm or more in metal, 1.5 mm in plastic (0.5 / 1.0 are the floor);
+  gaps 2.5 mm or wider (or the smallest tool).
+- **Reach.** Every face seen straight from one of the six axis directions (3 axes); no undercut, no
+  T-slot or dovetail unless the person planned the cutter; no closed void.
+- **Turning.** One axis of revolution, diameters stepping down toward the free end, outside grooves
+  at least 1.2 mm wide, cross holes radial; a flat, a keyway or an off-axis hole is live tooling.
+- The material on the part: `part.material = metals.aluminum()`; the check reads it.
+
 ## Check it
 
 ```bash

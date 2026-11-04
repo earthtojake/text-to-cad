@@ -15,7 +15,7 @@ the page the person has open updates. Files are exports, made when asked.
 
 | Task | Start with | Reference |
 | --- | --- | --- |
-| **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
+| **Create or edit a part or assembly** | The project's model script, or a new one ([below](#write-a-model-and-run-it)); a part the request says how to make is designed for that process from the first line ([Design for the process](#design-for-the-process)). | [Models](references/model-contract.md), [build123d](references/build123d-modeling.md), [positioning](references/positioning.md) |
 | **Organize a CAD project** | The project's existing layout. | [Project layout](references/project-layout.md) |
 | **Export STEP, STL, 3MF, GLB or xbf** | `cad model export <id> <file>`. | [Exports](references/exports.md) |
 | **Make a 2D profile, flat pattern or DXF** | A model that returns 2D geometry on z=0, then `cad model export <id> part.dxf`. | [2D profiles and DXF](references/2d-profiles-and-dxf.md) |
@@ -275,7 +275,7 @@ can be checked:
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
-| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: `cad model dfm "$ID" --process cnc` ([Can it be made?](#can-it-be-made)); a new finding is fixed or reported before anything else |
+| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: `cad model dfm "$ID" --process cnc` ([Design for the process](#design-for-the-process)); an error is fixed before anything else, a new warning fixed or reported |
 
 ```bash
 cad model snapshot "$ID" tmp/review.png
@@ -326,8 +326,10 @@ print(closest_points(plate, post).distance)   # 0: the standoff sits on the plat
 ## Can it be made?
 
 Check that a part can be machined, cut and bent, molded or printed, and say what to change where it
-cannot. Pick the process, read its reference and run its check; when the person is choosing between
-processes, check each one the same way:
+cannot. A part whose process the request names is designed for it and checked after every run
+([below](#design-for-the-process)); a review of an existing part or file picks the process, reads its
+reference and runs its check, and when the person is choosing between processes checks each one the
+same way:
 
 | Process | Reference | Check with |
 | --- | --- | --- |
@@ -349,6 +351,42 @@ exactly, and each finding names a face ref; a mesh (STL, 3MF, GLB) is measured a
 In a check script, `cad.model.dfm(handle, process=...)` and `cad.step.dfm(path, process=...)` return
 the same result as data. An order from SendCutSend is the sendcutsend skill's (it can run the sheet
 check with `--rules sendcutsend`); slicing and sending a print is the print3d skill's.
+
+### Design for the process
+
+A request that says how the part is made -- machined, milled or turned; sheet metal, bent, folded,
+laser- or waterjet-cut; injection molded; 3D printed, or a printer, a resin, a filament or a cutting
+service named -- makes the process part of the design, not a review at the end. A material alone names
+none (6061 is machined, cast or bent); a thickness with a metal ("2 mm steel") is sheet.
+
+1. **Before the first line**, read the process reference's *Design it*: the limits the generic rules
+   judge, as build123d. Build them in -- walls drafted along the pull, a bend's inside radius, a
+   pocket's corner radii, walls at the material's minimum -- so the first check passes or nearly.
+2. **Record the process in the model.** Give each part its material (`part.material =
+   metals.aluminum()`: the check reads it when `--material` is not given) and put the check's command
+   line, with the flags the person's shop sets, in the script's module docstring:
+
+   ```python
+   """A motor mount, CNC milled from 6061 on 3 axes.
+
+   Check: cad model dfm "$ID" --process cnc --tools 3,6,10
+   """
+   ```
+
+   The next session, and every edit, runs the same check. Process-specific flags that change the
+   verdicts (`--axes`, `--tools`, `--pull`, `--thickness`, `--technology`) belong in that line.
+3. **After every run**, the check with the same flags, on the part's own id (each part model has its
+   own document; an assembly's check judges nothing a part's does not, and names the assembly in
+   every ref). An error -- a limit the part breaks as drawn -- is fixed before anything else is
+   reported: the finding's hint says what to change and its ref where (`cad model inspect "$ID"
+   '<ref>'`). A warning is fixed when the fix leaves what was asked for as it was (a corner radius,
+   a draft angle, a bend relief, a fillet at a rib's root); otherwise it is reported with its number.
+   A retry that drops or shrinks a feature the person specified builds another design: say so
+   instead. Repeat until no error remains.
+4. **At the hand-off**, say the process, the rule set (`generic` is a starting point, no shop's
+   limits) and the material the check judged with, the findings left and the rules not evaluated.
+   With no process named, build what was asked and never add draft, reliefs or tool radii to it: say
+   which process the design suits if one is evident, and offer the check.
 
 ### Evidence first
 
@@ -378,10 +416,17 @@ Never turn a set's number into a physical law, or a shop's machine capacity into
 
 - **The exit.** 1 when a finding is an error (a limit the part breaks as drawn) or a family was not
   measured (`measurement_failed`: the rest is still reported, so never read it as "no findings").
-  0 is not an approval: warnings (recommendations, cost, risk) and unverified rules remain.
-- **Fix by code.** A failing rule's finding is coded by its rule id (`cnc.internal_corner_radius`),
-  with the measured value, its limit and source, and a hint saying what to change. Other codes are
-  facts the figures call for (`zero_draft_walls`, `cnc.live_tooling`, `sheet.gauge_unmatched`).
+  The last line digests a failure: `FAILED <id>: N blocking finding(s); <what was measured>; failed:
+  molding.draft_min x10, ...`, every failure counted. 0 is not an approval: warnings
+  (recommendations, cost, risk) and unverified rules remain, and a set that judged nothing says so
+  (`rules_none_evaluated`).
+- **Fix by code.** Findings come errors first. A failing rule's finding is coded by its rule id
+  (`cnc.internal_corner_radius`), with the measured value, its limit and source, and a hint saying
+  what to change; several failures at one ref are one finding (`and 2 more at this ref`), a warning on
+  a figure that already fails an error at the same place is left to `measurements.rules`, and at
+  most eight refs of one rule are shown. Other codes are facts the figures call for
+  (`zero_draft_walls`, `cnc.live_tooling`, `sheet.gauge_unmatched`, `material_declared`: the material
+  was read from the part).
 - **See the place.** Resolve a finding's ref with `cad model inspect "$ID" 'plate/face 7'` or
   `cad step inspect part.step 'COMPOUND/face 7'`: the face's surface, radius, area and box. The
   figures behind it are `measurements.<family>`, items worst first; the reference names the families.
@@ -428,8 +473,9 @@ shop takes once it is exported, never the model alone.
 ## Hand off
 
 The reply is the person's record of the work: the models made or changed, the files
-written, the checks run and what they showed, the requirements no check covered, and
-every assumption or departure from the request.
+written, the checks run and what they showed (for a part made by a named process, the process, rule
+set and material its check judged with, and the findings left), the requirements no check covered,
+and every assumption or departure from the request.
 
 ### Show the model
 

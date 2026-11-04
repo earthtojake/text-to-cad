@@ -6,6 +6,32 @@ to additive processes.
 
 Slicing and sending a print to a printer is the print3d skill's ($print3d).
 
+## Design it
+
+What a printed part has from its first line (the `generic` set's FDM numbers unless another technology
+is named; the reference's table and a machine datasheet move them):
+
+- **Model it as it prints.** Z up, the face it stands on at the bottom: the check measures the part as
+  it stands, so build the model in its print orientation, or turn it in the model and check again
+  (`--candidates` ranks the orientations and judges nothing). The largest flat face down.
+- **Overhangs.** A down-facing slope at least 45 degrees from horizontal (FDM, metal PBF; SLA 19) prints
+  without support: chamfer an overhang at 45 rather than leaving it flat; a flat ceiling spans at most
+  5 mm as a bridge (FDM), and a horizontal round hole up to 10 mm prints unsupported (wider: a teardrop,
+  or turn the part so the hole is vertical). Powder processes (SLS, MJF) need no support: there, trapped powder is the
+  question.
+- **Walls, pins and holes.** Walls 0.8 mm or more (two nozzle widths; SLA 0.5 supported / 1.0 free,
+  SLS 0.8 / 1.0, MJF 0.7 / 1.0, PBF 0.4 / 0.8); holes 1 mm or wider (SLS 1.5), vertical where they
+  can be; pins 5 mm (FDM, a recommendation; SLS 0.8, SLA 0.5); embossed text 1 mm high (FDM) and
+  engraving 0.4 mm deep.
+- **No knife edges.** A chamfer or a draft that meets a face under 45 degrees thins to nothing over
+  its last millimetres: blunt it to the wall minimum.
+- **Hollow parts.** SLS, MJF and PBF need an escape hole of 3.5 mm or more per cavity for the powder;
+  SLA a drain hole and walls of 2 mm; FDM prints a sealed cavity as infill.
+- **Fits.** Mating parts 0.3 mm apart for FDM in practice (the generic rule warns under 0.76), SLS 0.3,
+  SLA 0.5; walls are judged per part, clearances per pair.
+- Within the printer: `--build-volume 256x256x256` for the person's machine; the material on the
+  part, `part.material = plastics.petg()`, for the warping materials.
+
 ## Check it
 
 ```bash
@@ -65,7 +91,8 @@ model's document. Then check by hand what the check does not measure:
   than the probing ball are found only when sealed.
 - Lattices, minimum feature by local curvature, text legibility, tolerance stack-ups and residual
   stress beyond the largest cross-section.
-- FDM horizontal holes are judged as bridges, not against a teardrop diameter.
+- A horizontal round hole is judged by its diameter (`printing.horizontal_hole`: over 10 mm on FDM its
+  crown sags; a teardrop or a turn of the part fixes it), not as a bridge; smaller ones print unsupported.
 
 For every fail, give a concrete, plain-language instruction with target numbers from the hint (for
 example "thicken the wall at housing/face 8 from 0.3 mm to at least 1 mm"). When the model's source can

@@ -4,6 +4,39 @@ The evidence, the rules, the review and how to check a redesign are SKILL.md's
 [Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
 to injection molding.
 
+## Design it
+
+What a molded part has from its first line (the `generic` set's numbers, from Protolabs' and Protolabs
+Network's guides; a shop's set moves them):
+
+- **The pull first.** Decide which way the mold opens (`--pull z`: the open side of a box faces +Z) and
+  model every feature along it. Build the outside by extruding the outline up from the parting face
+  with draft, and cut the cavity by extruding the inner outline down from the open face with the same
+  draft, so both release:
+
+  ```python
+  body = bd.extrude(bd.Rectangle(60, 40), 20, taper=1)                      # 1 degree, narrowing upward
+  cavity = bd.Pos(0, 0, 20) * bd.extrude(bd.Rectangle(56, 36), -17, taper=1)  # from the open face down, narrowing
+  body = body - cavity
+  ```
+
+  Every wall needs 0.5 degree at least (an error under it), 1 degree recommended (a warning under it;
+  2 or more on textured faces) to eject cleanly; a face
+  square to the pull is not a wall and takes none. A hole or a boss is drafted the same way.
+- **One wall.** A nominal wall in the resin's range (ABS 1.1 to 3.6 mm, PC 1.0 to 3.8, nylon 0.8 to 2.9;
+  the material table has the rest) and no section thicker than 1.7 times it: core out thick spots.
+  Change thickness over a length of three times the step, never a sharp step.
+- **Ribs and bosses.** A rib is 50 to 60% of the wall it stands on, at most three walls tall, at least
+  2.5 walls from the next, drafted 0.5 degree or more, with a fillet of a quarter of the wall at its
+  root. A boss is a drafted tube whose wall is 60% of the base wall at most, its hole along the pull,
+  a fillet at the root and gussets to the wall rather than a thick foot.
+- **Corners.** Inside radius at least half the wall, outside radius the inside plus the wall, so the
+  thickness stays constant around the corner. Fillet the cavity's vertical edges and its floor edges.
+- **Undercuts.** A feature that will not pull straight -- a side hole, a snap hook, a lip under a rim --
+  takes a side action or a lifter (a warning, a cost) and one nothing frees is an error: avoid it, or
+  plan the action with the person.
+- The resin on the part: `part.material = plastics.abs_()`; the check reads it.
+
 ## Check it
 
 ```bash
@@ -29,7 +62,7 @@ and each item names a face ref; prefer it to a mesh.
 
 ## Read it
 
-The families: `draft`, `undercuts`, `thickness`, `ribs`, `bosses`, `corners`, `projection`,
+The families: `draft`, `undercuts`, `thickness`, `transitions`, `ribs`, `bosses`, `corners`, `projection`,
 `envelope`, `parting`, `clamp`; `pulls` with `--candidates`.
 
 - `draft` items carry `draft_deg` and `opens` (`+pull`, `-pull`, `none` for zero draft, `split` where
@@ -37,8 +70,11 @@ The families: `draft`, `undercuts`, `thickness`, `ribs`, `bosses`, `corners`, `p
 - `undercuts` items carry the `release` each needs: `side_action`, `lifter`, `collapsible_core`, or
   `none`. `molding.undercut` (a warning) is tooling cost; `molding.undercut_unreleasable` (an error)
   is a feature no action tried frees. Distinguish a need for side actions from impossibility.
-- `thickness.nominal_mm` and `thick_sections`; `ribs` and `bosses` as ratios to the wall they stand
-  on; `corners` as radius over the wall. These are sink and stress signals, not a fill simulation.
+- `thickness.nominal_mm` and `thick_sections`; `transitions` (a step between two walls: `min_mm`, `max_mm`,
+  the two points in `at_xyz`, judged by `molding.wall_transition`); `ribs` and `bosses` as ratios to the
+  wall they stand on; `corners` as radius over the wall. These are sink and stress signals, not a fill
+  simulation. Walls drafted with `extrude(taper=...)` are B-splines that the check reads as the planes and
+  cylinders they are.
 - `parting.flat_parting_possible`, and `stepped_parting` where it is not.
 - `clamp` is an estimate (`clamp_estimate`): the part's projected area alone, no runner, at a molder's
   factor for the resin.

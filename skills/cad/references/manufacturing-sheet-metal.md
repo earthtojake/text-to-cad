@@ -7,6 +7,43 @@ to cutting and bending sheet.
 An order from SendCutSend, checked against its catalog and specs, is the sendcutsend skill's
 ($sendcutsend).
 
+## Design it
+
+What a cut-and-bent part has from its first line (the `generic` set's numbers, in multiples of the
+thickness `t`; a shop's set or bend table moves them):
+
+- **One thickness.** The whole part is one sheet: every face is its top, its bottom or a cut edge.
+  No boss, pocket, countersink, second thickness or solid block; a formed feature the person wants is
+  a check by hand.
+- **A bend is two arcs.** Inside radius `r` of at least `t` (the shop's tooling sets it; `--bend-radius`
+  when known) and outside radius `r + t` at the same corner. Build the legs, union them and fillet
+  both edges of the corner:
+
+  ```python
+  leg_a = bd.Box(60, 40, t, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+  leg_b = bd.Box(t, 40, 30, align=(bd.Align.MIN, bd.Align.CENTER, bd.Align.MIN))
+  bracket = leg_a + leg_b
+  along = bracket.edges().filter_by(bd.Axis.Y)                 # the corner's edges run along Y
+  inside = [e for e in along if abs(e.center().X - t) < 1e-6 and abs(e.center().Z - t) < 1e-6]
+  outside = [e for e in along if abs(e.center().X) < 1e-6 and abs(e.center().Z) < 1e-6]
+  bracket = bracket.fillet(r, inside).fillet(r + t, outside)
+  ```
+
+  Two boxes with a sharp corner, a fillet on one side only, or two radii that are not concentric is
+  not a bend: the check reports the corner (`sheet.sharp_bend`, an error) and unfolds nothing past
+  it. A shelled box (`bd.offset(box, -t, openings=...)`) has sharp corners the same way.
+- **Flanges and holes.** A flange runs at least `2t` past the bend's outside radius (`4t` keeps every
+  shop happy); a hole sits at least `2t` from where the bend's radius starts and `t` from an edge,
+  holes `2t` apart, each at least `t` across (`2t` for a tapped one); nothing crosses a bend.
+- **Reliefs.** Where a flange ends before the sheet's edge, a relief at the bend's end, at least `t`
+  wide and reaching past the bend radius, so the bend does not tear.
+- **Cut features.** Slots, notches and tabs at least `t` wide (and wider than the kerf), no longer than
+  five times their width; webs between cut-outs at least `t`.
+- **Hems and channels.** A hem's inside diameter at least `t` and its return `6t`; a channel's base at
+  least twice its flange height, so a punch fits.
+- Stock 0.5 to 6 mm bent (10 mm cut flat); the material on the part, `part.material = metals.steel()`
+  or the alloy's factory; `--thickness` when the person named the gauge.
+
 ## Check it
 
 ```bash
