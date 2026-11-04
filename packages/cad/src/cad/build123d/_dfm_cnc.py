@@ -279,13 +279,9 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
         for d, r in zip(extra, extra_reach):
             reach[len(candidates)] = r
             candidates.append(d)
-    sphere_dirs = fibonacci(200)
+    probes = _probe_directions(model)
     if axes == 5:
-        idx = np.flatnonzero(residual)
-        for d in sphere_dirs:
-            r = np.zeros(len(points), dtype=bool)
-            if len(idx):
-                r[idx] = _reach(model, points[idx], normals[idx], d)
+        for d, r in _probe(model, points, normals, owner_a, np.flatnonzero(residual), probes):
             reach[len(candidates)] = r
             candidates.append(d)
     # greedy set cover over the sampled area
@@ -307,12 +303,8 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
     # would any direction at all reach the points the machine does not?
     anywhere = reachable_any.copy()
     if axes < 5 and unreached.any():
-        idx = np.flatnonzero(unreached)
-        for d in sphere_dirs:
-            todo = idx[~anywhere[idx]]
-            if not len(todo):
-                break
-            anywhere[todo] = _reach(model, points[todo], normals[todo], d)
+        for _, r in _probe(model, points, normals, owner_a, np.flatnonzero(unreached), probes):
+            anywhere |= r
     items = []
     for i in faces:
         mask = owner_a == i
@@ -336,13 +328,106 @@ def _access(model: Model, state: dict[str, Any]) -> dict[str, Any]:
                            "area_fraction": round(float(areas[new].sum() / areas.sum()), 4),
                            "faces": int(len(set(owner_a[new].tolist())))})
     fixtures = _fixtures([candidates[k] for k in chosen], axes, rotary)
-    largest = max(range(1, model.n + 1), key=lambda i: model.face(i).area)
+    largest = model.largest()
     setup = {"setup_count": fixtures, "orientation_count": len(chosen), "directions": directions,
              "unreached_area_fraction": round(float(areas[unreached].sum() / areas.sum()), 4),
              "rotary_axis": brep.rounded(rotary) if rotary is not None else None,
              "sampled_points": int(len(points)), "part": model.part.name,
              "location": model.ref(largest), "xyz": model.center(largest)}
     return {"items": items, "setup": setup, "directions": candidates, "rotary": rotary}
+
+
+#: Of the points no machine direction reaches, each face's first few are probed over every direction
+#: (``_probe``); its others try only the directions that reached those.
+PROBED_PER_FACE = 2
+#: A probed point tries at most this many directions that face it before it is called unreachable.
+PROBE_TRIES = 32
+
+
+def _probe_directions(model: Model) -> list[np.ndarray]:
+    """The directions a tool might come from, most likely first: the part's own -- each plane's normal, each
+    cylinder's and cone's axis both ways, by the area that names them, the first 64 --, then every 15
+    degrees about each world axis, then 200 spread over the sphere."""
+    weights: list[tuple[float, np.ndarray]] = []
+    for i in range(1, model.n + 1):
+        s = model.surface(i)
+        area = model.mesh_area(i)
+        if s.kind == "plane":
+            weights.append((area, unit(s.normal)))
+        elif s.kind in ("cylinder", "cone") and s.axis is not None:
+            weights += [(area, unit(s.axis)), (area, -unit(s.axis))]
+    found: list[tuple[float, np.ndarray]] = []
+    for area, d in sorted(weights, key=lambda pair: -pair[0]):
+        for k, (total, known) in enumerate(found):
+            if float(d @ known) > SAME:
+                found[k] = (total + area, known)
+                break
+        else:
+            found.append((area, d))
+    ordered = [d for _, d in sorted(found, key=lambda pair: -pair[0])][:64]
+    rotations = [d for axis in np.eye(3) for d in about(axis)]  # a rotary table's, about each world axis
+    for d in rotations + fibonacci(200):
+        if not any(float(d @ known) > SAME for known in ordered):
+            ordered.append(d)
+    return ordered
+
+
+def _probe(model: Model, points: np.ndarray, normals: np.ndarray, owner: np.ndarray, idx: np.ndarray,
+           directions: list[np.ndarray]) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Which of the points ``idx`` each direction reaches: each face's first ``PROBED_PER_FACE`` of them try
+    the directions in turn (at most ``PROBE_TRIES`` that face them) until one reaches them; the face's other
+    points then try the directions that reached its probed ones, then the 16 that reached most. The
+    directions that reach anything, each with the points it reaches."""
+    probed: list[int] = []
+    rest: list[int] = []
+    seen: dict[int, int] = {}
+    for index in idx:
+        face = int(owner[index])
+        seen[face] = seen.get(face, 0) + 1
+        (probed if seen[face] <= PROBED_PER_FACE else rest).append(int(index))
+    probed_a = np.array(probed, dtype=int)
+    reached = np.zeros(len(points), dtype=bool)
+    tries = np.zeros(len(points), dtype=int)
+    found: list[tuple[np.ndarray, np.ndarray]] = []
+    worked: dict[int, set[int]] = {}
+    for k, d in enumerate(directions):
+        if not len(probed_a):
+            break
+        pending = probed_a[~reached[probed_a] & (tries[probed_a] < PROBE_TRIES)
+                           & (normals[probed_a] @ d >= -0.01)]
+        if not len(pending):
+            if bool(np.all(reached[probed_a] | (tries[probed_a] >= PROBE_TRIES))):
+                break
+            continue
+        tries[pending] += 1
+        hit = model.escape_all(points[pending], normals[pending], d)
+        if hit.any():
+            r = np.zeros(len(points), dtype=bool)
+            r[pending[hit]] = True
+            reached |= r
+            found.append((d, r))
+            for index in pending[hit]:
+                worked.setdefault(int(owner[index]), set()).add(len(found) - 1)
+    left = np.array([index for index in rest
+                     if not any(_try(model, points, normals, index, found[slot])
+                                for slot in sorted(worked.get(int(owner[index]), ())))], dtype=int)
+    # then, in batches, the directions that reached most, at most 16 of them
+    for slot in sorted(range(len(found)), key=lambda k: -int(found[k][1].sum()))[:16]:
+        d, r = found[slot]
+        pending = left[~r[left] & (normals[left] @ d >= -0.01)] if len(left) else left
+        if len(pending):
+            r[pending[model.escape_all(points[pending], normals[pending], d)]] = True
+            left = left[~r[left]]
+    return found
+
+
+def _try(model: Model, points: np.ndarray, normals: np.ndarray, index: int,
+         entry: tuple[np.ndarray, np.ndarray]) -> bool:
+    d, r = entry
+    if float(normals[index] @ d) >= -0.01 and model.escapes(points[index], normals[index], d):
+        r[index] = True
+        return True
+    return False
 
 
 def _stock_faces(model: Model) -> set[int]:
@@ -707,7 +792,7 @@ def _stock(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
     blank_volume = float(np.prod(blank))
     ordered = sorted(size, reverse=True)
     fits = all(p <= s + 1e-6 for p, s in zip(ordered, sorted(blank, reverse=True)))
-    largest = max(range(1, model.n + 1), key=lambda i: model.face(i).area)
+    largest = model.largest()
     return [{"part": model.part.name, "size_mm": brep.rounded(size), "stock_mm": brep.rounded(blank),
              "stock_given": stock is not None, "fits_stock": fits,
              "length_mm": round(ordered[0], 4), "width_mm": round(ordered[1], 4), "height_mm": round(ordered[2], 4),
@@ -717,8 +802,8 @@ def _stock(model: Model, state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _small(model: Model) -> dict[str, Any]:
-    lengths = [float(edge.length) for edge in model.part.edges() if edge.length > 1e-9]
-    areas = [float(face.area) for face in model.faces]
+    lengths = [float(edge.length) for edge in model.edges if edge.length > 1e-9]
+    areas = [model.mesh_area(i) for i in range(1, model.n + 1)]
     items = []
     fine = 0
     for i in range(1, model.n + 1):
