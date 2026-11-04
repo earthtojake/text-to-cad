@@ -275,6 +275,7 @@ can be checked:
 | New parts, placements, colours, a mechanism | The snapshots it takes to judge it: usually one from the angle that shows the change, more only when a view leaves the question open, a posed one for a mechanism state |
 | A reference the prompt names | `cad model inspect "$ID" '<ref>'` ([Prompt references](#prompt-references-and-inspection)) |
 | A 2D profile or DXF | `cad model export` (it runs the drawing checks), then an `ezdxf` read and `cad dxf snapshot` of the file ([check a drawing](references/2d-profiles-and-dxf.md#check-a-drawing)) |
+| Any change to the geometry of a part whose process is known | Its process's check, with the same flags as before: `cad model dfm "$ID" --process cnc` ([Can it be made?](#can-it-be-made)); a new finding is fixed or reported before anything else |
 
 ```bash
 cad model snapshot "$ID" tmp/review.png
