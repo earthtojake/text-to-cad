@@ -459,6 +459,7 @@ class Rays:
         self._tolerance = tolerance
         faces = FaceMap()
         TopExp.MapShapes_s(shape.wrapped, TopAbs_FACE, faces)
+        self._map = faces
         self.faces = [TopoDS.Face(faces.FindKey(index)) for index in range(1, faces.Extent() + 1)]
         whole = Bnd_Box()
         BRepBndLib.Add_s(shape.wrapped, whole, False)
@@ -540,7 +541,7 @@ class Rays:
 
     def ordinal(self, face: Any) -> int:
         """The ordinal (1-based) of a face a crossing names, 0 for none of this shape's."""
-        return next((index + 1 for index, mine in enumerate(self.faces) if mine.IsSame(face)), 0)
+        return int(self._map.FindIndex(face))
 
     def thickness(self, point: Iterable[float], normal: Iterable[float], skip: float = 1e-5) -> float | None:
         """The wall under ``point`` of a face whose outward normal there is ``normal``: the distance, into the

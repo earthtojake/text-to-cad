@@ -56,18 +56,19 @@ PT = Source("pt-tonnage", "Plastics Technology", "Clamp tonnage: more is better,
 
 _IN = 25.4
 #: Protolabs' recommended wall thickness by resin (its table, in inches, "adapted from
-#: manufacturingcenter.com"), in millimetres, keyed by ``materials``' names. A resin the table names that
-#: ``materials`` has no name for (polyphenylene sulfide 0.020-0.180 in, polyurethane 0.080-0.750 in,
-#: long-fiber reinforced 0.075-1.000 in) cannot be given yet.
+#: manufacturingcenter.com"), in millimetres, keyed by ``materials``' names (its polyethylene row stands for
+#: HDPE and LDPE too).
 WALL_RANGES: dict[str, tuple[float, float]] = {
     "abs": (0.045 * _IN, 0.140 * _IN), "pom": (0.030 * _IN, 0.120 * _IN), "pmma": (0.025 * _IN, 0.500 * _IN),
     "lcp": (0.030 * _IN, 0.120 * _IN), "nylon": (0.030 * _IN, 0.115 * _IN), "pc": (0.040 * _IN, 0.150 * _IN),
     "pbt": (0.025 * _IN, 0.125 * _IN), "petg": (0.025 * _IN, 0.125 * _IN), "pe": (0.030 * _IN, 0.200 * _IN),
     "pp": (0.035 * _IN, 0.150 * _IN), "ps": (0.035 * _IN, 0.150 * _IN),
+    "hdpe": (0.030 * _IN, 0.200 * _IN), "ldpe": (0.030 * _IN, 0.200 * _IN), "pps": (0.020 * _IN, 0.180 * _IN),
+    "pu": (0.080 * _IN, 0.750 * _IN), "lft": (0.075 * _IN, 1.000 * _IN),
 }
 #: Moldminds' clamp tonnage factor by resin, US tons per square inch of projected area (its "pe" is HDPE's,
 #: 2.0; LDPE's is 1.5).
-CLAMP_FACTORS: dict[str, float] = {"abs": 3.25, "pe": 2.0, "nylon": 4.5, "nylon_gf": 5.0, "pc": 4.0, "pp": 2.0,
+CLAMP_FACTORS: dict[str, float] = {"abs": 3.25, "pe": 2.0, "hdpe": 2.0, "ldpe": 1.5, "nylon": 4.5, "nylon_gf": 5.0, "pc": 4.0, "pp": 2.0,
                                    "ps": 1.5, "pom": 3.5, "tpu": 2.5}
 #: A resin the table lacks: RJC Mold's usual range, 2 to 5 tons per square inch, estimated at Plastics
 #: Technology's starting point, 3.
