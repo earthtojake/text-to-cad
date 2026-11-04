@@ -513,7 +513,8 @@ class CheckTest(unittest.TestCase):
         self.assertEqual(sorted(report), ["bosses", "clamp", "corners", "draft", "envelope", "mesh", "notes", "partial",
                                          "parting", "process", "projection", "ribs", "rules", "scale", "source",
                                          "thickness", "undercuts"])
-        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=0.5, msg="a solid block reads its least span")
+        # A solid block reads its least span, from the sampled point nearest a face's middle (within a spacing).
+        self.assertAlmostEqual(report["thickness"]["nominal_mm"], 15.0, delta=1.0, msg="a solid block's least span")
         self.assertEqual(report["draft"]["pull_axis"], [0.0, 0.0, -1.0])
         # A plain box's four sides have no draft: the fact is said, and the generic rules' 0.5 deg minimum
         # (Protolabs') fails the check at each side; facts alone (rules none) still pass.

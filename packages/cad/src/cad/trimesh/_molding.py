@@ -665,6 +665,25 @@ def _probe_mesh(mesh: trimesh.Trimesh) -> tuple[trimesh.Trimesh, float, str | No
     return probe, edge, note
 
 
+def _smoothed(mesh: trimesh.Trimesh, diag: float) -> np.ndarray:
+    """Each facet's normal averaged (by area) with the facets within ``_SMOOTHING`` of the part's size whose
+    own normals lie within 20 deg of it: the surface's direction, not one facet's noise."""
+    normals = mesh.face_normals
+    total = normals * mesh.area_faces[:, None]
+    try:
+        from scipy.spatial import cKDTree
+
+        pairs = cKDTree(mesh.triangles_center).query_pairs(_SMOOTHING * diag, output_type="ndarray")
+    except Exception:  # noqa: BLE001 - no scipy: the raw normals
+        return normals
+    if len(pairs):
+        pairs = pairs[np.einsum("ij,ij->i", normals[pairs[:, 0]], normals[pairs[:, 1]]) > np.cos(np.radians(20.0))]
+        np.add.at(total, pairs[:, 0], normals[pairs[:, 1]] * mesh.area_faces[pairs[:, 1], None])
+        np.add.at(total, pairs[:, 1], normals[pairs[:, 0]] * mesh.area_faces[pairs[:, 0], None])
+    size = np.linalg.norm(total, axis=1)
+    return total / np.where(size > 0, size, 1.0)[:, None]
+
+
 def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) -> dict:
     """Straight-pull occlusion test for every face.
 
@@ -703,9 +722,13 @@ def _undercut_facts(mesh: trimesh.Trimesh, pull: np.ndarray, zero_tol: float) ->
         normals = probe.face_normals
         areas = probe.area_faces
         centers = probe.triangles_center
-        along = normals @ pull
+        # Which way a facet opens is read from its normal averaged over the facets about it that face the
+        # same way (``_smoothed``): vertex noise tilts single facets of a 3 degree wall past zero.
+        along = _smoothed(probe, float(np.linalg.norm(body.extents))) @ pull
         lean_deg = np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0)))
-        zero = lean_deg < zero_tol
+        # A facet leaning under half a degree is taken as zero draft (both ways tried): a mesh's vertex noise
+        # tilts a straight bore's facets about that much, and a bore is not trapped by its own floor.
+        zero = lean_deg < max(zero_tol, _NOISE_DEG)
         eps = 1e-3 * max(float(np.linalg.norm(body.extents)), 1.0)
 
         def blocked(direction_sign: np.ndarray, sel: np.ndarray) -> np.ndarray:
@@ -983,6 +1006,14 @@ def pulls(mesh: trimesh.Trimesh, wall_limit: float, zero_tol: float) -> dict:
 # whole cylinder; a fillet joins the faces it blends into one region).
 
 _SMOOTH_DEG = 20.0
+#: A region whose corners lie this close to one plane (as a share of the part's size) is flat.
+_FLAT_FIT = 3e-4
+#: Facet normals are averaged over a patch this size (a share of the part's size) before draft is read.
+_SMOOTHING = 5e-3
+_SLIVER = 2e-4
+#: A facet leaning less than this either way is taken as square to the pull where a lean's sign matters
+#: (a split face, a silhouette): a mesh's own noise tilts facets by about this much.
+_NOISE_DEG = 0.5
 #: A concave edge turning this much is a sharp internal corner: a square one turns 90, and a fillet
 #: exported coarsely enough to turn 45 a facet (two facets round a quarter) is not one.
 _CORNER_TURN_DEG = 60.0
@@ -1095,16 +1126,62 @@ class _Regions:
                     link["angle"] = link["turn"] / max(link["concave"] + link["convex"], 1e-12)
                     link["points"].append(mesh.vertices[edge].mean(axis=0))
         normals = mesh.face_normals
+        order = np.argsort(self.label, kind="stable")
+        bounds = np.searchsorted(self.label[order], np.arange(self.count + 1))
+        self._members = [order[bounds[i]:bounds[i + 1]] for i in range(self.count)]
         self.normal = np.zeros((self.count, 3))
         np.add.at(self.normal, self.label, normals * mesh.area_faces[:, None])
         size = np.linalg.norm(self.normal, axis=1)
         self.normal = self.normal / np.where(size > 0, size, 1.0)[:, None]
         spread = np.ones(self.count)
         np.minimum.at(spread, self.label, np.einsum("ij,ij->i", normals, self.normal[self.label]))
-        self.planar = spread > np.cos(np.radians(1.0))
         self.centroid = np.zeros((self.count, 3))
         np.add.at(self.centroid, self.label, mesh.triangles_center * mesh.area_faces[:, None])
         self.centroid /= np.where(self.areas > 0, self.areas, 1.0)[:, None]
+        # Flat: its facets agree to a degree, or its corners lie on one plane to _FLAT_FIT of the part's size
+        # (a flat face whose vertices carry noise has facets that disagree but corners that do not). A flat
+        # region's normal is its plane's.
+        diag = max(float(np.linalg.norm(mesh.extents)), 1e-9)
+        #: A region smaller than this (a share of the surface) is a sliver the exporter, or vertex noise, left
+        #: between faces -- one skinny triangle whose normal is anyone's -- not a face of the part.
+        self.sliver = _SLIVER * float(mesh.area)
+        self.planar = spread > np.cos(np.radians(1.0))
+        self.width = np.zeros(self.count)
+        for region in range(self.count):
+            verts = self.vertices(region)
+            if len(verts) >= 3:
+                centre = verts.mean(axis=0)
+                _u, sigma, vt = np.linalg.svd(verts - centre, full_matrices=False)
+                fit = vt[-1]
+                residual = float(np.abs((verts - centre) @ fit).max())
+                # Only a plane its corners pin down in both directions: a strip of facets one wide (a fillet's
+                # band) has no second span to fit across, and its facets' mean normal is the better reading.
+                spans = sigma[1] >= 0.2 * sigma[0] if len(sigma) > 1 else False
+                if spans and residual <= _FLAT_FIT * diag and \
+                        abs(float(fit @ self.normal[region])) > np.cos(np.radians(10.0)):
+                    self.planar[region] = True
+                    self.normal[region] = fit if float(fit @ self.normal[region]) > 0 else -fit
+                span = 2.0 * float(np.linalg.norm(verts - centre, axis=1).max())
+                self.width[region] = float(self.areas[region]) / span if span > 0 else 0.0
+        # Each facet's normal averaged (by area) over its region's facets within _SMOOTHING of the part's size:
+        # noise on a curved face's vertices tilts single facets, not the surface, and a mean over a patch
+        # that small leaves a cone's or a fillet's own turn as it was.
+        smooth_normals = normals * mesh.area_faces[:, None]
+        centers = mesh.triangles_center
+        try:
+            from scipy.spatial import cKDTree
+
+            pairs = cKDTree(centers).query_pairs(_SMOOTHING * diag, output_type="ndarray")
+        except Exception:  # noqa: BLE001 - no scipy: each facet with its smooth neighbours alone
+            pairs = smooth
+        if len(pairs):
+            pairs = pairs[self.label[pairs[:, 0]] == self.label[pairs[:, 1]]]
+            np.add.at(smooth_normals, pairs[:, 0], normals[pairs[:, 1]] * mesh.area_faces[pairs[:, 1], None])
+            np.add.at(smooth_normals, pairs[:, 1], normals[pairs[:, 0]] * mesh.area_faces[pairs[:, 0], None])
+        length = np.linalg.norm(smooth_normals, axis=1)
+        self.facet_normal = smooth_normals / np.where(length > 0, length, 1.0)[:, None]
+        flat = self.planar[self.label]
+        self.facet_normal[flat] = self.normal[self.label[flat]]
 
     def coplanar(self, a: int, b: int) -> bool:
         if a == b:
@@ -1115,7 +1192,7 @@ class _Regions:
         return abs(float((self.centroid[b] - self.centroid[a]) @ self.normal[a])) < 1e-4 * scale
 
     def faces(self, region: int) -> np.ndarray:
-        return np.nonzero(self.label == region)[0]
+        return self._members[region]
 
     def concave_neighbours(self, region: int) -> list[int]:
         return [other for other, link in self.links.get(region, {}).items() if link["concave"] > link["convex"]]
@@ -1128,14 +1205,11 @@ class _Regions:
 
 
 def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
-    count = min(_THICKNESS_SAMPLES, max(200, len(mesh.faces)))
-    points, faces = trimesh.sample.sample_surface_even(mesh, count, seed=0) if hasattr(
-        trimesh.sample, "sample_surface_even") else trimesh.sample.sample_surface(mesh, count, seed=0)
-    if len(points) < 50:
-        points, faces = trimesh.sample.sample_surface(mesh, count, seed=0)
-    faces = np.asarray(faces, dtype=int)
+    count = _THICKNESS_SAMPLES
+    # Deterministic and even (``meshops_molding.even_points``): no rejection sampling, whose yield moves
+    # with the platform's tessellation.
+    points, faces, weights = ops.even_points(mesh.vertices, mesh.faces, count)
     normals = mesh.face_normals[faces]
-    weights = np.full(len(points), float(mesh.area) / max(len(points), 1))
     spacing = np.full(len(points), float(np.sqrt(float(mesh.area) / max(len(points), 1))))
     diag = float(np.linalg.norm(mesh.extents)) or 1.0
     eps = min(max(1e-4 * diag, 1e-5), 0.01)
@@ -1145,8 +1219,12 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
     # the next facet's crease (exact geometry has none there); the ray straight through bounds it instead.
     values, bound = ops.ball_thickness(points, normals, ray, mesh.vertices, mesh.faces, others=points,
                                        point_face=owner, triangle_face=regions.label, others_face=owner)
-    held = np.array([b >= 0 and int(regions.label[b]) in regions.convex_neighbours(int(o))
-                     for b, o in zip(bound, owner)], dtype=bool)
+    # Held round an edge: bounded by a face across a convex edge of its own, or by any face not looking
+    # back at it (a far wall faces the point, within 60 deg; a face round an outside edge stands square to
+    # it) -- the second holds where noise has cut the faces between into slivers.
+    facing = np.einsum("ij,ij->i", mesh.face_normals[np.maximum(bound, 0)], normals)
+    held = np.array([b >= 0 and (int(regions.label[b]) in regions.convex_neighbours(int(o)) or f > -0.5)
+                     for b, o, f in zip(bound, owner, facing)], dtype=bool)
     finite = np.isfinite(values)
     clean = finite & ~held
     if clean.any() and weights[clean].sum() >= 0.5 * weights[finite].sum():
@@ -1157,18 +1235,24 @@ def _thickness_mesh(mesh: trimesh.Trimesh, regions: _Regions) -> dict:
     for region in np.unique(owner[finite]):
         mine = (owner == region) & finite
         v, w, tidy = values[mine], weights[mine], clean[mine]
-        narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
-        median = low = float(v.max()) if narrow else ops.weighted_median(v[tidy], w[tidy])
-        if not narrow:
+        # Narrow: a region the ball cannot sit on -- most of its points held by a face round a convex edge,
+        # a sliver, or the region narrower (its area over its span) than twice the widest ball it holds (a
+        # fillet's strip, a corner's patch, a rib's top, a block's side). Its reading is the edge's.
+        narrow = (float(w[tidy].sum()) < 0.3 * float(w.sum()) or regions.areas[region] < regions.sliver
+                  or float(regions.width[region]) < 2.0 * float(v.max()))
+        median = low = float(v.max()) if narrow or not tidy.any() else ops.weighted_median(v[tidy], w[tidy])
+        if not narrow and tidy.any():
             low = ops.weighted_quantile(v[tidy], w[tidy], 0.1)
         top = int(np.argmax(v))
         per[int(region)] = {"median": median, "low": low, "max": float(v[top]), "at": points[mine][top],
                             "narrow": narrow}
     for region, face in per.items():
         if face["narrow"]:
-            walls = [per[o]["median"] for o in regions.convex_neighbours(region) if o in per and not per[o]["narrow"]]
-            if walls:
-                face["median"] = face["low"] = float(np.median(walls))
+            # It takes the wall of the broad regions nearest it; where none is near, its own widest reading.
+            near = ops.nearest_broad(region, lambda r: list(regions.links.get(r, {})),
+                                     lambda r: r in per and not per[r]["narrow"])
+            if near:
+                face["median"] = face["low"] = float(np.median([per[o]["median"] for o in near]))
                 face["max"] = max(face["max"], face["median"])
     if per:
         # The nominal wall: the area median of the regions' own walls (a narrow region's from its neighbours).
@@ -1368,8 +1452,7 @@ def _corners_mesh(mesh: trimesh.Trimesh, regions: _Regions, wall_of, nominal: fl
     (a filleted corner joins its faces into one region, or its facets each turn less, and is not listed: a
     mesh's fillet radius is not read)."""
     items = []
-    # A region this small is a sliver the exporter left where faces meet, not a face of the part.
-    least = 2e-4 * float(mesh.area)
+    least = regions.sliver
     for a, links in regions.links.items():
         for b, link in links.items():
             if a >= b or link["concave"] <= link["convex"] or link["angle"] < _CORNER_TURN_DEG or a in used or b in used:
@@ -1395,8 +1478,8 @@ def _parting_mesh(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, ze
     heights = mesh.vertices @ pull
     top, bottom = float(heights.max()), float(heights.min())
     tolerance = max(1e-3 * (top - bottom), 0.01)
-    tol = np.sin(np.radians(zero_tol))
-    along = mesh.face_normals @ pull
+    tol = np.sin(np.radians(max(zero_tol, _NOISE_DEG)))
+    along = regions.facet_normal @ pull
     sign = np.where(along > tol, 1, np.where(along < -tol, -1, 0))
     skip = trapped if trapped is not None else np.zeros(len(mesh.faces), dtype=bool)
     elements = []
@@ -1501,15 +1584,19 @@ def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
                  zero_tol: float) -> list:
     """The draft per region, the rules' items: a flat region's exactly (its normal), a curved one's at the 5th
     percentile of its wall facets' area (its chords scatter: ``spread_deg``), tangent bands left out; ``opens``
-    as the region leans, ``split`` where it leans both ways (the parting line crosses it)."""
-    along = mesh.face_normals @ pull
+    as the region leans, ``split`` where it leans both ways (the parting line crosses it). Facets are read by
+    their smoothed normals (``_Regions.facet_normal``) and a lean counts past half a degree, so vertex noise
+    does not tilt a wall."""
+    along = regions.facet_normal @ pull
     draft = np.round(np.degrees(np.arcsin(np.clip(np.abs(along), 0.0, 1.0))), 3)
-    tangent = _tangent_faces(mesh, pull, along, zero_tol)
-    tol = float(np.sin(np.radians(zero_tol)))
+    tangent = _tangent_faces(mesh, pull, mesh.face_normals @ pull, zero_tol)
+    tol = float(np.sin(np.radians(max(zero_tol, _NOISE_DEG))))
     areas = mesh.area_faces
     reach = mesh.triangles @ pull
     items = []
     for region in range(regions.count):
+        if regions.areas[region] < regions.sliver:
+            continue  # a sliver the exporter (or noise) left between faces: no face of the part
         tris = regions.faces(region)
         wall = tris[(draft[tris] < wall_limit) & ~tangent[tris]]
         if not len(wall):
@@ -1544,8 +1631,8 @@ def _draft_items(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, wal
 def _trapped_regions(mesh: trimesh.Trimesh, regions: _Regions, pull: np.ndarray, zero_tol: float) -> np.ndarray:
     """Per triangle: does it lie in a region mostly blocked along the way it opens (an undercut's: a slide
     forms it, and the parting line runs round it)?"""
-    along = mesh.face_normals @ pull
-    tol = np.sin(np.radians(zero_tol))
+    along = regions.facet_normal @ pull
+    tol = np.sin(np.radians(max(zero_tol, _NOISE_DEG)))
     eps = 1e-3 * max(float(np.linalg.norm(mesh.extents)), 1.0)
     origins = mesh.triangles_center + mesh.face_normals * eps
     sign = np.where(along >= 0, 1.0, -1.0)

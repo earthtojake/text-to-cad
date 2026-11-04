@@ -280,7 +280,13 @@ class _Geometry:
                     except Exception:  # noqa: BLE001 - a degenerate edge adds no point
                         continue
             own = self.points[self.owner == ordinal]
-            self._vertices[ordinal] = np.vstack([np.array(corners + edge_points).reshape(-1, 3), own])
+            found = np.vstack([np.array(corners + edge_points).reshape(-1, 3), own])
+            if not len(found):
+                # A closed face with no vertex, no edge and no sample: its box's corners stand for it.
+                box = face.bounding_box()
+                found = np.array([[x, y, z] for x in (box.min.X, box.max.X) for y in (box.min.Y, box.max.Y)
+                                  for z in (box.min.Z, box.max.Z)])
+            self._vertices[ordinal] = found
         return self._vertices[ordinal]
 
     def neighbours(self) -> dict[int, list[tuple[int, Any]]]:
@@ -649,7 +655,13 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
         v, w = values[mine], geo.weights[mine]
         top = int(np.argmax(v))
         tidy = clean[mine]
-        narrow = float(w[tidy].sum()) < 0.3 * float(w.sum())
+        # Narrow: a face the ball cannot sit on -- most of its points held by a face round a convex edge, or
+        # the face narrower (its area over its span) than twice the widest ball it holds.
+        corners = geo.vertices(ordinal)
+        span = 2.0 * float(np.linalg.norm(corners - corners.mean(axis=0), axis=1).max()) if len(corners) else 0.0
+        width = float(geo.areas[ordinal - 1]) / span if span > 0 else 0.0
+        narrow = (float(w[tidy].sum()) < 0.3 * float(w.sum())
+                  or width < 2.0 * float(v.max()))
         if narrow:
             median = low = float(v.max())
         else:
@@ -664,8 +676,10 @@ def _thickness_part(geo: _Geometry) -> _Thickness:
             walls = [per_face[other]["median"] for other in convex.get(ordinal, set())
                      if other in per_face and not per_face[other]["narrow"]]
             if not walls:
-                walls = [per_face[other]["median"] for other, _edge in geo.neighbours().get(ordinal, [])
-                         if other in per_face and not per_face[other]["narrow"]]
+                links = geo.neighbours()
+                walls = [per_face[other]["median"] for other in ops.nearest_broad(
+                    ordinal, lambda face: [o for o, _e in links.get(face, [])],
+                    lambda face: face in per_face and not per_face[face]["narrow"])]
             if walls:
                 face["median"] = face["low"] = float(np.median(walls))
                 face["max"] = max(face["max"], face["median"])
@@ -1028,6 +1042,8 @@ def _parting_part(geo: _Geometry, drafts: list[_FaceDraft], projection: dict[str
     trapped = trapped or set()
     u, v = ops.basis(pull)
     heights = vertices @ pull if len(vertices) else geo.points @ pull
+    if not len(heights):
+        heights = np.array([float(geo.lo @ pull), float(geo.hi @ pull)])
     top, bottom = float(heights.max()), float(heights.min())
     depth = top - bottom
     tolerance = max(1e-3 * depth, 0.01)

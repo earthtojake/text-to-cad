@@ -287,5 +287,44 @@ class RuleSetsTest(unittest.TestCase):
         self.assertNotIn("molding.wall_min", {f.code for f in _check(thin, material="nylon").findings})
 
 
+
+def _ellipsoid(a: float, b: float, c: float) -> Any:
+    """A unit sphere stretched to semi-axes a, b, c: one closed freeform face."""
+    from OCP.BRepBuilderAPI import BRepBuilderAPI_GTransform
+    from OCP.gp import gp_GTrsf, gp_Mat
+
+    stretch = gp_GTrsf()
+    stretch.SetVectorialPart(gp_Mat(a, 0, 0, 0, b, 0, 0, 0, c))
+    return bd.Solid(BRepBuilderAPI_GTransform(bd.Sphere(1).wrapped, stretch, True).Shape())
+
+
+class OneFaceTest(unittest.TestCase):
+    """A part of one closed face has no other face to hold a ball, bound a rib or meet a corner: each family
+    reports what it found (nothing, where nothing is there), never an empty reduction."""
+
+    def test_a_sphere_an_ellipsoid_and_a_torus_are_measured_whole(self) -> None:
+        for name, shape, wall in (("sphere", bd.Sphere(5), 10.0), ("ellipsoid", _ellipsoid(6, 4, 3), 6.0),
+                                  ("torus", bd.Torus(10, 3), 6.0)):
+            with self.subTest(part=name):
+                self.assertEqual(len(shape.faces()), 1)
+                report = _check(shape).measurements
+                self.assertEqual((report["partial"], report["partial_sections"]), (False, []))
+                for family in ("ribs", "bosses", "corners"):
+                    self.assertEqual(report[family]["count"], 0, family)
+                # The widest ball is the least diameter (an ellipsoid's 2 x 3); no reading exceeds it.
+                self.assertAlmostEqual(report["thickness"]["max_mm"], wall, delta=0.05 * wall)
+                self.assertLessEqual(report["thickness"]["nominal_mm"], wall * 1.01)
+
+    def test_the_shared_geometry_takes_empty_input(self) -> None:
+        none = np.zeros((0, 3))
+        values, bound = ops.ball_thickness(np.array([[0, 0, 1.0]]), np.array([[0, 0, 1.0]]), np.array([2.0]),
+                                           np.array([[0, 0, 0.0], [1, 0, 0], [0, 1, 0]]), np.array([[0, 1, 2]]),
+                                           others=none, point_face=np.array([1]), triangle_face=np.array([1]),
+                                           others_face=np.zeros(0, dtype=int))
+        self.assertEqual((float(values[0]), int(bound[0])), (2.0, -1), "its own face alone: the ray bounds it")
+        release = ops.classify_undercut(none, none, np.array([0, 0, 1.0]), lambda o, d: np.full(len(o), np.inf),
+                                        scale=10.0, zero_tol_deg=0.05)
+        self.assertEqual(release["release"], "none")
+
 if __name__ == "__main__":
     unittest.main()
