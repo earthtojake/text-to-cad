@@ -232,7 +232,7 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan
 camera, layer visibility and saved ink; they do not support 3D Preview, pose or transparency.
-The board view is 2D only. For a 3D look, export the board to GLB (`cad kicad_pcb export board.kicad_pcb --to glb -o out/`, or a `@glb` on the board script) and open that file in the viewer.
+The board view is 2D only. For a 3D look, export the board to GLB (`cad kicad_pcb export board.kicad_pcb --to glb -o out/`, or `kicad_pcb.export(board, to="glb", out=...)` after an edit) and open that file in the viewer.
 The viewer and snapshots draw the board as KiCad's PCB editor shows it (front copper active, pours
 at 60%, pad numbers and net names on pads, vias and tracks, dimensions; no drawing sheet, the board alone); they approximate mask/paste openings
 and use stroke lettering; text boxes, tables and embedded images are not drawn. KiCad's DRC and manufacturing
