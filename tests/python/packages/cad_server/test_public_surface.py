@@ -60,7 +60,7 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The person's telemetry choice: status, on or off.
     "telemetry": frozenset({"action"}),
     # The engine's verbs (cad_server.engine.cli), each a command of its own.
-    "export": frozenset({"source", "destinations", "json"}),
+    "export": frozenset({"source", "destinations", "tolerance", "json"}),
     "snapshot": SNAPSHOT,
     "serve": frozenset({"document", "port"}),
     "inspect": frozenset({"document", "ref", "query", "json"}),

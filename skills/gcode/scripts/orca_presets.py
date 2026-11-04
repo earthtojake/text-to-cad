@@ -42,14 +42,21 @@ def profile_roots(extra: list[str]) -> list[Path]:
     return [root for root in roots if root.is_dir()]
 
 
+def read_preset(path: Path) -> dict:
+    # Some vendors' files start with a UTF-8 byte-order mark (Snapmaker's fdm_process_common.json).
+    return json.loads(path.read_text(encoding="utf-8-sig"))
+
+
 def index_presets(roots: list[Path]) -> tuple[dict[tuple[str, str], list[Path]], set[tuple[str, str]]]:
     found: dict[tuple[str, str], list[Path]] = {}
     selectable: set[tuple[str, str]] = set()
     for root in roots:
         for path in sorted(root.rglob("*.json")):
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, ValueError):
+                data = read_preset(path)
+            except (OSError, ValueError) as error:
+                # A file left out may be another preset's parent, which would then come from another vendor.
+                print(f"Skipped {path}: {error}", file=sys.stderr)
                 continue
             if isinstance(data, dict) and data.get("type") in KINDS and isinstance(data.get("name"), str):
                 key = (data["type"], data["name"])
@@ -67,21 +74,36 @@ def shared_path_depth(a: Path, b: Path) -> int:
         return 0
 
 
-def complete(index: dict[tuple[str, str], list[Path]], kind: str, ref: str) -> tuple[dict, str]:
-    """The preset merged with every parent, and the selectable system preset it comes from."""
+def locate(index: dict[tuple[str, str], list[Path]], kind: str, ref: str,
+           printer: tuple[str, Path] | None = None) -> Path:
+    """The file of a preset given by file or by name. Several vendors can ship a preset of one name
+    (`Generic PETG`): with a printer (its name and file), take the one that lists it as compatible,
+    else the one nearest its file."""
     path = Path(ref).expanduser()
-    if not path.is_file():
-        if (kind, ref) not in index:
-            sys.exit(f"No {kind} preset named {ref!r}; list them with --list {kind}.")
-        path = index[(kind, ref)][0]
-    chain = [json.loads(path.read_text(encoding="utf-8"))]
+    if path.is_file():
+        return path
+    if (kind, ref) not in index:
+        sys.exit(f"No {kind} preset named {ref!r}; list them with --list {kind}.")
+    candidates = index[(kind, ref)]
+    if printer is None or len(candidates) == 1:
+        return candidates[0]
+    name, printer_path = printer
+    return max(candidates, key=lambda candidate: (name in (read_preset(candidate).get("compatible_printers") or []),
+                                                  shared_path_depth(candidate, printer_path)))
+
+
+def complete(index: dict[tuple[str, str], list[Path]], kind: str, ref: str,
+             printer: tuple[str, Path] | None = None) -> tuple[dict, str]:
+    """The preset merged with every parent, and the selectable system preset it comes from."""
+    path = locate(index, kind, ref, printer)
+    chain = [read_preset(path)]
     while chain[-1].get("inherits"):
         parents = index.get((kind, chain[-1]["inherits"]))
         if not parents or len(chain) > 20:
             sys.exit(f"Can't resolve parent {chain[-1]['inherits']!r} of {kind} preset {chain[0].get('name')!r}.")
         # A parent of the same name can exist under several vendors: take the one nearest the child.
         path = max(parents, key=lambda parent: shared_path_depth(parent, path))
-        chain.append(json.loads(path.read_text(encoding="utf-8")))
+        chain.append(read_preset(path))
     merged: dict = {}
     for layer in reversed(chain):
         merged.update(layer)
@@ -110,9 +132,11 @@ def main() -> int:
     if not (args.printer and args.process and args.filament):
         parser.error("give --printer, --process and at least one --filament, or --list")
 
-    printer, printer_system = complete(index, "machine", args.printer)
+    printer_path = locate(index, "machine", args.printer)
+    printer, printer_system = complete(index, "machine", str(printer_path))
     printer.update({"from": "User", "inherits": printer_system})
-    process, process_system = complete(index, "process", args.process)
+    made_for = (printer_system, printer_path)
+    process, process_system = complete(index, "process", args.process, made_for)
     process.update({"from": "User", "inherits": process_system, "compatible_printers": [printer_system]})
     out = Path(args.out).expanduser().resolve()
     out.mkdir(parents=True, exist_ok=True)
@@ -120,7 +144,7 @@ def main() -> int:
     written["printer"].write_text(json.dumps(printer, indent=1), encoding="utf-8")
     written["process"].write_text(json.dumps(process, indent=1), encoding="utf-8")
     for number, ref in enumerate(args.filament, start=1):
-        filament, filament_system = complete(index, "filament", ref)
+        filament, filament_system = complete(index, "filament", ref, made_for)
         filament.update({"from": "User", "inherits": filament_system, "compatible_printers": [printer_system]})
         path = out / f"filament-{number}.json"
         path.write_text(json.dumps(filament, indent=1), encoding="utf-8")
