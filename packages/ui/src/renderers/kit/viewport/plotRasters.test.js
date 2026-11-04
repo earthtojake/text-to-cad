@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { fitPlotTransform, layoutPlot } from "@cad/core/lib/plot2d/index.js";
 import { panTransform, zoomLimits, zoomTransform } from "@cad/core/lib/drawing2d/transform.js";
-import { PATCH_LIMIT, SETTLE_MS, createBoardRasters } from "./boardRasters.js";
+import { PATCH_LIMIT, SETTLE_MS, createPlotRasters } from "./plotRasters.js";
 
 // The cache's contract, with canvases that record what is drawn on them and a clock the test
 // turns by hand: the first frame is drawn at once, a pan is a whole-pixel move of what was
@@ -35,7 +35,7 @@ function harness() {
   const timers = new Map();
   let next = 0;
   let changes = 0;
-  const rasters = createBoardRasters({
+  const rasters = createPlotRasters({
     layout,
     onChange: () => { changes += 1; },
     createCanvas: (width, height) => { const element = canvas(width, height); made.push(element); return element; },

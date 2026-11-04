@@ -1,5 +1,6 @@
 /**
- * The rasters a board view paints from: what keeps a zoom crisp and a pan cheap.
+ * The rasters a plot view — a board, a schematic's sheet (`usePlotView.js`) — paints from: what keeps a
+ * zoom crisp and a pan cheap.
  *
  * A board's geometry is drawn by the canvas at whatever scale it lands at — crisp at any zoom,
  * and too slow to do every frame of a pan on a large board: tens of thousands of pads, tracks and
@@ -15,7 +16,7 @@
  * drawn first out: zooming back out to a view drawn before is instant, and a zoom or a pan has
  * something under it. The one at the scale on screen is drawn last, over the others.
  *
- * Nothing here is React: the view hook (`useBoardView.js`) owns one of these per plot, paints through it and
+ * Nothing here is React: the view hook (`usePlotView.js`) owns one of these per plot, paints through it and
  * disposes of it with the plot.
  */
 import { drawPlot, drawPlotImages, rectsOverlap, visiblePageRect } from "@cad/core/lib/plot2d/index.js";
@@ -50,7 +51,7 @@ function defaultCanvas(width, height) {
  *   schedule?: typeof setTimeout, cancel?: typeof clearTimeout }} options
  *   `onChange`: a better picture is ready; paint again.
  */
-export function createBoardRasters({ layout, onChange, view = null, createCanvas = defaultCanvas,
+export function createPlotRasters({ layout, onChange, view = null, createCanvas = defaultCanvas,
   schedule = (callback, delay) => setTimeout(callback, delay), cancel = (handle) => clearTimeout(handle) }) {
   /** @type {{ canvas: HTMLCanvasElement, scale: number, rect: number[], used: number }[]} */
   let patches = [];

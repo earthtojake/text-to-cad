@@ -1,6 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import { DropdownMenuCheckboxItem, DropdownMenuLabel } from "@cad/ui/primitives/dropdown-menu";
-import { ToolSettingsMenu } from "../kit/tools/ToolModeMenu.jsx";
+import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
 import { useControlUsage } from "../../usage/controls.js";
 import { BOARD_FILTER_GRID, BOARD_LOCKED, BOARD_SELECT_KINDS, boardFilterAll, readBoardFilter } from "./boardPick.js";
 
@@ -22,8 +21,8 @@ const BOXES = Object.freeze({
 const COUNTED = Object.freeze({ all: "select_filter_all", parts: "select_filter_parts" });
 
 /**
- * A board's Select filter: KiCad's Selection Filter, a grid of boxes in its two columns, row by row
- * (`BOARD_FILTER_GRID`) — All items and Locked items, then Footprints and Text, Tracks and Vias,
+ * A board's Select filter: KiCad's Selection Filter, the kit's filter menu (`kit/tools/select/SelectFilterMenu.jsx`),
+ * a grid of boxes in its two columns, row by row (`BOARD_FILTER_GRID`) — All items and Locked items, then Footprints and Text, Tracks and Vias,
  * Pads and Graphics, Zones and Rule Areas, Dimensions — in the chevron's dropdown after Select's
  * button (`ToolSettingsMenu`), headed "Pick", each box a stock checkbox item, its name alone (no
  * glyph, as KiCad's boxes have none), its check at the row's right end as every menu's. Ticking one leaves the menu open and takes Select up. All items ticks
@@ -47,15 +46,6 @@ export default function BoardSelectFilter({ value, onChange, disabled = false })
     else onChange(readBoardFilter(on ? [...value, id] : value.filter(other => other !== id)));
   };
   const checked = id => (id === "all" ? (everything ? true : kinds.length ? "indeterminate" : false) : value.includes(id));
-  return <ToolSettingsMenu label={t("select.filter")} trigger="chevron" disabled={disabled} contentClassName="w-auto"
-    triggerLabel={t("select.filterCurrent", { filter: t("select.filter"), mode })}
-    triggerProps={{ "data-select-filter-trigger": everything ? "all" : kinds.join(" ") || "none" }}>
-    <DropdownMenuLabel className="text-tiny font-normal text-muted-foreground">{t("select.pick")}</DropdownMenuLabel>
-    <div className="grid grid-cols-2 gap-x-1" data-board-filter-grid="">
-      {BOARD_FILTER_GRID.flat().map(id => <DropdownMenuCheckboxItem key={id} checked={checked(id)} data-select-filter={id}
-        onSelect={event => event.preventDefault()} onCheckedChange={on => toggle(id, on === true)}>
-        {t(BOXES[id])}
-      </DropdownMenuCheckboxItem>)}
-    </div>
-  </ToolSettingsMenu>;
+  return <SelectFilterMenu grid={BOARD_FILTER_GRID} label={id => t(BOXES[id])} checked={checked} onToggle={toggle} mode={mode} disabled={disabled}
+    trigger={everything ? "all" : kinds.join(" ") || "none"} />;
 }
