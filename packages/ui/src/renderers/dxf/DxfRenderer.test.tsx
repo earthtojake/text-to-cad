@@ -270,6 +270,8 @@ it('a drawing with layers and blocks has a Layers section: a layer hidden is not
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
   const tile = await waitFor(() => within(pane.querySelector('[data-file-sidebar-tools]') as HTMLElement).getByRole('button', { name: 'Layers' }));
+  // Its tile is a layer list's glyph, as a board's Layers is, not a tree's.
+  expect(tile.querySelector('svg.lucide-layers')).not.toBeNull();
   fireEvent.click(tile);
   const list = await waitFor(() => { const element = pane.querySelector('[data-drawing-layers]'); expect(element).not.toBeNull(); return element as HTMLElement; });
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))

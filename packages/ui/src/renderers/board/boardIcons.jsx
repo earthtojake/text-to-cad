@@ -4,7 +4,8 @@
  * 14px: the Display modes, each what the mode shows — Board, the outline with a part on it and a
  * trace from it to a pad; Copper, two pads joined by a trace through a via, nothing else;
  * Assembly, a part's body and legs in its dashed courtyard, its reference over it; Placement, two
- * parts and the straight airwire between them — and Select's kinds (a part with its legs; a pad;
+ * parts and the straight airwire between them — and the kinds a pick names, in Quick Edit's chips and
+ * the Circuit's rows, and Display's opacity rows (a part with its legs; a pad;
  * a net, two pads and the trace between them; a track, a trace with its bend; a via, a ring round
  * its hole; a zone, a pour's outline with a corner cut, faintly filled; a rule area, the same
  * outline hatched, as KiCad draws a keepout; a text, a T; a dimension, a measured span between its

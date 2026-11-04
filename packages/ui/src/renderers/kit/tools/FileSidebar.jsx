@@ -27,7 +27,8 @@ export const SIDEBAR_SLIDE_CLASS = "transition-[translate,opacity] duration-200 
  * whatever tool is in hand. The toolbar is for using tools; this is for the file. It is a toolbar
  * of its own at the viewer's top-left, one tile per section (`ToolPanel`s drawn as sections,
  * `ToolStackContext`'s `sidebar`): a tree by its name (**Model tree**, **Links**: a tree icon, its
- * filter heading the panel), **Position**
+ * filter heading the panel; a section with a glyph of its own, its `icon`: a board's **Circuit**, a
+ * **Layers** list's layers), **Position**
  * for a model's joints, **Animation** for its routines (**Motion** for an engine document's
  * motions), and any other section by its name. None is open as a file opens; a tile
  * opens its section in a panel under the toolbar, a second press on it closes it, and so does the
@@ -184,7 +185,7 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
   const [metaTick, setMetaTick] = useState(0);
   const register = useCallback((id, next) => {
     const current = meta.current.get(id);
-    if (current && current.title === next.title && current.fit === next.fit && Boolean(current.changed) === Boolean(next.changed)) return;
+    if (current && current.title === next.title && current.fit === next.fit && current.icon === next.icon && Boolean(current.changed) === Boolean(next.changed)) return;
     meta.current.set(id, next);
     setMetaTick(tick => tick + 1);
   }, []);
@@ -210,7 +211,8 @@ export default function FileSidebar({ layout: stored, onLayoutChange, hidden = f
       : id === "position" ? { label: t("sidebar.position"), Icon: PositionIcon }
         : id === "animation" ? { label: section.title || t("sidebar.animation"), Icon: Clapperboard }
         : { label: section.title || id, Icon: FileText };
-    return { id, ...tile, changed: Boolean(section.changed) };
+    // A section that names its own glyph (a board's Circuit, a Layers list) keeps it.
+    return { id, ...tile, ...(section.icon ? { Icon: section.icon } : {}), changed: Boolean(section.changed) };
   });
   void metaTick;
   // A press of a tile: its section opens, or closes if it was the open one.

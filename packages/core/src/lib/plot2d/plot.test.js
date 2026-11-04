@@ -7,6 +7,7 @@ import {
   PLOT_SCHEMA_VERSION,
   drawPlot,
   drawPlotImages,
+  boardFitMargin,
   fitPlotTransform,
   grownOutline,
   layoutPlot,
@@ -86,11 +87,25 @@ test("the fit frames the sheet the right way up, whatever is drawn past it: its 
   const [left, top] = pageToScreen(transform, 0, 0);
   const [right, bottom] = pageToScreen(transform, ...layout.bounds.slice(2));
   assert.ok(top < bottom, `page y grows downwards on screen: ${top} -> ${bottom}`);
-  // Centred, inside drawing2d's 16 px gutter, the tight axis touching it.
+  // Centred, inside a board's margin (6% of the pane's smaller side: 36 px), the tight axis touching it.
   assert.ok(Math.abs((left + right) / 2 - 300) < 1e-9 && Math.abs((top + bottom) / 2 - 500) < 1e-9);
-  assert.ok(Math.abs(right - left - 568) < 1e-9, `width is the binding axis: ${right - left}`);
+  assert.ok(Math.abs(right - left - 528) < 1e-9, `width is the binding axis: ${right - left}`);
   // screen = page * scale + offset, on both axes.
   assert.deepEqual(pageToScreen(transform, 10, 20), [10 * transform.scale + transform.offsetX, 20 * transform.scale + transform.offsetY]);
+});
+
+test("a board's fit leaves the 3D views' room round it, never under drawing2d's 16 px, and clears the tool strip", () => {
+  // 6% of the smaller side, floored at 16 px: a large pane's board breathes, a small card's keeps its gutter.
+  assert.equal(boardFitMargin(1200, 800), 48);
+  assert.equal(boardFitMargin(200, 150), 16);
+  const layout = layoutPlot(BOARD);
+  // 40 x 30 mm in 1200 x 800 with 56 px of tool strip over its top: height binds, (800 - 56 - 96) / 30 px a mm.
+  const fitted = fitPlotTransform(layout, 1200, 800, { top: 56 });
+  const [left, top] = pageToScreen(fitted, 0, 0);
+  const [right, bottom] = pageToScreen(fitted, 40, 30);
+  assert.ok(Math.abs(fitted.scale - (800 - 56 - 96) / 30) < 1e-9, `the margin on both sides of the room under the strip: ${fitted.scale}`);
+  assert.ok(Math.abs(top - (56 + 48)) < 1e-9 && Math.abs(800 - bottom - 48) < 1e-9, `48 px under the strip and above the foot: ${top}, ${bottom}`);
+  assert.ok(Math.abs((left + right) / 2 - 600) < 1e-9, "centred across");
 });
 
 test("screenToPage inverts pageToScreen, under a zoom about a point too", () => {
@@ -166,6 +181,20 @@ function recorder(width, height) {
   return { ctx, calls, Path2D };
 }
 const painted = (calls) => calls.filter(([name]) => name === "fill" || name === "stroke");
+
+test("a card's picture is the board on nothing: its area in the canvas colour, its cutout open, no box of canvas round it", () => {
+  const layout = layoutPlot(BOARD);
+  const { ctx, calls, Path2D } = recorder(800, 600);
+  drawPlot(ctx, layout, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D, backdrop: "board" });
+  assert.ok(!calls.some(([name]) => name === "fillRect"), "no rectangle of canvas");
+  const [first] = painted(calls);
+  assert.deepEqual([first[0], first[2].fill, first[3]], ["fill", "#001023", "evenodd"], "first, the board's area in the background, its cutout open");
+  // A board with no outline is its sheet, filled.
+  const bare = layoutPlot({ ...BOARD, sheets: [{ ...BOARD.sheets[0], layers: LAYERS.filter((one) => one.kind !== "area") }] });
+  const plain = recorder(800, 600);
+  drawPlot(plain.ctx, bare, { transform: { scale: 10, offsetX: 0, offsetY: 0 }, Path2D: plain.Path2D, backdrop: "board" });
+  assert.deepEqual(plain.calls.find(([name]) => name === "fillRect"), ["fillRect", "#001023", 0, 0, 40, 30]);
+});
 
 test("a frame is KiCad's canvas, then each layer's items as KiCad draws them", () => {
   const layout = layoutPlot(BOARD);

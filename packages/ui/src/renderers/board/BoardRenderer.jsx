@@ -53,9 +53,10 @@ import { useBoardView } from "./useBoardView.js";
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
- * Circuit (its parts in their schematic blocks, and its nets) and its Layers (the active layer, Dim
- * and the zones' and tracks' opacities among them); its one view control is its Display (the modes,
- * the pours, the side): one contract with `cad <type> snapshot --display`. A payload without its
+ * Circuit (its parts in their schematic blocks, and its nets) and its Layers (each layer's eye, and a
+ * row's press for the active layer), each tile its own glyph; its one view control is its Display
+ * (the modes, the pours, the side, Dim other layers and the zones' and tracks' opacities): one
+ * contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  */
 

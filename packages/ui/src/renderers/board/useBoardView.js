@@ -16,7 +16,7 @@
  */
 import { useCallback, useEffect, useRef } from "react";
 import { clearSurface } from "@cad/core/lib/drawing2d/index.js";
-import { drawPlot, fitPlotTransform } from "@cad/core/lib/plot2d/index.js";
+import { drawPlot, fitBoardBounds, fitPlotTransform } from "@cad/core/lib/plot2d/index.js";
 import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { createBoardRasters } from "./boardRasters.js";
 
@@ -56,7 +56,9 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     overlayRef.current?.(ctx, { transform, pixelRatio, width, height });
     if (element) element.dataset.boardSettled = final ? "true" : "false";
   }, []);
+  // The fit, as its first view and a double-click take it: a board's margin, clear of the tool strip.
   const view = useFlatCanvasView({ content: plot, bounds: plot?.layout.modelBounds ?? null, restored, colorScheme, onViewMoved, paint, onTap, onHover,
+    fitBox: fitBoardBounds, clearStrip: true,
     onDrag, middlePan: true, orbitPan: true });
   const { containerRef, schemeRef, requestPaint, paintNow, encode } = view;
 
@@ -83,8 +85,10 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
   const capture = useCallback(() => { settle(); return encode("board"); }, [settle, encode]);
 
   /**
-   * The board on its own, for a library card: fitted whole to `width` × `height`, drawn as a
-   * snapshot draws it, on KiCad's canvas — the pane's view is left as it is.
+   * The board on its own, for a library card: fitted whole to `width` × `height` with the view's
+   * margin, drawn as a snapshot draws it but on nothing round it — the board's area in the canvas
+   * colour, the rest clear, so the card's own backdrop is all there is behind the board's shape, in
+   * either theme, as a STEP's or a drawing's card picture is. The pane's view is left as it is.
    */
   const thumbnail = useCallback(({ width, height }) => new Promise((resolve, reject) => {
     const current = plotRef.current;
@@ -94,8 +98,8 @@ export function useBoardView({ plot, restored = null, colorScheme = "light", onV
     canvas.height = Math.max(1, Math.round(height));
     const context = canvas.getContext("2d");
     if (!context) { reject(new Error("The browser cannot draw the board’s picture.")); return; }
-    clearSurface(context, { width: canvas.width, height: canvas.height, background: surroundColor(current) });
-    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height) });
+    clearSurface(context, { width: canvas.width, height: canvas.height });
+    drawPlot(context, current.layout, { transform: fitPlotTransform(current.layout, canvas.width, canvas.height), backdrop: "board" });
     canvas.toBlob((blob) => {
       if (blob) resolve(blob);
       else reject(new Error("The browser could not encode this board as a PNG."));
