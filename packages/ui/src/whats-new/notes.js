@@ -2,14 +2,14 @@
  * What's new: the notes of each release that brought something a person would want to know of, by
  * its minor version, and the rule for when a view shows them. Not every release has notes. An
  * entry is its items' ids, at most three; its words are the locale files' (`../i18n/locales`):
- * `whatsNew.<release>.title`, and per item `whatsNew.<release>.<item>.title` (bold, ending in a
+ * one title for every release (`whatsNew.title`, "What's New (v<release>.0)"), and per item `whatsNew.<release>.<item>.title` (bold, ending in a
  * period) and `.body` (one or two sentences; `code` in backticks). User-facing features only.
  * The notes ship in the page, so a view reads them from the server that served it, never the network.
  */
 
 /** @type {Readonly<Record<string, readonly string[]>>} */
 export const WHATS_NEW = Object.freeze({
-  "0.11": Object.freeze(["boards", "select", "checks"]),
+  "0.11": Object.freeze(["boards", "install", "print"]),
 });
 
 /** At most this many items an entry. */
@@ -49,7 +49,7 @@ export function whatsNewEntry(release, seen, notes = WHATS_NEW) {
  */
 export function whatsNewNotes(release, t, notes = WHATS_NEW) {
   return {
-    title: t(`whatsNew.${release}.title`),
+    title: t("whatsNew.title", { version: `${release}.0` }),
     items: (notes[release] ?? []).map(item => ({ id: item, title: t(`whatsNew.${release}.${item}.title`), body: t(`whatsNew.${release}.${item}.body`) })),
   };
 }

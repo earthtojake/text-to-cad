@@ -269,13 +269,13 @@ export default {
   "update.updatedRestart": "Updated to {version}. Restart the app to load its new skills.",
   // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
   "whatsNew.gotIt": "Got it",
-  "whatsNew.0.11.title": "What's new in text-to-cad 0.11",
-  "whatsNew.0.11.boards.title": "KiCad boards in the viewer.",
-  "whatsNew.0.11.boards.body": "Open a `.kicad_pcb` and see it drawn the way KiCad's PCB editor shows it, with its layers, nets and schematic sheets in the sidebar.",
-  "whatsNew.0.11.select.title": "Point your agent at any part of a board.",
-  "whatsNew.0.11.select.body": "Click or drag to select parts, pads, tracks, zones or an area, then describe the change in Quick Edit.",
-  "whatsNew.0.11.checks.title": "Checks and fab files, with nothing to install.",
-  "whatsNew.0.11.checks.body": "Your agent runs KiCad's design and electrical rule checks and exports Gerbers, BOMs, STEP and more. text-to-cad brings its own copy of KiCad.",
+  "whatsNew.title": "What's New (v{version})",
+  "whatsNew.0.11.boards.title": "KiCad boards.",
+  "whatsNew.0.11.boards.body": "Open a `.kicad_pcb` in the viewer, and your agent can check it and export its fab files.",
+  "whatsNew.0.11.install.title": "One-command install and updates.",
+  "whatsNew.0.11.install.body": "One command sets up every agent app on your computer, and the Update button keeps it current.",
+  "whatsNew.0.11.print.title": "Your own print tolerance.",
+  "whatsNew.0.11.print.body": "Export an STL or 3MF meshed finer than the viewer's mesh, for parts with tight fits.",
 
   // The alert card over the viewport.
   "alert.undisplayable": "Couldn’t display the model",

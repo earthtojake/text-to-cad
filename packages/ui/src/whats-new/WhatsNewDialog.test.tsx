@@ -31,9 +31,9 @@ it("an update says what's new: the release's title, each item a bold title and i
   const { call, settings } = server({ seen: [], release: '0.11' });
   const dialog = await shown(call);
   expect(dialog).toBeTruthy();
-  expect(screen.getByRole('heading', { name: "What's new in text-to-cad 0.11" })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: "What's New (v0.11.0)" })).toBeTruthy();
   expect([...dialog!.querySelectorAll('li strong')].map(node => node.textContent)).toEqual(
-    ['KiCad boards in the viewer.', 'Point your agent at any part of a board.', 'Checks and fab files, with nothing to install.']);
+    ['KiCad boards.', 'One-command install and updates.', 'Your own print tolerance.']);
   expect(dialog!.querySelector('li code')?.textContent).toBe('.kicad_pcb');
   // Read by a screen reader as its title and its notes; the button has the focus.
   expect(dialog!.getAttribute('aria-describedby')).toBe(dialog!.querySelector('ul')!.id);
@@ -88,5 +88,5 @@ it('dismissed in another view, it closes here once the person comes back to the 
 
 it("reads in the person's language", async () => {
   expect(await shown(server({ seen: [], release: '0.11' }).call, 'ja')).toBeTruthy();
-  expect(screen.getByRole('heading', { name: 'text-to-cad 0.11 の新機能' })).toBeTruthy();
+  expect(screen.getByRole('heading', { name: '新機能（v0.11.0）' })).toBeTruthy();
 });
