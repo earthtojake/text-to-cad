@@ -7,7 +7,7 @@ import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
 import {
-  boardDisplayAirwires, boardDrawView, boardMirrorX, boardPlanProjection, marksInPlan, planToSheet
+  boardDisplayAirwires, boardDrawView, boardMirrorX, boardPlanProjection, marksInPlan, nextBoardOthers, planToSheet
 } from "@cad/core/lib/plot2d/index.js";
 import { useViewerHost } from "../../host/context.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";
@@ -64,7 +64,7 @@ const THREE_D_LOADING = Object.freeze({ opening: true, progress: Object.freeze({
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its sidebar is the
  * Circuit (its parts in their schematic blocks, and its nets) and its Layers (each layer's eye, and a
  * row's press for the active layer), each tile its own glyph; its view controls are its Display (the
- * modes) and its Settings (the pours, the side, Dim other layers and the zones' and tracks'
+ * modes) and its Settings (the pours, the side, Other layers and the zones' and tracks'
  * opacities): one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
  *
@@ -101,7 +101,7 @@ const boardPacketReferences = (references, file) => [...new Set(references
   .flatMap(reference => reference.target.selectors))];
 /** The board's Display as a view carries it, and a snapshot job reads it. */
 const viewDisplay = display => ({ mode: display.mode, side: display.side, poured: display.poured, ...(display.layers ? { layers: [...display.layers] } : {}),
-  ...(display.active ? { active: display.active } : {}), dim: display.dim, zones: display.zones, tracks: display.tracks });
+  ...(display.active ? { active: display.active } : {}), others: display.others, zones: display.zones, tracks: display.tracks });
 
 /**
  * The file's view, one record the two halves write their parts of (`SLICES`): the 2D window (`camera`), the
@@ -506,9 +506,15 @@ function BoardSurface({ view, data, workspace, document, files, display, setDisp
     capture,
     thumbnail
   };
+  // Ctrl+H (⌘H), as KiCad's: the other layers shown, dimmed, hidden, and round again.
+  const cycleOthers = useCallback(event => {
+    if (event.key.toLowerCase() !== "h" || event.shiftKey || !layered) return false;
+    setDisplay(current => ({ ...current, others: nextBoardOthers(current.others) }));
+    return true;
+  }, [layered, setDisplay]);
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-    capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE,
+    capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 

@@ -79,12 +79,14 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {(() => boolean) | null} [options.copySelection]  The copy key's, while no drawing tool is up.
  * @param {() => unknown} options.fit  Fits the picture to the pane: the F key's.
  * @param {string} options.captureFailed  The card's title when a capture or copy fails.
+ * @param {((event: KeyboardEvent) => boolean) | null} [options.onChord]  ⌘ or Ctrl with a letter the view takes (a
+ *   board's Ctrl+H), while the view has the keyboard (`useViewerShortcuts`); true when it took it.
  * @param {((references: readonly object[], file: string) => string[]) | null} [options.packetReferences]  What the
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -176,8 +178,11 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     if (selectionRef.current.active) { selectionRef.current.clear(); return true; }
     return false;
   };
+  const chordRef = useRef(onChord);
+  chordRef.current = onChord;
   useViewerShortcuts({
     viewerElement,
+    onChord: onChord ? event => Boolean(shown && chordRef.current?.(event)) : undefined,
     onCopy: () => copyAction(),
     onDelete: () => {
       if (annotating) return false;

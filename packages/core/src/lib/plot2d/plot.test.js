@@ -7,6 +7,7 @@ import {
   PLOT_SCHEMA_VERSION,
   drawPlot,
   drawPlotImages,
+  focusedLayers,
   boardFitMargin,
   fitPlotTransform,
   grownOutline,
@@ -363,11 +364,40 @@ test("the active layer tops the stack, Dim fades every other but the board's are
   assert.deepEqual(at(set, layerColor("B.Cu")).slice(0, 1), [0.25]);
   assert.deepEqual(at(set, layerColor("F.Cu"), 1), [0.5]);
   // Dim with F.Cu active: F.Cu as it is, the back copper and the courtyard faded, the board's area not.
-  const dimmed = alphas({ dim: "F.Cu" });
+  const dimmed = alphas({ focus: { layer: "F.Cu", others: "dimmed" } });
   assert.deepEqual(at(dimmed, layerColor("F.Cu"), 1), [1]);
   assert.deepEqual(at(dimmed, layerColor("B.CrtYd")), [DIM_OPACITY]);
   assert.deepEqual(at(dimmed, layerColor("area")), [1]);
   assert.deepEqual(at(dimmed, layerColor("B.Cu")).slice(0, 1), [DIM_OPACITY * ZONE_OPACITY]);
+});
+
+test("other layers shown, dimmed or hidden keep the outline, and the holes through an active copper layer, at full strength", () => {
+  const hole = (at, extra = {}) => ({ t: "circle", at, r: 0.3, w: 0.03, hole: "via", via: "through", ...extra });
+  const sheet = { layers: [
+    { id: "area", kind: "area", side: "both", items: [] },
+    { id: "B.Cu", kind: "copper", side: "back", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "In1.Cu", kind: "copper", side: "both", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "F.SilkS", kind: "silk", side: "front", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "Edge.Cuts", kind: "outline", side: "both", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "F.Cu", kind: "copper", side: "front", items: [{ t: "circle", at: [1, 1], r: 1, w: 0 }] },
+    { id: "drills", kind: "drill", side: "both", items: [{ t: "circle", at: [2, 2], r: 0.5, w: 0.03, hole: "pad" }] },
+    // A through via, a blind one F.Cu to In1.Cu, and a buried one In1.Cu to B.Cu.
+    { id: "vias", kind: "via", side: "both", items: [hole([3, 3]), hole([4, 4], { via: "blind", span: ["F.Cu", "In1.Cu"] }),
+      hole([5, 5], { via: "blind", span: ["In1.Cu", "B.Cu"] })] },
+    { id: "names", kind: "names", side: "both", items: [] },
+  ] };
+  const strengths = (focus) => focusedLayers(sheet, { focus }).map(({ layer, fade }) => [layer.id, layer.items.length, fade]);
+  assert.ok(strengths(null).every(([, , fade]) => fade === 1));
+  assert.deepEqual(strengths({ layer: "F.Cu", others: "dimmed" }), [
+    ["area", 0, 1], ["B.Cu", 1, DIM_OPACITY], ["In1.Cu", 1, DIM_OPACITY], ["F.SilkS", 1, DIM_OPACITY], ["Edge.Cuts", 1, 1], ["F.Cu", 1, 1],
+    ["drills", 1, 1], ["vias", 1, DIM_OPACITY], ["vias", 2, 1], ["names", 0, DIM_OPACITY]]);
+  // Hidden: only the active layer and what keeps the bearings; the via the active layer is not on is gone.
+  assert.deepEqual(strengths({ layer: "F.Cu", others: "hidden" }), [["area", 0, 1], ["Edge.Cuts", 1, 1], ["F.Cu", 1, 1], ["drills", 1, 1], ["vias", 2, 1]]);
+  const vias = (focus) => focusedLayers(sheet, { focus }).filter(({ layer, fade }) => layer.id === "vias" && fade === 1).flatMap(({ layer }) => layer.items.map(item => item.at[0]));
+  assert.deepEqual(vias({ layer: "B.Cu", others: "hidden" }), [3, 5]);
+  assert.deepEqual(vias({ layer: "In1.Cu", others: "hidden" }), [3, 4, 5]);
+  // A layer that is no copper keeps the outline alone: its holes go the way of the rest.
+  assert.deepEqual(strengths({ layer: "F.SilkS", others: "hidden" }), [["area", 0, 1], ["F.SilkS", 1, 1], ["Edge.Cuts", 1, 1]]);
 });
 
 // A schematic's sheet, as `GET /api/v1/documents/kicad_sch/<id>/plot?sheet=/` answers it: an A4 page, its

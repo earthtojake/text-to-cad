@@ -23,7 +23,9 @@ MODES = {
     "assembly": {"area", "silk", "fab", "courtyard", "drill", "outline", "ratsnest"},
     "placement": {"area", "fab", "courtyard", "outline"},
 }
-DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance", "active", "dim", "zones", "tracks"}
+DISPLAY_KEYS = {"mode", "side", "poured", "layers", "appearance", "active", "others", "dim", "zones", "tracks"}
+#: What the layers but the active one are (KiCad's high-contrast modes): drawn as they are, faded, or left out.
+OTHERS = ("shown", "dimmed", "hidden")
 # What a set saved when a board had a drawing sheet may still name: no layer now, left out.
 GONE = {"sheet"}
 # Mirrors core/lib/plot2d/theme.js, both themes; snapshot pixel tests check the layer colours. Dark is KiCad's
@@ -97,16 +99,23 @@ def display_options(value: Any, grid: bool = False) -> dict:
         value = {}
     if not isinstance(value, dict) or set(value) - DISPLAY_KEYS or grid:
         raise SnapshotRefused(f"a board's display takes {', '.join(sorted(DISPLAY_KEYS))}")
-    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "appearance": "light", "active": None, "dim": False,
-               "zones": ZONE_OPACITY, "tracks": 1.0, **value}
+    # The earlier ``dim`` (true or false) is read as ``others`` says it: true is dimmed; ``others`` wins.
+    dim = value.get("dim", False)
+    if type(dim) is not bool:
+        raise SnapshotRefused("board others is shown, dimmed or hidden (dim, the earlier switch, is true or false)")
+    value = {key: item for key, item in value.items() if key != "dim"}
+    display = {"mode": "board", "side": "top", "poured": True, "layers": None, "appearance": "light", "active": None,
+               "others": "dimmed" if dim else "shown", "zones": ZONE_OPACITY, "tracks": 1.0, **value}
     if display["mode"] not in MODES:
         raise SnapshotRefused(f"a board's modes are {', '.join(MODES)}")
     if display["side"] not in ("top", "bottom") or type(display["poured"]) is not bool:
         raise SnapshotRefused("board side is top or bottom and poured is true or false")
     if display["appearance"] not in ("light", "dark"):
         raise SnapshotRefused("board appearance is light or dark")
-    if display["active"] is not None and (not isinstance(display["active"], str) or not display["active"]) or type(display["dim"]) is not bool:
-        raise SnapshotRefused("board active is a layer id or null, and dim is true or false")
+    if display["active"] is not None and (not isinstance(display["active"], str) or not display["active"]):
+        raise SnapshotRefused("board active is a layer id or null")
+    if display["others"] not in OTHERS:
+        raise SnapshotRefused("board others is shown, dimmed or hidden")
     for key in ("zones", "tracks"):
         if isinstance(display[key], bool) or not isinstance(display[key], (int, float)) or not 0 <= display[key] <= 1:
             raise SnapshotRefused(f"board {key} is an opacity from 0 to 1")
@@ -204,6 +213,50 @@ def viewed_layers(layers: list[dict], display: dict) -> list[dict]:
     # The active layer tops the board's stack, as plot2d draws it.
     stack.sort(key=lambda x: x["id"] == display.get("active"))
     return [x for x in kept if x["kind"] in UNDERLAYS] + stack + [x for x in kept if x["kind"] in OVERLAYS]
+
+
+def _copper_rank(layer_id: str) -> float:
+    if layer_id == "F.Cu":
+        return 0
+    if layer_id == "B.Cu":
+        return float("inf")
+    found = re.match(r"In(\d+)\.Cu$", layer_id)
+    return float(found.group(1)) if found else float("nan")
+
+
+def _through(item: dict, layer_id: str) -> bool:
+    """Whether a hole goes through the copper layer ``layer_id``: a pad's, an unplated one, a through via, or a
+    blind one whose ``span`` holds it."""
+    span = item.get("span")
+    if not isinstance(span, list) or len(span) != 2:
+        return True
+    low, high = sorted(_copper_rank(end) for end in span)
+    return low <= _copper_rank(layer_id) <= high
+
+
+def focused_layers(layers: list[dict], viewed: list[dict], display: dict) -> list[tuple[dict, float]]:
+    """plot2d's ``focusedLayers``: each layer drawn and its strength. Dimmed or hidden (``others``), every layer
+    but the active one is faded or left out, but the board's area, its outline (Edge.Cuts) and, with a copper
+    layer active, every drill and every via that spans it, which stay at full strength."""
+    focus = active_layer(layers, display) if display["others"] in ("dimmed", "hidden") else None
+    if focus is None:
+        return [(layer, 1.0) for layer in viewed]
+    other = None if display["others"] == "hidden" else DIM_OPACITY
+    copper = any(layer["id"] == focus and layer["kind"] == "copper" for layer in layers)
+    drawn: list[tuple[dict, float]] = []
+    for layer in viewed:
+        if layer["id"] == focus or layer["kind"] in UNDERLAYS or layer["kind"] == "outline" or (copper and layer["kind"] == "drill"):
+            drawn.append((layer, 1.0))
+        elif copper and layer["kind"] == "via":
+            kept = [item for item in layer["items"] if _through(item, focus)]
+            rest = [item for item in layer["items"] if not _through(item, focus)]
+            if rest and other is not None:
+                drawn.append(({**layer, "items": rest}, other))
+            if kept:
+                drawn.append(({**layer, "items": kept}, 1.0))
+        elif other is not None:
+            drawn.append((layer, other))
+    return drawn
 
 
 def active_layer(layers: list[dict], display: dict) -> str | None:
@@ -466,16 +519,15 @@ class Held:
         named = set(display["layers"]) if display["layers"] is not None else None
         vias, names = named is None or "vias" in named, named is None or "names" in named
         viewport = (width / scale, height / scale)  # the millimetres the still shows, for where a track's names fall
-        # Dim: every layer but the active one and the board's area is blended over what lies under it at DIM_OPACITY.
-        kept = active_layer(sheet["layers"], display) if display["dim"] else None
-        for layer in layers:
-            faded = kept is not None and layer["id"] != kept and layer["kind"] not in UNDERLAYS
+        # Dimmed: a faded layer is blended over what lies under it at its strength; hidden ones are not drawn.
+        for layer, strength in focused_layers(sheet["layers"], layers, display):
+            faded = strength < 1
             under = image.copy() if faded else None
             _Painter(image, place, scale, ss, background, appearance).layer(
                 layer, poured=display["poured"], vias=vias, names=names, mirrored=bottom, viewport=viewport,
                 zones=display["zones"], tracks=display["tracks"])
             if faded:
-                image = Image.blend(under, image, DIM_OPACITY)
+                image = Image.blend(under, image, strength)
         if display["mode"] == "placement":
             from PIL import ImageDraw
 

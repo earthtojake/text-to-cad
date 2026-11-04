@@ -176,8 +176,10 @@ schematic blocks their footprints record (by kind on a board that records none) 
 block picks every part in it, a net picks the whole net. Each arrives as a reference
 ([checks](references/checks.md#references) says what each names and how to resolve it). The
 **Layers** tab hides and shows layers and sets the active layer (drawn on top). The toolbar's
-Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Dim
-other layers and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
+Display menu picks the mode; its Settings menu sets the copper pours, the view from below, Other
+layers (KiCad's high-contrast modes: the layers but the active one **Shown**, **Dimmed** or **Hidden**,
+Ctrl+H cycling them; the outline, and the drills and vias through an active copper layer, always stay
+at full strength) and the zones' and tracks' opacity. They are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
@@ -202,7 +204,8 @@ cad kicad_pcb snapshot board.kicad_pcb tmp/copper.png --display copper
 cad kicad_pcb snapshot board.kicad_pcb tmp/copper-dark.png --display copper,dark
 cad kicad_pcb snapshot board.kicad_pcb tmp/bottom.png --display '{"mode":"copper","side":"bottom","poured":false}'
 cad kicad_pcb snapshot board.kicad_pcb tmp/front.png --display '{"layers":["F.Cu","Edge.Cuts"]}'
-cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","dim":true,"zones":0.3}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/inner.png --display '{"active":"In1.Cu","others":"dimmed","zones":0.3}'
+cad kicad_pcb snapshot board.kicad_pcb tmp/front-only.png --display '{"active":"F.Cu","others":"hidden"}'
 ```
 
 Bottom views mirror the board and its annotations. Native 2D snapshots support the board's plan

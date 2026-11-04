@@ -7,7 +7,7 @@
  *
  * ```jsonc
  * { "mode": "board", "side": "top", "poured": true, "layers": ["F.Cu", "Edge.Cuts"],
- *   "active": "F.Cu", "dim": false, "zones": 0.6, "tracks": 1 }
+ *   "active": "F.Cu", "others": "shown", "zones": 0.6, "tracks": 1 }
  * ```
  *
  * **Modes** are presets, as a 3D view's are (`ui/docs/render-mode.md`): each names the layer
@@ -25,9 +25,12 @@
  * side are switches of their own, kept through a change of mode, as a 3D view's Grid is, and so is
  * what the Layers section sets above its list, as KiCad's Appearance panel does: the **active**
  * layer (the one a row's press chose, drawn on top of the stack; null for KiCad's own order, its
- * active layer the copper facing the eye), **dim** (KiCad's "Inactive layers: Dim": every other
- * layer but the board's area drawn faded), and the opacity of the **zones**' fills (KiCad's 60%)
- * and of the **tracks** (100%).
+ * active layer the copper facing the eye), **others** (KiCad's high-contrast modes, "Inactive layers":
+ * `shown` as they are, `dimmed` faded, `hidden` not drawn; a display that says the earlier `dim: true`
+ * reads as `dimmed`), and the opacity of the **zones**' fills (KiCad's 60%) and of the **tracks**
+ * (100%). Dimmed or hidden, what keeps a person's bearings stays at full strength: the board's area,
+ * its outline (Edge.Cuts), and with a copper layer active, the holes through it (every drill, every
+ * via that spans it: `plot.js`'s `focusedLayers`).
  *
  * Nothing here is React or canvas: pure functions over the payload's sheet (`layoutPlot`'s, or
  * the raw `payload.sheets[0]`: only `layers[].id`, `kind` and `side` are read).
@@ -43,7 +46,11 @@ export const BOARD_DISPLAY_MODES = Object.freeze({
 /** The mode ids, in the order a menu lists them. */
 export const BOARD_DISPLAY_MODE_IDS = Object.freeze(["board", "copper", "assembly", "placement"]);
 export const BOARD_DISPLAY_SIDES = Object.freeze(["top", "bottom"]);
-export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null, active: null, dim: false, zones: 0.6, tracks: 1 });
+export const BOARD_DISPLAY_DEFAULTS = Object.freeze({ mode: "board", side: "top", poured: true, layers: null, active: null, others: "shown", zones: 0.6, tracks: 1 });
+/** What the layers but the active one are, in the order a menu lists them and Ctrl/Cmd+H cycles them (KiCad's). */
+export const BOARD_DISPLAY_OTHERS = Object.freeze(["shown", "dimmed", "hidden"]);
+/** The next of `BOARD_DISPLAY_OTHERS` after `others`, round to the first: Ctrl/Cmd+H's step. */
+export const nextBoardOthers = (others) => BOARD_DISPLAY_OTHERS[(BOARD_DISPLAY_OTHERS.indexOf(others) + 1) % BOARD_DISPLAY_OTHERS.length];
 /** What a set stored when a board still had a drawing sheet may name: no layer now, dropped as it is read. */
 const GONE = new Set(["sheet"]);
 /** The ids of what is not a board layer — the canvas under it, what goes through it — and how the Display names them. */
@@ -74,7 +81,7 @@ const sameSet = (left, right) => left.length === right.length && left.every((id)
  * but not the drawing sheet a set stored before it was dropped names.
  *
  * @param {unknown} raw
- * @returns {{ mode: string, side: "top"|"bottom", poured: boolean, layers: string[]|null, active: string|null, dim: boolean,
+ * @returns {{ mode: string, side: "top"|"bottom", poured: boolean, layers: string[]|null, active: string|null, others: "shown"|"dimmed"|"hidden",
  *   zones: number, tracks: number }}
  */
 export function readBoardDisplay(raw) {
@@ -89,7 +96,8 @@ export function readBoardDisplay(raw) {
     poured: typeof value.poured === "boolean" ? value.poured : BOARD_DISPLAY_DEFAULTS.poured,
     layers,
     active: typeof value.active === "string" && value.active && !GONE.has(value.active) ? value.active : null,
-    dim: typeof value.dim === "boolean" ? value.dim : BOARD_DISPLAY_DEFAULTS.dim,
+    // `others`, else what the earlier `dim` said (true: dimmed).
+    others: BOARD_DISPLAY_OTHERS.includes(value.others) ? value.others : value.dim === true ? "dimmed" : BOARD_DISPLAY_DEFAULTS.others,
     zones: unit(value.zones, BOARD_DISPLAY_DEFAULTS.zones),
     tracks: unit(value.tracks, BOARD_DISPLAY_DEFAULTS.tracks),
   };
@@ -153,15 +161,20 @@ export function boardActiveLayer(display, sheet) {
   return sheetLayers(sheet).some((layer) => layer.id === facing) ? facing : null;
 }
 
+const focusOf = (display, sheet) => {
+  const layer = display.others === "dimmed" || display.others === "hidden" ? boardActiveLayer(display, sheet) : null;
+  return layer ? { layer, others: display.others } : null;
+};
+
 /**
  * The drawing's view for a display (`drawPlot`'s `view`): the ids to draw, the pours, the side, the
- * active layer chosen (drawn on top), the layer kept bright while the rest is dimmed, and the zones'
- * and tracks' opacities.
+ * active layer chosen (drawn on top), the focus — the layer kept at full strength and whether the rest
+ * are dimmed or hidden, null while they are shown — and the zones' and tracks' opacities.
  */
 export function boardDrawView(display, sheet) {
   return { layers: boardDisplayLayers(display, sheet), poured: display.poured, side: display.side,
     active: display.active && boardLayerActivatable(sheet, display.active) ? display.active : null,
-    dim: display.dim ? boardActiveLayer(display, sheet) : null, zones: display.zones ?? BOARD_DISPLAY_DEFAULTS.zones,
+    focus: focusOf(display, sheet), zones: display.zones ?? BOARD_DISPLAY_DEFAULTS.zones,
     tracks: display.tracks ?? BOARD_DISPLAY_DEFAULTS.tracks };
 }
 

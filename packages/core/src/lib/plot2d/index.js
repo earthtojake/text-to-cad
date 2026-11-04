@@ -21,6 +21,7 @@ export {
   pageToScreen,
   rectsOverlap,
   screenToPage,
+  focusedLayers,
   viewedLayers,
   visiblePageRect
 } from "./plot.js";
@@ -31,6 +32,7 @@ export { boardMirrorX, boardPlanProjection, marksInPlan, planToSheet, sheetToPla
 export {
   BOARD_DISPLAY_DEFAULTS,
   BOARD_DISPLAY_MODES,
+  BOARD_DISPLAY_OTHERS,
   BOARD_DISPLAY_MODE_IDS,
   BOARD_DISPLAY_SIDES,
   BOARD_THROUGH_LAYER_LABELS,
@@ -43,6 +45,7 @@ export {
   boardLayerActivatable,
   boardLayerGroups,
   boardModeLayers,
+  nextBoardOthers,
   readBoardDisplay,
   selectBoardMode,
   toggleBoardLayer

@@ -1,7 +1,7 @@
 import { useI18n, english } from "@cad/ui/i18n";
-import { Box, FlipHorizontal2, Layers2, PaintBucket, SlidersHorizontal, Square, SunDim } from "lucide-react";
+import { Box, Eye, EyeOff, FlipHorizontal2, Layers2, PaintBucket, SlidersHorizontal, Square, SunDim } from "lucide-react";
 import {
-  BOARD_DISPLAY_DEFAULTS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
+  BOARD_DISPLAY_DEFAULTS, BOARD_DISPLAY_OTHERS, boardDisplayDrawsCopper, boardDisplayIsCustom, readBoardDisplay, selectBoardMode
 } from "@cad/core/lib/plot2d/index.js";
 import {
   DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuRadioGroup,
@@ -27,15 +27,17 @@ import { AssemblyModeIcon, BoardModeIcon, CopperModeIcon, PlacementModeIcon, Tra
  *   section's eyes have left the mode's set (choosing the mode goes back to it). Choosing a mode
  *   closes the menu.
  * - **Settings** (a sliders glyph): the switches, kept through a change of mode as a 3D view's Grid
- *   is — **Copper pours** (while copper is drawn), **View from below** (the board mirrored, its back
- *   layers on top) and **Dim other layers** (KiCad's "Inactive layers: Dim": every layer but the
- *   active one, which a press on its row in the Layers section chooses, drawn faded) — then a rule
- *   and **Opacity**, KiCad's Layer Display Options' — the **Zones**' fill (60%) and the **Tracks**'
+ *   is — **Copper pours** (while copper is drawn) and **View from below** (the board mirrored, its back
+ *   layers on top) — then a rule and **Other layers**, KiCad's high-contrast modes, a radio group:
+ *   every layer but the active one (which a press on its row in the Layers section chooses) **Shown**,
+ *   **Dimmed** or **Hidden**, the board's outline and the holes through an active copper layer at full
+ *   strength either way (`plot2d/plot.js`'s `focusedLayers`); Ctrl+H (⌘H) cycles them while the board
+ *   has the keyboard, as KiCad's does — then a rule and **Opacity**, KiCad's Layer Display Options' — the **Zones**' fill (60%) and the **Tracks**'
  *   (100%), each a row of its glyph, its name, a slider and its committed percentage, as a settings
  *   form's slider is. Ticking or sliding leaves it open; Escape in a value puts the draft back.
  *
  * A phone's More has a submenu of each, in the same order. The contract — `{ mode, side, poured,
- * layers, active, dim, zones, tracks }` — is core's, shared with `cad <type> snapshot --display`, so
+ * layers, active, others, zones, tracks }` — is core's, shared with `cad <type> snapshot --display`, so
  * what is drawn here is drawn there, and kept with the file's view.
  *
  * Where the server draws a board in 3D, Display leads with **View**, under a muted label, **2D** and
@@ -85,6 +87,11 @@ function OpacityRow({ id, Icon, label, name, value, onChange }) {
     <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={percent(value)} onValueCommit={commit} className="h-6 w-13 px-1.5" />
   </div>;
 }
+
+/** What the layers but the active one are, as Other layers' rows name them. */
+export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({
+  value, labelKey: `board.text.others_${value}`, Icon: { shown: Eye, dimmed: SunDim, hidden: EyeOff }[value]
+})));
 
 /** The two pictures of a board, as View's rows name them. */
 export const BOARD_VIEW_OPTIONS = Object.freeze([
@@ -158,10 +165,15 @@ export function BoardSettingsItems({ display, sheet, onChange }) {
       onCheckedChange={value => onChange({ ...display, side: value === true ? "bottom" : "top" })} data-board-side="">
       <FlipHorizontal2 className="size-4" />{t("board.text.view_from_below")}
     </DropdownMenuCheckboxItem>
-    <DropdownMenuCheckboxItem checked={display.dim === true} onSelect={keepOpen}
-      onCheckedChange={value => onChange({ ...display, dim: value === true })} data-board-dim="">
-      <SunDim className="size-4" />{t("board.text.dim_other_layers")}
-    </DropdownMenuCheckboxItem>
+    <DropdownMenuSeparator />
+    {/* Choosing leaves the menu open, as a switch does: the board is seen changing. */}
+    <DropdownMenuLabel className="text-muted-foreground">{t("board.text.other_layers")}</DropdownMenuLabel>
+    <DropdownMenuRadioGroup aria-label={t("board.text.other_layers")} value={display.others}
+      onValueChange={value => { if (BOARD_DISPLAY_OTHERS.includes(value)) onChange({ ...display, others: value }); }}>
+      {BOARD_OTHERS_OPTIONS.map(({ value, labelKey, Icon }) => <DropdownMenuRadioItem key={value} value={value} onSelect={keepOpen} data-board-others={value}>
+        <Icon className="size-4" />{t(labelKey)}
+      </DropdownMenuRadioItem>)}
+    </DropdownMenuRadioGroup>
     <DropdownMenuSeparator />
     <DropdownMenuLabel className="text-muted-foreground">{t("render.opacity")}</DropdownMenuLabel>
     <OpacityRow id="zones" Icon={ZoneKindIcon} label={t("board.text.zones")} name={t("board.text.zone_opacity")}

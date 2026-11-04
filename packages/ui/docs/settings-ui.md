@@ -555,8 +555,8 @@ opens or shuts it, as the STEP tree's. It opens as its blocks and "Nets (N)", a 
 parts and the Nets shut; a pick on the board opens its row's owners and scrolls it into view. A selected
 net is lit and the rest of the board stepped back, as KiCad's net highlight — and the Layers: the
 layer list and its Other group, each layer's eye, and a press on a board layer's row makes it the
-active layer (a filled dot after its name), drawn on top, the one Settings' Dim other layers leaves
-bright — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
+active layer (a filled dot after its name), drawn on top, the one Settings' Other layers keeps at
+full strength when it dims or hides the rest — the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb snapshot --display`
 draws too; a KiCad schematic's **Circuit** and, for more than one sheet, **Hierarchy** (`schematic/SchematicSection.jsx`,
 `schematic/SheetsSection.jsx`): the Hierarchy is KiCad's Hierarchy Navigator, the root (by its
 file's name) and the sheets each places, in page order, each row its page number, every sheet open,
@@ -734,13 +734,18 @@ it chooses the picture, as the modes do, and is the file's, kept with its view; 
 Projection and Preview as every 3D view has), and while KiCad makes the model the shared loading
 screen shows with the Display tile over it, View alone, so 2D is one choice away; then
 **Settings**, a sliders glyph, its switches under a muted **Settings** label — Copper pours (while
-copper is drawn), View from below and **Dim other layers**, checkbox items — then a rule and
-**Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
+copper is drawn) and View from below, checkbox items — then a rule and **Other layers**, KiCad's
+high-contrast modes, a radio group under its muted label: **Shown**, **Dimmed** or **Hidden** (every
+layer but the active one as it is, faded, or not drawn; the board's outline, and with a copper layer
+active every drill and every via through it, stay at full strength in both, so the active layer is
+never seen without its bearings), a choice leaving the menu open; **Ctrl+H** (⌘H) cycles the three while
+the board has the keyboard, as KiCad's does (a Mac's ⌘H is the system's Hide where the browser keeps
+it; Ctrl+H is the board's there too) — then a rule and **Opacity**, KiCad's Layer Display Options' **Zones** (60%) and **Tracks** (100%): each a row of
 its glyph and name where an item's are, a slider and its committed percentage (Enter or blur
 commits; Escape in the value puts it back and keeps the menu open), the menu 14rem wide for them;
-a slide or a tick leaves it open. On a phone the strip's More has a submenu of each, Display then
+a slide, a tick or a choice of Other layers leaves it open. On a phone the strip's More has a submenu of each, Display then
 Settings. Its Layers sidebar can override a preset, shown as Custom, and chooses the active layer
-Dim leaves bright; the active layer, Dim and the opacities are kept through a change of mode. It
+Other layers keeps bright; the active layer, Other layers and the opacities are kept through a change of mode. It
 has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -1189,6 +1194,9 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   a note; in an empty box it closes the box and is also the viewer's own Escape
   (it clears the selection). ⌘C or Ctrl+C with none of its text selected is the
   viewer's copy.
+- **Ctrl+H** (⌘H) on a KiCad board cycles Settings' Other layers, Shown, Dimmed, Hidden and round, as
+  KiCad's high-contrast key does, while the board has the keyboard (as Escape's viewer, above); no
+  other view binds it, and a Mac browser that keeps ⌘H for Hide leaves Ctrl+H.
 - **Arrow keys** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in Preview or with a
   modifier held.
