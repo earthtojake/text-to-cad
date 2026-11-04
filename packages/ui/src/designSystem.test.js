@@ -71,15 +71,16 @@ test("the Home is one type scale: text-ui throughout but the heading and a tile'
   assert.match(page, /className="cad-library h-full overflow-y-auto text-ui"/);
 });
 
-// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 12px start and the logo
-// button's 4px padding put its mark 16px in, over the home and a page. The Home itself is a centred
+// The logo stands on the page's gutter (docs/settings-ui.md): the navbar's 10px start, the logo
+// button's 4px padding and the 2px its artwork sits in put its drawn mark 16px in, over the home and a page. The Home itself is a centred
 // column of its own, 1128px at most on 24px gutters, 44px under the navbar, its tiles 280px at least.
-test("the navbar's logo stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
+test("the navbar's logo's drawn mark stands 16px in, and the Home is a centred 1128px column on its own gutters", () => {
   const css = readFileSync(join(root, "styles/globals.css"), "utf8");
   assert.match(css, /\.cad-library-content \{[^}]*max-width: 1128px; margin: 0 auto; padding: 44px 24px /);
   assert.match(css, /\.cad-library-grid \{[^}]*minmax\(280px, 1fr\)/);
   const navbar = readFileSync(join(root, "file-viewer/navigation/ViewerNavbar.jsx"), "utf8");
-  assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "pl-3 /);
+  // 10px, the button's 4px, and the 2px the mark's artwork sits in from its image's edge.
+  assert.match(navbar, /cn\(NAVBAR_ROW_CLASS, "pl-\[10px\] /);
   assert.match(navbar, /"cad-navbar-logo justify-start px-1"/);
 });
 

@@ -21,7 +21,8 @@ const ROW_ACTIONS_WIDTH = "1.5rem";
 function LayerEye({ id, hidden, onToggle }) {
   const { t } = useI18n();
   const action = hidden ? t("tree.reveal") : t("tree.hide");
-  return <div data-row-actions="" className={treeRowActionsClass(hidden)}>
+  // Its glyph ends on the panel's line, 16px in: the row's 8px, and 6px and the button's 2px inside it.
+  return <div data-row-actions="" className={cn(treeRowActionsClass(hidden), "pr-1.5")}>
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
         data-layer-visibility={id} onClick={event => { event.stopPropagation(); onToggle(id, hidden); }}>
@@ -90,11 +91,12 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
     return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
-  // The settings together over the list, their headings and labels on the list's line, 16px in, where
-  // a layer group's name and a swatch start; their controls end 8px in, and the rule between the two
-  // sections runs the panel's width, as every rule in it does.
+  // The settings together over the list, on the panel's line both sides (16px: where a layer group's
+  // name and a swatch start, and where the eyes end); the rule between the two sections runs the
+  // panel's width, as every rule in it does.
   return <div className="flex flex-col gap-1 pt-1 text-tiny">
-    <div className="pb-1 [&_[data-settings-section]>h2>*]:pl-4 [&_[data-settings-section-body]>*]:pl-4" data-board-settings="">
+    {/* Its labels are short words (Preset, Side, Others): a 3rem column, the rest the controls'. */}
+    <div className="pb-1 [&_[data-settings-section]>h2>*]:px-4 [&_[data-settings-section-body]>*]:px-4 [&_[data-settings-section-body]>*]:grid-cols-[3rem_minmax(0,1fr)]" data-board-settings="">
       <BoardViewSettings display={display} sheet={sheet} onChange={onDisplayChange} />
       <BoardLayerDisplaySettings display={display} sheet={sheet} onChange={onDisplayChange} />
     </div>

@@ -15,8 +15,8 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * A flat view's panel (a board's, a schematic's: `FlatViewFrame.jsx`), docked at the view's left
  * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
  * after it, then a row of tabs, buttons as Figma's (a board's Circuit and Layers, a schematic's
- * Circuit and Hierarchy), and the open tab's list under them, scrolling as one. Head, tabs and lists
- * keep one gutter: 8px in from the panel's edges.
+ * Circuit and Hierarchy), and the open tab's list under them, scrolling as one. It keeps two lines,
+ * the same on both sides: what is read 16px in, what lights up 8px in.
  *
  * - **Collapsed, it goes completely**: its expand button alone on a small pill at the canvas's
  *   top-left (`FlatPanelPill`). ⌘\ (Ctrl+\) shows and hides it, and / opens it on its search.
@@ -32,11 +32,18 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
  */
 
-// The panel's one gutter: its head, its tabs and the boxes of its rows start this far in from its edges.
-const GUTTER_PX = 8;
+// The panel's two lines, the same on both sides (Figma's): what is read — text, fields, the edges of
+// controls, an icon's glyph — stands 16px in (`CONTENT_PX`); a surface that lights under the pointer
+// or for what is chosen (a tab's button, a row) runs 8px further out (`SURFACE_PX`), padded back to the line.
+const CONTENT_PX = 16;
+const SURFACE_PX = 8;
+// An icon button's glyph is 5px inside its 24px box: the box stops short of the line by that much.
+const ICON_INSET_PX = 5;
+// A phone's 36px touch button and its 18px glyph: 9px.
+const TOUCH_ICON_INSET_PX = 9;
 const KEY_NUDGE_PX = 16;
 export const FLAT_PANEL_DEFAULT_WIDTH = 216;
-export const FLAT_PANEL_MIN_WIDTH = 180;
+export const FLAT_PANEL_MIN_WIDTH = 200;
 /** The toggle's key, as its tooltip shows it: ⌘\ on a Mac (the host's `environment.platform`), Ctrl+\ elsewhere. */
 export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : "Ctrl+\\");
 
@@ -155,7 +162,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
       page && "absolute inset-0 z-50")}
     style={page ? undefined : { width: drawnWidth }}>
     {/* The head: the search, then the collapse button at its right (Back before it, on a phone). */}
-    <div className="flex shrink-0 items-center gap-1" style={{ padding: `${GUTTER_PX}px ${GUTTER_PX}px 6px` }} data-flat-panel-head="">
+    <div className="flex shrink-0 items-center gap-1.5" style={{ padding: page ? `${SURFACE_PX}px ${CONTENT_PX}px 6px ${CONTENT_PX - TOUCH_ICON_INSET_PX}px` : `${SURFACE_PX}px ${CONTENT_PX - ICON_INSET_PX}px 6px ${CONTENT_PX}px` }} data-flat-panel-head="">
       {page ? <ToolbarButton label={t("flatPanel.back")} tooltip={false} className={TOUCH_STRIP_BUTTON_CLASS} onClick={onClose} data-flat-panel-toggle=""><ArrowLeft aria-hidden="true" /></ToolbarButton> : null}
       <TreeFilterInput label={searchLabel} placeholder={searchPlaceholder} value={query} onChange={setQuery} onKeyDown={onSearchKeyDown}
         inputRef={input} dense className="min-w-0 flex-1 rounded-md border border-border pl-px pr-0.5 shadow-none" data-flat-panel-search="" />
@@ -164,7 +171,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
       </ToolbarButton>}
     </div>
     {/* The tabs, buttons as Figma's: the open one raised on the accent. While a search is up they step aside. */}
-    <div role="tablist" aria-label={label} hidden={searching} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${GUTTER_PX}px ${GUTTER_PX}px` }}>
+    <div role="tablist" aria-label={label} hidden={searching} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
       {tabs.map(entry => {
         const on = entry.id === active;
         return <button key={entry.id} type="button" role="tab" id={ids(entry.id).tab} aria-controls={ids(entry.id).panel} aria-selected={on} tabIndex={on ? 0 : -1}
@@ -194,7 +201,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
               style={searching && entry.searchLast ? { order: 1 } : undefined}
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-              {searching ? <h3 className="flex h-6 items-center px-2 text-tiny text-muted-foreground">{entry.label}</h3> : null}
+              {searching ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
               {entry.content}
             </section>;
           })}

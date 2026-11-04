@@ -612,11 +612,13 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   muted; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
-- **One gutter, one text line.** The head, the tabs and every list start 8px in from the panel's
-  edges: the search box, a tab's button and a row's background begin on that line, and the controls
-  end 8px from the right; every rule runs the panel's width. What is read inside them starts 16px
-  in: the search icon, a tab's name, a settings heading and label, a layer group's name and a
-  layer's swatch (a tree's rows keep the tree's own inset).
+- **Two lines, the same on both sides** (Figma's). What is read stands 16px in from each edge: the
+  search field, a tab's name, a settings heading, label and control (a Select, a value, a checkbox),
+  a layer group's name, a swatch, and an icon's glyph (the collapse button's, a row's eye: an icon
+  button's box stops 5px short of the line). What lights up under the pointer or for what is chosen —
+  a tab's button, a row's background — runs 8px from each edge. Every rule runs the panel's width.
+  A settings row's label column is 3rem (its labels are short words) and its control fills the rest.
+  The navbar's logo stands on the same 16px line: its drawn mark, not its image's edge.
 - **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
   a board's parts in the schematic blocks their footprints record (a sheet's name without
   `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its
@@ -652,7 +654,7 @@ the narrower for it (the strip centres on the canvas). Nothing else changes for 
   hover reveal, and a pick on the picture never opens it.
   ⌘\ (Ctrl+\) shows and hides it, and / opens it with the keyboard in its search, while the view has
   the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
-  width (`toolStack.panels.flat`: 216px at first, 180px to half the view, from a grip on its right
+  width (`toolStack.panels.flat`: 216px at first, 200px to half the view, from a grip on its right
   edge, Left/Right by 16px).
 - **Open, it is always docked**: the canvas is the narrower for it, at any width. Under 1024px of
   view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**

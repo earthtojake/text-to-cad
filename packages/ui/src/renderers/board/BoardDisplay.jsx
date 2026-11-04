@@ -40,11 +40,10 @@ export const BOARD_MODE_OPTIONS = Object.freeze([
 ]);
 const CUSTOM = "custom";
 const percent = value => `${Math.round(value * 100)}%`;
-// Every control fills the row's control column at the row's 24px height; a choice is as wide as its value, at the row's end.
+// Every control fills the row's control column at the row's 24px height, a choice too: the room is the control's.
 // A row is as tall as its control where that is taller (a phone's 32px Select), never cut by it.
 const CONTROL_CLASS = "!h-6 w-full min-w-0";
 const ROW_CLASS = "h-auto min-h-6";
-const CHOICE_WIDTH_CLASS = "ml-auto w-fit max-w-full";
 
 /** What the layers but the active one are, as Others names them. */
 export const BOARD_OTHERS_OPTIONS = Object.freeze(BOARD_DISPLAY_OTHERS.map(value => Object.freeze({ value, labelKey: `board.text.others_${value}` })));
@@ -58,7 +57,7 @@ export function boardDisplayChoice(display, sheet) {
 function Choice({ label, name, value, options, onChange, data }) {
   return <FileSheetSettingRow label={label} className={ROW_CLASS}>
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label={name} size="sm" className={cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, CONTROL_CLASS, CHOICE_WIDTH_CLASS)} {...data}><SelectValue /></SelectTrigger>
+      <SelectTrigger aria-label={name} size="sm" className={cn(FILE_SHEET_SELECT_TRIGGER_CLASSES, CONTROL_CLASS)} {...data}><SelectValue /></SelectTrigger>
       <SelectContent>{options.map(([id, title]) => <SelectItem key={id} value={id} data-board-option={id}>{title}</SelectItem>)}</SelectContent>
     </Select>
   </FileSheetSettingRow>;
@@ -76,7 +75,7 @@ function Opacity({ id, label, name, value, onChange }) {
     <div className="contents" data-board-opacity={id}>
       <Slider className={cn(SUB_TOOLBAR_SLIDER_CLASS, "px-1")} value={[value]} min={0} max={1} step={0.01}
         thumbProps={{ "aria-label": name }} onValueChange={([next]) => onChange(next)} />
-      <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={percent(value)} onValueCommit={commit} className="h-6 w-13 px-1.5" />
+      <FileSheetValueInput ariaLabel={t("render.valueOf", { name })} value={percent(value)} onValueCommit={commit} className="h-6 w-11 shrink-0 px-1.5" />
     </div>
   </FileSheetSettingRow>;
 }

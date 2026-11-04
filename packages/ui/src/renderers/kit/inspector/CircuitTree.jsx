@@ -33,7 +33,8 @@ const additive = event => event.shiftKey || event.metaKey || event.ctrlKey;
 function IsolateEye({ node, on, onToggle, data }) {
   const { t } = useI18n();
   const action = on ? t("tree.exitIsolate") : t("tree.isolate");
-  return <div data-row-actions="" className={treeRowActionsClass(on)}>
+  // Its glyph ends on the panel's line, 16px in: the row's 8px, and 6px and the button's 2px inside it.
+  return <div data-row-actions="" className={cn(treeRowActionsClass(on), "pr-1.5")}>
     <TooltipHint content={action}>
       <Button type="button" variant="ghost" size="icon-xs" aria-label={t(on ? "tree.exitIsolateNamed" : "tree.isolateNamed", { name: node.label })} aria-pressed={on}
         className={cn("h-5 w-4", on ? "text-foreground" : "text-muted-foreground")} {...{ [`data-${data}-isolate`]: node.id }}
