@@ -139,7 +139,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/i18n` (the locales and the translation hook), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
 `joinPath`) and `/links` (the navbar's link defaults) are pure modules, with no React, for a

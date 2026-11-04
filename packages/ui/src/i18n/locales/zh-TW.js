@@ -253,6 +253,15 @@ export default {
   "update.failed": "更新失敗：{error}",
   "update.updated": "已更新至 {version}。",
   "update.updatedRestart": "已更新至 {version}。重新啟動應用程式以載入新技能。",
+  // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
+  "whatsNew.gotIt": "知道了",
+  "whatsNew.0.11.title": "text-to-cad 0.11 新功能",
+  "whatsNew.0.11.boards.title": "在檢視器中開啟 KiCad 電路板。",
+  "whatsNew.0.11.boards.body": "開啟 `.kicad_pcb`，它會依 KiCad PCB 編輯器的樣子繪製，層、網路與電路圖圖紙都在側邊欄中。",
+  "whatsNew.0.11.select.title": "把電路板的任何部分指給代理程式。",
+  "whatsNew.0.11.select.body": "點選或拖曳以選取元件、焊墊、走線、鋪銅區或一塊區域，再到快速編輯中描述要做的變更。",
+  "whatsNew.0.11.checks.title": "檢查與製造檔案，無需安裝任何東西。",
+  "whatsNew.0.11.checks.body": "代理程式會執行 KiCad 的設計規則檢查與電氣規則檢查，並匯出 Gerber、BOM、STEP 等檔案。text-to-cad 自帶一份 KiCad。",
 
   "alert.undisplayable": "無法顯示這個模型",
   "alert.dismiss": "關閉",

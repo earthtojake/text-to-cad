@@ -429,6 +429,13 @@ once it has settled — the model framed whole from the default direction, whate
 camera (`{action: "thumbnail"}`). `cad_server.viewer.recents` keeps the library in the
 user's state directory, shared with the CAD app.
 
+### What's new
+
+After an update to a release whose notes say what it brought, the page shows them once, over the
+home or a file's view once it is up (`@cad/ui/whats-new`): read through the CAD client (`whatsNew`,
+`/api/v1/settings`' `whats_new`) and kept seen in the person's settings for every CAD view. A new
+person is shown nothing new, and nothing shows while the engine is gone or an update restarts.
+
 ### Usage stats (telemetry)
 
 The server's usage stats (`cad_server/analytics.py`) are on by default once a `cad` command has said

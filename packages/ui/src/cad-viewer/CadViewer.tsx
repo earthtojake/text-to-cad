@@ -20,6 +20,7 @@ import { normalizePath } from './catalog.js';
 import { isDocumentId } from '@cad/core/lib/cadRefs.js';
 import { MissingCadFile } from './MissingCadFile.js';
 import { ControlUsageProvider } from '../usage/controls.js';
+import { WhatsNewDialog } from '../whats-new/WhatsNewDialog.js';
 
 // A STEP: read by the cadgen engine, at a length its size decides (the home's pictures ask first, as
 // they do for a model's document, by its id).
@@ -91,6 +92,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   fullSize?: ReactNode;
   /** The chrome around the view (`FileViewerProps.chrome`): the navbar (`"page"`, the default), or the view alone (`"bare"`). */
   chrome?: "page" | "bare";
+  /**
+   * What's new (`@cad/ui/whats-new`'s `useWhatsNew`): the release whose notes to show, once something
+   * is on screen -- the home, or a file's view, never its loading page -- and how they are dismissed.
+   * A host leaves it out where a dialog has no room, or while a notice of its own covers the view.
+   */
+  whatsNew?: { entry: string | null; onDismiss(): void };
   onError?(error: Error): void;
 }
 
@@ -107,7 +114,7 @@ const reportError = (error: Error) => console.error(error);
  * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
-  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, colorScheme, language, appSettings, notice, update, fullSize, history, chrome, whatsNew, onError = reportError }: CadViewerProps<Model>) {
   // The language the host names: the pages drawn here (the home, a file that will not open) read in it.
   const locale = host.environment.locale;
   const t = translator(locale);
@@ -162,6 +169,10 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // so a model rebuilt while it is open is pictured again as a file written again is.
   useModelThumbnail(live, shown, String(entry?.documentHash || entry?.hash || ''),
     (png, pictured) => latest.current.onThumbnail?.(png, pictured) ?? Promise.resolve());
+  // Something on screen to say What's new over: the home, or a file's view once its renderer is up
+  // (past the loading page), never a file that would not open.
+  const viewing = useSyncExternalStore(live.subscribe, live.current, live.current);
+  const onScreen = !path || Boolean(viewing);
 
   // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host.
   // A view with no library shows its file and nothing else: it opens no other, and has no home.
@@ -240,6 +251,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     <ExportControls service={client.exports} downloads={host.downloads} file={shown ?? path}>{({ menu, overlay }) => <FileViewer navbarActions={fullSize} fileMenuItems={menu} overlay={overlay} file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       colorScheme={colorScheme} language={language} appSettings={appSettings} update={update} history={history} recent={recent} explorerFolder={explorerFolder} onExplorerFolderChange={homed ? keepExplorerFolder : undefined} notice={notice} chrome={chrome} onError={onError} presentation={presentation} />}</ExportControls>
     </ControlUsageProvider>
+    {whatsNew && onScreen ? <WhatsNewDialog entry={whatsNew.entry} onDismiss={whatsNew.onDismiss} /> : null}
     {drawing && !path ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </I18nProvider>;
 }

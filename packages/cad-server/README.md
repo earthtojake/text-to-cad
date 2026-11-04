@@ -49,6 +49,8 @@ src/cad_server/
                          #   a command has said so, never after a no
   settings.py            # the person's settings: settings.json in the state directory
   language.py            # the language the person chose for the CAD views
+  whats_new.py           # the releases whose What's new the person has seen (settings'
+                         #   whats_new), and whether a device was updated or is new
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
   assets.py              # where the bundled runtime is

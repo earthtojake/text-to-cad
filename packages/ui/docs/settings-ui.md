@@ -1219,6 +1219,14 @@ right-hand controls (before the host's actions and the update button), brings it
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
 
+**What's new** is the one dialog the viewer opens by itself (`whats-new/WhatsNewDialog.tsx`): once
+after an update to a release with notes, never on a new person's first run, over the home or a
+file's view once its renderer is up (never a loading page, nor while the host's own notice covers
+the view). It is the stock shadcn Dialog (`primitives/dialog.jsx`, on the `text-ui` scale, no corner
+X): the release's title, its items as a list, each a bold title and a sentence or two in the
+muted text, and one primary button, **Got it**, which has the focus. The button, Escape and a press
+outside each close it and keep it seen for every view of the person's; nothing else is offered.
+
 ## Verification
 
 Verify state transitions, touch cancellation, keyboard operation, nested popup

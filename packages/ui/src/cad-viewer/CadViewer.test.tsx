@@ -253,6 +253,22 @@ test("the host's Full size is the navbar's one host action: Export is the file m
   expect([props().navbarActions ?? null, props().fileMenuItems ?? null]).toEqual([null, null]);
 });
 
+test("What's new is said over the home, and over a file once its view is up: never over its loading page", () => {
+  const client = cadClient();
+  const live = createLiveRegistry();
+  const whatsNew = { entry: '0.11', onDismiss: vi.fn() };
+  const view = (file: string) => <CadViewer client={client as never} host={ports(client)} tabStore={createTabStore(memoryTabRecord())} live={live} file={file}
+    library={library} onShow={() => {}} whatsNew={whatsNew} />;
+  const { rerender } = render(view(''));
+  expect(screen.getByRole('dialog').getAttribute('data-whats-new')).toBe('0.11');
+  rerender(view('/m/a.step'));
+  expect(screen.queryByRole('dialog')).toBeNull();  // the file's loading page: its renderer is not up
+  let release = () => {};
+  act(() => { release = live.binding.bind({ readState: () => ({}), capture: async () => new Blob(), thumbnail: async () => new Blob() }); });
+  expect(screen.getByRole('dialog')).toBeTruthy();
+  act(() => release());
+});
+
 test("a model's Files starts where the explorer was last this tab, else the person's home folder, never the script's", async () => {
   const client = Object.assign(cadClient(), { serverInfo: vi.fn(async () => ({ home: '/Users/me' })) });
   const tabStore = createTabStore(memoryTabRecord());

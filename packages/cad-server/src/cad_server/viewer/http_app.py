@@ -606,26 +606,33 @@ class CadApp:
 
     def settings(self, share=None) -> dict:
         """``GET /api/v1/settings``: the person's settings every CAD view reads -- the language they
-        chose (``cad_server/language.py``) and whether usage stats are shared (``telemetry``: null
-        where this server keeps none)."""
-        from cad_server import language
+        chose (``cad_server/language.py``), whether usage stats are shared (``telemetry``: null
+        where this server keeps none) and the releases whose What's new they have seen, with the one
+        this installation runs (``whats_new``, ``cad_server/whats_new.py``)."""
+        from cad_server import language, whats_new
 
-        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None}
+        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None,
+                "whats_new": whats_new.read()}
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
-        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are. It takes
-        what ``GET`` answers: the telemetry's read-only ``reason``, ``policy`` and ``saved`` ride along
-        and are ignored, and a null telemetry (a server that keeps none) changes nothing, so a page
-        that puts back what it read, one value changed, changes that value."""
-        from cad_server import language
+        ``{"telemetry": {"share"}}``, ``{"whats_new": {"seen"}}`` or several -- answered with the
+        settings as they now are. It takes what ``GET`` answers: the telemetry's read-only ``reason``,
+        ``policy`` and ``saved`` and What's new's ``release`` ride along and are ignored, a null
+        telemetry (a server that keeps none) changes nothing, and What's new's ``seen`` is added to
+        what is kept, never taken from it, so a page that puts back what it read, one value changed,
+        changes that value."""
+        from cad_server import language, whats_new
 
         self._limit(request, 4096)
         payload = json.loads(request.body() or b"{}")
-        if type(payload) is not dict or not set(payload) <= {"language", "telemetry"}:
-            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}}")
+        if type(payload) is not dict or not set(payload) <= {"language", "telemetry", "whats_new"}:
+            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}, "
+                             "\"whats_new\"?: {\"seen\"}}")
         if "language" in payload:
             language.change(payload["language"])
+        if "whats_new" in payload:
+            whats_new.change(payload["whats_new"])
         share = None
         if payload.get("telemetry") is not None:
             telemetry = payload["telemetry"]

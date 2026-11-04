@@ -252,6 +252,15 @@ export default {
   "update.failed": "업데이트하지 못했습니다: {error}",
   "update.updated": "{version}(으)로 업데이트했습니다.",
   "update.updatedRestart": "{version}(으)로 업데이트했습니다. 새 스킬을 불러오려면 앱을 다시 시작하세요.",
+  // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
+  "whatsNew.gotIt": "확인",
+  "whatsNew.0.11.title": "text-to-cad 0.11의 새로운 기능",
+  "whatsNew.0.11.boards.title": "뷰어에서 KiCad 기판을.",
+  "whatsNew.0.11.boards.body": "`.kicad_pcb`를 열면 KiCad의 PCB 편집기가 보여 주는 그대로 그려지고, 레이어, 네트, 회로도 시트가 사이드바에 나타납니다.",
+  "whatsNew.0.11.select.title": "기판의 어느 부분이든 에이전트에게 가리키세요.",
+  "whatsNew.0.11.select.body": "클릭하거나 드래그해 부품, 패드, 트랙, 존 또는 영역을 선택한 다음 빠른 편집에서 변경 사항을 설명하세요.",
+  "whatsNew.0.11.checks.title": "설치할 것 없이 검사와 제조 파일까지.",
+  "whatsNew.0.11.checks.body": "에이전트가 KiCad의 설계 규칙 검사와 전기 규칙 검사를 실행하고 거버, BOM, STEP 등을 내보냅니다. text-to-cad에는 자체 KiCad가 함께 들어 있습니다.",
 
   "alert.undisplayable": "모델을 표시할 수 없습니다",
   "alert.dismiss": "닫기",
