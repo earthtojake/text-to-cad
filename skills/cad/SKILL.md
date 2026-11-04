@@ -30,7 +30,7 @@ the page the person has open updates. Files are exports, made when asked.
 
 ## Setup and paths
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
 it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
@@ -63,7 +63,7 @@ the script's own packages, never a version of cad:
 A one-off dependency is `--with`; a script inside a Python project runs with the project's
 dependencies and lock. A run that stops on an import or a requirement says what to change in one
 line. [Environments](references/environments.md) has the details: `--with`, projects and their locks,
-private indexes, the network, and Windows PowerShell.
+private indexes and the network.
 
 Command-line paths, and the paths `read_step`, `read_xbf`, `read_mesh` and `export`
 take, are relative to the working directory, as are a model's own file reads. Anchor

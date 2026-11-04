@@ -1215,8 +1215,7 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     told = {"engine": True, "refused": False, "here": False}
     failed = next((report for report in reports if not report.get("ok")), None)
     if failed is not None:
-        trace = failed.get("trace")
-        return {**_read(trace or failed.get("error") or ""), **told, "engine": bool(trace)}
+        return told_error(failed)
     if error is None:
         return None
     if isinstance(error, EngineError):
@@ -1242,6 +1241,18 @@ def _error(error: BaseException | None, reports: list[dict[str, Any]], worker: d
     return {"type": kind.__qualname__ if kind.__module__ == "builtins" else f"{kind.__module__}.{kind.__qualname__}",
             "frames": frames, "engine": bool(frames) and os.path.abspath(frames[-1]["file"]).startswith(_ENGINE),
             "refused": isinstance(error, refusals), "here": True}
+
+
+def told_error(report: dict[str, Any]) -> dict[str, Any]:
+    """A failed build report's error as the verbs tell it (``observers``' ``error``): its type and frames,
+    innermost last -- the whole traceback the build kept (``build._raised``), else what its text shows --
+    and whether it was the engine's own, writing a file (``trace``). The server reads it to tell a mistake
+    in the library's code from the model's: for a crash report, and for whether a page offers to report
+    the failure (``cad_server.analytics.told_signature``, the one rule for both)."""
+    trace = report.get("trace")
+    raised = report.get("raised")
+    found = dict(raised) if isinstance(raised, dict) and raised.get("frames") else _read(trace or report.get("error") or "")
+    return {**found, "engine": bool(trace), "refused": False, "here": False}
 
 
 def _read(text: str) -> dict[str, Any]:

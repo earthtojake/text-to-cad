@@ -606,26 +606,42 @@ class CadApp:
 
     def settings(self, share=None) -> dict:
         """``GET /api/v1/settings``: the person's settings every CAD view reads -- the language they
-        chose (``cad_server/language.py``) and whether usage stats are shared (``telemetry``: null
-        where this server keeps none)."""
-        from cad_server import language
+        chose (``cad_server/language.py``), whether usage stats are shared (``telemetry``: null
+        where this server keeps none), the releases whose What's new they have seen, with the one
+        this installation runs (``whats_new``, ``cad_server/whats_new.py``), and whether the engine
+        updates by itself (``updates``: ``cad_server/auto_updates.py``, one setting for every CAD app)."""
+        from cad_server import auto_updates, language, whats_new
 
-        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None}
+        return {"language": language.read(), "telemetry": self._consent(share) if self.analytics is not None else None,
+                "whats_new": whats_new.read(), "updates": auto_updates.read()}
 
     def _change_settings(self, request) -> dict:
         """``PUT /api/v1/settings`` with part of the settings -- ``{"language": {"locale"}}``,
-        ``{"telemetry": {"share"}}`` or both -- answered with the settings as they now are. It takes
-        what ``GET`` answers: the telemetry's read-only ``reason``, ``policy`` and ``saved`` ride along
-        and are ignored, and a null telemetry (a server that keeps none) changes nothing, so a page
-        that puts back what it read, one value changed, changes that value."""
-        from cad_server import language
+        ``{"telemetry": {"share"}}``, ``{"whats_new": {"seen"}}``, ``{"updates": {"automatic"}}`` or
+        several -- answered with the settings as they now are. It takes what ``GET`` answers: the
+        telemetry's read-only ``reason``, ``policy`` and ``saved``, What's new's ``release`` and the
+        updates' ``reason`` ride along and are ignored, a null telemetry (a server that keeps none)
+        changes nothing, and What's new's ``seen`` is added to what is kept, never taken from it, so a
+        page that puts back what it read, one value changed, changes that value."""
+        from cad_server import auto_updates, language, whats_new
 
         self._limit(request, 4096)
         payload = json.loads(request.body() or b"{}")
-        if type(payload) is not dict or not set(payload) <= {"language", "telemetry"}:
-            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}}")
+        if type(payload) is not dict or not set(payload) <= {"language", "telemetry", "whats_new", "updates"}:
+            raise ValueError("a settings change is {\"language\"?: {\"locale\"}, \"telemetry\"?: {\"share\"}, "
+                             "\"whats_new\"?: {\"seen\"}, \"updates\"?: {\"automatic\"}}")
         if "language" in payload:
             language.change(payload["language"])
+        if "whats_new" in payload:
+            whats_new.change(payload["whats_new"])
+        if "updates" in payload:
+            updates = payload["updates"]
+            if type(updates) is not dict or not set(updates) <= {"automatic", "reason"}:
+                raise ValueError("an updates change is {\"automatic\": true or false}")
+            # The app menu's Automatic updates: the person's setting, one for every CAD app. What a read
+            # answered, put back as it was, changes nothing: a default stays a default.
+            if updates != auto_updates.read():
+                auto_updates.change({"automatic": updates.get("automatic")})
         share = None
         if payload.get("telemetry") is not None:
             telemetry = payload["telemetry"]

@@ -66,6 +66,12 @@ and assets, so the app does not scan another package's source.
   (Position); the engine serves the document, never a frame of it.
 - **Loud failure**: a missing entry, an unresolvable ref, or a file the engine
   cannot read surfaces as an alert — never a silently wrong scene.
+- **The viewer is read-only**: it never changes a design. It writes no
+  document's content and no file of one (an export downloads a new file; the
+  home's Delete removes the engine's record and cache of a document, never its
+  file). Changing a design belongs to the agent and the code; every viewer tool
+  (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to
+  show the person the design and to give the agent feedback.
 
 ## Launching
 
@@ -428,6 +434,13 @@ library, a model's record notes the time), and its picture
 once it has settled — the model framed whole from the default direction, whatever the
 camera (`{action: "thumbnail"}`). `cad_server.viewer.recents` keeps the library in the
 user's state directory, shared with the CAD app.
+
+### What's new
+
+After an update to a release whose notes say what it brought, the page shows them once, over the
+home or a file's view once it is up (`@cad/ui/whats-new`): read through the CAD client (`whatsNew`,
+`/api/v1/settings`' `whats_new`) and kept seen in the person's settings for every CAD view. A new
+person is shown nothing new, and nothing shows while the engine is gone or an update restarts.
 
 ### Usage stats (telemetry)
 

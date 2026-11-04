@@ -374,6 +374,20 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { language: { locale } }, operation: 'language' }))
         .then((settings) => settings.language);
     },
+    // What's new: the releases whose notes the person has seen and the one the engine runs; with
+    // `seen`, the releases to add (the server adds, never takes away). A server before it answers none.
+    whatsNew(seen) {
+      return (seen === undefined ? request(`${API}/settings`, { operation: 'whats-new' })
+        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { whats_new: { seen } }, operation: 'whats-new' }))
+        .then((settings) => settings.whats_new ?? null);
+    },
+    // Whether the engine updates by itself (`/api/v1/settings`' `updates`); with `automatic`, the
+    // person's answer (the app menu's Automatic updates).
+    automaticUpdates(automatic) {
+      return (automatic === undefined ? request(`${API}/settings`, { operation: 'updates' })
+        : request(`${API}/settings`, { method: 'PUT', headers: JSON_POST, body: { updates: { automatic } }, operation: 'updates' }))
+        .then((settings) => settings.updates);
+    },
     // Who the engine is, this start of it (`instance`), whether a newer text-to-cad is out and where
     // an update is (`GET /api/v1/server`); and the update button's click (`POST /api/v1/local/update`),
     // which answers the notice, the release, the instance and the update.

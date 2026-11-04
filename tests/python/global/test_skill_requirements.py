@@ -25,7 +25,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
-SETUP = """Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+SETUP = """Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
 it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
@@ -38,7 +38,7 @@ explains any other failure.
 """
 
 _IMPORT = re.compile(r"^\s*(?:from|import)\s+(?:cad|cadgen|cad_server)\b", re.M)
-_INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.cmd)?\s+[a-z]", re.M)
+_INVOCATION = re.compile(r"(?:^|[`\s])cad(?:\.exe)?\s+[a-z]", re.M)
 _FENCE = re.compile(r"^ *```[^\n]*\n(.*?)^ *```", re.M | re.S)
 
 

@@ -35,6 +35,9 @@ dependencies = [
   "ezdxf",
   # The DXF pane's raster and the Recents' previews are drawn with Pillow.
   "pillow",
+  # The cad command on Windows, cad.exe, is distlib's console launcher (the one pip writes for every
+  # console script) in front of a zip the server writes (cad_server._internal.installations).
+  'distlib; sys_platform == "win32"',
 ]
 
 [project.urls]

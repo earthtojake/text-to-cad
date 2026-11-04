@@ -15,6 +15,12 @@ binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. The CAD app's surrounding host controls
 remain its own.
 
+**The viewer is read-only.** It never changes a design: it writes no document's content and no
+file of one (an export is a download of a new file; the home's Delete removes the engine's record
+and cache of a document, never its file). Changing a design belongs to the agent and the code, and
+every viewer tool (Select, Measure, Annotate, Quick Edit, the filters and displays) exists to show
+the person the design and to give the agent feedback.
+
 ## Ownership and dependencies
 
 UI may import `@cad/core` and browser-safe React dependencies. It must not
@@ -139,7 +145,7 @@ const renderers = [createDxfRenderer({ client, preferences }), createGlbRenderer
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/xbf`, `/renderers/workspace`, `/file-viewer/presentation`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/i18n` (the locales and the translation hook), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the app menu's Telemetry row and its state), `/update` (the update button), `/whats-new` (the What's new dialog, its notes and when it shows), `/i18n` (the locales and the translation hook), `/build-id` (what a Vite config names the build with), `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD client as a `FileSource`, the file menu's
 Copy path and Reveal, and the one spelling of an absolute path: `normalizePath`, `baseName`,
 `joinPath`) and `/links` (the navbar's link defaults) are pure modules, with no React, for a

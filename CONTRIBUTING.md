@@ -794,6 +794,12 @@ A release pull request comes one of two ways. Choose the bump deliberately for
 every release; if a release request does not specify one, confirm it rather
 than assuming.
 
+A release with significant user-facing features adds its What's new entry before it ships: its
+minor version's line in `packages/ui/src/whats-new/notes.js` and its words in all five locale
+files, user-facing features only, at most three items, each a bold title and one or two sentences
+(the dialog the CAD Viewer and the CAD app's tabs show once after an update; `notes.test.mjs`
+holds the shape). A release with nothing a person would notice adds none.
+
 **Its own pull request**, to release what `main` already has: dispatch
 `Prepare Release` (`release-prepare.yml`).
 
@@ -831,11 +837,29 @@ The pull request's Version Check says what merging it releases, and refuses:
   a contributor's pull request can never start one;
 - a version that is not past the target branch's and the latest release tag's, or that is on
   the list of [versions a release cannot take](#versions-a-release-cannot-take);
+- a patch release (the same `X.Y` as the target's) that adds or changes a migration guide under
+  `docs/migrations/`: see **Patch releases install themselves**, below;
 - a release that changes more than 300 files: GitHub matches a push's paths
   against its first 300 changed files only, so `Publish Release` might never
   start. Release such a change after it merges, from its own pull request;
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
+
+**Patch releases install themselves.** With automatic updates on, the default, every device's
+engine installs a newer patch release by itself and switches to it once idle, under agent threads
+that are running, with no click (`cad_server.auto_updates.takes`); a minor or major release waits for
+the person's click. So choose the bump by what the release asks of people, not by its size:
+
+- **patch** (`0.11.0` to `0.11.1`): fixes and additions nothing has to change for. No command,
+  option, tool, Python name or file format removed or renamed, no output shape changed (a `--json`
+  key, an MCP tool's answer), no setting that means something else, nothing a skill or a person's
+  script would have to be edited for, and no migration guide;
+- **minor** (`0.11.x` to `0.12.0`): anything else on 0.x -- a rename, a removal, a hard cutover, a
+  change a migration guide explains. It reaches each device when its person updates.
+
+Version Check refuses a patch release that adds or changes a migration guide; the rest is the
+release's author's to judge, and when in doubt it is a minor release. An addition that renames
+nothing (a new command, a new document type, a new option) may ship in a patch.
 
 A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
 tested whole, Windows included, before it can merge. Merge it once everything is

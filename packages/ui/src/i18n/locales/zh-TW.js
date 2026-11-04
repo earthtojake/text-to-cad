@@ -173,6 +173,9 @@ export default {
   "consent.shareUsage": "遙測",
   "consent.shareUsageEnvironment": "遙測（由你的環境設定）",
   "consent.telemetryInfo": "匿名使用資料與當機報告，用於改善 text-to-cad。你的提示詞、模型與檔案絕不會被傳送。",
+  "update.automatic": "自動更新",
+  "update.automaticEnvironment": "自動更新（由你的環境關閉）",
+  "update.automaticInfo": "自動安裝 text-to-cad 的修補版本（修正），並在沒有工作執行時重新啟動 CAD 伺服器。新的次要版本不會自動安裝：請透過更新按鈕或安裝指令更新。",
 
   "appearance.system": "跟隨系統",
   "appearance.light": "淺色",
@@ -253,6 +256,15 @@ export default {
   "update.failed": "更新失敗：{error}",
   "update.updated": "已更新至 {version}。",
   "update.updatedRestart": "已更新至 {version}。重新啟動應用程式以載入新技能。",
+  // What's new: the dialog an update to a release with notes shows once (`whats-new/notes.js`).
+  "whatsNew.gotIt": "知道了",
+  "whatsNew.title": "新功能（v{version}）",
+  "whatsNew.0.11.boards.title": "KiCad。",
+  "whatsNew.0.11.boards.body": "你的代理可以佈局、檢查並匯出 KiCad 電路板與電路圖，KiCad 已內建。",
+  "whatsNew.0.11.install.title": "一個指令完成安裝與更新。",
+  "whatsNew.0.11.install.body": "一個指令即可設定這台電腦上的所有代理應用程式，「更新」按鈕讓它保持最新。",
+  "whatsNew.0.11.print.title": "自訂列印公差。",
+  "whatsNew.0.11.print.body": "為配合精密的零件匯出比檢視器網格更精細的 STL 或 3MF。",
 
   "alert.undisplayable": "無法顯示這個模型",
   "alert.dismiss": "關閉",
@@ -627,6 +639,7 @@ export default {
   "alert.build.title": "無法建置模型",
   "alert.build.message": "無法建置「{file}」。",
   "alert.build.recovery": "請修正模型原始檔中的錯誤：建置成功後檢視會自動更新。",
+  "alert.build.recoveryInternal": "此錯誤來自 CAD 本身，而非模型程式碼。請附上下方的詳細資訊回報此問題。",
   "alert.empty.summary": "網格無法使用",
   "alert.empty.title": "沒有可顯示的幾何",
   "alert.empty.message": "「{file}」列在檔案瀏覽器中，但載入後沒有產生可見的幾何。",

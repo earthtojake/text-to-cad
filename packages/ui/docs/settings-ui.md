@@ -776,7 +776,8 @@ Settings are the person's, never a file's, and live in the app menu: one dropdow
 navbar's logo over every file and over the home (FileViewer builds it from the host's `links`, the
 `appSettings` `CadViewer` hands it and `environment.platform`, while a model loads and after
 it failed to as well). Its rows, a rule between each group, are only
-what the host supplies, the person's settings in the order Language, Telemetry, Theme:
+what the host supplies, the person's settings in the order Language, Telemetry, Automatic updates,
+Theme:
 
 - **Back to home**, where the host has a home
   (`navigation.home`): it shows the home in this view. The home's own menu has none.
@@ -800,7 +801,13 @@ what the host supplies, the person's settings in the order Language, Telemetry, 
   come, checked at the right; a press turns one without closing the menu. An info icon after
   a setting's name, where the host gives its meaning (`info`), shows it as a hint to the
   menu's right. **Telemetry**, in both apps: anonymous usage data and crash reports, never
-  prompts, models or files.
+  prompts, models or files. **Automatic updates**, in both apps, after it: whether the server
+  installs a newer patch release by itself and restarts on it once nothing runs (a minor or major
+  release waits for the update button) (the server's
+  `cad_server/auto_updates.py`, the same setting `cad update auto` changes), on by default; one
+  the environment turned off (`CAD_UPDATE_CHECK=0`, CI) shows unchecked and fixed, saying so in
+  its label, as Telemetry does. Neither adds anything to the navbar: an automatic update shows
+  as the update button's own restart, and only once it switches.
 - **Theme**, where the host hands the person's colour scheme (`colorScheme`, both apps): one
   row, its name and then **System**, **Light** and **Dark** as a segmented control of their
   glyphs (each a radio item, named), the one in force lit; a press changes it without closing
@@ -1218,6 +1225,14 @@ the card away for as long as that alert stands, and its icon, first of the navba
 right-hand controls (before the host's actions and the update button), brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
+
+**What's new** is the one dialog the viewer opens by itself (`whats-new/WhatsNewDialog.tsx`): once
+after an update to a release with notes, never on a new person's first run, over the home or a
+file's view once its renderer is up (never a loading page, nor while the host's own notice covers
+the view). It is the stock shadcn Dialog (`primitives/dialog.jsx`, on the `text-ui` scale, no corner
+X): the release's title, its items as a list, each a bold title and a sentence or two in the
+muted text, and one primary button, **Got it**, which has the focus. The button, Escape and a press
+outside each close it and keep it seen for every view of the person's; nothing else is offered.
 
 ## Verification
 

@@ -3,7 +3,7 @@
 A **document type** is what is in a file: one lowercase underscore id, the same in Python, the CLI,
 the registry, the server, the viewer and the JavaScript. The definitions and the laws they bind
 are the library's README ([`packages/cad/README.md`](../../packages/cad/README.md), **Definitions**
-and laws 24 to 28); the mechanism is the engine README's **Document types and integrations**
+and laws 24 to 29); the mechanism is the engine README's **Document types and integrations**
 ([`packages/cad-server/src/cad_server/engine/README.md`](../../packages/cad-server/src/cad_server/engine/README.md)).
 
 A type usually arrives with the tool that makes or checks it. That tool is an **integration**, and

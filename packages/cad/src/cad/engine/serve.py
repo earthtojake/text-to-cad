@@ -1581,7 +1581,8 @@ class Server:
 
     def built(self, outcomes: dict[str, dict[str, Any] | None]) -> None:
         """Builds that answered: per model document they built (its id), None when its model built,
-        else what failed (``{"model", "error", "progress"}``). Those served are built
+        else what failed (``{"model", "error", "reportable", "progress"}``; ``reportable``: a mistake in
+        cadgen's own code, the daemon's ``_reportable``). Those served are built
         no longer; their pages are woken."""
         hit = False
         with self.load_lock:

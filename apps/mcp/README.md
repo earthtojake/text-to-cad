@@ -125,6 +125,10 @@ Inspection never builds. The web viewer's Export is a browser download; this pag
   It is the view's, in memory: another tab or card has its own, and a view opened
   again starts with one step. A file handler's view, which shows its file alone,
   keeps none.
+- **What's new is a tab's.** After an update to a release with notes, a tab (the sidebar, a
+  thread's CAD tab, *Open with CAD*) shows them once, as the CAD Viewer does (`@cad/ui/whats-new`),
+  kept seen for every view. A card never does, and reads nothing for it: a few hundred pixels of a
+  chat are no room for a dialog, and a chat keeps several cards at once.
 - ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
   file the host handed over, and nothing else, for as long as it is open: no home
   and no explorer (the host's own file tree is its navigation), no Back or Forward,

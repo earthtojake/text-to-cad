@@ -14,7 +14,7 @@ Treat SendCutSend's ordering guide, catalog JSON, and specs JSON as evidence fee
 
 ## Setup
 
-Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.cmd` on Windows). If
+Run the `cad` command (`~/.local/bin/cad` where it is not on your PATH; `cad.exe` on Windows). If
 it is missing, install text-to-cad, outside a sandbox or with its permission:
 
 ```bash
