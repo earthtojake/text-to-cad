@@ -216,6 +216,8 @@ test("a look's parameters: a colour alone without a material, the material's who
   const lacquer = xbfLookParameters(THREE, LACQUER_COLOR, LACQUER);
   assert.deepEqual([lacquer.clearcoat, lacquer.clearcoatRoughness, lacquer.emissiveIntensity, lacquer.metalness], [1, 0.05, 2, 0]);
   assert.equal("transmission" in lacquer, false);
+  assert.deepEqual([lacquer.diffuseRoughness, "diffuseRoughness" in xbfLookParameters(THREE, null, BRUSHED)], [0.4, false],
+    "a dielectric's diffuse as rough as its surface; a metal has none");
 });
 
 test("a document's materials: a physical material per look, kept in the shaded looks, the engine's plain one in X-ray and Parts", async () => {
