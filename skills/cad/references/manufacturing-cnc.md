@@ -4,64 +4,72 @@ The evidence, the rules, the review and how to check a redesign are SKILL.md's
 [Can it be made?](../SKILL.md#can-it-be-made), the same for every process; this is what is particular
 to milling and turning.
 
-## Sources
-
-Where the person supplies no shop specification, start from these two:
-
-- [How to design parts for CNC machining](https://www.hubs.com/knowledge-base/how-design-parts-cnc-machining/) (Protolabs Network) for the design rules: cavities and pockets, internal edges, thin walls, holes, threads, small features, tolerances, setups and orientation, undercuts.
-- [CNC milling guidelines](https://www.protolabs.com/services/cnc-machining/cnc-milling/design-guidelines/) (Protolabs) for that supplier's size limits, materials, finishes, thread conventions and radii.
-
-Neither establishes the capabilities of an arbitrary lathe, five-axis machine,
-or custom fixture. Obtain the actual turning/tooling specification when
-reviewing those processes.
-
-## Measure it
+## Check it
 
 ```bash
-cad step inspect part.step                    # parts, bounds, volume
-cad step inspect part.step 'face 12'          # one face: its surface, radius, area, box
-cad model inspect "$ID" 'plate/face 7'          # the same of a model's face
+cad model dfm "$ID" --process cnc --material aluminum
+cad step dfm plate.step --process cnc --material aluminum --axes 5 --tools 3,6,10 --rules protolabs
+cad step dfm shaft.step --process cnc --turning --material stainless
 ```
 
-A cylindrical face's `radius` is an internal corner's radius or a hole's; its `box` gives a pocket's
-or a slot's depth and width. A check script that calls the model measures what no single face
-answers (a wall between two faces, a pocket's depth from the top face).
+The options that change the verdicts:
+
+- `--material`: metal or plastic wall limits, hardness, a shop's envelope. Without it walls are
+  judged as metal (`cnc.material_assumed`).
+- `--axes 3|4|5` (3 by default): the directions that reach a face, the setups it takes, a shop's
+  envelope.
+- `--turning`: the part is turned on a lathe. Its axis, diameters, bores, grooves and the off-axis
+  features that need live tooling are measured instead of pockets and corners.
+- `--tools 3,6,10`: the shop's end mill diameters. Corner radius and gap limits then follow the
+  smallest; a corner no tool fits leaves its reach unmeasured.
+- `--stock 100x60x25`: the blank, else the part's box.
+
+Rule sets: `generic`, `hubs`, `protolabs`, `xometry`. A mesh is refused: check the STEP or the model.
+
+## Read it
+
+The families: `holes`, `threads`, `pockets`, `internal_corners`, `sharp_edges`, `walls`, `gaps`,
+`access`, `setups`, `voids`, `stock`, `small_features`; with `--turning`, `turning`,
+`turned_diameters`, `bores`, `grooves` and `live_tooling`.
+
+- `internal_corners` are a pocket's in-plane corners: `radius_mm`, `depth_mm`, and `reach_ratio`, the
+  depth over the largest tool that fits. A floor-to-wall root is never a corner: a flat end mill
+  makes it sharp, and a root fillet is optional (it takes a corner-radius or ball tool).
+- `cnc.sharp_internal_edge` is a concave edge no rotating tool makes. The fix is a radius or a relief
+  where acceptable; another setup, a special cutter or EDM are proposals, not a verified plan.
+- `access` is line of sight for a tool of no diameter: `undercut` faces five axes would reach,
+  `no_line_of_sight` faces nothing straight reaches.
+- `setups.setup_count` estimates clampings from the reachable directions.
+- `holes` carry `standard_drill` and `tap_candidate` as facts: a diameter that matches a drill or a
+  tap drill, not a callout.
 
 ## Review the part
 
-Collect material, stock form, milling versus turning, available axes, critical
-fits/tolerances, and the intended shop or tool constraints. If the process is
-unspecified, discuss candidate setups without claiming a verified machining plan.
+Collect material, stock form, milling or turning, the axes, critical fits and tolerances, and the
+shop's tools. With the process unspecified, discuss candidate setups without claiming a machining
+plan. Then check by hand what the check does not measure:
 
-- For milling, identify pockets, internal corner radii, holes, thin walls, and
-  approach directions. A cutter fitting in a pocket does not prove holder access.
-- Compare actual internal radii with the proposed cutter radius. Report pocket
-  depth, hole depth/diameter, and wall height/thickness separately; use the shop's
-  material-specific reach limits instead of declaring one universal ratio.
-- For turning, identify the rotation axis, diameters, bores, shoulders, grooves,
-  and parting/workholding regions. Off-axis features may require live tooling or
-  another setup. Rotational symmetry alone does not prove tool access.
-- Review stock allowance, fixture contact, setup changes, inaccessible cavities,
-  and collision risks. Treat setup counts as estimates until tool and fixture
-  envelopes have been checked. No exact cycle time or quote without that evidence.
-- Inspect thread callouts, engagement, drill-tip clearance, and tool runout.
-  Distinguish modeled thread geometry from a drawing specification and follow
-  the target shop's preferred thread representation.
-- Separate geometry constraints from cost suggestions. Preserve functional
-  interfaces; suggest relaxed tolerances only where function permits them.
+- Tool holder and spindle collisions. A cutter that fits a corner or a pocket does not prove holder
+  access; reach limits are material-specific.
+- Fixturing, workholding, stock allowance and setup changes. Treat setup counts as estimates; no
+  cycle time or quote without that evidence.
+- Thread callouts on the drawing, engagement, drill-tip clearance: the check sees modelled threads
+  and tap-drill diameters only. Follow the shop's thread representation.
+- Tolerances and surface finish; a T-slot or dovetail cutter's entry path; pockets whose floor is not
+  planar (reported through `access` and `walls`); engraved text (seen only as fine faces and narrow
+  gaps).
+- Turning: parting and chucking allowances, ID groove depth beyond the bore, a cone's point angle.
+  Rotational symmetry alone does not prove tool access.
 
-Distinguish in-plane pocket corners from floor-to-wall roots: a flat end mill
-can produce a sharp floor-to-wall junction. A root fillet is optional and may
-require a corner-radius or ball tool and an extra finishing pass. For sharp
-in-plane internal corners, consider larger radii or reliefs when acceptable.
-A feature infeasible with one end mill is not infeasible for all manufacturing;
-identify alternatives such as another setup, tooling, or EDM as proposals.
+Separate geometry constraints from cost suggestions. Preserve functional interfaces; suggest relaxed
+tolerances only where function permits them.
 
 ## Worked reasoning example
 
 The following numbers are illustrative inputs, not default process limits.
 
-A measured 2 mm internal corner radius cannot be reproduced by a proposed 6 mm
-diameter cylindrical end mill: its 3 mm radius is too large. A smaller cutter
-may fit, but reach, holder clearance, material, and pocket depth remain
-separate checks.
+`cnc.internal_corner_radius at plate/face 7: internal corner radius 0.5 mm is under the 1.5 mm
+minimum`, from a check with `--tools 3,6,10`. `cad model inspect "$ID" 'plate/face 7'` shows a cylinder
+of radius 0.5 mm 8 mm deep. Report the corner as fail against the 3 mm tool, and propose a radius of
+at least 1.5 mm, or a smaller tool if the shop has one; reach and holder clearance remain checks of
+their own.
