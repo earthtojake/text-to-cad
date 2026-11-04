@@ -1,7 +1,7 @@
 """What text-to-cad leaves behind that no release running now needs, which ``cad doctor`` reports and
 ``cad doctor --prune`` removes. Nothing here removes anything by itself.
 
-Six classes, each found by what it is, never by a guess:
+Seven classes, each found by what it is, never by a guess:
 
 - **Engine records of an older format**: ``<state>/engines/<installation>.json`` that the engine
   does not read (``registry.Registry.engine``: another ``schema``, or not a record), removed; one
@@ -26,6 +26,10 @@ Six classes, each found by what it is, never by a guess:
   here whether one is -- 0.7 never registered itself -- so they go once nothing in them has been
   written for ``QUIET_DAYS`` days, or at once when the person says no version needs them
   (``cad doctor --prune --all-versions``).
+- **0.10.0's Windows folders**: the state and cache folders it kept in the local application data
+  (``places.appdata_state_dir``, ``appdata_cache_dir``), which an app package virtualizes. What this release
+  keeps of them moved out (``places.adopt_earlier``); the rest -- 0.10.0's installations, release folders
+  and base -- only 0.10.0 runs by. Each goes whole.
 
 Nothing written in the last ``QUIET_DAYS`` days is removed, of any class (but 0.7's with
 ``--all-versions``): a write that recent may be a release at work.
@@ -364,6 +368,21 @@ def seven(state: Path, cache: Path | None) -> Seven:
 def quiet(found: Seven, now: float | None = None) -> bool:
     """Whether nothing of 0.7's leftovers has been written for ``QUIET_DAYS`` days."""
     return _quiet(found.newest, time.time() if now is None else now)
+
+
+def appdata(state: Path | None, cache: Path | None, now: float | None = None) -> Found:
+    """0.10.0's Windows folders (``state``, ``cache``: None where there are none), each whole."""
+    found, now = Found(), time.time() if now is None else now
+    for path in (state, cache):
+        if path is None or not path.is_dir() or path.is_symlink():
+            continue
+        size, newest = _walk(path)
+        if _quiet(newest, now):
+            found.paths.append(path)
+            found.bytes += size
+        else:
+            found.recent.append(path)
+    return found
 
 
 # --- words ---------------------------------------------------------------------------------------

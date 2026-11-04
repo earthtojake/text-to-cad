@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 import unittest
 from pathlib import Path
@@ -102,7 +103,13 @@ class AdoptEarlierTest(Folders):
     """Where no state folder is named: the platform's places, stood in for."""
 
     def platform(self, names: tuple[str, str]) -> Path:
-        return {places.STATE: self.folder, places.EARLIER_STATE: self.earlier}[names]
+        return {places.EARLIER_STATE: self.earlier}[names]
+
+    def setUp(self) -> None:
+        super().setUp()
+        local = mock.patch.object(places, "_local_state", return_value=self.root)  # this release's: root/cad
+        local.start()
+        self.addCleanup(local.stop)
 
     def test_the_earlier_folder_is_adopted_once_whatever_this_release_wrote_first(self) -> None:
         # A told command (`cad doctor`'s notice) may have written this release's folder first.
@@ -135,6 +142,73 @@ class AdoptEarlierTest(Folders):
         self.assertFalse(self.folder.exists())
         self.assertFalse(named.exists())
         self.assertTrue((self.earlier / "installations" / "current").is_file())
+
+
+class WindowsTest(Folders):
+    """On Windows 0.10.0 kept its folders in the local application data, which an app package (the Claude
+    desktop app's) virtualizes for every process it starts; this release keeps them in the user's own
+    folder, as Linux does, and moves what 0.10.0 kept there once -- 0.10.0's folder before 0.8's, whose
+    settings are only the telemetry no it kept behind (#759)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.home = self.root / "home"
+        self.appdata = self.root / "AppData" / "Local"
+        self.ten = self.appdata / "cad-state"
+        (self.earlier / "settings.json").write_text('{"telemetry": {"choice": "off"}}', encoding="utf-8")
+        for name in ("documents", "recents", "install-receipt.json"):
+            path = self.earlier / name
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
+        write(self.ten / "settings.json", '{"telemetry": {"choice": "off"}, "language": "zh-TW"}')
+        write(self.ten / "engines" / "token", "u" * 43)
+        write(self.ten / "engines" / "engine.json", '{"port": 3246, "schema": 3}')
+        write(self.ten / "documents" / "a" / "document.json", "{}")
+        write(self.ten / "recents" / "thumbnails" / "a.png")
+        write(self.ten / "install-receipt.json", "{}")
+        write(self.ten / "install-channels.json", "{}")
+        write(self.ten / "installations" / "current", "0.10.0")
+        write(self.ten / "releases" / "0.10.0" / "Scripts" / "python.exe")
+        write(self.appdata / "cad" / "documents" / "a" / "document.xbf", "xbf")
+        write(self.appdata / "cad" / "base" / "0123" / "pyvenv.cfg")
+        environment = {"CAD_STATE_DIR": "", "CAD_CACHE_DIR": "", "CAD_ENGINE_DIR": "", "XDG_STATE_HOME": "",
+                       "XDG_CACHE_HOME": "", "HOME": str(self.home), "USERPROFILE": str(self.home),
+                       "LOCALAPPDATA": str(self.appdata)}
+        for patch in (mock.patch.object(places, "WINDOWS", True), mock.patch("sys.platform", "win32"),
+                      mock.patch.object(places, "_platform_state", side_effect=lambda names: self.earlier),
+                      mock.patch.dict(os.environ, environment)):
+            patch.start()
+            self.addCleanup(patch.stop)
+
+    def test_the_folders_are_the_users_own_out_of_the_local_application_data(self) -> None:
+        self.assertEqual(places.state_dir(), self.home / ".local" / "state" / "cad")
+        self.assertEqual(places.cache_dir(), self.home / ".cache" / "cad")
+        self.assertEqual(Path(places.default_engine_dir()), self.home / ".local" / "state" / "cad-engine")
+        self.assertEqual((places.appdata_state_dir(), places.appdata_cache_dir()), (self.ten, self.appdata / "cad"))
+        self.assertEqual(places.appdata_engine_dir(), Path(tempfile.gettempdir()) / "cad-engine")
+        with mock.patch.dict(os.environ, {"CAD_STATE_DIR": "s", "CAD_CACHE_DIR": "c", "CAD_ENGINE_DIR": "e"}):
+            self.assertEqual((places.appdata_state_dir(), places.appdata_cache_dir(), places.appdata_engine_dir()),
+                             (None, None, None))
+
+    def test_what_0_10_kept_moves_once_with_the_page_token_its_port_and_its_documents_bytes(self) -> None:
+        state, cache = places.state_dir(), places.cache_dir()
+        self.assertEqual(places.adopt_earlier(), [*places.APPDATA_ADOPTED, "documents"])
+        self.assertEqual(json.loads((state / "settings.json").read_text(encoding="utf-8")),
+                         {"telemetry": {"choice": "off"}, "language": "zh-TW"}, "0.10's whole settings, not 0.8's no")
+        self.assertEqual((state / "engines" / "token").read_text(encoding="utf-8"), "u" * 43, "every link still works")
+        self.assertEqual(json.loads((state / "engines" / "engine.json").read_text(encoding="utf-8"))["port"], 3246)
+        self.assertTrue((state / "documents" / "a" / "document.json").is_file())
+        self.assertEqual((cache / "documents" / "a" / "document.xbf").read_text(encoding="utf-8"), "xbf")
+        # What 0.10.0 runs by stays for it -- its installations, its release, its base --, and its telemetry no.
+        self.assertTrue((self.ten / "installations" / "current").is_file())
+        self.assertTrue((self.ten / "releases" / "0.10.0" / "Scripts" / "python.exe").is_file())
+        self.assertTrue((self.appdata / "cad" / "base" / "0123" / "pyvenv.cfg").is_file())
+        self.assertEqual(json.loads((self.ten / "settings.json").read_text(encoding="utf-8")),
+                         {"telemetry": {"choice": "off"}})
+        self.assertFalse((state / "installations").exists() or (cache / "base").exists())
+        self.assertEqual(places.adopt_earlier(), [], "once")
 
 
 if __name__ == "__main__":
