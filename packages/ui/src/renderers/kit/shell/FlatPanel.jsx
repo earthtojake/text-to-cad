@@ -103,7 +103,9 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   openRef.current = open;
   const control = enabled ? {
     toggle: () => setOpen(!openRef.current),
-    search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
+    search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; },
+    // Open, on a tab: the view's menu's Show in list.
+    show: (id) => { setOpen(true); if (id) changeTab(id); return true; }
   } : null;
   return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, detailHeight, changeDetailHeight, focusSearch, control };
 }

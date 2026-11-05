@@ -193,16 +193,22 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   view.dispose();
 });
 
-it('a press picks what is under it and reveals its row; a net from the Nets lights, its pins under the lists; a part on another sheet shows that sheet', async () => {
+it('a press picks what is under it, and Show in list reveals its row; a net from the Nets lights, its pins under the lists; a part on another sheet shows that sheet', async () => {
   const user = userEvent.setup();
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
   const controller = await controllerOf(view);
   await zoomIn(pane);
-  // R1's body, in the middle of its symbol: its part, its row revealed under its opened block.
+  // R1's body, in the middle of its symbol: its part, said under the lists; the lists stay as they were,
+  // until the view's menu's Show in list opens its block and brings its row into view.
   tap(pane, [101.6, 59.69]);
   await waitFor(() => expect(selected(controller)).toEqual(['#R1']));
+  expect(pane.querySelector('[data-schematic-detail-head]')!.textContent).toBe('R1');
+  const right = { ...point([101.6, 59.69]), button: 2, pointerId: 5 };
+  fireEvent.pointerDown(canvasOf(pane), right);
+  fireEvent.pointerUp(canvasOf(pane), right);
+  await user.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Show in list' }));
   await waitFor(() => expect(pane.querySelector('[data-schematic-row="part:R1"] button[aria-pressed="true"]')).not.toBeNull());
   // The MID label's text, then its wire to the sheet: each by its uuid.
   tap(pane, [115.2, 63.4]);

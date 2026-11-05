@@ -21,6 +21,7 @@ import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import HoverTip from "../kit/shell/HoverTip.jsx";
 import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
@@ -227,6 +228,14 @@ function BoardSurface({ view, data }) {
     };
   }
 
+  // The name of what the pointer rests on, under Select (`kit/shell/HoverTip.jsx`): its name, and a pad's or
+  // pin's net, a part's value.
+  const [hoverTip, setHoverTip] = useState(null);
+  const tipOfRef = useRef(null);
+  tipOfRef.current = selector => {
+    const resolved = indexRef.current?.resolve(selector), name = scene?.describePart(selector)?.name;
+    return name ? [name, resolved?.kind === "pad" ? resolved.pad.net : resolved?.kind === "part" ? resolved.part.value : ""].filter(Boolean).join(" · ") : "";
+  };
   // ---- pointer: what a tap and a resting pointer do under each tool -----------
   const [overPick, setOverPick] = useState(false);
   const measureHoverRef = useRef(null);
@@ -306,6 +315,8 @@ function BoardSurface({ view, data }) {
       } else if (measureRef.current.hovered) measureRef.current.hover("");
       if (inkIds.join() !== hoveredInkRef.current.join()) { hoveredInkRef.current = inkIds; requestPaint(); }
       selectionRef.current.hover(hit ? hit.selector : "");
+      const tipKey = hit && point ? hit.selector : "";
+      setHoverTip(now => ((now?.key || "") === tipKey ? now : tipKey ? { key: tipKey, text: tipOfRef.current(tipKey), x: point.x, y: point.y } : null));
       setOverPick(current => (current === over ? current : over));
     };
     // Select's drag is the box between its ends, KiCad's window selection: drawn as it goes, an area
@@ -437,6 +448,8 @@ function BoardSurface({ view, data }) {
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 
+  // What the view's menu's Show in list asked the panel's lists to bring into view (`CircuitTree.jsx`).
+  const [reveal, setReveal] = useState(null);
   // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over something Select would pick: its reference (with what is picked already), Select or
   // Deselect, Isolate for a part or a net and its net for copper, then the framing. Over bare board:
@@ -456,12 +469,18 @@ function BoardSurface({ view, data }) {
     const ownNet = hit.kind === "net" ? "" : String(hit.pad?.net || hit.item?.net || hit.net?.name || "");
     const netId = ownNet ? formatBoardRefSelector({ kind: "net", net: ownNet }) : "";
     const isolatable = hit.kind === "part" || hit.kind === "net";
+    // Show in list: the Parts' row of a part or a pad's part, the Nets' row of a net or of copper's net.
+    const listed = hit.kind === "part" || hit.kind === "pad" ? ["parts", id] : hit.kind === "net" ? ["nets", id] : netId ? ["nets", netId] : null;
+    const showInList = listed ? [menuEntry("show-in-list", t("menu.showInList"), { onSelect: () => {
+      handover.panelControl.current?.show?.(listed[0]);
+      setReveal({ id: listed[1], key: Date.now() });
+    } })] : [];
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
       pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t,
         isolated: isolatable ? isolated.includes(id) : null, onIsolate: () => isolation.toggle(id), isolatedCount: isolated.length, onExitIsolates: isolation.clear }),
-      netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
-        { onSelect: () => isolation.toggle(netId) })] : [],
+      [...(netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
+        { onSelect: () => isolation.toggle(netId) })] : []), ...showInList],
       zoom);
   } : null;
 
@@ -478,7 +497,7 @@ function BoardSurface({ view, data }) {
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildBoardRefToken({ path, selectors: ids }))).catch(() => {}); };
   const takeSelect = () => selectTool(BOARD_TOOL.SELECT);
-  const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
+  const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated} revealRequest={reveal}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const detail = useBoardDetail(index, selection, { onSelect: takeSelect, onFrame: frameSelectors });
   const panelTabs = [
@@ -510,6 +529,7 @@ function BoardSurface({ view, data }) {
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
       <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
       {annotating && shown && index ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
+      {dragging ? null : <HoverTip tip={hoverTip} />}
     </FlatViewFrame>
   );
 }

@@ -473,13 +473,16 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   fireEvent.click(within(menu).getByRole('menuitem', { name: 'Zoom to led' }));
   await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
 
-  // A part selects as a click on the board does; under the lists, its pads, each its number and net.
+  // A part selects as a click on the board does; under the lists, what is selected: its name, its facts
+  // (a chip card's), then its pads, each its number and net.
   fireEvent.click(within(parts).getByRole('button', { name: 'Select J1' }));
   expect(selected(controller)).toEqual(['#J1']);
-  expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1Conn_01x02 · PinHeader_1x02_P2.54mm_Vertical2 pads');
+  expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1');
+  const facts = () => [...detail()!.querySelectorAll('[data-flat-panel-facts] [data-info-row]')].map(row => row.textContent);
+  expect(facts().slice(0, 2)).toEqual(['ValueConn_01x02', 'FootprintPinHeader_1x02_P2.54mm_Vertical']);
   expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
   // Titled with whose pads they are, at a height of its own, its top edge the grip that sizes it.
-  expect(detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent).toBe('Pads of J1');
+  expect(detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent).toBe('Pads of J12 pads');
   expect(within(detail()!).getByRole('separator', { name: 'Resize details' }).getAttribute('aria-orientation')).toBe('horizontal');
   // A net, from the Nets: its pads, each its part and number; one pressed is selected, lit, and the net's detail stays.
   fireEvent.click(within(panel(pane)).getByRole('tab', { name: 'Nets' }));
@@ -489,19 +492,23 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   const framedNet = { ...frames.at(-1)! };
   fireEvent.click(detail()!.querySelector('[data-board-detail-row="netpad:R1.2"]')!);
   expect(selected(controller)).toEqual(['#R1.2']);
+  // A pad: what it is, in words, and what it is connected to, the pads on its net, itself lit.
+  expect([detail()!.querySelector('[data-board-detail-head]')!.textContent, detail()!.querySelector('[data-flat-panel-selected-what]')!.textContent,
+    detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent]).toEqual(['R1.2', expect.stringContaining('Pad of R1'), 'Connected to LED2 pads']);
   expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'true']]);
   // A detail row's double-click frames its pad.
   fireEvent.doubleClick(detail()!.querySelector('[data-board-detail-row="netpad:R1.2"]')!);
   await waitFor(() => expect(frames.at(-1)).not.toEqual(framedNet));
 
   // The panel's search reads the parts with their pads and the nets: a pasted pad reference finds the pad,
-  // and its press shows its part's pads, the pad lit.
+  // and its press shows what it is connected to, the pad lit there.
   fireEvent.change(searchBox(pane), { target: { value: '#J1.2' } });
   await waitFor(() => expect(parts.querySelector('[data-search-row="pad:J1.2"]')).not.toBeNull());
   expect(within(panel(pane)).queryByRole('tablist')).toBeNull();
   fireEvent.click(within(parts.querySelector<HTMLElement>('[data-search-row="pad:J1.2"]')!).getByRole('button'));
   expect(selected(controller)).toEqual(['#J1.2']);
-  expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'true']]);
+  expect(detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent).toMatch(/^Connected to GND/);
+  expect(detailRows().find(([label]) => label!.startsWith('J1.2'))?.[1]).toBe('true');
   // A net by its name, in the Nets' hits, no Layers (none matches).
   fireEvent.change(searchBox(pane), { target: { value: 'VBUS' } });
   await waitFor(() => expect(nets.querySelector('[data-search-row="net:VBUS"]')).not.toBeNull());
@@ -518,7 +525,8 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   fireEvent.click(within(parts).getByRole('button', { name: 'Isolate J1' }));
   expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
-  // A pad picked on the board opens its part's block, its part's row brought into view, and shows its part's pads.
+  // A pad picked on the board leaves the lists as they were (its part's block shut, nothing scrolled) and shows
+  // what it is connected to; the view's menu's Show in list opens the block and brings its part's row into view.
   await act(async () => { await controller.clearSelection(); });
   const scrolled: string[] = [];
   const { scrollIntoView } = Element.prototype;
@@ -530,9 +538,15 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   try {
     tap(pane, [35.825, 15]);
     expect(selected(controller)).toEqual(['#R1.2']);
+    expect(parts.querySelector('[data-board-row="sheet:led"] [aria-expanded]')!.getAttribute('aria-expanded')).toBe('false');
+    expect(scrolled).toEqual([]);
+    expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'true']]);
+    const [x, y] = pageToScreen(frames.at(-1)!, 35.825, 15);
+    fireEvent.pointerDown(pane.querySelector('[data-board-surface] canvas')!, { pointerId: 4, pointerType: 'mouse', button: 2, clientX: x, clientY: y });
+    fireEvent.pointerUp(pane.querySelector('[data-board-surface] canvas')!, { pointerId: 4, pointerType: 'mouse', button: 2, clientX: x, clientY: y });
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Show in list' }));
     await waitFor(() => expect(parts.querySelector('[data-board-row="sheet:led"] [aria-expanded]')!.getAttribute('aria-expanded')).toBe('true'));
     await waitFor(() => expect(scrolled).toContain('part:R1'));
-    expect(detailRows()).toEqual([['1VBUS', 'false'], ['2LED', 'true']]);
   } finally { Element.prototype.scrollIntoView = scrollIntoView; }
   dispose();
 });

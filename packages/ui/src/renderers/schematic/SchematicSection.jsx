@@ -1,9 +1,9 @@
 import { useI18n } from "@cad/ui/i18n";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import CircuitDetail from "../kit/inspector/CircuitDetail.jsx";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PinKindIcon, SymbolKindIcon } from "./schematicIcons.jsx";
-import { buildSchematicTree, schematicDetail, schematicRowOwners, schematicTreeNodeIds } from "./schematicTree.js";
+import { buildSchematicTree, schematicRowOwners, schematicSelected, schematicTreeNodeIds } from "./schematicTree.js";
 
 const CLOSED = Object.freeze(["group:unconnected"]);
 const KIND_GLYPHS = Object.freeze({ part: SymbolKindIcon, pin: PinKindIcon, pad: PinKindIcon, net: NetKindIcon });
@@ -39,20 +39,12 @@ export default function SchematicSection({ index, trees, list, ...props }) {
 }
 
 /**
- * What the schematic's selection picks, in detail under its lists (`kit/inspector/CircuitDetail.jsx`):
- * the last thing selected, or null when it is nothing a detail holds (the panel then draws none). A
- * row of the detail shown picked (a pad of the net shown) keeps that detail, as Altium's lists keep
- * the list above the one picked in.
+ * What is selected on the schematic, under its lists (`kit/inspector/CircuitDetail.jsx`, `schematicTree.js`'s
+ * `schematicSelected`): what it is, its facts, and what it is connected to; null while nothing is.
  */
 export function useSchematicDetail(index, selection, props) {
   const { t } = useI18n();
-  const last = selection.selected.at(-1);
-  const kept = useRef(null);
-  const detail = useMemo(() => {
-    if (!index || !last) return null;
-    const shown = kept.current;
-    return shown?.rows.some(row => row.pick === last) ? schematicDetail(index, shown.pick, t) : schematicDetail(index, last, t);
-  }, [index, last, t]);
-  kept.current = detail;
+  const { selected } = selection;
+  const detail = useMemo(() => (index ? schematicSelected(index, selected, t) : null), [index, selected, t]);
   return detail ? <CircuitDetail detail={detail} selection={selection} glyphs={KIND_GLYPHS} data="schematic" {...props} /> : null;
 }

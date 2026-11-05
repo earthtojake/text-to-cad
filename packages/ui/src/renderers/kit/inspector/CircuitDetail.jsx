@@ -1,9 +1,9 @@
 import { memo, useCallback, useMemo, useRef } from "react";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { TREE_GLYPH_STROKE, TREE_ROW_DENSE_ICON_CLASS, TREE_ROW_INSET_PX, TreeRowLabel, TreeRowSurface, useTreeRowHeight } from "@cad/ui/primitives/tree-row";
-import { cn } from "@cad/ui/utils";
 import { useFlatPanel } from "../shell/FlatPanel.jsx";
 import VirtualRows from "./VirtualRows.jsx";
+import { InfoRow, MonoValue } from "./referenceRows.jsx";
 
 const additive = event => event.shiftKey || event.metaKey || event.ctrlKey;
 
@@ -27,17 +27,21 @@ function DetailRow({ node, lit, choose, frame, hover, glyphs, data }) {
 const MemoDetailRow = memo(DetailRow);
 
 /**
- * What is picked, in detail, under a flat view's lists (`FlatPanel.jsx`'s `detail`), as the third of
- * Altium's PCB panel's lists: the picked part's pads or pins, each its number, its pin's name and its
- * net, or the picked net's, each its part and number (`board/boardTree.js`'s `boardDetail`,
- * `schematic/schematicTree.js`'s `schematicDetail`). Its head names what it is the detail of and how
- * many rows it has; the head's name selects it again. A row selects its pad or pin as a press on the
- * picture does (Shift, Ctrl or Cmd adds or takes away), lit while it is selected, and a double-click
- * frames it, as the lists' rows do; the pointer on a row lights it on the picture. A pad picked on the
- * picture shows its part's detail, the pad lit. Its rows are mounted as they scroll into view.
+ * What is selected, under a flat view's lists (`FlatPanel.jsx`'s `detail`), as a CAD tool's Properties
+ * panel answers it: first **what it is** — its glyph, its name (`U3.5`, `VBUS · track`), a line saying what
+ * that is in words ("Pad of U3 · ATmega328P"), and its facts (its net, layer, size, position: the
+ * renderer's, the same a Quick Edit chip's card holds) — then **what it is connected to**: the other pads or
+ * pins on its net (a part's own pads or pins, each with its net), titled with whose they are. Several
+ * things selected say how many, and list them. Nothing with a net or pads of its own (a text, a graphic,
+ * an area) has its facts alone.
+ *
+ * A row selects its pad or pin as a press on the picture does (Shift, Ctrl or Cmd adds or takes away),
+ * lit while it is selected, and a double-click frames it, as the lists' rows do; the pointer on a row
+ * lights it on the picture. The head's name selects what it is the detail of again, and a double-click
+ * frames it. Its rows are mounted as they scroll into view.
  *
  * @param {{ detail: { id: string, kind: string, pick: string, label: string, detail: string, count: string, listLabel: string,
- *   rows: { id: string, kind: string, pick: string, label: string, detail: string }[] },
+ *   facts?: { label: string, value: string }[], rows: { id: string, kind: string, pick: string, label: string, detail: string }[] },
  *   selection: ReturnType<typeof import("../tools/select/useSceneSelection.js").useSceneSelection>,
  *   glyphs: Record<string, import("react").ComponentType<any>>, data: string, onSelect(): void,
  *   onShow?(ids: readonly string[]): void, onFrame?(ids: readonly string[]): void }} props
@@ -57,28 +61,35 @@ export default function CircuitDetail({ detail, selection, glyphs, data, onSelec
     (page ? frameIt : show)?.([node.pick]);
   }, [select]);
   const frame = useCallback(node => refs.current.onFrame?.([node.pick]), []);
-  const { rows } = detail;
+  const { rows, facts = [] } = detail;
   const renderRow = at => <MemoDetailRow node={rows[at]} lit={picked.has(rows[at].pick)} choose={choose} frame={frame} hover={hover} glyphs={glyphs} data={data} />;
-  return <section aria-label={detail.listLabel} className="flex min-h-0 flex-col text-tiny" {...{ [`data-${data}-detail`]: detail.id }}>
-    {/* What this is the detail of, in words: a part's pads, a net's. */}
-    <h3 className="flex h-6 shrink-0 items-center truncate px-4 pt-1 text-micro text-muted-foreground" data-flat-panel-detail-title="">{detail.listLabel}</h3>
-    <div className="flex shrink-0 items-center px-2 pb-1">
-      <TreeRowSurface dense active={picked.has(detail.pick)} className="relative min-w-0 flex-1 gap-0 pr-0">
-        <button type="button" aria-pressed={picked.has(detail.pick)} onClick={event => choose(detail, event)} onDoubleClick={() => frame(detail)}
-          className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}
-          style={{ paddingLeft: TREE_ROW_INSET_PX }} {...{ [`data-${data}-detail-head`]: detail.id }}>
-          <Glyph kind={detail.kind} glyphs={glyphs} />
-          <TreeRowLabel className="max-w-full shrink-0">{detail.label}</TreeRowLabel>
-          {detail.detail ? <TreeRowLabel className="min-w-0 flex-1 font-normal text-micro text-muted-foreground">{detail.detail}</TreeRowLabel> : <span className="flex-1" />}
-          <span className="shrink-0 font-normal text-micro text-muted-foreground">{detail.count}</span>
-        </button>
-      </TreeRowSurface>
-    </div>
+  return <section aria-label={detail.label} className="flex min-h-0 flex-1 flex-col text-tiny" {...{ [`data-${data}-detail`]: detail.id }}>
     <ScrollArea className="min-h-0 flex-1">
-      <div className="px-2 pb-2">
+      {/* What it is: its name, what that is in words, its facts. */}
+      <div className="px-2 pt-1.5" data-flat-panel-selected="">
+        <TreeRowSurface dense className="relative min-w-0 gap-0 pr-0">
+          <button type="button" onClick={event => (detail.pick ? choose(detail, event) : null)} onDoubleClick={() => (detail.pick ? frame(detail) : null)}
+            className="flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            style={{ paddingLeft: TREE_ROW_INSET_PX }} {...{ [`data-${data}-detail-head`]: detail.id }}>
+            <Glyph kind={detail.kind} glyphs={glyphs} />
+            <TreeRowLabel className="min-w-0 flex-1">{detail.label}</TreeRowLabel>
+          </button>
+        </TreeRowSurface>
+        {detail.detail ? <p className="truncate pb-1 text-micro text-muted-foreground" style={{ paddingLeft: TREE_ROW_INSET_PX + 16 }}
+          data-flat-panel-selected-what="">{detail.detail}</p> : null}
+        {facts.length ? <div className="pb-1.5" style={{ paddingLeft: TREE_ROW_INSET_PX, paddingRight: TREE_ROW_INSET_PX }} data-flat-panel-facts="">
+          {facts.map(fact => <InfoRow key={fact.label} label={fact.label}><MonoValue>{fact.value}</MonoValue></InfoRow>)}
+        </div> : null}
+      </div>
+      {/* What it is connected to: the other pads or pins on its net, or its own. */}
+      {rows.length ? <div className="px-2 pb-2">
+        <h3 className="flex h-6 items-center justify-between gap-2 border-t border-border text-micro text-muted-foreground" style={{ paddingLeft: TREE_ROW_INSET_PX, paddingRight: TREE_ROW_INSET_PX }}
+          data-flat-panel-detail-title="">
+          <span className="truncate">{detail.listLabel}</span><span className="shrink-0">{detail.count}</span>
+        </h3>
         <VirtualRows key={detail.id} aria-label={detail.listLabel} count={rows.length} rowHeight={rowHeight}
           rowKey={at => rows[at].id} rowProps={() => ({ className: "min-w-0" })} renderRow={renderRow} />
-      </div>
+      </div> : null}
     </ScrollArea>
   </section>;
 }

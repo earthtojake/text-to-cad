@@ -1,9 +1,9 @@
 import { useI18n } from "@cad/ui/i18n";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useMemo } from "react";
 import CircuitDetail from "../kit/inspector/CircuitDetail.jsx";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
-import { boardDetail, boardRowOwners, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
+import { boardRowOwners, boardSelected, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
 
 // The pins on nothing (`boardTree.js`): shut as the tab opens.
 const CLOSED = Object.freeze(["group:unconnected"]);
@@ -40,20 +40,13 @@ export default function BoardSection({ index, trees, list, ...props }) {
 }
 
 /**
- * What the board's selection picks, in detail under its lists (`kit/inspector/CircuitDetail.jsx`):
- * the last thing selected, or null when it is nothing a detail holds (the panel then draws none). A
- * row of the detail shown picked (a pad of the net shown) keeps that detail, as Altium's lists keep
- * the list above the one picked in.
+ * What is selected on the board, under its lists (`kit/inspector/CircuitDetail.jsx`, `boardTree.js`'s
+ * `boardSelected`): what it is, its facts, and what it is connected to; null while nothing is (the panel
+ * then draws none).
  */
 export function useBoardDetail(index, selection, props) {
   const { t } = useI18n();
-  const last = selection.selected.at(-1);
-  const kept = useRef(null);
-  const detail = useMemo(() => {
-    if (!index || !last) return null;
-    const shown = kept.current;
-    return shown?.rows.some(row => row.pick === last) ? boardDetail(index, shown.pick, t) : boardDetail(index, last, t);
-  }, [index, last, t]);
-  kept.current = detail;
+  const { selected } = selection;
+  const detail = useMemo(() => (index ? boardSelected(index, selected, t) : null), [index, selected, t]);
   return detail ? <CircuitDetail detail={detail} selection={selection} glyphs={KIND_GLYPHS} data="board" {...props} /> : null;
 }

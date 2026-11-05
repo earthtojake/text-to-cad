@@ -607,20 +607,27 @@ file.
   shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
   double-clicked (on a phone, whose page gives the view back, a press frames it). A row's chevron
   opens or shuts it, and a block's name does too. The Parts open as their blocks, a block of several parts shut; a pick on the
-  picture opens its row's owners and scrolls it into view (a pad's or a pin's, its part's row). A
+  picture lights its row where the row is in view and moves nothing — the lists stay as the person left
+  them — and the view's menu's **Show in list** opens the row's owners on its tab and brings it into view
+  (a pad's or a pin's, its part's row in the Parts; a net's, or a track's, a via's, a wire's net, in the
+  Nets). A
   selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
   the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
-- **The detail** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`), Altium's third list:
-  under the lists, whatever tab is open, at a height of its own whatever it shows (two fifths of the
-  panel at first; its top edge is the grip that sizes it, kept across files as
-  `toolStack.panels.flatDetail`, never under 96px, the lists keeping 160px over it), scrolling on its
-  own, what the last pick is in detail, titled with whose it is ("Pads of C17", "Pads on net VBUS"):
-  ONE thing's, whatever else is selected. A part's: its reference, value and footprint
-  name, its pad count, then its pads (a board's: one a pin, its number, its pin's name and net) or pins;
-  a net's: its pads or pins, each its part and number. A pad or a pin picked shows its part's, itself
-  lit; one picked in the detail shown keeps that detail (a net's pad leaves the net's). A row selects
-  as a press on the picture does and a double-click frames it; the head's name selects what it is the
-  detail of. Nothing picked, or something with no detail (a track, a label, a block of parts): none.
+- **Selected** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`; `boardTree.js`'s
+  `boardSelected`, `schematicTree.js`'s `schematicSelected`), as a CAD tool's Properties panel: under the
+  lists, whatever tab is open, at a height of its own whatever it shows (two fifths of the panel at
+  first; its top edge is the grip that sizes it, kept across files as `toolStack.panels.flatDetail`,
+  never under 96px, the lists keeping 160px over it), scrolling on its own. First **what it is** — its
+  glyph and name (`C17.1`, `VBUS · track`), a line in words for a pad or a pin ("Pad of C17 · 100nF"),
+  and its facts (its net, layer, width, drill, value, footprint, position: a Quick Edit chip card's) —
+  then **what it is connected to**: a part's own pads or pins, each its net ("Pads of C17"); a net's pads
+  or pins, each its part ("Pads on net VBUS"); a pad's, a pin's, a track's, a via's, a pour's or a
+  wire's net's pads or pins ("Connected to VBUS"), itself lit there. Several picked: how many, and each
+  of them. A text, a graphic or an area has its facts alone. A row selects as a press on the picture
+  does and a double-click frames it; the head's name selects it again. Nothing picked: none.
+- **A hover tip** (`kit/shell/HoverTip.jsx`): under Select, the name of what the pointer rests on — a
+  pad's or a pin's with its net, a part's with its value — in a small tip beside it, once the pointer has
+  rested on it a moment (450ms), gone the moment it leaves; it takes no pointer.
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
   making it the active layer (a filled dot after its name), drawn on top. How the board is drawn is

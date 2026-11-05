@@ -1,5 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Eye } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -163,8 +163,9 @@ export function treeAncestors(tree, id) {
  * isolates it. It opens as every tree does, until there is a choice (`treeExpansion.js`), but for a
  * block of several parts and the groups `closedGroups` names, shut until the person opens them. A
  * row's chevron opens or shuts it, and a block's name does too; a group's is a label. A pick on
- * the picture opens its row's owners and brings it into view, once (a pad's or a pin's, its part's row,
- * `ownerOf`); a press in the list opens and scrolls nothing (its row is in view). From the first row
+ * the picture lights its row where it is in view and moves nothing: the list stays as the person left
+ * it. Asked (`revealRequest`, `{ id, key }`: the view's menu's Show in list), the row's owners open and
+ * it comes into view, once a request (a pad's or a pin's, its part's row, `ownerOf`). From the first row
  * the person opens or shuts, the shape is theirs. The viewer is read-only: nothing here edits the file.
  *
  * @param {{ tree: { roots: object[], nodesById: Map<string, object>, parents: Map<string, string> }, searchRoots?: object[],
@@ -178,7 +179,7 @@ export function treeAncestors(tree, id) {
  *   `onSelect`: a row pressed takes Select up, as a pick in any tree does.
  */
 export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, ownerOf = null, glyphs, closedGroups = EMPTY, data, panel, selection,
-  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null, onCopyReference = null }) {
+  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null, onCopyReference = null, revealRequest = null }) {
   const { t } = useI18n();
   const rowHeight = useTreeRowHeight();
   // Untouched, the tree is the rule's shape for the board it shows; the person's from their first change.
@@ -262,15 +263,8 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
         isolated: isolable(node) ? isolatedRef.current.includes(node.pick) : null, onIsolate: () => onIsolate(node.pick) }),
       zoom);
   }, [t, frame, choose, select, onIsolate]);
-  // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing. The
-  // selection it makes is marked as the tree's (`pressedInTree`), and the reveal below passes it by.
-  const pressedInTree = useRef(false);
-  const chooseInTree = useCallback((node, event) => {
-    pressedInTree.current = true;
-    // Spent by the selection it makes (committed within the press), or, if it made none, at once after.
-    setTimeout(() => { pressedInTree.current = false; }, 0);
-    choose(node, event);
-  }, [choose]);
+  // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing.
+  const chooseInTree = choose;
   const search = useMemo(() => ({ query: flatPanel?.query ?? "" }), [flatPanel?.query]);
   const { searching, found, cursorId, listRef, onKeyDown } = useTreeSearch(searchRoots || tree.roots, search);
   // The panel's search box walks the hits with the arrows and picks with Enter.
@@ -279,30 +273,25 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   const registerKeys = flatPanel?.registerKeys;
   useEffect(() => registerKeys?.(event => keysRef.current(event)), [registerKeys]);
 
-  // A pick on the board opens its row's owners, and its row comes into view, once; a press in the
-  // tree (above) does neither. A search hit's press does, once its filter is cleared: its row was not in view.
+  // A pick on the picture lights its row where the row is in view, and moves nothing: the list stays as
+  // the person left it. Asked to (`revealRequest`, the view's menu's Show in list), the row's owners open
+  // and the row comes into view, once per request.
   const rowElements = useRef(new Map());
   const registerRow = useCallback((key, element) => { if (element) rowElements.current.set(key, element); else rowElements.current.delete(key); }, []);
   const target = useMemo(() => {
-    const last = selected.at(-1);
-    if (!last) return null;
+    const wanted = revealRequest?.id;
+    if (!wanted) return null;
     const has = id => tree.nodesById.has(id);
-    return nodeIdsOf(last).find(has) || ownerOf?.(last).find(has) || null;
-  }, [selected, tree, nodeIdsOf, ownerOf]);
+    return nodeIdsOf(wanted).find(has) || ownerOf?.(wanted).find(has) || null;
+  }, [revealRequest, tree, nodeIdsOf, ownerOf]);
   const revealed = useRef(null);
-  useLayoutEffect(() => {
-    if (!pressedInTree.current) return;
-    pressedInTree.current = false;
-    revealed.current = target;
-  }, [selected, target]);
   useEffect(() => {
-    if (!target || searching || revealed.current === target) return;
+    if (!target || searching || revealed.current === revealRequest?.key) return;
     const missing = treeAncestors(tree, target).filter(id => !expanded.has(id));
     if (missing.length) { reshape(next => { for (const id of missing) next.add(id); return next; }); return; }
     const row = rowElements.current.get(target);
-    if (row) { revealRow(row); revealed.current = target; }
-  }, [target, tree, expanded, searching, reshape]);
-  useEffect(() => { if (!target) revealed.current = null; }, [target]);
+    if (row) { revealRow(row); revealed.current = revealRequest.key; }
+  }, [target, revealRequest, tree, expanded, searching, reshape]);
   const targetIndex = target ? rows.findIndex(row => row.node.id === target) : -1;
   const treePinned = useMemo(() => (targetIndex < 0 ? EMPTY : [targetIndex]), [targetIndex]);
   const matches = found.matches;
