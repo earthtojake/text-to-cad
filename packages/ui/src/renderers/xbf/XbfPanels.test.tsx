@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import XbfPositionSection, { useXbfPose } from '../../../dist/renderers/xbf/XbfPositionSection.js';
 import XbfModelTree from '../../../dist/renderers/xbf/XbfModelTree.js';
 import { MeasureIcon as XbfMeasureIcon, SelectIcon as XbfSelectIcon, SelectModeMenu as XbfSelectModeMenu, XBF_SELECT_DEFAULT, xbfSelectModes } from '../../../dist/renderers/xbf/XbfSelectionModes.js';
@@ -32,10 +32,15 @@ function override(target: object, key: string, descriptor: PropertyDescriptor) {
 }
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  override(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return this.hasAttribute('data-file-sidebar-room') ? 600 : 0; } });
   override(Element.prototype, 'scrollIntoView', { value() {} });
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); while (restores.length) restores.pop()!(); });
+
+// A section as the shell draws it: a tab of the view's panel, open.
+function InPanel({ tab, children }: { tab: string, children: React.ReactNode }) {
+  return <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" searchPlaceholder="Search"
+    sections={children} tab={tab} onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />;
+}
 
 // One assembly: a hinge of a base and two arms of one part, and a pin beside it, as the engine serves it.
 const structure = {
@@ -71,33 +76,29 @@ it("the tree is a STEP's: the document's wrapper is no row, repeated parts fold,
 // The controls a tree draws, in order: its rows' names and their actions.
 const controls = () => [...document.querySelectorAll('[aria-label="Modeling tree"] button, [aria-label="Modeling tree"] [data-disclosure-locked]')]
   .map(element => element.getAttribute('aria-label') || `locked:${(element as HTMLElement).dataset.disclosureLocked}`);
-const heading = () => [...document.querySelectorAll('section[data-tool-panel][aria-label="Model tree"] input, section[data-tool-panel][aria-label="Model tree"] header button')]
-  .map(element => element.getAttribute('aria-label'));
+// What heads the tree: the panel's search, which searches it.
+const heading = () => [...document.querySelectorAll('[data-flat-panel-head] input')].map(element => element.getAttribute('aria-label'));
 
 function Tree({ mode }: { mode: string }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const [expanded, setExpanded] = useState<string[]>([]);
   const toggle = (id: string) => setExpanded(current => current.includes(id) ? current.filter(value => value !== id) : [...current, id]);
   const partControls = { isAssemblyView: true, expandedTreeNodeIds: expanded, onToggleTreeNode: toggle, onFocusTreeNode: () => {}, hiddenPartIds: [] };
-  return <FileSidebar layout={layout} onLayoutChange={(patch: any) => setLayout((current: any) => ({ ...current, ...patch }))}>
-    <XbfModelTree tree={presentXbfTree(structure)} active mode={mode} partControls={partControls} />
-  </FileSidebar>;
+  return <InPanel tab="tree"><XbfModelTree tree={presentXbfTree(structure)} active mode={mode} partControls={partControls} /></InPanel>;
 }
 
 it("the Model tree's controls are a STEP's under every shape Select's filter gives it", () => {
   const view = render(<Tree mode="all" />);
-  fireEvent.click(screen.getByRole('button', { name: 'Model tree' }));
   const states = [heading(), controls()];
   fireEvent.click(screen.getByRole('button', { name: 'Expand hinge' }));
   fireEvent.click(screen.getByRole('button', { name: 'Expand arm (2)' }));
   states.push(controls());
   for (const mode of ['parts', 'faces']) { view.rerender(<Tree mode={mode} />); states.push(controls()); }
-  // The heading's filter; the tree shut; the tree open; and under Select's Parts and Faces, its
+  // The panel's search; the tree shut; the tree open; and under Select's Parts and Faces, its
   // open rows' disclosure locked open.
   const hinge = ['Select hinge', 'Isolate hinge', 'Hide hinge'], pin = ['Select pin', 'Isolate pin', 'Hide pin'];
   const open = (disclosure: (row: string) => string) => [disclosure('hinge'), ...hinge, 'Select base', 'Isolate base', 'Hide base',
     disclosure('arm (2)'), 'Select arm (2)', 'Select arm_1', 'Isolate arm_1', 'Hide arm_1', 'Select arm_2', 'Isolate arm_2', 'Hide arm_2', ...pin];
-  expect(states).toEqual([['Filter model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
+  expect(states).toEqual([['Search the model'], ['Expand hinge', ...hinge, ...pin], open(row => `Collapse ${row}`), open(() => 'locked:open'), open(() => 'locked:open')]);
 });
 
 it("Select's menu is a STEP's single choice: All when a file opens, or one kind alone", async () => {
@@ -169,21 +170,21 @@ const hingeKinematics = {
 
 // The section over the renderer's own pose state (`useXbfPose`).
 function XbfPosition({ kinematics = hingeKinematics, onPose = () => {} }: { kinematics?: any, onPose?: (values: any) => void }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const pose = useXbfPose(kinematics);
   onPose(pose.values);
-  return <FileSidebar layout={layout} onLayoutChange={(patch: any) => setLayout((current: any) => ({ ...current, ...patch }))}>
+  return <InPanel tab="position">
     <XbfPositionSection kinematics={kinematics} values={pose.values} couplings={pose.couplings} preset={pose.preset}
-      changed={pose.applied} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />
-  </FileSidebar>;
+      onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />
+  </InPanel>;
 }
 
-// What the Position section shows, in order: its heading's controls, then its body's.
+// What the Position tab shows, in order: its name and its head's controls, then its body's.
+const positionTab = () => document.querySelector<HTMLElement>('[data-flat-panel-section="position"]')!;
 function positionControls() {
-  const panel = screen.getByRole('region', { name: 'Position controls' });
-  const head = panel.querySelector<HTMLElement>('[data-sidebar-head]')!;
+  const panel = positionTab();
+  const head = panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!;
   return {
-    head: [within(head).getByRole('heading').textContent, ...[...head.querySelectorAll('button')].map(button => `${button.getAttribute('aria-label')}:${(button as HTMLButtonElement).disabled}`)],
+    head: [document.querySelector('[data-flat-panel-tab="position"] [data-flat-panel-tab-name]')!.textContent, ...[...head.querySelectorAll('button')].map(button => `${button.getAttribute('aria-label')}:${(button as HTMLButtonElement).disabled}`)],
     body: [...panel.querySelectorAll('[data-tool-panel-body] button, [data-tool-panel-body] input, [data-tool-panel-body] [role=slider]')]
       .map(element => `${element.getAttribute('role') || element.tagName.toLowerCase()}:${element.getAttribute('aria-label')}:${(element as HTMLInputElement).value ?? ''}`)
   };
@@ -192,9 +193,8 @@ function positionControls() {
 it("Position is a STEP's -- its heading, its Pose row, a named slider and value per joint -- through a configuration and back", async () => {
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   render(<XbfPosition />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
   const states: unknown[] = [positionControls()];
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
   await user.click(within(panel).getByRole('button', { name: /^Pose: / }));
   const menu = document.querySelector<HTMLElement>('[role=menu][aria-label="Pose"]')!;
   states.push(within(menu).getAllByRole('menuitemradio').map(item => `${item.textContent}:${item.getAttribute('aria-checked')}`));
@@ -204,10 +204,10 @@ it("Position is a STEP's -- its heading, its Pose row, a named slider and value 
   await user.clear(value);
   await user.type(value, '25{Enter}');
   states.push(positionControls());
-  await user.click(within(panel.querySelector<HTMLElement>('[data-sidebar-head]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!).getByRole('button', { name: 'Reset position' }));
   states.push(positionControls());
-  // The heading (Reset is off at the opening pose), the Pose row, then the joint's slider and value.
-  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`, 'Close position:false'],
+  // The tab (Reset is off at the opening pose), the Pose row, then the joint's slider and value.
+  const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`],
     body: [`button:Pose: ${pose}:`, 'slider:hinge:', `input:hinge slider value:${value}`] });
   expect(states).toEqual([shown('Default', '0.00°', true), ['Default:true', 'open:false'], shown('open', '90.0°', false),
     shown('Custom', '25.0°', false), shown('Default', '0.00°', true)]);
@@ -254,8 +254,7 @@ it('Position drives a cylindrical pair by both its values, and says what it cann
     asBuilt: { hinge: 0, slide: [0, 10], spin: 0, knee: 0, shin: 0 }, configurations: {}, loop: ['knee', 'shin'],
   };
   render(<XbfPosition kinematics={rig} onPose={onPose} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
   expect(within(panel).getAllByRole('slider').map(thumb => [thumb.getAttribute('aria-label'), thumb.getAttribute('aria-valuemin'), thumb.getAttribute('aria-valuemax')]))
     .toEqual([['hinge', '-180', '180'], ['slide angle', '-180', '180'], ['slide position', '0', '50'], ['spin', '-180', '180']]);
   const position = within(panel).getByLabelText('slide position slider value') as HTMLInputElement;
@@ -299,8 +298,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   const onPose = vi.fn();
   render(<XbfPosition kinematics={fingerKinematics} onPose={onPose} />);
-  fireEvent.click(screen.getByRole('button', { name: 'Position' }));
-  const panel = screen.getByRole('region', { name: 'Position controls' });
+  const panel = positionTab();
   // Under the Pose row: the coupling, 0 as built over its range; no joint of it has a slider.
   expect(sliders(panel)).toEqual([['index_curl', '0', '1']]);
   expect(within(panel).queryByLabelText('index_pip slider value')).toBeNull();
@@ -314,7 +312,7 @@ it("Position shows a slider per coupling under the Pose row and none for its joi
   expect(onPose.mock.lastCall![0]).toEqual(pose(90, 100, 70));
   await setValue(user, panel, 'index_curl', '0.2');
   expect(onPose.mock.lastCall![0]).toEqual(pose(18, 20, 14));
-  await user.click(within(panel.querySelector<HTMLElement>('[data-sidebar-head]')!).getByRole('button', { name: 'Reset position' }));
+  await user.click(within(panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!).getByRole('button', { name: 'Reset position' }));
   expect(valueOf(panel, 'index_curl')).toBe('0.00');
   expect(onPose.mock.lastCall![0]).toEqual(pose(0, 0, 0));
 });

@@ -191,7 +191,7 @@ export function PoseGroupStateRow({ pose }) {
 }
 
 /**
- * A robot's Position section (the file sidebar's): its Pose row — Default, then an SRDF's group
+ * A robot's Position tab (the view's panel's): its Pose row — Default, then an SRDF's group
  * states — then a compact slider row per driven joint, with no sections of their own.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props

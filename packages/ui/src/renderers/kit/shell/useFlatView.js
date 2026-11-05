@@ -231,7 +231,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     return attachLiveBinding(binding, () => runtimeRef.current, { commands, declined, ready: whenSettled });
   }, [binding, whenSettled]);
 
-  // ---- the file sidebar's layout: the person's, across files ------------------
+  // ---- the view's panel's layout: the person's, across files ------------------
   const toolStack = useMemo(() => normalizeToolStack(workspace.services.preferences?.toolStack), [workspace.services.preferences?.toolStack]);
   const toolStackRef = useRef(toolStack);
   toolStackRef.current = toolStack;

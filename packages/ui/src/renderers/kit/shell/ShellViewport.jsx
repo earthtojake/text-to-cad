@@ -1226,7 +1226,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         showViewPlane
         isLoading={isLoading}
         meshData={scene}
-        // Close into the bottom-right corner, clear of the file sidebar down the left: the cube's box
+        // Close into the bottom-right corner, clear of the canvas's left edge: the cube's box
         // is larger than the cube, whose labels overhang it.
         viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
         viewPlaneOffsetBottom={VIEWPORT_CUBE_BOTTOM}

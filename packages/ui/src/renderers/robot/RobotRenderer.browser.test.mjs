@@ -242,7 +242,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   const home = (-0.5 * 180) / Math.PI, raised = (-1.0 * 180) / Math.PI;
 
   // The robot opens in Select, its one tool, picking its links and showing its joints' knobs; its
-  // filter can pick Position's knobs alone. Its controls are the file sidebar's, under the Links,
+  // filter can pick Position's knobs alone. Its controls are the view's panel's, after the Links,
   // whatever Select picks; the tool stack holds nothing of a robot's.
   await page.waitForFunction(() => window.__cadJointHandles?.().length > 0);
   assert.deepEqual(await robot.toolNames(), SELECT_IN_HAND);
@@ -451,7 +451,7 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   // The antenna reaches away from the nod pivot; the visor sits on it.
   const antenna = [surface.x + nod.pivotX + (nod.x - nod.pivotX) * 2, surface.y + nod.pivotY + (nod.y - nod.pivotY) * 2];
   const visor = [surface.x + nod.pivotX, surface.y + nod.pivotY];
-  // Nothing: the backdrop right of the robot, clear of the file sidebar down the left and the view cube in the corner.
+  // Nothing: the backdrop right of the robot, clear of the view's panel down the left and the view cube in the corner.
   const backdrop = [surface.x + surface.width - 90, surface.y + surface.height / 2];
 
   // Picking Position alone, a press on the model picks nothing: a click on it is the camera's.
@@ -726,10 +726,6 @@ test('a pose step costs the same on a long chain: one matrix, no component', asy
   await robot.settled();
   // What a step costs is counted, never timed: the matrices it writes and the renders it causes.
   // (Posing through React state and a re-placed part list rendered the renderer every step.)
-  // The file sidebar, its 29-joint Position section with it, floats over the chain's root on this
-  // viewport. This measures what a pose step costs, not the layout, so the sidebar is kept out of
-  // the pointer's way (still rendered: its slider rows are what a step must not re-render).
-  await page.addStyleTag({ content: '[data-testid="one"] [data-file-sidebar-room] { visibility: hidden !important; }' });
   const surface = await pane.locator('[data-cad-joint-handles]').boundingBox();
   const knob = (await robot.handles()).j0;
   const radius = Math.hypot(knob.x - knob.pivotX, knob.y - knob.pivotY), bearing = Math.atan2(knob.y - knob.pivotY, knob.x - knob.pivotX);

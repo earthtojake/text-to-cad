@@ -537,13 +537,11 @@ function DxfSurface({ view, data }) {
       // On the frame, where the drawing's fit reads it (`useDrawingView.js`).
       frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
       if (mobile || !rows.length) {
-        viewport.style.removeProperty("--cad-file-sidebar-max-width");
         viewport.style.removeProperty("--cad-top-right-left");
         return;
       }
       const box = viewport.getBoundingClientRect();
-      const left = Math.min(...rows.map(row => row.left)) - box.left, right = Math.max(...rows.map(row => row.right)) - box.left;
-      viewport.style.setProperty("--cad-file-sidebar-max-width", `${Math.max(0, Math.round(left - 2 * VIEWPORT_INSET_PX))}px`);
+      const right = Math.max(...rows.map(row => row.right)) - box.left;
       viewport.style.setProperty("--cad-top-right-left", `${Math.round(right + VIEWPORT_INSET_PX)}px`);
     };
     measureColumn();
@@ -554,7 +552,7 @@ function DxfSurface({ view, data }) {
     return () => {
       resized.disconnect();
       frame.style.removeProperty("--cad-tools-bottom");
-      for (const name of ["--cad-file-sidebar-max-width", "--cad-top-right-left"]) viewport.style.removeProperty(name);
+      viewport.style.removeProperty("--cad-top-right-left");
     };
   }, [toolsHidden, mobile, layered, flat.open, flat.mode]);
 

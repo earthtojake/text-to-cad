@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  DEFAULT_TOOL_STACK, FILE_SIDEBAR_MIN_WIDTH, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
-  clampToolPanelHeight, clampToolPanelWidth, fileSidebarSizeId, normalizeToolStack, toolPanelDefaultHeight
+  DEFAULT_TOOL_STACK, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
+  clampToolPanelHeight, clampToolPanelWidth, normalizeToolStack, toolPanelDefaultHeight
 } from "./toolStackLayout.js";
 
 test("the layout is the sizes a person set, by panel, and the folded panels — nothing else, whatever a store hands back", () => {
@@ -24,10 +24,9 @@ test("a flat view's panel keeps the tab it shows, by the kind of file: a word fo
   assert.equal("tabs" in normalizeToolStack({ tabs: {} }), false, "no tab chosen is no key");
 });
 
-test("each file sidebar section's panel keeps a size of its own, as narrow as the sidebar may be", () => {
-  assert.deepEqual([fileSidebarSizeId("tree"), fileSidebarSizeId(null)], ["sidebar:tree", "sidebar"]);
-  assert.deepEqual(normalizeToolStack({ panels: { "sidebar:tree": { width: 12, height: 300 }, "sidebar:position": { width: 240 }, "sidebar:": { width: 200 }, "sidebar:a:b": { width: 200 } } }).panels,
-    { "sidebar:tree": { width: FILE_SIDEBAR_MIN_WIDTH, height: 300 }, "sidebar:position": { width: 240 } });
+test("the view's panel's width is kept as a panel's; the old floating sidebar's sizes are nobody's", () => {
+  assert.deepEqual(normalizeToolStack({ panels: { flat: { width: 260 }, "sidebar:tree": { width: 200, height: 300 }, "sidebar:position": { width: 240 } } }).panels,
+    { flat: { width: 260 } });
 });
 
 test("every panel is a six-tool strip wide; a resizable one is only ever wider, up to half the viewer", () => {

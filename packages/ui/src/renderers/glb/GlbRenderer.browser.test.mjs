@@ -121,7 +121,7 @@ function projector(camera, box) {
 // never a section of a panel (a GLB has none).
 const animationSection = pane => pane.locator('[data-playbar="tools"]');
 const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
-// Preview's playbar, under the model, for a file with routines (Preview has no file sidebar).
+// Preview's playbar, under the model, for a file with routines (Preview has no panel).
 const playbar = pane => pane.getByRole('toolbar', { name: 'Animation playback', exact: true });
 // Display's menu: the modes, then the Grid switch.
 async function openDisplay(pane) {

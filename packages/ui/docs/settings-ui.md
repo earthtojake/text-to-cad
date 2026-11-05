@@ -661,7 +661,7 @@ Its panels follow these rules:
   reads over any canvas — a flat view's, which is the app's own background, and a 3D scene's alike:
   the tool strip, its sub-toolbars, the stack's panels and a collapsed panel's pill share
   `FLOATING_CHROME_SURFACE_CLASS` (90%, a small blur, a medium shadow); Preview's settings panel,
-  mostly text, `FILE_SIDEBAR_SURFACE_CLASS` (92%); every menu and popover over the viewport, the app
+  mostly text, `SETTINGS_PANEL_SURFACE_CLASS` (92%); every menu and popover over the viewport, the app
   menu and Display included, `FLOATING_SURFACE_CLASS` (95%, blurred).
 - **Scrolling.** Every scroll region in the viewer's chrome — the view's panel, a panel's
   body, the stack's column, the explorer, a menu, the alert card — is the

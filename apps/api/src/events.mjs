@@ -118,7 +118,7 @@ export const CONTROLS = new Set([
   // A model's routines (the sidebar's Animation or Motion, Preview's playbar), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
-  // The file sidebar's sections, and its trees.
+  // The floating sidebar's sections (which older releases send), and the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
   // A part's menu, over the model or in its tree.

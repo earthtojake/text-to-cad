@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { Box, MousePointer2 } from "lucide-react";
 import { PositionIcon } from "../kit/tools/ChangedDot.jsx";
@@ -19,7 +19,6 @@ import SelectFilterMenu from "../kit/tools/select/SelectFilterMenu.jsx";
 import { selects } from "../kit/tools/select/selectFilter.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import PositionControls from "./PositionControls.jsx";
-import { positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 import { useRobotReferences } from "./robotReferences.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
@@ -50,13 +49,11 @@ const CLIP_OFF = Object.freeze({ clip: { enabled: false, axis: "x", invert: fals
 const poseIsSet = pose => Boolean(pose) && Object.entries(pose.getSnapshot().values)
   .some(([name, value]) => Math.abs(value - (pose.defaults[name] ?? value)) > URDF_JOINT_VALUE_EPSILON);
 
-// The file sidebar's Position section, its tile's dot the tools view's joints off their defaults. It
-// reads the pose itself, and only whether it is off its defaults: a pose step renders it only when
-// that flips, and never the surface (a pose step renders no component of the renderer).
+// The view's panel's Position tab. Its controls read the pose themselves: a pose step renders no
+// component of the renderer.
 function PositionSection({ pose, previewPose, revision }) {
   const { t } = useI18n();
-  const changed = useSyncExternalStore(pose.subscribe, () => !positionValuesAreDefault(pose.getSnapshot().values, pose.defaults));
-  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details" changed={changed}>
+  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
     {/* Preview poses its own robot (`previewPose`). */}
     <PositionControls key={`${revision}:${previewPose ? "preview" : "tools"}`} pose={previewPose || pose} />
   </ToolPanel>;
@@ -305,7 +302,7 @@ function RobotSurface({ view, data }) {
         onChange={value => { setSelectFilter(value); selectTool(ROBOT_TOOL.SELECT); }} /> }),
     ...sceneTools.tools
   ];
-  // The file sidebar, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
+  // The view's panel, whatever the tool: the Links (and an SDF's own metadata), then Position's controls.
   const sidebarShown = !shell.previewing;
   const sidebar = <>
     <LinksSection key={modelKey} active={sidebarShown} robot={robot?.robot || null} components={robot?.components}

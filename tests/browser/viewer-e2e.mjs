@@ -36,7 +36,7 @@ const root = path.resolve(args.dir || ".");
 const fixtures = [
   // `tools` is the file's own tool strip; unavailable tools are hidden. `threeD` has
   // Projection, Display and Preview at the strip's end; `sections`
-  // are file sidebar tiles it must have (what there is to read of the file, whatever the tool).
+  // are the view's panel's tabs it must have (what there is to read of the file, whatever the tool).
   { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
   // A STEP: read by the engine, drawn as an engine document is.
   { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model tree"], threeD: true },
@@ -315,11 +315,11 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // What there is to read of the file is the file sidebar's, a tile per section, never a tool.
-      const tiles = await page.locator("[data-file-sidebar-tools] button").evaluateAll((buttons) =>
-        buttons.map((button) => button.getAttribute("aria-label")));
-      for (const label of fixture.sections) if (!tiles.includes(label)) failures.push(`${fixture.format}: missing the ${label} tile (sidebar: ${tiles.join(", ")})`);
-      if (!fixture.sections.length && tiles.length) failures.push(`${fixture.format}: a file sidebar on a file with nothing to read (${tiles.join(", ")})`);
+      // What there is to read of the file is the view's panel's, a tab per section, never a tool.
+      const tabs = await page.locator("[data-flat-panel] [data-flat-panel-tab-name]").evaluateAll((names) =>
+        names.map((name) => name.textContent));
+      for (const label of fixture.sections) if (!tabs.includes(label)) failures.push(`${fixture.format}: missing the ${label} tab (panel: ${tabs.join(", ")})`);
+      if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
       // Projection, Display and Preview end the tool strip on 3D views; drawings have none.
       const controls = await page.locator("[data-cad-toolbar] [data-view-controls] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));

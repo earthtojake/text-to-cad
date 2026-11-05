@@ -129,8 +129,8 @@ async function openRobot({ phone = false } = {}) {
   }
   render(<Pane />);
   const pane = screen.getByTestId('one');
-  // Its Links are in the file sidebar once the robot has loaded; on a phone the sidebar's tiles
-  // lead the strip, which comes with the robot.
+  // Its Links are in the view's panel once the robot has loaded; on a phone the panel's pill
+  // leads the strip, which comes with the robot.
   await waitFor(() => expect(phone ? within(pane).queryByRole('group', { name: 'Interaction tools' }) : pane.querySelector('[aria-label="Robot links"] li')).not.toBeNull());
   const tools = () => within(pane).getByRole('group', { name: 'Interaction tools' });
   const robot = {

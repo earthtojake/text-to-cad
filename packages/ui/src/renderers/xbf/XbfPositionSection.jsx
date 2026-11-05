@@ -12,7 +12,7 @@ import { DEFAULT_POSE_VALUE, KinematicsPoseRow, NO_PRESET_VALUE } from "../kit/i
 import { useControlUsage } from "../../usage/controls.js";
 import { useI18n } from "@cad/ui/i18n";
 
-// An engine document's Position: the file sidebar's section exactly as a STEP's is (the STEP
+// An engine document's Position: the view's panel's tab exactly as a STEP's is (the STEP
 // renderer's `PoseControlsSection.js` and `MotionControlsSection.js`, copied: one again at the
 // renderers' migration) -- headed "Position", Reset in its heading, the Pose row (Default, the
 // document as built, then its configurations), then a slider per coupling (a constraint moving
@@ -149,7 +149,7 @@ export function useXbfPose(kinematics) {
 
 /**
  * @param {{ kinematics: object, values: Record<string, number[]>, couplings?: Record<string, number>, preset: string,
- *   changed: boolean, onValues: (values: Record<string, number[]>, couplings?: Record<string, number>) => void,
+ *   onValues: (values: Record<string, number[]>, couplings?: Record<string, number>) => void,
  *   onPreset: (name: string) => void, onReset: () => void }} props
  *   `values`: every pair's values now. `couplings`: each coupling's slider (where `values` stand on
  *   it when not given). `preset`: the configuration chosen, `DEFAULT_POSE_VALUE` as built,
@@ -163,10 +163,10 @@ export default function XbfPositionSection({ kinematics, motion = null, ...own }
   if (!frame) return <PositionBody kinematics={kinematics} {...own} />;
   const atRest = xbfSamePose(frame, xbfPoseValues(kinematics));
   return <PositionBody kinematics={kinematics} values={frame} couplings={xbfCouplingValues(kinematics, frame)}
-    preset={atRest ? DEFAULT_POSE_VALUE : NO_PRESET_VALUE} changed={!atRest} readOnly onValues={own.onValues} onPreset={own.onPreset} onReset={own.onReset} />;
+    preset={atRest ? DEFAULT_POSE_VALUE : NO_PRESET_VALUE} readOnly onValues={own.onValues} onPreset={own.onPreset} onReset={own.onReset} />;
 }
 
-function PositionBody({ kinematics, values, couplings = null, preset, changed, onValues, onPreset, onReset, readOnly = false }) {
+function PositionBody({ kinematics, values, couplings = null, preset, onValues, onPreset, onReset, readOnly = false }) {
   const usage = useControlUsage();
   const { t } = useI18n();
   const controls = xbfPositionRows(kinematics);
@@ -196,7 +196,7 @@ function PositionBody({ kinematics, values, couplings = null, preset, changed, o
       step={controlStep(control)} onValueChange={next => write(control, next?.[0] ?? currentValue)} thumbProps={{ "aria-label": control.label }} />
   </FileSheetSliderField>;
   };
-  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details" changed={changed}>
+  return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
     <div className="space-y-1.5 pb-1.5 pt-0.5">
       {poseNames.length || controls.length || coupled.length ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
         activeValue={preset} onSelect={onPreset} onReset={onReset} disabled={readOnly} /> : null}

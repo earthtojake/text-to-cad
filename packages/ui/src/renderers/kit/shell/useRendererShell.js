@@ -137,7 +137,7 @@ const EMPTY = Object.freeze({});
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
  *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
  * @param {object | null} [options.animation]  The tools view's routine runtime (with its own `clock`),
- *   when the file has routines. They play from the file sidebar's Animation section, whose frame stays
+ *   when the file has routines. They play from the playbar under the model, whose frame stays
  *   on the model as a pose does. Preview's routine is its own, on its own scene (`RendererShell`'s
  *   `previewView.animation`).
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,

@@ -79,7 +79,7 @@ const DOUBLE_PRESS_MS = 600;
 
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
- * its top centre and the tool stack under it, the file sidebar down its left side, Quick Edit at
+ * its top centre and the tool stack under it, the view's panel docked at its left, Quick Edit at
  * the top-right, the cube in the bottom-right corner, a 3D view's controls at the strip's end
  * (Display and Preview), the loading, update and alert overlays, and Preview's own controls.
  * The same structure, classes and data attributes for every renderer: hosts, stylesheets and tests
@@ -110,8 +110,8 @@ const DOUBLE_PRESS_MS = 600;
  *   shell's own tool's panel leads it: Annotate's.
  *   `subToolbar`: the renderer's tool in hand's own row under the strip (`kit/tools/SubToolbar.jsx`:
  *   the active tool); the shell's own tool's row (Annotate's) takes its place while it is up.
- *   `sidebar`: the file sidebar's sections, top to bottom — each a `ToolPanel`, drawn as a
- *   section (`kit/tools/FileSidebar.jsx`): a tree, joints, metadata. None (null): no sidebar. A phone draws none.
+ *   `sidebar`: the file's sections, in order — each a `ToolPanel`, drawn as a tab of the view's panel
+ *   (`FlatPanel.jsx`): a tree, joints, metadata. None (null): no panel.
  *   Gone in preview, kept mounted, so a tree keeps its expansion and scroll.
  *   `referenceChips`: the renderer's description of that selection, as Quick Edit shows it (its
  *   chips, `kit/tools/quick-edit/ReferenceChips.jsx`): a chip each for one or several picks of a kind
@@ -381,8 +381,8 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
 
   // The controls at the top — the strip, a wrapped one, and the tool's row under it — are measured
   // into variables, so a tool change or a resize moves what hangs below them without redrawing the
-  // model or touching a saved size: on a wide view, the column's sides, which the sidebar's panel and the
-  // top-right corner (Quick Edit) keep clear of (`--cad-file-sidebar-max-width`, `--cad-top-right-left`).
+  // model or touching a saved size: on a wide view, the column's right side, which the top-right
+  // corner (Quick Edit) keeps clear of (`--cad-top-right-left`).
   const topControls = useRef(null);
   useLayoutEffect(() => {
     const controls = topControls.current;
@@ -395,48 +395,45 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
         const width = controls.getBoundingClientRect().width;
         const room = Math.max(0, columnBox.width - width);
         const centered = viewBox.left + (viewBox.width - width) / 2 - columnBox.left;
-        // Start at the viewport centre, keeping the sidebar gap and the right edge padding.
+        // Start at the viewport centre, keeping the pill's gap and the right edge padding.
         // Offset the flex-centred controls without changing the room TouchStrip uses for More.
         controls.style.left = `${Math.min(room, Math.max(0, centered)) - room / 2}px`;
       } else controls.style.removeProperty("left");
       // The rows with something in them: an empty one (no update under way) still takes the
-      // column's gap, which would leave a wider gap over the sidebar than at its sides.
+      // column's gap, which would leave a wider gap under the strip than at its sides.
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
       const top = controls.getBoundingClientRect().top;
       const below = `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`;
       viewport.style.setProperty("--cad-tools-bottom", below);
       if (mobile || !rows.length) {
-        viewport.style.removeProperty("--cad-file-sidebar-max-width");
         viewport.style.removeProperty("--cad-top-right-left");
         return;
       }
-      // The column's sides, the widest of its rows: the sidebar's panel stops short of the left one,
-      // and the top-right corner (Quick Edit) starts past the right one, an inset away, so neither
-      // ever reaches under the strip.
+      // The column's right side, the widest of its rows: the top-right corner (Quick Edit) starts
+      // past it, an inset away, so it never reaches under the strip.
       const box = viewport.getBoundingClientRect();
-      const left = Math.min(...rows.map(row => row.left)) - box.left, right = Math.max(...rows.map(row => row.right)) - box.left;
-      viewport.style.setProperty("--cad-file-sidebar-max-width", `${Math.max(0, Math.round(left - 2 * VIEWPORT_INSET_PX))}px`);
+      const right = Math.max(...rows.map(row => row.right)) - box.left;
       viewport.style.setProperty("--cad-top-right-left", `${Math.round(right + VIEWPORT_INSET_PX)}px`);
     };
     measure();
     if (typeof ResizeObserver === "undefined") return undefined;
-    // What moves them: the controls, the view, the sidebar (out or away, resized), and what comes
-    // and goes in the top-right corner (Quick Edit opening, closing, resized).
+    // What moves them: the controls, the view, and what comes and goes in the top-right corner
+    // (Quick Edit opening, closing, resized).
     const resized = new ResizeObserver(measure);
     resized.observe(controls);
     resized.observe(viewport);
     const watch = () => {
-      for (const element of viewport.querySelectorAll(`aside[data-cad-file-sidebar], [data-file-sidebar-tools], ${CORNER_BOXES}`)) resized.observe(element);
+      for (const element of viewport.querySelectorAll(CORNER_BOXES)) resized.observe(element);
     };
     watch();
     const changed = typeof MutationObserver === "undefined" ? null : new MutationObserver(() => { watch(); measure(); });
-    for (const element of viewport.querySelectorAll("aside[data-cad-file-sidebar], [data-viewport-top-right]")) {
-      changed?.observe(element, { attributes: true, attributeFilter: ["data-open"], childList: true, subtree: element.matches("[data-viewport-top-right]") });
+    for (const element of viewport.querySelectorAll("[data-viewport-top-right]")) {
+      changed?.observe(element, { attributes: true, attributeFilter: ["data-open"], childList: true, subtree: true });
     }
     return () => {
       resized.disconnect(); changed?.disconnect();
       controls.style.removeProperty("left");
-      for (const name of ["--cad-tools-bottom", "--cad-file-sidebar-max-width", "--cad-top-right-left"]) viewport.style.removeProperty(name);
+      for (const name of ["--cad-tools-bottom", "--cad-top-right-left"]) viewport.style.removeProperty(name);
     };
   }, [toolsHidden, mobile, besideSidebarTile, Boolean(sidebar), Boolean(references)]);
   // Display's tile is its mode's sphere; on a phone with no room for it, its More row shows the same.

@@ -3,11 +3,11 @@
 // nothing else (any other key a stored record carries is dropped):
 //
 //   panels     for each panel a person can size (`ToolPanel.jsx`'s `resizable`), the width and
-//              the height cap they dragged it to, by panel id, and each file sidebar section's
-//              panel (`fileSidebarSizeId`: `sidebar:<id>`) — only what they set; a panel opens at its
-//              defaults otherwise (`TOOL_PANEL_WIDTH`, and `toolPanelDefaultHeight`: the stack's height);
-//   collapsed  which panels and sidebar sections are folded to their first row, by id (a flat
-//              view's panel, `flat`, collapsed: `FlatViewFrame.jsx`);
+//              the height cap they dragged it to, by panel id, and the view's panel's width (`flat`:
+//              `FlatPanel.jsx`) — only what they set; a panel opens at its defaults otherwise
+//              (`TOOL_PANEL_WIDTH`, and `toolPanelDefaultHeight`: the stack's height);
+//   collapsed  which panels are folded to their first row, by id (the view's panel, `flat`,
+//              collapsed: `useFlatPanelState`);
 //   tabs       the tab a flat view's panel shows, by the kind of file (`board`: `layers`); absent
 //              until one is chosen.
 //
@@ -19,24 +19,14 @@
 // exactly this wide; a resizable one opens this wide and is only ever made wider.
 const STRIP_TOOLS = 6, BUTTON_PX = 24, GAP_PX = 2, PADDING_PX = 4, BORDER_PX = 1;
 export const TOOL_PANEL_WIDTH = STRIP_TOOLS * BUTTON_PX + (STRIP_TOOLS - 1) * GAP_PX + 2 * PADDING_PX + 2 * BORDER_PX;
-// The file sidebar (`FileSidebar.jsx`): its size kept under this id among the panels'; it opens a
-// tool panel's width, as tall as its sections, and may be made narrower, down to room for a
-// heading's name, its chevron and the bar's toggle (a tree's names truncate).
-export const FILE_SIDEBAR_ID = "sidebar";
-/** Where the sidebar keeps the size of one section's panel: each section is sized on its own. */
-export function fileSidebarSizeId(sectionId) {
-  return sectionId ? `${FILE_SIDEBAR_ID}:${sectionId}` : FILE_SIDEBAR_ID;
-}
-const isFileSidebarSize = id => id === FILE_SIDEBAR_ID || id.startsWith(`${FILE_SIDEBAR_ID}:`);
-export const FILE_SIDEBAR_MIN_WIDTH = 120;
 // The shortest a person can drag a panel's cap: its first row and a row of content under it.
 export const TOOL_PANEL_MIN_HEIGHT = 64;
 // A stored size is kept whatever the viewer it was chosen in; what is drawn is bounded by the
 // viewer at hand (`clampToolPanelWidth`, `clampToolPanelHeight`).
 const MAX_STORED_PX = 4000;
-// Panel ids are short words (`ToolPanel.jsx`'s `id`), and a sidebar section's size is kept under
-// `sidebar:<its id>` (`fileSidebarSizeId`); a record full of anything else is not ours.
-const PANEL_ID = /^[a-z][a-z0-9-]{0,31}(?::[a-z][a-z0-9-]{0,31})?$/;
+// Panel ids are short words (`ToolPanel.jsx`'s `id`); a record full of anything else is not ours
+// (the floating sidebar's `sidebar:<id>` sizes, which no view draws now, among it).
+const PANEL_ID = /^[a-z][a-z0-9-]{0,31}$/;
 const MAX_PANELS = 32;
 
 export const DEFAULT_TOOL_STACK = Object.freeze({ panels: Object.freeze({}), collapsed: Object.freeze({}) });
@@ -68,7 +58,7 @@ export function normalizeToolStack(value) {
   const panels = {};
   for (const [id, size] of record(value?.panels)) {
     if (!PANEL_ID.test(id) || !size || typeof size !== "object") continue;
-    const width = bounded(size.width, isFileSidebarSize(id) ? FILE_SIDEBAR_MIN_WIDTH : TOOL_PANEL_WIDTH), height = bounded(size.height, TOOL_PANEL_MIN_HEIGHT);
+    const width = bounded(size.width, TOOL_PANEL_WIDTH), height = bounded(size.height, TOOL_PANEL_MIN_HEIGHT);
     if (width !== undefined || height !== undefined) panels[id] = { ...(width !== undefined ? { width } : {}), ...(height !== undefined ? { height } : {}) };
   }
   const tabs = words(value?.tabs);

@@ -9,12 +9,12 @@
  * `FLOATING_CHROME_SURFACE_CLASS`: the tool strip, its sub-toolbars, the tool stack's panels and a
  * collapsed panel's pill, up beside the model for as long as a file is open: 90%, a small blur and a
  * medium shadow, so the strip stands off the canvas.
- * `FILE_SIDEBAR_SURFACE_CLASS`: the file sidebar's panel, mostly text, up for as long as a file is
- * open: 92%, a small blur.
+ * `SETTINGS_PANEL_SURFACE_CLASS`: Preview's settings panel, mostly text, up for as long as Preview
+ * is: 92%, a small blur.
  * `FLOATING_SURFACE_CLASS`: the popovers and menus opened over the viewport (a mode menu, the
- * viewport's context menu, the app menu, the explorer, Display's settings, the Animation section's
+ * viewport's context menu, the app menu, the explorer, Display's settings, the playbar's
  * Playback settings) — read while they are up: 95%, blurred.
  */
 export const FLOATING_SURFACE_CLASS = "border border-border bg-popover/95 text-foreground shadow-sm backdrop-blur-md";
-export const FILE_SIDEBAR_SURFACE_CLASS = "border border-border bg-popover/92 text-foreground shadow-sm backdrop-blur-sm";
+export const SETTINGS_PANEL_SURFACE_CLASS = "border border-border bg-popover/92 text-foreground shadow-sm backdrop-blur-sm";
 export const FLOATING_CHROME_SURFACE_CLASS = "border border-border bg-popover/90 text-foreground shadow-md backdrop-blur-sm";

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render as mount, screen } from '@testing-libra
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import PositionControls from '../../../dist/renderers/robot/PositionControls.js';
 import { createPoseStore } from '../../../dist/renderers/robot/poseStore.js';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 import ToolPanel from '../../../dist/renderers/kit/tools/ToolPanel.js';
 import { fixturePayload } from './__tests__/robotFixtures.js';
 
@@ -12,25 +12,26 @@ Object.assign(globalThis, { React });
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(cleanup);
 
-const render = (controls: React.ReactElement) => mount(<FileSidebar layout={{ panels: {}, collapsed: {} }} onLayoutChange={() => {}}>
-  <ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>
-</FileSidebar>);
+// As the shell draws it: the Position tab of the view's panel, open.
+const render = (controls: React.ReactElement) => mount(<FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model"
+  searchPlaceholder="Search" sections={<ToolPanel id="position" title="Position" label="Position controls" fit="details">{controls}</ToolPanel>}
+  tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />);
 const poseLabel = () => screen.getByRole('button', { name: /^Pose: / }).getAttribute('aria-label');
 const field = (name: string, unit: string) => screen.getByRole('textbox', { name: `${name} value in ${unit}` }) as HTMLInputElement;
 
-it('opens on the pose row, full width over a slider per joint a person can drive, and Reset in the section\'s heading', () => {
+it('opens on the pose row, full width over a slider per joint a person can drive, and Reset at the tab\'s top', () => {
   const pose = createPoseStore(fixturePayload('arm.urdf'));
   render(<PositionControls pose={pose}/>);
-  // One section's rows: the Position section around them is the panel's.
-  expect(screen.getAllByRole('heading').map(heading => heading.textContent)).toEqual(['Position']);
+  // One tab's rows: the Position tab around them is the panel's, named by its tab, with no heading of its own.
+  expect([screen.getByRole('tab', { name: 'Position' }).getAttribute('aria-selected'), screen.queryAllByRole('heading').length]).toEqual(['true', 0]);
   expect(poseLabel()).toBe('Pose: Default');
-  // The pose is the body's first row, not the heading's.
-  expect([document.querySelector('[data-sidebar-head] [data-pose-menu]'), document.querySelector('[data-tool-panel-body] [data-pose-row] [data-pose-menu]') !== null]).toEqual([null, true]);
+  // The pose is the body's first row, not the head's.
+  expect([document.querySelector('[data-tool-panel-head-slot] [data-pose-menu]'), document.querySelector('[data-tool-panel-body] [data-pose-row] [data-pose-menu]') !== null]).toEqual([null, true]);
   expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
   expect(screen.queryByRole('textbox', { name: /camera_mount|grip_mirror/ })).toBeNull();
-  // Reset is the heading's, idle at the default pose, and takes a moved joint back.
+  // Reset is the head's, idle at the default pose, and takes a moved joint back.
   const reset = screen.getByRole('button', { name: 'Reset position' });
-  expect([reset.closest('[data-sidebar-head]') !== null, (reset as HTMLButtonElement).disabled]).toEqual([true, true]);
+  expect([reset.closest('[data-tool-panel-head-slot]') !== null, (reset as HTMLButtonElement).disabled]).toEqual([true, true]);
   act(() => { pose.write('shoulder', 30); });
   expect([poseLabel(), (reset as HTMLButtonElement).disabled]).toEqual(['Pose: Custom', false]);
   fireEvent.click(reset);

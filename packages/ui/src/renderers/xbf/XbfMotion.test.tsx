@@ -25,7 +25,6 @@ function override(target: object, key: string, descriptor: PropertyDescriptor) {
 let frames: FrameRequestCallback[] = [];
 beforeEach(() => {
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  override(HTMLElement.prototype, 'clientHeight', { get(this: HTMLElement) { return this.hasAttribute('data-file-sidebar-room') ? 600 : 0; } });
   override(Element.prototype, 'scrollIntoView', { value() {} });
   for (const name of ['setPointerCapture', 'releasePointerCapture']) override(Element.prototype, name, { value() {} });
   override(Element.prototype, 'hasPointerCapture', { value: () => false });
@@ -61,7 +60,6 @@ const kinematics = {
 // the pose, by the motion's frames while it does, and by Position as it lets go; the pose and the
 // motion one motion at a time.
 function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { setPose: (values: any) => void } }) {
-  const [layout, setLayout] = useState<any>({ panels: {}, collapsed: {} });
   const pose = useXbfPose(mechanism);
   const position = useRef(pose);
   position.current = pose;
@@ -74,11 +72,10 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
   });
   useEffect(() => { if (!owns.current) scene.setPose(pose.applied ? pose.values : null); }, [pose.values, pose.applied]);
   // As the shell draws them: Position a tab of the view's panel, the motions the playbar's under the model.
-  void layout; void setLayout;
   return <div style={{ position: 'relative' }}>
     <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" searchPlaceholder="Search"
       sections={<XbfPositionSection kinematics={mechanism} motion={motion?.enabled ? motion : null} values={pose.values} couplings={pose.couplings}
-        preset={pose.preset} changed={pose.applied} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
+        preset={pose.preset} onValues={pose.setValues} onPreset={pose.choosePreset} onReset={pose.reset} />}
       tab="position" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     {motion ? <PreviewPlaybar runtime={motion} autoplay={false} onAutoplayChange={() => {}} surfaced /> : null}
   </div>;

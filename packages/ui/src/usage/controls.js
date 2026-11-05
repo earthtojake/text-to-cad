@@ -50,10 +50,11 @@ export const CONTROLS = Object.freeze(/** @type {const} */ ([
   'preview_lighting_size', 'preview_lighting_fill', 'preview_background_color', 'preview_background_opacity',
   'preview_floor_enabled', 'preview_floor_color', 'preview_floor_opacity', 'preview_floor_placement',
   'preview_floor_finish', 'preview_reset',
-  // A model's routines (the sidebar's Animation or Motion, Preview's playbar), and its Position.
+  // A model's routines (the playbar, in the tools view and Preview), and its Position.
   'animation_play', 'animation_clip', 'animation_speed', 'animation_loop', 'animation_autoplay', 'animation_release',
   'position_joint', 'position_preset', 'position_reset', 'position_knob',
-  // The file sidebar's sections, and its trees.
+  // The floating sidebar's sections: no view sends them now, but older releases do, and the three
+  // lists are one vocabulary. Then the trees.
   'sidebar_tree', 'sidebar_position', 'sidebar_animation', 'sidebar_layers', 'sidebar_sdf',
   'tree_filter', 'tree_visibility', 'layer_visibility',
   // A part's menu, over the model or in its tree.

@@ -134,7 +134,7 @@ function ModelingSearchRow({ match, index, availability, selected, joinAbove, jo
 const MemoModelingSearchRow = memo(ModelingSearchRow);
 
 /**
- * The file sidebar's Model tree: the filter and the tree of an assembly's subassemblies and
+ * The view's panel's Model tree: the tree of an assembly's subassemblies and
  * parts, on screen while `active` and mounted otherwise. Its shape follows Select's `mode`: under
  * All it is the person's own; under Parts, Faces and Edges every assembly is open and the
  * disclosure locked.

@@ -55,9 +55,9 @@ const MENU_CONTROLS = Object.freeze({
 // An engine document in the viewer, exactly as a STEP is: the same tools in the same order
 // (Select with its filter, Pencil, Shapes, Measure, Explode, Clip), the same selection (Parts, Faces and
 // Edges as the filter ticks them, a collapsed assembly picked as a unit, a part's faces and edges
-// once it is open, Group faces and Group edges), the same file sidebar (Model tree, Position), the
-// same menus, the same Quick Edit chips; and, for a document with motions, the file sidebar's
-// Motion section, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
+// once it is open, Group faces and Group edges), the same view's panel (Model tree, Position), the
+// same menus, the same Quick Edit chips; and, for a document with motions, the playbar under the
+// model, the shell's routine transport playing them (`useXbfMotion.js`). What differs is
 // underneath: the document is read from the engine that serves it, and every face and edge is to
 // hand from the start, so nothing waits on topology.
 
@@ -679,7 +679,7 @@ function XbfSurface({ view, data }) {
   [knobsShown, kinematics, positionRows, poseValues, scene, setPoseValues]);
   const handleLayoutRef = useRef(null);
 
-  // ---- the file sidebar: the Model tree (an assembly's), then Position --------------------------
+  // ---- the view's panel: the Model tree (an assembly's), then Position -------------------------
   const partControls = useMemo(() => ({
     isAssemblyView: assembly, hiddenPartIds: hiddenIds, focusedNodeIds: isolatedIds, selectableNodeIds: selectableIds ? [...selectableIds] : null,
     expandedTreeNodeIds: expandedIds, onToggleTreeNode: toggleExpanded, onSelectTreeNode: selectTreeNode,
@@ -693,7 +693,7 @@ function XbfSurface({ view, data }) {
     {assembly ? <XbfModelTree key={document.modelKey} tree={tree} active={!previewing} disabled={shell.idle} mode={shape}
       selectedIds={selected} onClearSelection={clearSelection} partControls={partControls} /> : null}
     {kinematics ? <XbfPositionSection kinematics={kinematics} motion={motionOwns ? motion : null} values={poseValues || {}} couplings={poseCouplings} preset={posePreset}
-      changed={poseApplied} onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
+      onValues={setPoseValues} onPreset={choosePreset} onReset={resetPose} /> : null}
   </> : null;
 
   return <RendererShell shell={shell} tools={strip} subToolbar={measuring ? <MeasurementsBar measure={measure} /> : null} sidebar={sidebar} previewView={previewView}

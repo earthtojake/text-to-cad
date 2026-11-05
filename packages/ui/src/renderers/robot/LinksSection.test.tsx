@@ -4,7 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import LinksSection from '../../../dist/renderers/robot/LinksSection.js';
 import { useLinkSelection } from '../../../dist/renderers/robot/useLinkSelection.js';
 import { useRobotReferences } from '../../../dist/renderers/robot/robotReferences.js';
-import FileSidebar from '../../../dist/renderers/kit/tools/FileSidebar.js';
+import FlatPanel from '../../../dist/renderers/kit/shell/FlatPanel.js';
 
 Object.assign(globalThis, { React });
 afterEach(cleanup);
@@ -73,10 +73,10 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
   };
   const { references, chips } = useRobotReferences({ robot: payload, components, selection: observed, groupNamesByLink, meshPath, resource: { kind: 'workspace-file', path: '/work/arm.urdf' }, onOpenFile });
   return <>
-    {/* In the file sidebar, as it ships: a section its Links tile opens, headed by its search box. */}
-    <FileSidebar layout={{ panels: {}, collapsed: {} }} onLayoutChange={() => {}}>
-      <LinksSection robot={payload} components={components} parts={parts} selection={observed} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>
-    </FileSidebar>
+    {/* In the view's panel, as it ships: its Links tab, searched by the panel's search box. */}
+    <FlatPanel mode="docked" open onClose={() => {}} label="Model panel" searchLabel="Search the model" searchPlaceholder="Search"
+      sections={<LinksSection robot={payload} components={components} parts={parts} selection={observed} hiddenPartIds={hiddenPartIds} onVisibilityChange={onVisibilityChange}/>}
+      tab="tree" onTabChange={() => {}} width={240} maxWidth={480} onWidthChange={() => {}} focusSearch={0} />
     {chips.length ? <section aria-label="Reference details" data-references={JSON.stringify(references.map((reference: any) => reference.target.selectors))}>
       {chips.map((chip: any) => <div key={chip.key} aria-label={`Chip ${chip.label}`} data-copy={chip.copy}>
         {chip.card}<button type="button" onClick={chip.onRemove}>Remove {chip.label}</button>
@@ -87,18 +87,14 @@ function Harness({ spy = {} as Record<string, (...args: any[]) => void>, payload
 const chipLabels = () => within(screen.getByRole('region', { name: 'Reference details' })).getAllByRole('generic', { name: /^Chip / })
   .map(chip => chip.getAttribute('aria-label'));
 const rows = () => within(screen.getByRole('list', { name: 'Robot links' })).getAllByRole('button', { name: /^Select / }).map(row => row.getAttribute('aria-label'));
-const filter = () => screen.getByRole('textbox', { name: 'Filter links' });
+const filter = () => screen.getByRole('textbox', { name: 'Search the model' });
 
 it('draws the kinematic tree collapsed below the first real choice, with each link’s joint beside it', () => {
   render(<Harness/>);
-  // Its tile is named for the section and opens it; its head is the search box, no heading, and the X that closes it.
-  const tile = within(screen.getByRole('group', { name: 'File sidebar' })).getByRole('button', { name: 'Links' });
-  fireEvent.click(tile);
-  expect(tile.getAttribute('aria-pressed')).toBe('true');
-  const head = document.querySelector<HTMLElement>('[data-sidebar-head]')!;
-  expect([head.contains(filter()), filter().getAttribute('placeholder'), head.querySelector('[data-tool-panel-heading]')]).toEqual([true, 'Filter…', null]);
-  fireEvent.click(within(head).getByRole('button', { name: 'Close links' }));
-  expect(tile.getAttribute('aria-pressed')).toBe('false');
+  // Its tab is named for the section and is open; the panel's search box searches it, and the tab draws no heading of its own.
+  expect(screen.getByRole('tab', { name: 'Links' }).getAttribute('aria-selected')).toBe('true');
+  const tab = document.querySelector<HTMLElement>('[data-flat-panel-section="tree"]')!;
+  expect([tab.contains(filter()), filter().getAttribute('placeholder'), tab.querySelector('[data-tool-panel-heading], h3')]).toEqual([false, 'Search', null]);
   // base_footprint is only a frame (no geometry, no mass, base_link fixed to it): it has nothing
   // to select or read back, so it gets no row and base_link leads the tree.
   expect(rows()).toEqual(['Select base_link', 'Select shoulder_link', 'Select camera_link']);
@@ -225,7 +221,8 @@ it('filters to a flat ranked list by link, joint or object name without expandin
   expect(within(screen.getByRole('list', { name: 'Link search results' })).getByRole('button', { name: 'Select flange' })).toBeTruthy();
 
   fireEvent.change(filter(), { target: { value: 'nothing here' } });
-  expect(screen.getByText('No link matches “nothing here”')).toBeTruthy();
+  // Nothing found is the panel's to say, once, for every tab.
+  expect(screen.getByText('Nothing matches “nothing here”')).toBeTruthy();
 
   // Typing never touched the tree's expansion.
   fireEvent.click(screen.getByRole('button', { name: 'Clear filter' }));

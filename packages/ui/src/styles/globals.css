@@ -35,12 +35,10 @@
   min-height: 40px;
 }
 /* The navbar, and Preview's bar in its place, a 48px row of 36px controls (Preview's settings docked
-   under it); a section's heading in the file sidebar 36px, its buttons 32px. */
+   under it). */
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) { height: 48px; }
 [data-viewer-layout="mobile"] :is([data-viewer-navbar], [data-preview-bar]) :is(button, a) { min-height: 36px; min-width: 36px; }
 [data-viewer-layout="mobile"] [data-preview-panel] { top: 48px; }
-[data-viewer-layout="mobile"] [data-sidebar-head] [data-tool-panel-heading] { height: 36px; }
-[data-viewer-layout="mobile"] [data-sidebar-head] button { min-height: 32px; min-width: 32px; }
 [data-viewer-layout="mobile"] [data-select-trigger], [data-viewer-layout="mobile"] [data-slot="select-trigger"] { min-height: 36px; }
 /* A slider anywhere on a phone (Position's joints, Display's settings, a tool's row): a 36px band to
  * press in — the band takes the finger, so the thumb need only be seen: 16px. The selected ink's
