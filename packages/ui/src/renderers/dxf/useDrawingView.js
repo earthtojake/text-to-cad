@@ -70,6 +70,8 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
   const sizeRef = useRef({ width: 0, height: 0 });
+  // Where the pane last stood on screen (its left and top), to tell its edge moving from its window resizing.
+  const placeRef = useRef(null);
   const transformRef = useRef(null);
   const fitScaleRef = useRef(0);
   // The person has framed this drawing themselves: a resize must not take it back,
@@ -171,6 +173,11 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       const height = Math.max(0, Math.round(rect.height));
       const previous = sizeRef.current;
       if (width === previous.width && height === previous.height) return;
+      // Where the pane stood on screen before: a pane whose own edge moved (the panel docked or
+      // taken away beside it) is told apart from one whose window resized.
+      const before = placeRef.current;
+      placeRef.current = { left: rect.left, top: rect.top };
+      const edgeMoved = before !== null && previous.width > 0 && (Math.round(before.left) !== Math.round(rect.left) || Math.round(before.top) !== Math.round(rect.top));
       // What the pane held in its middle, and how far the view was from the fitted scale.
       // Both are read BEFORE the size changes: a view the person chose is carried across a
       // resize in those terms rather than in pixels (see below).
@@ -190,6 +197,16 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       // cached context has to be re-read along with the picture.
       contextRef.current = canvas.getContext("2d");
       refit(false);
+      // A pane whose edge moved because the panel docked beside it (or left): a view the person
+      // framed keeps its scale and stays still on screen, so toggling the panel never zooms or
+      // slides the drawing (the board's way, `useFlatCanvasView.js`). A view still the fit has
+      // just refitted to the room it has now.
+      if (edgeMoved && movedRef.current && transformRef.current) {
+        const held = transformRef.current;
+        moveTo({ scale: held.scale, offsetX: held.offsetX + before.left - rect.left, offsetY: held.offsetY + before.top - rect.top });
+        paintNow();
+        return;
+      }
       // A view the person framed is not taken back by a resize — but it must not keep an
       // absolute pixel scale either, or a pane that narrows (the window resizing) simply
       // crops the drawing where it stands. So it keeps what it MEANT: the same zoom

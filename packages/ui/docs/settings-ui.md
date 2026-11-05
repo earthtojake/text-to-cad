@@ -1,12 +1,12 @@
 # Viewer interaction and settings design system
 
-This is the binding contract for the viewer's tools, its file sidebar and its
+This is the binding contract for the viewer's tools, its panel and its
 settings, in both apps. Build from the shared pieces — the
 [toolbar button](../src/primitives/toolbar-button.jsx),
 [FloatingToolBar](../src/renderers/kit/tools/FloatingToolBar.js),
 [SubToolbar](../src/renderers/kit/tools/SubToolbar.jsx),
 [ToolPopover](../src/renderers/kit/tools/ToolPopover.jsx),
-[FileSidebar](../src/renderers/kit/tools/FileSidebar.jsx),
+[FlatPanel](../src/renderers/kit/shell/FlatPanel.jsx),
 [ToolStack](../src/renderers/kit/tools/ToolStack.jsx),
 [ToolPanel](../src/renderers/kit/tools/ToolPanel.jsx),
 [the floating surface](../src/lib/floatingSurface.js) and the
@@ -20,17 +20,17 @@ FileViewer owns the navbar — the logo's app menu ([Settings](#settings)) inclu
 the host's `links` and the `appSettings` `CadViewer` hands it — and the name menu (a popover
 under the file's name: Models and Files, the file explorer). RendererShell owns the scene's chrome: the tool strip and
 the view's controls at its end (Projection, Display, Preview), the sub-toolbar of the tool in hand under
-it, the file sidebar, Quick Edit, the view cube and Preview, with Preview's own bar in the navbar's place. Renderers supply
-their tools, their tools' rows, their sidebar sections and their document state; the shell never
+it, the view's panel, Quick Edit, the view cube and Preview, with Preview's own bar in the navbar's place. Renderers supply
+their tools, their tools' rows, their panel's sections and their document state; the shell never
 inspects a format's parts, joints or topology. No pick or tool opens or closes the explorer.
 
 | The host (web, the CAD app) supplies | The shared UI decides |
 | --- | --- |
-| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the file sidebar's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@cad/ui/tab-store`, `kit/shell/fileView.js`) |
+| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the view's panel's and tool stack's layout, the appearance, the home's layout, the folder the explorer was last in) and the view of the file on screen (its camera, Display settings, Preview's Render settings, its playback settings, and renderer slices), what is written when, and what is never stored (`@cad/ui/tab-store`, `kit/shell/fileView.js`) |
 | `chrome` (the navbar, `"page"`, or the view alone, `"bare"`), `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings), `colorScheme` (the person's theme and how it changes) | The navbar's order and look, over a file and over the home, the app menu (one menu in the viewer and on the home) and what a new issue says |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `promptFiles` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
-| `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool strip and sidebar, the camera |
+| `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool strip and panel, the camera |
 
 Hosts pass no Preview or notification props; there are none. A host's one say over the chrome
 is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
@@ -177,7 +177,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   pick in the explorer does, Up and Down walk the filter and the rows, and there is no footer: the
   home is one click away. **Files** is the file explorer (`FolderExplorer.jsx`),
   below. The menu is as tall as its rows up to 28rem or the room below it: past that its list
-  scrolls. It floats over the view and the file sidebar, so opening it resizes and moves
+  scrolls. It floats over the view and its panel, so opening it resizes and moves
   nothing. The explorer starts in the open file's folder; a model, which has no file of its
   own, starts it where the explorer was last in this tab (the tab's `explorer.folder`, kept as
   it moves), else in the person's home folder (the server's `home`), never in the folder of the
@@ -186,7 +186,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   folders on the way to it), which holds each model's `documents/<id>/document.xbf` — in compact rows: one 24px
   line of 12px text each, its kind a small light glyph in one column 5px in from the row's
   left end and 4px before the name (a folder its disclosure chevron, with no folder icon; a
-  file its glyph), as the file sidebar's trees draw theirs. Every CAD file, whatever its kind, has
+  file its glyph), as the panel's trees draw theirs. Every CAD file, whatever its kind, has
   one glyph, lucide's plain `File` (`EntryIcon.jsx`), and a model, built from code, lucide's `Box`
   (`DocumentGlyph.jsx`), both 16px wherever documents are listed: the Home's tiles and table,
   the explorer and the name menu (in a compact row drawn 2px past each side of the 12px glyph
@@ -218,10 +218,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   section), in every host, with a navbar or without. 24px tiles with 14px icons,
   an even 4px apart, a tool's chevron touching its button, in a 34px row (`FloatingToolBar`,
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
-  ([mobile](#the-file-sidebar-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
+  ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
   20px wide, in one row that never wraps. Centre it on the viewport whenever it fits;
-  clamp its position to keep 8px from the edges and from the file sidebar's tile at its left.
-  Its available width still uses all the room after that tile. What does not fit goes into
+  clamp its position to keep 8px from the edges and, on a phone, from the panel's pill at its left.
+  Its available width still uses all the room after that pill. What does not fit goes into
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
   in hand, and Projection's and Display's rows open their choices as nested submenus
@@ -232,13 +232,13 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   buttons are the strip's 36px tiles and its sliders as tall, the slider rows 20rem wide.
 - **Tool stack** under the sub-toolbar, in the same centred column: a renderer's own
   `toolPanels`, where it hands any (see
-  [The file sidebar and the tool stack](#the-file-sidebar-and-the-tool-stack)). The column
+  [The view's panel and the tool stack](#the-views-panel-and-the-tool-stack)). The column
   stops 8px above the cube's line (`VIEWPORT_STACK_BOTTOM`), so it never runs past the
   view.
 - **The view's panel**, docked at the left: one search over a tab per section of what there is
   to read of the file — a STEP assembly's Model tree, a robot's Links, Position, an SDF's
-  metadata — whatever tool is in hand; collapsed, a pill at the canvas's top-left; on a phone the
-  whole view (see [The view's panel](#the-file-sidebar-and-the-tool-stack)). A file with no
+  metadata, a drawing's Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; on a phone the
+  whole view (see [The view's panel](#the-views-panel-and-the-tool-stack)). A file with no
   section (a mesh) has none.
 - **Quick Edit** at top-right, 8px in, a STEP's or a robot's: the box of the note a
   person writes to their agent, there only while something is picked, drawn or measured
@@ -287,7 +287,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
 its knobs are Select's, while Select's filter picks Position, and its controls are a
-tab of the [view's panel](#the-file-sidebar-and-the-tool-stack); the file's routines play from the
+tab of the [view's panel](#the-views-panel-and-the-tool-stack); the file's routines play from the
 playbar under the model (see [Preview](#camera-animation-and-preview)). A file with no tools
 and no 3D view has no strip at all.
 
@@ -321,7 +321,7 @@ the **Position** pose. They replace each other: exploding puts the pose back at 
 default, and using Position (a knob dragged, a value set or a named pose chosen) takes
 Explode off, with nothing set aside to come back. While the model is exploded there are no
 knobs. Its popover closed, the explosion stays under every tool until Position is used. A
-routine played from the Animation section is the third motion: playing it puts Explode and the
+routine played from the playbar is the third motion: playing it puts Explode and the
 pose back at rest, and using either puts the routine back at rest; paused, its frame stays on the
 model as a pose does. Preview's routine is its own and moves nothing of the tools view's.
 Another file has the motions its tools have, under the same rule, decided by value
@@ -351,7 +351,7 @@ free to overlap the view — and closes with no exit animation, so a quick secon
 included) always reaches its trigger. Choosing a value closes it; ticking an option leaves
 it open, as do Clip's axes and the app menu's Theme. Menu checks sit on the right. The other dropdowns over the viewport are Display,
 the sub-toolbars' (Clip's axis and settings, the drawing tools' colour, stroke width and placement), its
-context menu, and the Animation section's routine and Playback settings (`PlaybackMenu.jsx`, on
+context menu, and the playbar's routine and Playback settings (`PlaybackMenu.jsx`, on
 `ToolPopover`). Preview's settings are a panel, not a dropdown (see [Preview](#camera-animation-and-preview)).
 
 **Select's menu** (`kit/tools/select/SelectFilterMenu.jsx`) is a CAD tool's selection
@@ -534,84 +534,28 @@ outside the new box. Explode is offered only where there are parts to separate: 
 assembly and a GLB of several rigid nodes. A STEP part file has no Explode tile, as it has no
 Model tree (`STEP_PART_VIEW_FEATURES`).
 
-## The file sidebar and the tool stack
-
-**The file sidebar** (`kit/tools/FileSidebar.jsx`) is a DXF drawing's, for its **Layers**, where it
-has four or more layers or any block reference (a flat pattern's CUT and BEND has none): each
-layer's pen, name, entity count and eye, its block references under it. Every other view's sections
-are tabs of the view's panel (below: a 3D view's Model tree or Links, Position and SDF; a board's
-and a schematic's Circuit, Layers and Hierarchy). The strip is for using tools, the sidebar for
-reading the file. A drawing with no Layers section has no sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
-its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
-section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
-drawing's), Position's a spline, Animation's a
-clapperboard, any other section's a page named for it (a section names its own with `ToolPanel`'s
-`icon`; no two tiles of a file share one). Preview has no file sidebar: every
-section stays mounted, out of sight, and a routine plays from Preview's playbar.
-
-- **One section at a time.** None is open as a file opens. A tile opens its section in a panel
-  under the toolbar, 8px below it, and is pressed while it is open; another tile opens its
-  section in the panel instead; a second press of its tile closes it, and so does the X that
-  ends the section's head. The panel slides in from the left as a section opens with none open
-  before, and back out as the last closes (200ms, none under reduced motion); from one section to
-  another it stays where it is. Closed, the panel is out of reach (`inert`). Every section stays
-  mounted, open or not, so a tree keeps its expansion, search and scroll. Nothing folds: a
-  section is its head and its body.
-- **Sections.** Each section is a `ToolPanel` drawn as one: a 24px head — its name 12px in from
-  the panel's edge, what its body puts there (`ToolPanelHeadAction`: Position's and Animation's
-  Reset), then its X — and its body. A tree's head is its filter instead of its name, the X
-  after it. The section is its content's height and the panel as tall as it is, up to its cap;
-  past that the whole panel scrolls, as one, the head pinned to its top
-  (`data-pinned`). A tree's rows are mounted as that scroll brings them into view
-  (`kit/inspector/VirtualRows.jsx`).
-- **Filter.** A tree is headed by its filter ("Filter model", "Filter links": "Filter…"), in place of a title,
-  always there, a tree row's 24px and 11px text, its icon over the rows' glyph column
-  (`primitives/tree-filter.jsx`'s `TreeFilterInput`, `dense`), its X clearing it once something
-  is typed, Escape too. The model tree's filter is followed by **Show all** while parts are hidden. Every tree's search is one ranked flat search
-  (`kit/inspector/modelTreeSearch.js`).
-- **Size, each section's own.** A section's panel opens a tool panel's width
-  (`TOOL_PANEL_WIDTH`, 164px) and as tall as its section, capped at the room under the toolbar.
-  It is sized from its bottom-right corner alone, by Quick Edit's grip (`kit/tools/ResizeGrip.jsx`):
-  width and cap together, by pointer, or by keyboard (a separator named "Resize file sidebar":
-  Left/Right nudge the width and Up/Down the cap by 16px, Home and End take both to their
-  bounds). Its width runs from 120px (`FILE_SIDEBAR_MIN_WIDTH`: room for a heading's name and its
-  buttons; a tree's names truncate) to half the viewer, its cap from 64px to its room. One write,
-  when the gesture lets go (or per key), never per pointer move; each section keeps its own size
-  (`sidebar:<id>`), so the model tree may be wide and tall while Position stays narrow.
-- **On a phone** the sidebar is one touch tile, **Sidebar** (a menu icon,
-  `data-file-sidebar-toggle`), at the left of the strip's line, the strip padded clear of it on
-  both sides and keeping to its tools (`FileSidebar`'s `phone`). It opens one panel on the section
-  last open (the first, at first): its top a row of tabs, one per section with its tile's icon
-  (shadcn's `ToggleGroup`, `data-file-sidebar-tab`), and the panel's one X at that row's right end
-  (a section's head then has none; a panel of one section has no tabs and keeps its head's X).
-  The panel runs down to the view's bottom inset, or is as tall as its section if that is less,
-  stopping above Quick Edit's peek (`--cad-quick-edit-peek`), at a phone's own width (288px,
-  within the view's inset), with no grip. Its text is the panel's one size (13px, as the
-  Display menu's), its tree rows 36px with 16px glyphs, its filter, dropdowns and value fields
-  32px (`globals.css`). Preview hides it, as on a desktop.
-- **The layout is the person's.** The section sizes are one of the tab's settings, across its
-  files (`CadPreferences.toolStack`: `{ panels: { [id]: { width?, height? } }, collapsed: { [id]: boolean } }`,
-  a section's panel under `sidebar:<id>`, kept beside the appearance; any other key a stored
-  record carries is dropped). `panels` holds only what a person set; `collapsed` is the tool
-  stack's folded panels. Which section is open is not kept: a file opens with none. A new tab (a
-  cleared record) puts everything back at its defaults.
+## The view's panel and the tool stack
 
 **The view's panel** (`kit/shell/FlatPanel.jsx`; a board's and a schematic's `FlatViewFrame.jsx`, a
-3D view's `RendererShell.jsx`, one state, `useFlatPanelState`) holds what there is to read of the
+3D view's `RendererShell.jsx`, a drawing's `DxfRenderer.jsx`, one state, `useFlatPanelState`) holds what there is to read of the
 file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
 with a rule at its right, and the canvas the narrower for it (the strip stays at the view's centre,
-panel open or not). Its tabs: a board's Circuit and Layers, a schematic's Circuit and Hierarchy
-(handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
+panel open or not). Its tabs: a board's Circuit and Layers, a schematic's Circuit and Hierarchy,
+a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model tree** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
 **Position**), a section's head actions (Position's Reset, the Model tree's Show all) a row at the
 top of its tab, and the trees searched by the panel's search box. A file's routines are no tab:
-they play from the playbar under the model. A mesh, with no section, has no panel.
+they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
+drawing with nothing for its Layers to say (fewer than four layers drawn on and no block
+reference: a flat pattern's CUT and BEND). The strip is for using tools, the panel for reading the
+file.
 
 - **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
-  the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; then **Hide
+  the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; "Search the
+  drawing", "Layers, blocks"; "Search the model", "Search"; then **Hide
   panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
   weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
@@ -638,6 +582,13 @@ they play from the playbar under the model. A mesh, with no section, has no pane
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
   making it the active layer (a filled dot after its name), drawn on top. How the board is drawn is
   the strip's (below), not the panel's.
+- **A drawing's Layers** (`dxf/LayersSection.jsx`): each layer drawn on, in the drawing's order, its
+  pen, name, entity count and eye (hidden: not drawn, picked or snapped to), and under a layer the
+  block references placed on it, open, a press on one picking it as a tap on the drawing does
+  (Shift adds). A layer with blocks under it leads with its chevron, the others with an empty
+  column of its width, so every pen stands on one line and a block's glyph under its layer's pen,
+  the layer's guide down the chevron's middle. Searching, the layers whose names match, and the
+  blocks whose names do under their layer.
 - **A board's view controls** (`board/BoardDisplay.jsx`'s `boardViewControls`) end the strip after
   its rule, where a 3D view's Display and Projection stand: **Flip board** (lucide's
   FlipHorizontal2, pressed while the board is seen from below, mirrored, its back layers on top),
@@ -668,16 +619,18 @@ they play from the playbar under the model. A mesh, with no section, has no pane
 - **Open, it is always docked**: the canvas is the narrower for it, at any width. Showing or hiding it
   never zooms the picture: a view the person has moved keeps its scale and stays still on screen
   (what was beside the panel is where it was), and a view still at its fit refits to the room it has
-  now (`kit/viewport/useFlatCanvasView.js`: a pane whose own edge moved, as against a window resized,
+  now (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`: a pane whose own edge moved, as against a window resized,
   which keeps the zoom relative to the fit, centred). Under 1024px of
   view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**
   (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
   whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
-  Quick Edit's sheet keeps the bottom.
+  Quick Edit's sheet keeps the bottom. There its text is one size (13px, the Display menu's), its
+  search a 36px field and its tabs 32px, its tree rows 36px with 16px glyphs, its dropdowns and
+  value fields 32px and a joint's row 44px (`globals.css`, `[data-flat-panel="page"]`).
 
 **The tool stack** (`ToolStack`) is the column under the strip and the sub-toolbar, centred
 with them, for a renderer's own `toolPanels`. STEP and the robot renderer hand none: their
-tools' controls are sub-toolbars and what there is to read of their files is the sidebar's.
+tools' controls are sub-toolbars and what there is to read of their files is the panel's.
 Its panels follow these rules:
 
 - **Two kinds of panel.** A `resizable` panel is the person's to size, on its own; every
@@ -689,9 +642,9 @@ Its panels follow these rules:
 - **Heights.** A panel is exactly its content's height — never padded to a minimum. A
   resizable panel has a *cap* the content grows up to and then scrolls inside: it opens capped
   at the stack's own height (`toolPanelDefaultHeight`). A cap is never a floor.
-- **One grip, on a resizable panel only**, the sidebar's: its bottom-right corner, Quick
-  Edit's grip, moving its width and cap at once, a separator in the tab order named after its
-  panel, keyed as the sidebar's is. A folded panel has no grip: there is no height to set.
+- **One grip, on a resizable panel only**: its bottom-right corner, Quick Edit's grip, moving
+  its width and cap at once, a separator in the tab order named after its panel (Left/Right
+  nudge the width and Up/Down the cap by 16px, Home and End take both to their bounds). A folded panel has no grip: there is no height to set.
 - **Never past the viewer.** The column stops 8px above the cube's line
   (`VIEWPORT_STACK_BOTTOM`, `calc(6rem + 16px)`). When the panels need more, a `"tree"` panel
   gives way first, down to 128px or its content, then the `"details"` panels together, each in
@@ -707,21 +660,21 @@ Its panels follow these rules:
   off the app's background, lighter in the dark theme) with one border, nearly opaque, so chrome
   reads over any canvas — a flat view's, which is the app's own background, and a 3D scene's alike:
   the tool strip, its sub-toolbars, the stack's panels and a collapsed panel's pill share
-  `FLOATING_CHROME_SURFACE_CLASS` (90%, a small blur, a medium shadow); the file sidebar's panel,
+  `FLOATING_CHROME_SURFACE_CLASS` (90%, a small blur, a medium shadow); Preview's settings panel,
   mostly text, `FILE_SIDEBAR_SURFACE_CLASS` (92%); every menu and popover over the viewport, the app
   menu and Display included, `FLOATING_SURFACE_CLASS` (95%, blurred).
-- **Scrolling.** Every scroll region in the viewer's chrome — the file sidebar, a panel's
+- **Scrolling.** Every scroll region in the viewer's chrome — the view's panel, a panel's
   body, the stack's column, the explorer, a menu, the alert card — is the
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay
   bars in the theme's colours, shown while the pointer is over the region. No
   native `overflow-auto` scroller in chrome; `src/designSystem.test.js` holds it.
   The home (the model library) is a page, not chrome: it scrolls as a page does,
   with the platform's scrollbar, and only when there is more of it than fits.
-- **Nothing opens elsewhere.** A pick shows as Quick Edit's chips; the sidebar is on screen
+- **Nothing opens elsewhere.** A pick shows as Quick Edit's chips; the panel is there
   under every tool. No pick or tool opens or closes the explorer, on desktop or mobile.
 
 Tree rows inset their backgrounds 4px from the panel's edges, and the search box
-shares that inset. A tree in the file sidebar (Model tree, Links) is dense (`TreeRowSurface`'s
+shares that inset. A tree in the view's panel (Model tree, Links) is dense (`TreeRowSurface`'s
 `dense`): 24px rows in the panels' 11px text, and ONE light 12px glyph per row in one
 column, as the explorer has: a subassembly's or folded group's disclosure chevron, turned down
 while open, or a part's box (Links draws its chevrons alone), 4px before the name. The glyph
@@ -778,7 +731,7 @@ label. Checks sit at the row's right end. Choosing a mode closes the menu; ticki
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
-settings are its strip's Flip and Display (see [A flat view's panel](#the-file-sidebar-and-the-tool-stack)),
+settings are its strip's Flip and Display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)),
 and it has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
@@ -826,7 +779,7 @@ sections retain their own disclosure rules. Hover, focus and rendering never wri
 settings. Light and dark are the app menu's Theme.
 
 Type comes from the token scale only (`text-micro` 10px, `text-tiny` 11px,
-`text-xs` 12px, `text-ui` 13px, a phone's a step up: see [mobile](#the-file-sidebar-and-the-tool-stack));
+`text-xs` 12px, `text-ui` 13px, a phone's a step up: see [mobile](#the-views-panel-and-the-tool-stack));
 no pixel font sizes. Settings controls and the
 menu labels use `text-tiny`, regular weight;
 panel headings use `text-tiny` (11px) too. Sections use 8px gutters and bottom insets
@@ -914,7 +867,7 @@ on screen (`kit/status/statusLabels.js`).
 
 ## Position and references
 
-**Position** is a tab of the [view's panel](#the-file-sidebar-and-the-tool-stack), there
+**Position** is a tab of the [view's panel](#the-views-panel-and-the-tool-stack), there
 under every tool: a STEP's where the file has joints to move, a
 robot's where a joint can be driven. Its knobs in the viewport are Select's, while Select's
 filter ticks Position, and only while the parts are where the pose puts them: over an explosion
@@ -982,11 +935,10 @@ annotations a note can carry has it (a STEP's, a robot's); a compact host gets n
 Preview puts it away with the tools. While the view loads it is out of sight, its note
 and its state kept. It is essential, so no setting turns it off.
 
-The sidebar and Quick Edit keep their corners, 8px in, and neither reaches under the tool
-strip or its tool's row: the sidebar's panel is never wider than the room left of the strip
-(`--cad-file-sidebar-max-width`), and the top-right column starts past the strip's right edge
-(`--cad-top-right-left`), both measured by the shell (`RendererShell.jsx`), so the strip is never
-covered. They may overlap each other.
+Quick Edit keeps its corner, 8px in, and never reaches under the tool strip or its tool's row:
+the top-right column starts past the strip's right edge (`--cad-top-right-left`), measured by
+the frame (`RendererShell.jsx`, `FlatViewFrame.jsx`, `DxfRenderer.jsx`), so the strip is never
+covered. The view's panel is docked beside the canvas, never over it.
 
 On a phone Quick Edit is a bottom sheet, shadcn's drawer as it ships (`primitives/drawer.jsx`,
 vaul): full width, non-modal, never swiped away (its X clears it). It opens at a peek of its
@@ -1137,11 +1089,11 @@ anything in either; they stay while the pointer is on either, while something in
 focus (a menu of theirs open among them) and while the settings are open. Gone, they let presses
 through to the model, and hiding never touches the routine. Under the bar's right end, docked at
 the view's right edge, the settings panel (`kit/shell/PreviewSettings.jsx`), which slides in and out
-from that edge with the file sidebar's own motion (`SIDEBAR_SLIDE_CLASS`), closed each time Preview
+from that edge (`SIDEBAR_SLIDE_CLASS`, 200ms, none under reduced motion), closed each time Preview
 opens and put away by its button or its own X: **Orbit** — its heading's checkbox turns the camera about the model, off every
 time Preview opens, and its **Speed** is a dropdown of speeds — then Render's own settings
-page (see [Display settings](#display-settings-and-section-primitives)). Preview has no file
-sidebar (hidden, so a tree keeps its state); a file with routines has Preview's own routine in a
+page (see [Display settings](#display-settings-and-section-primitives)). Preview has no
+panel (hidden, so a tree keeps its state); a file with routines has Preview's own routine in a
 playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`), which fades with the bar.
 Escape leaves Preview too, once an open dropdown has closed. Explode and Clip are the tools
 view's alone.
@@ -1214,11 +1166,11 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   then the drawing surface's canvas (Pencil's or Shapes') spends its own Escape; then the selected ink; then an unfinished
   measurement; then the tool in hand, any but Select, which goes down and takes Select up, what
   it set kept; then the renderer's own (STEP: the selection, then isolation; robots: the
-  selection). The file sidebar and the tool stack's panels are
+  selection). The view's panel and the tool stack's panels are
   never Escape's to close.
-- **The file sidebar's grip**, and a resizable panel's (its bottom-right corner), is a
-  separator in the tab order: Left/Right nudge its width and Up/Down its cap by 16px, and Home and
-  End take both to their bounds.
+- **The view's panel's grip** (its right edge), and a resizable panel's (its bottom-right corner),
+  is a separator in the tab order: Left/Right nudge its width by 16px (and a resizable panel's
+  Up/Down its cap), and Home and End take it to its bounds.
 - **Copy** (⌘C or Ctrl+C, and Ctrl+Insert) copies the view with its annotations
   while Pencil or Shapes is up, otherwise the selection's references — unless a text field
   has focus or text is selected.
@@ -1258,7 +1210,7 @@ strip's buttons (Display and Preview among them; a tool with a key shows it afte
 muted), the drawing row's tools (each with its key), the navbar's right-hand controls (the
 update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
 settings, Exit preview) and the
-Animation section's Reset are hinted by name — the strip's hints above their buttons, the
+playbar's Reset are hinted by name — the strip's hints above their buttons, the
 others' below; there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,
 the transport (play, pause, the scrubber), the drawing row's settings or labelled text

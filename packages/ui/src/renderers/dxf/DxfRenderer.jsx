@@ -23,8 +23,8 @@ import { useViewerHistory } from "../kit/shell/useViewerHistory.js";
 import { useViewerShortcuts } from "../kit/shell/useViewerShortcuts.js";
 import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
+import FlatPanel, { FlatPanelPill, useFlatPanelState } from "../kit/shell/FlatPanel.jsx";
 import FloatingToolBar, { StripTouchProvider } from "../kit/tools/FloatingToolBar.js";
-import FileSidebar from "../kit/tools/FileSidebar.jsx";
 import PreviewChrome from "../kit/tools/PreviewChrome.jsx";
 import { normalizeToolStack } from "../kit/tools/toolStackLayout.js";
 import AnnotationOverlay, { CAD_ANNOTATION_DEFAULTS } from "../kit/tools/annotate/AnnotationOverlay.jsx";
@@ -60,9 +60,11 @@ import { useI18n } from "@cad/ui/i18n";
  * snapped to its ends, centres and lines, in the unit the drawing declares (bare drawing units when
  * it declares none). What is picked and drawn is Quick Edit's (what is measured, Measure's row's), whose views are the window
  * on screen as a plan-view camera, which `cad <type> snapshot --annotation PACKET --camera authored` draws again. A drawing with
- * layers and blocks to read has a Layers section in the file sidebar (`layersSectionShown`). The
- * chrome is every view's — the strip at the top centre, the tool's row under it, the sidebar at the
- * top-left, Quick Edit at the top-right — drawn from the kit's parts around the 2D canvas.
+ * layers and blocks to read has the view's panel docked at the left (`kit/shell/FlatPanel.jsx`, a
+ * board's and a 3D view's): its search, then its Layers tab (`layersSectionShown`), kept open or
+ * collapsed as the other views' panel is, ⌘\ to show or hide it and / to search it. The chrome is
+ * every view's — the strip at the top centre of the view, the tool's row under it, Quick Edit at the
+ * top-right — drawn from the kit's parts around the 2D canvas.
  *
  * The picture comes from the BACKEND (`GET /api/v1/documents/dxf/<id>/drawing`), which runs ezdxf over the file and
  * returns flat primitives, each naming its entity. This renderer never parses DXF.
@@ -79,10 +81,8 @@ const pickPx = pointerType => (pointerType === "touch" ? TOUCH_HIT_PX : PICK_PX)
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and what hangs under it: one column at the top centre, as every view's (`RendererShell.jsx`).
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
-// On a phone with a sidebar, its one tile stands at the left of the strip's line.
+// On a phone with a panel, its pill stands at the left of the strip's line.
 const TOOLBAR_POSITION_PHONE_SIDEBAR = Object.freeze({ ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX + 46 + 8}px` });
-const SIDEBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: INSET });
-const SIDEBAR_POSITION_PHONE = Object.freeze({ top: INSET, left: INSET, bottom: `calc(var(--cad-quick-edit-peek, 0px) + ${INSET})` });
 
 function DxfSurface({ view, data }) {
   const { t } = useI18n();
@@ -399,6 +399,8 @@ function DxfSurface({ view, data }) {
   };
   // The strip's tools as last drawn: what a tool's letter takes up.
   const toolKeysRef = useRef([]);
+  // The panel's ⌘\ and / (`useFlatPanelState`'s control), while there is one.
+  const panelControl = useRef(null);
   useViewerShortcuts({
     viewerElement,
     onCopy: () => copyAction(),
@@ -411,9 +413,14 @@ function DxfSurface({ view, data }) {
     },
     onUndo: () => history.undo(),
     onRedo: () => history.redo(),
-    // A tool's letter takes it up, F fits the drawing (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => shown && pressToolKey(event, { tools: toolKeysRef.current,
-      selectDrawing: tool => annotationRef.current.selectTool(tool), fit }),
+    onChord: event => {
+      if (event.key !== "\\" || event.shiftKey || !panelControl.current) return false;
+      panelControl.current.toggle();
+      return true;
+    },
+    // / searches the panel, a tool's letter takes it up, F fits the drawing (`toolShortcuts.js`), over the strip as drawn.
+    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
+      : shown && pressToolKey(event, { tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit })),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
       if (hasOpenPopup(viewerElement?.current)) return;
@@ -492,17 +499,43 @@ function DxfSurface({ view, data }) {
     <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div> : null;
 
-  // The strip's column is measured into the view's variables, as every view's is: the sidebar's
-  // panel stops short of its left side, and the top-right corner (Quick Edit) starts past its right.
+  // ---- the view's panel: docked, or on a phone the whole view; open at first in a wide view ----
   const frameRef = useRef(null);
+  const flat = useFlatPanelState({ frameRef, mobile, enabled: layered && !toolsHidden, kind: "drawing", toolStack, onToolStackChange: changeToolStack });
+  panelControl.current = layered && !toolsHidden ? flat.control : null;
+  const panelTabs = useMemo(() => (layered ? [{
+    id: "layers", label: t("layers.title"),
+    content: <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
+  }] : []), [layered, drawing, hiddenLayers, toggleLayer, selection, t]);
+  const panelNode = layered && !toolsHidden ? <FlatPanel mode={flat.mode} open={flat.open} onClose={() => flat.setOpen(false)} label={t("drawing.panel")}
+    searchLabel={t("drawing.search")} searchPlaceholder={t("drawing.searchPlaceholder")} tabs={panelTabs} tab={flat.tab} onTabChange={flat.changeTab}
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
+
+  // How far the canvas starts from the view's left edge (the docked panel's width, open): the strip
+  // reaches back by that much, so it stands at the view's centre whether the panel is open or not.
+  const stageRef = useRef(null);
+  const [stageLeft, setStageLeft] = useState(0);
+  useLayoutEffect(() => {
+    const stage = stageRef.current, frame = frameRef.current;
+    if (!stage || !frame) return undefined;
+    const place = () => setStageLeft(Math.round(stage.getBoundingClientRect().left - frame.getBoundingClientRect().left));
+    place();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(place);
+    observer.observe(stage);
+    return () => observer.disconnect();
+  }, []);
+  // The strip's column is measured into the canvas's variables, as every view's is: the top-right
+  // corner (Quick Edit) starts past its right.
   const topControls = useRef(null);
   useLayoutEffect(() => {
-    const controls = topControls.current, viewport = frameRef.current;
-    if (!controls || !viewport) return undefined;
+    const controls = topControls.current, viewport = stageRef.current, frame = frameRef.current;
+    if (!controls || !viewport || !frame) return undefined;
     const measureColumn = () => {
       const rows = [...controls.children].map(row => row.getBoundingClientRect()).filter(box => box.height > 0);
       const top = controls.getBoundingClientRect().top;
-      viewport.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
+      // On the frame, where the drawing's fit reads it (`useDrawingView.js`).
+      frame.style.setProperty("--cad-tools-bottom", `${Math.round(VIEWPORT_INSET_PX * 2 + Math.max(top, ...rows.map(box => box.bottom)) - top)}px`);
       if (mobile || !rows.length) {
         viewport.style.removeProperty("--cad-file-sidebar-max-width");
         viewport.style.removeProperty("--cad-top-right-left");
@@ -520,62 +553,65 @@ function DxfSurface({ view, data }) {
     resized.observe(viewport);
     return () => {
       resized.disconnect();
-      for (const name of ["--cad-tools-bottom", "--cad-file-sidebar-max-width", "--cad-top-right-left"]) viewport.style.removeProperty(name);
+      frame.style.removeProperty("--cad-tools-bottom");
+      for (const name of ["--cad-file-sidebar-max-width", "--cad-top-right-left"]) viewport.style.removeProperty(name);
     };
-  }, [toolsHidden, mobile, layered]);
+  }, [toolsHidden, mobile, layered, flat.open, flat.mode]);
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps its crosshair (Annotate's layer has its own).
   const cursor = measuring ? "cursor-crosshair" : pointing && !dragging ? "cursor-pointer" : "cursor-default";
 
   return (
-    <div ref={frameRef} className="@container/cad-viewport relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
+    <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"
       data-slot="cad-file-view" data-drawing-surface data-cad-scene-backdrop="" tabIndex={-1}
       onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
-      <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={payload.loading || payload.updating ? "true" : "false"}>
-        <canvas ref={canvasRef} aria-label={t("drawing.canvas", { name: view.file.name })} role="img" data-drawing-tool={toolMode}
-          className={cn("absolute inset-0 block touch-none select-none", cursor)} />
-        {/* Measure's layer, over the drawing and under the tools: the pointer stays the drawing's. */}
-        <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
-        {annotating && shown ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
-        {empty ? (
-          <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground"
-            data-drawing-empty>
-            {t("drawing.empty")}
-          </p>
-        ) : null}
+      {flat.mode === "docked" ? panelNode : null}
+      <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">
+        <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={payload.loading || payload.updating ? "true" : "false"}>
+          <canvas ref={canvasRef} aria-label={t("drawing.canvas", { name: view.file.name })} role="img" data-drawing-tool={toolMode}
+            className={cn("absolute inset-0 block touch-none select-none", cursor)} />
+          {/* Measure's layer, over the drawing and under the tools: the pointer stays the drawing's. */}
+          <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
+          {annotating && shown ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}
+          {empty ? (
+            <p className="pointer-events-none absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-muted-foreground"
+              data-drawing-empty>
+              {t("drawing.empty")}
+            </p>
+          ) : null}
+        </div>
+        <PreviewChrome active={false}>
+          {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
+            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX - stageLeft}px` }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
+            <StripTouchProvider value={mobile}>
+              <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
+                <FloatingToolBar tools={tools} touch={mobile} />
+                {toolRow}
+                {updateStatus}
+              </div>
+            </StripTouchProvider>
+          </div>}
+          {/* The top-right: the host's notice once the drawing is on screen, and Quick Edit under it —
+              hidden, not unmounted, while the drawing loads: a note being written outlives a reload. */}
+          <ViewportTopRight notice={chromeHidden ? null : view.notice}>
+            {compact ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile}
+              resource={workspace.resource} references={references} chips={chips} nameReference={nameReference} annotation={quickEditAnnotation}
+              prompt={quickEditPrompt} onCopy={copyAction} onEscape={letGo} onClear={clearQuickEdit} disabled={!shown} />}
+          </ViewportTopRight>
+        </PreviewChrome>
+        {/* Collapsed, the panel's expand button, alone on a pill at the canvas's top-left. */}
+        {layered && !toolsHidden && !flat.open ? <FlatPanelPill touch={mobile} onOpen={() => flat.setOpen(true)} /> : null}
+        {/* Where there is no strip (a compact host), the drawing catching up says so at the top centre. */}
+        {toolsHidden && payload.updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
+          <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
+        </div> : null}
+        <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
+          operationKey={file} />
+        <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />
       </div>
-      <PreviewChrome active={false}>
-        {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
-          style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : TOOLBAR_POSITION} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
-          <StripTouchProvider value={mobile}>
-            <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-              <FloatingToolBar tools={tools} touch={mobile} />
-              {toolRow}
-              {updateStatus}
-            </div>
-          </StripTouchProvider>
-        </div>}
-        {/* The top-right: the host's notice once the drawing is on screen, and Quick Edit under it —
-            hidden, not unmounted, while the drawing loads: a note being written outlives a reload. */}
-        <ViewportTopRight notice={chromeHidden ? null : view.notice}>
-          {compact ? null : <QuickEdit key={file} className="self-stretch" hidden={chromeHidden} docked={mobile}
-            resource={workspace.resource} references={references} chips={chips} nameReference={nameReference} annotation={quickEditAnnotation}
-            prompt={quickEditPrompt} onCopy={copyAction} onEscape={letGo} onClear={clearQuickEdit} disabled={!shown} />}
-        </ViewportTopRight>
-      </PreviewChrome>
-      {toolsHidden || !layered ? null : <FileSidebar style={mobile ? SIDEBAR_POSITION_PHONE : SIDEBAR_POSITION} phone={mobile}
-        layout={toolStack} onLayoutChange={changeToolStack}>
-        <LayersSection drawing={drawing} hiddenLayers={hiddenLayers} onToggleLayer={toggleLayer} selection={selection} />
-      </FileSidebar>}
-      {/* Where there is no strip (a compact host), the drawing catching up says so at the top centre. */}
-      {toolsHidden && payload.updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
-        style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
-        <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-      </div> : null}
-      <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
-        operationKey={file} />
-      <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />
+      {flat.mode === "page" ? panelNode : null}
     </div>
   );
 }

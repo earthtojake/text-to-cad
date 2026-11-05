@@ -299,7 +299,7 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
 authoritative contract for the [toolbar](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle),
-[file sidebar and mobile layout](../../packages/ui/docs/settings-ui.md#the-file-sidebar-and-the-tool-stack),
+[view's panel and mobile layout](../../packages/ui/docs/settings-ui.md#the-views-panel-and-the-tool-stack),
 settings controls, selection and
 [Preview](../../packages/ui/docs/settings-ui.md#camera-animation-and-preview).
 Keep those rules there rather than maintaining a separate web layout
@@ -309,13 +309,14 @@ The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, its selection filter the chevron after its button; the tool in hand's
 controls are one row under the strip. An assembly's Features (Links for a robot), Position
-and an SDF's metadata are the file sidebar's, a tile each at the top-left, whatever the tool. The
+and an SDF's metadata are tabs of the view's panel, docked at the left, whatever the tool. The
 file's name in the navbar opens its name menu: Models and Files (the explorer).
 STEP and robot files have tools on a strip at the top centre; GLB, STL and 3MF have none,
 a GLB's clips or not.
 Every 3D file's strip ends in Projection, Display (its settings, a popover that opens down) and
 Preview, with the view cube at the bottom-right and Quick Edit at the top-right. DXF is a
-2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar or file sidebar.
+2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar; one with layers and blocks
+to read has the view's panel, its Layers tab.
 
 The name menu is a popover under the file's name, two tabs over the explorer's own rows:
 **Models**, the library's eight latest models (no file), by last activity, each its glyph, its
@@ -324,14 +325,13 @@ explorer: the file's folder (a model's, the folder the explorer was last in this
 person's home folder), one folder at a
 time, with "Filter files..." to find a file anywhere under it. It opens on Models over a model
 and on Files over a file. Below 600px of
-FileViewer width (a phone) the chrome is touch-sized and the file sidebar's tiles lead the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
+FileViewer width (a phone) the chrome is touch-sized and the panel's pill leads the tool strip. Preview is the shared shell's button after Display on the strip: it takes the whole page,
 hiding the navbar, the tool strip and Quick Edit, opens still (Orbit, in its settings, is
 off at every entry), draws the model in Render — the one place it is drawn — and draws its
 own bar in the navbar's place, over the view's top edge on no surface: the file's name at
 its left, Preview settings (Orbit, then Render's settings, a panel sliding in from the right
 edge) and Exit preview at its right, fading with the playbar while the pointer rests. Routines play
-from the sidebar's Animation section in the tools view, and from Preview's playbar under the model
-in Preview (on entry only with Autoplay on); the host passes no Preview props.
+from the playbar under the model, in the tools view and in Preview (on entry only with Autoplay on); the host passes no Preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another or for the home drops it, and opening it again frames it anew (see

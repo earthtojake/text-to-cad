@@ -10,7 +10,7 @@ FileViewer over a CAD client, with the six CAD renderers, the home (the model
 library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
-The viewer's tools, file sidebar, settings, tooltips and keyboard follow one
+The viewer's tools, panel, settings, tooltips and keyboard follow one
 binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. The CAD app's surrounding host controls
 remain its own.
@@ -62,8 +62,8 @@ File-tab chrome uses normal-weight type. The navbar's file name, the explorer's 
 the model tree's rows, and filter matches use muted/primary text color for emphasis,
 never bold weight. The explorer's rows are compact 24px lines in 12px text, the size of
 the section titles and the filter above them, a folder opening inline under itself; the
-file sidebar's trees (Model tree, Links) are 24px lines in its smaller 11px text
-([the file sidebar](docs/settings-ui.md#the-file-sidebar-and-the-tool-stack)). Both inset
+view's panel's trees (Model tree, Links) are 24px lines in its smaller 11px text
+([the view's panel](docs/settings-ui.md#the-views-panel-and-the-tool-stack)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
 The name menu is a popover under the navbar's file name: Models and Files as stock Tabs over
@@ -71,9 +71,9 @@ the explorer's rows (`ModelList.jsx`, `FolderExplorer.jsx`),
 17.5rem wide, no taller than 28rem or the room below it, with no resize handle. It
 floats over the view and never resizes it or moves its tools. A file's controls are
 the viewer's own: the tool strip at the view's top centre, the tool in hand's sub-toolbar
-under it, and the file sidebar's tiles at its top-left, a section's panel under them bounded by the viewer's height.
+under it, and the view's panel docked at its left, the canvas the narrower for it while it is open.
 FileViewer is mobile below 600px of its own width; progress indicators use this same
-breakpoint. The sidebar never scrolls sideways: Position's labels truncate to preserve its
+breakpoint. The panel never scrolls sideways: Position's labels truncate to preserve its
 sliders and inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
@@ -261,25 +261,26 @@ objects), Pencil, Shapes, Measure and Clip; an STL's Pencil, Shapes and Clip —
 controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx`):
 the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
-What there is to read of the file is the file sidebar at the top-left, whatever the tool
-(`kit/tools/FileSidebar.jsx`): an assembly's Model tree, a robot's Links, Position, an SDF's
-metadata, and Animation for a file with routines, a tile each at the top-left, a tile opening its
-section in a panel under them, one at a time; each section's panel is sized from its
-bottom-right grip, Quick Edit's, and keeps its own size. On a phone it is one tile, opening one panel with the sections as tabs. Sidebar sections stay mounted, so a tree keeps its scroll and expansion;
+What there is to read of the file is the view's panel, docked at the left, whatever the tool
+(`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model tree, a
+robot's Links, Position, an SDF's metadata; a board's Circuit and Layers, a schematic's Circuit and
+Hierarchy, a drawing's Layers. A file's routines play from the playbar under the model. The panel
+is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
+phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
 the description's link tree, with the Model tree's rows and search box; see
 [robot links](docs/cad-renderer.md#robot-links).
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
-the file sidebar, mobile layout, section density, keyboard scope, tooltips
-and Preview. RendererShell owns the strip and its sub-toolbar at the top centre, the file
-sidebar, Quick Edit at the top-right and the cube at the bottom-right. Preview (preview
+the view's panel, mobile layout, section density, keyboard scope, tooltips
+and Preview. RendererShell owns the strip and its sub-toolbar at the top centre, the view's
+panel docked at the left, Quick Edit at the top-right and the cube at the bottom-right. Preview (preview
 mode) is the shell's own, the one place Render is drawn — whatever the file's display mode,
 which has no Render — and takes the whole page, the navbar and the strip with it, in every
 host; in the navbar's place its own bar, on no surface, names the file and holds Preview settings
 (Orbit, off at every entry, and its speed, then Render's settings, sliding in from the right
 edge) and Exit preview, fading with the playbar while the pointer rests; for a file with
-routines, Preview's own playbar sits under the model. Routines play from the sidebar's
-Animation section in the tools view and from that playbar in Preview. Preview and the tools view are two views,
+routines, Preview's own playbar sits under the model. Routines play from the playbar
+under the model in the tools view and from Preview's own in Preview. Preview and the tools view are two views,
 each with its own viewport, scene, camera, pose and routine over the page's one GPU device:
 Preview starts from the model as authored and leaves the tools view's state untouched, and
 leaving it throws Preview's away and gives the tools view back exactly as it was
@@ -338,7 +339,7 @@ It consumes the core plot payload; authoring and DRC belong to KiCad and the `ca
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterChecklist.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
-first): its Circuit and Hierarchy in the file sidebar, the Hierarchy and a sheet symbol's double-click
+first): its Circuit and Hierarchy in the view's panel, the Hierarchy and a sheet symbol's double-click
 to move between sheets (each keeping its view for the session), and the app's theme,
 switched live; ERC belongs to the
 `cad` command.

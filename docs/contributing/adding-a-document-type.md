@@ -70,7 +70,7 @@ The rules live in the shared UI's documents; this section says which to read and
 copies none of them:
 
 - [`settings-ui.md`](../../packages/ui/docs/settings-ui.md), BINDING for every control: the toolbar
-  button, `FloatingToolBar`, `SubToolbar`, `ToolPopover`, `FileSidebar`, `ToolStack`, `ToolPanel`, the
+  button, `FloatingToolBar`, `SubToolbar`, `ToolPopover`, `FlatPanel` (the view's panel), `ToolStack`, `ToolPanel`, the
   floating surface, the tokens (`tokens.css`) and the 13px UI size.
 - [`cad-renderer.md`](../../packages/ui/docs/cad-renderer.md): the renderer kit -- shell, inspector,
   viewport, tools, camera, view settings.

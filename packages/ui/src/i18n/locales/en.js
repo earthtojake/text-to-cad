@@ -735,6 +735,9 @@ export default {
   "viewUpdate.preparingSection": "Preparing section view…",
   "drawing.canvas": "Drawing: {name}",
   "drawing.empty": "This drawing has no geometry in its modelspace, so there is nothing to show.",
+  "drawing.panel": "Drawing panel",
+  "drawing.search": "Search the drawing",
+  "drawing.searchPlaceholder": "Layers, blocks",
 
   // The trees, their rows and menus, and the details panels (a robot's, an SDF's, a drawing's).
   "tree.collapse": "Collapse {name}",

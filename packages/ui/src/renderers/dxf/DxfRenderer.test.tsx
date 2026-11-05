@@ -180,8 +180,8 @@ it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure: no Display, n
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
-  // A drawing of one layer and no blocks has nothing for a Layers section to say: no sidebar.
-  expect(pane.querySelector('[data-file-sidebar-tools]')).toBeNull();
+  // A drawing of one layer and no blocks has nothing for a Layers tab to say: no panel, and no pill.
+  expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).toBeNull();
   // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.
   expect(pane.querySelector('[data-quick-edit-box]')).toBeNull();
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
@@ -266,14 +266,14 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   dispose();
 });
 
-it('a drawing with layers and blocks has a Layers section: a layer hidden is not drawn, a block reference is picked from it', async () => {
+it('a drawing with layers and blocks has the docked panel and its Layers tab: a layer hidden is not drawn, a block reference is picked from it', async () => {
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
-  const tile = await waitFor(() => within(pane.querySelector('[data-file-sidebar-tools]') as HTMLElement).getByRole('button', { name: 'Layers' }));
-  // Its tile is a layer list's glyph, as a board's Layers is, not a tree's.
-  expect(tile.querySelector('svg.lucide-layers')).not.toBeNull();
-  fireEvent.click(tile);
-  const list = await waitFor(() => { const element = pane.querySelector('[data-drawing-layers]'); expect(element).not.toBeNull(); return element as HTMLElement; });
+  // The view's panel, a board's: docked at the left, its search, then its one tab, Layers.
+  const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
+  expect([aside.getAttribute('data-flat-panel'), aside.hidden, aside.getAttribute('aria-label')]).toEqual(['docked', false, 'Drawing panel']);
+  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Layers', 'true']]);
+  const list = aside.querySelector<HTMLElement>('[data-drawing-layers]')!;
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']);
   fireEvent.click(list.querySelector('[data-layer-visibility="CENTRE"]')!);
@@ -283,6 +283,21 @@ it('a drawing with layers and blocks has a Layers section: a layer hidden is not
   expect(inserts.map(row => row.getAttribute('data-insert-row'))).toEqual(['99', '9B']);
   fireEvent.click(inserts[0]);
   await waitFor(() => expect(within(pane.querySelector('[data-quick-edit-box]') as HTMLElement).getByRole('button', { name: 'Block M5_NUT on HARDWARE' })).toBeTruthy());
+
+  // The panel's search keeps the layers whose names match, and the blocks whose names do, under their layer.
+  const search = within(aside).getByRole('textbox', { name: 'Search the drawing' });
+  fireEvent.change(search, { target: { value: 'nut' } });
+  await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-layer-row]')].map(row => row.getAttribute('data-layer-row'))).toEqual(['HARDWARE']));
+  expect(aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')).toHaveLength(2);
+  fireEvent.change(search, { target: { value: 'zzz' } });
+  await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
+  fireEvent.change(search, { target: { value: '' } });
+
+  // Hidden, its expand button stands alone on a pill at the canvas's top-left, and brings it back.
+  fireEvent.click(within(aside).getByRole('button', { name: 'Hide panel' }));
+  const pill = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel-pill]'); expect(element).not.toBeNull(); return element!; });
+  fireEvent.click(within(pill).getByRole('button', { name: 'Show panel' }));
+  await waitFor(() => expect(pane.querySelector<HTMLElement>('[data-flat-panel]')!.hidden).toBe(false));
   dispose();
 });
 

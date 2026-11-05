@@ -40,7 +40,7 @@ terminal UI show none and are served as text clients.
   (file name)", then Default app) — no Export, as this host has no downloads;
   then, at the right, only Full size where the host can show a view full size and, last, the update
   button; Back and Forward are dropped on a phone-width view), the tool strip ending
-  in Projection, Display and Preview, the file sidebar, the view cube, and Quick Edit. In
+  in Projection, Display and Preview, the view's panel, the view cube, and Quick Edit. In
   Preview its own bar (the file's name, its settings, its exit) takes the navbar's place. A
   newer card retires the older ones. The Claude app's Code tab draws the card too, but carries none of its calls
   back: there the card tries the engine directly, else links the CAD Viewer (**A card says

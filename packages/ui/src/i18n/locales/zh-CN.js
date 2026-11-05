@@ -709,6 +709,9 @@ export default {
   "viewUpdate.preparingSection": "正在准备剖视图…",
   "drawing.canvas": "图纸：{name}",
   "drawing.empty": "此图纸的模型空间中没有几何体，因此无内容可显示。",
+  "drawing.panel": "图纸面板",
+  "drawing.search": "搜索图纸",
+  "drawing.searchPlaceholder": "图层、块",
 
   "tree.collapse": "折叠{name}",
   "tree.expand": "展开{name}",

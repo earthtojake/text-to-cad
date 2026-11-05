@@ -709,6 +709,9 @@ export default {
   "viewUpdate.preparingSection": "正在準備剖視圖…",
   "drawing.canvas": "圖面：{name}",
   "drawing.empty": "此圖面的模型空間中沒有幾何，因此沒有內容可顯示。",
+  "drawing.panel": "圖面面板",
+  "drawing.search": "搜尋圖面",
+  "drawing.searchPlaceholder": "圖層、圖塊",
 
   "tree.collapse": "收合{name}",
   "tree.expand": "展開{name}",

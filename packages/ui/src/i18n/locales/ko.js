@@ -708,6 +708,9 @@ export default {
   "viewUpdate.preparingSection": "단면 뷰 준비 중…",
   "drawing.canvas": "도면: {name}",
   "drawing.empty": "이 도면의 모델 공간에 지오메트리가 없어 표시할 내용이 없습니다.",
+  "drawing.panel": "도면 패널",
+  "drawing.search": "도면 검색",
+  "drawing.searchPlaceholder": "레이어, 블록",
 
   "tree.collapse": "{name} 접기",
   "tree.expand": "{name} 펼치기",

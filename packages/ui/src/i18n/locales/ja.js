@@ -708,6 +708,9 @@ export default {
   "viewUpdate.preparingSection": "断面図を準備中…",
   "drawing.canvas": "図面: {name}",
   "drawing.empty": "この図面のモデル空間にはジオメトリがないため、表示するものがありません。",
+  "drawing.panel": "図面パネル",
+  "drawing.search": "図面を検索",
+  "drawing.searchPlaceholder": "レイヤー、ブロック",
 
   "tree.collapse": "{name}を折りたたむ",
   "tree.expand": "{name}を展開",
