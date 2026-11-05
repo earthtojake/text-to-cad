@@ -169,7 +169,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // (`DisplayPopover.jsx`), portaled out of the pane: a file never opens with it, and it is not a tool.
   // A pane narrower than a phone's breakpoint (each of two side by side) has a phone's strip: the
   // view's controls are rows of its More menu, Projection and Display nested submenus, Preview an item.
-  const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
+  const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
   const moreButton = pane => pane.locator('[data-cad-toolbar] [data-strip-more]');
   const moreMenu = page.getByRole('menu', { name: 'More tools', exact: true });
   const display = page.getByRole('menu', { name: 'Display', exact: true });
@@ -452,7 +452,9 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  assert.equal(await pane.getByRole('button', { name: 'Home', exact: true }).count(), 0);
+  // The cube has no Home of its own: Home is the view's corner's, over it.
+  assert.equal(await pane.getByLabel('View cube', { exact: true }).getByRole('button', { name: 'Home', exact: true }).count(), 0);
+  assert.equal(await pane.locator('[data-view-corner]').getByRole('button', { name: 'Home', exact: true }).count(), 1);
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
@@ -641,7 +643,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
   const offBottom = frameBox.y + frameBox.height - cubeBox.y - cubeBox.height;
-  assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-right corner: ${offBottom}px`);
+  // Its box 2px off the bottom, its drawing 8px, as every corner control.
+  assert.ok(offBottom >= 0 && offBottom < 16, `the view cube sits just off the bottom-right corner: ${offBottom}px`);
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
   // The cube's box overhangs the right edge by 6px, so its drawing stands 8px in, as every corner control does.
   assert.ok(offRight >= -6 && offRight < 20, `the view cube stays against the right edge: ${offRight}px`);

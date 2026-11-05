@@ -124,9 +124,9 @@ const opened = async (pane: HTMLElement) => {
   await waitFor(() => expect(frames.length).toBeGreaterThan(0));
 };
 const strip = (pane: HTMLElement) => within(pane).getByRole('group', { name: 'Interaction tools' });
-// The view's corner (`ViewCorner.jsx`): Display, then the side, over the zoom pill.
+// The view's corner (`ViewCorner.jsx`): the side, over the zoom pill.
 const corner = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-view-corner]')!;
-const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
+const cornerButtons = (pane: HTMLElement) => [...corner(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label') || button.textContent);
 const box = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-quick-edit-box]');
 // The view's panel (`kit/shell/FlatPanel.jsx`), a tab of it by name, its search box, and one of its tabs' bodies.
 const panel = (pane: HTMLElement) => pane.querySelector<HTMLElement>('[data-flat-panel]')!;
@@ -134,11 +134,11 @@ const showTab = (pane: HTMLElement, name: string) => fireEvent.click(within(pane
 const searchBox = (pane: HTMLElement) => within(panel(pane)).getByRole('textbox', { name: 'Search the board' }) as HTMLInputElement;
 const tabBody = (pane: HTMLElement, id: string) => pane.querySelector<HTMLElement>(`[data-flat-panel-section="${id}"]`)!;
 // The strip's Display popover, opened if it is not.
+// How the board is drawn, now and then: the Layers tab's Preset over the layers and Layer display under them.
 const displayMenu = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement) => {
-  const shown = document.querySelector<HTMLElement>('[data-board-display-menu]');
-  if (shown) return shown;
-  await user.click(within(corner(pane)).getByRole('button', { name: 'Display' }));
-  return waitFor(() => { const found = document.querySelector<HTMLElement>('[data-board-display-menu]'); expect(found).not.toBeNull(); return found!; });
+  const tab = within(pane.querySelector<HTMLElement>('[data-flat-panel]')!).queryByRole('tab', { name: 'Layers' });
+  if (tab && tab.getAttribute('aria-selected') !== 'true') await user.click(tab);
+  return waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-flat-panel-section="layers"]'); expect(found?.querySelector('[data-board-display-settings]')).toBeTruthy(); return found!; });
 };
 /** A choice of Display's, by its accessible name: its Select opened, the option pressed. */
 const choose = async (user: ReturnType<typeof userEvent.setup>, pane: HTMLElement, name: string, option: string) => {
@@ -173,7 +173,7 @@ const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unkno
   fireEvent.pointerUp(canvas, event);
 };
 
-it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then Display and the side in the view's corner; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
+it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then the side in the view's corner; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
@@ -181,9 +181,9 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // Its view controls are the corner's, as a 3D view's are: Display, then the side, over the zoom pill; the strip has none.
+  // Its view control on the screen is the corner's side, over the zoom pill; the strip has none.
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Display', 'Side: Top']);
+  expect(cornerButtons(pane)).toEqual(['Front', 'Back']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
@@ -224,15 +224,15 @@ it('a native board uses the host language for its controls, tree and accessible 
   dispose();
 });
 
-it('a board without its index is the picture, its Display and side, and its Layers: no tools, no Parts or Nets, no Quick Edit', async () => {
+it('a board without its index is the picture, its side, and its Layers (with the preset and layer display): no tools, no Parts or Nets, no Quick Edit', async () => {
   const { board: _index, ...picture } = BOARD as any;
   readPlot = () => json(picture);
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  // No tools, so no strip; Display and the side in the corner, over the zoom pill.
+  // No tools, so no strip; the side in the corner, over the zoom pill.
   expect(within(pane).queryByRole('group', { name: 'Interaction tools' })).toBeNull();
-  expect(cornerButtons(pane)).toEqual(['Display', 'Side: Top']);
+  expect(cornerButtons(pane)).toEqual(['Front', 'Back']);
   // Its one list, with no row of tabs over it.
   expect(within(panel(pane)).queryAllByRole('tab')).toEqual([]);
   expect(within(panel(pane)).getByRole('region', { name: 'Layers' })).toBeTruthy();
@@ -647,10 +647,11 @@ it('a preset chooses the layers; the side and the pours are switches kept throug
   const view = await open();
   const { pane, dispose } = view;
   await opened(pane);
-  // The side, the corner's button nearest the pill: T, and a press makes it B, pressed.
-  await user.click(within(corner(pane)).getByRole('button', { name: 'Side: Top' }));
-  const flip = within(corner(pane)).getByRole('button', { name: 'Side: Bottom' });
-  expect([flip.textContent, flip.getAttribute('aria-pressed')]).toEqual(['B', 'true']);
+  // The side, the corner's switch over the pill: Front chosen, and a press on Back flips the board.
+  const side = within(corner(pane)).getByRole('radiogroup', { name: 'Side' });
+  expect(within(side).getByRole('radio', { name: 'Front' }).getAttribute('aria-checked')).toBe('true');
+  await user.click(within(side).getByRole('radio', { name: 'Back' }));
+  expect(within(side).getByRole('radio', { name: 'Back' }).getAttribute('aria-checked')).toBe('true');
   await user.click(within(await displayMenu(user, pane)).getByRole('checkbox', { name: 'Copper pours' }));
   // A switch is not a layer set: the preset is still the one on screen.
   expect(await choice(user, pane, 'Board display mode')).toBe('Board');

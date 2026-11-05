@@ -176,7 +176,7 @@ async function open(t, file, { panel = true } = {}) {
     // The view's controls at the strip's end, after its rule: Projection, Display (the mode in hand), then Preview.
     viewControls: () => tools.locator('[data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     // Display: its tile between Projection and Preview, the mode in hand; its menu, the modes and the Grid switch.
-    displayButton: () => tools.locator('[data-view-controls]').getByRole('button', { name: /^Display mode: / }),
+    displayButton: () => page.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / }),
     async openDisplay() {
       await robot.displayButton().click();
       await robot.displayPanel().waitFor();

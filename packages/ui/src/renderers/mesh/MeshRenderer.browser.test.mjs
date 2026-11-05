@@ -144,7 +144,7 @@ function projector(camera, box) {
     return [box.x + (dot(offset, right) / halfWidth * 0.5 + 0.5) * box.width, box.y + (0.5 - dot(offset, up) / camera.halfHeight * 0.5) * box.height];
   };
 }
-const displayButton = pane => pane.locator('[data-cad-toolbar] [data-view-controls]').getByRole('button', { name: /^Display mode: / });
+const displayButton = pane => pane.locator('[data-view-corner]').getByRole('button', { name: /^Display mode: / });
 // Display's menu: the modes, then the Grid switch.
 async function openDisplay(pane) {
   await displayButton(pane).click();

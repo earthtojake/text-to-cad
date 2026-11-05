@@ -215,7 +215,10 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   model's effects, Explode and Clip), and, for a 3D file, **Preview**, directly after the last tool, in
   the same second section with no rule between (a file with only tools that pick has it after a rule,
   as its own second section), in every host, with a navbar or without. The strip is what you do to the
-  model; how you look at it is the view's corner (**The view's corner**, below). 24px tiles with 14px icons,
+  model; how you look at it is the view's corner (**The view's corner**, below). **What goes on the
+  screen is what is changed often**: a tool, Display and Projection, a board's side, the zoom. What is
+  changed now and then goes in the view's panel or behind a menu: a board's preset and layer display are
+  its Layers tab's, Grid is Display's menu's, Zoom to selection and Zoom to 100% the zoom's menu's. 24px tiles with 14px icons,
   an even 4px apart, a tool's chevron touching its button, in a 34px row (`FloatingToolBar`,
   `data-cad-toolbar`). A file with no tools and no 3D view has no strip. On a phone
   ([mobile](#the-views-panel-and-the-tool-stack)) the tiles are 36px with 18px icons, a chevron
@@ -267,15 +270,17 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   `ProjectionToggle.jsx`), then **Home** nearest the cube (a house: the view it opened with — the
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
-  view buttons over it in the same column (a board's Display, then its side). The corner's design
+  view controls over it in the same column (a board's side: a switch as wide as the pill). The corner's design
   language is its own, for navigation only, never a tool: **round** — 28px discs with 14px icons on a
   see-through fill of the canvas's foreground (9%, 16% under the pointer, while a menu is open and while
   a state is on), no border and no shadow, 6px apart, tooltips and menus to the left; the pill is the
   same disc drawn out into a capsule, the same height and fill, − and + discs either end of the
-  percentage. A state shows on the button itself (Projection's icon, a board's T or B). The strip's
+  percentage, and a board's side the same capsule over it, its two halves the two sides side by side, the
+  chosen one raised on the stronger fill. A state shows on the control itself (Projection's icon, a
+  board's side). The strip's
   square tiles on the floating surface stay the tools'. A phone has no corner: its view's controls are
-  rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's Display and View
-  from bottom). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
+  rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
+  back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
 - **A file's routines are a playbar at the bottom centre**, in the tools view (on the strip's
   surface, Reset first; on a phone over Quick Edit's peek) as in Preview (see
@@ -627,19 +632,18 @@ file.
   column of its width, so every pen stands on one line and a block's glyph under its layer's pen,
   the layer's guide down the chevron's middle. Searching, the layers whose names match, and the
   blocks whose names do under their layer.
-- **A board's view controls** (`board/BoardDisplay.jsx`'s `boardViewControls`) are the view's
-  corner's, over its zoom pill, where a 3D view's Display and Projection stand: **Display** (a sliders
-  glyph), then **the side** nearest the pill (KiCad's View ▸ Flip Board: the letter of the side the
-  board is seen from, T or B, a press the other; from below the board is mirrored, its back layers on
-  top, and the button filled while it is). Display is a popover of the settings form's rows, opening to the left: **Display** —
+- **A board's view control on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`) is its
+  **side**, the corner's switch over the zoom pill, as wide as it (KiCad's View ▸ Flip Board View):
+  **Front** and **Back** side by side, in KiCad's words, the side the board is seen from raised, a press
+  on the other flipping it; from the back the board is mirrored, its back layers on top. The rest of how a
+  board is drawn is changed now and then, so it is the Layers tab's, as KiCad's Appearance panel has it,
+  in the settings form's rows: over the layers **Display** —
   **Preset**, the modes as a Select (Board, Copper, Assembly, Placement, and Custom while the Layers
-  tab's eyes have left the mode's set) — and **Layer display**: **Others** (KiCad's high-contrast
+  tab's eyes have left the mode's set) — and, under them, **Layer display**: **Others** (KiCad's high-contrast
   modes, a Select: every layer but the active one **Shown**, **Dimmed** or **Hidden**; the outline, and
   with a copper layer active every drill and via through it, stay at full strength; **Ctrl+H** (⌘H)
   cycles them while the board has the keyboard), **Pours** (a checkbox, while copper is drawn), and
-  the **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed values. On a
-  phone they are rows of the strip's More: Display opening its popover from More, View from bottom
-  ticked while it is on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
+  the **Zones**' (60%) and **Tracks**' (100%) opacities, sliders with their committed values. On a phone the side is a row of the strip's More, View from the back, ticked while it is on. All of it is the board's Display (`plot2d/boardDisplay.js`), which `cad kicad_pcb
   snapshot --display` draws too. A schematic has none: its colours are the theme's.
 - **The Hierarchy** (`schematic/SheetsSection.jsx`), KiCad's Hierarchy Navigator: the root (by its
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
@@ -771,7 +775,7 @@ label. Checks sit at the row's right end. Choosing a mode closes the menu; ticki
 toggles it and leaves the menu open (`onSelect` prevents the close). Clicking outside or
 pressing Escape closes it. Opening it leaves the active tool and its controls in place. A
 DXF view has no Display or Preview control. A native KiCad board has none on the strip: its view
-settings are its corner's Display and side (see [A flat view's panel](#the-views-panel-and-the-tool-stack)),
+settings are its corner's side and its Layers tab's preset and layer display (see [A flat view's panel](#the-views-panel-and-the-tool-stack)),
 and it has no 3D Projection or Preview. It follows the theme as every view does: the app's own canvas
 (white, or the neutral dark grey) and a palette for it (`plot2d/theme.js`: KiCad's default colours
 on the dark one, the same hues darkened to 3:1 on white on the light one), its highlight, hover and
