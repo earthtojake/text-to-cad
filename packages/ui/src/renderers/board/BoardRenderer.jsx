@@ -502,7 +502,8 @@ function BoardSurface({ view, data }) {
       updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : []}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
-      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} onFit={fit}>
+      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
+      zoom={{ ...boardView.zoom, zoomToSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 }}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
         className={cn("absolute inset-0 block touch-none select-none", cursor)} />
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}

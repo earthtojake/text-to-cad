@@ -689,6 +689,9 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   return applied;
 }
 
+/** What the controls announce when the camera's zoom moved without them (a transition's step, a zoom step): the zoom readout's. */
+export const CAMERA_ZOOMED_EVENT = "cad-zoomed";
+
 export function stepCameraTransition(runtime, timestamp) {
   const transition = runtime?.cameraTransition;
   if (!transition || !runtime?.THREE || !runtime?.camera || !runtime?.controls) {
@@ -734,6 +737,7 @@ export function stepCameraTransition(runtime, timestamp) {
     runtime.camera.updateProjectionMatrix?.();
   }
   runtime.camera.lookAt(target);
+  runtime.controls.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
 
   if (progress >= 1) {
     if (transition.resetZoomBaselineOnComplete) {

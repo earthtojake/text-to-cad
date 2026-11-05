@@ -205,7 +205,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // Display's submenu lists the modes, then Grid, which toggles and leaves it open.
   await moreButton(first).click();
   assert.deepEqual(await moreMenu.getByRole('menuitem').evaluateAll(items => items.map(item => `${item.textContent.trim()}:${item.getAttribute('aria-haspopup') || 'item'}`)),
-    ['Projection:item', 'Display:menu', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display opens its submenu');
+    ['Projection:item', 'Display:menu', 'Zoom:menu', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display and Zoom open their submenus');
   await moreMenu.getByRole('menuitem', { name: 'Display', exact: true }).click();
   await display.waitFor();
   assert.deepEqual(await display.getByRole('menuitemradio').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');
@@ -646,7 +646,7 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(offRight >= 0 && offRight < 20, `the view cube stays against the right edge: ${offRight}px`);
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
   assert.deepEqual(await pane.locator('[data-cad-toolbar] [data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Preview'], 'Projection, Display then Preview, at the strip\'s end');
+    ['Projection: Orthographic', 'Display mode: Solid', 'Zoom 100%', 'Preview'], 'Projection, Display then Preview, at the strip\'s end');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
 
@@ -761,14 +761,15 @@ test('a renderer says more about its load than a download: finding the file, edi
   const grip = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
   await page.mouse.move(grip.x, grip.y);
   await page.mouse.down();
-  await page.mouse.move(grip.x - 30, grip.y + 60, { steps: 2 });
+  // Wider by 30px in all: the strip's column (its zoom readout too) leaves an 800px view's box ~38px to grow.
+  await page.mouse.move(grip.x - 15, grip.y + 60, { steps: 2 });
   await settle(page);
   const midway = (await quickEdit.boundingBox()).width;
-  assert.ok(Math.abs(midway - opened.width - 30) <= 1, `mid-drag, the box is where its corner is: ${opened.width} -> ${midway}`);
-  await page.mouse.move(grip.x - 60, grip.y + 120, { steps: 2 });
+  assert.ok(Math.abs(midway - opened.width - 15) <= 1, `mid-drag, the box is where its corner is: ${opened.width} -> ${midway}`);
+  await page.mouse.move(grip.x - 30, grip.y + 120, { steps: 2 });
   await page.mouse.up();
   const resized = await quickEdit.boundingBox();
-  assert.ok(Math.abs(resized.width - opened.width - 60) <= 1, `dragged out 60px: ${opened.width} -> ${resized.width}`);
+  assert.ok(Math.abs(resized.width - opened.width - 30) <= 1, `dragged out 30px: ${opened.width} -> ${resized.width}`);
   const noteResized = (await note.boundingBox()).height;
   assert.ok(noteResized > 160 && Math.abs(noteResized - noteHeight - 120) <= 1, `and its note 120px down: ${noteHeight} -> ${noteResized}`);
   assert.ok(Math.abs(resized.x + resized.width - opened.x - opened.width) < 1, 'still hanging from the same corner');

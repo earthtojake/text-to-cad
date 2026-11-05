@@ -38,6 +38,9 @@
  * @property {SceneBounds} [restBounds]  The authored placement, unmoved by any pose: what the
  *   camera frames, what 100% zoom means and what the ground is sized from. Absent means `bounds`
  *   never moves.
+ * @property {() => (SceneBounds | null)} [shownBounds]  The box of what is shown now (hidden parts
+ *   left out, an isolated part alone, where it stands posed or exploded): what Zoom to fit frames.
+ *   Absent, the fit frames `bounds`; 100% is `restBounds`' either way.
  * @property {() => void} dispose  Release everything the scene created.
  * @property {(look: SurfaceLook) => void} [setSurfaceLook]  Wear the look the host resolved.
  *   Called on adoption and whenever it changes; a scene applies it to its own materials.

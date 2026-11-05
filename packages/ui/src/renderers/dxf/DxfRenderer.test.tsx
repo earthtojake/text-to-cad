@@ -174,17 +174,18 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure: no Display, no Preview, no view controls", async () => {
+it("a DXF's strip is Select (in hand), Pencil, Shapes and Measure, then the zoom: no Display, no Preview", async () => {
   const { pane, delivered, dispose } = await openDrawing();
   const inPane = within(pane);
   const strip = inPane.getByRole('group', { name: 'Interaction tools' });
-  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
+  expect(within(strip).getAllByRole('button').map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure', 'Zoom 100%']);
   expect(within(strip).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
-  expect(strip.querySelector('[data-strip-rule]')).toBeNull();
+  // The zoom after the tools' rule, the drawing's one view control.
+  expect(strip.querySelector('[data-strip-rule]')).not.toBeNull();
   for (const name of ['Orbit', 'Position', 'Animation', 'Preview', 'Display', 'Display settings', 'Projection', 'Explode', 'Clip']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
-  expect(pane.querySelectorAll('[data-view-controls] button')).toHaveLength(0);
+  expect([...pane.querySelectorAll('[data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Zoom 100%']);
   // A drawing of one layer and no blocks has nothing for a Layers tab to say: no panel, and no pill.
   expect(pane.querySelector('[data-flat-panel], [data-flat-panel-pill]')).toBeNull();
   // Nothing is picked, drawn or measured yet: Quick Edit is not there, and nothing went anywhere.

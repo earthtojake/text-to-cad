@@ -1,4 +1,4 @@
-import { english } from "@cad/ui/i18n";
+import { english, useI18n } from "@cad/ui/i18n";
 import { useLayoutEffect, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
 import { cn } from "@cad/ui/utils";
@@ -18,7 +18,7 @@ import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
-import ZoomFitButton from "./ZoomFitButton.jsx";
+import { zoomViewControl } from "./ZoomControl.jsx";
 
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
@@ -96,13 +96,14 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
- *   `onFit`: Zoom to fit, the corner's button (`ZoomFitButton.jsx`), where a 3D view's cube stands.
+ *   `zoom`: the view's zoom (`ZoomControl.jsx`'s), the last of the strip's view controls, as every view's (a 3D view's Preview after it).
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
-  alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, onFit = null }) {
+  alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, zoom = null }) {
+  const { t } = useI18n();
   const toolsHidden = chromeHidden || compact;
   const sided = Boolean(panel?.tabs.length);
   const besideSidebarTile = mobile && sided;
@@ -169,7 +170,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
             style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-                <FloatingToolBar tools={tools} views={views} touch={mobile} />
+                <FloatingToolBar tools={tools} views={zoom && shown ? [...(views || []), zoomViewControl(zoom, { t })] : views} touch={mobile} />
                 {toolRow}
                 {status}
               </div>
@@ -188,7 +189,6 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
-        {toolsHidden || !shown || !onFit ? null : <ZoomFitButton onFit={onFit} touch={mobile} />}
         {chromeHidden || !canvasRef || !contextMenuItems ? null
           : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
         <ViewerLoadingOverlay loading={{ opening: loading && !alert, progress: { label: loadingLabel } }} operationKey={file} />

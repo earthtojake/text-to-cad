@@ -80,5 +80,5 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
   const capture = useCallback(() => encode("drawing"), [encode]);
 
   return { containerRef: view.containerRef, canvasRef: view.canvasRef, dragging: view.dragging, fit: view.fit, frame: view.frame,
-    zoomBy: view.zoomBy, setView: view.setView, capture, thumbnail, transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
+    zoomBy: view.zoomBy, zoom: view.zoom, setView: view.setView, capture, thumbnail, transformRef: view.transformRef, sizeRef: view.sizeRef, requestPaint };
 }

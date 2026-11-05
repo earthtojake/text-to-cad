@@ -240,7 +240,7 @@ it("a robot is a 3D view: Projection, Display and Preview end the strip, in the 
   // Two sections: the tools that pick, a rule, then Clip and the view's controls, nothing between them.
   expect(strip.querySelectorAll('[data-strip-rule]')).toHaveLength(1);
   expect(actions.previousElementSibling?.getAttribute('aria-label')).toBe('Clip');
-  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Preview']);
+  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Projection: Orthographic', 'Display mode: Solid', 'Zoom 100%', 'Preview']);
   expect(robot.pane.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   robot.client.dispose();
 });

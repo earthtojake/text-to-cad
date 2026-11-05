@@ -246,11 +246,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   file handler's corner: Full size and its update). The rest of the right side of the view is clear.
 - **View cube** at bottom-right, 2px from the right and 8px off the bottom so the axes
   drawn in its lower corner never touch the edge (`VIEWPORT_CUBE_BOTTOM`), in a 6rem area:
-  enlarged face/edge/corner hit areas and neutral hover and XYZ guides. **Zoom to fit** stands at
-  its left, its foot on the cube's (`kit/shell/ZoomFitButton.jsx`, a single icon on the floating
-  chrome's surface, its tooltip naming F; no zoom readout): the view's navigation in one corner. A
-  flat view (a board, a schematic, a drawing) has no cube, and the same button alone in the same
-  corner. F, a double-click on empty space and the view's menu fit too. A host whose own
+  enlarged face/edge/corner hit areas and neutral hover and XYZ guides. It carries no button: it
+  turns the view, and the zoom is the strip's (**The zoom**, below). A host whose own
   control floats over that corner lifts it clear with `--cad-viewport-corner-bottom`, the
   room that control takes from the bottom edge. A host can instead anchor it at bottom-left
   with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`.
@@ -1073,8 +1070,22 @@ selected.
 
 Zoom to Fit recenters and frames the whole original model at the current angle;
 Zoom to Selection frames the selection and is unavailable without one. Both are
-every view's context-menu items; Zoom to Fit is also the button at the view cube's left (below), and
-the live `resetCamera` command takes the same fit path.
+every view's context-menu items and the zoom's menu's (below); the live `resetCamera` command takes
+the same fit path.
+
+**The zoom** (`kit/shell/ZoomControl.jsx`) is the strip's last view control in every view, 2D and 3D,
+as every design tool shows it (Figma's, Spline's, Penpot's, tldraw's): the zoom as a percentage, in
+tabular digits at a fixed width so the strip never shifts as it changes, and, pressed, its menu —
+Zoom in, Zoom out (half again, and back), then Zoom to fit (F) and Zoom to selection. A 3D view's
+Preview comes after it; on a phone it is More's Zoom submenu. **100% is the model as authored,
+framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`) at the camera's angle — a
+fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which
+leave the number where it is while the camera stays. **Zoom to fit frames what is shown now**
+(`scene.shownBounds()`: the parts as they stand, exploded or posed, the hidden ones left out, the
+isolated ones alone; else `bounds`), so on an exploded assembly it reads whatever that takes, 42%
+say. A rebuild whose box changed redefines 100%: an untouched camera fits again and reads 100%, a
+camera the person took stays exactly where it is and its number moves. The number is read from the
+view live (`zoomPercent()`, `subscribeCamera()`; a flat view's `zoom`), redrawn at most once a frame.
 
 **A rebuild follows the camera's owner** (`kit/camera/cameraTouch.js`). A page opens on the
 viewer's fit, and the camera is **untouched** until the person takes it: an orbit, a pan or a
@@ -1231,7 +1242,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   field or Preview, take a tool up as a design or CAD tool's do: **V** Select, **M** Measure;
   **P** the Pen, **⇧P** the Highlighter, **E** the Eraser; **R** the Rectangle, **L** the Line,
   **⇧L** the Arrow, **O** the Ellipse, **T** Text (each taking up Pencil or Shapes with that
-  tool in hand); and **F** frames the model (Zoom to fit: its button is the one at the view's bottom-right, `ZoomFitButton.jsx`). A tool already in hand stays so.
+  tool in hand); and **F** frames the model (Zoom to fit: and the zoom's menu, the strip's percentage). A tool already in hand stays so.
   Each key shows after its name in its button's tooltip ("Measure M", muted), and Pencil's and
   Shapes' tooltips name what they draw with now ("Rectangle R").
 

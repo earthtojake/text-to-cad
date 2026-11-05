@@ -704,6 +704,7 @@ function XbfSurface({ view, data }) {
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
     inkTouches={inkTouches} contextMenuItems={contextMenuItems} doubleClickFits={false}
+    zoomToSelection={{ run: zoomToSelection, available: zoomSelectionAvailable }}
     viewportOverlay={viewport => {
       viewportRef.current = viewport;
       return <>

@@ -1636,18 +1636,21 @@ from the card, with the file's name and no path of the machine.
 
 ### Camera framing and zoom
 
-Zoom to fit and the live `resetCamera` frame the original authored model bounds at
-the current angle, and that framing is 100%. A saved revision keeps a camera the person took and its
+100% is the original authored model bounds framed at the current angle. Zoom to fit and the live
+`resetCamera` frame what is SHOWN at the current angle (`scene.shownBounds()`, else `bounds`: the parts
+as they stand, exploded or posed, the hidden left out, the isolated alone), so a fit of an exploded
+assembly reads under 100%. A saved revision keeps a camera the person took and its
 zoom exactly, and fits a camera still untouched since the last fit when its box changed
 (`kit/camera/cameraTouch.js`); Zoom to fit frames the new revision and hands the camera back. Explode, clipping, animation, kinematics, visibility, floor and
 other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
 `kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
-for clipping, lighting and picking. Nothing displays that percentage; it is read
-through the `window.__cadCamera()` test seam (`zoomPercent`). The acts that frame the
+for clipping, lighting and picking. The strip's zoom shows that percentage (`ZoomControl.jsx`, the viewport's
+`zoomPercent()` and `subscribeCamera()`; a step of it is `zoomBy(factor)`), and the
+`window.__cadCamera()` test seam reads it (`zoomPercent`). The acts that frame the
 model are every view's context menu (Zoom to fit, Zoom to selection), a double-click on empty space, and the live
 `resetCamera`; the view cube (bottom-right, absent in Preview) turns
-the camera and keeps its zoom and pan, F frames the model, and so does the Zoom to fit button at the cube's left (`ZoomFitButton.jsx`), and opening a
+the camera and keeps its zoom and pan, F frames the model, as the zoom's menu does, and opening a
 file fits the model afresh (a
 reload of the page restores the camera the file on screen was left at).

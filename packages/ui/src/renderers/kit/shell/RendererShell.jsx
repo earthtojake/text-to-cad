@@ -15,6 +15,7 @@ import { modelUpdateStatus, ViewPreviewLabel, ViewUpdateStatus } from "../status
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
 import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
+import { zoomViewControl } from "./ZoomControl.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
@@ -127,6 +128,8 @@ const DOUBLE_PRESS_MS = 600;
  *   background makes it; Quick Edit's X calls it, and clears Annotate's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Annotate's copies the view with its ink); null when there is nothing to copy.
+ *   `zoomToSelection`: `{ run(), available }`, the zoom menu's Zoom to selection (`ZoomControl.jsx`): what
+ *   is picked, framed; off without it.
  *   `doubleClickFits`: a double-click on empty space under Select fits the model (`DoubleClickFit`);
  *   false for a renderer whose double-click is its own (an engine document's isolates and looks at).
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
@@ -191,7 +194,7 @@ function DoubleClickFit({ viewport, scene, active, viewerRef }) {
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
   frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
-  doubleClickFits = true }) {
+  doubleClickFits = true, zoomToSelection = null }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -470,6 +473,16 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     ? { present: frame.annotation.hasAnnotation, clear: forgetAnnotation } : null,
   [frame.annotateToolActive, frame.annotation.hasAnnotation, forgetAnnotation]);
   // The renderer's overlay and the shell's own layers share one viewport context.
+  // The strip's zoom (`ZoomControl.jsx`): the viewport's zoom against the authored box, read live.
+  const viewerRef = frame.viewerRef;
+  const zoomBase = useMemo(() => ({
+    read: () => viewerRef.current?.zoomPercent?.() ?? 100,
+    subscribe: listener => viewerRef.current?.subscribeCamera?.(listener) || (() => {}),
+    zoomBy: factor => viewerRef.current?.zoomBy?.(factor),
+    fit: () => viewerRef.current?.resetZoom?.()
+  // A model's viewport, once it is up: its camera is the one the readout follows.
+  }), [viewerRef, scene, viewerLoading]);
+  const zoom = { ...zoomBase, zoomToSelection: zoomToSelection?.run || null, selectionAvailable: Boolean(zoomToSelection?.available) };
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} active={frame.selecting} viewerRef={frame.viewerRef} />}
@@ -636,6 +649,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                       tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
                       // In a phone's More, a standard nested submenu of the same list: the modes, then Grid.
                       submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
+                    zoomViewControl(zoom, { t, disabled: shell.idle }),
                     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
                       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
                   ] : []} />

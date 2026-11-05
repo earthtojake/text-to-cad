@@ -21,7 +21,7 @@ import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiv
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
 import {
   DEFAULT_DAMPING_FACTOR, applyPerspectiveSnapshot, boundsModelRadius, cancelCameraTransition, captureRuntimeViewportFitScale,
-  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, stepCameraTransition,
+  readOrthographicHalfHeight, readPerspectiveSnapshot, readRuntimeZoomPercent, readScopedPerspectiveSnapshot, resetRuntimeZoomBaseline, setRuntimePerspectiveFocalLength, setRuntimeZoomPercent, CAMERA_ZOOMED_EVENT, stepCameraTransition,
   syncRuntimeCameraClipPlanes, syncRuntimeCameraProjection, syncRuntimeViewportFraming, transitionCameraToPerspectiveSnapshot,
   zoomRuntimeToBounds
 } from "../camera/runtimeCamera.js";
@@ -61,7 +61,6 @@ import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { useI18n } from "@cad/ui/i18n";
 import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
-import ZoomFitButton from "./ZoomFitButton.jsx";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
@@ -318,12 +317,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     finally { suppressPerspectiveEventsRef.current = Math.max(0, suppressPerspectiveEventsRef.current - 1); }
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
+  // Zoom to fit frames what is shown now: the scene's own word for it (`shownBounds`: hidden and
+  // ghosted parts left out), else where it stands posed (`bounds`). 100% is the authored box's still.
+  const fitSceneRef = useRef(scene);
+  fitSceneRef.current = scene;
+  const fitBounds = useCallback(() => {
+    const live = fitSceneRef.current;
+    return live ? live.shownBounds?.() || live.bounds || null : null;
+  }, []);
   const {
     activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef,
-    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKeyRef,
+    lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, shownBounds: fitBounds, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef,
     runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
     setViewPlaneOrientation, suppressPerspectiveEventsRef
@@ -516,6 +523,33 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    // The strip's zoom readout (`ZoomControl.jsx`): the zoom against the authored box (100%, which
+    // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
+    zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },
+    zoomBy(factor) {
+      const runtime = runtimeRef.current;
+      if (!runtime?.camera) return false;
+      const applied = setRuntimeZoomPercent(runtime, readRuntimeZoomPercent(runtime) * factor);
+      if (applied) {
+        runtime.openFitPending = false;
+        touchCamera(runtime, CAMERA_TOUCH.WHEEL);
+        emitPerspectiveChange(runtime);
+        // An orthographic step moves only the zoom, which the controls do not report: say so for them.
+        runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
+      }
+      return applied;
+    },
+    subscribeCamera(listener) {
+      const controls = runtimeRef.current?.controls;
+      controls?.addEventListener?.("change", listener);
+      controls?.addEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+      window.addEventListener("resize", listener);
+      return () => {
+        controls?.removeEventListener?.("change", listener);
+        controls?.removeEventListener?.(CAMERA_ZOOMED_EVENT, listener);
+        window.removeEventListener("resize", listener);
+      };
+    },
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
     syncSceneBounds() {
@@ -1240,9 +1274,6 @@ const ShellViewport = forwardRef(function ShellViewport({
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />
-      {/* Zoom to fit, at the cube's left, its foot on the cube's: the view's navigation in one corner, as a flat view's. */}
-      <ZoomFitButton onFit={() => resetZoomAndPan({ animate: true })}
-        beside={`calc(var(--cad-viewport-corner-right, ${VIEWPORT_CORNER_INSET_PX}px) + ${VIEWPORT_CUBE_SIZE} + 4px)`} />
       </div>}
       <ViewportError message={error} />
     </div>

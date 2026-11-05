@@ -30,7 +30,7 @@
  * idle picture draws nothing at all. A resize is the exception: resizing the canvas wipes it, so
  * the pane's observer paints at once.
  */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clampScale,
   fitTransform,
@@ -122,8 +122,11 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
 
+  // Who hears that the view moved: the strip's zoom readout (`ZoomControl.jsx`), told as each frame paints.
+  const viewListeners = useRef(new Set());
   const paint = useCallback(() => {
     frameRef.current = 0;
+    for (const listener of viewListeners.current) listener();
     const canvas = canvasRef.current;
     const { width, height } = sizeRef.current;
     if (!canvas || width <= 0 || height <= 0) return;
@@ -432,5 +435,16 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     }, "image/png");
   }), []);
 
-  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
+  /**
+   * The view's zoom for the strip's readout (`kit/shell/ZoomControl.jsx`): 100% the fit — the picture
+   * whole, as it opens and as F frames it — and the zoom steps about the pane's middle.
+   */
+  const zoom = useMemo(() => ({
+    read: () => (transformRef.current && fitScaleRef.current ? (transformRef.current.scale / fitScaleRef.current) * 100 : 100),
+    subscribe: (listener) => { viewListeners.current.add(listener); return () => viewListeners.current.delete(listener); },
+    zoomBy: factor => zoomBy(factor),
+    fit
+  }), [zoomBy, fit]);
+
+  return { containerRef, canvasRef, dragging, fit, frame, zoomBy, zoom, setView: moveTo, encode, transformRef, sizeRef, schemeRef, requestPaint, paintNow };
 }

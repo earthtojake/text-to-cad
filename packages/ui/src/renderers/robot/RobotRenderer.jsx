@@ -344,7 +344,12 @@ function RobotSurface({ view, data }) {
       : (robotRef.current?.parts || []).filter(part => part.link === hit.linkName).map(part => part.id), false) })]
   }) : null;
 
-  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
+  const zoomToSelection = {
+    available: selection.active,
+    run: () => { const box = scene?.selectionBounds?.(pickedIds()); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
     references={shell.previewing ? NO_REFERENCES : references} referenceChips={shell.previewing ? NO_REFERENCES : referenceChips}
     nameReference={nameLink}
     onClearReferences={() => { clearSelection(); measure.select([]); }}

@@ -142,7 +142,12 @@ function GlbSurface({ view, data }) {
     viewer: () => shellRef.current?.frame.viewerRef.current || null
   }) : null;
 
-  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} subToolbar={sceneTools.subToolbar} previewView={previewView}
+  const zoomToSelection = {
+    available: selection.selected.length > 0 && Boolean(scene?.selectionBounds),
+    run: () => { const box = scene?.selectionBounds?.(selectionRef.current.selected); if (box) shellRef.current?.frame.viewerRef.current?.zoomToBounds?.(box); }
+  };
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} zoomToSelection={zoomToSelection} subToolbar={sceneTools.subToolbar} previewView={previewView}
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameNode}
     onClearReferences={() => { selection.clear(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}

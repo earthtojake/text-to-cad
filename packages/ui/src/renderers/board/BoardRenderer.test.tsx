@@ -178,8 +178,8 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
     .map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
   expect(within(tools).getByRole('button', { name: 'Select' }).getAttribute('aria-pressed')).toBe('true');
   expect(within(tools).getByRole('button', { name: 'Selection filter: everything' })).toBeTruthy();
-  // Its view controls after the rule, as a 3D view's Display and Projection: Flip, then Display.
-  expect([...tools.querySelectorAll('[data-strip-rule] + [data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
+  // Its view controls after the rule, as a 3D view's Display and Projection: Flip, Display, then the zoom.
+  expect([...tools.querySelectorAll('[data-strip-rule] + [data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display', 'Zoom 100%']);
   for (const name of ['Preview', 'Projection', 'Explode', 'Clip', 'Orbit', 'Position', 'Animation', 'Settings']) {
     expect(within(pane).queryByRole('button', { name }), name).toBeNull();
   }
@@ -225,7 +225,7 @@ it('a board without its index is the picture, its Flip and Display, and its Laye
   const { pane, dispose } = await open();
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
-  expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
+  expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display', 'Zoom 100%']);
   // Its one list, with no row of tabs over it.
   expect(within(panel(pane)).queryAllByRole('tab')).toEqual([]);
   expect(within(panel(pane)).getByRole('region', { name: 'Layers' })).toBeTruthy();

@@ -42,7 +42,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import ViewportContextMenu from "../kit/shell/ViewportContextMenu.jsx";
-import ZoomFitButton from "../kit/shell/ZoomFitButton.jsx";
+import { zoomViewControl } from "../kit/shell/ZoomControl.jsx";
 import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 import { createDrawingScene, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
@@ -611,7 +611,8 @@ function DxfSurface({ view, data }) {
             style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-                <FloatingToolBar tools={tools} touch={mobile} />
+                <FloatingToolBar tools={tools} touch={mobile} views={shown ? [zoomViewControl({ ...drawingView.zoom,
+                  zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 }, { t })] : []} />
                 {toolRow}
                 {updateStatus}
               </div>
@@ -632,7 +633,6 @@ function DxfSurface({ view, data }) {
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
-        {toolsHidden || !shown ? null : <ZoomFitButton onFit={fit} touch={mobile} />}
         {chromeHidden || !contextMenuItems ? null : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />

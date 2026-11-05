@@ -23,6 +23,7 @@ export function useViewportCamera({
   lastEmittedPerspectiveRef,
   cameraMovedRef,
   modelBounds,
+  shownBounds = null,
   modelKeyRef,
   modelTransformRef,
   perspectiveChangeRef,
@@ -89,11 +90,15 @@ export function useViewportCamera({
   // fresh object every render, but the imperative reset callback must stay stable.
   const modelBoundsRef = useRef(modelBounds);
   modelBoundsRef.current = modelBounds;
+  // What the fit frames: what is SHOWN now (posed, spread apart, hidden parts gone, an isolated part alone),
+  // where the scene says it; 100% stays the authored box's (`resetRuntimeZoomBaseline`, `zeroPoseBounds`).
+  const shownBoundsRef = useRef(shownBounds);
+  shownBoundsRef.current = shownBounds;
   const resetZoomAndPan = useCallback(({ animate = true } = {}) => {
     const runtime = runtimeRef.current;
     const reset = zoomRuntimeToBounds(
       runtime,
-      runtimeFramingBounds(runtime, modelBoundsRef.current),
+      shownBoundsRef.current?.() || runtimeFramingBounds(runtime, modelBoundsRef.current),
       sceneScaleModeRef.current,
       {
         animate,

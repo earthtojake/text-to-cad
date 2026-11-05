@@ -533,7 +533,8 @@ function SchematicSurface({ view, data }) {
       updating={document.updating} updateStatus={{ pending: true, label: t("schematic.text.updating_schematic") }} tools={index ? strip : []}
       toolRow={index ? toolRow : null} views={[]} panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
-      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} onFit={fit}>
+      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
+      zoom={{ ...plotView.zoom, zoomToSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 }}>
       <canvas ref={canvasRef} aria-label={t("schematic.text.schematic_file", { file: view.file.name, sheet: shownSheet && index ? index.sheetName(shownSheet) : "" })}
         role="img" data-schematic-tool={toolMode} data-schematic-sheet={shownSheet || ""}
         className={cn("absolute inset-0 block touch-none select-none", cursor)} />
