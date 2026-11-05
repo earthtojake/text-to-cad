@@ -751,7 +751,6 @@ export default {
   "zoom.out": "축소",
   "zoom.to100": "100%로 확대/축소",
   "menu.copyReference": "참조 복사",
-  "menu.showInList": "목록에서 보기",
   "menu.deselect": "선택 해제",
   "menu.exitAllIsolates": "모든 격리 종료",
   "menu.hideOthers": "나머지 숨기기",

@@ -751,7 +751,6 @@ export default {
   "zoom.out": "ズームアウト",
   "zoom.to100": "100% にズーム",
   "menu.copyReference": "参照をコピー",
-  "menu.showInList": "リストに表示",
   "menu.deselect": "選択を解除",
   "menu.exitAllIsolates": "すべての分離表示を終了",
   "menu.hideOthers": "他を非表示",

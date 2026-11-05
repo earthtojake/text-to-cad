@@ -448,8 +448,6 @@ function BoardSurface({ view, data }) {
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 
-  // What the view's menu's Show in list asked the panel's lists to bring into view (`CircuitTree.jsx`).
-  const [reveal, setReveal] = useState(null);
   // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over something Select would pick: its reference (with what is picked already), Select or
   // Deselect, Isolate for a part or a net and its net for copper, then the framing. Over bare board:
@@ -469,18 +467,12 @@ function BoardSurface({ view, data }) {
     const ownNet = hit.kind === "net" ? "" : String(hit.pad?.net || hit.item?.net || hit.net?.name || "");
     const netId = ownNet ? formatBoardRefSelector({ kind: "net", net: ownNet }) : "";
     const isolatable = hit.kind === "part" || hit.kind === "net";
-    // Show in list: the Parts' row of a part or a pad's part, the Nets' row of a net or of copper's net.
-    const listed = hit.kind === "part" || hit.kind === "pad" ? ["parts", id] : hit.kind === "net" ? ["nets", id] : netId ? ["nets", netId] : null;
-    const showInList = listed ? [menuEntry("show-in-list", t("menu.showInList"), { onSelect: () => {
-      handover.panelControl.current?.show?.(listed[0]);
-      setReveal({ id: listed[1], key: Date.now() });
-    } })] : [];
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
       pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t,
         isolated: isolatable ? isolated.includes(id) : null, onIsolate: () => isolation.toggle(id), isolatedCount: isolated.length, onExitIsolates: isolation.clear }),
-      [...(netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
-        { onSelect: () => isolation.toggle(netId) })] : []), ...showInList],
+      netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
+        { onSelect: () => isolation.toggle(netId) })] : [],
       zoom);
   } : null;
 
@@ -497,7 +489,7 @@ function BoardSurface({ view, data }) {
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildBoardRefToken({ path, selectors: ids }))).catch(() => {}); };
   const takeSelect = () => selectTool(BOARD_TOOL.SELECT);
-  const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated} revealRequest={reveal}
+  const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const detail = useBoardDetail(index, selection, { onSelect: takeSelect, onFrame: frameSelectors });
   const panelTabs = [

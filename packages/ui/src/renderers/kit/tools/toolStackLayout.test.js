@@ -3,7 +3,7 @@ import test from "node:test";
 
 import {
   DEFAULT_TOOL_STACK, TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH,
-  clampToolPanelHeight, clampToolPanelWidth, normalizeToolStack, toolPanelDefaultHeight
+  clampToolPanelHeight, clampToolPanelWidth, flatDetailHeight, normalizeToolStack, toolPanelDefaultHeight
 } from "./toolStackLayout.js";
 
 test("the layout is the sizes a person set, by panel, and the folded panels — nothing else, whatever a store hands back", () => {
@@ -50,4 +50,13 @@ test("every resizable panel opens capped at the whole stack, on desktop and phon
   assert.equal(toolPanelDefaultHeight(600), 600);
   assert.equal(toolPanelDefaultHeight(600.4), 600);
   assert.equal(toolPanelDefaultHeight(0), null, "an unmeasured stack sets no cap yet");
+});
+
+test("the Selected pane opens 320px tall, or half a short panel, and a person's height wins within the bounds", () => {
+  assert.equal(flatDetailHeight({ panelHeight: 900 }).height, 320);
+  assert.equal(flatDetailHeight({ panelHeight: 500 }).height, 250);
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200 }).height, 200);
+  assert.deepEqual(flatDetailHeight({ panelHeight: 400, kept: 300 }), { height: 240, max: 240 }, "the lists keep 160px");
+  assert.equal(flatDetailHeight({ panelHeight: 0 }).height, 96, "unmeasured: the minimum");
+  assert.equal(flatDetailHeight({ panelHeight: 900, kept: 200, draft: 400 }).height, 400, "a drag wins over the kept height");
 });

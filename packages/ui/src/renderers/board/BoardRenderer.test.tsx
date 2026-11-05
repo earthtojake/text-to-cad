@@ -525,8 +525,7 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   fireEvent.click(within(parts).getByRole('button', { name: 'Isolate J1' }));
   expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
-  // A pad picked on the board leaves the lists as they were (its part's block shut, nothing scrolled) and shows
-  // what it is connected to; the view's menu's Show in list opens the block and brings its part's row into view.
+  // A pad picked on the board opens its part's block and brings the part's row into view, and shows what it is connected to.
   await act(async () => { await controller.clearSelection(); });
   const scrolled: string[] = [];
   const { scrollIntoView } = Element.prototype;
@@ -538,16 +537,82 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   try {
     tap(pane, [35.825, 15]);
     expect(selected(controller)).toEqual(['#R1.2']);
-    expect(parts.querySelector('[data-board-row="sheet:led"] [aria-expanded]')!.getAttribute('aria-expanded')).toBe('false');
-    expect(scrolled).toEqual([]);
-    expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'true']]);
-    const [x, y] = pageToScreen(frames.at(-1)!, 35.825, 15);
-    fireEvent.pointerDown(pane.querySelector('[data-board-surface] canvas')!, { pointerId: 4, pointerType: 'mouse', button: 2, clientX: x, clientY: y });
-    fireEvent.pointerUp(pane.querySelector('[data-board-surface] canvas')!, { pointerId: 4, pointerType: 'mouse', button: 2, clientX: x, clientY: y });
-    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Show in list' }));
     await waitFor(() => expect(parts.querySelector('[data-board-row="sheet:led"] [aria-expanded]')!.getAttribute('aria-expanded')).toBe('true'));
-    await waitFor(() => expect(scrolled).toContain('part:R1'));
+    await waitFor(() => expect(scrolled).toEqual(['part:R1']));
+    // The part's row holds the pad picked without being it: tinted, not lit.
+    const row = parts.querySelector<HTMLElement>('[data-board-row="part:R1"]')!;
+    expect([row.hasAttribute('data-holds-selection'), within(row).getByRole('button', { name: 'Select R1' }).getAttribute('aria-pressed')]).toEqual([true, 'false']);
+    expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'true']]);
   } finally { Element.prototype.scrollIntoView = scrollIntoView; }
+  dispose();
+});
+
+it('a pick on the board brings its row into view in the list on screen, one block following it; a list not on screen waits until it is', async () => {
+  // Two blocks of two parts: led (D1, R1) and power (J1, and an R2 of no pads), both shut as the tab opens.
+  const board = JSON.parse(JSON.stringify(BOARD));
+  board.board.parts.push({ ...board.board.parts.find((part: any) => part.ref === 'R1'), ref: 'R2', at: [36, 5], outline: [[35, 4.5], [37, 4.5], [37, 5.5], [35, 5.5]] });
+  const sheets: Record<string, string> = { J1: 'power', R2: 'power', R1: 'led', D1: 'led' };
+  for (const part of board.board.parts) part.sheet = sheets[part.ref];
+  readPlot = () => json(board);
+  const view = await open();
+  const { pane, dispose } = view;
+  await opened(pane);
+  const controller = await controllerOf(view);
+  const parts = await waitFor(() => { const found = tabBody(pane, 'parts'); expect(found).not.toBeNull(); return found!; });
+  const rows = () => [...parts.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'));
+  // Every row out of view, so each reveal scrolls.
+  const scrolled: string[] = [];
+  Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.getAttribute('data-virtual-row') || ''); };
+  const page = { x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON: noop };
+  vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
+    return (this.hasAttribute('data-virtual-row') ? { ...page, top: 900, bottom: 924, height: 24 } : page) as DOMRect;
+  });
+  expect(rows()).toEqual(['sheet:led', 'sheet:power']);
+  // The person opens power. A pad of R1 opens led, the reveal's, and brings R1 into view.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Expand power' }));
+  tap(pane, [35.825, 15]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']));
+  await waitFor(() => expect(scrolled).toEqual(['part:R1']));
+  // A pad of J1, in the block the person opened: led shuts again, power stays open.
+  tap(pane, [5, 17.54]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'part:R2']));
+  await waitFor(() => expect(scrolled).toEqual(['part:R1', 'part:J1']));
+  // Nothing picked moves nothing; D1's pad opens led again.
+  tap(pane, [36, 26]);
+  expect(selected(controller)).toEqual([]);
+  tap(pane, [20, 23.175]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']));
+  await waitFor(() => expect(scrolled.at(-1)).toBe('part:D1'));
+  // A press in the list keeps what the reveal opened and scrolls nothing.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Select R2' }));
+  expect(selected(controller)).toEqual(['#R2']);
+  expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']);
+  expect(scrolled).toEqual(['part:R1', 'part:J1', 'part:D1']);
+  // Shut by the person, led is theirs: a pick in power leaves it shut, and one in led opens it again.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Collapse led' }));
+  tap(pane, [5, 17.54]);
+  await waitFor(() => expect(scrolled.at(-1)).toBe('part:J1'));
+  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'part:R2']);
+  tap(pane, [35.825, 15]);
+  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']));
+  await waitFor(() => expect(scrolled.at(-1)).toBe('part:R1'));
+  // The Nets, not shown, have moved for none of it. A track picked: the Parts move nothing, and the Nets
+  // wait, then, shown, bring its net into view.
+  tap(pane, [30, 15]);
+  expect(selected(controller)).toEqual(['#track:7a1c0000-0000-4000-8000-000000000001']);
+  expect(rows()).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1', 'part:R2']);
+  expect(scrolled.filter(id => id.startsWith('net:'))).toEqual([]);
+  showTab(pane, 'Nets');
+  await waitFor(() => expect(scrolled.at(-1)).toBe('net:VBUS'));
+  // A via, while they are shown: its net. With the panel hidden, D1's pad waits for it to be shown.
+  tap(pane, [18, 27]);
+  await waitFor(() => expect(scrolled.at(-1)).toBe('net:GND'));
+  fireEvent.click(within(panel(pane)).getByRole('button', { name: 'Hide panel' }));
+  tap(pane, [20, 23.175]);
+  expect(selected(controller)).toEqual(['#D1.2']);
+  expect(scrolled.at(-1)).toBe('net:GND');
+  fireEvent.click(within(pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
+  await waitFor(() => expect(scrolled.at(-1)).toBe('net:LED'));
   dispose();
 });
 

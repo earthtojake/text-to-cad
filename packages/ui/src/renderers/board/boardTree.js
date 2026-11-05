@@ -126,12 +126,15 @@ export function boardTreeNodeIds(selector) {
   return [];
 }
 
-/** The rows a selector is under, brought into view when it has none of its own: a pad's part, and its net. */
+/**
+ * The rows a selector is under, brought into view when it has none of its own: a pad's part and its
+ * net; a track's, a via's or a zone's net. Anything else (a text, a graphic, an area) is under none.
+ */
 export function boardRowOwners(index, selector) {
-  const parsed = parseBoardRefSelector(selector);
-  if (parsed?.kind !== "pad") return [];
-  const net = index.pads.get(`${parsed.ref}.${parsed.pad}`)?.net;
-  return [`part:${parsed.ref}`, ...(net ? [`net:${net}`] : [])];
+  const resolved = index.resolve(selector);
+  if (resolved?.kind === "pad") return [`part:${resolved.pad.ref}`, ...(resolved.pad.net ? [`net:${resolved.pad.net}`] : [])];
+  const onNet = resolved?.kind === "track" || resolved?.kind === "via" || resolved?.kind === "zone";
+  return onNet && resolved.item.net ? [`net:${resolved.item.net}`] : [];
 }
 
 /** The rows above a node, outermost first, to open so the node shows. */

@@ -779,7 +779,6 @@ export default {
   "zoom.out": "Zoom out",
   "zoom.to100": "Zoom to 100%",
   "menu.copyReference": "Copy Reference",
-  "menu.showInList": "Show in list",
   "menu.deselect": "Deselect",
   "menu.exitAllIsolates": "Exit all isolates",
   "menu.hideOthers": "Hide others",

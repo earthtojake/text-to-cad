@@ -22,6 +22,9 @@ test("the Parts are the parts in their sheets' blocks and the Nets a list of the
   assert.deepEqual(schematicTreeNodeIds("#R1"), ["part:R1"]);
   assert.deepEqual(schematicTreeNodeIds("#R1.2"), []);
   assert.deepEqual(schematicRowOwners(index, "#R1.2"), ["part:R1", "net:/MID"]);
+  // What is on a net is under its net's row: a wire, a label, a junction; a part, a net and a sheet are under none.
+  assert.deepEqual(["#wire:5c4e0000-0000-4000-8000-0000000000a1", "#label:5c4e0000-0000-4000-8000-0000000000a2", "#junction:5c4e0000-0000-4000-8000-0000000000a3",
+    "#R1", "#net:/MID", "#sheet:/Load/"].map(selector => schematicRowOwners(index, selector)), [["net:/MID"], ["net:/MID"], ["net:/MID"], [], [], []]);
   assert.deepEqual(schematicTreeNodeIds("#net:/MID"), ["net:/MID"]);
   assert.deepEqual(schematicTreeNodeIds("#sheet:/Load/"), []);
   const part = schematicDetail(index, "#R1.2");

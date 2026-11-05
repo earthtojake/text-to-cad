@@ -100,12 +100,15 @@ export function schematicTreeNodeIds(selector) {
   return [];
 }
 
-/** The rows a selector is under, brought into view when it has none of its own: a pin's part, and its net. */
+/**
+ * The rows a selector is under, brought into view when it has none of its own: a pin's part and its
+ * net; the net of anything else on one (a wire, a label, a junction). A sheet is under none.
+ */
 export function schematicRowOwners(index, selector) {
-  const parsed = parseBoardRefSelector(selector);
-  if (parsed?.kind !== "pad") return [];
-  const net = index.pins.get(`${parsed.ref}.${parsed.pad}`)?.net;
-  return [`part:${parsed.ref}`, ...(net ? [`net:${net}`] : [])];
+  const resolved = index.resolve(selector);
+  if (!resolved || resolved.kind === "part" || resolved.kind === "net") return [];
+  const net = resolved.net ? [`net:${resolved.net}`] : [];
+  return resolved.kind === "pin" ? [`part:${resolved.ref}`, ...net] : net;
 }
 
 /**

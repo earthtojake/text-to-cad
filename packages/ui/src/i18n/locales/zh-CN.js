@@ -752,7 +752,6 @@ export default {
   "zoom.out": "缩小",
   "zoom.to100": "缩放到 100%",
   "menu.copyReference": "复制引用",
-  "menu.showInList": "在列表中显示",
   "menu.deselect": "取消选择",
   "menu.exitAllIsolates": "退出所有隔离",
   "menu.hideOthers": "隐藏其他",

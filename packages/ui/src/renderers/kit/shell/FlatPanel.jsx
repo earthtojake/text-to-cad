@@ -10,6 +10,7 @@ import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
 import { ToolStackContext } from "../tools/ToolStack.jsx";
+import { FLAT_DETAIL_MIN_HEIGHT, flatDetailHeight } from "../tools/toolStackLayout.js";
 import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 /**
@@ -43,11 +44,8 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 export const FLAT_PANEL_OPEN_PX = 1024;
 const FLAT_PANEL_ID = "flat";
 // The detail's height, the person's (a grip on its top edge, kept: `toolStack.panels.flatDetail`): at
-// first two fifths of the panel, never under four rows, and the lists keep 160px over it.
+// first 320px, or half the panel where that is less, never under four rows, and the lists keep 160px over it.
 const DETAIL_ID = "flatDetail";
-const DETAIL_SHARE = 0.4;
-const DETAIL_MIN_PX = 96;
-const LISTS_MIN_PX = 160;
 
 /**
  * A view's panel's state, the same in every view that has one: docked (a phone: the whole view), open
@@ -103,9 +101,7 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   openRef.current = open;
   const control = enabled ? {
     toggle: () => setOpen(!openRef.current),
-    search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; },
-    // Open, on a tab: the view's menu's Show in list.
-    show: (id) => { setOpen(true); if (id) changeTab(id); return true; }
+    search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
   } : null;
   return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, detailHeight, changeDetailHeight, focusSearch, control };
 }
@@ -125,16 +121,17 @@ export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : 
 const FlatPanelContext = createContext(null);
 /**
  * The panel a tab is drawn in: `query` (what is typed, `""` for none), `searching`, `page` (a phone's
- * whole-view page), `registerKeys(handler)` (the search box's arrow and Enter keys go to `handler`
+ * whole-view page), `shown` (the tab is on screen: the panel open, and the tab the one open or every
+ * tab's hits listed), `registerKeys(handler)` (the search box's arrow and Enter keys go to `handler`
  * while its tab is open, or while no open tab has a handler; returns the release) and `picked()` (a
  * row pressed: on a phone, the panel gives the view back). Null outside one.
  */
 export const useFlatPanel = () => useContext(FlatPanelContext);
 
-// A tab's own view of the panel: its keys registered under its id.
-function FlatPanelTab({ panel, id, children }) {
+// A tab's own view of the panel: its keys registered under its id, and whether it is on screen.
+function FlatPanelTab({ panel, id, shown, children }) {
   const { registerKeys } = panel;
-  const value = useMemo(() => ({ ...panel, registerKeys: handler => registerKeys(handler, id) }), [panel, id, registerKeys]);
+  const value = useMemo(() => ({ ...panel, shown: panel.shown && shown, registerKeys: handler => registerKeys(handler, id) }), [panel, id, shown, registerKeys]);
   return <FlatPanelContext.Provider value={value}>{children}</FlatPanelContext.Provider>;
 }
 
@@ -174,7 +171,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const picked = useCallback(() => { if (page) closeRef.current(); }, [page]);
-  const panel = useMemo(() => ({ query, searching, page, registerKeys, picked }), [query, searching, page, registerKeys, picked]);
+  // On screen: the panel open (a tab narrows it to its own, below).
+  const onScreen = open && !hidden;
+  const panel = useMemo(() => ({ query, searching, page, shown: onScreen, registerKeys, picked }), [query, searching, page, onScreen, registerKeys, picked]);
 
   // A section drawn in the panel names its tab (`ToolPanel.jsx`); the tabs are in the sections' order.
   const body = useRef(null);
@@ -272,9 +271,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     return () => observer.disconnect();
   }, []);
   const [detailDraft, setDetailDraft] = useState(null);
-  const detailMax = Math.max(DETAIL_MIN_PX, asideHeight - LISTS_MIN_PX);
-  const clampDetail = value => Math.round(Math.min(detailMax, Math.max(DETAIL_MIN_PX, value)));
-  const drawnDetail = clampDetail(detailDraft ?? detailHeight ?? asideHeight * DETAIL_SHARE);
+  const { height: drawnDetail, max: detailMax } = flatDetailHeight({ panelHeight: asideHeight, kept: detailHeight, draft: detailDraft });
+  const clampDetail = value => flatDetailHeight({ panelHeight: asideHeight, draft: value }).height;
   const detailDrag = useRef(null);
   const startDetailDrag = event => {
     if (event.button !== 0) return;
@@ -365,7 +363,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
               {searching && !single ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
-              <FlatPanelTab panel={panel} id={entry.id}>{entry.content}</FlatPanelTab>
+              <FlatPanelTab panel={panel} id={entry.id} shown={shown}>{entry.content}</FlatPanelTab>
             </section>;
           })}
           {searching ? <p style={{ order: 2 }} className="px-3 py-6 text-center text-muted-foreground group-has-[[data-flat-panel-hit]]/body:hidden"
@@ -377,7 +375,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         the person's height, scrolling on its own; its top edge is the grip that sizes it. */}
     {detail ? <div className="relative flex min-h-0 shrink-0 flex-col border-t border-border" style={{ height: drawnDetail }} data-flat-panel-detail="">
       <div role="separator" aria-orientation="horizontal" aria-label={t("flatPanel.resizeDetail")} aria-valuenow={drawnDetail}
-        aria-valuemin={DETAIL_MIN_PX} aria-valuemax={detailMax} tabIndex={0}
+        aria-valuemin={FLAT_DETAIL_MIN_HEIGHT} aria-valuemax={detailMax} tabIndex={0}
         className={cn("absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none focus-visible:outline-none",
           "after:absolute after:inset-x-0 after:top-1/2 after:h-px after:-translate-y-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:bg-ring",
           detailDraft !== null && "after:bg-ring")}

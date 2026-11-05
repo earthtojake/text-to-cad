@@ -606,18 +606,28 @@ file.
   does, and leaves the view where it is (a schematic shows the sheet it is on, if it is not the one
   shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
   double-clicked (on a phone, whose page gives the view back, a press frames it). A row's chevron
-  opens or shuts it, and a block's name does too. The Parts open as their blocks, a block of several parts shut; a pick on the
-  picture lights its row where the row is in view and moves nothing — the lists stay as the person left
-  them — and the view's menu's **Show in list** opens the row's owners on its tab and brings it into view
-  (a pad's or a pin's, its part's row in the Parts; a net's, or a track's, a via's, a wire's net, in the
-  Nets). A
+  opens or shuts it, and a block's name does too. The Parts open as their blocks, a block of several parts shut. A pick
+  made anywhere but in the list — on the picture, in Selected, a search hit's once the search is cleared,
+  a host's — brings its row into view, once, as a pick in the 3D views does the Model tree's: a part's, or
+  a pad's or a pin's part's, in the Parts; a net's, or the net of what is on one (a pad, a pin, a track, a
+  via, a pour, a wire, a label, a junction), in the Nets; a row that holds the pick without being it is
+  tinted (the search cursor's tint), where a selected row is lit. A text, a graphic or an area moves nothing, and
+  a press in the list opens and scrolls nothing (its row is in view). **One block follows the pick**:
+  what a reveal opens is not the person's, and the next reveal that goes elsewhere shuts it again; a
+  block the person opened stays open, one they shut stays shut until a pick needs it, and one the
+  reveal opened is theirs from the moment they open or shut it — so a list is the shape the person left,
+  and at most the one block the last pick opened. Nothing picked moves nothing. Only a list on screen
+  follows: one on a tab not shown, or in a collapsed panel, waits, and brings the pick's row into view
+  once it is shown. A
   selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
   the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
 - **Selected** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`; `boardTree.js`'s
   `boardSelected`, `schematicTree.js`'s `schematicSelected`), as a CAD tool's Properties panel: under the
-  lists, whatever tab is open, at a height of its own whatever it shows (two fifths of the panel at
-  first; its top edge is the grip that sizes it, kept across files as `toolStack.panels.flatDetail`,
-  never under 96px, the lists keeping 160px over it), scrolling on its own. First **what it is** — its
+  lists, whatever tab is open, at a height of its own whatever it shows (320px at first, or half the
+  panel where that is less: room for a pick's facts and half a dozen of what it is connected to, whatever
+  the window's height; its top edge is the grip that sizes it, kept across files as
+  `toolStack.panels.flatDetail`, never under 96px, the lists keeping 160px over it), scrolling on its
+  own. First **what it is** — its
   glyph and name (`C17.1`, `VBUS · track`), a line in words for a pad or a pin ("Pad of C17 · 100nF"),
   and its facts (its net, layer, width, drill, value, footprint, position: a Quick Edit chip card's) —
   then **what it is connected to**: a part's own pads or pins, each its net ("Pads of C17"); a net's pads

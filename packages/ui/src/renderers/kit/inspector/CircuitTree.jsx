@@ -1,5 +1,5 @@
 import { useI18n } from "@cad/ui/i18n";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Eye } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -17,6 +17,7 @@ import { openUntilChoice } from "./treeExpansion.js";
 import VirtualRows, { revealRow } from "./VirtualRows.jsx";
 
 const EMPTY = Object.freeze([]);
+const NONE = new Set();
 // The room the eye takes at a row's right end: the row's `--row-actions`.
 const ROW_ACTIONS_WIDTH = "1.5rem";
 // A part or a net can be isolated; a pin or a pad is seen with its part, a group is many things.
@@ -83,12 +84,13 @@ function RowMenu({ node, menuOf, children }) {
   </ContextMenu>;
 }
 
-function CircuitRow({ node, depth, branch, open, selected, isolated, toggle, choose, frame, hover, onIsolate, glyphs, data, menuOf }) {
+function CircuitRow({ node, depth, branch, open, selected, holds, isolated, toggle, choose, frame, hover, onIsolate, glyphs, data, menuOf }) {
   const { t } = useI18n();
   const block = node.kind === "block";
   const pickable = node.kind !== "group" && !block;
   const eye = isolable(node);
-  return <RowMenu node={node} menuOf={node.kind === "group" ? null : menuOf}><TreeRowSurface dense active={selected} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
+  return <RowMenu node={node} menuOf={node.kind === "group" ? null : menuOf}><TreeRowSurface dense active={selected} cursor={holds} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
+    data-holds-selection={holds ? "" : undefined}
     style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
     onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
     <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
@@ -162,11 +164,19 @@ export function treeAncestors(tree, id) {
  * (`kit/shell/viewMenu.js`: the reference, Select, Isolate, Zoom to it); a part's or a net's eye
  * isolates it. It opens as every tree does, until there is a choice (`treeExpansion.js`), but for a
  * block of several parts and the groups `closedGroups` names, shut until the person opens them. A
- * row's chevron opens or shuts it, and a block's name does too; a group's is a label. A pick on
- * the picture lights its row where it is in view and moves nothing: the list stays as the person left
- * it. Asked (`revealRequest`, `{ id, key }`: the view's menu's Show in list), the row's owners open and
- * it comes into view, once a request (a pad's or a pin's, its part's row, `ownerOf`). From the first row
- * the person opens or shuts, the shape is theirs. The viewer is read-only: nothing here edits the file.
+ * row's chevron opens or shuts it, and a block's name does too; a group's is a label. From the first row
+ * the person opens or shuts, the shape is theirs. A pick made anywhere but in the list (on the picture,
+ * in the Selected pane, a search hit's, a host's) brings its row into view, once a pick, as the model
+ * tree's does: its own row, else the row it is under (`ownerOf`: a pad's or a pin's part in the Parts,
+ * the net of what is on one in the Nets), which is tinted while it holds the pick, as a selected row is
+ * lit; a pick with no row moves nothing, and a press in the list
+ * opens and scrolls nothing (its row is in view). One block follows the pick: what a reveal opens is
+ * kept apart from the person's shape (`followed`), and the next reveal that goes elsewhere shuts it
+ * again, so the list is the shape the person left and at most the one chain the latest pick opened. A
+ * block of that chain the person opens or shuts is theirs from then on. Only a list on screen follows
+ * (`useFlatPanel()`'s `shown`, its rows not stepped aside for a search): one hidden, or under a
+ * collapsed panel, waits, and reveals the pick's row once it is shown. The viewer is read-only:
+ * nothing here edits the file.
  *
  * @param {{ tree: { roots: object[], nodesById: Map<string, object>, parents: Map<string, string> }, searchRoots?: object[],
  *   nodeIdsOf(id: string): string[], ownerOf?(id: string): string[], glyphs: Record<string, import("react").ComponentType<any>>,
@@ -179,7 +189,7 @@ export function treeAncestors(tree, id) {
  *   `onSelect`: a row pressed takes Select up, as a pick in any tree does.
  */
 export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, ownerOf = null, glyphs, closedGroups = EMPTY, data, panel, selection,
-  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null, onCopyReference = null, revealRequest = null }) {
+  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null, onCopyReference = null }) {
   const { t } = useI18n();
   const rowHeight = useTreeRowHeight();
   // Untouched, the tree is the rule's shape for the board it shows; the person's from their first change.
@@ -194,12 +204,25 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   const openedRef = useRef(opened);
   openedRef.current = opened;
   const [touched, setTouched] = useState(null);
-  const expanded = touched || opened;
+  const shape = touched || opened;
+  // What the latest reveal opened that the person's shape has shut (below): open over it, never in it.
+  const [followed, setFollowed] = useState(NONE);
+  const followedRef = useRef(followed);
+  followedRef.current = followed;
+  const expanded = useMemo(() => (followed.size ? new Set([...shape, ...followed]) : shape), [shape, followed]);
   const reshape = useCallback(change => setTouched(current => change(new Set(current || openedRef.current))), []);
-  const toggle = useCallback(node => reshape(next => {
-    if (!next.delete(node.id)) next.add(node.id);
-    return next;
-  }), [reshape]);
+  const toggle = useCallback(node => {
+    // A row a reveal opened, shut by the person: theirs from now, shut, and no longer followed.
+    if (followedRef.current.has(node.id)) {
+      setFollowed(current => new Set([...current].filter(id => id !== node.id)));
+      reshape(next => { next.delete(node.id); return next; });
+      return;
+    }
+    reshape(next => {
+      if (!next.delete(node.id)) next.add(node.id);
+      return next;
+    });
+  }, [reshape]);
   const rows = useMemo(() => visibleRows(tree.roots, expanded), [tree, expanded]);
   const { selected, select, hover, clear } = selection;
   const highlighted = useMemo(() => {
@@ -209,6 +232,15 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
     for (const node of tree.nodesById.values()) if (node.picks?.length && node.picks.every(id => picked.has(id))) rows.add(node.id);
     return rows;
   }, [selected, tree, nodeIdsOf]);
+  // The rows that hold what is selected without being it (a pad's or a pin's part, the net of what is on
+  // one): tinted, not lit, so the row a pick's reveal lands on says why.
+  const holding = useMemo(() => {
+    if (!ownerOf) return NONE;
+    const has = id => tree.nodesById.has(id);
+    const rows = new Set();
+    for (const id of selected) if (!nodeIdsOf(id).some(has)) for (const owner of ownerOf(id)) if (has(owner)) rows.add(owner);
+    return rows;
+  }, [selected, tree, nodeIdsOf, ownerOf]);
   const isolatedIds = useMemo(() => new Set(isolated.flatMap(nodeIdsOf)), [isolated, nodeIdsOf]);
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
@@ -252,19 +284,27 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   isolatedRef.current = isolated;
   const copyRef = useRef(onCopyReference);
   copyRef.current = onCopyReference;
+  // A press on a tree row, or its menu, picks what is already in view: it opens nothing and scrolls
+  // nothing. The selection it makes is marked as the list's (`pressedInTree`), and the reveal below passes it by.
+  const pressedInTree = useRef(false);
+  const inTree = useCallback(pick => {
+    pressedInTree.current = true;
+    // Spent by the selection it makes (committed within the press), or, if it made none, at once after.
+    setTimeout(() => { pressedInTree.current = false; }, 0);
+    pick();
+  }, []);
+  const chooseInTree = useCallback((node, event) => inTree(() => choose(node, event)), [inTree, choose]);
   const menuOf = useCallback(node => {
     const zoom = [menuEntry("zoom-to", t("menu.zoomToNamed", { name: node.label }), { onSelect: () => frame(node) })];
-    if (node.picks) return menuGroups([menuEntry("select-all", t("menu.selectAllParts", { count: node.picks.length }), { onSelect: () => choose(node, {}) })], zoom);
+    if (node.picks) return menuGroups([menuEntry("select-all", t("menu.selectAllParts", { count: node.picks.length }), { onSelect: () => chooseInTree(node, {}) })], zoom);
     if (!node.pick) return [];
     const picked = selectedRef.current.includes(node.pick);
     return menuGroups(
       copyRef.current ? [menuEntry("copy-reference", t("menu.copyReference"), { onSelect: () => copyRef.current([...new Set([...selectedRef.current, node.pick])]) })] : [],
-      pickGroup({ selected: picked, t, onSelect: () => { onSelectRef.current?.(); select(node.pick, { multiSelect: picked }); },
+      pickGroup({ selected: picked, t, onSelect: () => inTree(() => { onSelectRef.current?.(); select(node.pick, { multiSelect: picked }); }),
         isolated: isolable(node) ? isolatedRef.current.includes(node.pick) : null, onIsolate: () => onIsolate(node.pick) }),
       zoom);
-  }, [t, frame, choose, select, onIsolate]);
-  // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing.
-  const chooseInTree = choose;
+  }, [t, frame, chooseInTree, inTree, select, onIsolate]);
   const search = useMemo(() => ({ query: flatPanel?.query ?? "" }), [flatPanel?.query]);
   const { searching, found, cursorId, listRef, onKeyDown } = useTreeSearch(searchRoots || tree.roots, search);
   // The panel's search box walks the hits with the arrows and picks with Enter.
@@ -273,25 +313,34 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   const registerKeys = flatPanel?.registerKeys;
   useEffect(() => registerKeys?.(event => keysRef.current(event)), [registerKeys]);
 
-  // A pick on the picture lights its row where the row is in view, and moves nothing: the list stays as
-  // the person left it. Asked to (`revealRequest`, the view's menu's Show in list), the row's owners open
-  // and the row comes into view, once per request.
+  // A pick made anywhere but here brings its row into view, once: its own row, else the one it is under.
+  // The rows above it that the person's shape has shut open as the one chain followed, which shuts the
+  // last pick's chain; a press in the list (above) is marked revealed as it is made, and moves nothing.
+  // Nothing selected, or a pick with no row here, leaves what the last reveal opened as it is.
   const rowElements = useRef(new Map());
   const registerRow = useCallback((key, element) => { if (element) rowElements.current.set(key, element); else rowElements.current.delete(key); }, []);
   const target = useMemo(() => {
-    const wanted = revealRequest?.id;
-    if (!wanted) return null;
+    const last = selected.at(-1);
+    if (!last) return null;
     const has = id => tree.nodesById.has(id);
-    return nodeIdsOf(wanted).find(has) || ownerOf?.(wanted).find(has) || null;
-  }, [revealRequest, tree, nodeIdsOf, ownerOf]);
+    return nodeIdsOf(last).find(has) || ownerOf?.(last).find(has) || null;
+  }, [selected, tree, nodeIdsOf, ownerOf]);
   const revealed = useRef(null);
+  useLayoutEffect(() => {
+    if (!pressedInTree.current) return;
+    pressedInTree.current = false;
+    revealed.current = target;
+  }, [selected, target]);
+  // A list on screen follows: its tab the one shown, its panel open, its rows not stepped aside for a search.
+  const following = flatPanel?.shown !== false && !searching;
   useEffect(() => {
-    if (!target || searching || revealed.current === revealRequest?.key) return;
-    const missing = treeAncestors(tree, target).filter(id => !expanded.has(id));
-    if (missing.length) { reshape(next => { for (const id of missing) next.add(id); return next; }); return; }
+    if (!target) { revealed.current = null; return; }
+    if (!following || revealed.current === target) return;
+    const chain = treeAncestors(tree, target).filter(id => !shape.has(id));
+    if (chain.length !== followed.size || chain.some(id => !followed.has(id))) { setFollowed(chain.length ? new Set(chain) : NONE); return; }
     const row = rowElements.current.get(target);
-    if (row) { revealRow(row); revealed.current = revealRequest.key; }
-  }, [target, revealRequest, tree, expanded, searching, reshape]);
+    if (row) { revealRow(row); revealed.current = target; }
+  }, [target, tree, shape, followed, following]);
   const targetIndex = target ? rows.findIndex(row => row.node.id === target) : -1;
   const treePinned = useMemo(() => (targetIndex < 0 ? EMPTY : [targetIndex]), [targetIndex]);
   const matches = found.matches;
@@ -301,7 +350,7 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   const renderTreeRow = at => {
     const row = rows[at];
     return <MemoCircuitRow node={row.node} depth={row.depth} branch={row.branch} open={row.open} selected={highlighted.has(row.node.id)}
-      isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={chooseInTree} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
+      holds={holding.has(row.node.id)} isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={chooseInTree} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
   };
   const renderSearchRow = at => {
     const match = matches[at], id = match.entry.node.id;

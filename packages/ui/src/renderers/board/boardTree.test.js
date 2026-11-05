@@ -68,6 +68,12 @@ test("a reference finds its row, a pad its part's and its net's, and what it pic
   assert.deepEqual(boardTreeNodeIds("#U1.2"), []);
   assert.deepEqual(boardRowOwners(index, "#U1.2"), ["part:U1", "net:VIN"]);
   assert.deepEqual(boardRowOwners(index, "#U1"), []);
+  // Copper on a net is under its net's row: a track, a via, a zone.
+  const routed = createBoardIndex({ ...BOARD, tracks: [{ ...BOARD.tracks[0], id: "7a1c0000-0000-4000-8000-000000000001" }],
+    vias: [{ ...BOARD.vias[0], id: "7a1c0000-0000-4000-8000-000000000003" }] });
+  assert.deepEqual(boardRowOwners(routed, "#track:7a1c0000-0000-4000-8000-000000000001"), ["net:VIN"]);
+  assert.deepEqual(boardRowOwners(routed, "#via:7a1c0000-0000-4000-8000-000000000003"), ["net:GND"]);
+  assert.deepEqual(boardRowOwners(routed, "#track:7a1c0000-0000-4000-8000-00000000ffff"), []);
   assert.deepEqual(boardTreeNodeIds("#net:VIN@x1y2"), ["net:VIN"]);
   assert.deepEqual(boardTreeNodeIds('#net:"a b"'), ["net:a b"]);
   // A quoted name may hold what a point is spelled with.

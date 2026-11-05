@@ -480,8 +480,6 @@ function SchematicSurface({ view, data }) {
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: schematicPacketReferences
   });
 
-  // What the view's menu's Show in list asked the panel's lists to bring into view (`CircuitTree.jsx`).
-  const [reveal, setReveal] = useState(null);
   // ---- the menu: a secondary tap on the sheet, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over something Select would pick: its reference (with what is picked already), Select or
   // Deselect, Isolate for a part or a net and its net for a pin or a wire, Show sheet on a sheet
@@ -507,18 +505,12 @@ function SchematicSurface({ view, data }) {
     const ownNet = resolved && resolved.kind !== "net" ? String(resolved.net || "") : "";
     const netId = ownNet ? index.resolve(`#net:${ownNet}`)?.selector || "" : "";
     const isolatable = resolved?.kind === "part" || resolved?.kind === "net";
-    // Show in list: the Parts' row of a part or a pin's part, the Nets' row of a net or of what is on one.
-    const listed = resolved?.kind === "part" || resolved?.kind === "pin" ? ["parts", id] : resolved?.kind === "net" ? ["nets", id] : netId ? ["nets", netId] : null;
-    const showInList = listed ? [menuEntry("show-in-list", t("menu.showInList"), { onSelect: () => {
-      handover.panelControl.current?.show?.(listed[0]);
-      setReveal({ id: listed[1], key: Date.now() });
-    } })] : [];
     return menuGroups(
       referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
       pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t,
         isolated: isolatable ? isolated.includes(id) : null, onIsolate: () => isolation.toggle(id), isolatedCount: isolated.length, onExitIsolates: isolation.clear }),
       [...(netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
-        { onSelect: () => isolation.toggle(netId) })] : []), ...enter, ...showInList],
+        { onSelect: () => isolation.toggle(netId) })] : []), ...enter],
       zoom);
   } : null;
 
@@ -534,7 +526,7 @@ function SchematicSurface({ view, data }) {
   // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
   const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildSchematicRefToken({ path, selectors: ids }))).catch(() => {}); };
   const takeSelect = () => selectTool(SCHEMATIC_TOOL.SELECT);
-  const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated} revealRequest={reveal}
+  const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
   const detail = useSchematicDetail(index, selection, { onSelect: takeSelect, onShow: showSelectors, onFrame: frameSelectors });
   const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
