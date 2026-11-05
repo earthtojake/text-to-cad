@@ -768,6 +768,7 @@ export default {
   "zoom.current": "Zoom {percent}",
   "zoom.in": "Zoom in",
   "zoom.out": "Zoom out",
+  "zoom.to100": "Zoom to 100%",
   "menu.copyReference": "Copy Reference",
   "menu.deselect": "Deselect",
   "menu.exitAllIsolates": "Exit all isolates",

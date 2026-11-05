@@ -437,12 +437,13 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
 
   /**
    * The view's zoom for the strip's readout (`kit/shell/ZoomControl.jsx`): 100% the fit — the picture
-   * whole, as it opens and as F frames it — and the zoom steps about the pane's middle.
+   * whole, as it opens and as F frames it, so 100% fits — and the zoom steps about the pane's middle.
    */
   const zoom = useMemo(() => ({
     read: () => (transformRef.current && fitScaleRef.current ? (transformRef.current.scale / fitScaleRef.current) * 100 : 100),
     subscribe: (listener) => { viewListeners.current.add(listener); return () => viewListeners.current.delete(listener); },
     zoomBy: factor => zoomBy(factor),
+    zoomTo100: fit,
     fit
   }), [zoomBy, fit]);
 

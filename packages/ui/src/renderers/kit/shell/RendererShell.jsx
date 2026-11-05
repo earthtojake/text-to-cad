@@ -479,10 +479,13 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     read: () => viewerRef.current?.zoomPercent?.() ?? 100,
     subscribe: listener => viewerRef.current?.subscribeCamera?.(listener) || (() => {}),
     zoomBy: factor => viewerRef.current?.zoomBy?.(factor),
+    zoomTo100: () => viewerRef.current?.zoomTo100?.(),
     fit: () => viewerRef.current?.resetZoom?.()
   // A model's viewport, once it is up: its camera is the one the readout follows.
   }), [viewerRef, scene, viewerLoading]);
   const zoom = { ...zoomBase, zoomToSelection: zoomToSelection?.run || null, selectionAvailable: Boolean(zoomToSelection?.available) };
+  // What the zoom's keys reach (`useRendererShell`'s `zoom`): the zoom as the strip has it now.
+  frame.zoomKeys.current = zoom;
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} active={frame.selecting} viewerRef={frame.viewerRef} />}

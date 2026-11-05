@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { ScanSearch } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger
@@ -7,16 +7,16 @@ import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
-import { TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
+import { ViewerHostContext } from "../../../host/context.js";
+import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
 import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 
-/** How far Zoom in and Zoom out step: half again, and back. */
-export const ZOOM_FACTOR = 1.5;
+export { ZOOM_FACTOR };
 
 /**
  * The view's zoom, as every design tool shows it (Figma's, Spline's, Penpot's, tldraw's): the zoom as a
- * percentage, and, pressed, the zoom's menu — Zoom in, Zoom out, then Zoom to fit (F) and Zoom to selection
- * (off with nothing picked). It is the strip's view control, the same in every view, 2D and 3D.
+ * percentage, and, pressed, the zoom's menu — Zoom in, Zoom out, Zoom to 100%, then Zoom to fit and Zoom to
+ * selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's keys, `pressZoomKey`). It is the strip's view control, the same in every view, 2D and 3D.
  *
  * 100% is the model as authored, framed whole (a flat view's fit, a 3D view's rest box at the camera's
  * angle): a fixed ruler, which nothing shown moves — not a pose, a routine, a cut, parts spread apart, hiding or
@@ -28,7 +28,7 @@ export const ZOOM_FACTOR = 1.5;
  *
  * @param {{ zoom: ViewZoom, disabled?: boolean, tooltipSide?: "top" | "bottom" }} props
  * @typedef {{ read(): number, subscribe(listener: () => void): () => void, zoomBy(factor: number): void, fit(): void,
- *   zoomToSelection?: (() => void) | null, selectionAvailable?: boolean }} ViewZoom
+ *   zoomTo100?: (() => void) | null, zoomToSelection?: (() => void) | null, selectionAvailable?: boolean }} ViewZoom
  */
 export default function ZoomControl({ zoom, disabled = false, tooltipSide = "top" }) {
   const { t } = useI18n();
@@ -43,7 +43,7 @@ export default function ZoomControl({ zoom, disabled = false, tooltipSide = "top
       </ToolbarButton>
     </DropdownMenuTrigger>
     <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
-      className={cn(FLOATING_SURFACE_CLASS, "w-44 data-[state=closed]:animate-none!")}>
+      className={cn(FLOATING_SURFACE_CLASS, "w-48 data-[state=closed]:animate-none!")}>
       <ZoomMenuItems zoom={zoom} />
     </DropdownMenuContent>
   </DropdownMenu>;
@@ -52,16 +52,17 @@ export default function ZoomControl({ zoom, disabled = false, tooltipSide = "top
 /** The zoom menu's items, for the tile's menu and a phone's More submenu alike. */
 export function ZoomMenuItems({ zoom }) {
   const { t } = useI18n();
+  const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
+  const item = (label, shortcut, onSelect, disabled = false) => <DropdownMenuItem className="text-xs" disabled={disabled} onSelect={onSelect}>
+    {label}<DropdownMenuShortcut>{shortcut}</DropdownMenuShortcut>
+  </DropdownMenuItem>;
   return <>
-    <DropdownMenuItem className="text-xs" onSelect={() => zoom.zoomBy(ZOOM_FACTOR)}>{t("zoom.in")}</DropdownMenuItem>
-    <DropdownMenuItem className="text-xs" onSelect={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>{t("zoom.out")}</DropdownMenuItem>
+    {item(t("zoom.in"), keys.in, () => zoom.zoomBy(ZOOM_FACTOR))}
+    {item(t("zoom.out"), keys.out, () => zoom.zoomBy(1 / ZOOM_FACTOR))}
+    {item(t("zoom.to100"), keys.actual, () => (zoom.zoomTo100 ? zoom.zoomTo100() : zoom.fit()))}
     <DropdownMenuSeparator />
-    <DropdownMenuItem className="text-xs" onSelect={() => zoom.fit()}>
-      {t("menu.zoomToFit")}<DropdownMenuShortcut>{TOOL_SHORTCUTS.fit}</DropdownMenuShortcut>
-    </DropdownMenuItem>
-    <DropdownMenuItem className="text-xs" disabled={!zoom.zoomToSelection || !zoom.selectionAvailable} onSelect={() => zoom.zoomToSelection?.()}>
-      {t("menu.zoomToSelection")}
-    </DropdownMenuItem>
+    {item(t("menu.zoomToFit"), keys.fit, () => zoom.fit())}
+    {item(t("menu.zoomToSelection"), keys.selection, () => zoom.zoomToSelection?.(), !zoom.zoomToSelection || !zoom.selectionAvailable)}
   </>;
 }
 

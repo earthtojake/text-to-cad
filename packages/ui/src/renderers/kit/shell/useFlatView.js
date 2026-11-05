@@ -184,6 +184,8 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   // The view's panel, as the frame drew it (`FlatViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or
   // hides it, / opens it on its search.
   const panelControl = useRef(null);
+  // The view's zoom as the strip has it (the renderer writes it, Zoom to selection and all): what the zoom's keys reach.
+  const zoomKeys = useRef(null);
   useViewerShortcuts({
     viewerElement,
     onChord: event => {
@@ -203,6 +205,7 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
     onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && pressToolKey(event, { tools: toolKeys.current,
       selectDrawing: tool => annotationRef.current.selectTool(tool), fit })),
+    zoom: () => (shown ? zoomKeys.current : null),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
       if (hasOpenPopup(viewerElement?.current)) return;
@@ -246,5 +249,5 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     resource: workspace.resource, references, chips, nameReference, annotation: quickEditAnnotation,
     prompt: quickEditPrompt, onCopy: copyAction, onEscape: letGo, onClear: clearQuickEdit, disabled: !shown
   };
-  return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, panelControl, reportActionError: setActionError };
+  return { quickEdit, cardAlert, alertDismissal, toolStack, changeToolStack, panelControl, zoomKeys, reportActionError: setActionError };
 }

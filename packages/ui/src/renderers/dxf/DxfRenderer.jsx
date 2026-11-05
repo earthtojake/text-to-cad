@@ -408,6 +408,8 @@ function DxfSurface({ view, data }) {
   };
   // The strip's tools as last drawn: what a tool's letter takes up.
   const toolKeysRef = useRef([]);
+  // The strip's zoom as last drawn (Zoom to selection and all): what the zoom's keys reach.
+  const zoomKeysRef = useRef(null);
   // The panel's ⌘\ and / (`useFlatPanelState`'s control), while there is one.
   const panelControl = useRef(null);
   useViewerShortcuts({
@@ -430,6 +432,7 @@ function DxfSurface({ view, data }) {
     // / searches the panel, a tool's letter takes it up, F fits the drawing (`toolShortcuts.js`), over the strip as drawn.
     onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search()
       : shown && pressToolKey(event, { tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit })),
+    zoom: () => (shown ? zoomKeysRef.current : null),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {
       if (hasOpenPopup(viewerElement?.current)) return;
@@ -529,6 +532,9 @@ function DxfSurface({ view, data }) {
     stripTool(DXF_TOOL.MEASURE, t("tool.measure"), MEASURE_ICON, { shortcut: TOOL_SHORTCUTS.measure })
   ];
   toolKeysRef.current = tools;
+  // The strip's zoom, and the zoom's keys.
+  const zoom = { ...drawingView.zoom, zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
+  zoomKeysRef.current = zoom;
   // The drawing tools' row under the strip, and Measure's (its measurements, while there are any); Select has none.
   const toolRow = annotating
     ? <AnnotationToolbar annotation={annotation} colorScheme={colorScheme} placements={false} />
@@ -611,8 +617,7 @@ function DxfSurface({ view, data }) {
             style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-                <FloatingToolBar tools={tools} touch={mobile} views={shown ? [zoomViewControl({ ...drawingView.zoom,
-                  zoomToSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 }, { t })] : []} />
+                <FloatingToolBar tools={tools} touch={mobile} views={shown ? [zoomViewControl(zoom, { t })] : []} />
                 {toolRow}
                 {updateStatus}
               </div>

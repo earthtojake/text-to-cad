@@ -539,6 +539,7 @@ export function useRendererShell({
   // selection can lose (`deleteSelection`: a measurement), and Escape lets go of it first.
   // The strip's tools as the frame last drew them (`RendererShell.jsx`): what a tool's letter takes up.
   const toolKeysRef = useRef([]);
+  const zoomKeysRef = useRef(null);
   const deleteSelectionRef = useRef(deleteSelection);
   deleteSelectionRef.current = deleteSelection;
   // Everything Select has picked that can go: the annotation's ink and the renderer's own; true if any went.
@@ -568,6 +569,8 @@ export function useRendererShell({
     onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search() : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
       fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),
+    // The zoom's keys (`pressZoomKey`): the strip's zoom (`zoomKeys`, RendererShell's); never in preview.
+    zoom: () => (!previewing && !idle ? zoomKeysRef.current : null),
     escapeActive: Boolean(escape.active || previewing || annotation.selected.length || (toolModes && toolMode !== toolModes.defaultMode)),
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
@@ -736,7 +739,7 @@ export function useRendererShell({
       resource, captureView, escape: escapeView, currentView, quickEditPrompt,
       // Select is the tool in hand (the default one), where a press on ink picks it before a part.
       selecting: !previewing && Boolean(toolModes) && toolMode === toolModes.defaultMode,
-      annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
+      annotateToolActive, annotation, history, deletePicked, toolKeys: toolKeysRef, zoomKeys: zoomKeysRef, animation, previewSettings, displayMode, grid, projection, sceneEffects,
       previewDesiredScene
     }
   };

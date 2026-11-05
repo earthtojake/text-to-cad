@@ -1076,7 +1076,9 @@ the same fit path.
 **The zoom** (`kit/shell/ZoomControl.jsx`) is the strip's last view control in every view, 2D and 3D,
 as every design tool shows it (Figma's, Spline's, Penpot's, tldraw's): the zoom as a percentage, in
 tabular digits at a fixed width so the strip never shifts as it changes, and, pressed, its menu —
-Zoom in, Zoom out (half again, and back), then Zoom to fit (F) and Zoom to selection. A 3D view's
+Zoom in, Zoom out (half again, and back), Zoom to 100%, then Zoom to fit and Zoom to selection,
+each with its key, as Figma's: ⌘+ and ⌘- (Ctrl+= and Ctrl+- elsewhere; the plain + and - too), ⇧0,
+F (⇧1 too) and ⇧2. A 3D view's
 Preview comes after it; on a phone it is More's Zoom submenu. **100% is the model as authored,
 framed whole**: a flat view's fit, a 3D view's rest box (`restBounds`) at the camera's angle — a
 fixed ruler nothing shown moves: not Explode, a pose, a routine, Clip, hiding or isolating, which
@@ -1243,6 +1245,10 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   **P** the Pen, **⇧P** the Highlighter, **E** the Eraser; **R** the Rectangle, **L** the Line,
   **⇧L** the Arrow, **O** the Ellipse, **T** Text (each taking up Pencil or Shapes with that
   tool in hand); and **F** frames the model (Zoom to fit: and the zoom's menu, the strip's percentage). A tool already in hand stays so.
+  The zoom's keys are the design tools' (`pressZoomKey`), held keys repeating: **+** (or **=**) and
+  **-** zoom in and out, with ⌘ or Ctrl as well (the view's then, never the page's zoom); **⇧1**
+  fits as F does, **⇧2** frames what Select has picked (nothing with nothing picked), and **⇧0** is
+  100% (a flat view's fit; a 3D view's authored box at the camera's angle, about its target).
   Each key shows after its name in its button's tooltip ("Measure M", muted), and Pencil's and
   Shapes' tooltips name what they draw with now ("Rectangle R").
 

@@ -15,7 +15,7 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   const zoom = {
     read: () => percent,
     subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
-    zoomBy: vi.fn(), fit: vi.fn(), zoomToSelection: vi.fn(), selectionAvailable: false
+    zoomBy: vi.fn(), fit: vi.fn(), zoomTo100: vi.fn(), zoomToSelection: vi.fn(), selectionAvailable: false
   };
   const view = render(<ZoomControl zoom={zoom} />);
   const button = screen.getByRole('button', { name: 'Zoom 100%' });
@@ -27,17 +27,20 @@ it('the zoom is its percentage, redrawn as the view says it moved, and its menu 
   await user.click(button);
   const items = await screen.findAllByRole('menuitem');
   expect(items.map(item => [item.textContent, item.hasAttribute('data-disabled')])).toEqual([
-    ['Zoom in', false], ['Zoom out', false], ['Zoom to fitF', false], ['Zoom to selection', true]
+    ['Zoom inCtrl+=', false], ['Zoom outCtrl+-', false], ['Zoom to 100%⇧0', false], ['Zoom to fitF', false], ['Zoom to selection⇧2', true]
   ]);
-  await user.click(screen.getByRole('menuitem', { name: 'Zoom in' }));
+  await user.click(screen.getByRole('menuitem', { name: /Zoom in/ }));
   expect(zoom.zoomBy).toHaveBeenCalledWith(ZOOM_FACTOR);
+  await user.click(button);
+  await user.click(await screen.findByRole('menuitem', { name: /Zoom to 100%/ }));
+  expect(zoom.zoomTo100).toHaveBeenCalledTimes(1);
   await user.click(button);
   await user.click(await screen.findByRole('menuitem', { name: /Zoom to fit/ }));
   expect(zoom.fit).toHaveBeenCalledTimes(1);
   // With something picked, Zoom to selection frames it.
   view.rerender(<ZoomControl zoom={{ ...zoom, selectionAvailable: true }} />);
   await user.click(button);
-  await user.click(await screen.findByRole('menuitem', { name: 'Zoom to selection' }));
+  await user.click(await screen.findByRole('menuitem', { name: /Zoom to selection/ }));
   expect(zoom.zoomToSelection).toHaveBeenCalledTimes(1);
   view.unmount();
   expect(listeners.size).toBe(0);

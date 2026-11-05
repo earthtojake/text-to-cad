@@ -741,6 +741,7 @@ export default {
   "zoom.current": "缩放 {percent}",
   "zoom.in": "放大",
   "zoom.out": "缩小",
+  "zoom.to100": "缩放到 100%",
   "menu.copyReference": "复制引用",
   "menu.deselect": "取消选择",
   "menu.exitAllIsolates": "退出所有隔离",

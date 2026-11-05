@@ -740,6 +740,7 @@ export default {
   "zoom.current": "ズーム {percent}",
   "zoom.in": "ズームイン",
   "zoom.out": "ズームアウト",
+  "zoom.to100": "100% にズーム",
   "menu.copyReference": "参照をコピー",
   "menu.deselect": "選択を解除",
   "menu.exitAllIsolates": "すべての分離表示を終了",

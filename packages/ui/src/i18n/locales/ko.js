@@ -740,6 +740,7 @@ export default {
   "zoom.current": "확대/축소 {percent}",
   "zoom.in": "확대",
   "zoom.out": "축소",
+  "zoom.to100": "100%로 확대/축소",
   "menu.copyReference": "참조 복사",
   "menu.deselect": "선택 해제",
   "menu.exitAllIsolates": "모든 격리 종료",

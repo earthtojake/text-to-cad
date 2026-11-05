@@ -426,6 +426,20 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (moved) touchCamera(runtime, CAMERA_TOUCH.LOOK_AT);
     return moved;
   };
+  // The strip's zoom set to `next(percent now)` about the camera's target: the camera touched, as a wheel's.
+  const zoomTo = next => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.camera) return false;
+    const applied = setRuntimeZoomPercent(runtime, next(readRuntimeZoomPercent(runtime)));
+    if (applied) {
+      runtime.openFitPending = false;
+      touchCamera(runtime, CAMERA_TOUCH.WHEEL);
+      emitPerspectiveChange(runtime);
+      // An orthographic step moves only the zoom, which the controls do not report: say so for them.
+      runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
+    }
+    return applied;
+  };
   useImperativeHandle(ref, () => ({
     async prepareViewSettings(nextScene, signal) {
       const runtime = runtimeRef.current;
@@ -526,19 +540,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     // The strip's zoom readout (`ZoomControl.jsx`): the zoom against the authored box (100%, which
     // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
     zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },
-    zoomBy(factor) {
-      const runtime = runtimeRef.current;
-      if (!runtime?.camera) return false;
-      const applied = setRuntimeZoomPercent(runtime, readRuntimeZoomPercent(runtime) * factor);
-      if (applied) {
-        runtime.openFitPending = false;
-        touchCamera(runtime, CAMERA_TOUCH.WHEEL);
-        emitPerspectiveChange(runtime);
-        // An orthographic step moves only the zoom, which the controls do not report: say so for them.
-        runtime.controls?.dispatchEvent?.({ type: CAMERA_ZOOMED_EVENT });
-      }
-      return applied;
-    },
+    zoomBy(factor) { return zoomTo(percent => percent * factor); },
+    // 100%: the authored box framed at the camera's angle, about its target (`zoomPercent`'s ruler).
+    zoomTo100() { return zoomTo(() => 100); },
     subscribeCamera(listener) {
       const controls = runtimeRef.current?.controls;
       controls?.addEventListener?.("change", listener);
