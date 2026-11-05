@@ -8,7 +8,7 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // `#net:/MID`, `#wire:<uuid>`, `#sheet:/Load/`), a click on nothing clearing; a drag the box between its
 // ends, everything wholly inside it, as KiCad's window selection; a double-click on a sheet symbol enters
 // its sheet. The view moves as every flat view's: a right or middle drag, or a drag with Ctrl, Cmd or
-// Shift, pans, the wheel, a trackpad's two-finger scroll or a pinch zooms, a double-click elsewhere fits;
+// Shift, or a trackpad's two-finger scroll, pans, a mouse's wheel or a pinch zooms, a double-click elsewhere fits;
 // Pencil and Shapes draw on the sheet; Measure takes distances between points snapped to its pins' ends,
 // its wires' ends, its junctions and its labels, in millimetres.
 export const SCHEMATIC_TOOL = FLAT_TOOL;

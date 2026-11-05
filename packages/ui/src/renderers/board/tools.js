@@ -7,7 +7,7 @@ import { createToolModes } from "../kit/tools/toolModes.js";
 // text, a dimension or a graphic by the uuid KiCad saved it with), a click on nothing clearing; a
 // drag the box between its ends, an area on the view's working layer, as KiCad's window selection —
 // and the view moves under it as the 3D views' does: a right or middle drag, or a drag with Ctrl, Cmd
-// or Shift, pans, the wheel, a trackpad's two-finger scroll or a pinch zooms, a double-click fits;
+// or Shift, or a trackpad's two-finger scroll, pans, a mouse's wheel or a pinch zooms, a double-click fits;
 // Pencil and Shapes draw on the board; Measure takes
 // distances between points snapped to its pad, via and hole centres, its track ends and its
 // outline's corners, in millimetres (a drag pans under it). Its view settings are its panel's Layers tab.

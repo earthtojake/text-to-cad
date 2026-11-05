@@ -16,6 +16,7 @@ import ViewerAlertCard, { useAlertDismissal } from "../kit/status/ViewerAlertCar
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { ViewUpdateStatus } from "../kit/status/ViewUpdateStatus.jsx";
 import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
+import { stripLeft, useStageReach } from "../kit/shell/useStageReach.js";
 import { ViewportTopRight } from "../kit/shell/ViewportTopRight.jsx";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
@@ -511,20 +512,9 @@ function DxfSurface({ view, data }) {
     searchLabel={t("drawing.search")} searchPlaceholder={t("drawing.searchPlaceholder")} tabs={panelTabs} tab={flat.tab} onTabChange={flat.changeTab}
     width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
 
-  // How far the canvas starts from the view's left edge (the docked panel's width, open): the strip
-  // reaches back by that much, so it stands at the view's centre whether the panel is open or not.
+  // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).
   const stageRef = useRef(null);
-  const [stageLeft, setStageLeft] = useState(0);
-  useLayoutEffect(() => {
-    const stage = stageRef.current, frame = frameRef.current;
-    if (!stage || !frame) return undefined;
-    const place = () => setStageLeft(Math.round(stage.getBoundingClientRect().left - frame.getBoundingClientRect().left));
-    place();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(place);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, []);
+  useStageReach(stageRef, frameRef);
   // The strip's column is measured into the canvas's variables, as every view's is: the top-right
   // corner (Quick Edit) starts past its right.
   const topControls = useRef(null);
@@ -581,7 +571,7 @@ function DxfSurface({ view, data }) {
         </div>
         <PreviewChrome active={false}>
           {toolsHidden ? null : <div className={cn("pointer-events-none absolute z-20 flex flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")}
-            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX - stageLeft}px` }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
+            style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
                 <FloatingToolBar tools={tools} touch={mobile} />

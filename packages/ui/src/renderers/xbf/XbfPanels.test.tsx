@@ -206,9 +206,9 @@ it("Position is a STEP's -- its heading, its Pose row, a named slider and value 
   states.push(positionControls());
   await user.click(within(panel.querySelector<HTMLElement>('[data-tool-panel-head-slot]')!).getByRole('button', { name: 'Reset position' }));
   states.push(positionControls());
-  // The tab (Reset is off at the opening pose), the Pose row, then the joint's slider and value.
+  // The tab (Reset is off at the opening pose), the Pose row, then the joint's value on its name's line, its slider under it.
   const shown = (pose: string, value: string, atOpening: boolean) => ({ head: ['Position', `Reset position:${atOpening}`],
-    body: [`button:Pose: ${pose}:`, 'slider:hinge:', `input:hinge slider value:${value}`] });
+    body: [`button:Pose: ${pose}:`, `input:hinge slider value:${value}`, 'slider:hinge:'] });
   expect(states).toEqual([shown('Default', '0.00°', true), ['Default:true', 'open:false'], shown('open', '90.0°', false),
     shown('Custom', '25.0°', false), shown('Default', '0.00°', true)]);
 });

@@ -255,7 +255,8 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
   expect(controller.setZoom).toBeUndefined();
 
   const fitted = painted.at(-1)!;
-  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015, clientX: 300, clientY: 300 });
+  // A mouse's wheel (in lines, as Firefox's counts: a trackpad's fine pixel steps would pan) zooms.
+  fireEvent.wheel(canvas, { deltaY: -Math.log(0.5) / 0.0015 / 16, deltaMode: 1, clientX: 300, clientY: 300 });
   await waitFor(() => expect(painted.at(-1)!.scale).toBeCloseTo(fitted.scale * 0.5, 6));
   await act(async () => { await controller.resetCamera(); });
   expect(painted.at(-1)).toEqual(fitted);
@@ -269,10 +270,11 @@ it('host commands a flat drawing cannot answer are declined in words', async () 
 it('a drawing with layers and blocks has the docked panel and its Layers tab: a layer hidden is not drawn, a block reference is picked from it', async () => {
   readDrawing = () => json(LAYERED);
   const { pane, dispose } = await openDrawing();
-  // The view's panel, a board's: docked at the left, its search, then its one tab, Layers.
+  // The view's panel, a board's: docked at the left, its search, then its one list, Layers, with no row of tabs.
   const aside = await waitFor(() => { const element = pane.querySelector<HTMLElement>('[data-flat-panel]'); expect(element).not.toBeNull(); return element!; });
   expect([aside.getAttribute('data-flat-panel'), aside.hidden, aside.getAttribute('aria-label')]).toEqual(['docked', false, 'Drawing panel']);
-  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Layers', 'true']]);
+  expect(within(aside).queryAllByRole('tab')).toEqual([]);
+  expect(within(aside).getByRole('region', { name: 'Layers' })).toBeTruthy();
   const list = aside.querySelector<HTMLElement>('[data-drawing-layers]')!;
   expect([...list.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['CUT', 'BEND', 'ENGRAVE', 'HARDWARE', 'CENTRE', '0']);

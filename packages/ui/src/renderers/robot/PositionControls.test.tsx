@@ -22,12 +22,13 @@ const field = (name: string, unit: string) => screen.getByRole('textbox', { name
 it('opens on the pose row, full width over a slider per joint a person can drive, and Reset at the tab\'s top', () => {
   const pose = createPoseStore(fixturePayload('arm.urdf'));
   render(<PositionControls pose={pose}/>);
-  // One tab's rows: the Position tab around them is the panel's, named by its tab, with no heading of its own.
-  expect([screen.getByRole('tab', { name: 'Position' }).getAttribute('aria-selected'), screen.queryAllByRole('heading').length]).toEqual(['true', 0]);
+  // One tab's rows: the Position list around them is the panel's only one, so no row of tabs, and no heading of its own.
+  expect([screen.queryAllByRole('tab').length, screen.getByRole('region', { name: 'Position controls' }) !== null, screen.queryAllByRole('heading').length]).toEqual([0, true, 0]);
   expect(poseLabel()).toBe('Pose: Default');
   // The pose is the body's first row, not the head's.
   expect([document.querySelector('[data-tool-panel-head-slot] [data-pose-menu]'), document.querySelector('[data-tool-panel-body] [data-pose-row] [data-pose-menu]') !== null]).toEqual([null, true]);
-  expect([field('shoulder', 'deg').value, field('lift', 'm').value]).toEqual(['0°', '0 m']);
+  // A slide in metres reads in millimetres.
+  expect([field('shoulder', 'deg').value, field('lift', 'mm').value]).toEqual(['0°', '0 mm']);
   expect(screen.queryByRole('textbox', { name: /camera_mount|grip_mirror/ })).toBeNull();
   // Reset is the head's, idle at the default pose, and takes a moved joint back.
   const reset = screen.getByRole('button', { name: 'Reset position' });
@@ -55,8 +56,9 @@ it('follows the pose store, and writes to it: a typed value is clamped, and a re
   render(<PositionControls pose={pose}/>);
   act(() => { pose.write('shoulder', 30); });
   expect(field('shoulder', 'deg').value).toBe('30°');
-  fireEvent.change(field('lift', 'm'), { target: { value: '5' } });
-  fireEvent.blur(field('lift', 'm'));
+  // Typed in the field's millimetres, and clamped to the joint's limit.
+  fireEvent.change(field('lift', 'mm'), { target: { value: '5000' } });
+  fireEvent.blur(field('lift', 'mm'));
   expect(pose.getSnapshot().values.lift).toBe(0.3);
   act(() => { pose.selectGroupState(pose.groupStates.find(state => state.id === 'arm/raised')); });
   expect(poseLabel()).toBe('Pose: raised');

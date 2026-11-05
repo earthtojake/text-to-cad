@@ -17,11 +17,13 @@ test('an engine document reopens with its tree as it was left, and its selection
   // whether it is hidden, its Isolate whether it is isolated.
   const rows = () => pane.locator('[aria-label="Modeling tree"] button[aria-label]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label')));
   await loaded();
-  // The Model tree is the view's panel's first tab, the panel opened from its pill (the 800px view starts it collapsed).
+  // The Model is the view's panel's first tab (its only one, with no tab row, where nothing has a Position), the panel
+  // opened from its pill (the 800px view starts it collapsed).
   const openTree = async () => {
     await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
     if (await pane.locator('[data-flat-panel-pill] button').count()) await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
-    await pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model tree', exact: true }).click();
+    const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Model', exact: true });
+    if (await tab.count()) await tab.click();
   };
   await openTree();
   await pane.getByRole('button', { name: 'Expand peg (2)', exact: true }).click();

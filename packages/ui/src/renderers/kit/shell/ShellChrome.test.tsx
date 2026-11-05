@@ -118,7 +118,8 @@ it("the strip is at the top centre with the stack under it; the view's panel is 
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
   // stopping 8px above the cube's line (the cube itself 8px off the bottom).
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', right: '8px', bottom: 'calc(16px + 6rem)' });
+  // Its left reaches back over the docked panel (`useStageReach.js`), before the frame is painted.
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px', bottom: 'calc(16px + 6rem)' });
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);
   expect([tabNames(), shownTab(), sections()]).toEqual([['Harness tree', 'Reference'], 'Harness tree', ['Harness tree']]);

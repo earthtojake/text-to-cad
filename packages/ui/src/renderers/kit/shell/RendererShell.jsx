@@ -1,4 +1,5 @@
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
+import { stripLeft, useStageReach } from "./useStageReach.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
@@ -363,21 +364,9 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     label={t("flatPanel.modelPanel")} searchLabel={t("flatPanel.searchModel")} searchPlaceholder={t("flatPanel.searchModelPlaceholder")}
     sections={sidebar} tab={flat.tab} onTabChange={flat.changeTab} width={flat.width} maxWidth={flat.maxWidth}
     onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
-  // How far the canvas starts from the view's left edge (the docked panel's width, open): the strip
-  // reaches back by that much, so it stands at the view's centre whether the panel is open or not.
+  // The strip reaches back over the docked panel, so it stands at the view's centre (`useStageReach.js`).
   const stageRef = useRef(null);
-  const [stageLeft, setStageLeft] = useState(0);
-  useLayoutEffect(() => {
-    const stage = stageRef.current, host = frame.hostRef.current;
-    if (!stage || !host) return undefined;
-    const measure = () => setStageLeft(Math.round(stage.getBoundingClientRect().left - host.getBoundingClientRect().left));
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(stage);
-    return () => observer.disconnect();
-  }, [frame.hostRef]);
-
+  useStageReach(stageRef, frame.hostRef);
   // The controls at the top — the strip, a wrapped one, and the tool's row under it — are measured
   // into variables, so a tool change or a resize moves what hangs below them without redrawing the
   // model or touching a saved size: on a wide view, the column's right side, which the top-right
@@ -534,11 +523,12 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                 scene's edge colour: the canvas is resized on the next frame, and one frame of
                 the chrome's background above a dark stage is a visible band. */}
             <div ref={stageRef}
-              className="@container/cad-viewport pointer-events-none relative min-w-0 flex-1 overflow-hidden"
+              className="@container/cad-viewport pointer-events-none relative min-w-0 flex-1"
               data-cad-scene-backdrop={frame.sceneBackdrop}
               style={{ backgroundColor: frame.sceneBackdrop }}
             >
-              <div className="pointer-events-auto absolute inset-0 z-0">
+              {/* The canvas is clipped to the stage; the strip is not, so it reaches over the docked panel. */}
+              <div className="pointer-events-auto absolute inset-0 z-0 overflow-hidden">
                 <div className="absolute inset-0">
                   <ShellViewport
                     ref={frame.viewerRef}
@@ -603,7 +593,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                   onClose={() => setPreviewPanelOpen(false)} render={frame.previewSettings} />}>
 
               {/* The file explorer floats over the top-left corner, above the sidebar, which stays drawn under it. */}
-              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-center gap-2" style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX - stageLeft}px` }}
+              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-center gap-2" style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups=""><StripTouchProvider value={mobile}>
                 {/* The view's controls end the strip, after a rule: Projection, Display, then Preview (on a
                     phone, always in its More menu). */}

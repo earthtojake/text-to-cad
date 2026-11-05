@@ -1,6 +1,7 @@
 /**
  * The canvas a drawing is painted on, and the three things a person does to it:
- * drag to pan, wheel or pinch to zoom about the pointer, double-click to fit —
+ * drag or a trackpad's two-finger scroll to pan, a mouse's wheel or a pinch to zoom about the
+ * pointer (`../kit/viewport/wheelGesture.js`), double-click to fit —
  * and, for the tool in hand, a tap (a press that lets go without dragging) and
  * the pointer resting over the drawing (`onTap`, `onHover`), in the pane's CSS
  * pixels. A drag that has gone further than a tap may is a pan, whatever the tool.
@@ -31,6 +32,7 @@ import {
   zoomTransform
 } from "@cad/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
+import { createWheelGesture } from "../kit/viewport/wheelGesture.js";
 import { capturePointer, releasePointer } from "../../lib/pointerCapture.js";
 import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js";
 
@@ -38,16 +40,10 @@ import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js
 const WHEEL_ZOOM_SPEED = 0.0015;
 /** A trackpad pinch arrives as a ctrl-wheel with much smaller deltas. */
 const PINCH_WHEEL_ZOOM_SPEED = 0.01;
-const LINE_HEIGHT_PX = 16;
-const PAGE_HEIGHT_PX = 400;
 /** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
 const TAP_SLOP_PX = 4;
 const NO_LAYERS = new Set();
-function wheelZoomFactor(event) {
-  const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
-  const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
-  return Math.exp(-event.deltaY * unit * speed);
-}
+const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED));
 
 /**
  * @param {object} options
@@ -335,12 +331,17 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
       if (tapped && at) tapRef.current?.(at, event);
     };
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
+    // A mouse's wheel and a pinch zoom about the pointer; a trackpad's two-finger scroll pans (`wheelGesture.js`).
+    const readWheel = createWheelGesture();
     const onWheel = (event) => {
-      if (!transformRef.current) return;
-      // The page must not scroll under a drawing being zoomed, so this listener
+      const transform = transformRef.current;
+      if (!transform) return;
+      // The page must not scroll under a drawing being moved, so this listener
       // is registered non-passive and always consumes the event.
       event.preventDefault();
-      zoomBy(wheelZoomFactor(event), local(event));
+      const gesture = readWheel(event);
+      if (gesture.pan) moveTo(panTransform(transform, gesture.pan.x, gesture.pan.y));
+      else zoomBy(wheelZoomFactor(gesture.zoom, gesture.pinch), local(event));
     };
     const onDoubleClick = (event) => { event.preventDefault(); fit(); };
 

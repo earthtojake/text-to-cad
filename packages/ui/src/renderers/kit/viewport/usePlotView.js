@@ -1,7 +1,7 @@
 /**
  * The canvas a plot is painted on — a board, a schematic's sheet (`@cad/core`'s `plot2d`): every flat
- * view's (`useFlatCanvasView.js` — wheel, a trackpad's two-finger scroll or a pinch to zoom about the
- * pointer, double-click to fit, a tap, a drag and the pointer resting over it for the tool in hand, and
+ * view's (`useFlatCanvasView.js` — a mouse's wheel or a pinch to zoom about the pointer, a trackpad's
+ * two-finger scroll to pan, double-click to fit, a tap, a drag and the pointer resting over it for the tool in hand, and
  * the 3D views' pans: the middle or the right button's drag, or a drag with Ctrl, Cmd or Shift; a drag
  * the tool does not take pans too), painting the plot from the rasters kept of it (`plotRasters.js`) on
  * the pane's surround, then what the tools draw over it (`overlay`), in the same frame, so a capture of

@@ -723,7 +723,7 @@ export default {
   "tree.firstMatches": "일치 항목 {total}개 중 처음 {shown}개",
   "tree.match": "일치 항목 {count}개",
   "tree.matches": "일치 항목 {count}개",
-  "tree.modelTree": "모델 트리",
+  "tree.modelTree": "모델",
   "tree.filterModel": "모델 필터",
   "tree.modelingTree": "모델링 트리",
   "tree.modelTreeArea": "모델 트리 영역",

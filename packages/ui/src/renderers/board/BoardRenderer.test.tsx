@@ -226,7 +226,9 @@ it('a board without its index is the picture, its Flip and Display, and its Laye
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('Board: blinky.kicad_pcb');
   expect([...strip(pane).querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Flip board', 'Display']);
-  expect(within(panel(pane)).getAllByRole('tab').map(tab => tab.querySelector('[data-flat-panel-tab-name]')!.textContent)).toEqual(['Layers']);
+  // Its one list, with no row of tabs over it.
+  expect(within(panel(pane)).queryAllByRole('tab')).toEqual([]);
+  expect(within(panel(pane)).getByRole('region', { name: 'Layers' })).toBeTruthy();
   tap(pane, [34.175, 15]);
   expect(box(pane)).toBeNull();
 

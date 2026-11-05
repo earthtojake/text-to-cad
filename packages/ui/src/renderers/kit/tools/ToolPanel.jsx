@@ -222,10 +222,10 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const dragging = draft !== null;
   if (tabbed) {
     const searching = stack.searching;
-    return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role="tabpanel"
-      id={`flat-panel-body-${id}`} aria-labelledby={`flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
+    return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role={stack.single ? "region" : "tabpanel"}
+      id={`flat-panel-body-${id}`} aria-labelledby={stack.single ? undefined : `flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
       className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-      {searching ? <h3 className="flex h-6 items-center px-4 text-tiny text-muted-foreground">{tabName}</h3> : null}
+      {searching && !stack.single ? <h3 className="flex h-6 items-center px-4 text-tiny text-muted-foreground">{tabName}</h3> : null}
       {/* What its body puts in its head (Position's Reset, the Model tree's Show all), at the tab's top-right. */}
       <div ref={setHeadSlot} className="flex items-center justify-end gap-0.5 px-2 empty:hidden" data-tool-panel-head-slot="">{actions}</div>
       <div ref={body} data-tool-panel-body="" className={cn("min-w-0", fit !== "tree" && "px-2")}>

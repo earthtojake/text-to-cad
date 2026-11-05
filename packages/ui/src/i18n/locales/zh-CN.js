@@ -724,7 +724,7 @@ export default {
   "tree.firstMatches": "{total} 个匹配中的前 {shown} 个",
   "tree.match": "{count} 个匹配",
   "tree.matches": "{count} 个匹配",
-  "tree.modelTree": "模型树",
+  "tree.modelTree": "模型",
   "tree.filterModel": "筛选模型",
   "tree.modelingTree": "建模树",
   "tree.modelTreeArea": "模型树区域",

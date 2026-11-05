@@ -236,7 +236,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   stops 8px above the cube's line (`VIEWPORT_STACK_BOTTOM`), so it never runs past the
   view.
 - **The view's panel**, docked at the left: one search over a tab per section of what there is
-  to read of the file — a STEP assembly's Model tree, a robot's Links, Position, an SDF's
+  to read of the file — a STEP assembly's Model, a robot's Links, Position, an SDF's
   metadata, a drawing's Layers — whatever tool is in hand; collapsed, a pill at the canvas's top-left; on a phone the
   whole view (see [The view's panel](#the-views-panel-and-the-tool-stack)). A file with no
   section (a mesh) has none.
@@ -282,7 +282,7 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 | 3MF | Select, Pencil, Shapes, Measure; Clip, Projection, Display and Preview |
 | STL | Select (in hand, the view's navigation: an STL picks nothing), Pencil, Shapes; Clip, Projection, Display and Preview |
 | DXF | Select (in hand, and the view's hand: a drag pans, a tap picks an entity), Pencil, Shapes, Measure; no view controls: a drawing is 2D |
-| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, the wheel, a trackpad's two-finger scroll and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Flip board, Display |
+| KiCad board | Select (in hand, as KiCad's: a click picks what its filter ticks, on a layer the Display draws, a click on nothing clearing; a drag draws a box, the area on the view's working layer; the rest are the 3D views' drags: a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's two-finger scroll does, a mouse's wheel and a pinch zoom, a double-click fits: the board whole, 6% of the pane's smaller side clear round it (16px at least) and clear of the strip, as it opens and as its snapshot frames it), Pencil, Shapes, Measure; Flip board, Display |
 | KiCad schematic | Select (in hand, as a board's: a click picks what its filter ticks, a click on nothing clearing; a drag picks what lies wholly inside the box, KiCad's window selection; a double-click on a sheet symbol enters its sheet, anywhere else fits: the page whole, with a board's margin and clear of the strip), Pencil, Shapes, Measure; no view controls (no layers, and its colours are the theme's). |
 
 There is no activity dot. A thin rule parts the tools from the view's controls, which
@@ -390,14 +390,15 @@ its part, as KiCad's single click), and it is unticked as a board opens, as KiCa
 ticked as a board opens; the filter holds while the file is open. A click takes the most specific
 thing the boxes tick (`board/boardPick.js`): with Footprints ticked a footprint's graphics are its
 part's; with the zones alone a zone is taken anywhere inside it. KiCad's Grid Items, Points and
-Other items have no box: the board's index holds none of them. A whole net is picked from the Circuit's
+Other items have no box: the board's index holds none of them. A whole net is picked from the panel's
 Nets, not by the filter. The chevron's name says what is ticked ("Selection filter:
 everything", "Selection filter: Pads, Vias"). Select on a board has no modes: a click picks and a
 drag draws a box, the area it names (KiCad's window selection, a translucent rectangle as it is
 dragged); every other drag is the 3D views' (`useViewerRuntime.js`'s OrbitControls, the left
 button's orbit being the box): the right button's drag pans (a Mac trackpad's two-finger click and
 drag), as does the middle button's and a left drag with Ctrl, Cmd or Shift held (a Shift click still
-adds); the wheel, a trackpad's two-finger scroll and a pinch zoom; the browser's menu is kept off
+adds), and so does a trackpad's two-finger scroll, as Figma's does; a mouse's wheel, a wheel with
+Cmd or Ctrl and a pinch zoom (`kit/viewport/wheelGesture.js`); the browser's menu is kept off
 the board, as off a 3D view.
 
 **A schematic's filter is KiCad's too** (`schematic/SchematicSelectFilter.jsx`, over the kit's checklist the
@@ -405,7 +406,7 @@ the board, as off a 3D view.
 **Labels**, **Sheets** and **Other items** (junctions, no-connects), each its name alone. A click takes
 the nearest ink, and of what is about as near the most specific — a pin, a junction or a no-connect, a
 label (a sheet pin, its net), a wire, a field (its symbol) — then the symbol body or sheet symbol it is
-inside. A whole net is picked from the Circuit's Nets.
+inside. A whole net is picked from the panel's Nets.
 
 The geometry chosen is picked as one mode (`xbf/xbfSelectionFilter.js`'s
 `selectGeometryMode`): All, a press takes the face or edge it lands on where the part's
@@ -476,7 +477,7 @@ picks alone. On an engine document (an `.xbf`, or a STEP, which opens as one), i
 Select's own (`kit/tools/measure/MeasureFilterMenu.jsx`): **All** (when a file opens),
 **Vertices**, **Edges** or **Faces**, one chosen. A press takes an ENTITY, whole, as a CAD measure
 tool does: an edge's end within 10px of the pointer is its vertex, else the edge, else the face
-(`measureFilter.js`, `xbf/xbfMeasurePick.js`), of any part, open in the Model tree or not. What
+(`measureFilter.js`, `xbf/xbfMeasurePick.js`), of any part, open in the Model or not. What
 lights under the resting pointer is what a press takes, with what it is worth on its own beside
 it (a vertex's X Y Z; an edge's length or ⌀, a face's ⌀ or normal and its area, the length along
 a curve and the area the engine's facts of it, shown once they are in). With one kind chosen,
@@ -533,7 +534,7 @@ away, while the view stores where the plane stands (`clip.at`, in millimetres), 
 edit leaves the plane where it was and the slider reads 0% or 100% if the plane ends up
 outside the new box. Explode is offered only where there are parts to separate: a STEP
 assembly and a GLB of several rigid nodes. A STEP part file has no Explode tile, as it has no
-Model tree (`STEP_PART_VIEW_FEATURES`).
+Model (`STEP_PART_VIEW_FEATURES`).
 
 ## The view's panel and the tool stack
 
@@ -543,11 +544,13 @@ file, whatever tool is in hand, after KiCad's Appearance panel: docked at the vi
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
 with a rule at its right, and the canvas the narrower for it (the strip stays at the view's centre,
-panel open or not). Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
+panel open or not, and stands over the panel where a narrow view makes them meet, as Figma's toolbar
+stands over its layers; its reach is written before the frame is painted, so opening or shutting the
+panel never moves it, `kit/shell/useStageReach.js`). Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
-name: a STEP assembly's **Model tree** — a part file, whose tree would be its one row, has none —
+name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
-**Position**), a section's head actions (Position's Reset, the Model tree's Show all) a row at the
+**Position**), a section's head actions (Position's Reset, the Model's Show all) a row at the
 top of its tab, and the trees searched by the panel's search box. A file's routines are no tab:
 they play from the playbar under the model. A mesh, with no section, has no panel, and nor has a
 drawing with nothing for its Layers to say (fewer than four layers drawn on and no block
@@ -558,6 +561,9 @@ file.
   the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; "Search the
   drawing", "Layers, blocks"; "Search the model", "Search"; then **Hide
   panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
+- **One tab is no tabs.** A panel with a single tab (an assembly's Model with nothing to Position, a
+  drawing's Layers, a board read without its index) draws no row of tabs and no name over its search hits: the head's
+  rule sits over its list, which is labelled by the tab's name for assistive technology.
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
   weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
@@ -688,7 +694,7 @@ Its panels follow these rules:
   under every tool. No pick or tool opens or closes the explorer, on desktop or mobile.
 
 Tree rows inset their backgrounds 4px from the panel's edges, and the search box
-shares that inset. A tree in the view's panel (Model tree, Links) is dense (`TreeRowSurface`'s
+shares that inset. A tree in the view's panel (Model, Links) is dense (`TreeRowSurface`'s
 `dense`): 24px rows in the panels' 11px text, and ONE light 12px glyph per row in one
 column, as the explorer has: a subassembly's or folded group's disclosure chevron, turned down
 while open, or a part's box (Links draws its chevrons alone), 4px before the name. The glyph
@@ -890,15 +896,19 @@ heading holds **Reset position** before its X, idle while the joints are at thei
 first row is the pose, a dropdown the panel's width (`KinematicsPoseRow`, `data-pose-row`):
 **Default**, which puts the joints back, then the named poses, and Custom while the joints are
 set by hand. No divider under the pose row and no Reset footer.
-Each joint's label sits tight above its
-slider in the flexible left column, with a compact value field (24px tall, about
-five characters wide, tabular figures; degrees read "90.0°") in the right column
-of the same row; joint rows are 4px apart. Long labels truncate with a full-name
-hint and never take the slider's width. Every slider in the viewer is shadcn's slider
+Each joint is Figma's property row (`FileSheetSliderField`): its first line (20px) the joint's
+kind — a turn (lucide's RotateCw) or a slide (MoveHorizontal), muted, 12px — its name, and its
+value at the line's right, a committed field with no box until the pointer or the keyboard is on
+it (about five characters wide, tabular figures; degrees read "90.0°", a robot's slides in
+millimetres, "12.5 mm", typed in millimetres too); its second line the slider, under the name, on
+the line the name starts on. Joint rows are 8px apart. Long names truncate with a full-name hint and
+never take the value's room. Every slider in the viewer is shadcn's slider
 (`primitives/slider.jsx`), with a 12px thumb (16px on a phone, in a 36px band) and a track a
 shade darker than muted, for these dense, see-through panels: a row sizes and places it, never
-restyles its track or thumb — but for a joint's, which has no fill (a joint's zero is mostly
-mid-range, so a bar from the left end means nothing). Slider thumbs are named after their
+restyles its track or thumb. A joint's fills from its rest — as built, or the description's
+default — to its value, a tick at the rest where it is inside the range (`origin`): a joint's zero
+is mostly mid-range, so a bar from the left end would mean nothing, and the fill says at a glance
+which joints are moved and how far. Slider thumbs are named after their
 joint, and every slider reports its value at its step's precision (never float
 noise). Writes pose the model at once.
 

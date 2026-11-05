@@ -751,7 +751,7 @@ export default {
   "tree.firstMatches": "First {shown} of {total} matches",
   "tree.match": "{count} match",
   "tree.matches": "{count} matches",
-  "tree.modelTree": "Model tree",
+  "tree.modelTree": "Model",
   "tree.filterModel": "Filter model",
   "tree.modelingTree": "Modeling tree",
   "tree.modelTreeArea": "Model tree area",

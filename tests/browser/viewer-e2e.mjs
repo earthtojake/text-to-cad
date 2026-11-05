@@ -39,14 +39,14 @@ const fixtures = [
   // are the view's panel's tabs it must have (what there is to read of the file, whatever the tool).
   { format: "stl", file: "smoke.stl", parts: false, tools: ["Pencil", "Shapes", "Clip"], sections: [], threeD: true },
   // A STEP: read by the engine, drawn as an engine document is.
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model tree"], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Model"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
   { format: "dxf", file: "smoke.dxf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure"], sections: [], threeD: false, minCoverage: 0.003 },
   { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Pencil", "Shapes", "Measure", "Clip"], sections: ["Links"], threeD: true },
   // A cadgen engine document: served by the engine, read by the page from it, and picked,
   // measured and laid out as a STEP's is, with a STEP's pick menus on Select's and Measure's chevrons.
   { format: "xbf", file: "smoke.xbf", parts: true,
-    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model tree"], threeD: true },
+    tools: ["Select", "Selection filter: everything", "Pencil", "Shapes", "Measure", "Measure filter: everything", "Clip"], sections: ["Model"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -315,9 +315,10 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // What there is to read of the file is the view's panel's, a tab per section, never a tool.
-      const tabs = await page.locator("[data-flat-panel] [data-flat-panel-tab-name]").evaluateAll((names) =>
-        names.map((name) => name.textContent));
+      // What there is to read of the file is the view's panel's, a tab per section (a panel of one has no
+      // row of tabs: each section is labelled by its name), never a tool.
+      const tabs = await page.locator("[data-flat-panel] [data-flat-panel-section]").evaluateAll((sections) =>
+        sections.map((section) => section.getAttribute("aria-label")));
       for (const label of fixture.sections) if (!tabs.includes(label)) failures.push(`${fixture.format}: missing the ${label} tab (panel: ${tabs.join(", ")})`);
       if (!fixture.sections.length && tabs.length) failures.push(`${fixture.format}: a panel on a file with nothing to read (${tabs.join(", ")})`);
       // Projection, Display and Preview end the tool strip on 3D views; drawings have none.

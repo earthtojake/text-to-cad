@@ -160,7 +160,7 @@ it("a motion replaces Position's pose, shown read-only while it owns it, and Res
   frameAt(500);
   await user.click(within(motionPanel).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(7.5, 9);
-  const position = screen.getByRole('tabpanel', { name: 'Position' });
+  const position = screen.getByRole('region', { name: 'Position controls' });
   const field = within(position).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
   expect(field.value).toBe('7.50°');
   expect(field.disabled).toBe(true);
@@ -171,7 +171,7 @@ it("a motion replaces Position's pose, shown read-only while it owns it, and Res
   // Reset lets go: `open` was put at rest as the motion took the pose, so the model is as built.
   await user.click(screen.getByRole('button', { name: 'Reset motion' }));
   expect(lastPose(scene)).toBeNull();
-  const again = screen.getByRole('tabpanel', { name: 'Position' });
+  const again = screen.getByRole('region', { name: 'Position controls' });
   const after = within(again).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;
   expect([after.value, after.disabled]).toEqual(['0.00°', false]);
   expect(within(again).getByRole('button', { name: 'Pose: Default' })).toBeTruthy();

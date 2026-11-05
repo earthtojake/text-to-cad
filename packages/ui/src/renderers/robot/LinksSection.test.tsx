@@ -91,8 +91,8 @@ const filter = () => screen.getByRole('textbox', { name: 'Search the model' });
 
 it('draws the kinematic tree collapsed below the first real choice, with each link’s joint beside it', () => {
   render(<Harness/>);
-  // Its tab is named for the section and is open; the panel's search box searches it, and the tab draws no heading of its own.
-  expect(screen.getByRole('tab', { name: 'Links' }).getAttribute('aria-selected')).toBe('true');
+  // The panel's one list, so no row of tabs: it is named for the section; the panel's search box searches it, and it draws no heading of its own.
+  expect([screen.queryAllByRole('tab').length, screen.getByRole('region', { name: 'Links' }) !== null]).toEqual([0, true]);
   const tab = document.querySelector<HTMLElement>('[data-flat-panel-section="tree"]')!;
   expect([tab.contains(filter()), filter().getAttribute('placeholder'), tab.querySelector('[data-tool-panel-heading], h3')]).toEqual([false, 'Search', null]);
   // base_footprint is only a frame (no geometry, no mass, base_link fixed to it): it has nothing

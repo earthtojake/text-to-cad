@@ -61,9 +61,9 @@
 [data-viewer-layout="mobile"] [data-flat-panel="page"] :is([data-pose-menu], [data-animation-routine] button, input[type="text"]) { height: 32px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] :is([data-pose-row], [data-animation-routine]) { height: 44px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-animation-transport] { height: 44px; }
-/* A joint's row as on a desktop: its label tight over its slider (5px to the track), the value field
- * centred on the two, the rows 12px apart — a label reads as its slider's, not the one above's. The
- * slider draws a 16px band; its 36px touch band reaches over the label's foot and the gap, invisibly. */
+/* A joint's row as on a desktop: its name and value on one line, its slider under them, the rows 12px
+ * apart — a name reads as its slider's, not the one above's. The slider draws a 16px band; its 36px
+ * touch band reaches over the name's foot and the gap, invisibly. */
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-position-control] { padding-block: 3px; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-position-control] :has(> [data-slot="slider"]) { margin-top: 0; }
 [data-viewer-layout="mobile"] [data-flat-panel="page"] [data-position-control] [data-slot="slider"] { height: 16px; }

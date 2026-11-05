@@ -724,7 +724,7 @@ export default {
   "tree.firstMatches": "{total} 個相符項目中的前 {shown} 個",
   "tree.match": "{count} 個相符項目",
   "tree.matches": "{count} 個相符項目",
-  "tree.modelTree": "模型樹狀結構",
+  "tree.modelTree": "模型",
   "tree.filterModel": "篩選模型",
   "tree.modelingTree": "建模樹狀結構",
   "tree.modelTreeArea": "模型樹狀結構區域",

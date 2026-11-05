@@ -62,7 +62,7 @@ File-tab chrome uses normal-weight type. The navbar's file name, the explorer's 
 the model tree's rows, and filter matches use muted/primary text color for emphasis,
 never bold weight. The explorer's rows are compact 24px lines in 12px text, the size of
 the section titles and the filter above them, a folder opening inline under itself; the
-view's panel's trees (Model tree, Links) are 24px lines in its smaller 11px text
+view's panel's trees (Model, Links) are 24px lines in its smaller 11px text
 ([the view's panel](docs/settings-ui.md#the-views-panel-and-the-tool-stack)). Both inset
 row backgrounds 5px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
@@ -246,7 +246,7 @@ reads what the engine serves of it through the viewer (`client.engineDocument`,
 `/api/v1/documents/<kind>/<id>`) — its structure and one buffer per part — and reads no source or sidecar. A
 rebuild reaches the view as the engine's next version, and only the parts the edit changed are
 fetched. Both the tools view and its independent Preview draw the engine's meshes.
-The Model tree shares the explorer's row and filter primitives. Its rows are the
+The Model tab's tree shares the explorer's row and filter primitives. Its rows are the
 document's assemblies and parts, a part a leaf whose faces and edges the viewport picks;
 its expansion controls viewport selection, and its filter searches
 names without expanding anything. See [the engine document renderer](docs/cad-renderer.md#engine-document-renderer)
@@ -262,14 +262,14 @@ controls are one row under the strip, its sub-toolbar (`kit/tools/SubToolbar.jsx
 the drawing tools' colour, stroke width, placement and history; Measure's chips. Explode's and
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 What there is to read of the file is the view's panel, docked at the left, whatever the tool
-(`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model tree, a
+(`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model, a
 robot's Links, Position, an SDF's metadata; a board's Parts, Nets and Layers, a schematic's Parts,
 Nets and Hierarchy, a drawing's Layers — and, under a board's or a schematic's lists, the picked
 part's or net's pads or pins (`kit/inspector/CircuitDetail.jsx`). A file's routines play from the playbar under the model. The panel
 is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
 phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
-the description's link tree, with the Model tree's rows and search box; see
+the description's link tree, with the Model's rows and search box; see
 [robot links](docs/cad-renderer.md#robot-links).
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the view's panel, mobile layout, section density, keyboard scope, tooltips

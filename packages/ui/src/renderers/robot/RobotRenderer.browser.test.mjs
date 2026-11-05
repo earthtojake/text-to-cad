@@ -116,7 +116,8 @@ async function open(t, file, { panel = true } = {}) {
     links: async () => Object.fromEntries((await page.evaluate(() => window.__robotLinks())).map(({ link, matrixWorld }) => [link, matrixWorld])),
     camera: () => page.evaluate(() => { const { position, target, zoom } = window.__cadCamera(); return [...position, ...target, zoom]; }),
     stats: () => page.evaluate(() => window.__robotPoseStats()),
-    jointField: (name, unit = 'deg') => page.getByLabel(`${name} value in ${unit}`, { exact: true }),
+    // A slide in metres is shown, and typed, in millimetres.
+    jointField: (name, unit = 'deg') => page.getByLabel(`${name} value in ${unit === 'm' ? 'mm' : unit}`, { exact: true }),
     // Select picking the joints' knobs alone (a press on the model picks nothing), or its links alone (no knobs).
     openPosition: () => robot.filterTo('position'),
     pickLinks: () => robot.filterTo('links'),
@@ -156,7 +157,8 @@ async function open(t, file, { panel = true } = {}) {
     // A joint set from the sidebar's Position section, whatever Select picks.
     async type(name, value, unit) {
       await robot.openSection('Position');
-      await robot.jointField(name, unit).fill(String(value)); await robot.jointField(name, unit).press('Enter');
+      const typed = unit === 'm' ? Math.round(value * 1e4) / 10 : value;
+      await robot.jointField(name, unit).fill(String(typed)); await robot.jointField(name, unit).press('Enter');
     },
     pressedRows: () => pane.locator('[aria-label="Robot tree area"] button[aria-pressed="true"]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     // The pressed rows once they read `wanted` (in any order), or the assertion naming what they did read.
@@ -276,8 +278,8 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   const position = robot.position();
   const poseSelect = position.locator('[data-tool-panel-body] [data-pose-row] [data-pose-menu]');
   assert.equal(await poseSelect.getAttribute('aria-label'), 'Pose: Default');
-  // Compact joint rows: a small value field beside each slider, as wide as its text needs (a
-  // length "0 m" as a turn "0°"), never clipping it; rows 6px apart.
+  // Compact joint rows: a small value field on the name's line, as wide as its text needs (a
+  // length "0 mm" as a turn "0°"), never clipping it; rows 8px apart.
   const fields = await position.locator('[data-position-control] input').evaluateAll(inputs => inputs.map(input => {
     const box = input.getBoundingClientRect();
     return { value: input.value, width: box.width, height: box.height, fits: input.scrollWidth <= input.clientWidth };
@@ -285,11 +287,11 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.ok(fields.length >= 3 && fields.every(field => field.height <= 24 && field.width <= 80), `small value fields: ${JSON.stringify(fields)}`);
   assert.ok(fields.every(field => field.fits), `every value fits its field: ${JSON.stringify(fields)}`);
   const rowTops = await position.locator('[data-position-control]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect()));
-  assert.ok(rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom - 6) <= 0.5),
-    `rows 6px apart: ${JSON.stringify(rowTops.slice(1).map((row, index) => row.top - rowTops[index].bottom))}`);
+  assert.ok(rowTops.slice(1).every((row, index) => Math.abs(row.top - rowTops[index].bottom - 8) <= 0.5),
+    `rows 8px apart: ${JSON.stringify(rowTops.slice(1).map((row, index) => row.top - rowTops[index].bottom))}`);
   // A longer value widens its field rather than being cut.
   await robot.type('lift', 0.25, 'm');
-  assert.equal(await robot.jointField('lift', 'm').evaluate(input => [input.value, input.scrollWidth <= input.clientWidth].join()), '0.25 m,true');
+  assert.equal(await robot.jointField('lift', 'm').evaluate(input => [input.value, input.scrollWidth <= input.clientWidth].join()), '250 mm,true');
   // Back to the value it opened at (the SRDF's home), so the pose is still the default.
   await robot.type('lift', 0.1, 'm');
   for (const heading of ['Pose', 'Joints', 'Kinematics']) {
@@ -650,7 +652,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
   await robot.openSection('Position');
   await robot.jointField('shoulder').waitFor();
-  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '0.2 m', '12°']);
+  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '200 mm', '12°']);
   await page.waitForFunction(() => window.__cadJointHandles?.().find(handle => handle.id === 'shoulder')?.value === 25);
   const links = await robot.links();
   assert.equal(round6(translation(links.carriage)[2]), 0.35, 'and the robot on screen is in that pose');
@@ -665,7 +667,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   await page.evaluate(() => window.cadHarness.mounted(true));
   await robot.openSection('Position');
   await robot.jointField('shoulder').waitFor();
-  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0°', '0 m'], 'a pose belongs to the description it was made on');
+  assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue()], ['0°', '0 mm'], 'a pose belongs to the description it was made on');
   await robot.openSection('Links');
   await pane.getByRole('button', { name: 'Hide upper_arm', exact: true }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Reveal upper_arm', exact: true }).count(), 0, 'and so do its hidden visuals');

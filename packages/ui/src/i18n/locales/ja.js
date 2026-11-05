@@ -723,7 +723,7 @@ export default {
   "tree.firstMatches": "{total} 件中の最初の {shown} 件",
   "tree.match": "{count} 件一致",
   "tree.matches": "{count} 件一致",
-  "tree.modelTree": "モデルツリー",
+  "tree.modelTree": "モデル",
   "tree.filterModel": "モデルを絞り込む",
   "tree.modelingTree": "モデリングツリー",
   "tree.modelTreeArea": "モデルツリーの領域",

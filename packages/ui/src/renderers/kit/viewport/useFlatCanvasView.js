@@ -1,14 +1,15 @@
 /**
- * A flat picture on a canvas, and the three things a person does to it: drag to pan, wheel or
- * pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
+ * A flat picture on a canvas, and the three things a person does to it: drag or a trackpad's
+ * two-finger scroll to pan, a mouse's wheel or a pinch to zoom about the pointer, double-click to fit — and, for the tool in hand, a tap (a press
  * that lets go without dragging) and the pointer resting over the picture (`onTap`, `onHover`), in
  * the pane's CSS pixels. A drag that has gone further than a tap may is a pan, unless the tool in
  * hand takes it (`onDrag`, a board's Select drawing its box): then the middle button pans, as
  * KiCad's does (`middlePan`), and the view's other drags are the 3D views' (`orbitPan`, three's
  * OrbitControls as `useViewerRuntime.js` sets them): the right button's drag pans (a Mac
  * trackpad's two-finger click and drag) and a primary drag with Ctrl, Cmd or Shift held pans, the
- * browser's menu kept off the picture; a press of either that does not travel is no tap. The wheel
- * and a trackpad's two-finger scroll zoom, as a pinch does. Every flat view (a 2D drawing, a
+ * browser's menu kept off the picture; a press of either that does not travel is no tap. A mouse's
+ * wheel zooms, as a pinch and a wheel with Cmd or Ctrl do; a trackpad's two-finger scroll pans, as
+ * Figma's does (`wheelGesture.js`). Every flat view (a 2D drawing, a
  * board) is this one hook under its own paint.
  *
  * The renderer brings the picture: `content` (a new one frames itself, unless this file's view is
@@ -40,23 +41,18 @@ import {
   zoomTransform
 } from "@cad/core/lib/drawing2d/transform.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "./pixelRatio.js";
+import { createWheelGesture } from "./wheelGesture.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 
 /** Wheel notches to zoom factor. A notch is ~100 px of delta on most mice. */
 const WHEEL_ZOOM_SPEED = 0.0015;
 /** A trackpad pinch arrives as a ctrl-wheel with much smaller deltas. */
 const PINCH_WHEEL_ZOOM_SPEED = 0.01;
-const LINE_HEIGHT_PX = 16;
-const PAGE_HEIGHT_PX = 400;
 /** How far a press may travel and still be a tap rather than the start of a pan, in CSS pixels. */
 export const TAP_SLOP_PX = 4;
 /** How much closer than the fit framing a thing may bring the view. */
 export const FRAME_ZOOM_CAP = 24;
-function wheelZoomFactor(event) {
-  const unit = event.deltaMode === 1 ? LINE_HEIGHT_PX : event.deltaMode === 2 ? PAGE_HEIGHT_PX : 1;
-  const speed = event.ctrlKey ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED;
-  return Math.exp(-event.deltaY * unit * speed);
-}
+const wheelZoomFactor = (pixels, pinch) => Math.exp(-pixels * (pinch ? PINCH_WHEEL_ZOOM_SPEED : WHEEL_ZOOM_SPEED));
 
 /**
  * @param {object} options
@@ -388,12 +384,17 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
     const onPointerLeave = () => { if (!pointers.size) hoverRef.current?.(null, null); };
     // The right button is a pan: the browser's own menu stays off the picture, as OrbitControls keeps it off a 3D view.
     const onContextMenu = (event) => { if (orbitPanRef.current) event.preventDefault(); };
+    // A mouse's wheel and a pinch zoom about the pointer; a trackpad's two-finger scroll pans (`wheelGesture.js`).
+    const readWheel = createWheelGesture();
     const onWheel = (event) => {
-      if (!transformRef.current) return;
-      // The page must not scroll under a picture being zoomed, so this listener
+      const transform = transformRef.current;
+      if (!transform) return;
+      // The page must not scroll under a picture being moved, so this listener
       // is registered non-passive and always consumes the event.
       event.preventDefault();
-      zoomBy(wheelZoomFactor(event), local(event));
+      const gesture = readWheel(event);
+      if (gesture.pan) moveTo(panTransform(transform, gesture.pan.x, gesture.pan.y));
+      else zoomBy(wheelZoomFactor(gesture.zoom, gesture.pinch), local(event));
     };
     const onDoubleClick = (event) => {
       event.preventDefault();

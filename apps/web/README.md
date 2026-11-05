@@ -20,7 +20,7 @@ family and draws the navbar and the explorer. The catalog exposes CAD
 artifacts only. Explicit exports write only the requested download to temporary server storage.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
-The [shared Model tree](../../packages/ui/docs/cad-renderer.md#engine-document-panels)
+The [shared Model tab](../../packages/ui/docs/cad-renderer.md#engine-document-panels)
 owns expansion-based picking and isolation.
 Web uses the same tree and file-row primitives as the CAD app; its HTTP adapter
 does not decide which model nodes are expanded or selectable.

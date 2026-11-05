@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
+import { MoveHorizontal, RotateCw } from "lucide-react";
 import { Slider } from "@cad/ui/primitives/slider";
 import {
   xbfCoupledPairs, xbfCouplingControls, xbfCouplingValues, xbfCouplingWrite, xbfCouplings, xbfPoseControls,
@@ -175,6 +176,8 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
   const poseNames = Object.keys(kinematics?.configurations || {}).filter(name => String(name || "").trim());
   const unposable = xbfUnposable(kinematics);
   const others = xbfOtherWarnings(kinematics);
+  // Each slider fills from where its joint is as built (a coupling's 0).
+  const asBuilt = useMemo(() => (kinematics ? xbfPoseValues(kinematics) : null), [kinematics]);
   const change = (control, next) => {
     if (readOnly) return;
     const written = writeXbfPosition(values, control, next);
@@ -186,25 +189,27 @@ function PositionBody({ kinematics, values, couplings = null, preset, onValues, 
     if (written) onValues(written.values, written.couplings);
   };
   // A joint a person moves, counted once a drag (`usage/controls.js`).
-  const slider = (control, currentValue, writeValue, title) => {
+  const slider = (control, currentValue, writeValue, title, rest = 0) => {
     const write = (...args) => { usage.changed("position_joint"); return writeValue(...args); };
-    return <FileSheetSliderField key={control.id} label={control.label}
+    const angular = unitSuffix(control.unit) === "°";
+    return <FileSheetSliderField key={control.id} label={control.label} icon={angular ? <RotateCw /> : <MoveHorizontal />}
     labelTitle={title} value={`${formatControlNumber(currentValue)}${unitSuffix(control.unit)}`}
     onValueCommit={text => write(control, parseFileSheetNumberInput(text, { fallback: currentValue, min: control.min, max: control.max }))}
     valueInputProps={{ ariaLabel: t("position.sliderValue", { name: control.label }), disabled: readOnly }}>
     <Slider className={FILE_SHEET_PRECISION_SLIDER_CLASSES} disabled={readOnly} value={[Number(currentValue) || 0]} min={control.min} max={control.max}
+      origin={Math.min(Math.max(Number(rest) || 0, control.min), control.max)}
       step={controlStep(control)} onValueChange={next => write(control, next?.[0] ?? currentValue)} thumbProps={{ "aria-label": control.label }} />
   </FileSheetSliderField>;
   };
   return <ToolPanel id="position" title={t("position.title")} label={t("position.controls")} fit="details">
-    <div className="space-y-1.5 pb-1.5 pt-0.5">
+    <div className="space-y-2 pb-2 pt-0.5">
       {poseNames.length || controls.length || coupled.length ? <KinematicsPoseRow poses={poseNames.map(name => ({ value: name, label: name }))}
         activeValue={preset} onSelect={onPreset} onReset={onReset} disabled={readOnly} /> : null}
       {coupled.map(control => slider(control, Number(shown[control.coupling]) || 0, couple,
         t("position.couples", { name: control.label, pairs: control.pairs.join(", ") })))}
       {controls.map((control) => {
         const currentValue = values[control.pair]?.[control.index] ?? 0;
-        return slider(control, currentValue, change, control.label);
+        return slider(control, currentValue, change, control.label, asBuilt?.[control.pair]?.[control.index] ?? 0);
       })}
       {!controls.length && !coupled.length && !poseNames.length ? <FileSheetStatusText>{t("position.noControls")}</FileSheetStatusText> : null}
       {/* What the document's mechanism cannot pose, and why. */}

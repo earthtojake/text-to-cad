@@ -250,7 +250,9 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
   const activeRef = useRef(active);
   activeRef.current = active;
-  const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register }), [active, searching, register]);
+  // One tab is no choice: no row of tabs, and no name over its hits; its list says what it is by its own label.
+  const single = tabs.length <= 1;
+  const tabbed = useMemo(() => ({ tabbed: true, single, activeSection: active, searching, register }), [single, active, searching, register]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const aside = <aside aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
     onKeyDown={onPanelKeyDown}
@@ -268,8 +270,10 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         <PanelLeftClose aria-hidden="true" />
       </ToolbarButton>}
     </div>
-    {/* The tabs, buttons as Figma's: the open one raised on the accent. While a search is up they step aside. */}
-    <div role="tablist" aria-label={label} hidden={searching} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
+    {/* The tabs, buttons as Figma's: the open one raised on the accent. While a search is up they step
+        aside; a panel of one tab has none, its head's rule alone over its list. */}
+    {single ? <div className="shrink-0 border-b border-border" style={{ paddingTop: 2 }} data-flat-panel-rule="" /> : null}
+    <div role="tablist" aria-label={label} hidden={searching || single} className="flex shrink-0 items-center gap-1 border-b border-border" style={{ padding: `0 ${SURFACE_PX}px ${SURFACE_PX}px` }}>
       {tabs.map(entry => {
         const on = entry.id === active;
         return <button key={entry.id} type="button" role="tab" id={ids(entry.id).tab} aria-controls={ids(entry.id).panel} aria-selected={on} tabIndex={on ? 0 : -1}
@@ -298,13 +302,13 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         <div ref={body} className={"group/body flex flex-col pt-1 pb-2"} data-flat-panel-body="">
           {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = searching || entry.id === active;
-            return <section key={entry.id} role="tabpanel" id={ids(entry.id).panel} aria-labelledby={ids(entry.id).tab} hidden={!shown}
-              data-flat-panel-section={entry.id}
+            return <section key={entry.id} role={single ? "region" : "tabpanel"} id={ids(entry.id).panel} aria-label={entry.label}
+              aria-labelledby={single ? undefined : ids(entry.id).tab} hidden={!shown} data-flat-panel-section={entry.id}
               // Searching, a long ranked list (the Parts', the Nets') goes under the short ones, so a layer or a sheet found is not under 200 parts.
               style={searching && entry.searchLast ? { order: 1 } : undefined}
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
-              {searching ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
+              {searching && !single ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
               <FlatPanelTab panel={panel} id={entry.id}>{entry.content}</FlatPanelTab>
             </section>;
           })}
