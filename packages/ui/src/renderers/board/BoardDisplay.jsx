@@ -126,8 +126,8 @@ function BoardLayerDisplaySettings({ display, sheet, onChange }) {
 }
 
 /**
- * Display's tile and popover, a 3D view's Projection's way (`kit/shell/ProjectionPopover.jsx`): its
- * own tile on the strip, or, from a phone's More, `anchor`ed there and held open by it.
+ * Display's tile and popover: its own tile on the strip, or, from a phone's More, `anchor`ed there
+ * and held open by it.
  */
 function BoardDisplayPopover({ display, sheet, onChange, disabled = false, anchor = null, open: held, onOpenChange }) {
   const { t } = useI18n();

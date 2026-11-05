@@ -102,7 +102,7 @@ The steps:
    `packages/ui/src/renderers/registrations.test.ts`.
 
 The worked example is the KiCad board view (`packages/ui/src/renderers/board/`): a flat view like a
-drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Circuit and Layers sections, a
+drawing's, on `FlatViewFrame`, with Select, Annotate and Measure, its Parts, Nets and Layers tabs, a
 Display and Settings menus of its own, and its refs as chips.
 
 ## Walkthrough: a type and its integration together (KiCad)

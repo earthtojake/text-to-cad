@@ -23,7 +23,7 @@ import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { usePlotView } from "../kit/viewport/usePlotView.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
-import SchematicSection from "./SchematicSection.jsx";
+import SchematicSection, { useSchematicDetail, useSchematicTrees } from "./SchematicSection.jsx";
 import SchematicSelectFilter from "./SchematicSelectFilter.jsx";
 import SheetsSection from "./SheetsSection.jsx";
 import { useSchematicReferences } from "./schematicReferences.jsx";
@@ -45,8 +45,9 @@ import { useSchematicDocument } from "./useSchematicDocument.js";
  * It follows the viewer's theme, live: KiCad's light paper and dark ink in light, a dark sheet and light
  * ink of the same hues in dark (`plot2d/theme.js`'s `schematicColors`: a switch redraws, it reads nothing
  * again), on the app's neutral grey round the sheet. No drawing sheet (KiCad's frame and title block) is
- * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Circuit (`SchematicSection.jsx`, a board's tree rules)
- * and, for a schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
+ * drawn, as a board draws none. Its panel (`kit/shell/FlatPanel.jsx`) is the Parts and the Nets
+ * (`SchematicSection.jsx`, a board's list rules, the picked part's or net's pins under them) and, for a
+ * schematic of more than one sheet, the Hierarchy (`SheetsSection.jsx`, KiCad's Hierarchy
  * Navigator: a press shows that sheet, the way back up from one entered); a double-click on a sheet
  * symbol enters its sheet. Each sheet keeps its view for the session: going back to one finds it where it was left.
  * Ink and measurements are the sheet's they were made on: showing another sheet lets them go. A schematic has no view controls: it has no layers, and its colours are the theme's.
@@ -224,7 +225,15 @@ function SchematicSurface({ view, data }) {
     viewRef.current?.frame([x0, -y1, x1, -y0]);
     return true;
   }
-  /** What a press in the Circuit picked, framed: here, or on the first sheet it is on. */
+  /** What a press in a list picked, shown: the sheet shown if it is there, else the first sheet it is on, at that sheet's view. */
+  const showSelectors = useCallback(selectors => {
+    const drawn = pageRef.current, schematic = indexRef.current;
+    if (!schematic) return;
+    if (drawn && selectors.some(id => drawn.extent(schematic.resolve(id)))) return;
+    const onSheet = selectors.map(id => schematic.resolve(id)?.sheets?.[0]).find(Boolean);
+    if (onSheet && onSheet !== drawn?.path) showSheet(onSheet);
+  }, [showSheet]);
+  /** What a double-click in a list picked, framed: here, or on the first sheet it is on. */
   const frameSelectors = useCallback(selectors => {
     if (frameOnPage(selectors)) return;
     const schematic = indexRef.current;
@@ -445,11 +454,17 @@ function SchematicSurface({ view, data }) {
   const selectMenu = <SchematicSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
   const toolRow = row;
-  // The panel (`kit/shell/FlatPanel.jsx`): the Circuit, then, for more than one sheet, the Hierarchy.
+  // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then, for more than one sheet, the
+  // Hierarchy; under them, what is picked in detail.
+  const trees = useSchematicTrees(index);
+  const takeSelect = () => selectTool(SCHEMATIC_TOOL.SELECT);
+  const list = id => <SchematicSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
+    onIsolate={isolation.toggle} onShow={showSelectors} onFrame={frameSelectors} onSelect={takeSelect} />;
+  const detail = useSchematicDetail(index, selection, { onSelect: takeSelect, onShow: showSelectors, onFrame: frameSelectors });
   const panel = index ? { kind: "schematic", label: t("schematic.text.schematic_panel"), searchLabel: t("schematic.text.search_schematic"),
-    searchPlaceholder: t("schematic.text.search_schematic_placeholder"), tabs: [
-      { id: "circuit", label: t("board.text.circuit"), searchLast: true, content: <SchematicSection index={index} selection={selection} isolated={isolation.isolated}
-        onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={() => selectTool(SCHEMATIC_TOOL.SELECT)} /> },
+    searchPlaceholder: t("schematic.text.search_schematic_placeholder"), detail, tabs: [
+      { id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
+      { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") },
       ...(index.order.length > 1 ? [{ id: "hierarchy", label: t("schematic.text.hierarchy"), content: <SheetsSection index={index} shown={shownSheet}
         onShow={showSheet} onHover={selector => selection.hover(selector)} /> }] : [])
     ] } : null;

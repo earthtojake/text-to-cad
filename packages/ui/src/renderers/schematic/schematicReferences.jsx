@@ -7,7 +7,7 @@ import {
 } from "./schematicIcons.jsx";
 
 const EMPTY = Object.freeze([]);
-// A chip leads with its kind's glyph, as the Circuit's rows name the kinds.
+// A chip leads with its kind's glyph, as the Parts' and Nets' rows name the kinds.
 const KIND_ICONS = Object.freeze({ part: SymbolKindIcon, symbol: SymbolKindIcon, pin: PinKindIcon, net: NetKindIcon, sheet: SheetKindIcon,
   label: LabelKindIcon, wire: WireKindIcon, bus: WireKindIcon, junction: JunctionKindIcon, no_connect: NoConnectKindIcon, bus_entry: BusEntryKindIcon });
 const CHIP_ICON_CLASS = "size-2.5 shrink-0 text-muted-foreground";

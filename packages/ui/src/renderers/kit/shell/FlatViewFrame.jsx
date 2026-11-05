@@ -84,7 +84,8 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   busy: boolean, children: import("react").ReactNode, file: string, mobile: boolean, compact: boolean,
  *   chromeHidden: boolean, loading: boolean, loadingLabel: string, updating: boolean, updateStatus: { pending: boolean, label: string },
  *   tools: object[], toolRow?: import("react").ReactNode, views?: object[],
- *   panel?: { kind: string, label: string, searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode }[] } | null,
+ *   panel?: { kind: string, label: string, searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode }[],
+ *     detail?: import("react").ReactNode } | null,
  *   panelControl?: { current: object | null },
  *   toolStack: object, onToolStackChange(patch: object): void, notice?: import("react").ReactNode,
  *   quickEdit: object | null, alert: object | null, cardAlert: object | null, alertDismissal: { dismissed: boolean, dismiss(): void },
@@ -157,7 +158,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
 
   const panelNode = sided && !toolsHidden ? <FlatPanel mode={mode} open={open} onClose={() => setOpen(false)} label={panel.label}
     searchLabel={panel.searchLabel} searchPlaceholder={panel.searchPlaceholder} tabs={tabs} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={panel.detail ?? null} /> : null;
 
   return (
     <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"

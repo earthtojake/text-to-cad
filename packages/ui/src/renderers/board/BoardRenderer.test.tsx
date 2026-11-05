@@ -170,7 +170,7 @@ const tap = (pane: HTMLElement, at: [number, number], init: Record<string, unkno
   fireEvent.pointerUp(canvas, event);
 };
 
-it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then Flip and Display after the rule; its panel is docked, open, the Circuit then the Layers", async () => {
+it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure — then Flip and Display after the rule; its panel is docked, open, the Parts, the Nets, then the Layers", async () => {
   const { pane, dispose } = await open();
   await opened(pane);
   const tools = strip(pane);
@@ -193,9 +193,10 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   // The search field and the collapse button on the boxes' line, 8px in, as the tabs' buttons below them.
   expect(head.style.padding).toBe('8px 8px 6px');
   expect(searchBox(pane).placeholder).toBe('Parts, nets, layers');
-  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Circuit', 'true'], ['Layers', 'false']]);
+  expect(within(aside).getAllByRole('tab').map(tab => [tab.querySelector('[data-flat-panel-tab-name]')!.textContent, tab.getAttribute('aria-selected')])).toEqual([['Parts', 'true'], ['Nets', 'false'], ['Layers', 'false']]);
   expect(aside.querySelector('[role=tab] svg')).toBeNull();
-  expect(tabBody(pane, 'circuit').hidden).toBe(false);
+  expect(tabBody(pane, 'parts').hidden).toBe(false);
+  expect(tabBody(pane, 'nets').hidden).toBe(true);
   expect(tabBody(pane, 'layers').hidden).toBe(true);
   // The Layers tab is the layer list alone.
   expect(within(tabBody(pane, 'layers')).queryAllByRole('combobox')).toEqual([]);
@@ -209,7 +210,7 @@ it('a native board uses the host language for its controls, tree and accessible 
   const { pane, dispose } = await open('blinky.kicad_pcb', { locale: 'zh-CN' });
   await opened(pane);
   expect(pane.querySelector('canvas')?.getAttribute('aria-label')).toBe('电路板：blinky.kicad_pcb');
-  expect(within(panel(pane)).getByRole('tab', { name: '电路' }).getAttribute('aria-selected')).toBe('true');
+  expect(within(panel(pane)).getByRole('tab', { name: '元件' }).getAttribute('aria-selected')).toBe('true');
   expect(within(panel(pane)).getByRole('textbox', { name: '搜索电路板' })).toBeTruthy();
   expect(within(pane).getByRole('button', { name: '选择', exact: true })).toBeTruthy();
   expect(within(pane).getByText('电阻')).toBeTruthy();
@@ -218,7 +219,7 @@ it('a native board uses the host language for its controls, tree and accessible 
   dispose();
 });
 
-it('a board without its index is the picture, its Flip and Display, and its Layers: no tools, no Circuit, no Quick Edit', async () => {
+it('a board without its index is the picture, its Flip and Display, and its Layers: no tools, no Parts or Nets, no Quick Edit', async () => {
   const { board: _index, ...picture } = BOARD as any;
   readPlot = () => json(picture);
   const { pane, dispose } = await open();
@@ -408,7 +409,7 @@ it("a drag under Select draws the box and names the area on the working layer; t
   dispose();
 });
 
-it('the Circuit tab is the parts in their schematic blocks, then the nets: a block selects its parts, a row selects and frames, an eye isolates', async () => {
+it('the Parts tab is the parts in their schematic blocks and the Nets tab the nets: a press selects, a double-click frames, an eye isolates', async () => {
   const board = JSON.parse(JSON.stringify(BOARD));
   const sheets: Record<string, string> = { J1: 'power', R1: 'led', D1: 'led' };
   for (const part of board.board.parts) part.sheet = sheets[part.ref];
@@ -417,48 +418,64 @@ it('the Circuit tab is the parts in their schematic blocks, then the nets: a blo
   const { pane, dispose } = view;
   await opened(pane);
   const controller = await controllerOf(view);
-  const section = await waitFor(() => { const found = tabBody(pane, 'circuit'); expect(found).not.toBeNull(); return found!; });
-  const inSection = within(section);
-  const rows = () => [...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'));
-  // The blocks the footprints record, then the nets, open as a tree opens until there is a choice, a block of several
-  // and the Nets shut: the tab opens as its blocks and "Nets (N)".
-  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets']);
-  const expandedOf = (id: string) => section.querySelector(`[data-board-row="${id}"] [aria-expanded]`)!.getAttribute('aria-expanded');
-  expect(expandedOf('group:nets')).toBe('false');
-  // Only a chevron opens or shuts a row: the Nets' name is a label, and a press on it does nothing.
-  fireEvent.click(section.querySelector('[data-board-group="group:nets"]')!);
-  expect(expandedOf('group:nets')).toBe('false');
-  expect(inSection.queryByRole('button', { name: 'Nets' })).toBeNull();
-  fireEvent.click(inSection.getByRole('button', { name: 'Expand Nets' }));
-  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']);
-  fireEvent.click(inSection.getByRole('button', { name: 'Collapse Nets' }));
-  expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets']);
-  // A net picked on the board opens the Nets, its row brought into view.
-  await act(async () => { await controller.select({ selectors: ['#net:LED'] }); });
-  await waitFor(() => expect(rows()).toEqual(['sheet:led', 'sheet:power', 'part:J1', 'group:nets', 'net:GND', 'net:LED', 'net:VBUS']));
-  await act(async () => { await controller.clearSelection(); });
-  // A block's name selects every part in it, a chip each, and frames them; the block stays shut.
+  const parts = await waitFor(() => { const found = tabBody(pane, 'parts'); expect(found).not.toBeNull(); return found!; });
+  const nets = tabBody(pane, 'nets');
+  const rows = (section: HTMLElement) => [...section.querySelectorAll('[data-board-row]')].map(row => row.getAttribute('data-board-row'));
+  // The blocks the footprints record, a block of several shut; the nets, flat. A part is a row with no pads under it.
+  expect(rows(parts)).toEqual(['sheet:led', 'sheet:power', 'part:J1']);
+  expect(rows(nets)).toEqual(['net:GND', 'net:LED', 'net:VBUS']);
+  fireEvent.click(within(parts).getByRole('button', { name: 'Expand led' }));
+  expect(rows(parts)).toEqual(['sheet:led', 'part:D1', 'part:R1', 'sheet:power', 'part:J1']);
+  expect(parts.querySelector('[data-board-row="part:R1"] [aria-expanded]')).toBeNull();
+  fireEvent.click(within(parts).getByRole('button', { name: 'Collapse led' }));
+  // Nothing picked: no detail under the lists.
+  const detail = () => panel(pane).querySelector<HTMLElement>('[data-flat-panel-detail]');
+  const detailRows = () => [...detail()!.querySelectorAll('[data-board-detail-row]')].map(row => [row.textContent, row.getAttribute('aria-pressed')]);
+  expect(detail()).toBeNull();
+
+  // A block's name selects every part in it, a chip each, and leaves the view where it is; a double-click frames them.
   const fitted = { ...frames.at(-1)! };
-  fireEvent.click(inSection.getByRole('button', { name: 'Select led' }));
+  const led = within(parts).getByRole('button', { name: 'Select led' });
+  fireEvent.click(led);
   expect(selected(controller)).toEqual(['#D1', '#R1']);
-  await new Promise(resolve => setTimeout(resolve, 0));
-  expect(expandedOf('sheet:led')).toBe('false');
-  expect(rows()).not.toContain('part:R1');
-  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
   await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
     .filter(label => !label!.startsWith('Remove'))).toEqual(['D1', 'R1']));
-  expect(section.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
-  // A part selects as a click on the board does, and frames it.
-  const before = { ...frames.at(-1)! };
-  fireEvent.click(inSection.getByRole('button', { name: 'Select J1' }));
+  expect(parts.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
+  expect(frames.at(-1)).toEqual(fitted);
+  fireEvent.doubleClick(led);
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
+
+  // A part selects as a click on the board does; under the lists, its pads, each its number and net.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Select J1' }));
   expect(selected(controller)).toEqual(['#J1']);
-  await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(before.offsetX));
-  // The panel's search finds a net by its name, the tabs stepping aside: the Circuit's hits, and no Layers (none matches).
-  fireEvent.change(searchBox(pane), { target: { value: 'VBUS' } });
-  await waitFor(() => expect(section.querySelector('[data-search-row="net:VBUS"]')).not.toBeNull());
+  expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1Conn_01x02 · PinHeader_1x02_P2.54mm_Vertical2 pads');
+  expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
+  // A net, from the Nets: its pads, each its part and number; one pressed is selected, lit, and the net's detail stays.
+  fireEvent.click(within(panel(pane)).getByRole('tab', { name: 'Nets' }));
+  fireEvent.click(within(nets).getByRole('button', { name: 'Select LED' }));
+  expect(selected(controller)).toEqual(['#net:LED']);
+  expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'false']]);
+  const framedNet = { ...frames.at(-1)! };
+  fireEvent.click(detail()!.querySelector('[data-board-detail-row="netpad:R1.2"]')!);
+  expect(selected(controller)).toEqual(['#R1.2']);
+  expect(detailRows()).toEqual([['D1.2', 'false'], ['R1.2', 'true']]);
+  // A detail row's double-click frames its pad.
+  fireEvent.doubleClick(detail()!.querySelector('[data-board-detail-row="netpad:R1.2"]')!);
+  await waitFor(() => expect(frames.at(-1)).not.toEqual(framedNet));
+
+  // The panel's search reads the parts with their pads and the nets: a pasted pad reference finds the pad,
+  // and its press shows its part's pads, the pad lit.
+  fireEvent.change(searchBox(pane), { target: { value: '#J1.2' } });
+  await waitFor(() => expect(parts.querySelector('[data-search-row="pad:J1.2"]')).not.toBeNull());
   expect(within(panel(pane)).queryByRole('tablist')).toBeNull();
+  fireEvent.click(within(parts.querySelector<HTMLElement>('[data-search-row="pad:J1.2"]')!).getByRole('button'));
+  expect(selected(controller)).toEqual(['#J1.2']);
+  expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'true']]);
+  // A net by its name, in the Nets' hits, no Layers (none matches).
+  fireEvent.change(searchBox(pane), { target: { value: 'VBUS' } });
+  await waitFor(() => expect(nets.querySelector('[data-search-row="net:VBUS"]')).not.toBeNull());
   expect(tabBody(pane, 'layers').querySelector('[data-flat-panel-hit]')).toBeNull();
-  fireEvent.click(within(section.querySelector<HTMLElement>('[data-search-row="net:VBUS"]')!).getByRole('button', { name: 'Select VBUS' }));
+  fireEvent.click(within(nets.querySelector<HTMLElement>('[data-search-row="net:VBUS"]')!).getByRole('button', { name: 'Select VBUS' }));
   expect(selected(controller)).toEqual(['#net:VBUS']);
   // A search that names a layer finds it in the Layers too; Escape in the box clears it, and the tabs come back.
   fireEvent.change(searchBox(pane), { target: { value: 'B.Cu' } });
@@ -466,23 +483,25 @@ it('the Circuit tab is the parts in their schematic blocks, then the nets: a blo
   fireEvent.keyDown(searchBox(pane), { key: 'Escape' });
   expect(searchBox(pane).value).toBe('');
   expect(within(panel(pane)).getByRole('tablist')).toBeTruthy();
-  fireEvent.click(inSection.getByRole('button', { name: 'Isolate J1' }));
-  expect(inSection.getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(within(panel(pane)).getByRole('tab', { name: 'Parts' }));
+  fireEvent.click(within(parts).getByRole('button', { name: 'Isolate J1' }));
+  expect(within(parts).getByRole('button', { name: 'Exit isolate J1' }).getAttribute('aria-pressed')).toBe('true');
   await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.isolated?.value).toEqual({ selectors: ['#J1'] }));
-  // A pad picked on the board opens its block and its part, and its row, below the panel's view, is scrolled to.
+  // A pad picked on the board opens its part's block, its part's row brought into view, and shows its part's pads.
+  await act(async () => { await controller.clearSelection(); });
   const scrolled: string[] = [];
   const { scrollIntoView } = Element.prototype;
   Element.prototype.scrollIntoView = function (this: Element) { scrolled.push(this.getAttribute('data-virtual-row') || ''); };
   const page = { x: 0, y: 0, left: 0, top: 0, right: 1200, bottom: 700, width: 1200, height: 700, toJSON: noop };
   vi.mocked(HTMLElement.prototype.getBoundingClientRect).mockImplementation(function (this: HTMLElement) {
-    return (this.getAttribute('data-virtual-row') === 'pad:R1.2' ? { ...page, top: 900, bottom: 924, height: 24 } : page) as DOMRect;
+    return (this.getAttribute('data-virtual-row') === 'part:R1' ? { ...page, top: 900, bottom: 924, height: 24 } : page) as DOMRect;
   });
   try {
     tap(pane, [35.825, 15]);
     expect(selected(controller)).toEqual(['#R1.2']);
-    await waitFor(() => expect(expandedOf('sheet:led')).toBe('true'));
-    expect(expandedOf('part:R1')).toBe('true');
-    await waitFor(() => expect(scrolled).toEqual(['pad:R1.2']));
+    await waitFor(() => expect(parts.querySelector('[data-board-row="sheet:led"] [aria-expanded]')!.getAttribute('aria-expanded')).toBe('true'));
+    await waitFor(() => expect(scrolled).toContain('part:R1'));
+    expect(detailRows()).toEqual([['1VBUS', 'false'], ['2LED', 'true']]);
   } finally { Element.prototype.scrollIntoView = scrollIntoView; }
   dispose();
 });
@@ -748,7 +767,7 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; on 
   await waitFor(() => expect(panel(phone.pane).getAttribute('data-flat-panel')).toBe('page'));
   fireEvent.click(within(phone.pane.querySelector<HTMLElement>('[data-flat-panel-pill]')!).getByRole('button', { name: 'Show panel' }));
   expect(panel(phone.pane).querySelector('[data-flat-panel-head]')!.firstElementChild!.getAttribute('aria-label')).toBe('Back to the view');
-  fireEvent.click(within(tabBody(phone.pane, 'circuit')).getByRole('button', { name: 'Select J1' }));
+  fireEvent.click(within(tabBody(phone.pane, 'parts')).getByRole('button', { name: 'Select J1' }));
   expect(panel(phone.pane).hidden).toBe(true);
   expect(selected(await controllerOf(phone))).toEqual(['#J1']);
   phone.dispose();

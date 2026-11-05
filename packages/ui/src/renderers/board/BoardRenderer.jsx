@@ -26,7 +26,7 @@ import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/anno
 import { useBoardReferences } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
 import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
-import BoardSection from "./BoardSection.jsx";
+import BoardSection, { useBoardDetail, useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
 import {
@@ -56,11 +56,12 @@ import { useBoardView } from "./useBoardView.js";
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
  * board's Display, which `cad <type> snapshot --job` draws again, the references lit. Its panel
- * (`kit/shell/FlatPanel.jsx`) is a search over two tabs, the Circuit (its parts in their schematic
- * blocks, and its nets) and the Layers (each layer's eye, a row's press for the active layer); its view
+ * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
+ * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
+ * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
  * controls are the strip's, after its tools (`BoardDisplay.jsx`: Flip, and Display's
  * preset, other layers, pours and opacities): one contract with `cad <type> snapshot --display`. A payload without its
- * index (an older server's) is the picture alone: no tools, no Circuit, no Quick Edit.
+ * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  */
 
 const SAVE_DELAY_MS = 180;
@@ -319,7 +320,7 @@ function BoardSurface({ view, data }) {
   viewRef.current = boardView;
   paintRef.current = boardView.requestPaint;
   const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = boardView;
-  // A row of the Circuit pressed: what it picked, framed, from the side looked at (a page box to the plan's model space).
+  // A row of the Parts, the Nets or the detail double-clicked: what it picked, framed, from the side looked at (a page box to the plan's model space).
   const frameSelectors = useCallback(selectors => {
     const board = indexRef.current;
     if (!board) return;
@@ -434,14 +435,20 @@ function BoardSurface({ view, data }) {
   const chromeHidden = document.loading || failed;
   const selectMenu = <BoardSelectFilter value={filter} onChange={changeFilter} disabled={!shown} />;
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
-  // The panel (`kit/shell/FlatPanel.jsx`): the Circuit, then the Layers with the board's view settings.
+  // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then the Layers with the board's view
+  // settings; under them, what is picked in detail.
+  const trees = useBoardTrees(index);
+  const takeSelect = () => selectTool(BOARD_TOOL.SELECT);
+  const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
+    onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={takeSelect} />;
+  const detail = useBoardDetail(index, selection, { onSelect: takeSelect, onFrame: frameSelectors });
   const panelTabs = [
-    ...(index ? [{ id: "circuit", label: t("board.text.circuit"), searchLast: true, content: <BoardSection index={index} selection={selection} isolated={isolation.isolated}
-      onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={() => selectTool(BOARD_TOOL.SELECT)} /> }] : []),
+    ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
+      { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
     ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
-    searchPlaceholder: t("board.text.search_board_placeholder"), tabs: panelTabs } : null;
+    searchPlaceholder: t("board.text.search_board_placeholder"), tabs: panelTabs, detail } : null;
 
   // The 3D views' cursors under Select: the arrow, pressed or dragging too, and the pointing hand
   // over what a press would pick. Measure keeps a crosshair (Annotate's layer has its own).

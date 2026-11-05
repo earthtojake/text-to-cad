@@ -15,8 +15,10 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 /**
  * A flat view's panel (a board's, a schematic's: `FlatViewFrame.jsx`), docked at the view's left
  * edge the way KiCad's Appearance panel is: one search box over everything, its collapse button
- * after it, then a row of tabs, buttons as Figma's (a board's Circuit and Layers, a schematic's
- * Circuit and Hierarchy), and the open tab's list under them, scrolling as one. It keeps two lines,
+ * after it, then a row of tabs, buttons as Figma's (a board's Parts, Nets and Layers, a schematic's
+ * Parts, Nets and Hierarchy), and the open tab's list under them, scrolling as one; under that, when the
+ * view hands one in, what is picked in detail (`detail`: a part's pads, `kit/inspector/CircuitDetail.jsx`),
+ * at most 45% of the panel's height and scrolling on its own, whatever tab is open. It keeps two lines,
  * the same on both sides: its boxes 8px in, what is read in them 16px in.
  *
  * - **Collapsed, it goes completely**: its expand button alone on a small pill at the canvas's
@@ -25,7 +27,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  *   body lists what matches in every tab, each under its tab's name (a tab with no match is left out;
  *   a tab of many ranked hits, `searchLast`, after the others);
  *   Escape or the box's X clears it. A tab reads the query from `useFlatPanel()`, and a tab whose
- *   results the arrow keys walk registers its keys there (the Circuit's).
+ *   results the arrow keys walk registers its keys there (the Parts' and the Nets'): the open tab's get them.
  * - **Two ways to be shown**: `docked` beside the canvas, the canvas always the narrower for it, its
  *   width the person's (a grip on its right edge, kept); `page`, on a phone, the whole view, with
  *   Back before its search; a pick in it closes it.
@@ -33,7 +35,7 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
  *
  * Its tabs are handed in (`tabs`, a board's and a schematic's), or are the sections drawn in it
- * (`sections`: a 3D view's `ToolPanel`s — its Model tree or Links, Position, SDF — each a tab by its
+ * (`sections`: a 3D view's `ToolPanel`s — its Model tree or Links, Position and the rest — each a tab by its
  * name, in their order, `ToolPanel.jsx`'s tabbed form). `useFlatPanelState` is what a view keeps of it.
  */
 
@@ -112,11 +114,19 @@ export const flatPanelShortcut = platform => (platform === "darwin" ? "⌘\\" : 
 
 const FlatPanelContext = createContext(null);
 /**
- * The panel a tab is drawn in: `query` (what is typed, `""` for none), `searching`,
- * `registerKeys(handler)` (the search box's arrow and Enter keys go to `handler`; returns the
- * release) and `picked()` (a row pressed: on a phone, the panel gives the view back). Null outside one.
+ * The panel a tab is drawn in: `query` (what is typed, `""` for none), `searching`, `page` (a phone's
+ * whole-view page), `registerKeys(handler)` (the search box's arrow and Enter keys go to `handler`
+ * while its tab is open, or while no open tab has a handler; returns the release) and `picked()` (a
+ * row pressed: on a phone, the panel gives the view back). Null outside one.
  */
 export const useFlatPanel = () => useContext(FlatPanelContext);
+
+// A tab's own view of the panel: its keys registered under its id.
+function FlatPanelTab({ panel, id, children }) {
+  const { registerKeys } = panel;
+  const value = useMemo(() => ({ ...panel, registerKeys: handler => registerKeys(handler, id) }), [panel, id, registerKeys]);
+  return <FlatPanelContext.Provider value={value}>{children}</FlatPanelContext.Provider>;
+}
 
 /** The collapsed panel: its expand button alone, at the canvas's top-left. */
 export function FlatPanelPill({ onOpen, touch = false }) {
@@ -135,24 +145,25 @@ export function FlatPanelPill({ onOpen, touch = false }) {
  * @param {{ mode: "docked" | "page", open: boolean, onClose(): void, label: string,
  *   searchLabel: string, searchPlaceholder: string, tabs: { id: string, label: string, content: import("react").ReactNode, searchLast?: boolean }[],
  *   tab: string, onTabChange(id: string): void, width: number, maxWidth: number, onWidthChange(width: number): void,
- *   focusSearch: number }} props
- *   `focusSearch`: a count; each new value puts the keyboard in the search box (/).
+ *   focusSearch: number, detail?: import("react").ReactNode }} props
+ *   `focusSearch`: a count; each new value puts the keyboard in the search box (/). `detail`: what is picked, under the lists.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false }) {
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false }) {
   const { t } = useI18n();
   const platform = useContext(ViewerHostContext)?.environment?.platform;
   const page = mode === "page", docked = mode === "docked";
   const [query, setQuery] = useState("");
   const searching = query.trim() !== "";
-  const keys = useRef(null);
-  const registerKeys = useCallback(handler => {
-    keys.current = handler;
-    return () => { if (keys.current === handler) keys.current = null; };
+  // The search box's arrows and Enter go to the open tab's list, else to the first tab that has one.
+  const keys = useRef(new Map());
+  const registerKeys = useCallback((handler, tabId = "") => {
+    keys.current.set(tabId, handler);
+    return () => { if (keys.current.get(tabId) === handler) keys.current.delete(tabId); };
   }, []);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
   const picked = useCallback(() => { if (page) closeRef.current(); }, [page]);
-  const panel = useMemo(() => ({ query, searching, registerKeys, picked }), [query, searching, registerKeys, picked]);
+  const panel = useMemo(() => ({ query, searching, page, registerKeys, picked }), [query, searching, page, registerKeys, picked]);
 
   // A section drawn in the panel names its tab (`ToolPanel.jsx`); the tabs are in the sections' order.
   const body = useRef(null);
@@ -193,7 +204,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
       if (page) { event.preventDefault(); event.stopPropagation(); onClose(); }
       return;
     }
-    keys.current?.(event);
+    const handler = keys.current.get(activeRef.current) ?? keys.current.values().next().value;
+    handler?.(event);
   };
   // A phone's page goes with Escape, wherever its focus is.
   const onPanelKeyDown = event => {
@@ -236,6 +248,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   };
 
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
+  const activeRef = useRef(active);
+  activeRef.current = active;
   const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register }), [active, searching, register]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
   const aside = <aside aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
@@ -286,12 +300,12 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
             const shown = searching || entry.id === active;
             return <section key={entry.id} role="tabpanel" id={ids(entry.id).panel} aria-labelledby={ids(entry.id).tab} hidden={!shown}
               data-flat-panel-section={entry.id}
-              // Searching, a long ranked list (the Circuit's) goes under the short ones, so a layer or a sheet found is not under 200 parts.
+              // Searching, a long ranked list (the Parts', the Nets') goes under the short ones, so a layer or a sheet found is not under 200 parts.
               style={searching && entry.searchLast ? { order: 1 } : undefined}
               // Searching, a tab with nothing found is left out, and its name with it.
               className={cn(searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
               {searching ? <h3 className="flex h-6 items-center text-tiny text-muted-foreground" style={{ paddingInline: CONTENT_PX }}>{entry.label}</h3> : null}
-              {entry.content}
+              <FlatPanelTab panel={panel} id={entry.id}>{entry.content}</FlatPanelTab>
             </section>;
           })}
           {searching ? <p style={{ order: 2 }} className="px-3 py-6 text-center text-muted-foreground group-has-[[data-flat-panel-hit]]/body:hidden"
@@ -299,6 +313,10 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         </div>
       </FlatPanelContext.Provider>
     </ScrollArea>
+    {/* What is picked, in detail (a part's pads, a net's): under the lists, whatever tab is open, scrolling on its own. */}
+    {detail ? <div className="flex max-h-[45%] min-h-0 shrink-0 flex-col border-t border-border" data-flat-panel-detail="">
+      <FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider>
+    </div> : null}
     {page ? null : <div role="separator" aria-orientation="vertical" aria-label={t("flatPanel.resize")} aria-valuenow={drawnWidth}
       aria-valuemin={FLAT_PANEL_MIN_WIDTH} aria-valuemax={maxWidth} tabIndex={0}
       className={cn("absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none focus-visible:outline-none",

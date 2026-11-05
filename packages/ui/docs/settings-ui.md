@@ -224,8 +224,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   Its available width still uses all the room after that pill. What does not fit goes into
   **More tools** (an ellipsis, last): on a phone the view's controls are always its rows, and the
   tools that do not fit join them from the strip's end; a tool there is a row ticked while it is
-  in hand, and Projection's and Display's rows open their choices as nested submenus
-  (`touchStripFit`).
+  in hand, Projection's row switches the projection as its tile does, and Display's row opens its
+  choices as a nested submenu (`touchStripFit`).
 - **Sub-toolbar** under the strip, 8px below it, centred: the tool in hand's one row of
   controls (`SubToolbar`, `data-cad-sub-toolbar`), there for as long as the tool is up (see
   [Tools and lifecycle](#tools-and-lifecycle)). Select and Measure have none. On a phone its
@@ -255,7 +255,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   Preview omits it, and so does a phone.
 - **Projection, Display and Preview** end the tool strip, for a 3D file (`data-view-controls`,
   `FloatingToolBar`'s `views`), in every host, with a navbar or without: **Projection** (the
-  projection on screen), **Display** (the active mode's sphere: see
+  projection on screen; a click switches to the other, Orthographic to Perspective and back, no
+  menu, its tooltip naming the one it switches to: `ProjectionToggle.jsx`), **Display** (the active mode's sphere: see
   [Display settings](#display-settings-and-section-primitives)) and **Preview** (a play
   triangle, the way into Preview), the strip's tiles, hinted above them. They are no
   tools: pressing one leaves the tool in hand as it is. Display's dropdown opens down from its
@@ -542,7 +543,7 @@ file, whatever tool is in hand, after KiCad's Appearance panel: docked at the vi
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
 with a rule at its right, and the canvas the narrower for it (the strip stays at the view's centre,
-panel open or not). Its tabs: a board's Circuit and Layers, a schematic's Circuit and Hierarchy,
+panel open or not). Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model tree** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
@@ -558,7 +559,7 @@ file.
   drawing", "Layers, blocks"; "Search the model", "Search"; then **Hide
   panel** at its right (lucide's PanelLeftClose, its tooltip naming ⌘\ or Ctrl+\).
 - **Its tabs**, under the head, buttons as Figma's: 24px, the open one on the accent in medium
-  weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Circuit** then **Layers**, a schematic's **Circuit** then, for more than one
+  weight, the others muted, each as wide as its name in medium weight, so choosing one moves nothing; a board's **Parts**, **Nets** then **Layers**, a schematic's **Parts**, **Nets** then, for more than one
   sheet, **Hierarchy**. Arrow keys move between them. The tab shown is the person's, by the kind of
   file (`toolStack.tabs`), the first at first. Every tab stays mounted, and each keeps its own scroll.
 - **Two lines, the same on both sides** (Figma's). Every box in the head and the lists — the search
@@ -568,16 +569,28 @@ file.
   on that 16px line on both sides. Every rule runs the panel's width.
   A settings row's label column is 3rem (its labels are short words) and its control fills the rest.
   The navbar's logo stands on the same 16px line: its drawn mark, not its image's edge.
-- **The Circuit** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`, `schematic/SchematicSection.jsx`):
-  a board's parts in the schematic blocks their footprints record (a sheet's name without
-  `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), each part with its
-  pads, then Nets (the `unconnected-(...)` pins shut under their own group); a schematic's blocks the
-  sheets the parts are placed on, each part's pins under it. A block's name selects every part in it, a
-  chip each, a part's, pad's or net's selects it as a click on the picture does, and each frames what it
-  picked (a schematic shows the sheet it is on), opening and scrolling nothing; a group's name (Nets, the
-  unconnected pins) is a label: only a row's chevron opens or shuts it. It opens as its blocks and "Nets
-  (N)", a block of several parts and the Nets shut; a pick on the picture opens its row's owners and
-  scrolls it into view. A selected net is lit and the rest stepped back, as KiCad's net highlight.
+- **The Parts and the Nets** (`kit/inspector/CircuitTree.jsx`: `board/BoardSection.jsx`,
+  `schematic/SchematicSection.jsx`), two lists as Altium's PCB panel lists Components and Nets. The
+  Parts: a board's parts in the schematic blocks their footprints record (a sheet's name without
+  `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), a schematic's in
+  the sheets they are placed on; a part is a row with no pads or pins under it. The Nets: flat, each
+  its pad or pin count, the `unconnected-(...)` pins shut under their own group, a label. A block's
+  name selects every part in it, a chip each; a part's or net's selects it as a click on the picture
+  does, and leaves the view where it is (a schematic shows the sheet it is on, if it is not the one
+  shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
+  double-clicked (on a phone, whose page gives the view back, a press frames it). Only a row's chevron
+  opens or shuts it. The Parts open as their blocks, a block of several parts shut; a pick on the
+  picture opens its row's owners and scrolls it into view (a pad's or a pin's, its part's row). A
+  selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
+  the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
+- **The detail** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`), Altium's third list:
+  under the lists, whatever tab is open, a rule above it, at most 45% of the panel's height and
+  scrolling on its own, what the last pick is in detail. A part's: its reference, value and footprint
+  name, its pad count, then its pads (a board's: one a pin, its number, its pin's name and net) or pins;
+  a net's: its pads or pins, each its part and number. A pad or a pin picked shows its part's, itself
+  lit; one picked in the detail shown keeps that detail (a net's pad leaves the net's). A row selects
+  as a press on the picture does and a double-click frames it; the head's name selects what it is the
+  detail of. Nothing picked, or something with no detail (a track, a label, a block of parts): none.
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
   making it the active layer (a filled dot after its name), drawn on top. How the board is drawn is
@@ -606,8 +619,9 @@ file.
   file's name) and the sheets each places, in page order, each row its page number, every sheet open,
   the sheet shown lit; a press on a row shows that sheet, the way back up from one entered.
 - **Search is the panel's.** What is typed searches every tab: the tabs step aside and the body lists
-  each tab's hits under its name — the layers or sheets whose names match first, then the Circuit's
-  ranked hits (its arrows and Enter walk and pick them) — a tab with none left out, and one line when
+  each tab's hits under its name — the layers or sheets whose names match first, then the Parts' and
+  the Nets' ranked hits (the arrows and Enter walk and pick the open tab's, else the first list's) —
+  a tab with none left out, and one line when
   nothing matches. Escape or the box's X clears it and the tabs come back.
 - **Collapsed, it goes whole.** **Hide panel** takes it away and leaves **Show panel** (lucide's
   PanelLeftOpen) alone on a pill at the canvas's top-left, 8px in, on the strip's surface. No rail, no

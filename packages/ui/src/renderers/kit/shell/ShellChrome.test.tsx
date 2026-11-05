@@ -192,9 +192,8 @@ it("on a phone the panel's pill is one tile at the top-left, on the strip's line
 const displayButton = (root: HTMLElement = document.body) => within(root).getByRole('button', { name: /^Display mode: / });
 const displayLit = (root?: HTMLElement) => displayButton(root).getAttribute('aria-expanded') === 'true';
 const displayMenu = () => document.querySelector<HTMLElement>('[role=menu][aria-label="Display"]');
-// Projection: its own tile, before Display's, and its menu of the two projections.
+// Projection: its own tile, before Display's, switching on a click.
 const projectionButton = () => screen.getByRole('button', { name: /^Projection: / });
-const projectionMenu = () => document.querySelector<HTMLElement>('[role=dialog][aria-label="Projection"]');
 async function openDisplay(user: ReturnType<typeof userEvent.setup>, root?: HTMLElement) {
   await user.click(displayButton(root));
   await waitFor(() => expect(displayMenu()).not.toBeNull());
@@ -334,7 +333,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Projection, Display and Preview end the strip; Render is no mode of Display's, Projection a menu of its own, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
+it("Projection, Display and Preview end the strip; Render is no mode of Display's, Projection a tile that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
   const user = userEvent.setup({ skipHover: true });
   const { remount } = frame();
   expect([strip(), barButtons()]).toEqual([['Select', 'Pencil', 'Shapes', 'Keep', 'Pose'], ['Projection', 'Display mode', 'Preview']]);
@@ -351,13 +350,14 @@ it("Projection, Display and Preview end the strip; Render is no mode of Display'
   expect(within(displayMenu()!).queryByRole('menuitemradio', { name: 'Perspective' })).toBeNull();
   await user.keyboard('{Escape}');
   await waitFor(() => expect(displayMenu()).toBeNull());
+  // Projection's tile switches on a click, no menu: Orthographic to Perspective and back, its tile saying which it is.
   expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Orthographic');
   await user.click(projectionButton());
-  expect(within(projectionMenu()!).getAllByRole('radio').map(item => [item.textContent, item.getAttribute('aria-checked')]))
-    .toEqual([['Orthographic', 'true'], ['Perspective', 'false']]);
-  // A choice closes it, and its tile says it.
-  await user.click(within(projectionMenu()!).getByRole('radio', { name: 'Perspective', exact: true }));
-  await waitFor(() => expect(projectionMenu()).toBeNull());
+  expect(document.querySelector('[role=dialog][aria-label="Projection"], [role=menu][aria-label="Projection"]')).toBeNull();
+  expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Perspective');
+  await user.click(projectionButton());
+  expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Orthographic');
+  await user.click(projectionButton());
   expect(projectionButton().getAttribute('aria-label')).toBe('Projection: Perspective');
   await user.click(tool('Keep'));
   await user.click(tool('Pencil'));

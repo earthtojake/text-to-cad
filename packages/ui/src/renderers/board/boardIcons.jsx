@@ -1,7 +1,7 @@
 /**
  * A board's glyphs, on lucide's 24-unit grid and in the 3D Display modes' one line (1.7, round:
  * `kit/view-settings/DisplayModeOptions.js`), outlines only, so each still reads at the strip's
- * 14px: the kinds a pick names, in Quick Edit's chips and the Circuit's rows (a part with its legs; a pad;
+ * 14px: the kinds a pick names, in Quick Edit's chips and the panel's rows (a part with its legs; a pad;
  * a net, two pads and the trace between them; a track, a trace with its bend; a via, a ring round
  * its hole; a zone, a pour's outline with a corner cut, faintly filled; a rule area, the same
  * outline hatched, as KiCad draws a keepout; a text, a T; a dimension, a measured span between its

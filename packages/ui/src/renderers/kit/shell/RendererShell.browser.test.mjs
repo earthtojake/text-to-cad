@@ -205,7 +205,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   // Display's submenu lists the modes, then Grid, which toggles and leaves it open.
   await moreButton(first).click();
   assert.deepEqual(await moreMenu.getByRole('menuitem').evaluateAll(items => items.map(item => `${item.textContent.trim()}:${item.getAttribute('aria-haspopup') || 'item'}`)),
-    ['Projection:menu', 'Display:menu', 'Preview:item'], 'the view\'s controls are More\'s rows');
+    ['Projection:item', 'Display:menu', 'Preview:item'], 'the view\'s controls are More\'s rows: Projection switches, Display opens its submenu');
   await moreMenu.getByRole('menuitem', { name: 'Display', exact: true }).click();
   await display.waitFor();
   assert.deepEqual(await display.getByRole('menuitemradio').allInnerTexts(), ['Solid'], 'an STL of one mesh: Solid alone');

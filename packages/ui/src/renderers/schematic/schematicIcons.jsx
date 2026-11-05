@@ -1,7 +1,7 @@
 /**
  * A schematic's glyphs, on lucide's 24-unit grid and in the board's one line (1.7, round:
  * `../board/boardIcons.jsx`), outlines only, so each reads at the strip's 14px: the
- * kinds a pick names, in Quick Edit's chips and the Circuit's rows: a symbol (a resistor's zigzag body
+ * kinds a pick names, in Quick Edit's chips and the panel's rows: a symbol (a resistor's zigzag body
  * with its leads), a pin (a lead with its end dot), a net (two pins and the wire between them, a label's
  * flag on it), a sheet (a sheet symbol, its pins' flags on its edge), a label (a flag), a wire (a bent
  * wire with a junction), a junction (a dot), a no-connect (a cross) and a bus entry (a slanted stub off a

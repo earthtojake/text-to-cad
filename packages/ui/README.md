@@ -263,8 +263,9 @@ the drawing tools' colour, stroke width, placement and history; Measure's chips.
 Clip's slider rows open in a popover from their tiles, taking up no tool.
 What there is to read of the file is the view's panel, docked at the left, whatever the tool
 (`kit/shell/FlatPanel.jsx`): one search, then a tab per section — an assembly's Model tree, a
-robot's Links, Position, an SDF's metadata; a board's Circuit and Layers, a schematic's Circuit and
-Hierarchy, a drawing's Layers. A file's routines play from the playbar under the model. The panel
+robot's Links, Position, an SDF's metadata; a board's Parts, Nets and Layers, a schematic's Parts,
+Nets and Hierarchy, a drawing's Layers — and, under a board's or a schematic's lists, the picked
+part's or net's pads or pins (`kit/inspector/CircuitDetail.jsx`). A file's routines play from the playbar under the model. The panel
 is sized from the grip on its right edge and collapses to a pill at the canvas's top-left; on a
 phone the pill opens it as the whole view. Its tabs stay mounted, so a tree keeps its scroll and expansion;
 only what is on screen does background work. What is picked is Quick Edit's chips. Links is
@@ -339,7 +340,7 @@ It consumes the core plot payload; authoring and DRC belong to KiCad and the `ca
 The `.kicad_sch` renderer, `src/renderers/schematic/`, is the same flat plot view from the kit
 (`kit/viewport/usePlotView.js`, `kit/inspector/CircuitTree.jsx`, `kit/tools/select/SelectFilterChecklist.jsx`),
 read a sheet at a time (`GET .../kicad_sch/<id>/plot?sheet=<path>`, the hierarchy's index with the
-first): its Circuit and Hierarchy in the view's panel, the Hierarchy and a sheet symbol's double-click
+first): its Parts, Nets and Hierarchy in the view's panel, the Hierarchy and a sheet symbol's double-click
 to move between sheets (each keeping its view for the session), and the app's theme,
 switched live; ERC belongs to the
 `cad` command.

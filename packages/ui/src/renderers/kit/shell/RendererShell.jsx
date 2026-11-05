@@ -13,8 +13,7 @@ import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/
 import { modelUpdateStatus, ViewPreviewLabel, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
-import ProjectionPopover from "./ProjectionPopover.jsx";
-import { DropdownMenuRadioGroup, DropdownMenuRadioItem } from "@cad/ui/primitives/dropdown-menu";
+import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
@@ -611,12 +610,9 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                 <div ref={topControls} className="relative flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
                   <FloatingToolBar tools={tools} touch={mobile} views={shell.previewable && !previewing ? [
                     { id: "projection", label: t("projection.label"), icon: <ProjectionIcon value={frame.projection.value} />, disabled: shell.idle,
-                      tile: <ProjectionPopover disabled={shell.idle} boundary={frame.hostElement} projection={frame.projection} />,
-                      // In a phone's More, a standard nested submenu of the two choices.
-                      submenu: () => <DropdownMenuRadioGroup value={frame.projection.value} onValueChange={frame.projection.onChange}>
-                        <DropdownMenuRadioItem value="orthographic"><OrthographicProjectionIcon className="size-4" />{t("projection.orthographic")}</DropdownMenuRadioItem>
-                        <DropdownMenuRadioItem value="perspective"><PerspectiveProjectionIcon className="size-4" />{t("projection.perspective")}</DropdownMenuRadioItem>
-                      </DropdownMenuRadioGroup> },
+                      tile: <ProjectionToggle disabled={shell.idle} projection={frame.projection} />,
+                      // In a phone's More, a row that switches it the same way.
+                      onSelect: () => frame.projection.onChange(otherProjection(frame.projection.value)) },
                     { id: "display", label: t("display.label"), icon: DisplayIcon ? <DisplayIcon /> : null, disabled: shell.idle,
                       tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
                       // In a phone's More, a standard nested submenu of the same list: the modes, then Grid.

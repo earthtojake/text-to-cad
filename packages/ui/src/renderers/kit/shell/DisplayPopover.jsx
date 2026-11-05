@@ -35,8 +35,8 @@ export function DisplayMenuItems({ mode, grid }) {
 
 /**
  * The Display tile: the mode on screen's sphere, opening Display's list (`DisplayMenuItems`). A
- * mode chosen closes it; the Grid switch leaves it open. Projection is a menu of its own
- * (`ProjectionPopover.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
+ * mode chosen closes it; the Grid switch leaves it open. Projection is a tile of its own that switches
+ * on a click (`ProjectionToggle.jsx`); on a phone Display is More's submenu instead (`RendererShell.jsx`).
  */
 export default function DisplayPopover({ disabled = false, boundary = null, tooltipSide = "top", onOpenChange, mode, grid }) {
   const { t } = useI18n();
