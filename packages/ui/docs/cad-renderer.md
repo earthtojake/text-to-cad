@@ -172,7 +172,8 @@ calls one hook; the shell owns the rest.
 | `loadReport.js` | `shellLoadReport`: what the shell asks the status kit about one document load, as one pure function, and all it returns is the loading presentation over the viewport. A renderer whose document is a plain download passes `load` and nothing more. One whose document can be EDITED or PREVIEWED while it is open knows more than the shell can: `load.editPending` (queued work of the person's own, with nothing of it on screen), `load.currentPreview` (that work IS what is drawn, so the wait is over even though the write is not) and `load.finding` (the file is not even located yet). An alert is `load.alert`, which the frame draws as the alert card (`ViewerAlertCard`: every alert; one the model survives, a warning beside it included, can be dismissed). |
 | `useViewerShortcuts.js` | Which mounted viewer an Escape or a ⌘C / Ctrl+C belongs to (focus inside it, or the page after a press inside it); the renderer says what Escape means, and a copy is the active tool's (the drawing tools' view with its annotations, else the selection's references, `copySelection`). The order is [the design system's](settings-ui.md#keyboard). |
 | `viewportLayout.js` | The chrome's geometry: its inset from the viewer's edges (`VIEWPORT_INSET_PX`, 8px), the strip's row (`VIEWPORT_TOP_BAR_PX`, 34px), the cube's size and place (bottom-right, 2px from the right, `VIEWPORT_CORNER_INSET_PX`, and `VIEWPORT_CUBE_BOTTOM`, 8px off the bottom so its axes stay inside the view, plus `--cad-viewport-corner-bottom`, which a host whose control floats over that corner sets to lift it clear), the tool column's bottom (`VIEWPORT_STACK_BOTTOM`: an inset above the cube's line). |
-| `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. A renderer that passes no items has no viewport menu at all — every renderer but the engine document's. |
+| `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. Every view passes its items, built from one set of groups (`viewMenu.js`, below); a flat view hands its own canvas (`canvasRef`) and pane in place of a 3D runtime. |
+| `viewMenu.js` | The entries of every view's menu, in one order: the reference (Copy Reference), the pick (Select or Deselect, Isolate, Exit all isolates), what is shown (Hide others, Show all, Hide or Reveal), the view's own (a tree's Expand and Collapse, a schematic's sheets, a drawing's layers, a board's Flip), and last the framing (Zoom to fit; Zoom to selection, off with nothing picked). Over something, the menu opens with its reference; over empty space it is the view as a whole and the framing. `menuGroups` joins the groups with a rule between them. A 3D scene's is `kit/tools/select/sceneMenu.js`'s (`scene.selectionBounds` for Zoom to selection). |
 
 ```jsx
 const shell = useRendererShell({
@@ -336,10 +337,13 @@ Layers tab: `useFlatPanelState`, kind `drawing`), Quick Edit at the top-right.
   primitive's inner rings are its holes; merging two overlapping regions of one colour
   into a single path would turn their overlap into a hole as well. Fills go down
   before strokes, which is the one ordering that never hides an edge.
-- **Interaction** (`dxf/useDrawingView.js`): fit on open and on resize until the
-  person moves the view, drag to pan (a primary press, one finger, once it has travelled
-  more than a tap's 4 px; a press that lets go before is the tool's tap), wheel or pinch to
-  zoom about the pointer, double-click to fit again. The view lives in a REF and the
+- **Interaction** (`dxf/useDrawingView.js`, every flat view's `kit/viewport/useFlatCanvasView.js`
+  under the drawing's paint): fit on open and on resize until the person moves the view, drag to
+  pan (a primary press, one finger, once it has travelled more than a tap's 4 px; a press that lets
+  go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
+  with Ctrl, Cmd or Shift), a mouse's wheel or a pinch to zoom about the pointer and a trackpad's
+  two-finger scroll to pan, double-click to fit again, and a right-click for the view's menu (an
+  entity's reference, Select, Hide its layer; Show all layers; the framing). The view lives in a REF and the
   canvas repaints through one `requestAnimationFrame` when something changed; a pan
   never re-renders the component tree. A resize paints at once, inside the pane's
   ResizeObserver (after layout, before paint): resizing the canvas wipes it, and a frame
@@ -409,7 +413,8 @@ its NATIVE glTF scene, always: one path whether or not a clip is playing.
   points on its surface and reads glTF's metres, approximately (see
   [Measure on a mesh](#measure-on-a-mesh)). Explode moves the rigid nodes that draw along the
   file's tree (`sceneExplode.js`); Clip cuts every surface and caps the cut. There is no filter
-  menu, no copy-references key and no viewport context menu.
+  menu and no copy-references key; its viewport menu (`kit/tools/select/sceneMenu.js`) is a node's
+  reference, Select and the framing, and a double-click on empty space fits.
 - **One motion at a time** (`kit/tools/model-effects/motionExclusion.js`): Explode set, the
   routine playing (or owning the pose) and Clip set each put the other two back, decided by
   value. A routine lets go of Explode before it plays, so it starts from where the nodes were
@@ -468,7 +473,8 @@ or a `.3mf` as what it is: triangles, and in a 3MF a colour per object.
   one mesh in no unit: **Select**, **Pencil**, **Shapes** and **Clip**, Select in hand as it opens
   and the view's plain navigation (it picks no part; a press on ink still picks it), and its Quick
   Edit names the whole file. Neither has parts to move apart,
-  nor a viewport context menu.
+  and their viewport menu is a 3MF object's reference and Select, then the framing (an STL's, the
+  framing alone); a double-click on empty space fits.
 - **Panels**: none, and no view's panel. Preview is the shell's, as for every 3D file;
   it draws the scene's sibling (`createSibling()`: its own meshes, materials and look over the
   editor's geometry; `kit/shell/usePreviewScene.js`).
@@ -1133,7 +1139,7 @@ picked as a unit; expanding it exposes its children. A part is expanded in the h
 alone, never in the tree: by its menu's Expand (Expand all), so that a press under All picks
 its faces and edges (`xbfTree.js`'s `xbfPickFrontier`). Viewport hits select individual faces
 and edges in All, Faces and Edges modes; connected selection modes explicitly opt into edge
-chains or tangent face groups. Double-clicking empty space exits isolation.
+chains or tangent face groups. Double-clicking empty space exits isolation, or, with nothing isolated, fits the model.
 
 Isolation restricts the selectable subtree without propagating an excluded
 ancestor's disabled state into the isolated descendants. Hidden geometry stays
@@ -1518,7 +1524,8 @@ Shift/Ctrl/Cmd on a row add), each a chip in Quick Edit (`robot/robotReferences.
 link with no geometry selects its row and chip only. Viewport picks are Select's while its
 filter ticks Links. As for an engine document, a robot selection outlives Select: a pick in Links returns
 to Select, leaving Select keeps it, and Escape clears it. A click acts at once, as an engine document's does; a
-robot has no double-click at all.
+robot's double-click on empty space fits the model, as every view's does. Its viewport menu is a
+link's or an object's reference, Select, Hide, and the framing.
 
 Each link or component row has the Hide/Reveal eye of an assembly row
 (`settings-ui.md`; `robot/RobotVisibilityButton.jsx`), also in search results.
@@ -1639,8 +1646,8 @@ Selection fit may move the camera but cannot make that new framing become 100%.
 `kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
 for clipping, lighting and picking. Nothing displays that percentage; it is read
 through the `window.__cadCamera()` test seam (`zoomPercent`). The acts that frame the
-model are an engine document's context menu (Zoom to fit, Zoom to selection) and the live
+model are every view's context menu (Zoom to fit, Zoom to selection), a double-click on empty space, and the live
 `resetCamera`; the view cube (bottom-right, absent in Preview) turns
-the camera and keeps its zoom and pan, F frames the model (the cube has no Fit button), and opening a
+the camera and keeps its zoom and pan, F frames the model, and so does the Zoom to fit button at the cube's left (`ZoomFitButton.jsx`), and opening a
 file fits the model afresh (a
 reload of the page restores the camera the file on screen was left at).

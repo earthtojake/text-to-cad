@@ -144,9 +144,14 @@ it('Select is the hand, with the 3D views\' cursor: a drag pans under the arrow,
   const { canvas, dispose } = await openDrawing();
   const cursor = () => ['cursor-default', 'cursor-grab', 'cursor-grabbing', 'cursor-pointer'].filter(name => canvas.classList.contains(name));
   expect(cursor()).toEqual(['cursor-default']);
-  // A secondary press is not a drag: it belongs to whatever the host puts on it.
+  // A secondary press that lets go where it went down is no drag: it opens the view's menu, the framing over bare paper.
   fireEvent.pointerDown(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
+  fireEvent.pointerUp(canvas, { pointerId: 2, pointerType: 'mouse', button: 2, clientX: 600, clientY: 350 });
   expect(cursor()).toEqual(['cursor-default']);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Zoom to fit', 'Zoom to selection']);
+  fireEvent.keyDown(menu, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
   const fitted = painted.at(-1)!;
   fireEvent.pointerDown(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 600, clientY: 350 });
   fireEvent.pointerMove(canvas, { pointerId: 1, pointerType: 'mouse', clientX: 602, clientY: 350 });

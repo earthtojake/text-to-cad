@@ -61,6 +61,7 @@ import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { useI18n } from "@cad/ui/i18n";
 import { VIEWPORT_CUBE_BOTTOM, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
+import ZoomFitButton from "./ZoomFitButton.jsx";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 // The theme's lights on the viewer runtime (`useViewerRuntime`): what Render and a scene's own rig hide.
@@ -1239,6 +1240,9 @@ const ShellViewport = forwardRef(function ShellViewport({
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />
+      {/* Zoom to fit, at the cube's left, its foot on the cube's: the view's navigation in one corner, as a flat view's. */}
+      <ZoomFitButton onFit={() => resetZoomAndPan({ animate: true })}
+        beside={`calc(var(--cad-viewport-corner-right, ${VIEWPORT_CORNER_INSET_PX}px) + ${VIEWPORT_CUBE_SIZE} + 4px)`} />
       </div>}
       <ViewportError message={error} />
     </div>

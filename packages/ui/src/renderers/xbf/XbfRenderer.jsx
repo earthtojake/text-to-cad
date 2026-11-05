@@ -153,6 +153,8 @@ function XbfSurface({ view, data }) {
   const [expandedIds, setExpandedIds] = useState(EMPTY);
   const [hiddenIds, setHiddenIds] = useState(EMPTY);
   const [isolatedIds, setIsolatedIds] = useState(EMPTY);
+  const isolatedIdsRef = useRef(isolatedIds);
+  isolatedIdsRef.current = isolatedIds;
   const [chosen, setChosen] = useState(EMPTY);
   const [hover, setHover] = useState(NO_HOVER);
   const selected = useMemo(() => (scene ? chosen.filter(id => (isElementId(id) ? scene.describeElement(id) : tree.nodes.has(id))) : EMPTY),
@@ -563,7 +565,7 @@ function XbfSurface({ view, data }) {
     return chip.compact || { name: chip.label, kind: chip.glyph };
   }, [chips]);
 
-  // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation ----
+  // ---- double-click: a face or edge looked at, a part isolated, empty space leaves isolation or fits ----
   // A face or an edge: the view turns square to it (CAD's Normal To, `kit/camera/lookAt.js`) and
   // nothing is picked; navigation only.
   const lookAt = useCallback((id) => {
@@ -578,7 +580,8 @@ function XbfSurface({ view, data }) {
     if (activated && lastPick.current) setChosen(lastPick.current.before);
     lastPick.current = null;
     const hit = pickAtClient(clientX, clientY);
-    if (!hit) { exitIsolate(); return; }
+    // Empty space: out of isolation, or, with nothing isolated, the model fitted (as F, and every view's double-click).
+    if (!hit) { if (isolatedIdsRef.current.length) exitIsolate(); else shellRef.current?.frame.viewerRef.current?.resetZoom?.(); return; }
     if (hit.kind) { usage.used("look_at"); lookAt(hit.id); return; }
     const node = nodeOf(hit);
     if (node && assembly) { usage.used("isolate"); isolate([node]); }
@@ -700,7 +703,7 @@ function XbfSurface({ view, data }) {
     references={previewing ? NO_REFERENCES : references} referenceChips={previewing ? NO_REFERENCES : chips} nameReference={nameReference}
     onClearReferences={() => { setChosen(EMPTY); measure.select([]); }} copySelection={copySelection}
     onSelectPress={measureSelect.press} onSelectHover={measureSelect.hover} selectsAnnotations={selects(selectFilter, "annotation")}
-    inkTouches={inkTouches} contextMenuItems={contextMenuItems}
+    inkTouches={inkTouches} contextMenuItems={contextMenuItems} doubleClickFits={false}
     viewportOverlay={viewport => {
       viewportRef.current = viewport;
       return <>

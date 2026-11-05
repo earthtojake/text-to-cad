@@ -60,7 +60,9 @@ export default function CircuitDetail({ detail, selection, glyphs, data, onSelec
   const { rows } = detail;
   const renderRow = at => <MemoDetailRow node={rows[at]} lit={picked.has(rows[at].pick)} choose={choose} frame={frame} hover={hover} glyphs={glyphs} data={data} />;
   return <section aria-label={detail.listLabel} className="flex min-h-0 flex-col text-tiny" {...{ [`data-${data}-detail`]: detail.id }}>
-    <div className="flex shrink-0 items-center px-2 pt-1.5 pb-1">
+    {/* What this is the detail of, in words: a part's pads, a net's. */}
+    <h3 className="flex h-6 shrink-0 items-center truncate px-4 pt-1 text-micro text-muted-foreground" data-flat-panel-detail-title="">{detail.listLabel}</h3>
+    <div className="flex shrink-0 items-center px-2 pb-1">
       <TreeRowSurface dense active={picked.has(detail.pick)} className="relative min-w-0 flex-1 gap-0 pr-0">
         <button type="button" aria-pressed={picked.has(detail.pick)} onClick={event => choose(detail, event)} onDoubleClick={() => frame(detail)}
           className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}

@@ -330,11 +330,10 @@ async function formatGate() {
       const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
       if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
+      // Every view has the menu, its framing always (`kit/shell/viewMenu.js`); a file of parts, its tree's entries too.
+      for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
       if (fixture.parts) {
-        for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
         for (const item of presentTree) if (!menu.includes(item)) failures.push(`${fixture.format}: parts menu missing ${item}`);
-      } else if (menu.length) {
-        failures.push(`${fixture.format}: a viewport menu opened on a renderer that has none (${menu.join(", ")})`);
       }
       if (errors.length) failures.push(`${fixture.format}: ${errors.join(" | ")}`);
       results.push({ format: fixture.format, coverage: drawn });

@@ -7,6 +7,10 @@ const URDF_JOINT_VALUE_EPSILON = 1e-9;
 import { createRobotScene } from "@cad/core/lib/urdf/robotScene.js";
 import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
+import { useViewerHost } from "../../host/context.js";
+import { menuEntry } from "../kit/shell/viewMenu.js";
+import { sceneCopyText } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneMenuEntries } from "../kit/tools/select/sceneMenu.js";
 import { readFileView } from "../kit/shell/fileView.js";
 import { usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { usePreviewScene } from "../kit/shell/usePreviewScene.js";
@@ -325,16 +329,31 @@ function RobotSurface({ view, data }) {
   const nameLink = useCallback(reference => (reference?.resource?.path === resourcePath && reference.target?.kind === "cad-selector"
     ? { name: reference.target.selectors.join(", "), kind: "solid" } : ""), [resourcePath]);
 
-  return <RendererShell shell={shell} tools={strip} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
+  // The view's menu, under Select (`kit/tools/select/sceneMenu.js`): over a link or an object its
+  // reference (the link's name), Select or Deselect, Hide, then the framing; over empty space the framing.
+  const host = useViewerHost();
+  const viewportRef = useRef(null);
+  const pickedIds = () => [...selectionRef.current.selectedLinkNames.map(name => `link:${name}`), ...selectionRef.current.selectedComponentIds];
+  const contextMenuItems = scene && !shell.previewing && toolMode === ROBOT_TOOL.SELECT ? press => sceneMenuEntries({
+    press, viewport: viewportRef.current, scene, selected: pickedIds(), t,
+    copyText: hit => sceneCopyText(shell.frame.resource, [...new Set([...selectionRef.current.selectedLinkNames, hit.linkName].filter(Boolean))]),
+    onCopy: text => { void Promise.resolve(host.clipboard.writeText(text)).catch(() => {}); },
+    onSelect: (hit, selected) => (hit.componentId ? selection.select(hit.componentId, { multiSelect: selected }) : selection.selectLink(hit.linkName, { multiSelect: selected })),
+    viewer: () => shellRef.current?.frame.viewerRef.current || null,
+    more: hit => [menuEntry("visibility", t("tree.hide"), { onSelect: () => changeVisibility(hit.componentId ? [hit.componentId]
+      : (robotRef.current?.parts || []).filter(part => part.link === hit.linkName).map(part => part.id), false) })]
+  }) : null;
+
+  return <RendererShell shell={shell} tools={strip} contextMenuItems={contextMenuItems} subToolbar={sceneTools.subToolbar} sidebar={sidebar} previewView={previewView}
     references={shell.previewing ? NO_REFERENCES : references} referenceChips={shell.previewing ? NO_REFERENCES : referenceChips}
     nameReference={nameLink}
     onClearReferences={() => { clearSelection(); measure.select([]); }}
     onSelectPress={sceneTools.onSelectPress} onSelectHover={sceneTools.onSelectHover}
-    viewportOverlay={viewport => <>
+    viewportOverlay={viewport => { viewportRef.current = viewport; return <>
       {sceneTools.overlay(viewport)}
       {poseActive ? <JointHandleOverlay handlesRef={handlesRef} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
       <PointerPick viewport={viewport} scene={scene} enabled={picksLinks} onPick={handlePick} onHover={selection.hoverHit} />
-    </>} />;
+    </>; }} />;
 }
 
 export default function RobotRenderer(props) {

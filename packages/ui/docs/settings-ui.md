@@ -246,8 +246,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   file handler's corner: Full size and its update). The rest of the right side of the view is clear.
 - **View cube** at bottom-right, 2px from the right and 8px off the bottom so the axes
   drawn in its lower corner never touch the edge (`VIEWPORT_CUBE_BOTTOM`), in a 6rem area:
-  enlarged face/edge/corner hit areas and neutral hover and XYZ guides. It carries no button:
-  the fit is **F**'s (and the context menu's Zoom to fit), the orientation the cube's. A host whose own
+  enlarged face/edge/corner hit areas and neutral hover and XYZ guides. **Zoom to fit** stands at
+  its left, its foot on the cube's (`kit/shell/ZoomFitButton.jsx`, a single icon on the floating
+  chrome's surface, its tooltip naming F; no zoom readout): the view's navigation in one corner. A
+  flat view (a board, a schematic, a drawing) has no cube, and the same button alone in the same
+  corner. F, a double-click on empty space and the view's menu fit too. A host whose own
   control floats over that corner lifts it clear with `--cad-viewport-corner-bottom`, the
   room that control takes from the bottom edge. A host can instead anchor it at bottom-left
   with `--cad-viewport-corner-left: 2px` and `--cad-viewport-corner-right: auto`.
@@ -581,17 +584,23 @@ file.
   `.sch`/`.kicad_sch`; on a board that records none, the kinds: ICs, Resistors, ...), a schematic's in
   the sheets they are placed on; a part is a row with no pads or pins under it. The Nets: flat, each
   its pad or pin count, the `unconnected-(...)` pins shut under their own group, a label. A block's
-  name selects every part in it, a chip each; a part's or net's selects it as a click on the picture
+  name opens or shuts it, as a folder's, and selects nothing; its row menu's **Select all N parts**
+  selects every part in it, which Quick Edit shows as ONE chip ("graphic · 34 parts", its X letting
+  them all go; `kit/tools/select/groupChips.js`), and **Zoom to** the block frames them. Every row but
+  a group's has the view's menu (Copy Reference, Select, Isolate, Zoom to it). A part's or net's selects it as a click on the picture
   does, and leaves the view where it is (a schematic shows the sheet it is on, if it is not the one
   shown); a **double-click** frames what it picked, as KiCad's and Altium's lists zoom to what is
-  double-clicked (on a phone, whose page gives the view back, a press frames it). Only a row's chevron
-  opens or shuts it. The Parts open as their blocks, a block of several parts shut; a pick on the
+  double-clicked (on a phone, whose page gives the view back, a press frames it). A row's chevron
+  opens or shuts it, and a block's name does too. The Parts open as their blocks, a block of several parts shut; a pick on the
   picture opens its row's owners and scrolls it into view (a pad's or a pin's, its part's row). A
   selected net is lit and the rest stepped back, as KiCad's net highlight. The panel's search reads
   the parts with their pads or pins, so a pasted `#U3.9` finds the pad.
 - **The detail** (`kit/inspector/CircuitDetail.jsx`, `FlatPanel`'s `detail`), Altium's third list:
-  under the lists, whatever tab is open, a rule above it, at most 45% of the panel's height and
-  scrolling on its own, what the last pick is in detail. A part's: its reference, value and footprint
+  under the lists, whatever tab is open, at a height of its own whatever it shows (two fifths of the
+  panel at first; its top edge is the grip that sizes it, kept across files as
+  `toolStack.panels.flatDetail`, never under 96px, the lists keeping 160px over it), scrolling on its
+  own, what the last pick is in detail, titled with whose it is ("Pads of C17", "Pads on net VBUS"):
+  ONE thing's, whatever else is selected. A part's: its reference, value and footprint
   name, its pad count, then its pads (a board's: one a pin, its number, its pin's name and net) or pins;
   a net's: its pads or pins, each its part and number. A pad or a pin picked shows its part's, itself
   lit; one picked in the detail shown keeps that detail (a net's pad leaves the net's). A row selects
@@ -1064,7 +1073,8 @@ selected.
 
 Zoom to Fit recenters and frames the whole original model at the current angle;
 Zoom to Selection frames the selection and is unavailable without one. Both are
-STEP context-menu items; the live `resetCamera` command takes the same fit path.
+every view's context-menu items; Zoom to Fit is also the button at the view cube's left (below), and
+the live `resetCamera` command takes the same fit path.
 
 **A rebuild follows the camera's owner** (`kit/camera/cameraTouch.js`). A page opens on the
 viewer's fit, and the camera is **untouched** until the person takes it: an orbit, a pan or a
@@ -1221,7 +1231,7 @@ chat's frame), so its tool keys work with no press in it first (`file-viewer/tak
   field or Preview, take a tool up as a design or CAD tool's do: **V** Select, **M** Measure;
   **P** the Pen, **⇧P** the Highlighter, **E** the Eraser; **R** the Rectangle, **L** the Line,
   **⇧L** the Arrow, **O** the Ellipse, **T** Text (each taking up Pencil or Shapes with that
-  tool in hand); and **F** frames the model (Zoom to fit: the key is the only button it has). A tool already in hand stays so.
+  tool in hand); and **F** frames the model (Zoom to fit: its button is the one at the view's bottom-right, `ZoomFitButton.jsx`). A tool already in hand stays so.
   Each key shows after its name in its button's tooltip ("Measure M", muted), and Pencil's and
   Shapes' tooltips name what they draw with now ("Rectangle R").
 

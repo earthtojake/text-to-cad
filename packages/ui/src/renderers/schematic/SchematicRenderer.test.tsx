@@ -96,7 +96,7 @@ async function open({ colorScheme = 'light' } = {}) {
   }
   render(<Pane />);
   const pane = screen.getByTestId('pane');
-  return { pane, get controller() { return controller; }, dispose: () => client.dispose() };
+  return { pane, get controller() { return controller; }, get state() { return latest; }, dispose: () => client.dispose() };
 }
 
 const canvasOf = (pane: HTMLElement) => pane.querySelector<HTMLCanvasElement>('[data-schematic-surface] canvas[data-schematic-sheet]')!;
@@ -178,6 +178,16 @@ it('a sheet is shown from the Hierarchy and by a double-click on its symbol, eac
   await onSheet(pane, '/Load/');
   expect(reads).toHaveLength(2);
   expect((await controllerOf(view)).readState().schematicDisplay.sheet).toBe('/Load/');
+  // Each sheet's view is kept with the file, so a reopen finds the root where it was left.
+  await waitFor(() => expect(JSON.stringify(view.state)).toContain(`"views":{"/":{"scale":${left.scale}`));
+  // The menu over bare paper in a sheet entered goes up one; Zoom to fit is there too.
+  const right = { ...point([20, 20]), button: 2, pointerId: 3 };
+  fireEvent.pointerDown(canvasOf(pane), right);
+  fireEvent.pointerUp(canvasOf(pane), right);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Up one sheet', 'Zoom to fit', 'Zoom to selection']);
+  await user.click(within(menu).getByRole('menuitem', { name: 'Up one sheet' }));
+  await onSheet(pane, '/');
   view.dispose();
 });
 

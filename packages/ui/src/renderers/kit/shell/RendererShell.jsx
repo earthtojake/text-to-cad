@@ -30,6 +30,7 @@ import ShellViewport from "./ShellViewport.jsx";
 import PreviewView from "./PreviewView.jsx";
 import { previewCoverStep } from "./previewCover.js";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
+import { pickSceneAt } from "../tools/select/sceneMenu.js";
 import AnnotationSelectionBar from "../tools/annotate/AnnotationSelectionBar.jsx";
 import { useControlUsage } from "../../../usage/controls.js";
 
@@ -126,6 +127,8 @@ const DOUBLE_PRESS_MS = 600;
  *   background makes it; Quick Edit's X calls it, and clears Annotate's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Annotate's copies the view with its ink); null when there is nothing to copy.
+ *   `doubleClickFits`: a double-click on empty space under Select fits the model (`DoubleClickFit`);
+ *   false for a renderer whose double-click is its own (an engine document's isolates and looks at).
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
  *   gesture, the anchor and the dismissal are the shell's (`ViewportContextMenu.jsx`), and a
  *   renderer that passes none has no viewport menu at all. `onContextMenuOpenChange(open)`
@@ -161,9 +164,34 @@ const DOUBLE_PRESS_MS = 600;
  *   and Preview viewport's `runtimeLifecycle` and `onCameraSettled`. Preview is a view of its own
  *   (`PreviewView.jsx`) over the editor's, which nothing of it reaches.
  */
+/**
+ * A double-click on empty space under Select fits the model, as F does and as every flat view's
+ * double-click does: what the renderer, ink or a knob took first (`defaultPrevented`, or a capture
+ * that stopped it) is theirs, and so is a double-click on something the scene picks.
+ */
+function DoubleClickFit({ viewport, scene, active, viewerRef }) {
+  const { hostRef, runtimeRef, viewerReadyTick } = viewport;
+  const live = useRef(null);
+  live.current = { scene, active };
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host) return undefined;
+    const onDoubleClick = (event) => {
+      const now = live.current;
+      if (!now.active || event.defaultPrevented || event.target !== runtimeRef.current?.renderer?.domElement) return;
+      if (pickSceneAt({ hostRef, runtimeRef }, now.scene, event.clientX, event.clientY)) return;
+      viewerRef.current?.resetZoom?.();
+    };
+    host.addEventListener("dblclick", onDoubleClick);
+    return () => host.removeEventListener("dblclick", onDoubleClick);
+  }, [hostRef, runtimeRef, viewerReadyTick, viewerRef]);
+  return null;
+}
+
 export default function RendererShell({ shell, tools, toolPanels = null, subToolbar = null, sidebar = null, references = null, referenceChips = null, nameReference = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null, previewView = null,
-  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null }) {
+  frameProvider = null, onCanvasPointerDown = null, onSelectPress = null, onSelectHover = null, selectsAnnotations = true, inkTouches = null,
+  doubleClickFits = true }) {
   const { t } = useI18n();
   const frame = shell.frame;
   // What a tool's letter takes up (`useRendererShell`'s `onKey`): the strip as drawn now.
@@ -444,6 +472,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
   // The renderer's overlay and the shell's own layers share one viewport context.
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
+    {previewing || !doubleClickFits ? null : <DoubleClickFit viewport={viewport} scene={scene} active={frame.selecting} viewerRef={frame.viewerRef} />}
     {/* The ink Select has picked, its bar: restyle, fill, delete. */}
     {frame.selecting && frame.annotation.selected.length ? <AnnotationSelectionBar annotation={frame.annotation} colorScheme={colorScheme} runtimeRef={viewport.runtimeRef}
       viewerReadyTick={viewport.viewerReadyTick} onDelete={frame.deletePicked} disabled={viewerLoading || !scene} /> : null}

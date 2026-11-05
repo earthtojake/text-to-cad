@@ -42,6 +42,12 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 // Narrower than this, the panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
 export const FLAT_PANEL_OPEN_PX = 1024;
 const FLAT_PANEL_ID = "flat";
+// The detail's height, the person's (a grip on its top edge, kept: `toolStack.panels.flatDetail`): at
+// first two fifths of the panel, never under four rows, and the lists keep 160px over it.
+const DETAIL_ID = "flatDetail";
+const DETAIL_SHARE = 0.4;
+const DETAIL_MIN_PX = 96;
+const LISTS_MIN_PX = 160;
 
 /**
  * A view's panel's state, the same in every view that has one: docked (a phone: the whole view), open
@@ -90,6 +96,8 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
   const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2));
   const width = layout?.panels?.[FLAT_PANEL_ID]?.width ?? FLAT_PANEL_DEFAULT_WIDTH;
   const changeWidth = useCallback(next => changeStack(current => ({ panels: { ...current?.panels, [FLAT_PANEL_ID]: { width: next } } })), [changeStack]);
+  const detailHeight = layout?.panels?.[DETAIL_ID]?.height ?? null;
+  const changeDetailHeight = useCallback(next => changeStack(current => ({ panels: { ...current?.panels, [DETAIL_ID]: { height: next } } })), [changeStack]);
   const [focusSearch, setFocusSearch] = useState(0);
   const openRef = useRef(open);
   openRef.current = open;
@@ -97,7 +105,7 @@ export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, 
     toggle: () => setOpen(!openRef.current),
     search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
   } : null;
-  return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, focusSearch, control };
+  return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, detailHeight, changeDetailHeight, focusSearch, control };
 }
 
 // The panel's two lines, the same on both sides (Figma's): every box in its head and lists — the search
@@ -148,7 +156,8 @@ export function FlatPanelPill({ onOpen, touch = false }) {
  *   focusSearch: number, detail?: import("react").ReactNode }} props
  *   `focusSearch`: a count; each new value puts the keyboard in the search box (/). `detail`: what is picked, under the lists.
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false }) {
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, detail = null, hidden = false,
+  detailHeight = null, onDetailHeightChange = null }) {
   const { t } = useI18n();
   const platform = useContext(ViewerHostContext)?.environment?.platform;
   const page = mode === "page", docked = mode === "docked";
@@ -247,6 +256,51 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     onWidthChange(clamp(next));
   };
 
+  // The detail's height: the person's from the grip on its top edge (one write when it lets go), else
+  // two fifths of the panel; a fixed height whatever it shows, the list in it scrolling.
+  const asideRef = useRef(null);
+  const [asideHeight, setAsideHeight] = useState(0);
+  useLayoutEffect(() => {
+    const element = asideRef.current;
+    if (!element || typeof ResizeObserver === "undefined") return undefined;
+    const measure = () => setAsideHeight(Math.round(element.getBoundingClientRect().height));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const [detailDraft, setDetailDraft] = useState(null);
+  const detailMax = Math.max(DETAIL_MIN_PX, asideHeight - LISTS_MIN_PX);
+  const clampDetail = value => Math.round(Math.min(detailMax, Math.max(DETAIL_MIN_PX, value)));
+  const drawnDetail = clampDetail(detailDraft ?? detailHeight ?? asideHeight * DETAIL_SHARE);
+  const detailDrag = useRef(null);
+  const startDetailDrag = event => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    detailDrag.current = { pointerId: event.pointerId, y: event.clientY, from: drawnDetail, next: null };
+    capturePointer(event.currentTarget, event.pointerId);
+  };
+  const moveDetailDrag = event => {
+    const current = detailDrag.current;
+    if (current?.pointerId !== event.pointerId) return;
+    current.next = clampDetail(current.from - (event.clientY - current.y));
+    setDetailDraft(current.next);
+  };
+  const stopDetailDrag = event => {
+    const current = detailDrag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
+    detailDrag.current = null;
+    releasePointer(event.currentTarget, event.pointerId);
+    setDetailDraft(null);
+    if (current.next !== null && current.next !== detailHeight) onDetailHeightChange?.(current.next);
+  };
+  const keyDetailDrag = event => {
+    const next = { ArrowUp: drawnDetail + KEY_NUDGE_PX, ArrowDown: drawnDetail - KEY_NUDGE_PX, Home: Infinity, End: 0 }[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    onDetailHeightChange?.(clampDetail(next));
+  };
+
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
   const activeRef = useRef(active);
   activeRef.current = active;
@@ -254,7 +308,7 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   const single = tabs.length <= 1;
   const tabbed = useMemo(() => ({ tabbed: true, single, activeSection: active, searching, register }), [single, active, searching, register]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
-  const aside = <aside aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
+  const aside = <aside ref={asideRef} aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
     onKeyDown={onPanelKeyDown}
     // The chrome's colour, the navbar's: a step off the canvas, so the frame reads apart from the picture.
     className={cn("flex min-h-0 flex-col bg-sidebar text-tiny text-foreground",
@@ -317,8 +371,16 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
         </div>
       </FlatPanelContext.Provider>
     </ScrollArea>
-    {/* What is picked, in detail (a part's pads, a net's): under the lists, whatever tab is open, scrolling on its own. */}
-    {detail ? <div className="flex max-h-[45%] min-h-0 shrink-0 flex-col border-t border-border" data-flat-panel-detail="">
+    {/* What is picked, in detail (a part's pads, a net's): under the lists, whatever tab is open, at
+        the person's height, scrolling on its own; its top edge is the grip that sizes it. */}
+    {detail ? <div className="relative flex min-h-0 shrink-0 flex-col border-t border-border" style={{ height: drawnDetail }} data-flat-panel-detail="">
+      <div role="separator" aria-orientation="horizontal" aria-label={t("flatPanel.resizeDetail")} aria-valuenow={drawnDetail}
+        aria-valuemin={DETAIL_MIN_PX} aria-valuemax={detailMax} tabIndex={0}
+        className={cn("absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none focus-visible:outline-none",
+          "after:absolute after:inset-x-0 after:top-1/2 after:h-px after:-translate-y-1/2 after:transition-colors hover:after:bg-ring focus-visible:after:bg-ring",
+          detailDraft !== null && "after:bg-ring")}
+        onPointerDown={startDetailDrag} onPointerMove={moveDetailDrag} onPointerUp={stopDetailDrag} onPointerCancel={stopDetailDrag} onKeyDown={keyDetailDrag}
+        data-flat-panel-detail-grip="" />
       <FlatPanelContext.Provider value={panel}>{detail}</FlatPanelContext.Provider>
     </div> : null}
     {page ? null : <div role="separator" aria-orientation="vertical" aria-label={t("flatPanel.resize")} aria-valuenow={drawnWidth}

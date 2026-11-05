@@ -2,7 +2,7 @@ import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
-import { buildBoardRefToken, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
+import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
 import { drawAnnotationMarks } from "@cad/core/lib/drawing2d/marks.js";
 import { planCamera } from "@cad/core/lib/drawing2d/planView.js";
 import { screenToModel } from "@cad/core/lib/drawing2d/index.js";
@@ -16,10 +16,12 @@ import { promptView } from "../../annotation/views.js";
 import FlatViewFrame, { flatViewTools } from "../kit/shell/FlatViewFrame.jsx";
 import { useFlatHandover, useFlatTools } from "../kit/shell/useFlatView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
+import { exitIsolateEntry, menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import AnnotationOverlay from "../kit/tools/annotate/AnnotationOverlay.jsx";
 import { measureSelectHandlers } from "../kit/tools/measure/measureSelection.js";
 import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
+import { groupChips } from "../kit/tools/select/groupChips.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
@@ -51,7 +53,9 @@ import { useBoardView } from "./useBoardView.js";
  * or a rule area by its outline, then a part), Shift adds, and a click on nothing clears; a drag
  * draws a box and names the area, on the view's working layer (`tools.js`); the rest are the 3D
  * views' drags (a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's
- * two-finger scroll does; a mouse's wheel or a pinch zooms), a double-click fits — Annotate, which
+ * two-finger scroll does; a mouse's wheel or a pinch zooms), a double-click fits, a right-click opens
+ * the view's menu (every view's, `kit/shell/viewMenu.js`: the reference, Select, Isolate and the
+ * copper's net, Flip over bare board, and the framing) — Annotate, which
  * draws on the board, and Measure, between points snapped to pad, via and hole centres, track ends
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
@@ -175,7 +179,13 @@ function BoardSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const { references, chips } = useBoardReferences({ scene, selection, resource: workspace.resource });
+  const { references, chips: pickChips } = useBoardReferences({ scene, selection, resource: workspace.resource });
+  // A block picked whole (its row menu's Select all parts) is one chip, not a chip a part.
+  const trees = useBoardTrees(index);
+  const chips = useMemo(() => groupChips({ selected: selection.selected, chips: pickChips, resource: workspace.resource, select: selection.select,
+    groups: [...(trees?.parts.nodesById.values() || [])].filter(node => node.picks?.length > 1).sort((a, b) => b.picks.length - a.picks.length)
+      .map(node => ({ id: node.id, label: node.label, picks: node.picks })),
+    label: group => t("chip.blockParts", { name: group.label, count: group.picks.length }) }), [selection.selected, selection.select, pickChips, workspace.resource, trees, t]);
   // The overlay's colours are the theme's (`board2d/boardOverlay.js`): a highlight that reads on the canvas under it.
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
@@ -311,7 +321,7 @@ function BoardSurface({ view, data }) {
       if (phase === "end") selectionRef.current.pick({ id: board.areaSelector(from, to, workingRef.current) }, { multiSelect: Boolean(event?.shiftKey) });
       return true;
     };
-    return { tap, hover, drag };
+    return { tap, hover, drag, pickAt };
   }, [annotationSurface, requestPaint]);
 
   const boardView = useBoardView({
@@ -427,6 +437,36 @@ function BoardSurface({ view, data }) {
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
   });
 
+  // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
+  // Over something Select would pick: its reference (with what is picked already), Select or
+  // Deselect, Isolate for a part or a net and its net for copper, then the framing. Over bare board:
+  // Exit isolate, Flip, and the framing.
+  const contextMenuItems = index && toolMode === BOARD_TOOL.SELECT ? press => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const hit = handlers.pickAt({ x: press.clientX - rect.left, y: press.clientY - rect.top }, "mouse");
+    const now = selectionRef.current, isolated = isolation.isolated;
+    const zoom = zoomGroup({ t, onZoomFit: fit, onZoomSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: now.selected.length > 0 });
+    if (!hit) {
+      return menuGroups([exitIsolateEntry({ isolatedCount: isolated.length, onExitIsolates: isolation.clear, t })],
+        layered ? [menuEntry("flip", t("board.text.flip_board"), { onSelect: () => setDisplay(current => ({ ...current, side: current.side === "bottom" ? "top" : "bottom" })) })] : [],
+        zoom);
+    }
+    const id = hit.selector, selected = now.selected.includes(id);
+    const copyText = path ? buildBoardRefToken({ path, selectors: [...new Set([...now.selected, id])] }) : "";
+    const ownNet = hit.kind === "net" ? "" : String(hit.pad?.net || hit.item?.net || hit.net?.name || "");
+    const netId = ownNet ? formatBoardRefSelector({ kind: "net", net: ownNet }) : "";
+    const isolatable = hit.kind === "part" || hit.kind === "net";
+    return menuGroups(
+      referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
+      pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t,
+        isolated: isolatable ? isolated.includes(id) : null, onIsolate: () => isolation.toggle(id), isolatedCount: isolated.length, onExitIsolates: isolation.clear }),
+      netId ? [menuEntry("isolate-net", isolated.includes(netId) ? t("tree.exitIsolateNamed", { name: ownNet }) : t("tree.isolateNamed", { name: ownNet }),
+        { onSelect: () => isolation.toggle(netId) })] : [],
+      zoom);
+  } : null;
+
   // ---- the frame ---------------------------------------------------------------
   // While the board loads, or once it has failed to, none of the viewer's own chrome. A compact host
   // gets the board alone; a payload without its index, the picture and its Display alone.
@@ -437,10 +477,11 @@ function BoardSurface({ view, data }) {
   const { strip, row } = flatViewTools(tools, { colorScheme, shown, selectMenu, t });
   // The panel (`kit/shell/FlatPanel.jsx`): the Parts, the Nets, then the Layers with the board's view
   // settings; under them, what is picked in detail.
-  const trees = useBoardTrees(index);
+  // A list row's Copy Reference: what it names, with what is selected, as one reference into the file.
+  const copyReferences = ids => { void Promise.resolve(host.clipboard.writeText(buildBoardRefToken({ path, selectors: ids }))).catch(() => {}); };
   const takeSelect = () => selectTool(BOARD_TOOL.SELECT);
   const list = id => <BoardSection index={index} trees={trees} list={id} selection={selection} isolated={isolation.isolated}
-    onIsolate={isolation.toggle} onFrame={frameSelectors} onSelect={takeSelect} />;
+    onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const detail = useBoardDetail(index, selection, { onSelect: takeSelect, onFrame: frameSelectors });
   const panelTabs = [
     ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
@@ -461,7 +502,7 @@ function BoardSurface({ view, data }) {
       updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : []}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
-      shown={shown} onReload={view.reload}>
+      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems} onFit={fit}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
         className={cn("absolute inset-0 block touch-none select-none", cursor)} />
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}

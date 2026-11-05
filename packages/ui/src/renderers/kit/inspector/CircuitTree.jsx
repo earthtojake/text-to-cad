@@ -9,7 +9,9 @@ import {
 } from "@cad/ui/primitives/tree-row";
 import { TreeFilterHighlight } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
+import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuTrigger } from "@cad/ui/primitives/context-menu";
 import { useFlatPanel } from "../shell/FlatPanel.jsx";
+import { ViewMenuItems, menuEntry, menuGroups, pickGroup } from "../shell/viewMenu.js";
 import { useTreeSearch } from "./modelTreeSearch.js";
 import { openUntilChoice } from "./treeExpansion.js";
 import VirtualRows, { revealRow } from "./VirtualRows.jsx";
@@ -61,8 +63,8 @@ function visibleRows(roots, expanded) {
 
 // One row of a list: a block (a schematic sheet, or a kind), a group (the unconnected pins), a part or a net, with one
 // glyph in one column — a branch's chevron, a leaf's own — its name, its muted detail, and a part's or net's eye.
-// A block's name selects every part in it; a group's name is a label, and does nothing. Only a branch's
-// chevron opens or shuts it, as the model tree's.
+// A block's name opens or shuts it, as a folder's (its menu's Select all parts selects every part in it);
+// a group's name is a label, and does nothing. Any other branch opens or shuts by its chevron, as the model tree's.
 const ROW_NAME_CLASS = "flex h-full min-w-0 flex-1 items-center gap-1 pr-2 text-left";
 function RowName({ node }) {
   return <>
@@ -70,39 +72,56 @@ function RowName({ node }) {
     {node.detail ? <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{node.detail}</TreeRowLabel> : null}
   </>;
 }
-function CircuitRow({ node, depth, branch, open, selected, isolated, toggle, choose, frame, hover, onIsolate, glyphs, data }) {
+/** A row's menu, built as it opens (`menuOf`, every view's groups): a tree of rows never pays for it. */
+function RowMenu({ node, menuOf, children }) {
+  const [open, setOpen] = useState(false);
+  if (!menuOf) return children;
+  return <ContextMenu onOpenChange={setOpen}><ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+    <ContextMenuContent className="w-44">
+      {open ? <ViewMenuItems entries={menuOf(node)} Item={ContextMenuItem} Separator={ContextMenuSeparator} /> : null}
+    </ContextMenuContent>
+  </ContextMenu>;
+}
+
+function CircuitRow({ node, depth, branch, open, selected, isolated, toggle, choose, frame, hover, onIsolate, glyphs, data, menuOf }) {
   const { t } = useI18n();
-  const pickable = node.kind !== "group";
   const block = node.kind === "block";
+  const pickable = node.kind !== "group" && !block;
   const eye = isolable(node);
-  return <TreeRowSurface dense active={selected} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
+  return <RowMenu node={node} menuOf={node.kind === "group" ? null : menuOf}><TreeRowSurface dense active={selected} className="group/row relative gap-0 pr-0" {...{ [`data-${data}-row`]: node.id }}
     style={{ paddingLeft: TREE_ROW_INSET_PX + depth * TREE_INDENT_PX, ...(eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : {}) }}
     onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
     <TreeRowGuides depth={depth} inset={TREE_ROW_INSET_PX} />
-    {branch ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
+    {branch && !block ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
       className="grid h-6 w-3 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring" onClick={() => toggle(node)}>
       <TreeRowChevron expanded={open} />
     </button> : null}
     {pickable ? <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected}
-      onClick={event => choose(node, event)} onDoubleClick={() => frame(node)} {...{ [`data-${data}-block`]: block ? node.id : undefined }}
+      onClick={event => choose(node, event)} onDoubleClick={() => frame(node)}
       className={cn(ROW_NAME_CLASS, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         branch && "pl-1", eye && (isolated ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover))}>
       {branch ? null : <KindGlyph kind={node.kind} glyphs={glyphs} />}
+      <RowName node={node} />
+    </button> : block ? <button type="button" aria-label={t(open ? "tree.collapse" : "tree.expand", { name: node.label })} aria-expanded={open}
+      onClick={() => toggle(node)} {...{ [`data-${data}-block`]: node.id }}
+      className={cn(ROW_NAME_CLASS, "rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring")}>
+      {/* The block's one button, chevron and name: it opens or shuts, as a folder's row. */}
+      <span className="grid h-6 w-3 shrink-0 place-items-center" aria-hidden="true"><TreeRowChevron expanded={open} /></span>
       <RowName node={node} />
     </button> : <span className={cn(ROW_NAME_CLASS, "cursor-default", branch && "pl-1")} {...{ [`data-${data}-group`]: node.id }}>
       <RowName node={node} />
     </span>}
     {eye ? <IsolateEye node={node} on={isolated} onToggle={onIsolate} data={data} /> : null}
-  </TreeRowSurface>;
+  </TreeRowSurface></RowMenu>;
 }
 const MemoCircuitRow = memo(CircuitRow);
 
 // A search hit is the row without its place in the tree: its name, then what it is under, muted.
-function CircuitSearchRow({ match, selected, isolated, cursor, choose, frame, hover, onIsolate, glyphs, data }) {
+function CircuitSearchRow({ match, selected, isolated, cursor, choose, frame, hover, onIsolate, glyphs, data, menuOf }) {
   const { t } = useI18n();
   const { entry, indices, alias } = match, { node } = entry;
   const eye = isolable(node);
-  return <TreeRowSurface dense active={selected} cursor={cursor} className="group/row relative gap-0 pr-0"
+  return <RowMenu node={node} menuOf={menuOf}><TreeRowSurface dense active={selected} cursor={cursor} className="group/row relative gap-0 pr-0"
     style={eye ? { "--row-actions": ROW_ACTIONS_WIDTH } : undefined} onMouseEnter={() => hover(node.pick || "")} onMouseLeave={() => hover("")}>
     <button type="button" aria-label={t("tree.select", { name: node.label })} aria-pressed={selected} onClick={event => choose(node, event)} onDoubleClick={() => frame(node)} style={{ paddingLeft: TREE_ROW_INSET_PX }}
       className={cn("flex h-full min-w-0 flex-1 items-center gap-1 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -114,7 +133,7 @@ function CircuitSearchRow({ match, selected, isolated, cursor, choose, frame, ho
       </TreeRowLabel>
     </button>
     {eye ? <IsolateEye node={node} on={isolated} onToggle={onIsolate} data={data} /> : null}
-  </TreeRowSurface>;
+  </TreeRowSurface></RowMenu>;
 }
 const MemoCircuitSearchRow = memo(CircuitSearchRow);
 
@@ -138,10 +157,12 @@ export function treeAncestors(tree, id) {
  * adds or takes away), as a click on the picture does, under any tool, and shows it where it is
  * (`onShow`: a schematic's other sheet); a double-click frames it (`onFrame`), as KiCad's and Altium's
  * lists zoom to what is double-clicked. On a phone a press frames it too, as the page gives the view
- * back. A press on a block's name selects every part in it, a chip each; a part's or a net's eye
+ * back. A press on a block's name opens or shuts it, as a folder's; its row menu's Select all parts
+ * selects every part in it (Quick Edit's one chip for the block). Every row but a group's has the view's menu
+ * (`kit/shell/viewMenu.js`: the reference, Select, Isolate, Zoom to it); a part's or a net's eye
  * isolates it. It opens as every tree does, until there is a choice (`treeExpansion.js`), but for a
- * block of several parts and the groups `closedGroups` names, shut until the person opens them. Only a
- * row's chevron opens or shuts it: a block's name selects its parts, a group's is a label. A pick on
+ * block of several parts and the groups `closedGroups` names, shut until the person opens them. A
+ * row's chevron opens or shuts it, and a block's name does too; a group's is a label. A pick on
  * the picture opens its row's owners and brings it into view, once (a pad's or a pin's, its part's row,
  * `ownerOf`); a press in the list opens and scrolls nothing (its row is in view). From the first row
  * the person opens or shuts, the shape is theirs. The viewer is read-only: nothing here edits the file.
@@ -157,7 +178,7 @@ export function treeAncestors(tree, id) {
  *   `onSelect`: a row pressed takes Select up, as a pick in any tree does.
  */
 export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, ownerOf = null, glyphs, closedGroups = EMPTY, data, panel, selection,
-  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null }) {
+  isolated = EMPTY, onIsolate, onSelect, onShow = null, onFrame = null, onCopyReference = null }) {
   const { t } = useI18n();
   const rowHeight = useTreeRowHeight();
   // Untouched, the tree is the rule's shape for the board it shows; the person's from their first change.
@@ -224,6 +245,23 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
     select(node.pick, { multiSelect: additive(event) });
     shown([node.pick]);
   }, [select, clear]);
+  // A row's menu, every view's groups (`kit/shell/viewMenu.js`): a block's Select all parts and its
+  // framing; a part's, a pad's or a net's reference (with what is selected), Select or Deselect, Isolate, and its framing.
+  const isolatedRef = useRef(isolated);
+  isolatedRef.current = isolated;
+  const copyRef = useRef(onCopyReference);
+  copyRef.current = onCopyReference;
+  const menuOf = useCallback(node => {
+    const zoom = [menuEntry("zoom-to", t("menu.zoomToNamed", { name: node.label }), { onSelect: () => frame(node) })];
+    if (node.picks) return menuGroups([menuEntry("select-all", t("menu.selectAllParts", { count: node.picks.length }), { onSelect: () => choose(node, {}) })], zoom);
+    if (!node.pick) return [];
+    const picked = selectedRef.current.includes(node.pick);
+    return menuGroups(
+      copyRef.current ? [menuEntry("copy-reference", t("menu.copyReference"), { onSelect: () => copyRef.current([...new Set([...selectedRef.current, node.pick])]) })] : [],
+      pickGroup({ selected: picked, t, onSelect: () => { onSelectRef.current?.(); select(node.pick, { multiSelect: picked }); },
+        isolated: isolable(node) ? isolatedRef.current.includes(node.pick) : null, onIsolate: () => onIsolate(node.pick) }),
+      zoom);
+  }, [t, frame, choose, select, onIsolate]);
   // A press on a tree row picks what is already in view: it opens nothing and scrolls nothing. The
   // selection it makes is marked as the tree's (`pressedInTree`), and the reveal below passes it by.
   const pressedInTree = useRef(false);
@@ -274,15 +312,18 @@ export default function CircuitTree({ tree, searchRoots = null, nodeIdsOf, owner
   const renderTreeRow = at => {
     const row = rows[at];
     return <MemoCircuitRow node={row.node} depth={row.depth} branch={row.branch} open={row.open} selected={highlighted.has(row.node.id)}
-      isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={chooseInTree} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} />;
+      isolated={isolatedIds.has(row.node.id)} toggle={toggle} choose={chooseInTree} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
   };
   const renderSearchRow = at => {
     const match = matches[at], id = match.entry.node.id;
     return <MemoCircuitSearchRow match={match} selected={highlighted.has(id)} isolated={isolatedIds.has(id)} cursor={id === cursorId}
-      choose={choose} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} />;
+      choose={choose} frame={frame} hover={hover} onIsolate={onIsolate} glyphs={glyphs} data={data} menuOf={menuOf} />;
   };
   return <div className="flex flex-col text-tiny" aria-label={panel.listLabel}>
-    <div ref={listRef} className="px-2" onClick={event => { if (!event.target.closest("li,button,input")) clear(); }}>
+    <div ref={listRef} className="px-2" onClick={event => {
+      // A row menu's item is a portal's: its click reaches here through React, from outside the list.
+      if (event.currentTarget.contains(event.target) && !event.target.closest("li,button,input")) clear();
+    }}>
       {searching ? matches.length ? <div data-flat-panel-hit="">
         {found.total > matches.length ? <p role="status" className="px-2 py-1 text-muted-foreground">
           {t("tree.firstMatches", { shown: matches.length, total: found.total.toLocaleString() })}

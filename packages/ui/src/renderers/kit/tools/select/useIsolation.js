@@ -31,5 +31,7 @@ export function useIsolation({ index, restored, canonical: canonicalOf }) {
       return kept.includes(canonical) ? kept.filter((item) => item !== canonical) : [...kept, canonical];
     });
   }, [index, restored, canonicalOf]);
-  return { isolated, resolved, toggle };
+  /** Everything let back in: the menu's Exit isolate over empty space. */
+  const clear = useCallback(() => setChosen(EMPTY), []);
+  return { isolated, resolved, toggle, clear };
 }

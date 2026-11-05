@@ -35,12 +35,15 @@ import { useMeasureOverlay } from "../kit/tools/measure/useMeasureOverlay.js";
 import { useMeasureSession } from "../kit/tools/measure/useMeasureSession.js";
 import { MeasurementsBar } from "../kit/tools/measure/measurementChips.jsx";
 import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
-import { useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
+import { sceneCopyText, useSceneReferences } from "../kit/tools/select/sceneReferences.jsx";
 import { useSceneSelection } from "../kit/tools/select/useSceneSelection.js";
 import { TOUCH_HIT_PX } from "../kit/viewport/dom.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
+import ViewportContextMenu from "../kit/shell/ViewportContextMenu.jsx";
+import ZoomFitButton from "../kit/shell/ZoomFitButton.jsx";
+import { menuEntry, menuGroups, pickGroup, referenceGroup, zoomGroup } from "../kit/shell/viewMenu.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 import { createDrawingScene, drawingHandleOf, drawingReferenceId, drawingUnits, layersSectionShown } from "./drawingReferences.js";
 import { drawingAnnotationDocument, drawingAnnotationSurface } from "./drawingAnnotation.js";
@@ -270,7 +273,12 @@ function DxfSurface({ view, data }) {
       selectionRef.current.hover(handle ? drawingReferenceId(handle) : "");
       setPointing(current => (current === over ? current : over));
     };
-    return { tap, hover };
+    // The entity under a pane point, as Select would take it ("" for none).
+    const entityUnder = (point, pointerType) => {
+      const at = atPoint(point, pointerType);
+      return at && drawingRef.current ? entityAt(drawingRef.current, at.model, at.reach, { hiddenLayers: hiddenRef.current }) : "";
+    };
+    return { tap, hover, entityUnder };
   }, [annotationSurface, requestPaint]);
 
   const drawingView = useDrawingView({
@@ -461,6 +469,35 @@ function DxfSurface({ view, data }) {
     return attachLiveBinding(binding, () => runtimeRef.current, { commands: ["clearSelection"], declined: DXF_DECLINED_LIVE_COMMANDS, ready: whenSettled });
   }, [binding, whenSettled]);
 
+  // ---- the menu: a secondary tap on the drawing, under Select (`kit/shell/viewMenu.js`'s groups) ----
+  // Over an entity: its reference (with what is picked already), Select or Deselect, Hide its layer,
+  // then the framing. Over bare paper: Show all layers while any is hidden, and the framing.
+  const frameEntities = useCallback(ids => {
+    const drawable = drawingRef.current;
+    const boxes = ids.map(id => drawable?.entities?.get(drawingHandleOf(id))?.box).filter(Boolean);
+    if (!boxes.length) return;
+    drawingView.frame([Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))]);
+  }, [drawingView]);
+  const contextMenuItems = shown && toolMode === DXF_TOOL.SELECT ? press => {
+    const canvas = canvasRef.current;
+    if (!canvas) return null;
+    const rect = canvas.getBoundingClientRect();
+    const handle = handlers.entityUnder({ x: press.clientX - rect.left, y: press.clientY - rect.top }, "mouse");
+    const now = selectionRef.current;
+    const zoom = zoomGroup({ t, onZoomFit: fit, onZoomSelection: () => frameEntities(selectionRef.current.selected), selectionAvailable: now.selected.length > 0 });
+    if (!handle) {
+      return menuGroups(hiddenLayers.size ? [menuEntry("show-all-layers", t("menu.showAllLayers"), { onSelect: () => setHiddenLayers(NO_LAYERS) })] : [], zoom);
+    }
+    const id = drawingReferenceId(handle), selected = now.selected.includes(id);
+    const layer = drawingRef.current?.entities?.get(handle)?.layer || "0";
+    const copyText = sceneCopyText(workspace.resource, [...new Set([...now.selected, id])]);
+    return menuGroups(
+      referenceGroup({ copyText, onCopy: () => { void Promise.resolve(host.clipboard.writeText(copyText)).catch(() => {}); }, t }),
+      pickGroup({ selected, onSelect: () => now.select(id, { multiSelect: selected }), t }),
+      [menuEntry("hide-layer", t("layers.hideNamed", { name: layer }), { onSelect: () => toggleLayer(layer) })],
+      zoom);
+  } : null;
+
   // ---- the frame ---------------------------------------------------------------
   // While the drawing loads, or once it has failed to, none of the viewer's own chrome: the load
   // itself, or the card saying why. A compact host gets the drawing alone.
@@ -595,6 +632,8 @@ function DxfSurface({ view, data }) {
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
+        {toolsHidden || !shown ? null : <ZoomFitButton onFit={fit} touch={mobile} />}
+        {chromeHidden || !contextMenuItems ? null : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />

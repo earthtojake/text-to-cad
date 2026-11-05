@@ -17,6 +17,8 @@ import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
+import ViewportContextMenu from "./ViewportContextMenu.jsx";
+import ZoomFitButton from "./ZoomFitButton.jsx";
 
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
@@ -90,13 +92,17 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   panelControl?: { current: object | null },
  *   toolStack: object, onToolStackChange(patch: object): void, notice?: import("react").ReactNode,
  *   quickEdit: object | null, alert: object | null, cardAlert: object | null, alertDismissal: { dismissed: boolean, dismiss(): void },
- *   shown: boolean, onReload?: () => void }} props
+ *   shown: boolean, onReload?: () => void, canvasRef?: import("react").RefObject<HTMLCanvasElement>,
+ *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
+ *   `onFit`: Zoom to fit, the corner's button (`ZoomFitButton.jsx`), where a 3D view's cube stands.
+ *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
+ *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
 export default function FlatViewFrame({ surface, containerRef, busy, children, file, mobile, compact, chromeHidden, loading, loadingLabel,
   updating, updateStatus, tools, toolRow = null, views = undefined, panel = null, panelControl = null, toolStack, onToolStackChange, notice = null, quickEdit,
-  alert, cardAlert, alertDismissal, shown, onReload }) {
+  alert, cardAlert, alertDismissal, shown, onReload, canvasRef = null, contextMenuItems = null, onFit = null }) {
   const toolsHidden = chromeHidden || compact;
   const sided = Boolean(panel?.tabs.length);
   const besideSidebarTile = mobile && sided;
@@ -148,7 +154,8 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
 
   const panelNode = sided && !toolsHidden ? <FlatPanel mode={mode} open={open} onClose={() => setOpen(false)} label={panel.label}
     searchLabel={panel.searchLabel} searchPlaceholder={panel.searchPlaceholder} tabs={tabs} tab={flat.tab} onTabChange={flat.changeTab}
-    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={panel.detail ?? null} /> : null;
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} detail={panel.detail ?? null}
+    detailHeight={flat.detailHeight} onDetailHeightChange={flat.changeDetailHeight} /> : null;
 
   return (
     <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"
@@ -181,6 +188,9 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
+        {toolsHidden || !shown || !onFit ? null : <ZoomFitButton onFit={onFit} touch={mobile} />}
+        {chromeHidden || !canvasRef || !contextMenuItems ? null
+          : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
         <ViewerLoadingOverlay loading={{ opening: loading && !alert, progress: { label: loadingLabel } }} operationKey={file} />
         <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={onReload} file={file} />
       </div>

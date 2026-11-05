@@ -391,9 +391,21 @@ it("a drag under Select draws the box and names the area on the working layer; t
   await pans({ ctrlKey: true }, [5, 0]);
   await pans({ metaKey: true }, [0, -5]);
   await pans({ shiftKey: true }, [-5, 0]);
-  fireEvent.pointerDown(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
-  fireEvent.pointerUp(canvas, { ...press, button: 2, pointerId: 3, ...at([36, 26]) });
+  // A right press that does not travel picks nothing: it opens the view's menu, here over bare board.
+  const menuAt = async (point: [number, number]) => {
+    fireEvent.pointerDown(canvas, { ...press, button: 2, pointerId: 3, ...at(point) });
+    fireEvent.pointerUp(canvas, { ...press, button: 2, pointerId: 3, ...at(point) });
+    return within(await screen.findByRole('menu')).getAllByRole('menuitem').map(item => item.textContent);
+  };
+  const closeMenu = async () => { fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' }); await waitFor(() => expect(screen.queryByRole('menu')).toBeNull()); };
+  expect(await menuAt([36, 26])).toEqual(['Flip board', 'Zoom to fit', 'Zoom to selection']);
+  await closeMenu();
   expect(selected(controller)).toEqual(['#R1.1', '#F.Cu@x30y10..x40y20']);
+  // Over a pad: its reference, Deselect (it is picked), its net, and the framing.
+  const overPad = await menuAt([34.175, 15]);
+  expect(overPad.slice(0, 2)).toEqual(['Copy Reference', 'Deselect']);
+  expect(overPad.at(-2)).toBe('Zoom to fit');
+  await closeMenu();
   const quickEdit = await waitFor(() => { expect(box(pane)).not.toBeNull(); return box(pane)!; });
   expect([...quickEdit.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(button => button.getAttribute('aria-label')))
     .toEqual(['R1.1', 'Remove R1.1', 'area 10 × 10 mm', 'Remove area 10 × 10 mm']);
@@ -435,16 +447,23 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   const detailRows = () => [...detail()!.querySelectorAll('[data-board-detail-row]')].map(row => [row.textContent, row.getAttribute('aria-pressed')]);
   expect(detail()).toBeNull();
 
-  // A block's name selects every part in it, a chip each, and leaves the view where it is; a double-click frames them.
+  // A block's name opens and shuts it, as a folder's, and selects nothing; its row menu selects every part
+  // in it, one chip for the block, leaving the view where it is, and frames them.
   const fitted = { ...frames.at(-1)! };
-  const led = within(parts).getByRole('button', { name: 'Select led' });
-  fireEvent.click(led);
+  const blockMenu = async () => {
+    fireEvent.contextMenu(parts.querySelector('[data-board-row="sheet:led"]')!);
+    return screen.findByRole('menu');
+  };
+  let menu = await blockMenu();
+  expect(within(menu).getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Select all 2 parts', 'Zoom to led']);
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'Select all 2 parts' }));
   expect(selected(controller)).toEqual(['#D1', '#R1']);
   await waitFor(() => expect([...box(pane)!.querySelectorAll('[data-quick-edit-ref] button[aria-label]')].map(b => b.getAttribute('aria-label'))
-    .filter(label => !label!.startsWith('Remove'))).toEqual(['D1', 'R1']));
+    .filter(label => !label!.startsWith('Remove'))).toEqual(['led · 2 parts']));
   expect(parts.querySelector('[data-board-row="sheet:led"]')!.className).toContain('bg-accent');
   expect(frames.at(-1)).toEqual(fitted);
-  fireEvent.doubleClick(led);
+  menu = await blockMenu();
+  fireEvent.click(within(menu).getByRole('menuitem', { name: 'Zoom to led' }));
   await waitFor(() => expect(frames.at(-1)!.scale).toBeGreaterThan(fitted.scale));
 
   // A part selects as a click on the board does; under the lists, its pads, each its number and net.
@@ -452,6 +471,9 @@ it('the Parts tab is the parts in their schematic blocks and the Nets tab the ne
   expect(selected(controller)).toEqual(['#J1']);
   expect(detail()!.querySelector('[data-board-detail-head]')!.textContent).toBe('J1Conn_01x02 · PinHeader_1x02_P2.54mm_Vertical2 pads');
   expect(detailRows()).toEqual([['1VBUS', 'false'], ['2GND', 'false']]);
+  // Titled with whose pads they are, at a height of its own, its top edge the grip that sizes it.
+  expect(detail()!.querySelector('[data-flat-panel-detail-title]')!.textContent).toBe('Pads of J1');
+  expect(within(detail()!).getByRole('separator', { name: 'Resize details' }).getAttribute('aria-orientation')).toBe('horizontal');
   // A net, from the Nets: its pads, each its part and number; one pressed is selected, lit, and the net's detail stays.
   fireEvent.click(within(panel(pane)).getByRole('tab', { name: 'Nets' }));
   fireEvent.click(within(nets).getByRole('button', { name: 'Select LED' }));

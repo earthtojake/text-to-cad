@@ -166,7 +166,7 @@ export function boardDetail(index, selector, t = english) {
       .map(({ pad }) => padNode(pad, { underNet: true }));
     return {
       id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name, detail: "",
-      count: count(rows.length), listLabel: t("board.text.pads_of", { name: net.name }), rows,
+      count: count(rows.length), listLabel: t("board.text.pads_on_net", { name: net.name }), rows,
     };
   }
   return null;

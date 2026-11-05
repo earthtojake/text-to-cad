@@ -131,7 +131,7 @@ export function schematicDetail(index, selector, t = english) {
     const rows = net.pins.slice().sort(naturalCompare).map((key) => index.pins.get(key)).filter(Boolean).map((pin) => pinNode(pin, { underNet: true }));
     return {
       id: `net:${net.name}`, kind: "net", pick: formatBoardRefSelector({ kind: "net", net: net.name }), label: net.name, detail: "",
-      count: count(rows.length), listLabel: t("schematic.text.pins_of", { name: net.name }), rows
+      count: count(rows.length), listLabel: t("schematic.text.pins_on_net", { name: net.name }), rows
     };
   }
   return null;

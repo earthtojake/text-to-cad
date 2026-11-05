@@ -196,6 +196,15 @@ export function createGlbScene(THREE, document, { sibling = false } = {}) {
         ...(occurrence ? [{ label: "STEP occurrence", key: "part.stepOccurrence", value: occurrence }] : [])
       ] };
     },
+    /** The box, where they stand now, of what nodes draw (`n12`): what Zoom to selection frames. */
+    selectionBounds(ids) {
+      const box = new THREE.Box3();
+      for (const id of ids) {
+        const index = nodeOf(id);
+        for (const mesh of index === null ? [] : nodes.get(index).meshes) box.union(new THREE.Box3().setFromObject(mesh, true));
+      }
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
+    },
     /** Light what nodes draw: `hovered` and `selected` are nodes as a pick names them (`n12`). */
     setHighlight({ hovered = [], selected = [] } = {}) {
       if (disposed) return;

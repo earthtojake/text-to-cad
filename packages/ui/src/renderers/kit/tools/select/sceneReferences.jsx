@@ -12,6 +12,12 @@ function ScenePartCard({ facts }) {
   return <>{facts.map(fact => <InfoRow key={fact.label} label={fact.key ? t(fact.key) : fact.label}><MonoValue>{fact.value}</MonoValue></InfoRow>)}</>;
 }
 
+/** What Copy Reference copies for `ids` in the file on screen: one reference naming them all ("" off a workspace file). */
+export function sceneCopyText(resource, ids) {
+  return resource?.kind === "workspace-file" && ids.length
+    ? formatPromptReference({ resource: { ...resource }, target: { kind: "cad-selector", selectors: [...ids] } }) : "";
+}
+
 /**
  * What is selected in a scene, for Quick Edit (`useSceneSelection`): each part as a reference into
  * the file on screen, by the id its scene picks it by — the file's own name for it, whose grammar

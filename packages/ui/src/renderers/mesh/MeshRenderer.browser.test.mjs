@@ -283,8 +283,8 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
     requestAnimationFrame(step);
   }));
 
-  // A secondary press on the canvas is the camera's: the viewer opens no menu of
-  // its own, and the browser's own stays off the canvas.
+  // A secondary tap on the canvas opens the view's menu, an STL's the framing alone (it picks
+  // nothing), and the browser's own stays off the canvas.
   await page.evaluate(() => {
     window.nativeMenu = [];
     document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
@@ -293,8 +293,10 @@ test('an STL opens as one mesh in Select, which picks nothing: display settings,
   // The press has reached the page, and a menu it opened would be up two frames on.
   await page.waitForFunction(() => window.nativeMenu.length > 0);
   await settle(page);
-  assert.equal(await page.getByRole('menu').count(), 0);
+  assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Zoom to fit', 'Zoom to selection']);
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu is still prevented');
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu').waitFor({ state: 'detached' });
 
   // Host commands drive the mounted view, and one that makes no sense here fails loudly.
   const camera = await page.evaluate(async () => {

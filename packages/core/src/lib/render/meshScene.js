@@ -107,6 +107,12 @@ export function createMeshScene(THREE, objects, { units = UNITLESS_SCENE_UNITS }
         { label: "Triangles", key: "part.triangles", value: count.toLocaleString("en-US") }
       ] };
     },
+    /** The box, where they stand now, of 3MF objects (their places): what Zoom to selection frames. */
+    selectionBounds(paths) {
+      const box = new THREE.Box3();
+      for (const path of paths) for (const { mesh } of byPath.get(path) || []) box.union(new THREE.Box3().setFromObject(mesh, true));
+      return box.isEmpty() ? null : { min: box.min.toArray(), max: box.max.toArray() };
+    },
     /** Light 3MF objects: `hovered` and `selected` are their places. */
     setHighlight({ hovered = [], selected = [] } = {}) {
       if (disposed) return;
