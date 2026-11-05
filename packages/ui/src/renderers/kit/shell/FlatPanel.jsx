@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { useI18n } from "@cad/ui/i18n";
-import { useViewerHost } from "../../../host/context.js";
+import { ViewerHostContext } from "../../../host/context.js";
 import { ScrollArea } from "@cad/ui/primitives/scroll-area";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TreeFilterInput } from "@cad/ui/primitives/tree-filter";
@@ -9,6 +9,7 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { capturePointer, releasePointer } from "../../../lib/pointerCapture.js";
 import { STRIP_BUTTON_CLASS, TOUCH_STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
+import { ToolStackContext } from "../tools/ToolStack.jsx";
 import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
 
 /**
@@ -30,7 +31,72 @@ import { VIEWPORT_INSET_PX } from "./viewportLayout.js";
  *   Back before its search; a pick in it closes it.
  *
  * Every tab stays mounted, shown or not, so a tree keeps its expansion; each keeps its own scroll.
+ *
+ * Its tabs are handed in (`tabs`, a board's and a schematic's), or are the sections drawn in it
+ * (`sections`: a 3D view's `ToolPanel`s — its Model tree or Links, Position, SDF — each a tab by its
+ * name, in their order, `ToolPanel.jsx`'s tabbed form). `useFlatPanelState` is what a view keeps of it.
  */
+
+// Narrower than this, the panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
+export const FLAT_PANEL_OPEN_PX = 1024;
+const FLAT_PANEL_ID = "flat";
+
+/**
+ * A view's panel's state, the same in every view that has one: docked (a phone: the whole view), open
+ * at first in a view 1024px wide or more and the person's from there (kept: `toolStack.collapsed.flat`,
+ * its width `toolStack.panels.flat`, its tab by `kind` in `toolStack.tabs`), starting collapsed in a
+ * narrower one; and `control`, what ⌘\ and / reach (`toggle()`, `search()`).
+ * @param {{ frameRef: { current: HTMLElement | null }, mobile: boolean, enabled: boolean, kind: string,
+ *   toolStack: object, onToolStackChange(patch: (layout: object) => object): void }} options
+ */
+export function useFlatPanelState({ frameRef, mobile, enabled, kind, toolStack, onToolStackChange }) {
+  const [frameWidth, setFrameWidth] = useState(0);
+  useLayoutEffect(() => {
+    const element = frameRef.current;
+    if (!element) return undefined;
+    const measure = () => setFrameWidth(Math.round(element.getBoundingClientRect().width));
+    measure();
+    if (typeof ResizeObserver === "undefined") return undefined;
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [frameRef]);
+  const mode = mobile ? "page" : "docked";
+  // In a wide view it is the person's, kept; narrower, and on a phone, it starts collapsed each time.
+  const kept = mode === "docked" && !(frameWidth && frameWidth < FLAT_PANEL_OPEN_PX);
+  const [sessionOpen, setSessionOpen] = useState(false);
+  useEffect(() => { setSessionOpen(false); }, [kept, mode]);
+  // The layout as the person last changed it here, the host's store's once it answers (a host
+  // without one keeps it for as long as the view is open).
+  const [layout, setLayout] = useState(toolStack);
+  useEffect(() => { setLayout(toolStack); }, [toolStack]);
+  const changeStack = useCallback(patch => {
+    setLayout(current => ({ ...current, ...patch(current) }));
+    onToolStackChange(patch);
+  }, [onToolStackChange]);
+  const open = enabled && (kept ? layout?.collapsed?.[FLAT_PANEL_ID] !== true : sessionOpen);
+  const setOpen = useCallback(next => {
+    if (!kept) { setSessionOpen(next); return; }
+    changeStack(current => {
+      const collapsed = { ...current?.collapsed };
+      if (next) delete collapsed[FLAT_PANEL_ID]; else collapsed[FLAT_PANEL_ID] = true;
+      return { collapsed };
+    });
+  }, [kept, changeStack]);
+  const tab = layout?.tabs?.[kind];
+  const changeTab = useCallback(id => changeStack(current => ({ tabs: { ...current?.tabs, [kind]: id } })), [changeStack, kind]);
+  const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2));
+  const width = layout?.panels?.[FLAT_PANEL_ID]?.width ?? FLAT_PANEL_DEFAULT_WIDTH;
+  const changeWidth = useCallback(next => changeStack(current => ({ panels: { ...current?.panels, [FLAT_PANEL_ID]: { width: next } } })), [changeStack]);
+  const [focusSearch, setFocusSearch] = useState(0);
+  const openRef = useRef(open);
+  openRef.current = open;
+  const control = enabled ? {
+    toggle: () => setOpen(!openRef.current),
+    search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
+  } : null;
+  return { mode, open, setOpen, tab, changeTab, width, maxWidth, changeWidth, focusSearch, control };
+}
 
 // The panel's two lines, the same on both sides (Figma's): every box in its head and lists — the search
 // field, the collapse button, a tab's button, a row — runs 8px from each edge (`SURFACE_PX`), and
@@ -55,7 +121,7 @@ export const useFlatPanel = () => useContext(FlatPanelContext);
 /** The collapsed panel: its expand button alone, at the canvas's top-left. */
 export function FlatPanelPill({ onOpen, touch = false }) {
   const { t } = useI18n();
-  const platform = useViewerHost()?.environment?.platform;
+  const platform = useContext(ViewerHostContext)?.environment?.platform;
   return <div className={cn("pointer-events-auto absolute z-20 inline-flex rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}
     style={{ top: VIEWPORT_INSET_PX, left: VIEWPORT_INSET_PX }} data-flat-panel-pill="">
     <ToolbarButton label={t("flatPanel.show")} shortcut={touch ? "" : flatPanelShortcut(platform)} tooltipSide="right"
@@ -72,9 +138,9 @@ export function FlatPanelPill({ onOpen, touch = false }) {
  *   focusSearch: number }} props
  *   `focusSearch`: a count; each new value puts the keyboard in the search box (/).
  */
-export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch }) {
+export default function FlatPanel({ mode, open, onClose, label, searchLabel, searchPlaceholder, tabs: given = null, sections = null, tab, onTabChange, width, maxWidth, onWidthChange, focusSearch, hidden = false }) {
   const { t } = useI18n();
-  const platform = useViewerHost()?.environment?.platform;
+  const platform = useContext(ViewerHostContext)?.environment?.platform;
   const page = mode === "page", docked = mode === "docked";
   const [query, setQuery] = useState("");
   const searching = query.trim() !== "";
@@ -87,6 +153,25 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   closeRef.current = onClose;
   const picked = useCallback(() => { if (page) closeRef.current(); }, [page]);
   const panel = useMemo(() => ({ query, searching, registerKeys, picked }), [query, searching, registerKeys, picked]);
+
+  // A section drawn in the panel names its tab (`ToolPanel.jsx`); the tabs are in the sections' order.
+  const body = useRef(null);
+  const [registered, setRegistered] = useState([]);
+  const names = useRef(new Map());
+  const register = useCallback((id, name) => {
+    names.current.set(id, name);
+    setRegistered(current => (current.some(entry => entry.id === id && entry.label === name) ? current : [...current.filter(entry => entry.id !== id), { id, label: name }]));
+    return () => { names.current.delete(id); setRegistered(current => current.filter(entry => entry.id !== id)); };
+  }, []);
+  useLayoutEffect(() => {
+    if (!sections || !body.current) return;
+    const order = [...body.current.querySelectorAll(":scope > [data-flat-panel-section]")].map(element => element.getAttribute("data-flat-panel-section"));
+    setRegistered(current => {
+      const next = [...current].sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+      return next.every((entry, at) => entry === current[at]) ? current : next;
+    });
+  });
+  const tabs = given ?? registered;
 
   // Each tab keeps its own scroll, and the search its own: the body is one scroller.
   const scroller = useRef(null), scrolls = useRef(new Map());
@@ -151,10 +236,12 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
   };
 
   const active = tabs.some(entry => entry.id === tab) ? tab : tabs[0]?.id;
+  const tabbed = useMemo(() => ({ tabbed: true, activeSection: active, searching, register }), [active, searching, register]);
   const ids = id => ({ tab: `flat-panel-tab-${id}`, panel: `flat-panel-body-${id}` });
-  const aside = <aside aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open}
+  const aside = <aside aria-label={label} data-flat-panel={mode} data-open={open ? "" : undefined} hidden={!open || hidden}
     onKeyDown={onPanelKeyDown}
-    className={cn("flex min-h-0 flex-col bg-background text-tiny text-foreground",
+    // The chrome's colour, the navbar's: a step off the canvas, so the frame reads apart from the picture.
+    className={cn("flex min-h-0 flex-col bg-sidebar text-tiny text-foreground",
       docked && "relative h-full shrink-0 border-r border-border",
       page && "absolute inset-0 z-50")}
     style={page ? undefined : { width: drawnWidth }}>
@@ -194,8 +281,8 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, sea
     </div>
     <ScrollArea className="min-h-0 flex-1" viewportRef={scroller} viewportProps={{ "data-flat-panel-scroller": "" }}>
       <FlatPanelContext.Provider value={panel}>
-        <div className={"group/body flex flex-col pt-1 pb-2"} data-flat-panel-body="">
-          {tabs.map(entry => {
+        <div ref={body} className={"group/body flex flex-col pt-1 pb-2"} data-flat-panel-body="">
+          {sections ? <ToolStackContext.Provider value={tabbed}>{sections}</ToolStackContext.Provider> : tabs.map(entry => {
             const shown = searching || entry.id === active;
             return <section key={entry.id} role="tabpanel" id={ids(entry.id).panel} aria-labelledby={ids(entry.id).tab} hidden={!shown}
               data-flat-panel-section={entry.id}

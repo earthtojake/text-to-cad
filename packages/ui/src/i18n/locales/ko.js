@@ -886,4 +886,7 @@ export default {
   "board.text.others": "기타",
   "board.text.pours": "동박 채우기",
   "board.text.flip_board": "기판 뒤집기",
+  "flatPanel.modelPanel": "모델 패널",
+  "flatPanel.searchModel": "모델 검색",
+  "flatPanel.searchModelPlaceholder": "검색",
 };

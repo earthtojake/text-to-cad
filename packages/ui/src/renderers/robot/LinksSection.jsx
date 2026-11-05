@@ -4,6 +4,7 @@ import { ROW_NAME_UNDER_ACTIONS, TREE_GLYPH_STROKE, TREE_INDENT_PX, TREE_ROW_DEN
 import { TreeFilterHighlight, TreeFilterInput } from "@cad/ui/primitives/tree-filter";
 import { cn } from "@cad/ui/utils";
 import ToolPanel from "../kit/tools/ToolPanel.jsx";
+import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
 import RobotVisibilityButton, { ROBOT_ROW_ACTIONS_WIDTH } from "./RobotVisibilityButton.jsx";
 import { robotVisibilityState } from "./visibility.js";
 import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
@@ -152,7 +153,14 @@ export default function LinksSection({ robot = null, components = EMPTY, parts =
 
   // Search is a second view of the same tree: typing never touches expansion, and
   // the tree's rows unmount so a large open robot is not re-rendered per keystroke.
-  const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown: onSearchKeyDown } = useTreeSearch(tree.roots);
+  // In a view's panel the panel's search box searches it (its arrows and Enter walk the hits); alone, its own filter.
+  const flatPanel = useFlatPanel();
+  const external = useMemo(() => (flatPanel ? { query: flatPanel.query } : null), [flatPanel?.query]);
+  const { query, searching, deferredQuery, found, cursorId, listRef, changeQuery, onKeyDown: onSearchKeyDown } = useTreeSearch(tree.roots, external);
+  const searchKeys = useRef(onSearchKeyDown);
+  searchKeys.current = onSearchKeyDown;
+  const registerKeys = flatPanel?.registerKeys;
+  useEffect(() => registerKeys?.(event => searchKeys.current(event)), [registerKeys]);
   const rowRefs = useRef(new Map());
 
   // A selection is always a row the tree holds: its owners open at once, whether it
@@ -174,14 +182,14 @@ export default function LinksSection({ robot = null, components = EMPTY, parts =
   return <>
     {/* Headed by its filter, always there: Escape or its X clears it. */}
     <ToolPanel id="tree" label={t("robot.links")} fit="tree" resizable collapsible={false} hidden={!active}
-      header={<TreeFilterInput label={t("robot.filterLinks")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown} dense className="px-0 shadow-none"/>}>
+      header={flatPanel ? null : <TreeFilterInput label={t("robot.filterLinks")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown} dense className="px-0 shadow-none"/>}>
       <div className="flex flex-col text-tiny" aria-label={t("robot.linksTree")}>
         <div ref={listRef} className="px-1 py-1" aria-label={t("robot.treeArea")}
           onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
-          {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}
+          {searching && !(flatPanel && !found.matches.length) && <p role="status" className="px-2 py-1 text-micro text-muted-foreground" data-flat-panel-hit={found.matches.length ? "" : undefined}>{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}
           {searching ? found.matches.length
             ? <ul aria-label={t("robot.searchResults")}>{found.matches.map(match => <RobotSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, selection, hiddenIds, onVisibilityChange }}/>)}</ul>
-            : deferredQuery.trim() && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("robot.noMatch", { query: deferredQuery.trim() })}</p>
+            : deferredQuery.trim() && !flatPanel && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("robot.noMatch", { query: deferredQuery.trim() })}</p>
           : tree.roots.length
             ? <ul aria-label={t("robot.linksTree")}>{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs, hiddenIds, onVisibilityChange }}/>)}</ul>
             : <p role="status" className="p-2 text-tiny text-muted-foreground">{robot ? t("robot.noLinks") : t("robot.loadingLinks")}</p>}

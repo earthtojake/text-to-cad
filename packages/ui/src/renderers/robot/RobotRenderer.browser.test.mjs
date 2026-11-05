@@ -133,12 +133,17 @@ async function open(t, file, { panel = true } = {}) {
       };
       requestAnimationFrame(step);
     })),
-    // The file sidebar's tiles, and a section opened by its tile (one at a time), left open if it is.
-    tiles: () => pane.locator('[data-file-sidebar-tools] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    // The view's panel's tabs, and a section opened by its tab (one at a time), the panel opened from
+    // its pill first if it is collapsed (the harness's 800px view starts it collapsed).
+    tiles: () => pane.locator('[data-flat-panel] [data-flat-panel-tab-name]').evaluateAll(names => names.map(name => name.textContent)),
     async openSection(name) {
-      const tile = pane.getByRole('group', { name: 'File sidebar' }).getByRole('button', { name, exact: true });
-      if (await tile.getAttribute('aria-pressed') !== 'true') await tile.click();
-      await pane.locator(`[data-file-sidebar-tools] button[aria-pressed="true"][aria-label="${name}"]`).waitFor();
+      // The panel, open, or its pill, once the view has drawn either.
+      await pane.locator('[data-flat-panel-pill] button, [data-flat-panel][data-open]').first().waitFor();
+      const pill = pane.locator('[data-flat-panel-pill] button');
+      if (await pill.count()) await pill.click();
+      const tab = pane.locator('[data-flat-panel]').getByRole('tab', { name, exact: true });
+      if (await tab.getAttribute('aria-selected') !== 'true') await tab.click();
+      await pane.locator('[data-flat-panel] [role=tab][aria-selected="true"]').filter({ hasText: name }).waitFor();
     },
     // In and out of Preview, by Preview at the strip's end and Exit preview in Preview's bar, once its cover has lifted.
     // Exit preview is pressed as a person presses it, the bar it is on brought back (`harness/preview.mjs`).
@@ -179,10 +184,10 @@ async function open(t, file, { panel = true } = {}) {
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
-    // The file sidebar's sections, top to bottom, the same way. A section draws no box of its own
-    // (`display: contents`): one not hidden is on screen.
-    sidebar: () => pane.locator('[data-cad-file-sidebar] [data-tool-panel]').evaluateAll(panels => panels
-      .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label'))),
+    // The view's panel's sections, top to bottom, by their accessible names: each one its panel offers a tab for.
+    sidebar: () => pane.locator('[data-flat-panel]').evaluateAll(panels => panels.flatMap(panel => [...panel.querySelectorAll('[data-tool-panel]')]
+      .filter(section => panel.querySelector(`[data-flat-panel-tab="${section.getAttribute('data-flat-panel-section')}"]`))
+      .map(section => section.getAttribute('aria-label')))),
     linksPanel: () => pane.locator('[data-tool-panel][aria-label="Links"]'),
     // What is selected is Quick Edit's to show: a chip each, by its name (`robotReferences.jsx`).
     chips: () => pane.locator('[data-quick-edit-refs] [data-quick-edit-ref] > button:first-child')
@@ -217,7 +222,7 @@ async function open(t, file, { panel = true } = {}) {
   };
   if (panel) {
     await pane.locator('[aria-busy="false"] canvas').first().waitFor();
-    // Its Links are the file sidebar's, opened by their tile.
+    // Its Links are the view's panel's, opened by their tab.
     await robot.openSection('Links');
     await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
     await robot.settled();
@@ -252,15 +257,12 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'and nothing of the view in the navbar');
   // Display is the tile beside Preview, shut as the file opens.
   assert.equal(await robot.displayPanel().count(), 0, 'Display is never where a file opens');
-  assert.equal(await pane.getByRole('tab').count(), 0, 'no tabs');
   assert.deepEqual([await robot.sidebar(), await robot.stack(), await robot.tiles()], [['Links', 'Position controls'], [], ['Links', 'Position']]);
-  // Its tile opens it in Links' place. Headed "Position", its Reset (idle at the default pose) and its X.
+  // Its tab opens it in Links' place, its Reset (idle at the default pose) at the tab's top-right.
   await robot.openSection('Position');
   assert.equal(await robot.linksPanel().isVisible(), false, 'one section at a time');
-  const positionHeading = robot.position().locator('[data-sidebar-head]');
-  assert.equal((await positionHeading.getByRole('heading').innerText()).trim(), 'Position');
-  assert.deepEqual(await positionHeading.getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
-    [['Reset position', true], ['Close position', false]], 'the heading is its Reset and its X');
+  assert.deepEqual(await robot.position().locator('[data-tool-panel-head-slot]').getByRole('button').evaluateAll(buttons => buttons.map(button => [button.getAttribute('aria-label'), button.disabled])),
+    [['Reset position', true]], 'its Reset, at the top of its tab');
   await robot.openPosition();
   // One knob per moving joint row of the articulation: no fixed joint; a mimic follower's knob
   // writes its leader. A slider exists per CONTROL, so the follower has none, nor the fixed joint.
@@ -584,8 +586,8 @@ test('Select picks a visual at once; a selection outlives Select; Links shows wh
   assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['/models/meshes/head.glb']);
   await headCard.getByRole('button', { name: 'base', exact: true }).first().click();
   await robot.pressed(['Select base']);
-  // The search box heading Links finds a link by the joint that carries it.
-  await pane.getByRole('textbox', { name: 'Filter links', exact: true }).fill('nod');
+  // The panel's search box finds a link by the joint that carries it.
+  await pane.getByRole('textbox', { name: 'Search the model', exact: true }).fill('nod');
   await pane.getByRole('list', { name: 'Link search results' }).getByRole('button', { name: 'Select head', exact: true }).waitFor();
   await pane.getByRole('button', { name: 'Clear filter', exact: true }).click();
   await pane.getByRole('list', { name: 'Robot links', exact: true }).waitFor();
@@ -629,8 +631,8 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   await robot.openDisplay();
   await page.evaluate(() => window.cadHarness.mounted(false));
   // It has gone before it comes back: a busy React can take the two calls in one render, and a view
-  // that never went keeps its sidebar open, for the press on its tile to close.
-  await pane.getByRole('group', { name: 'File sidebar' }).waitFor({ state: 'detached' });
+  // that never went keeps its panel open.
+  await pane.locator('[data-flat-panel]').waitFor({ state: 'detached' });
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
   const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['/models/arm.urdf', 'robot'])]);
   assert.deepEqual([record.renderer.pose.value.jointValues.shoulder, record.renderer.pose.value.jointValues.lift], [25, 0.2]);
@@ -656,7 +658,7 @@ test('a reload of the tab brings the pose and the hidden visuals back, and nothi
   // A record written against another revision is not restored. (A new revision behind the mounted robot
   // keeps its pose only while its controls and named poses are unchanged: `RobotTools.test.tsx`.)
   await page.evaluate(() => window.cadHarness.mounted(false));
-  await pane.getByRole('group', { name: 'File sidebar' }).waitFor({ state: 'detached' });
+  await pane.locator('[data-flat-panel]').waitFor({ state: 'detached' });
   revision += 1;
   t.after(() => { revision = 1; });
   await page.evaluate(() => window.cadHarness.a.client.refresh());
@@ -699,9 +701,9 @@ test('Preview draws the robot as it opens, and leaving it finds the tools view a
   await enterPreview();
   assert.deepEqual(await robot.links(), opening, 'Preview poses the robot as it opens');
   assert.ok((await robot.capture()).data.equals(authored), 'Preview draws the robot as it opens');
-  // Preview has no file sidebar (a robot has no routine, so no playbar either), and no navbar: its own
+  // Preview has no panel (a robot has no routine, so no playbar either), and no navbar: its own
   // bar holds only the file's name, its settings and the way out.
-  assert.equal(await pane.locator('[data-file-sidebar-room]').isHidden(), true, 'no file sidebar in Preview');
+  assert.equal(await pane.locator('[data-flat-panel]').isHidden(), true, 'no panel in Preview');
   assert.equal(await pane.locator('[data-preview-playbar]').count(), 0, 'no playbar for a file with no routine');
   assert.equal(await pane.locator('[data-viewer-navbar]').count(), 0, 'no navbar in Preview');
   assert.deepEqual(await pane.locator('[data-preview-bar] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),

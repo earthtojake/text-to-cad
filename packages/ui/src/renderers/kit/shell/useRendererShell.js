@@ -548,8 +548,16 @@ export function useRendererShell({
     if (ink) session.remove(session.selected);
     return Boolean(deleteSelectionRef.current?.()) || ink;
   }, []);
+  // The view's panel, as the shell drew it (`RendererShell.jsx` fills it in): ⌘\\ (Ctrl+\\) shows or
+  // hides it, / opens it on its search.
+  const panelControl = useRef(null);
   useViewerShortcuts({
     viewerElement,
+    onChord: event => {
+      if (event.key !== "\\" || event.shiftKey || previewing || !panelControl.current) return false;
+      panelControl.current.toggle();
+      return true;
+    },
     onCopy: () => copyActionRef.current?.() || false,
     onDelete: () => !previewing && !annotateToolActive && deletePicked(),
     // ⌘Z and ⇧⌘Z walk the annotation's history, whatever tool is in hand; never in preview.
@@ -557,9 +565,9 @@ export function useRendererShell({
     onRedo: () => !previewing && historyRef.current.redo(),
     // A tool's letter takes it up, F frames the model (`toolShortcuts.js`), over the strip the frame
     // has on screen (`toolKeys`, RendererShell's); never in preview.
-    onKey: event => !previewing && !idle && pressToolKey(event, {
+    onKey: event => (event.key === "/" && !event.shiftKey && !previewing && panelControl.current ? panelControl.current.search() : !previewing && !idle && pressToolKey(event, {
       tools: toolKeysRef.current, selectDrawing: tool => annotationRef.current.selectTool(tool),
-      fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } }),
+      fit: () => { controls.used("fit"); viewerRef.current?.resetZoom?.(); } })),
     escapeActive: Boolean(escape.active || previewing || annotation.selected.length || (toolModes && toolMode !== toolModes.defaultMode)),
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
@@ -720,7 +728,7 @@ export function useRendererShell({
       onCameraSettled: reportCameraSettled,
       preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
       runtimeLifecycle: stableRuntimeLifecycle,
-      previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, viewerLoading, loading, presentationState,
+      previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, panelControl, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyAnnotation, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
       // Quick Edit's: the file it is about, how a copied prompt spells its paths, its annotation, and

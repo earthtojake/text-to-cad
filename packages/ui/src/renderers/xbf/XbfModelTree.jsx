@@ -7,7 +7,8 @@ import { TreeFilterHighlight, TreeFilterInput } from '@cad/ui/primitives/tree-fi
 import { cn } from '@cad/ui/utils';
 import XbfPartMenu from './XbfPartMenu.jsx';
 import XbfPartActions, { rowActionsLayout } from './XbfPartActions.jsx';
-import ToolPanel from '../kit/tools/ToolPanel.jsx';
+import ToolPanel, { ToolPanelHeadAction } from '../kit/tools/ToolPanel.jsx';
+import { useFlatPanel } from '../kit/shell/FlatPanel.jsx';
 import { modelTreeSearchChain, useTreeSearch } from '../kit/inspector/modelTreeSearch.js';
 import VirtualRows, { revealRow } from '../kit/inspector/VirtualRows.jsx';
 import { implicitXbfRoots, xbfSelectionPaths } from './xbfTree.js';
@@ -194,7 +195,14 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
   const rowElements=useRef(new Map());
   const registerRow=useCallback((key,element)=>{if(element)rowElements.current.set(key,element);else rowElements.current.delete(key);},[]);
   // Search is a second view of the same tree. Typing never touches expansion.
-  const {query,searching,deferredQuery,index:searchIndex,found,cursorId,listRef,changeQuery,onKeyDown:onSearchKeyDown}=useTreeSearch(tree);
+  // In a view's panel the panel's search box searches it (its arrows and Enter walk the hits); alone, its own filter.
+  const flatPanel=useFlatPanel();
+  const external=useMemo(()=>flatPanel ? { query: flatPanel.query } : null,[flatPanel?.query]);
+  const {query,searching,deferredQuery,index:searchIndex,found,cursorId,listRef,changeQuery,onKeyDown:onSearchKeyDown}=useTreeSearch(tree,external);
+  const searchKeys=useRef(onSearchKeyDown);
+  searchKeys.current=onSearchKeyDown;
+  const registerKeys=flatPanel?.registerKeys;
+  useEffect(()=>registerKeys?.(event=>searchKeys.current(event)),[registerKeys]);
   const latest=useRef(null);
   latest.current={partControls};
   // A selected part or assembly at its row; a picked face or edge at its part's.
@@ -273,12 +281,15 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
       selected={on} joinAbove={on && at > 0 && highlighted.has(matches[at-1].entry.node.id)} joinBelow={on && at < matches.length-1 && highlighted.has(matches[at+1].entry.node.id)}
       choose={choose} disabled={disabled} partControls={rowControls}/>;
   };
-  // Headed by its filter, always there, then Show all while parts are hidden.
+  const showAll=partControls.hiddenPartIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>{t("tree.showAll")}</Button>;
+  // Headed by its filter, always there, then Show all while parts are hidden; in a view's panel, the
+  // panel's search, and Show all at the tab's top-right.
   return <ToolPanel id="tree" label={t("tree.modelTree")} fit="tree" resizable collapsible={false} hidden={!active}
-    header={<TreeFilterInput label={t("tree.filterModel")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown} dense
+    header={flatPanel ? null : <TreeFilterInput label={t("tree.filterModel")} placeholder={t("tree.filterPlaceholder")} value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown} dense
       className="px-0 shadow-none" trailing={<>
         {partControls.hiddenPartIds?.length > 0 && <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-5 shrink-0 px-1.5 text-tiny text-muted-foreground" onClick={partControls.showAllHiddenParts}>{t("tree.showAll")}</Button>}
       </>}/>}>
+    {flatPanel && showAll ? <ToolPanelHeadAction>{showAll}</ToolPanelHeadAction> : null}
     <div className="flex flex-col text-tiny" aria-label={t("tree.modelingTree")}>
       <div ref={listRef} className="px-1 py-1" aria-label={t("tree.modelTreeArea")}
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))onClearSelection?.();}}>
@@ -287,11 +298,11 @@ function XbfModelTree({ tree: presented, active, disabled, mode='all', selectedI
           <TooltipHint content={isolatedLabels.join(', ')} overflowOnly><span className="min-w-0 flex-1 truncate">{t("tree.isolated", { names: isolatedLabels.join(', ') })}</span></TooltipHint>
           <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny" onClick={partControls.onExitAllIsolate}>{t("tree.exitIsolation")}</Button>
         </div>}
-        {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}
+        {searching && !(flatPanel && !found.matches.length) && <p role="status" className="px-2 py-1 text-micro text-muted-foreground" data-flat-panel-hit={found.matches.length ? "" : undefined}>{found.total > found.matches.length ? t("tree.firstMatches", { shown: found.matches.length, total: found.total.toLocaleString() }) : t(found.total === 1 ? "tree.match" : "tree.matches", { count: found.total })}</p>}
         {searching ? found.matches.length
           ? <VirtualRows key="search" aria-label={t("tree.searchResults")} count={matches.length} rowHeight={rowHeight} pinned={searchPinned}
             rowKey={at=>matches[at].entry.node.id} rowProps={at=>({className:'min-w-0','data-search-row':matches[at].entry.node.id})} renderRow={renderSearchRow}/>
-          : deferredQuery.trim() && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("tree.noPartMatch", { query: deferredQuery.trim() })}</p>
+          : deferredQuery.trim() && !flatPanel && <p className="px-3 py-6 text-center text-tiny text-muted-foreground">{t("tree.noPartMatch", { query: deferredQuery.trim() })}</p>
         : <VirtualRows key="tree" aria-label={t("tree.model")} count={rows.length} rowHeight={rowHeight} pinned={treePinned}
           rowKey={at=>rows[at].key} rowProps={at=>({className:'min-w-0','aria-level':rows[at].depth+1,'data-tree-part':rows[at].node.kind === 'part' ? rows[at].node.id : undefined})}
           renderRow={renderTreeRow} registerRow={registerRow}/>}

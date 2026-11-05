@@ -12,8 +12,8 @@ import { PLAYBACK_SPEEDS } from "./playbar/AnimationTimeControl.js";
 import ToolPopover from "./ToolPopover.jsx";
 import { useI18n } from "@cad/ui/i18n";
 
-// The file sidebar's Animation section's Playback settings (`playbar/AnimationSection.jsx`), opening
-// down from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds
+// The playbar's Playback settings (`playbar/PreviewPlaybar.jsx`, the tools view's and Preview's), opening
+// from its cog (`side`), lit while its menu is open; and Preview's Orbit speeds
 // (`kit/shell/PreviewSettings.jsx`).
 
 export const ORBIT_SPEEDS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5];

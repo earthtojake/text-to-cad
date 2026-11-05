@@ -1,5 +1,5 @@
 import { english } from "@cad/ui/i18n";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { MousePointer2 } from "lucide-react";
 import { cn } from "@cad/ui/utils";
 import { AnnotationToolbar, DRAWING_TOOLS, annotationToolIcon, drawingToolVariant, drawingToolLabel } from "../../../annotation/toolbar.jsx";
@@ -15,7 +15,7 @@ import { DRAWING_SHORTCUTS, TOOL_SHORTCUTS } from "../tools/toolShortcuts.js";
 import { FLAT_TOOL } from "./useFlatView.js";
 import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { ViewportTopRight } from "./ViewportTopRight.jsx";
-import FlatPanel, { FLAT_PANEL_DEFAULT_WIDTH, FLAT_PANEL_MIN_WIDTH, FlatPanelPill } from "./FlatPanel.jsx";
+import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
@@ -46,9 +46,7 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, right: INSET, bottom: INSET });
 // On a phone with a panel, its pill stands at the left of the strip's line (a 36px tile in 4px of padding and a border).
 const TOOLBAR_POSITION_PHONE_SIDEBAR = Object.freeze({ ...TOOLBAR_POSITION, left: `${VIEWPORT_INSET_PX + 46 + 8}px` });
-// Narrower than this, the panel starts collapsed (GitHub's file tree's breakpoint); opened, it docks all the same.
-export const FLAT_PANEL_OPEN_PX = 1024;
-const FLAT_PANEL_ID = "flat";
+
 
 /**
  * A flat view's strip, Select, Pencil, Shapes and Measure, each with its key, and the row of the
@@ -103,58 +101,11 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
 
   // ---- the panel: docked, or on a phone the whole view; open at first in a wide view ----
   const frameRef = useRef(null);
-  const [frameWidth, setFrameWidth] = useState(0);
-  useLayoutEffect(() => {
-    const element = frameRef.current;
-    if (!element) return undefined;
-    const measure = () => setFrameWidth(Math.round(element.getBoundingClientRect().width));
-    measure();
-    if (typeof ResizeObserver === "undefined") return undefined;
-    const observer = new ResizeObserver(measure);
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  // Unmeasured (jsdom), a view is wide.
-  const mode = mobile ? "page" : "docked";
-  const docked = mode === "docked";
-  // In a wide view it is the person's, kept; narrower, and on a phone, it starts collapsed each time.
-  const kept = docked && !(frameWidth && frameWidth < FLAT_PANEL_OPEN_PX);
-  const [sessionOpen, setSessionOpen] = useState(false);
-  useEffect(() => { setSessionOpen(false); }, [kept, mode]);
-  // The layout as the person last changed it here, the host's store's once it answers (a host
-  // without one keeps it for as long as the view is open).
-  const [layout, setLayout] = useState(toolStack);
-  useEffect(() => { setLayout(toolStack); }, [toolStack]);
-  const changeStack = useCallback(patch => {
-    setLayout(current => ({ ...current, ...patch(current) }));
-    onToolStackChange(patch);
-  }, [onToolStackChange]);
-  const open = sided && !toolsHidden && (kept ? layout?.collapsed?.[FLAT_PANEL_ID] !== true : sessionOpen);
-  const setOpen = useCallback(next => {
-    if (!kept) { setSessionOpen(next); return; }
-    changeStack(current => {
-      const collapsed = { ...current?.collapsed };
-      if (next) delete collapsed[FLAT_PANEL_ID]; else collapsed[FLAT_PANEL_ID] = true;
-      return { collapsed };
-    });
-  }, [kept, changeStack]);
   const tabs = panel?.tabs ?? [];
-  const storedTab = panel ? layout?.tabs?.[panel.kind] : undefined;
-  const tab = tabs.some(entry => entry.id === storedTab) ? storedTab : tabs[0]?.id;
-  const changeTab = id => changeStack(current => ({ tabs: { ...current?.tabs, [panel.kind]: id } }));
-  const maxWidth = Math.max(FLAT_PANEL_MIN_WIDTH, Math.floor((frameWidth || 2 * FLAT_PANEL_DEFAULT_WIDTH) / 2));
-  const width = layout?.panels?.[FLAT_PANEL_ID]?.width ?? FLAT_PANEL_DEFAULT_WIDTH;
-  const changeWidth = next => changeStack(current => ({ panels: { ...current?.panels, [FLAT_PANEL_ID]: { width: next } } }));
-  const [focusSearch, setFocusSearch] = useState(0);
-  // The keys (`useFlatHandover`): ⌘\ shows or hides the panel, / opens it on its search.
-  const openRef = useRef(open);
-  openRef.current = open;
-  if (panelControl) {
-    panelControl.current = sided && !toolsHidden ? {
-      toggle: () => setOpen(!openRef.current),
-      search: () => { setOpen(true); setFocusSearch(count => count + 1); return true; }
-    } : null;
-  }
+  const flat = useFlatPanelState({ frameRef, mobile, enabled: sided && !toolsHidden, kind: panel?.kind ?? "", toolStack, onToolStackChange });
+  const { mode, open, setOpen } = flat;
+  if (panelControl) panelControl.current = flat.control;
+
   const status = updating && !alert ? <div className="pointer-events-none flex max-w-full items-center" data-viewport-status="">
     <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
   </div> : null;
@@ -204,17 +155,17 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
       frame.style.removeProperty("--cad-tools-bottom");
       for (const name of ["--cad-file-sidebar-max-width", "--cad-top-right-left"]) viewport.style.removeProperty(name);
     };
-  }, [toolsHidden, mobile, sided, open, docked]);
+  }, [toolsHidden, mobile, sided, open, mode]);
 
   const panelNode = sided && !toolsHidden ? <FlatPanel mode={mode} open={open} onClose={() => setOpen(false)} label={panel.label}
-    searchLabel={panel.searchLabel} searchPlaceholder={panel.searchPlaceholder} tabs={tabs} tab={tab} onTabChange={changeTab}
-    width={width} maxWidth={maxWidth} onWidthChange={changeWidth} focusSearch={focusSearch} /> : null;
+    searchLabel={panel.searchLabel} searchPlaceholder={panel.searchPlaceholder} tabs={tabs} tab={flat.tab} onTabChange={flat.changeTab}
+    width={flat.width} maxWidth={flat.maxWidth} onWidthChange={flat.changeWidth} focusSearch={flat.focusSearch} /> : null;
 
   return (
     <div ref={frameRef} className="relative flex h-full min-h-0 flex-row overflow-hidden bg-background text-foreground"
       data-slot="cad-file-view" {...surface} data-cad-scene-backdrop="" tabIndex={-1}
       onPointerDownCapture={event => { if (event.target instanceof Element && event.target.closest("canvas")) event.currentTarget.focus({ preventScroll: true }); }}>
-      {docked ? panelNode : null}
+      {mode === "docked" ? panelNode : null}
       <div ref={stageRef} className="@container/cad-viewport relative flex min-h-0 min-w-0 flex-1 flex-col" data-flat-stage="">
         <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={busy ? "true" : "false"}>{children}</div>
         <PreviewChrome active={false}>

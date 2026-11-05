@@ -16,7 +16,7 @@ export function playbarWords(runtime, t) {
     list: say("list"), current: name => say("current", { name }) };
 }
 
-// The file sidebar's Animation section (`AnimationSection.jsx`) is the one transport, in the tools
+// The playbar under the model (`PreviewPlaybar.jsx`) is the one transport, in the tools
 // view and Preview alike: the routine, Play/Pause, this scrubber and the Playback settings
 // (`PlaybackMenu.jsx`).
 //

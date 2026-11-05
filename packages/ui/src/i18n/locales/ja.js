@@ -886,4 +886,7 @@ export default {
   "board.text.others": "その他",
   "board.text.pours": "ベタ",
   "board.text.flip_board": "基板を反転",
+  "flatPanel.modelPanel": "モデルパネル",
+  "flatPanel.searchModel": "モデルを検索",
+  "flatPanel.searchModelPlaceholder": "検索",
 };

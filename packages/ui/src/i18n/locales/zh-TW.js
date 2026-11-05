@@ -887,4 +887,7 @@ export default {
   "board.text.others": "其他圖層",
   "board.text.pours": "鋪銅",
   "board.text.flip_board": "翻轉電路板",
+  "flatPanel.modelPanel": "模型面板",
+  "flatPanel.searchModel": "搜尋模型",
+  "flatPanel.searchModelPlaceholder": "搜尋",
 };

@@ -77,7 +77,7 @@ const settle = page => page.evaluate(() => new Promise(resolve => requestAnimati
 // temporary harness.
 const mesh = 'solid triangle\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 20 0 0\nvertex 0 20 0\nendloop\nendfacet\nendsolid triangle\n';
 
-test('mobile tools centre on the viewport and keep the sidebar gap as space runs out', async (t) => {
+test('mobile tools centre on the viewport and keep the panel pill\'s gap as space runs out', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.goto(`${origin}/?file=panel.harness`);
@@ -98,9 +98,9 @@ test('mobile tools centre on the viewport and keep the sidebar gap as space runs
       return Math.abs(tools.left - expected) < 1 && tools.right <= view.right - 7;
     }, width);
     if (width < 600) {
-      const sidebar = await pane.getByRole('button', { name: 'Sidebar', exact: true }).boundingBox();
+      const pill = await pane.getByRole('button', { name: 'Show panel', exact: true }).boundingBox();
       const strip = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
-      assert.ok(strip.x >= sidebar.x + sidebar.width + 8, 'keeps the sidebar button clear');
+      assert.ok(strip.x >= pill.x + pill.width + 8, 'keeps the panel\'s pill clear');
     }
   }
   await pane.getByRole('button', { name: 'More tools', exact: true }).click();
@@ -777,28 +777,25 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.deepEqual(errors, []);
 });
 
-test('an alert the model survives is drawn over the tools, where it meets the parts tree', async (t) => {
+test('an alert the model survives is drawn on the canvas, beside the docked panel and its tree', async (t) => {
   const origin = await serve(t);
   const { page, errors } = await newPage(t);
   await page.addInitScript(() => { window.Worker = undefined; });
   await page.goto(`${origin}/?file=panel.harness`);
   const pane = page.getByTestId('one');
-  // The tree is the file sidebar's, opened by its tile, made as wide and tall as it goes, as a model's long part names take it.
-  await pane.getByRole('group', { name: 'File sidebar' }).getByRole('button', { name: 'Harness tree', exact: true }).click();
-  await pane.getByRole('region', { name: 'Harness tree', exact: true }).waitFor();
-  const tree = pane.locator('[data-cad-file-sidebar]');
-  await pane.getByRole('separator', { name: 'Resize file sidebar', exact: true }).press('End');
-  await tree.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
-  // A failed update keeps the model, and with it the tools: the card stands over both.
+  // The tree is the view's panel's, opened from its pill (the 800px view starts it collapsed), made as wide as it goes.
+  await pane.getByRole('button', { name: 'Show panel', exact: true }).click();
+  await pane.locator('[data-flat-panel]').getByRole('tab', { name: 'Harness tree', exact: true }).click();
+  const tree = pane.locator('[data-flat-panel]');
+  await pane.getByRole('separator', { name: 'Resize panel', exact: true }).press('End');
+  // A failed update keeps the model, and with it the tools: the card stands on the canvas, the panel docked beside it untouched.
   await pane.locator('[data-harness-stage="failed"]').click();
   const card = pane.getByRole('alert');
   await card.waitFor();
-  const [over, under] = [await card.boundingBox(), await tree.boundingBox()];
-  const meet = { x0: Math.max(over.x, under.x), x1: Math.min(over.x + over.width, under.x + under.width),
-    y0: Math.max(over.y, under.y), y1: Math.min(over.y + over.height, under.y + under.height) };
-  assert.ok(meet.x1 > meet.x0 + 8 && meet.y1 > meet.y0 + 8, `the card meets the tree here: ${JSON.stringify({ over, under })}`);
+  const [over, beside] = [await card.boundingBox(), await tree.boundingBox()];
+  assert.ok(over.x >= beside.x + beside.width - 1, `the card is the canvas's, right of the panel: ${JSON.stringify({ over, beside })}`);
   const drawn = await page.evaluate(({ x, y }) => Boolean(document.elementFromPoint(x, y)?.closest('[role="alert"]')),
-    { x: (meet.x0 + meet.x1) / 2, y: (meet.y0 + meet.y1) / 2 });
-  assert.ok(drawn, 'where they meet, the card is drawn, not the tree');
+    { x: over.x + over.width / 2, y: over.y + over.height / 2 });
+  assert.ok(drawn, 'the card is drawn where it stands');
   assert.deepEqual(errors, []);
 });

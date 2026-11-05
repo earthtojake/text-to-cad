@@ -112,7 +112,11 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   // surface, scroller or grip of its own, always headed, never folding, and closed by its X or its
   // tile. Closed, it stays mounted out of sight.
   const inSidebar = Boolean(stack?.sidebar);
-  if (inSidebar) collapsible = false;
+  // In a view's panel (`kit/shell/FlatPanel.jsx`) a panel is one of its tabs: its name the tab's, its
+  // body the tab's page, shown while its tab is open (or while the panel's search is up, under its
+  // name, left out when it holds no match), its head's actions (Position's Reset) a row at its top.
+  const tabbed = Boolean(stack?.tabbed);
+  if (inSidebar || tabbed) collapsible = false;
   // A section the sidebar does not offer just now (Preview's are Position and Animation) is as
   // a hidden one: mounted, out of sight, and no tile.
   if (inSidebar && !title) title = name || label;
@@ -120,6 +124,9 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const register = inSidebar ? stack.register : null;
   const tileTitle = typeof title === "string" ? title : name || label;
   useLayoutEffect(() => { if (register && id && !hidden) register(id, { title: tileTitle, fit, changed, icon }); }, [register, id, hidden, tileTitle, fit, changed, icon]);
+  const registerTab = tabbed ? stack.register : null;
+  const tabName = typeof title === "string" && title ? title : name || label;
+  useLayoutEffect(() => (registerTab && id && !hidden ? registerTab(id, tabName) : undefined), [registerTab, id, hidden, tabName]);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
   const [ownCollapsed, setOwnCollapsed] = useState(defaultCollapsed);
   const collapsed = collapsible && (kept ? stack.collapsed(id, defaultCollapsed) : ownCollapsed);
@@ -130,13 +137,13 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
 
   // The size: dragged (`draft`), then as the person left it, then the defaults — every panel's
   // width, and the stack's cap for this id.
-  const sized = resizable && Boolean(id) && !inSidebar;
+  const sized = resizable && Boolean(id) && !inSidebar && !tabbed;
   const [draft, setDraft] = useState(null);
   const [ownSize, setOwnSize] = useState({});
   const size = sized ? { ...(kept ? stack.size(id) : ownSize), ...draft } : {};
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
-  const width = inSidebar ? undefined : size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
+  const width = inSidebar || tabbed ? undefined : size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
   const cap = sized ? size.height ?? stack?.defaultHeight() ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
@@ -189,7 +196,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   };
 
   // The floor it gives way to: its content's own height when that is less (`FLOOR`).
-  const floored = fit !== "fixed" && !inSidebar && !collapsed && !hidden;
+  const floored = fit !== "fixed" && !inSidebar && !tabbed && !collapsed && !hidden;
   const [natural, setNatural] = useState(null);
   useLayoutEffect(() => {
     if (!floored || !section.current || !body.current || !content.current) return undefined;
@@ -252,6 +259,19 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   </div> : null;
 
   const dragging = draft !== null;
+  if (tabbed) {
+    const searching = stack.searching;
+    return <section ref={section} aria-label={label} hidden={hidden || !(searching || stack.activeSection === id)} role="tabpanel"
+      id={`flat-panel-body-${id}`} aria-labelledby={`flat-panel-tab-${id}`} data-flat-panel-section={id} data-tool-panel-id={id || undefined} data-tool-panel={fit}
+      className={cn("min-w-0 text-tiny", searching && "not-has-[[data-flat-panel-hit]]:hidden")}>
+      {searching ? <h3 className="flex h-6 items-center px-4 text-tiny text-muted-foreground">{tabName}</h3> : null}
+      {/* What its body puts in its head (Position's Reset, the Model tree's Show all), at the tab's top-right. */}
+      <div ref={setHeadSlot} className="flex items-center justify-end gap-0.5 px-2 empty:hidden" data-tool-panel-head-slot="">{actions}</div>
+      <div ref={body} data-tool-panel-body="" className={cn("min-w-0", fit !== "tree" && "px-2")}>
+        <div ref={content} className="flow-root"><HeadSlotContext.Provider value={headSlot}>{children}</HeadSlotContext.Provider></div>
+      </div>
+    </section>;
+  }
   return <section ref={section} aria-label={label} hidden={hidden} data-tool-panel={fit} data-tool-panel-id={id || undefined}
     data-collapsed={collapsed ? "" : undefined} data-resizable={sized ? "" : undefined} data-tool-panel-lead={lead ? "" : undefined}
     data-sidebar-section={inSidebar ? "" : undefined} data-sidebar-closed={closedInSidebar ? "" : undefined}

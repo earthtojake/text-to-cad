@@ -915,4 +915,7 @@ export default {
   "board.text.others": "Others",
   "board.text.pours": "Pours",
   "board.text.flip_board": "Flip board",
+  "flatPanel.modelPanel": "Model panel",
+  "flatPanel.searchModel": "Search the model",
+  "flatPanel.searchModelPlaceholder": "Search",
 };

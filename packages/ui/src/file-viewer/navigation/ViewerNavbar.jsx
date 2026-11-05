@@ -277,7 +277,9 @@ export function ViewerNavbar({ onHome: goHome, menu = null, history = null, file
     // `pl-[10px]`: the logo's drawn mark stands on the page's 16px gutter, the Home's grid's left edge
     // (`.cad-library-content`) and a board's or schematic's panel's line: 10px, its button's 4px, and
     // the 2px the mark's artwork sits in from its 16px image's edge.
-    <header className={cn(NAVBAR_ROW_CLASS, "pl-[10px] border-border bg-background text-foreground", className)} data-viewer-navbar="">
+    // On the chrome's colour, a step off the canvas's (`--sidebar`: lighter than white's off-white, a
+    // step above the dark canvas), as the panel beside a board or a model is: the frame reads as frame.
+    <header className={cn(NAVBAR_ROW_CLASS, "pl-[10px] border-border bg-sidebar text-foreground", className)} data-viewer-navbar="">
       <nav aria-label={t("navbar.viewer")} className="flex min-w-0 flex-1 items-center overflow-hidden text-sm">
         {onHome || menu ? <LogoMenu onHome={onHome} menu={menu} /> : null}
         {/* A phone's row has no room for them: Back and Forward are a desktop's alone. */}

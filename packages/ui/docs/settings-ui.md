@@ -235,12 +235,11 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   [The file sidebar and the tool stack](#the-file-sidebar-and-the-tool-stack)). The column
   stops 8px above the cube's line (`VIEWPORT_STACK_BOTTOM`), so it never runs past the
   view.
-- **File sidebar** at the top-left, 8px in: a toolbar of tiles, one per section of what there
-  is to read of the file — a STEP assembly's Model tree, a robot's Links, Position, an SDF's
-  metadata, the routines' Animation — whatever tool is in hand; a tile opens its section in a
-  panel under the tiles, one at a time, down to 8px off the view's bottom at most. On a phone it
-  is one tile, opening one panel with the sections as tabs (see
-  [The file sidebar and the tool stack](#the-file-sidebar-and-the-tool-stack)).
+- **The view's panel**, docked at the left: one search over a tab per section of what there is
+  to read of the file — a STEP assembly's Model tree, a robot's Links, Position, an SDF's
+  metadata — whatever tool is in hand; collapsed, a pill at the canvas's top-left; on a phone the
+  whole view (see [The view's panel](#the-file-sidebar-and-the-tool-stack)). A file with no
+  section (a mesh) has none.
 - **Quick Edit** at top-right, 8px in, a STEP's or a robot's: the box of the note a
   person writes to their agent, there only while something is picked, drawn or measured
   (see [Quick Edit](#quick-edit)), under the host's notice where there is one (the CAD app's
@@ -264,9 +263,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   none of them, and neither does a view drawn as a picture or one that is loading or failed to
   load. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
-- **Nothing sits at the bottom centre of the tools view**: a file's routines play from the
-  file sidebar's Animation section; in Preview its playbar is under the model (see
-  [Preview](#camera-animation-and-preview)).
+- **A file's routines are a playbar at the bottom centre**, in the tools view (on the strip's
+  surface, Reset first; on a phone over Quick Edit's peek) as in Preview (see
+  [Preview](#camera-animation-and-preview)). Nothing else sits there.
 - **Model update status** sits under the strip and its sub-toolbar, centred, and where
   there is no strip (Preview, a compact view, a load) at the top centre, in the strip's
   34px row, in every host. It is renderer chrome: the navbar carries no status. On mobile
@@ -288,8 +287,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 There is no activity dot. A thin rule parts the tools from the view's controls, which
 are no tools (see [Ownership and layout](#ownership-and-layout)). Position is no tool:
 its knobs are Select's, while Select's filter picks Position, and its controls are a
-section of the [file sidebar](#the-file-sidebar-and-the-tool-stack), and so is Animation, where
-the file's routines play (see [Preview](#camera-animation-and-preview)). A file with no tools
+tab of the [view's panel](#the-file-sidebar-and-the-tool-stack); the file's routines play from the
+playbar under the model (see [Preview](#camera-animation-and-preview)). A file with no tools
 and no 3D view has no strip at all.
 
 **A tool the file cannot offer is not on the strip**: never shown disabled.
@@ -331,7 +330,7 @@ renderer's own rule, `RobotRenderer.jsx`, for a robot): a GLB's Explode, routine
 Position and Clip; an engine document's Explode, Position and its motions (its **Motion**
 section, where Position shows a motion's frame read-only while it owns the pose).
 
-A tree is the file sidebar's, on screen under every tool; a pick in it takes Select up
+A tree is the view's panel's, there under every tool; a pick in it takes Select up
 before it acts.
 
 **Removing an effect.** Explode's and Clip's rows end in
@@ -537,15 +536,12 @@ Model tree (`STEP_PART_VIEW_FEATURES`).
 
 ## The file sidebar and the tool stack
 
-**The file sidebar** (`kit/tools/FileSidebar.jsx`) holds what there is to read of the file,
-whatever tool is in hand — the strip is for using tools, the sidebar for reading the file: a STEP
-assembly's **Model tree** (a part file, whose tree would be its one row, has none), then
-**Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
-**Position**, where a joint can be driven; a drawing's **Layers**, where it has four or more
-layers or any block reference (a flat pattern's CUT and BEND has none): each layer's pen, name,
-entity count and eye, its block references under it; and, after them, the shell's own **Animation** for a
-file with routines (`kit/tools/playbar/AnimationSection.jsx`), headed **Motion** for an engine document's motions. A file with none of them has no
-sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
+**The file sidebar** (`kit/tools/FileSidebar.jsx`) is a DXF drawing's, for its **Layers**, where it
+has four or more layers or any block reference (a flat pattern's CUT and BEND has none): each
+layer's pen, name, entity count and eye, its block references under it. Every other view's sections
+are tabs of the view's panel (below: a 3D view's Model tree or Links, Position and SDF; a board's
+and a schematic's Circuit, Layers and Hierarchy). The strip is for using tools, the sidebar for
+reading the file. A drawing with no Layers section has no sidebar. It is a toolbar of its own at the view's top-left, 8px in, on the strip's line and of
 its surface, padding and 24px tiles (`data-file-sidebar-tools`, "File sidebar"): one tile per
 section, a tree's a tree icon named for it (Model tree, Links), a layer list's lucide's Layers (a
 drawing's), Position's a spline, Animation's a
@@ -600,10 +596,19 @@ section stays mounted, out of sight, and a routine plays from Preview's playbar.
   stack's folded panels. Which section is open is not kept: a file opens with none. A new tab (a
   cleared record) puts everything back at its defaults.
 
-**A flat view's panel** (`kit/shell/FlatPanel.jsx`, `FlatViewFrame.jsx`) is a KiCad board's and a
-KiCad schematic's, in place of the file sidebar, after KiCad's Appearance panel: docked at the view's
-left edge, the full height of the view, on the background with a rule at its right, and the canvas
-the narrower for it (the strip stays at the view's centre, panel open or not). Nothing else changes for the other views.
+**The view's panel** (`kit/shell/FlatPanel.jsx`; a board's and a schematic's `FlatViewFrame.jsx`, a
+3D view's `RendererShell.jsx`, one state, `useFlatPanelState`) holds what there is to read of the
+file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
+full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
+lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
+with a rule at its right, and the canvas the narrower for it (the strip stays at the view's centre,
+panel open or not). Its tabs: a board's Circuit and Layers, a schematic's Circuit and Hierarchy
+(handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
+name: a STEP assembly's **Model tree** — a part file, whose tree would be its one row, has none —
+then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
+**Position**), a section's head actions (Position's Reset, the Model tree's Show all) a row at the
+top of its tab, and the trees searched by the panel's search box. A file's routines are no tab:
+they play from the playbar under the model. A mesh, with no section, has no panel.
 
 - **Its head.** The search box filling the row (`TreeFilterInput`, dense, in a 1px border): "Search
   the board", "Parts, nets, layers"; "Search the schematic", "Parts, nets, sheets"; then **Hide
@@ -754,7 +759,7 @@ break parting them, `SubToolbar`'s `data-wrapped`). An SDF's counts are two tile
 their labels read whole.
 The scale is set once, in `globals.css`, for the whole page while a phone's view is on it, so a
 portalled menu, select or hint is the same size as the chrome it opened from. There is no view
-cube; the file sidebar is one tile at the strip's left, its sections tabs of one panel; and
+cube; the view's panel is a pill at the strip's left, opening as the whole view; and
 Quick Edit is a bottom sheet (see
 [Quick Edit](#quick-edit)). The explorer is the same popover, never wider than the window less
 1rem. The shortcut hint is hidden.
@@ -909,8 +914,8 @@ on screen (`kit/status/statusLabels.js`).
 
 ## Position and references
 
-**Position** is a section of the [file sidebar](#the-file-sidebar-and-the-tool-stack), its
-tile there under every tool, headed "Position": a STEP's where the file has joints to move, a
+**Position** is a tab of the [view's panel](#the-file-sidebar-and-the-tool-stack), there
+under every tool: a STEP's where the file has joints to move, a
 robot's where a joint can be driven. Its knobs in the viewport are Select's, while Select's
 filter ticks Position, and only while the parts are where the pose puts them: over an explosion
 Select draws no knobs (the section's controls stay, and using them takes Explode off). Its
@@ -1148,10 +1153,10 @@ a live `setDisplaySettings` refuses it as it refuses any mode it does not know, 
 left in it reads as the defaults. Render settings edited in Preview are the file's Render settings;
 leaving returns the tools view to the file's mode.
 
-**Routines** play from the file sidebar's **Animation** section in the tools view
-(`kit/tools/playbar/AnimationSection.jsx`), and from Preview's playbar in Preview: its heading holds **Reset animation**,
-which stops the routine and puts the model at rest, disabled while it is; its body is the
-routine in hand, a dropdown of the routines where there are two or more, then **Play** or
+**Routines** play from the playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`), in the
+tools view on the strip's surface with **Reset animation** first, which stops the routine and puts
+the model at rest, disabled while it is (on a phone, over Quick Edit's peek), and in Preview on no
+surface: the routines' list where there are two or more, then **Play** or
 **Pause**, the scrubber (`AnimationTimeControl`) and **Playback settings** (a cog: the routine's
 Speed, a submenu, then Loop and Autoplay). Each routine in the dropdown says its duration at its
 right, muted, in tabular figures. In the tools view a routine is a motion as a pose is
