@@ -1,5 +1,5 @@
 import { useContext, useEffect, useState } from "react";
-import { ScanSearch } from "lucide-react";
+import { Minus, Plus, ScanSearch } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuShortcut, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
@@ -9,44 +9,51 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
-import { useStripButtonClass } from "../tools/FloatingToolBar.js";
 
 export { ZOOM_FACTOR };
 
 /**
- * The view's zoom, as every design tool shows it (Figma's, Spline's, Penpot's, tldraw's): the zoom as a
- * percentage, and, pressed, the zoom's menu — Zoom in, Zoom out, Zoom to 100%, then Zoom to fit and Zoom to
- * selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's keys, `pressZoomKey`). It is the strip's view control, the same in every view, 2D and 3D.
+ * A flat view's zoom, in the view's corner (`ViewCorner.jsx`), as a canvas tool keeps it (tldraw's,
+ * Excalidraw's, Miro's): − and + either side of the zoom as a percentage, on one see-through pill, and the
+ * percentage pressed opens the zoom's menu — Zoom in, Zoom out, Zoom to 100%, then Zoom to fit and Zoom to
+ * selection (off with nothing picked), each with its key (`zoomShortcuts`; the view's keys, `pressZoomKey`).
+ * A 3D view shows no percentage: its corner is the cube's, with Zoom to fit over it.
  *
- * 100% is the model as authored, framed whole (a flat view's fit, a 3D view's rest box at the camera's
- * angle): a fixed ruler, which nothing shown moves — not a pose, a routine, a cut, parts spread apart, hiding or
- * isolating. Zoom to fit frames what is SHOWN, so it may read 72% with the parts spread apart.
+ * 100% is the picture as authored, framed whole (a flat view's fit): a fixed ruler, which nothing shown
+ * moves. The number is the view's, read through `zoom.read()` and redrawn at most once a frame as the view
+ * tells it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders. Its
+ * digits are tabular and its width is fixed, so the pill never shifts as it changes.
  *
- * The number is the view's, read through `zoom.read()` and redrawn at most once a frame as the view tells
- * it moved (`zoom.subscribe(listener)`, which hands back its unsubscribe); nothing else re-renders. Its
- * digits are tabular and its width is fixed, so the strip never shifts as it changes.
- *
- * @param {{ zoom: ViewZoom, disabled?: boolean, tooltipSide?: "top" | "bottom" }} props
+ * @param {{ zoom: ViewZoom, style?: object }} props
  * @typedef {{ read(): number, subscribe(listener: () => void): () => void, zoomBy(factor: number): void, fit(): void,
  *   zoomTo100?: (() => void) | null, zoomToSelection?: (() => void) | null, selectionAvailable?: boolean }} ViewZoom
  */
-export default function ZoomControl({ zoom, disabled = false, tooltipSide = "top" }) {
+const PILL_BUTTON_CLASS = "size-7 rounded-full border-0 bg-transparent text-muted-foreground shadow-none hover:bg-foreground/[0.1] hover:text-foreground [&>svg]:size-3.5!";
+export default function ZoomPill({ zoom, style = null }) {
   const { t } = useI18n();
-  const tileClass = useStripButtonClass();
+  const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   const percent = useZoomPercent(zoom);
   const shown = `${Math.round(percent).toLocaleString()}%`;
-  return <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild>
-      <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide={tooltipSide} disabled={disabled}
-        className={cn(tileClass, "w-[3.25rem] px-1 text-tiny font-medium tabular-nums")} data-zoom-control="">
-        <span className="w-full text-center">{shown}</span>
-      </ToolbarButton>
-    </DropdownMenuTrigger>
-    <DropdownMenuContent align="center" sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
-      className={cn(FLOATING_SURFACE_CLASS, "w-48 data-[state=closed]:animate-none!")}>
-      <ZoomMenuItems zoom={zoom} />
-    </DropdownMenuContent>
-  </DropdownMenu>;
+  return <div className="pointer-events-auto absolute z-20 inline-flex h-7 items-center rounded-full bg-foreground/[0.09]" style={style ?? undefined} data-zoom-pill="">
+    <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={PILL_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
+      <Minus aria-hidden="true" />
+    </ToolbarButton>
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <ToolbarButton label={t("zoom.current", { percent: shown })} tooltip={t("zoom.label")} tooltipSide="top"
+          className={cn(PILL_BUTTON_CLASS, "w-12 px-0 text-tiny font-medium tabular-nums text-foreground aria-expanded:bg-foreground/[0.1]")} data-zoom-control="">
+          <span className="w-full text-center">{shown}</span>
+        </ToolbarButton>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="top" align="end" sideOffset={6} collisionPadding={8} aria-label={t("zoom.label")}
+        className={cn(FLOATING_SURFACE_CLASS, "w-48 data-[state=closed]:animate-none!")}>
+        <ZoomMenuItems zoom={zoom} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+    <ToolbarButton label={t("zoom.in")} shortcut={keys.in} tooltipSide="top" className={PILL_BUTTON_CLASS} onClick={() => zoom.zoomBy(ZOOM_FACTOR)}>
+      <Plus aria-hidden="true" />
+    </ToolbarButton>
+  </div>;
 }
 
 /** The zoom menu's items, for the tile's menu and a phone's More submenu alike. */
@@ -66,10 +73,10 @@ export function ZoomMenuItems({ zoom }) {
   </>;
 }
 
-/** The zoom's view-control descriptor for the strip (`FloatingToolBar`): the tile, and a phone's More submenu. */
+/** The zoom as a phone's More submenu (`FloatingToolBar`): a phone has no corner, its view's controls are More's rows. */
 export function zoomViewControl(zoom, { t, disabled = false }) {
   return { id: "zoom", label: t("zoom.label"), icon: <ScanSearch aria-hidden="true" />, disabled,
-    tile: <ZoomControl zoom={zoom} disabled={disabled} />, submenu: () => <ZoomMenuItems zoom={zoom} /> };
+    tile: null, submenu: () => <ZoomMenuItems zoom={zoom} /> };
 }
 
 /** The view's zoom, live: read again at most once a frame after the view says it moved. */

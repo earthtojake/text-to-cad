@@ -117,9 +117,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 it("the strip is at the top centre with the stack under it; the view's panel is docked at the left, open, a tab per section, the first shown, and nothing is stored until a person changes it", () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px down from the viewer's top, centred on the whole view,
-  // stopping 8px above the cube's line (the cube itself 8px off the bottom).
+  // stopping 8px above the cube's line (the cube's box 2px off the bottom, its drawing 8px).
   // Its left reaches back over the docked panel (`useStageReach.js`), before the frame is painted.
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px', bottom: 'calc(16px + 6rem)' });
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: 'calc(8px - var(--cad-stage-left, 0px))', right: '8px', bottom: 'calc(10px + 6rem)' });
   // The panel (`FlatPanel.jsx`), a board's: the search over its tabs, a tab per section in their order, the first shown.
   expect([flatPanel().getAttribute('data-flat-panel'), flatPanel().hidden]).toEqual(['docked', false]);
   expect([tabNames(), shownTab(), sections()]).toEqual([['Harness tree', 'Reference'], 'Harness tree', ['Harness tree']]);
@@ -202,6 +202,8 @@ async function openDisplay(user: ReturnType<typeof userEvent.setup>, root?: HTML
 // A control by its name, whatever it says it is set to ("Projection: Orthographic" is Projection).
 const named = (button: Element) => button.getAttribute('aria-label')!.split(':')[0];
 // The view's controls: the strip's last, after its tools and a rule.
+// The view's corner over the cube: Display, Projection, then Home, nearest the cube (`ViewCorner.jsx`).
+const viewCorner = () => [...document.querySelectorAll('[data-view-corner] button')].map(named);
 const barButtons = () => [...document.querySelector('[role=group][aria-label="Interaction tools"] [data-view-controls]')?.querySelectorAll('button') ?? []].map(named);
 // Preview's own bar, over the view's top edge: its name, and its controls at its right.
 const previewBar = () => document.querySelector<HTMLElement>('[data-preview-bar]');
@@ -213,7 +215,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Zoom 100%', 'Preview']);
+  expect(barButtons()).toEqual(['Preview']);
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
@@ -221,7 +223,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Zoom 100%', 'Preview']);
+  expect(barButtons()).toEqual(['Preview']);
   // With nothing to work on yet, the strip is idle together, and so are Projection, Display and Preview.
   stage('unready');
   expect(strip()).toEqual(['Select', 'Pencil', 'Shapes', 'Keep', 'Pose']);
@@ -237,7 +239,7 @@ it("Display and Preview are a 3D view's, as its renderer declares: a view that d
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
   // A 3D view (the harness's, declared `previewable`): Projection, Display and Preview end the strip, and a request enters it.
   frame();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Zoom 100%', 'Preview']);
+  expect(barButtons()).toEqual(['Preview']);
   ask();
   expect(inPreview()).toBe(true);
   cleanup();
@@ -265,7 +267,7 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(false);
   stage('failed');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Zoom 100%', 'Preview']);
+  expect(barButtons()).toEqual(['Preview']);
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
@@ -281,7 +283,7 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   const view: string[] = [];
-  expect([right(), barButtons()]).toEqual([view, ['Projection', 'Display mode', 'Zoom 100%', 'Preview']]);
+  expect([right(), barButtons()]).toEqual([view, ['Preview']]);
   expect(document.querySelectorAll('[data-viewer-navbar] [data-view-controls] button')).toHaveLength(0);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
@@ -334,10 +336,10 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Projection, Display and Preview end the strip; Render is no mode of Display's, Projection a tile that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
+it("Preview ends the strip and Display, Projection and Home are the corner's over the cube; Render is no mode of Display's, Projection a button that switches, and Display's Grid leaves the drawing tools and kept tools in place", async () => {
   const user = userEvent.setup({ skipHover: true });
   const { remount } = frame();
-  expect([strip(), barButtons()]).toEqual([['Select', 'Pencil', 'Shapes', 'Keep', 'Pose'], ['Projection', 'Display mode', 'Zoom 100%', 'Preview']]);
+  expect([strip(), barButtons(), viewCorner()]).toEqual([['Select', 'Pencil', 'Shapes', 'Keep', 'Pose'], ['Preview'], ['Display mode', 'Projection', 'Home']]);
   // After the strip's rule.
   expect(document.querySelector('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]')).not.toBeNull();
   const solid = render(<SolidModeIcon />).container.querySelector('svg')!;
@@ -451,7 +453,7 @@ it("Preview is in Render: the strip, the view's controls, the stack and the pane
   expect(chrome.hidden).toBe(false);
   // Preview's view is gone, and the editor's is as it was: nothing Preview did reached it.
   expect([inPreview(), previewProps.current, viewportProps.current.suspended, unchanged()]).toEqual([false, null, false, []]);
-  expect(barButtons()).toEqual(['Projection', 'Display mode', 'Zoom 100%', 'Preview']);
+  expect(barButtons()).toEqual(['Preview']);
   // The tools view is in the file's own mode, as it always was.
   expect(displayButton().getAttribute('aria-label')).toBe('Display mode: Solid');
   // The tool in hand is as it was, its section's tile with it; Display, put away, stays shut.

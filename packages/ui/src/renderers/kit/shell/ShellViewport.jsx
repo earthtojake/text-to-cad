@@ -537,6 +537,18 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    // Home: the view it opened with — from the opening direction, what is shown framed whole — the corner's
+    // Home button (`ViewCorner.jsx`), as Fusion's and Maya's cubes' Home is.
+    goHome() {
+      const runtime = runtimeRef.current;
+      if (!runtime) return false;
+      const live = fitSceneRef.current;
+      const bounds = live?.shownBounds?.() || live?.bounds || runtime.zeroPoseBounds;
+      const moved = zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate: true, modelOffset: modelTransformRef.current.offset,
+        resetZoomBaseline: true, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP });
+      if (moved) fitCamera(runtime);
+      return moved;
+    },
     // The strip's zoom readout (`ZoomControl.jsx`): the zoom against the authored box (100%, which
     // nothing shown redefines), a step of it about the camera's target, and word of the camera moving.
     zoomPercent() { return runtimeRef.current?.camera ? readRuntimeZoomPercent(runtimeRef.current) : 100; },

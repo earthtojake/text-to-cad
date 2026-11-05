@@ -122,7 +122,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   const [dragging, setDragging] = useState(false);
   const frameRef = useRef(0);
 
-  // Who hears that the view moved: the strip's zoom readout (`ZoomControl.jsx`), told as each frame paints.
+  // Who hears that the view moved: the corner's zoom pill (`ZoomControl.jsx`), told as each frame paints.
   const viewListeners = useRef(new Set());
   const paint = useCallback(() => {
     frameRef.current = 0;
@@ -436,7 +436,7 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   }), []);
 
   /**
-   * The view's zoom for the strip's readout (`kit/shell/ZoomControl.jsx`): 100% the fit — the picture
+   * The view's zoom for the corner's pill (`kit/shell/ZoomControl.jsx`): 100% the fit — the picture
    * whole, as it opens and as F frames it, so 100% fits — and the zoom steps about the pane's middle.
    */
   const zoom = useMemo(() => ({

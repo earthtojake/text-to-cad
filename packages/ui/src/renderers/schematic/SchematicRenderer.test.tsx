@@ -122,7 +122,7 @@ const zoomIn = async (pane: HTMLElement) => {
 const selected = (controller: any) => controller.readState().selection.map((reference: any) => reference.target.selectors[0]);
 const controllerOf = (view: { controller: any }) => waitFor(() => { expect(view.controller).not.toBeNull(); return view.controller; });
 
-it('opens on the root sheet, read with the index, drawn in the theme, its panel the Parts, the Nets, then the Hierarchy, and the zoom its one view control', async () => {
+it('opens on the root sheet, read with the index, drawn in the theme, its panel the Parts, the Nets, then the Hierarchy, and its zoom the corner pill', async () => {
   const view = await open();
   const { pane } = view;
   await onSheet(pane, '/');
@@ -130,8 +130,9 @@ it('opens on the root sheet, read with the index, drawn in the theme, its panel 
   await waitFor(() => expect(drawn.includes('light')).toBe(true));
   const tools = within(pane).getByRole('group', { name: 'Interaction tools' });
   expect([...tools.querySelectorAll(':scope button[aria-pressed]')].map(button => button.getAttribute('aria-label'))).toEqual(['Select', 'Pencil', 'Shapes', 'Measure']);
-  // Its one view control: the zoom, every view's.
-  expect([...tools.querySelectorAll('[data-view-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Zoom 100%']);
+  // No view controls on the strip: its zoom is the corner's pill.
+  expect(tools.querySelector('[data-view-controls]')).toBeNull();
+  expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
   // The panel: one search over every tab, the Parts open first.
   const panel = pane.querySelector<HTMLElement>('[data-flat-panel]')!;
   expect((within(panel).getByRole('textbox', { name: 'Search the schematic' }) as HTMLInputElement).placeholder).toBe('Parts, nets, sheets');

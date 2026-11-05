@@ -253,7 +253,7 @@ test('a robot\'s knobs are Select\'s while it picks Position, beside the sidebar
   assert.deepEqual([await robot.toolNames(), await robot.filter()], [SELECT_IN_HAND, 'Selection filter: Position']);
   assert.equal(await robot.tool('Explode').count(), 0, 'a robot is posed, never exploded');
   // Projection, Display and Preview are the view's controls, at the strip's end after its rule, for a robot as for any 3D file.
-  assert.deepEqual(await robot.viewControls(), ['Projection: Orthographic', 'Display mode: Solid', 'Zoom 100%', 'Preview']);
+  assert.deepEqual(await robot.viewControls(), ['Preview']);
   assert.equal(await tools.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await tools.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'and nothing of the view in the navbar');

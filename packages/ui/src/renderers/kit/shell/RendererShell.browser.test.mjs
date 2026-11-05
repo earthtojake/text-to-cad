@@ -643,10 +643,13 @@ test('a renderer says more about its load than a download: finding the file, edi
   const offBottom = frameBox.y + frameBox.height - cubeBox.y - cubeBox.height;
   assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-right corner: ${offBottom}px`);
   const offRight = frameBox.x + frameBox.width - cubeBox.x - cubeBox.width;
-  assert.ok(offRight >= 0 && offRight < 20, `the view cube stays against the right edge: ${offRight}px`);
+  // The cube's box overhangs the right edge by 6px, so its drawing stands 8px in, as every corner control does.
+  assert.ok(offRight >= -6 && offRight < 20, `the view cube stays against the right edge: ${offRight}px`);
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
   assert.deepEqual(await pane.locator('[data-cad-toolbar] [data-view-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Zoom 100%', 'Preview'], 'Projection, Display then Preview, at the strip\'s end');
+    ['Preview'], 'Preview at the strip\'s end');
+  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'Display, Projection, then Home over the cube');
   assert.equal(await pane.locator('[data-cad-toolbar] [data-strip-rule] + [data-view-controls]').count(), 1, 'after the strip\'s rule');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');
 

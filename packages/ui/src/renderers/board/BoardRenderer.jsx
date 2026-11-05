@@ -55,7 +55,7 @@ import { useBoardView } from "./useBoardView.js";
  * views' drags (a right or middle drag, or a drag with Ctrl, Cmd or Shift, pans, as a trackpad's
  * two-finger scroll does; a mouse's wheel or a pinch zooms), a double-click fits, a right-click opens
  * the view's menu (every view's, `kit/shell/viewMenu.js`: the reference, Select, Isolate and the
- * copper's net, Flip over bare board, and the framing) — Annotate, which
+ * copper's net, and the framing) — Annotate, which
  * draws on the board, and Measure, between points snapped to pad, via and hole centres, track ends
  * and outline corners, in millimetres. What is picked, drawn and measured is Quick Edit's, in board
  * references (`#R1`, `#R1.2`, `#net:VBUS`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`), whose views are the window on screen as a plan-view camera with the
@@ -63,8 +63,8 @@ import { useBoardView } from "./useBoardView.js";
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * controls are the strip's, after its tools (`BoardDisplay.jsx`: Flip, and Display's
- * preset, other layers, pours and opacities): one contract with `cad <type> snapshot --display`. A payload without its
+ * controls are the view's corner's (`kit/shell/ViewCorner.jsx`): Display (`BoardDisplay.jsx`: the side it
+ * is seen from, the preset, other layers, pours and opacities) over the zoom pill: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  */
 
@@ -440,7 +440,7 @@ function BoardSurface({ view, data }) {
   // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
   // Over something Select would pick: its reference (with what is picked already), Select or
   // Deselect, Isolate for a part or a net and its net for copper, then the framing. Over bare board:
-  // Exit isolate, Flip, and the framing.
+  // Exit isolate and the framing (the side is Display's View from).
   const contextMenuItems = index && toolMode === BOARD_TOOL.SELECT ? press => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
@@ -449,9 +449,7 @@ function BoardSurface({ view, data }) {
     const now = selectionRef.current, isolated = isolation.isolated;
     const zoom = zoomGroup({ t, onZoomFit: fit, onZoomSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: now.selected.length > 0 });
     if (!hit) {
-      return menuGroups([exitIsolateEntry({ isolatedCount: isolated.length, onExitIsolates: isolation.clear, t })],
-        layered ? [menuEntry("flip", t("board.text.flip_board"), { onSelect: () => setDisplay(current => ({ ...current, side: current.side === "bottom" ? "top" : "bottom" })) })] : [],
-        zoom);
+      return menuGroups([exitIsolateEntry({ isolatedCount: isolated.length, onExitIsolates: isolation.clear, t })], zoom);
     }
     const id = hit.selector, selected = now.selected.includes(id);
     const copyText = path ? buildBoardRefToken({ path, selectors: [...new Set([...now.selected, id])] }) : "";

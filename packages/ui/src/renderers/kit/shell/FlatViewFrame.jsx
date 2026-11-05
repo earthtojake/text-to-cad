@@ -18,7 +18,9 @@ import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import FlatPanel, { FlatPanelPill, useFlatPanelState } from "./FlatPanel.jsx";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
-import { zoomViewControl } from "./ZoomControl.jsx";
+import ZoomPill, { zoomViewControl } from "./ZoomControl.jsx";
+import { ViewCornerColumn } from "./ViewCorner.jsx";
+import { VIEWPORT_PILL_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewportLayout.js";
 
 /**
  * The frame every FLAT view is drawn in — a picture on a canvas, head on (a board, a schematic):
@@ -28,7 +30,8 @@ import { zoomViewControl } from "./ZoomControl.jsx";
  * the top-right, the loading cover and the alert card, laid out as every view's
  * (`RendererShell.jsx`'s), from the kit's parts. The renderer brings the picture (its canvases and
  * layers, `children`, in the pane the canvas view measures: `containerRef`), its tools
- * (`flatViewTools`), its view controls after the strip's rule (`views`), its panel's tabs (`panel`)
+ * (`flatViewTools`), its view controls (`views`: the view's corner's round buttons over its zoom pill,
+ * `ViewCorner.jsx`; on a phone, rows of the strip's More with the zoom), its panel's tabs (`panel`)
  * and Quick Edit's props (`useFlatHandover`'s `quickEdit`).
  *
  * The panel is docked, the canvas always the narrower for it while it is open. In a view 1024px wide
@@ -96,7 +99,8 @@ export function flatViewTools(tools, { colorScheme, shown, selectMenu = null, t 
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null }} props
  *   `surface`: the frame's own data attributes, which say what is drawn (`{ "data-drawing-surface": "" }`).
  *   `quickEdit`: null for a view whose picture has nothing a note could carry.
- *   `zoom`: the view's zoom (`ZoomControl.jsx`'s), the last of the strip's view controls, as every view's (a 3D view's Preview after it).
+ *   `zoom`: the view's zoom (`ZoomControl.jsx`'s): the corner's pill, at the bottom-right where a 3D view's cube stands.
+ *   A view control's `corner` is its round button there (a board's Display).
  *   `contextMenuItems`: the view's menu on a secondary tap over its canvas (`canvasRef`), every view's
  *   (`ViewportContextMenu.jsx`, its entries `viewMenu.js`'s); a right drag still pans.
  */
@@ -170,7 +174,7 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
             style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }} data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
             <StripTouchProvider value={mobile}>
               <div ref={topControls} className={cn("flex max-w-full shrink-0 flex-col gap-2", besideSidebarTile ? "items-start" : "items-center")} data-cad-top-controls="">
-                <FloatingToolBar tools={tools} views={zoom && shown ? [...(views || []), zoomViewControl(zoom, { t })] : views} touch={mobile} />
+                <FloatingToolBar tools={tools} views={mobile ? [...(views || []), ...(zoom && shown ? [zoomViewControl(zoom, { t })] : [])] : []} touch={mobile} />
                 {toolRow}
                 {status}
               </div>
@@ -189,6 +193,13 @@ export default function FlatViewFrame({ surface, containerRef, busy, children, f
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={updateStatus} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
+        {/* The view's corner: its zoom pill, and its own view buttons over it (`ViewCorner.jsx`). A phone's are More's. */}
+        {toolsHidden || mobile || !shown || !zoom ? null : <>
+          {views?.some(view => view.corner) ? <ViewCornerColumn style={VIEWPORT_PILL_COLUMN_POSITION}>
+            {views.map(view => (view.corner ? <span key={view.id} className="contents">{view.corner}</span> : null))}
+          </ViewCornerColumn> : null}
+          <ZoomPill zoom={zoom} style={VIEWPORT_PILL_POSITION} />
+        </>}
         {chromeHidden || !canvasRef || !contextMenuItems ? null
           : <ViewportContextMenu viewport={{ hostRef: containerRef, canvasRef }} items={contextMenuItems} />}
         <ViewerLoadingOverlay loading={{ opening: loading && !alert, progress: { label: loadingLabel } }} operationKey={file} />

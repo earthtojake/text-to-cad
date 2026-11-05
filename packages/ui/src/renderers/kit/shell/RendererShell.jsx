@@ -1,7 +1,7 @@
 import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { stripLeft, useStageReach } from "./useStageReach.js";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
+import { House, LoaderCircle, Play, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@cad/ui/primitives/button";
 import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@cad/ui/primitives/tooltip";
@@ -16,6 +16,8 @@ import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import DisplayPopover, { DisplayMenuItems } from "./DisplayPopover.jsx";
 import ProjectionToggle, { otherProjection } from "./ProjectionToggle.jsx";
 import { zoomViewControl } from "./ZoomControl.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerColumn } from "./ViewCorner.jsx";
+import { VIEWPORT_CUBE_COLUMN_POSITION } from "./viewportLayout.js";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 import PreviewSettings from "./PreviewSettings.jsx";
 import { withGroups } from "../../../annotation/geometry.js";
@@ -473,7 +475,8 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
     ? { present: frame.annotation.hasAnnotation, clear: forgetAnnotation } : null,
   [frame.annotateToolActive, frame.annotation.hasAnnotation, forgetAnnotation]);
   // The renderer's overlay and the shell's own layers share one viewport context.
-  // The strip's zoom (`ZoomControl.jsx`): the viewport's zoom against the authored box, read live.
+  // The view's zoom (`ZoomControl.jsx`'s `ViewZoom`): the viewport's zoom against the authored box, read live,
+  // for the keys, a phone's More and the corner's Zoom to fit.
   const viewerRef = frame.viewerRef;
   const zoomBase = useMemo(() => ({
     read: () => viewerRef.current?.zoomPercent?.() ?? 100,
@@ -640,10 +643,11 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
               {/* The file explorer floats over the top-left corner, above the sidebar, which stays drawn under it. */}
               {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-center gap-2" style={besideSidebarTile ? TOOLBAR_POSITION_PHONE_SIDEBAR : { ...TOOLBAR_POSITION, left: stripLeft(VIEWPORT_INSET_PX) }}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups=""><StripTouchProvider value={mobile}>
-                {/* The view's controls end the strip, after a rule: Projection, Display, then Preview (on a
-                    phone, always in its More menu). */}
+                {/* The strip ends with Preview, after a rule; the view's own controls are the corner's, over
+                    the cube (`ViewCorner.jsx`). A phone has no corner: Projection, Display and the zoom are
+                    rows of its More, with Preview. */}
                 <div ref={topControls} className="relative flex max-w-full shrink-0 flex-col items-center gap-2" data-cad-top-controls="">
-                  <FloatingToolBar tools={tools} touch={mobile} views={shell.previewable && !previewing ? [
+                  <FloatingToolBar tools={tools} touch={mobile} views={shell.previewable && !previewing ? [...(mobile ? [
                     { id: "projection", label: t("projection.label"), icon: <ProjectionIcon value={frame.projection.value} />, disabled: shell.idle,
                       tile: <ProjectionToggle disabled={shell.idle} projection={frame.projection} />,
                       // In a phone's More, a row that switches it the same way.
@@ -652,7 +656,7 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
                       tile: <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid} />,
                       // In a phone's More, a standard nested submenu of the same list: the modes, then Grid.
                       submenu: () => <DisplayMenuItems mode={frame.displayMode} grid={frame.grid} /> },
-                    zoomViewControl(zoom, { t, disabled: shell.idle }),
+                    zoomViewControl(zoom, { t, disabled: shell.idle })] : []),
                     { id: "preview", label: t("preview.label"), icon: <Play aria-hidden="true" />, disabled: shell.idle, onSelect: enterPreview,
                       tile: <ViewControl label={t("preview.label")} disabled={shell.idle} onClick={enterPreview}><Play aria-hidden="true" /></ViewControl> }
                   ] : []} />
@@ -666,6 +670,16 @@ export default function RendererShell({ shell, tools, toolPanels = null, subTool
               {/* The top-right: the host's notice once a model is on screen (`view.notice`), and Quick Edit
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}
+              {/* The view's corner, over the cube: Display, Projection, then Home, nearest the cube (`ViewCorner.jsx`). */}
+              {toolsHidden || previewing || mobile || failed || !shell.previewable ? null : <ViewCornerColumn style={VIEWPORT_CUBE_COLUMN_POSITION}>
+                <DisplayPopover disabled={shell.idle} boundary={frame.hostElement} mode={frame.displayMode} grid={frame.grid}
+                  className={VIEW_CORNER_BUTTON_CLASS} tooltipSide="left" side="left" align="end" />
+                <ProjectionToggle disabled={shell.idle} projection={frame.projection} tooltipSide="left" className={VIEW_CORNER_BUTTON_CLASS} />
+                <ToolbarButton label={t("view.home")} tooltipSide="left" disabled={shell.idle}
+                  className={VIEW_CORNER_BUTTON_CLASS} onClick={() => frame.viewerRef.current?.goHome?.()} data-view-home="">
+                  <House aria-hidden="true" />
+                </ToolbarButton>
+              </ViewCornerColumn>}
               <ViewportTopRight notice={chromeHidden ? null : view.notice}>
                 {/* On a phone Quick Edit is a bottom sheet (`docked`), portalled out of this corner. */}
                 {compact || !references ? null : quickEdit}

@@ -96,7 +96,9 @@ const glbTools = async (pane) => {
   }
   const strip = pane.getByRole('group', { name: 'Interaction tools' });
   assert.deepEqual(await strip.locator('[data-view-controls]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Projection: Orthographic', 'Display mode: Solid', 'Zoom 100%', 'Preview'], 'its view\'s controls end the strip');
+    ['Preview'], 'Preview ends the strip');
+  assert.deepEqual(await pane.locator('[data-view-corner] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display mode: Solid', 'Projection: Orthographic', 'Home'], 'the view\'s controls are the corner\'s, over the cube');
   assert.equal(await strip.locator('[data-strip-rule]').count(), 1, 'one rule, after the tools that pick');
   assert.equal(await strip.locator('[data-view-controls]').evaluate(element => element.previousElementSibling?.getAttribute('aria-label')), 'Clip', 'the view\'s controls follow Clip, no rule between');
   assert.equal(await pane.locator('[data-viewer-navbar] [data-view-controls] button').count(), 0, 'nothing of the view in the navbar');

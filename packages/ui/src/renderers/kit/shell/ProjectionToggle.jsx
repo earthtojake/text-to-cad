@@ -17,14 +17,14 @@ export const otherProjection = value => (value === "perspective" ? "orthographic
  *
  * @param {{ projection: { value: string, onChange(value: string): void }, disabled?: boolean, tooltipSide?: "top" | "bottom" }} props
  */
-export default function ProjectionToggle({ projection, disabled = false, tooltipSide = "top" }) {
+export default function ProjectionToggle({ projection, disabled = false, tooltipSide = "top", className = null }) {
   const { t } = useI18n();
   const stripClass = useStripButtonClass();
   const current = ICONS[projection.value] ? projection.value : "orthographic";
   const Icon = ICONS[current];
   const next = otherProjection(current);
   return <ToolbarButton label={t("projection.current", { mode: t(`projection.${current}`) })} tooltip={t("projection.switchTo", { mode: t(`projection.${next}`) })}
-    tooltipSide={tooltipSide} disabled={disabled} className={stripClass} data-projection={current} onClick={() => projection.onChange(next)}>
+    tooltipSide={tooltipSide} disabled={disabled} className={className || stripClass} data-projection={current} onClick={() => projection.onChange(next)}>
     <Icon />
   </ToolbarButton>;
 }
