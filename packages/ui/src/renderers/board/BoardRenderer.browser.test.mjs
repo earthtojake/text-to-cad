@@ -13,6 +13,13 @@ import { boardPalette } from '@cad/core/lib/plot2d/theme.js';
 // its rasters on a real canvas, and a press on a pad's pixels picking it and lighting it. What the
 // tab offers and what it hands over are the jsdom suite's (`BoardRenderer.test.tsx`).
 const BOARD = JSON.parse(await readFile(new URL('./__fixtures__/board.plot.json', import.meta.url), 'utf8'));
+// A part's 3D model, as the engine serves a STEP it read: core's bracket (`lib/xbf/__fixtures__/bracket`, a 40 x 20 x 4
+// plate and two pegs), its structure and its two part buffers, under `/api/v1/documents/step/bracket`.
+const BRACKET = new URL('../../../../core/src/lib/xbf/__fixtures__/bracket/', import.meta.url);
+// The bracket's document id, as the models table names a STEP it resolved (a document id is a uuid).
+const BRACKET_ID = 'b4ac0e70-0000-4000-8000-000000000001';
+// What the board's routes answer now: its plot, and its models table (none: a 404, as a server without the route).
+let served = { plot: BOARD, models: null };
 const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
 
 let server, browser;
@@ -23,18 +30,36 @@ before(async () => {
     const url = new URL(request.url, 'http://test');
     const root = url.pathname.split('/')[1];
     if (url.pathname.endsWith('/api/v1/documents') && request.method === 'POST') {
-      // The board opened by its path: its document's reads are under its kind, by an id.
-      request.resume();
+      // The board opened by its path, or a model by the id its models table gave: its reads are under its kind, by an id.
+      let body = '';
+      request.on('data', chunk => { body += chunk; });
       request.on('end', () => {
+        const model = JSON.parse(body || '{}').id === BRACKET_ID;
         response.statusCode = 201;
         response.setHeader('Content-Type', 'application/json');
-        response.end(JSON.stringify({ id: 'blinky', kind: 'kicad_pcb', api: '/api/v1/documents/kicad_pcb/blinky' }));
+        response.end(JSON.stringify(model ? { id: 'bracket', kind: 'step', api: '/api/v1/documents/step/bracket' }
+          : { id: 'blinky', kind: 'kicad_pcb', api: '/api/v1/documents/kicad_pcb/blinky' }));
       });
+      return;
+    }
+    if (url.pathname.endsWith('/api/v1/documents/step/bracket/structure')) {
+      readFile(new URL('structure.json', BRACKET)).then(bytes => { response.setHeader('Content-Type', 'application/json'); response.end(bytes); });
+      return;
+    }
+    const part = /\/api\/v1\/documents\/step\/bracket\/parts\/([0-9a-f]+)$/.exec(url.pathname);
+    if (part) {
+      readFile(new URL(`${part[1]}.xbm`, BRACKET)).then(bytes => { response.setHeader('Content-Type', 'application/octet-stream'); response.end(bytes); });
+      return;
+    }
+    if (url.pathname.endsWith('/models')) {
+      response.statusCode = served.models ? 200 : 404;
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify(served.models ? { models: served.models } : { error: 'no route' }));
       return;
     }
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
-    else if (url.pathname.endsWith('/plot')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(BOARD)); }
+    else if (url.pathname.endsWith('/plot')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(served.plot)); }
     else if (url.pathname.endsWith('/api/v1/documents') && request.method === 'GET') {
       response.setHeader('Content-Type', 'application/json');
       const entry = { kind: 'kicad_pcb', file: '/models/blinky.kicad_pcb', url: '/blinky.kicad_pcb', hash: `${root}-blinky`, bytes: 4096 };
@@ -155,5 +180,43 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.mouse.click(box.x + padX, box.y + padY);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
   assert.equal(await pane.locator('[data-board-side][aria-checked="true"]').getAttribute('data-board-side'), 'top');
+  assert.deepEqual(errors, []);
+});
+
+test('in 3D a part stands its model, a press on its body picks the part rather than the pad under it, and with 3D models hidden the pad', async (t) => {
+  // R1's model is the bracket, a tenth its size: a 4 x 2 mm plate over both its pads, 0.4 mm thick, standing on the front face.
+  const name = '${KIPRJMOD}/bracket.step';
+  const plot = structuredClone(BOARD);
+  plot.board.parts.find(part => part.ref === 'R1').models = [{ name, offset: [0, 0, 0.2], scale: [0.1, 0.1, 0.1] }];
+  served = { plot, models: { [name]: { file: 'bracket.step', document: BRACKET_ID, api: '/api/v1/documents/step/bracket', stamp: '1-1' } } };
+  t.after(() => { served = { plot: BOARD, models: null }; });
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  await pane.locator('[data-board-dimension="3d"]').click();
+  // The model read, baked once and placed: one body, one model; D1, whose model the table does not find, a block.
+  await pane.locator('[data-board-3d][data-board-bodies="1"][data-board-models="1"][data-board-blocks="1"]').waitFor();
+  const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [10, -55, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await settled();
+  const box = await pane.locator('[data-board-3d] canvas').first().boundingBox();
+  const camera = await page.evaluate(() => window.__cadCamera());
+  // R1 pad 2's place on the plate's top, where the ray meets the body first.
+  const [x, y] = project3d(camera, [35.825, -15, 0.4], box.width, box.height);
+  const picked = () => page.evaluate(() => window.cadHarness.a.controller?.readState().selection.map(reference => reference.target.selectors[0]));
+  await page.mouse.click(box.x + x, box.y + y);
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1');
+  // The Layers' 3D models eye hides the bodies, and the same press takes the pad under where the body stood.
+  await pane.locator('[data-layer-row="models-3d"] button[aria-label="Hide 3D models"]').dispatchEvent('click');
+  await pane.locator('[data-layer-row="models-3d"] button[aria-label="Show 3D models"]').waitFor({ state: 'attached' });
+  await page.mouse.click(box.x + x, box.y + y);
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
+  assert.deepEqual(await picked(), ['#R1.2']);
   assert.deepEqual(errors, []);
 });

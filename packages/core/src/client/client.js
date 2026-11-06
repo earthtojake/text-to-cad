@@ -431,6 +431,15 @@ export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fet
         if (disposed) throw abortError();
       }
     },
+    async boardModels(file, { signal } = {}) {
+      // A `.kicad_pcb`'s 3D models table (`GET <board>/models`): each model its footprints name, answered by the
+      // SERVER as this computer has it now -- `{ file, document, api, stamp }`, a STEP the engine serves by that
+      // document id (`engineDocument`), or `{ file, missing }` with the reason. The page names no path.
+      if (!file) throw new Error('Missing file');
+      const api = await documentApi(file, { signal, operation: 'board-models' });
+      const reply = await request(`${api}/models`, { signal, timeoutMs: 10_000, operation: 'board-models' });
+      return reply?.models && typeof reply.models === 'object' ? reply.models : {};
+    },
     async drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
       // reading, the client only paints. A plain GET of the document's `drawing`, derived data

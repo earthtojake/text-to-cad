@@ -16,11 +16,20 @@
  * sits on its canvas as it does in 2D. It opens on `opening.camera` (the 2D window head on, or the
  * camera it was left at) and then eases to `opening.then` (the camera this file was left at in 3D) or
  * to Home.
+ *
+ * Its parts stand on it (`@cad/core/lib/board3d/boardParts.js`): each footprint's 3D model, the STEP the
+ * board's models table names (`models`, `GET …/models`) read by its document id through the engine
+ * (`client.engineDocument`) four at a time, baked into one geometry a model shared by every placement of
+ * it, in the model's authored colours; a see-through block where a named model is missing. A press on a
+ * body in front of the face picks its part (`pickPart`: the filter's Footprints); the highlight and an
+ * isolation (`bodyInk`) light and fade the bodies as the faces' overlay lights the copper. Shown or not is
+ * the Layers tab's 3D models (`showModels`).
  */
 import { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { boardPalette } from "@cad/core/lib/plot2d/index.js";
 import { createBoardStage } from "@cad/core/lib/board3d/boardStage.js";
+import { createBoardParts, createModelLoader } from "@cad/core/lib/board3d/boardParts.js";
 import { BOARD_THICKNESS_MM, cameraTurnedOver, millimetresPerPixel, planFromCamera, sheetToWorldMatrix, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
 import { VIEWER_SCENE_SCALE } from "@cad/core/lib/viewer/sceneScale.js";
 import ShellViewport from "../kit/shell/ShellViewport.jsx";
@@ -39,16 +48,48 @@ const SCALE = VIEWER_SCENE_SCALE.CAD;
  *   picking: boolean, overlay(ctx: CanvasRenderingContext2D, frame: object): boolean,
  *   onCamera(camera: object, side: "top" | "bottom"): void, onShown(): void }} props
  */
-export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, display, colorScheme, opening, projection, pickAt, onTap, onHover,
-  picking, overlay, onCamera, onShown }) {
-  const thickness = BOARD_THICKNESS_MM;
+export default function Board3dView({ handle, viewerRef, modelKey, layout, outline, thickness = BOARD_THICKNESS_MM, display, colorScheme, opening, projection,
+  pickAt, onTap, onHover, picking, overlay, onCamera, onShown, parts = null, models = null, client = null, showModels = true, bodyInk = null, pickPart = null }) {
   const live = useRef(null);
-  live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme };
+  live.current = { pickAt, onTap, onHover, overlay, onCamera, onShown, display, colorScheme, client, bodyInk, pickPart };
   // The viewport the 3D views' overlay is handed: its runtime, and the element its pointer events arrive on.
   const viewportRef = useRef(null);
+  // A part's body the ray meets in front of the face it enters (null: none, or one the board hides).
+  const bodiesRef = useRef(null);
+  const bodyOn = ray => {
+    const hit = bodiesRef.current?.pick(ray);
+    if (!hit?.ref) return null;
+    const face = stage.locate(ray);
+    return face && face.distance < hit.distance - 1e-3 ? null : hit;
+  };
   const stage = useMemo(() => createBoardStage(THREE, { layout, outline, thickness, theme: colorScheme,
-    pickAt: located => live.current.pickAt(located) }), [layout, outline]);
+    pickAt: located => live.current.pickAt(located),
+    pickBody: ray => {
+      const body = bodyOn(ray), hit = body ? live.current.pickPart?.(body.ref) : null;
+      return hit ? { hit, point: body.point } : null;
+    } }), [layout, outline, thickness]);
   useEffect(() => () => stage.dispose(), [stage]);
+
+  // ---- the parts: bodies where their models are, blocks where they are missing ------------------
+  const bodies = useMemo(() => createBoardParts(THREE, { thickness, theme: colorScheme }), [stage]);
+  bodiesRef.current = bodies;
+  useEffect(() => {
+    stage.object3D.add(bodies.object3D);
+    return () => { stage.object3D.remove(bodies.object3D); bodies.dispose(); };
+  }, [stage, bodies]);
+  const loader = useMemo(() => createModelLoader(THREE, {
+    open: (document, options) => live.current.client.engineDocument(document, options),
+    onModel: (key, baked) => { bodies.addModel(key, baked); render(); },
+    onFailed: (key, reason) => { bodies.failModel(key, reason); render(); }
+  }), [bodies]);
+  useEffect(() => () => loader.dispose(), [loader]);
+  useEffect(() => {
+    bodies.setParts(parts || [], models);
+    if (typeof live.current.client?.engineDocument === "function") loader.request(bodies.wanted());
+    render();
+  }, [bodies, loader, parts, models]);
+  useEffect(() => { bodies.setVisible(showModels); render(); }, [bodies, showModels]);
+  useEffect(() => { bodies.setTheme(colorScheme); render(); }, [bodies, colorScheme]);
   const runtime = () => viewportRef.current?.runtimeRef.current || null;
 
   // The view settings a viewport outside the shell needs: no grid, no floor, the 2D canvas's colour behind it.
@@ -61,10 +102,15 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   // Each frame asked for also says what the faces hold, on the view's element, as the flat canvas says it
   // is settled (no render): the sides drawn, the texture megapixels and the last face's draw in milliseconds.
   const frameRef = useRef(null);
+  // And what the parts hold: placements with a body, blocks, distinct models, their mesh megabytes, those still loading.
   const render = () => {
     const { drawnSides, texturePixels, faceMs } = stage.stats();
+    const held = bodiesRef.current?.stats();
     const element = frameRef.current;
-    if (element) Object.assign(element.dataset, { boardFaces: drawnSides.join(" "), boardTextureMp: (texturePixels / 1e6).toFixed(1), boardFaceMs: faceMs.toFixed(0) });
+    if (element) Object.assign(element.dataset, { boardFaces: drawnSides.join(" "), boardTextureMp: (texturePixels / 1e6).toFixed(1), boardFaceMs: faceMs.toFixed(0),
+      ...(held ? { boardBodies: String(held.bodies), boardBlocks: String(held.blocks), boardModels: String(held.models),
+        boardMeshMb: (held.bytes / 1e6).toFixed(2), boardModelsWaiting: String(held.waiting), boardModelsFailed: String(held.failed),
+        ...(held.failure ? { boardModelFailure: held.failure.slice(0, 200) } : {}) } : {}) });
     runtime()?.requestRender?.();
   };
   useEffect(() => {
@@ -123,6 +169,8 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
   const paintOverlay = () => {
     const scale = pixelSize();
     stage.setOverlay((ctx, frame) => live.current.overlay(ctx, frame), { lineScale: scale > 0 ? 1 / scale : 1 });
+    const ink = live.current.bodyInk?.();
+    if (ink) bodiesRef.current?.setInk(ink);
     render();
   };
   const requestPaint = () => {
@@ -175,6 +223,11 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       const size = pixelSize(new THREE.Vector3(...located.point));
       return { page: located.page, side: located.side, reach: px * size };
     },
+    /** The part whose body is under a pane point, in front of the face (`{ ref, distance }`), else null. */
+    bodyAt(point) {
+      const ray = rayAt(point);
+      return ray ? bodyOn(ray) : null;
+    },
     /** Measure's camera: from the sheet (its points' frame) to clip space, through the face the camera sees. */
     measureCamera() {
       const current = camera();
@@ -204,8 +257,8 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     camera: () => plainShellCamera(viewerRef.current?.getPerspective?.()),
     setCamera: camera => viewerRef.current?.setPerspective?.(scopeShellCamera(camera, modelKey, SCALE), { animate: false }),
     capture: () => viewerRef.current.captureScreenshotBlob(),
-    stats: () => stage.stats()
-  }), [stage, modelKey]);
+    stats: () => ({ ...stage.stats(), parts: bodies.stats() })
+  }), [stage, bodies, modelKey, thickness]);
 
   // ---- the viewport -------------------------------------------------------------------------------
   const children = useCallback(viewport => {

@@ -10,9 +10,12 @@ const GROUP_KEYS = {"ICs": "board.text.ics", "Transistors": "board.text.transist
  * Nodes are what the kit's tree search reads (`id`, `label`, `children`, `selectionId` — the
  * reference a pasted `#U3.9` finds — and `searchAliases`: a part's value, footprint name and MPN),
  * plus what the row selects (`pick`, its reference; a block's `picks`, every part in it) and a muted `detail`.
+ * Once the board's models table is in (`models`, `GET …/models`), the Parts end with one more block, **No 3D
+ * model**: every part the 3D view draws no model for (its footprint names none, or the one it names is
+ * missing), each row saying why; it selects and isolates as any block does, in 2D and in 3D alike.
  */
 import { formatBoardRefSelector, parseBoardRefSelector } from "@cad/core/lib/boardRefs.js";
-import { boardReferenceId, describeBoardReference } from "./boardFacts.js";
+import { boardReferenceId, describeBoardReference, partModels } from "./boardFacts.js";
 
 // KiCad's reference prefixes, read as what the parts are. A prefix not here is "Other".
 const KINDS = Object.freeze([
@@ -30,6 +33,8 @@ const prefixOf = (ref) => (/^[A-Za-z]+/.exec(ref)?.[0] || "").toUpperCase();
 // One collator for every comparison: `localeCompare` with options builds a collator per call, which
 // on a board of thousands of parts and pads is most of the tree's cost.
 const NATURAL = new Intl.Collator(undefined, { numeric: true, sensitivity: "base" });
+/** The Parts' last block: the parts the 3D view draws no model for. */
+export const NO_MODEL_BLOCK = "block:no-3d-model";
 /** Natural order: C2 before C10. */
 export const naturalCompare = (left, right) => NATURAL.compare(String(left), String(right));
 
@@ -74,7 +79,7 @@ function indexTree(roots) {
  * @param {ReturnType<typeof import("@cad/core/lib/board2d/boardIndex.js").createBoardIndex>} index
  * @returns {{ parts: object, partsSearch: object[], nets: object }} each list as `{ roots, nodesById, parents }`
  */
-export function buildBoardTree(index, t = english) {
+export function buildBoardTree(index, t = english, models = null) {
   const sorted = [...index.parts.values()].sort((a, b) => naturalCompare(a.ref, b.ref));
   // The schematic's blocks when the footprints record them (a part that records none goes under Other), else the kinds.
   const bySheet = sorted.some((part) => part.sheet);
@@ -97,6 +102,17 @@ export function buildBoardTree(index, t = english) {
     ? [...byKind.keys()].filter(Boolean).sort(naturalCompare).map((sheet) => block(sheet, sheet))
       .concat(byKind.has("") ? [block("", t("board.text.other"))] : [])
     : KIND_ORDER.filter((kind) => byKind.has(kind)).map((kind) => block(kind, t(GROUP_KEYS[kind])));
+  if (models) {
+    const without = sorted.map((part) => ({ part, said: partModels(part, models, t) })).filter(({ said }) => said.missing);
+    if (without.length) {
+      const rows = without.map(({ part, said }) => ({
+        id: `nomodel:${part.ref}`, kind: "part", pick: `#${part.ref}`, label: part.ref, detail: said.reason,
+        selectionId: part.ref, searchAliases: [], children: [], pads: [],
+      }));
+      parts.push({ id: NO_MODEL_BLOCK, kind: "block", label: t("board.text.no_3d_model"), detail: String(rows.length), children: rows,
+        picks: rows.map((node) => node.pick) });
+    }
+  }
   const listed = [...index.nets.values()]
     .filter((net) => net.pads.length || net.tracks.length)
     .sort((a, b) => naturalCompare(a.name, b.name));
@@ -113,7 +129,7 @@ export function buildBoardTree(index, t = english) {
     nets.push({ id: "group:unconnected", kind: "group", label: t("board.text.unconnected_pins"), detail: String(loose.length), children: loose });
   }
   // The Parts' search reads each part with its pads, so `#U3.9` or a pin's name finds the pad.
-  const partsSearch = parts.map((node) => ({ ...node, children: node.children.map((part) => ({ ...part, children: part.pads })) }));
+  const partsSearch = parts.filter((node) => node.id !== NO_MODEL_BLOCK).map((node) => ({ ...node, children: node.children.map((part) => ({ ...part, children: part.pads })) }));
   return { parts: indexTree(parts), partsSearch, nets: indexTree(nets) };
 }
 
@@ -201,8 +217,8 @@ export function boardPickTip(index, id, t = english) {
  * net, a part's value. Its glyph is its chip's (`boardReferences.jsx`'s kinds). Null for a selector the
  * board does not resolve.
  */
-export function describeBoardPick(index, id, t = english) {
-  const resolved = index.resolve(id), described = describeBoardReference(resolved, index, t);
+export function describeBoardPick(index, id, t = english, models = null) {
+  const resolved = index.resolve(id), described = describeBoardReference(resolved, index, t, models);
   if (!described) return null;
   const part = resolved.kind === "pad" ? index.parts.get(resolved.pad.ref) : null;
   const what = resolved.kind === "pad" ? [t("selection.padOf", { part: resolved.pad.ref }), part?.value].filter(Boolean).join(" · ")

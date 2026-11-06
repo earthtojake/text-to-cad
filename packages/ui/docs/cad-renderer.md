@@ -247,6 +247,20 @@ the pill gives way to the 3D views' cube and their column over it. A tap and the
 through the 3D views' `usePointerPick`; a drag turns the view. Its faces' bytes are put on screen as
 drawn (no sRGB decode and encode), so they match the flat canvas's colours.
 
+The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the
+board's models table (`board/useBoardModels.js`, `GET …/kicad_pcb/<id>/models`, asked on every revision
+and when the window takes the focus back, in 2D too, for the Selected pane's fact and the Parts' No 3D
+model block) names each model a STEP by its document id; the 3D view opens each by that id
+(`client.engineDocument`), four at a time, reads it (`loadXbfDocument`, no look, no version wait: the
+engine may let it go), bakes it into ONE geometry with a material per colour, and shares it with every
+placement of it; a placement is diffed by reference on every revision (a moved part a matrix, a model
+held never asked for again), and a model no placement uses is released. A named model that is missing
+is a see-through block on the part's outline, a millimetre tall. A press tries the bodies before the
+face (the board's `pickAt` and the stage's `pickBody`), as the filter's Footprints takes them; the
+highlight and an isolation light and fade them (`bodyInk`); the Layers tab's 3D models hides them. The
+canvas element says what it holds: `data-board-bodies`, `-blocks`, `-models`, `-mesh-mb`,
+`-models-waiting`, `-models-failed`.
+
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState.read()` is called at the moment the view is
 written, so the last write before unmount is saved; `shell.scheduleStateSave()`
@@ -803,7 +817,7 @@ A reload shows the same file, and restores it:
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | The playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `{ orbitSpeed, autoplay, speed?, loop? }`, `DEFAULT_PLAYBACK` `{ orbitSpeed: 1, autoplay: false }`, and `speed` and `loop` once chosen in the playbar's Playback settings — unset, the routine's authored values apply. Kept between leaving and re-entering Preview, and across a reload of the tab. Whether Preview orbits is not kept: it opens still. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection }`: which is up, the 3D camera as a perspective snapshot, null for Home, and its projection; the record's `camera` stays the flat canvas's transform). |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. Robot: `pose` (joint values) and `visibility` (hidden component ids) against the description's revision. Engine document: `tree` (expanded rows, hidden parts, isolated assemblies) against the document's tree, and `pose` (preset, given values, couplings) against its mechanism (`xbf/xbfViewSlices.js`). GLB, mesh: none. DXF: nothing beyond its camera. Board: `board` (its Display), `isolated`, and `board3d` (`{ mode: "2d" \| "3d", camera, projection, models }`: which is up, the 3D camera as a perspective snapshot, null for Home, its projection, and whether the parts' 3D models show; the record's `camera` stays the flat canvas's transform). |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |

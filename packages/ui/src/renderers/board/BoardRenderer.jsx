@@ -40,6 +40,7 @@ import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js
 import { viewportZoom } from "../kit/shell/ZoomControl.jsx";
 import { useBoardView } from "./useBoardView.js";
 import { board3dAnnotationSurface } from "./board3dAnnotation.js";
+import { useBoardModels } from "./useBoardModels.js";
 
 // The board in 3D, its own chunk: a board shown in 2D loads no three.js.
 const Board3dView = lazy(() => import("./Board3dView.jsx"));
@@ -91,11 +92,11 @@ const SAVE_DELAY_MS = 180;
 const BOARD_SURFACE = Object.freeze({ "data-board-surface": "" });
 // The file's slices: the board's Display, what is isolated, and the board in 3D (which is up, its camera, its projection), kept across rebuilds.
 const SLICES = Object.freeze({ board: "1", isolated: "1", board3d: "1" });
-/** The board in 3D as the file's view keeps it: 2D or 3D, the 3D camera (null: Home), the projection. */
+/** The board in 3D as the file's view keeps it: 2D or 3D, the 3D camera (null: Home), the projection, whether its parts' 3D models show. */
 function readBoard3d(raw) {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   return { mode: value.mode === "3d" ? "3d" : "2d", camera: value.camera && typeof value.camera === "object" ? value.camera : null,
-    projection: value.projection === "perspective" ? "perspective" : "orthographic" };
+    projection: value.projection === "perspective" ? "perspective" : "orthographic", models: value.models !== false };
 }
 
 const BOARD_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
@@ -126,6 +127,11 @@ function BoardSurface({ view, data }) {
   const document = useBoardDocument({ workspace, path: view.file.path });
   const { file, plot, index, sheet, layered, shown, alert } = document;
   const colorScheme = view.appearance?.colorScheme === "dark" ? "dark" : "light";
+  // How thick the board is (its file's stack-up; KiCad's default where it names none), and its parts' 3D models table.
+  const thickness = plot?.board?.thickness > 0 ? plot.board.thickness : BOARD_THICKNESS_MM;
+  const thicknessRef = useRef(thickness);
+  thicknessRef.current = thickness;
+  const models = useBoardModels({ client: workspace.client, file, revision: workspace.resource.revision, enabled: Boolean(index) });
 
   // ---- the file's view: the transform, the board's Display, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
@@ -138,6 +144,7 @@ function BoardSurface({ view, data }) {
   const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
   const [dimension, setDimension] = useState(restored3d.mode);
   const [projection, setProjection] = useState(restored3d.projection);
+  const [showModels, setShowModels] = useState(restored3d.models);
   const saved = useRef({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d });
   const storedRef = useRef("");
   const saveTimer = useRef(0);
@@ -159,7 +166,7 @@ function BoardSurface({ view, data }) {
   const remember3d = useCallback(change => save({ board3d: { ...saved.current.board3d, ...change } }), [save]);
   useEffect(() => { storedRef.current = JSON.stringify(recordOf({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d })); }, []);
   useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);
-  useEffect(() => { remember3d({ mode: dimension, projection }); }, [dimension, projection, remember3d]);
+  useEffect(() => { remember3d({ mode: dimension, projection, models: showModels }); }, [dimension, projection, showModels, remember3d]);
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   // ---- tools ----------------------------------------------------------------
@@ -221,10 +228,10 @@ function BoardSurface({ view, data }) {
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
-  const describe = useBoardDescribe(index);
+  const describe = useBoardDescribe(index, models);
   const { references, chips: pickChips } = useBoardReferences({ scene, selection, resource: workspace.resource, describe });
   // A block picked whole (its row menu's Select all parts) is one chip, not a chip a part.
-  const trees = useBoardTrees(index);
+  const trees = useBoardTrees(index, models);
   const chips = useMemo(() => groupChips({ selected: selection.selected, chips: pickChips, resource: workspace.resource, select: selection.select,
     groups: [...(trees?.parts.nodesById.values() || [])].filter(node => node.picks?.length > 1).sort((a, b) => b.picks.length - a.picks.length)
       .map(node => ({ id: node.id, label: node.label, picks: node.picks })),
@@ -259,6 +266,23 @@ function BoardSurface({ view, data }) {
     return true;
   }, []);
 
+  // The parts' bodies in 3D, lit and faded as the faces' overlay lights the copper: the parts hovered and
+  // selected, and while something is isolated, the parts that stay bright (an isolated part, a pad's
+  // part, a part with a pad on an isolated net).
+  const bodyInk = useCallback(() => {
+    const { hovered, selected } = highlightRef.current;
+    const refs = list => list.filter(item => item?.kind === "part").map(item => item.part.ref);
+    const isolated = isolationRef.current.resolved;
+    if (!isolated.length) return { hovered: refs(hovered), selected: refs(selected), bright: null };
+    const bright = new Set();
+    for (const item of isolated) {
+      if (item?.kind === "part") bright.add(item.part.ref);
+      else if (item?.kind === "pad") bright.add(item.pad.ref);
+      for (const pad of item?.net?.pads || []) bright.add(pad.ref);
+    }
+    return { hovered: refs(hovered), selected: refs(selected), bright: [...bright] };
+  }, []);
+
   // Annotate's layer: ink on the board, under the view (and its side) as it stands; in 3D, on the face
   // the camera sees (`board3dAnnotation.js`). The marks are sheet millimetres either way.
   const flatSurface = useMemo(() => plotAnnotationSurface({
@@ -270,7 +294,7 @@ function BoardSurface({ view, data }) {
     ray: point => view3dRef.current?.ray(point) || null,
     project: world => view3dRef.current?.project(world) || null,
     side: () => view3dRef.current?.side() || "top",
-    thickness: () => view3dRef.current?.thickness() ?? BOARD_THICKNESS_MM,
+    thickness: () => view3dRef.current?.thickness() ?? thicknessRef.current,
     canvas: () => view3dRef.current?.canvas() || null
   }), []);
   const annotationSurface = dimension === "3d" ? surface3d : flatSurface;
@@ -324,7 +348,16 @@ function BoardSurface({ view, data }) {
       const [x, y] = snap ? snap.point : at.page;
       return { point: [x, y, 0], snapKind: snap ? snap.kind : "free", units: { unit: "mm", perWorld: 1 } };
     };
+    // A part, picked by its body in 3D, as the filter takes it: with Footprints ticked, a locked one with Locked items.
+    const pickPart = ref => {
+      const board = indexRef.current, kinds = boardPickKinds(filterRef.current), part = board?.parts.get(ref);
+      return part && kinds?.parts && (!part.locked || kinds.locked) ? { kind: "part", part, selector: formatBoardRefSelector({ kind: "part", ref }) } : null;
+    };
     const pickAt = (point, pointerType) => {
+      // In 3D a part's body in front of the face is what a press there takes, front to back.
+      const body = dimensionRef.current === "3d" ? in3d()?.bodyAt(point) : null;
+      const part = body ? pickPart(body.ref) : null;
+      if (part) return part;
       const at = atPoint(point, pointerType), board = indexRef.current, kinds = boardPickKinds(filterRef.current);
       return at && board && kinds ? board.pick(at.page, { kinds, view: at.side, tolerance: at.reach, layers: at.layers }) : null;
     };
@@ -404,7 +437,7 @@ function BoardSurface({ view, data }) {
       const board = indexRef.current, kinds = boardPickKinds(filterRef.current);
       return board && kinds ? board.pick(located.page, { kinds, view: located.side, tolerance: 0.1, layers: sideLayersRef.current?.[located.side] }) : null;
     };
-    return { tap, hover, drag, pickAt, pickLocated };
+    return { tap, hover, drag, pickAt, pickLocated, pickPart };
   }, [requestPaint]);
 
   // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
@@ -447,7 +480,7 @@ function BoardSurface({ view, data }) {
       const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current;
       const span = board ? Math.max(board.width, board.height) : 100;
       const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side: displayRef.current.side,
-        mirrorX: mirrorFor(displayRef.current.side), thickness: BOARD_THICKNESS_MM, distance: 2 * span }) : null;
+        mirrorX: mirrorFor(displayRef.current.side), thickness: thicknessRef.current, distance: 2 * span }) : null;
       const left = saved.current.board3d.camera;
       setOpening({ camera: headOn, then: left, home: !left });
     } else {
@@ -625,11 +658,15 @@ function BoardSurface({ view, data }) {
     onIsolate={isolation.toggle} onCopyReference={path ? copyReferences : null} onFrame={frameSelectors} onSelect={takeSelect} />;
   const copySelectors = useCallback(ids => (path ? buildBoardRefToken({ path, selectors: ids }) : ""), [path]);
   const tip = useBoardTip(index);
+  // How many parts the 3D view stands a model on (the Layers tab's 3D models row's count): every part with one shown, found.
+  const modelCount = useMemo(() => (index && models ? [...index.parts.values()].filter(part => part.models.some(model => !model.hidden && models[model.name]?.document)).length : 0),
+    [index, models]);
   const inspect = useBoardInspect({ index, describe, tip, selection, hovered, onSelect: takeSelect, frame: frameSelectors, copyText: copySelectors });
   const panelTabs = [
     ...(index ? [{ id: "parts", label: t("board.text.parts"), searchLast: true, content: list("parts") },
       { id: "nets", label: t("board.text.nets"), searchLast: true, content: list("nets") }] : []),
-    ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme} /> }] : [])
+    ...(layered ? [{ id: "layers", label: t("layers.title"), content: <LayersSection sheet={sheet} display={display} onDisplayChange={setDisplay} colorScheme={colorScheme}
+      models={index ? { shown: showModels, onChange: setShowModels, count: modelCount } : null} /> }] : [])
   ];
   const panel = panelTabs.length ? { kind: "board", label: t("board.text.board_panel"), searchLabel: t("board.text.search_board"),
     tabs: panelTabs } : null;
@@ -649,6 +686,8 @@ function BoardSurface({ view, data }) {
   const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
     onSide: chooseSide }) : [];
   const solid = dimension === "3d" && layered && plot;
+  // The parts the 3D view stands models on: the index's (page millimetres, as the stage's outline is), each with its models.
+  const boardParts = useMemo(() => (index ? [...index.parts.values()] : null), [index]);
   return (
     <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("board.text.reading_board")}
@@ -662,6 +701,7 @@ function BoardSurface({ view, data }) {
       {/* The board in 3D, over the flat canvas until its first frame is up, which then lets its rasters go. */}
       {solid ? <Suspense fallback={null}>
         <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
+          thickness={thickness} parts={boardParts} models={models} client={workspace.client} showModels={showModels} bodyInk={bodyInk} pickPart={handlers.pickPart}
           display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
           onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating}
           overlay={overlay} onCamera={onCamera3d} onShown={() => setShown3d(true)} />

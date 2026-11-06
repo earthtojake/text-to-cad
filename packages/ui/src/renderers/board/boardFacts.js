@@ -19,8 +19,8 @@ const HELD_KEYS = [["pads", "board.text.pads"], ["tracks", "board.text.tracks"],
  * board's own glyph for it), and its card's rows, in KiCad's millimetres (y down, from KiCad's page
  * origin: what a script's `Vector2.from_xy_mm` takes). Pure data.
  *
- * A part's card is its value, footprint, side, position and rotation (and its fields, DNP and the
- * script line that placed it, when the index has them); a pad's its net, number, pin name, type and
+ * A part's card is its value, footprint, side, position and rotation (and its fields, DNP, its 3D
+ * model or why it has none, and the script line that placed it, when the index has them); a pad's its net, number, pin name, type and
  * position; a net's its class and how many pads are on it; a piece of copper its net, what it is
  * and where it was picked; a track its net, layer, width and length; a via its net, size, drill, the
  * layers it joins and its type; a zone its net, layers, priority and the copper it was filled with (a
@@ -49,6 +49,35 @@ function trackLength(track) {
   return length;
 }
 
+// Why a part's 3D model is missing, as the board's models table says it (`GET …/models`, `models3d.py`'s reasons).
+const MODEL_REASON_KEYS = { "not-found": "board.text.model_reason_not_found", "vrml-only": "board.text.model_reason_vrml_only",
+  outside: "board.text.model_reason_outside", "too-large": "board.text.model_reason_too_large", "not-step": "board.text.model_reason_not_step",
+  embedded: "board.text.model_reason_embedded", "too-many": "board.text.model_reason_too_many", unreadable: "board.text.model_reason_unreadable" };
+const fileOf = (name) => String(name).replace(/\\/g, "/").split("/").filter(Boolean).pop() || String(name);
+
+/**
+ * A part's 3D models as its card and the Parts' No 3D model block say them, from the board's models table
+ * (`models`, null until it is in): each shown model's file (the STEP drawn), or why it has none ("Not found
+ * · R_Foo.wrl"); "None named" for a footprint that names none. `missing` is whether the part stands
+ * without a model (none named, or one missing); `reason` the first missing one's words. Pure data.
+ *
+ * @returns {{ value: string, missing: boolean, reason: string }}
+ */
+export function partModels(part, models, t = english) {
+  const shown = (part.models || []).filter((model) => model && !model.hidden && model.name);
+  if (!shown.length) return { value: t("board.text.no_model_named"), missing: true, reason: t("board.text.no_model_named") };
+  let reason = "";
+  const said = shown.map((model) => {
+    const entry = models ? models[model.name] : null;
+    if (!models) return fileOf(model.name);
+    if (entry?.document) return entry.file || fileOf(model.name);
+    const why = t(MODEL_REASON_KEYS[entry?.missing] || MODEL_REASON_KEYS["not-found"]);
+    reason ||= why;
+    return t("board.text.model_missing", { reason: why, file: entry?.file || fileOf(model.name) });
+  });
+  return { value: said.join(", "), missing: Boolean(reason), reason };
+}
+
 /** The selector as its card's ID reads it: the reference after its file, without the `#`. */
 export const boardReferenceId = (selector) => String(selector || "").replace(/^#/, "");
 
@@ -57,7 +86,7 @@ export const boardReferenceId = (selector) => String(selector || "").replace(/^#
  * @param {{ toScript(point: number[]): number[], within?(box: number[], layer?: string | null): object }} index
  * @returns {{ name: string, glyph: string, icon?: string, facts: { label: string, value: string }[] } | null}
  */
-export function describeBoardReference(resolved, index, t = english) {
+export function describeBoardReference(resolved, index, t = english, models = null) {
   if (!resolved) return null;
   const row = (label, value) => ({ label: FACT_KEYS[label] ? t(FACT_KEYS[label]) : label, value: String(value) });
   const netName = (name) => name || t("robot.none");
@@ -73,6 +102,8 @@ export function describeBoardReference(resolved, index, t = english) {
         row("Rotation", `${Number(part.rotation).toLocaleString("en-US", { maximumFractionDigits: 2 })}°`),
         ...FIELD_ROWS.filter((key) => part.fields[key]).map((key) => row(key, part.fields[key])),
         ...(part.dnp ? [row("DNP", t("board.text.not_assembled"))] : []),
+        // Its 3D model: the STEP the 3D view draws, or why it has none (the models table's word for it).
+        { label: t("board.text.model_3d"), value: partModels(part, models, t).value },
         // The line of the board's script that placed it, where the index carries one.
         ...(part.script ? [row("Script", part.script)] : [])
       ]

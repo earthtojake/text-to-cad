@@ -683,7 +683,9 @@ file.
   selects as a press on the picture does (Shift adds) and a double-click frames; the pane lists them
   all, a card the first eight and "+N more". What each view says:
   - a board's or a schematic's pick (`describeBoardPick`, `describeSchematicPick`): its net, layer,
-    width, drill, value, footprint, position; a part's own pads or pins, each its net ("Pads of C17"); a
+    width, drill, value, footprint, position; a board's part its **3D model** too: the STEP its 3D view
+    draws, or why it has none ("Not found · R_Foo.wrl", "VRML only", "Outside the allowed folders", "None
+    named"), from the board's models table, in 2D as in 3D, never on hover; a part's own pads or pins, each its net ("Pads of C17"); a
     net's pads or pins, each its part ("Pads on net VBUS"); a pad's, a pin's, a track's, a via's, a
     pour's or a wire's net's ("Connected to VBUS"), itself lit there; a text, a graphic or an area its
     facts alone;
@@ -722,8 +724,13 @@ file.
   for the pane and a card. No view draws a tip of its own (`check-kit-boundaries.mjs`' frame guard).
 - **The Layers** (`board/LayersSection.jsx`), a list as Altium's Layers panel is: the layers, grouped
   Front, Inner, Back, Other, each its colour, name, count and eye, a press on a board layer's row
-  making it the active layer (a filled dot after its name), drawn on top. Which preset draws the board
-  is the corner's Display (below); under the layers, the rest of how it is drawn, its layer display.
+  making it the active layer (a filled dot after its name), drawn on top; last in Other, **3D models**
+  (a box glyph, how many parts stand on a model, and an eye: the parts' models in the 3D view, a
+  seldom-used control, so here, in both modes, inert in 2D, kept with the file's view). Which preset draws
+  the board is the corner's Display (below); under the layers, the rest of how it is drawn, its layer
+  display. The board's **Parts** end, once its models table is in, with a shut block **No 3D model**:
+  every part the 3D view stands no model on, each row saying why, a block as any other (Select all
+  parts, Isolate) — the list of what is missing, reachable in 2D and 3D alike.
 - **A drawing's Layers** (`dxf/LayersSection.jsx`): each layer drawn on, in the drawing's order, its
   pen, name, entity count and eye (hidden: not drawn, picked or snapped to), and under a layer the
   block references placed on it, open, a press on one picking it as a tap on the drawing does
@@ -913,7 +920,8 @@ over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's 
 | Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other; over the board, in 2D and 3D alike, each opaque mark is edged with a thin keyline in the canvas's contrast (dark on the dark canvas, white on the light: `boardOverlay.js`'s `inkKeyline`), so neon red reads on red copper |
 | Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
-| Display, the Layers tab | the same Display: both faces redraw |
+| Display, the Layers tab | the same Display: both faces redraw; the Layers' 3D models eye shows or hides the parts' bodies |
+| The parts | each footprint's 3D model (a STEP from the board's folder, KiCad's installed 3D library or `CAD_KICAD_3DMODELS`; a `.wrl` name read as the `.step` beside it) in its authored colours under the stage's lights; a missing one a see-through block a millimetre tall on its outline, in the theme's muted ink. A press on a body picks its part (with Footprints ticked), in front of the face; a picked or hovered part's body takes the highlight; isolating fades the bodies that are not it |
 | Front \| Back | turns the camera over the board's left-to-right axis, eased, which way is up kept: the cube reads upright and the back is seen as the 2D view's back, mirrored left to right; follows the camera when it is turned over by hand |
 | Zoom pill | replaced by the cube; the zoom's keys (F, + and −, ⇧1, ⇧2, ⇧0) are the 3D views' |
 | Projection, Home | the 3D views' own |

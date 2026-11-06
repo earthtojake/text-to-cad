@@ -33,10 +33,10 @@ export function useBoardInspect({ index, describe, tip = null, selection, hovere
     [index, selected, describe, tip, hovered, select, hover, frame, onSelect, copyText]);
 }
 
-/** A board's picks described (`describeBoardPick`), in the view's language: what the pane, the cards and the tip read. */
-export function useBoardDescribe(index) {
+/** A board's picks described (`describeBoardPick`, a part's 3D model from the models table), in the view's language: what the pane and the cards read. */
+export function useBoardDescribe(index, models = null) {
   const { t } = useI18n();
-  return useCallback(id => (index ? describeBoardPick(index, id, t) : null), [index, t]);
+  return useCallback(id => (index ? describeBoardPick(index, id, t, models) : null), [index, t, models]);
 }
 
 /** The hover tip's short words for a pick (`boardPickTip`), in the view's language. */

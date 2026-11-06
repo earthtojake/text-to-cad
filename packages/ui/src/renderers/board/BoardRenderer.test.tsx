@@ -104,7 +104,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); while (restores.length) restores.pop()!(); });
 
 /** One pane: a host, a workspace with one board, a live binding, and the tab. */
-async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any } = {}) {
+async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = undefined as any, locale = "en", state = { renderers: {} } as any, models = null as any } = {}) {
   const file = `/models/${name}`;
   const fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input));
@@ -116,6 +116,7 @@ async function open(name = 'blinky.kicad_pcb', { strict = false, promptFiles = u
     }
     if (url.pathname.endsWith('/api/v1/server')) return json({ backend: 'cadgen' });
     if (url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/plot')) return readPlot();
+    if (models && url.pathname.endsWith('/api/v1/documents/kicad_pcb/board/models')) return json({ models });
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -721,10 +722,10 @@ it("a layer's eye hides it: the Display contract's layers, which reads as Custom
   showTab(pane, 'Layers');
   const layers = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-board-layers]'); expect(found).not.toBeNull(); return found!; });
   expect([...layers.querySelectorAll('[data-layer-group]')].map(group => group.getAttribute('data-layer-group'))).toEqual(['front', 'back', 'other']);
-  expect([...layers.querySelectorAll('[data-layer-row]')].map(row => row.getAttribute('data-layer-row')))
+  expect([...layers.querySelectorAll('[data-layer-row]:not([data-layer-row="models-3d"])')].map(row => row.getAttribute('data-layer-row')))
     .toEqual(['F.CrtYd', 'F.Fab', 'F.SilkS', 'F.Paste', 'F.Mask', 'F.Cu', 'B.Cu', 'B.Mask', 'Edge.Cuts', 'area', 'vias', 'drills', 'ratsnest', 'names']);
   // One glyph a row: a layer has nothing under it, so its glyph is its colour, and nothing stands before it.
-  for (const row of layers.querySelectorAll('[data-layer-row]')) {
+  for (const row of layers.querySelectorAll('[data-layer-row]:not([data-layer-row="models-3d"])')) {
     expect([...row.querySelectorAll('[data-layer-glyph]')].map(glyph => glyph.getAttribute('data-layer-glyph'))).toEqual(['swatch']);
     expect(row.firstElementChild!.getAttribute('data-layer-glyph')).toBe('swatch');
   }
@@ -1041,4 +1042,39 @@ it("2D | 3D is one view: the strip and the panel stay the same mounted controls,
   await waitFor(() => expect(again.pane.querySelector('[data-board-3d]')).not.toBeNull());
   expect(within(corner(again.pane)).getByRole('radio', { name: '3D' }).getAttribute('aria-checked')).toBe('true');
   again.dispose();
+});
+
+it("a part's card says its 3D model, or why it has none, and the Parts end with the parts that have none; the Layers' 3D models eye is kept with the file", async () => {
+  // The models table as the server answers it: R1's STEP found by its document id, D1's named and not found (J1 names none).
+  const view = await open('blinky.kicad_pcb', { models: {
+    '${KICAD9_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.wrl': { file: 'R_0603_1608Metric.step', document: 'r0603', api: '/api/v1/documents/step/r0603', stamp: '1-2' },
+    '${KIPRJMOD}/models/led.step': { file: 'led.step', missing: 'not-found' } } });
+  const { pane, dispose } = view;
+  await opened(pane);
+  showTab(pane, 'Parts');
+  const parts = await waitFor(() => { const found = tabBody(pane, 'parts').querySelector<HTMLElement>('[data-board-row="block:no-3d-model"]'); expect(found).not.toBeNull(); return tabBody(pane, 'parts'); });
+  expect(parts.querySelector('[data-board-row="block:no-3d-model"]')!.textContent).toContain('No 3D model');
+  const fact = async (ref: string) => {
+    fireEvent.click(within(parts).getAllByRole('button', { name: `Select ${ref}` })[0]);
+    return waitFor(() => {
+      const rows = [...pane.querySelectorAll('[data-flat-panel-detail] [data-flat-panel-facts] [data-info-row]')].map(row => row.textContent);
+      const found = rows.find(row => row!.startsWith('3D model'));
+      expect(found).toBeTruthy();
+      return found;
+    });
+  };
+  expect(await fact('R1')).toBe('3D modelR_0603_1608Metric.step');
+  expect(await fact('D1')).toBe('3D modelNot found · led.step');
+  expect(await fact('J1')).toBe('3D modelNone named');
+  // The block's rows are D1 and J1, each saying why, once the block is opened.
+  fireEvent.click(within(parts).getByRole('button', { name: 'Expand No 3D model' }));
+  await waitFor(() => expect([...parts.querySelectorAll('[data-board-row^="nomodel:"]')].map(row => row.textContent))
+    .toEqual([expect.stringContaining('Not found'), expect.stringContaining('None named')]));
+  // The Layers' 3D models row: how many parts stand on a model, and an eye, in 2D too; kept with the file's view.
+  showTab(pane, 'Layers');
+  const row = await waitFor(() => { const found = pane.querySelector<HTMLElement>('[data-layer-row="models-3d"]'); expect(found).not.toBeNull(); return found!; });
+  expect(row.textContent).toBe('3D models1');
+  fireEvent.click(within(row).getByRole('button', { name: 'Hide 3D models' }));
+  await waitFor(() => expect(view.state.renderers?.[KEY]?.renderer?.board3d?.value?.models).toBe(false));
+  dispose();
 });

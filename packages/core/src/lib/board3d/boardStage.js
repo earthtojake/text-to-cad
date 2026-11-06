@@ -49,11 +49,13 @@ export function outlineRings(outline, sheet) {
 /**
  * @param {typeof import("three")} THREE
  * @param {{ layout: object, outline: number[][][] | null, thickness?: number, theme: "light" | "dark",
- *   createCanvas?: () => HTMLCanvasElement, pickAt?: (located: { side: string, page: number[], point: number[], distance: number }) => object | null }} options
+ *   createCanvas?: () => HTMLCanvasElement, pickAt?: (located: { side: string, page: number[], point: number[], distance: number }) => object | null,
+ *   pickBody?: (ray: object) => { hit: object, point: number[] } | null }} options
  *   `outline`: the board's outline as the payload carries it (`board.outline`, page millimetres);
- *   `pickAt`: what a located point picks, the view's (null: nothing).
+ *   `pickAt`: what a located point picks, the view's (null: nothing); `pickBody`: what a part's body in
+ *   front of the face picks, the view's (`boardParts.js`), tried first.
  */
-export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THICKNESS_MM, theme = "dark", createCanvas, pickAt = null }) {
+export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THICKNESS_MM, theme = "dark", createCanvas, pickAt = null, pickBody = null }) {
   const sheet = layout.sheets[0];
   const box = faceBox(layout, sheet);
   const rings = outlineRings(outline, sheet);
@@ -182,8 +184,10 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     thickness,
     sheet,
     locate,
-    /** The kit's pick: what the view's `pickAt` makes of the point the ray meets, with its world point. */
+    /** The kit's pick: a part's body in front of the face (`pickBody`), else what the view's `pickAt` makes of the point the ray meets, with its world point. */
     pick(ray) {
+      const body = pickBody ? pickBody(ray) : null;
+      if (body) return { ...body.hit, id: body.hit.selector, point: new THREE.Vector3(...body.point) };
       const located = locate(ray);
       const hit = located && pickAt ? pickAt(located) : null;
       return hit ? { ...hit, id: hit.selector, point: new THREE.Vector3(...located.point) } : null;

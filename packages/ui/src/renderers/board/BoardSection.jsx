@@ -2,17 +2,17 @@ import { useI18n } from "@cad/ui/i18n";
 import { useCallback, useMemo } from "react";
 import CircuitTree from "../kit/inspector/CircuitTree.jsx";
 import { NetKindIcon, PadKindIcon, PartKindIcon } from "./boardIcons.jsx";
-import { boardRowOwners, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
+import { NO_MODEL_BLOCK, boardRowOwners, boardTreeNodeIds, buildBoardTree } from "./boardTree.js";
 
-// The pins on nothing (`boardTree.js`): shut as the tab opens.
-const CLOSED = Object.freeze(["group:unconnected"]);
+// The pins on nothing and the parts with no 3D model (`boardTree.js`): shut as the tab opens.
+const CLOSED = Object.freeze(["group:unconnected", NO_MODEL_BLOCK]);
 // A row's kind, in the glyphs Select's filter and the chips name the kinds with: a pad's copper, a part's body and legs, a net's trace.
 const KIND_GLYPHS = Object.freeze({ part: PartKindIcon, pad: PadKindIcon, net: NetKindIcon });
 
-/** A board's lists, built once for both its tabs (`boardTree.js`). */
-export function useBoardTrees(index) {
+/** A board's lists, built once for both its tabs (`boardTree.js`), the Parts' No 3D model block once its models table is in. */
+export function useBoardTrees(index, models = null) {
   const { t } = useI18n();
-  return useMemo(() => (index ? buildBoardTree(index, t) : null), [index, t]);
+  return useMemo(() => (index ? buildBoardTree(index, t, models) : null), [index, t, models]);
 }
 
 /**

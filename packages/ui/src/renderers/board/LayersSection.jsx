@@ -2,7 +2,7 @@ import { useI18n } from "@cad/ui/i18n";
 const GROUP_KEYS = {"front": "board.text.front", "inner": "board.text.inner", "back": "board.text.back", "other": "board.text.other"};
 const THROUGH_KEYS = {"vias": "board.text.vias", "ratsnest": "board.text.ratsnest", "drills": "board.text.drills", "names": "board.text.names", "area": "board.text.board_area"};
 import { useMemo } from "react";
-import { Eye, EyeOff } from "lucide-react";
+import { Box, Eye, EyeOff } from "lucide-react";
 import {
   boardActiveLayer, boardDisplayLayers, boardLayerActivatable, boardLayerGroups, boardPalette, toggleBoardLayer
 } from "@cad/core/lib/plot2d/index.js";
@@ -15,12 +15,12 @@ import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
 import { BoardLayerDisplaySettings } from "./BoardDisplay.jsx";
 
 /** A layer's Hide/Reveal eye, as a drawing's is: over the row's right end, on hover, kept while hidden. */
-function LayerEye({ id, hidden, onToggle }) {
+function LayerEye({ id, hidden, onToggle, label = null }) {
   const { t } = useI18n();
   const action = hidden ? t("tree.reveal") : t("tree.hide");
   return <TreeRowActions persistent={hidden}>
     <TooltipHint content={action}>
-      <Button type="button" variant="ghost" size="icon-xs" aria-label={t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
+      <Button type="button" variant="ghost" size="icon-xs" aria-label={label || t(hidden ? "layers.revealNamed" : "layers.hideNamed", { name: id })} aria-pressed={hidden} className="h-5 w-4 text-muted-foreground"
         data-layer-visibility={id} onClick={event => { event.stopPropagation(); onToggle(id, hidden); }}>
         {hidden ? <EyeOff className="size-3" aria-hidden="true" /> : <Eye className="size-3" aria-hidden="true" />}
       </Button>
@@ -43,13 +43,15 @@ function LayerEye({ id, hidden, onToggle }) {
  * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Under the
  * layers, **Layer display** (the other layers, the pours, the opacities), as
  * KiCad's Appearance panel has them (`BoardDisplay.jsx`): how the board is drawn, changed now and then, so
- * the panel's; the preset (Display) and the side, changed often, are the view's corner's.
+ * the panel's; the preset (Display) and the side, changed often, are the view's corner's. Last in Other,
+ * **3D models**: the parts' models in the 3D view (how many parts stand on one, and an eye), a seldom-used
+ * control kept here in both modes so the panel never differs between them; in 2D it changes nothing drawn.
  *
  * @param {{ sheet: { layers: { id: string, kind: string, side: string, items: unknown[] }[] },
  *   display: ReturnType<typeof import("@cad/core/lib/plot2d/index.js").readBoardDisplay>,
  *   onDisplayChange(display: object): void }} props
  */
-export default function LayersSection({ sheet, display, onDisplayChange, colorScheme = "light" }) {
+export default function LayersSection({ sheet, display, onDisplayChange, colorScheme = "light", models = null }) {
   const palette = boardPalette(colorScheme);
   const { t } = useI18n();
   const groups = useMemo(() => boardLayerGroups(sheet).map(group => ({ ...group, label: t(GROUP_KEYS[group.id]) })), [sheet, t]);
@@ -82,17 +84,33 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
       </TreeRowSurface>
     </li>;
   };
+  // The parts' 3D models, a row of Other: its glyph a box, its count the parts with a model, its eye the 3D view's.
+  const modelsRow = models ? <li key="models-3d" className="min-w-0">
+    <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row="models-3d">
+      <Box className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span className={cn(TREE_ROW_NAME_CLASS, !models.shown && "text-muted-foreground", models.shown ? ROW_NAME_UNDER_ACTIONS.hover : ROW_NAME_UNDER_ACTIONS.shown)}>
+        <TreeRowLabel className="max-w-full shrink-0">{t("board.text.models_3d")}</TreeRowLabel>
+        <TreeRowLabel className="flex-1 text-micro text-muted-foreground">{models.count.toLocaleString("en-US")}</TreeRowLabel>
+      </span>
+      <LayerEye id="models-3d" hidden={!models.shown} onToggle={() => models.onChange(!models.shown)}
+        label={t(models.shown ? "board.text.hide_models" : "board.text.show_models")} />
+    </TreeRowSurface>
+  </li> : null;
+  const modelsMatch = Boolean(models) && t("board.text.models_3d").toLowerCase().includes(query);
   // Searching: the layers whose names match, as one list; none, nothing (the panel leaves the tab out).
   if (query) {
     const found = groups.flatMap(group => group.layers).filter(layer => nameOf(layer).toLowerCase().includes(query) || layer.id.toLowerCase().includes(query));
-    return found.length ? <ul className="text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
+    return found.length || modelsMatch ? <ul className="text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">
+      {found.map(row)}{modelsMatch ? modelsRow : null}</ul> : null;
   }
   return <div className="flex flex-col pt-1 text-tiny">
     <div aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
         <li className="flex h-6 items-center px-2 text-muted-foreground" aria-hidden="true">{group.label}</li>
         {group.layers.map(row)}
+        {group.id === "other" ? modelsRow : null}
       </ul>)}
+      {modelsRow && !groups.some(group => group.id === "other") ? <ul data-layer-group="other">{modelsRow}</ul> : null}
     </div>
     {/* Its rule the panel's width, out over the body's padding; the settings under it on the panel's lines. */}
     <div className="-mx-2 mt-2 border-t border-border px-2 pt-1" data-board-display-settings="layer-display">
