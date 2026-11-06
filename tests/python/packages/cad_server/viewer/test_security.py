@@ -231,7 +231,8 @@ class OnlyCadBytesLeave(SecurityTestCase):
 
 class ABoardsModelsReadNothingOutsideItsFolders(SecurityTestCase):
     """A board's 3D models table (``GET .../kicad_pcb/<id>/models``) answers only STEPs inside the board's folder
-    and KiCad's 3D library: a board naming any other file is told it is missing, and no route then serves it."""
+    and KiCad's 3D library: a board naming any other file is told it is missing, gets no document id, and so no
+    route serves that file. A STEP it does find is a document like any other, whose structure names its file."""
 
     def test_a_hostile_board_cannot_aim_the_table_outside(self):
         outside = os.path.join(self.fixture.base, "outside.step")

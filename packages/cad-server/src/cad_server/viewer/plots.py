@@ -16,8 +16,9 @@ with the reason (``PlotError``).
   copy (``cad_server._internal.boards.refill``: kicode, in the environment of ``cad[kicad]``); without
   KiCad, or when the refill fails, the board as saved, the payload's ``pours`` saying so.
 * ``models``: the board's 3D models table (``BoardAnswers.models``): each model its footprints name, the STEP on
-  this computer it is (by a document id the engine's STEP routes serve its mesh by: no path is answered or taken)
-  or why it has none -- read by the rules of ``cad.engine.formats.kicad.models3d`` (the board's folder, KiCad's 3D
+  this computer it is (by a document id the engine's STEP routes serve its mesh by: the table carries no path and
+  the page asks for none; the STEP's own document, as every document, names its file in its structure and its
+  catalog entry) or why it has none -- read by the rules of ``cad.engine.formats.kicad.models3d`` (the board's folder, KiCad's 3D
   library, ``CAD_KICAD_3DMODELS``; STEP alone), afresh on every request (``stat`` alone), so a model file
   added, edited or removed is the next answer's.
 * ``drc``: ``cad kicad_pcb drc --json``'s ``CheckResult`` as data (``boards.drc``): ``ok``, ``path``,
@@ -274,10 +275,11 @@ class BoardAnswers:
 
         Each model a footprint names (``models3d.model_names``, read from the board's text once per board key and
         kept with its other answers) is answered as this computer has it NOW (``models3d.resolve_models``: only
-        ``stat`` and ``realpath``, every request): ``{"file", "document", "api", "stamp"}`` for a STEP inside the
-        board's folder or KiCad's 3D library -- ``remember``-ed, so the engine's STEP routes serve its mesh by
-        that id, and no path leaves -- else ``{"file", "missing": <reason>}``. Nothing is read but the board and
-        nothing is written."""
+        ``stat``, ``realpath`` and ``isfile``, inside the folders it allows, every request): ``{"file", "document",
+        "api", "stamp"}`` for a STEP inside the board's folder, KiCad's 3D library or ``CAD_KICAD_3DMODELS`` --
+        ``remember``-ed, so the engine's STEP routes serve its mesh by that id (that document's structure and
+        catalog entry name its file, as every document's do), the table itself carrying no path -- else
+        ``{"file", "missing": <reason>}``. Nothing is read but the board and nothing is written."""
         from cad.engine.formats.kicad.models3d import model_names, resolve_models
 
         from .kinds import document_api
