@@ -276,14 +276,15 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   opening direction, what is shown framed whole — as Fusion's and Maya's cubes' Home is). A **flat
   view's** has its zoom pill where the cube would stand, 8px from the right and the bottom, and its own
   view controls in a **column over the pill** (below). The corner is for navigation
-  only, never a tool, but it is drawn in the **strip's language**: every control is the tool strip's
-  (`FloatingToolBar.js`) without its border and its shadow, the same in light and dark. Its surface is
-  the strip's fill (`ViewCorner.jsx`'s `VIEW_CORNER_SURFACE_CLASS`, `floatingSurface.js`'s
-  `FLOATING_CHROME_FILL_CLASS`: the popover's colour at 90% under a small blur), in the strip's shape
-  (`VIEW_CORNER_TOOLBAR_CLASS`: 4px in, 4px between its tiles, rounded-md), and in it the strip's own
-  buttons (`VIEW_CORNER_BUTTON_CLASS`: 24px tiles, 14px icons, the strip's hover, pressed, open and on
-  fills, its tooltips). A single button is a one-button toolbar, 32px square (`ViewCornerTile`); the
-  zoom pill a small toolbar of three, − and + either side of the 48px percentage (112px). A state of how
+  only, never a tool, but it is drawn in the **strip's language**: every control is the tool strip's own
+  button (`FloatingToolBar.js`'s tile: 24px, its icon 14px, rounded as the strip's are), the same in
+  light and dark, carrying the strip's fill itself, without the strip's border and shadow
+  (`ViewCorner.jsx`'s `VIEW_CORNER_BUTTON_CLASS` on `VIEW_CORNER_SURFACE_CLASS`, `floatingSurface.js`'s
+  `FLOATING_CHROME_FILL_CLASS`: the popover's colour at 90% under a small blur). One 24px square each,
+  with no box round it: its hover, open, pressed and lit fills are states of that one surface (lit, the
+  whole button in the strip's pressed fill), and its tooltip the strip's. The zoom pill is one 24px row
+  of them on the same surface (`VIEW_CORNER_TOOLBAR_CLASS`): − and + either side of the 48px percentage
+  in the type scale's `text-tiny`, 96px wide. A state of how
   the model is looked at is **one state button** (`kit/shell/StateButton.jsx`), the one control every
   such state is drawn with, as Blender's viewport gizmo shows its projection and Flux its flip: Projection,
   and a board's 2D/3D and Flip. Its icon is the state on screen; its name says that state ("Projection:
@@ -292,8 +293,8 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   Perspective", "Switch to 3D", "View from bottom"), with its key where it has one. A state a person loses
   track of (a board seen from the bottom) is lit in the strip's pressed fill for as long as it holds, and
   keeps its tooltip. Over an empty canvas they stand a step off it as the strip does; over the picture or the
-  model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 6px apart; a column's
-  tooltips and menus open beside it, away from the corner, the pill's above it. A state shows on the
+  model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. 4px apart, as the strip's
+  tiles are; a column's tooltips and menus open beside it, away from the corner, the pill's above it. A state shows on the
   control itself, its icon (Projection's, a board's 2D/3D and side). A phone has no corner: its view's controls are
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's 3D view and View
   from bottom, ticked while they are, each with the icon the corner's button shows for that state, and in 3D
@@ -303,14 +304,15 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
 - **A flat view's column** (`ViewCorner.jsx`'s `ViewPillColumn`, `viewportLayout.js`'s
   `viewCornerLayout`): a view's own controls for how it is looked at, stacked over its zoom pill as a
   3D view's column stands over its cube: right-aligned, flush with the pill's right edge (8px from the
-  right edge), each the pill's 32px height, 6px apart and the lowest 6px over the pill (46px from the
+  right edge), each the pill's 24px height, 4px apart and the lowest 4px over the pill (36px from the
   bottom), lifted by `--cad-viewport-corner-bottom` as the pill is. A 3D view's column stands flush with
-  the cube's right face (14px from the right edge) on its box's top, its 32px tiles 6px apart: the same
-  column, each over its own anchor. A board's is, from the top down, Display, 2D/3D, Flip, over the
-  pill, each a one-button toolbar (32px) on the corner's surface (`VIEW_CORNER_SURFACE_CLASS`, the one
+  the cube's right face (14px from the right edge) on its box's top, its 24px buttons 4px apart: the same
+  column, each over its own anchor (`viewportLayout.js`: `VIEWPORT_CORNER_BUTTON_PX`,
+  `VIEWPORT_CORNER_GAP_PX`). A board's is, from the top down, Display, 2D/3D, Flip, over the
+  pill, each one 24px corner button on the corner's surface (`VIEW_CORNER_SURFACE_CLASS`, the one
   surface every corner control shares), its hint (and Display's menu) beside it, away from the corner, as
   a 3D view's Display; 2D/3D and Flip are state buttons (`ViewCorner.jsx`'s `ViewCornerState`), the same
-  32px whatever they show. A board in 3D keeps this corner, the pill zooming its camera: not one control
+  24px whatever they show. A board in 3D keeps this corner, the pill zooming its camera: not one control
   moves between 2D and 3D, nor when a state changes.
   A host that anchors the cube at the bottom-left (`--cad-viewport-corner-left`) moves all of the
   corner there, as one group mirrored: the cube's column flush with its left face, the pill where the

@@ -7,7 +7,7 @@ import { APP_THEME_COLORS } from '@cad/core/lib/appTheme.js';
 import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
-import { VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
+import { VIEW_CORNER_SURFACE_CLASS, VIEW_CORNER_TOOLBAR_CLASS } from '../../../dist/renderers/kit/shell/ViewCorner.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
 import '../../../dist/renderers/board/BoardRenderer.js';
 import BOARD from './__fixtures__/board.plot.json';
@@ -241,15 +241,22 @@ it("a board's strip is a drawing's — Select (in hand), Pencil, Shapes, Measure
   expect(tools.querySelector('[data-view-controls]')).toBeNull();
   expect(cornerButtons(pane)).toEqual(['Display mode: Board', 'View: 2D', 'Side: Top']);
   expect(pane.querySelector('[data-zoom-pill] [data-zoom-control]')!.textContent).toBe('100%');
-  // Every corner control is a small toolbar on the one corner box (`ViewCorner.jsx`): the strip's fill and
-  // shape with no border or shadow, its buttons the strip's tiles; Display, 2D/3D and Flip one button each.
-  const boxes = [...corner(pane).querySelectorAll<HTMLElement>('[data-view-corner-tile]'), pane.querySelector<HTMLElement>('[data-zoom-pill]')!];
-  expect(boxes.length).toBe(4);
-  for (const control of boxes) {
-    expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => control.classList.contains(name))).toBe(true);
-    expect([...control.classList].some(name => /^(border|shadow)/.test(name))).toBe(false);
-    for (const button of control.querySelectorAll('button')) expect(button.classList.contains('size-6')).toBe(true);
+  // Every corner control is the strip's own 24px button carrying the corner's one surface (`ViewCorner.jsx`), with
+  // nothing round it and no border or shadow: Display, 2D/3D and Flip, the column's own children; the pill one
+  // row of the same buttons on that surface.
+  const classes = (element: Element) => [...element.classList];
+  const surface = VIEW_CORNER_SURFACE_CLASS.split(' ');
+  const column = [...corner(pane).children] as HTMLElement[];
+  expect(column.map(element => element.tagName)).toEqual(['BUTTON', 'BUTTON', 'BUTTON']);
+  const pill = pane.querySelector<HTMLElement>('[data-zoom-pill]')!;
+  expect(VIEW_CORNER_TOOLBAR_CLASS.split(' ').every(name => pill.classList.contains(name))).toBe(true);
+  for (const button of [...column, ...pill.querySelectorAll<HTMLElement>('button')]) expect(classes(button)).toContain('size-6');
+  for (const control of [...column, pill]) {
+    expect(surface.every(name => control.classList.contains(name)), control.getAttribute('aria-label') || 'pill').toBe(true);
+    expect(classes(control).some(name => /^(border|shadow-(sm|md|lg))/.test(name))).toBe(false);
   }
+  // The pill's buttons stand on its surface, not on a second one of their own.
+  for (const button of pill.querySelectorAll('button')) expect(surface.some(name => button.classList.contains(name))).toBe(false);
   // 2D/3D and Flip are the view's state button, Projection's (`kit/shell/StateButton.jsx`), a tile like Display's.
   expect([...corner(pane).querySelectorAll('[data-state-button]')]).toEqual([dimensionButton(pane), flipButton(pane)]);
   const display = within(corner(pane)).getByRole('button', { name: /^Display mode:/ });

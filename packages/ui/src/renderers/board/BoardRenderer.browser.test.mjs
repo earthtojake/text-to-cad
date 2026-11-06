@@ -156,17 +156,20 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
   const pane = page.getByTestId('one');
   await frame(pane);
-  // The corner's boxes, from the top down: Display, 2D/3D and Flip in the column, each a 32px tile as
-  // Display's is, then the pill.
+  // The corner's boxes, from the top down: Display, 2D/3D and Flip in the column, each one 24px button,
+  // then the pill, a 24px row 96px wide, 8px off the pane's right and bottom edges.
   const corner = () => pane.evaluate(element => [...element.querySelectorAll('[data-view-pill-column] > *, [data-zoom-pill]')]
     .map(control => { const { x, y, width, height } = control.getBoundingClientRect(); return { x, y, width, height }; }));
   const flat = await corner();
   const pill = flat.at(-1);
+  const stage = await pane.locator('[data-cad-canvas]').first().boundingBox();
   assert.equal(flat.length, 4);
+  assert.deepEqual([pill.width, pill.height, stage.x + stage.width - pill.x - pill.width, stage.y + stage.height - pill.y - pill.height],
+    [96, 24, 8, 8], 'the pill: 96 x 24, 8px in from the corner');
   for (const [index, box] of flat.entries()) {
     assert.equal(box.x + box.width, pill.x + pill.width, `corner control ${index} flush with the pill's right edge`);
-    if (index) assert.equal(box.y - flat[index - 1].y - flat[index - 1].height, 6, `corner control ${index} 6px under the one over it`);
-    if (index < 3) assert.deepEqual([box.width, box.height], [32, 32], `corner control ${index} a 32px tile`);
+    if (index) assert.equal(box.y - flat[index - 1].y - flat[index - 1].height, 4, `corner control ${index} 4px under the one over it`);
+    if (index < 3) assert.deepEqual([box.width, box.height], [24, 24], `corner control ${index} a 24px button`);
   }
   await pane.locator('[data-board-dimension]').click();
   await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));

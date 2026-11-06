@@ -4,7 +4,7 @@ import { ToolbarButton } from "@cad/ui/primitives/toolbar-button";
 import { useI18n } from "@cad/ui/i18n";
 import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_FILL_CLASS } from "../../../lib/floatingSurface.js";
-import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS } from "../tools/stripTouch.js";
+import { STRIP_BUTTON_CLASS } from "../tools/stripTouch.js";
 import ProjectionToggle from "./ProjectionToggle.jsx";
 import StateButton from "./StateButton.jsx";
 import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
@@ -19,15 +19,15 @@ import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
  * its pill and its column: the pill zooms the 3D camera, and not one control moves. The top strip
  * is what you do to the model; this corner is how you look at it.
  *
- * Every control here is the tool strip's tiles (`FloatingToolBar.js`) on the strip's own surface
- * without its border and its shadow (`VIEW_CORNER_SURFACE_CLASS`: the popover's colour at 90% under a
- * small blur): a single button is a one-button toolbar (`ViewCornerTile`), each the same 32px square
- * (Display's menu button; a state the view is looked at in, Projection or a view's own, its state
- * button, `StateButton.jsx`, whose icon is the state on screen), and the zoom pill a small toolbar of
- * them, its segments the strip's buttons, with their hover, pressed, open and on states and their
- * tooltips. Over an empty canvas they stand a step off it, as the strip does; over the picture or the
- * model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. A column's tooltips
- * and menus open beside it, away from the corner; the pill's above it.
+ * Every control here is the tool strip's own button (`FloatingToolBar.js`'s tile, 24px, its icon 14px)
+ * carrying the strip's surface itself, without the strip's border and shadow (`VIEW_CORNER_SURFACE_CLASS`:
+ * the popover's colour at 90% under a small blur): one 24px square each, with no box round it (Display's
+ * menu button, Home; a state the view is looked at in, Projection or a view's own, its state button,
+ * `StateButton.jsx`, whose icon is the state on screen), its hover, open, pressed and lit fills states of
+ * that one surface, and its tooltip; the zoom pill is one 24px row of them on the same surface. Over an
+ * empty canvas they stand a step off it, as the strip does; over the picture or the model the fill,
+ * nearly opaque and blurred, keeps their glyphs at full contrast. They stand 4px apart; a column's
+ * tooltips and menus open beside it, away from the corner; the pill's above it.
  *
  * A host may anchor the cube at the bottom-left (`--cad-viewport-corner-left`, `viewer-host.md`): then
  * the whole corner stands there, mirrored as one group (`viewCornerLayout`): a column flush with the
@@ -60,19 +60,24 @@ export function ViewCornerSided({ children }) {
   return children(useViewCornerSide());
 }
 
-/** The corner's one surface: the strip's (`FLOATING_CHROME_SURFACE_CLASS`) without its border and shadow. */
+/** The corner's one surface: the strip's fill (`FLOATING_CHROME_FILL_CLASS`), without its border and shadow, under each control. */
 export const VIEW_CORNER_SURFACE_CLASS = FLOATING_CHROME_FILL_CLASS;
 
-/** A corner control's box: the strip's shape (4px in, 4px between its tiles) on the corner's surface. */
-export const VIEW_CORNER_TOOLBAR_CLASS = cn("pointer-events-auto inline-flex shrink-0", STRIP_SHAPE_CLASS, VIEW_CORNER_SURFACE_CLASS);
+// A corner button as the strip has it: its 24px tile (`STRIP_BUTTON_CLASS`, `ToolbarButton`'s size), lit while its menu is open.
+const CORNER_TILE_CLASS = cn(STRIP_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
 
-/** A corner button's classes, for a `ToolbarButton` (or a trigger built on one): the strip's own tile, lit while its menu is open. */
-export const VIEW_CORNER_BUTTON_CLASS = cn(STRIP_BUTTON_CLASS, "aria-expanded:bg-sidebar-accent aria-expanded:text-sidebar-accent-foreground");
+/**
+ * A corner button's classes, for a `ToolbarButton` (or a trigger built on one): the strip's tile carrying the
+ * corner's surface, one 24px square with nothing round it; hovered, open, pressed or lit, the strip's fill takes
+ * that surface's place.
+ */
+export const VIEW_CORNER_BUTTON_CLASS = cn(CORNER_TILE_CLASS, VIEW_CORNER_SURFACE_CLASS);
 
-/** A single corner button as a one-button toolbar: the button (`VIEW_CORNER_BUTTON_CLASS`) in the corner's box. */
-export function ViewCornerTile({ children }) {
-  return <div className={VIEW_CORNER_TOOLBAR_CLASS} data-view-corner-tile="">{children}</div>;
-}
+/** A corner control of several buttons (the zoom pill): one row of them, its height theirs, on the corner's surface, rounded as they are. */
+export const VIEW_CORNER_TOOLBAR_CLASS = cn("pointer-events-auto inline-flex shrink-0 items-center rounded-sm", VIEW_CORNER_SURFACE_CLASS);
+
+/** A button of a corner toolbar: the corner button's tile, the toolbar's surface under it. */
+export const VIEW_CORNER_TOOLBAR_BUTTON_CLASS = CORNER_TILE_CLASS;
 
 /** The corner's column: its controls stacked, aligned on the corner's edge, a gap between them. */
 export function ViewCornerColumn({ children, style, className, ...data }) {
@@ -93,13 +98,13 @@ export function ViewPillColumn({ children }) {
 
 /**
  * A state of the view's own as a corner button (`StateButton.jsx`, the one control a state is drawn
- * with): a one-button toolbar in the column, its tooltip beside it, away from the corner, as Display's
- * and Projection's are. Its props are the state button's but the side its tooltip opens on.
+ * with): a button of the column, its tooltip beside it, away from the corner, as Display's and
+ * Projection's are. Its props are the state button's but the side its tooltip opens on.
  * @param {Omit<import("react").ComponentProps<typeof StateButton>, "tooltipSide" | "className">} props
  */
 export function ViewCornerState(props) {
   const away = viewCornerAway(useViewCornerSide());
-  return <ViewCornerTile><StateButton {...props} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} /></ViewCornerTile>;
+  return <StateButton {...props} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} />;
 }
 
 /**
@@ -119,12 +124,10 @@ export function ViewCubeColumn({ projection, onHome, display = null, disabled = 
   const away = viewCornerAway(side);
   const shown = typeof display === "function" ? display(away) : display;
   return <ViewCornerColumn style={viewCornerLayout(side).cubeColumn}>
-    {shown ? <ViewCornerTile>{shown}</ViewCornerTile> : null}
-    <ViewCornerTile><ProjectionToggle disabled={disabled} projection={projection} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} /></ViewCornerTile>
-    <ViewCornerTile>
-      <ToolbarButton label={t("view.home")} tooltipSide={away.side} disabled={disabled} className={VIEW_CORNER_BUTTON_CLASS} onClick={onHome} data-view-home="">
-        <House aria-hidden="true" />
-      </ToolbarButton>
-    </ViewCornerTile>
+    {shown}
+    <ProjectionToggle disabled={disabled} projection={projection} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} />
+    <ToolbarButton label={t("view.home")} tooltipSide={away.side} disabled={disabled} className={VIEW_CORNER_BUTTON_CLASS} onClick={onHome} data-view-home="">
+      <House aria-hidden="true" />
+    </ToolbarButton>
   </ViewCornerColumn>;
 }

@@ -11,7 +11,7 @@ import {
 } from "../kit/inspector/FileSheet.js";
 import { SliderField } from "../kit/inspector/SliderField.jsx";
 import DisplayPopover, { DisplayMenuItems } from "../kit/shell/DisplayPopover.jsx";
-import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerState, ViewCornerTile, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
+import { VIEW_CORNER_BUTTON_CLASS, ViewCornerSided, ViewCornerState, viewCornerAway } from "../kit/shell/ViewCorner.jsx";
 import { SolidModeIcon } from "../kit/view-settings/DisplayModeOptions.js";
 
 /**
@@ -124,8 +124,8 @@ export const BOARD_DIMENSION_SHORTCUT = "3";
 /**
  * The board's view controls on the screen (`FloatingToolBar.js`'s `ViewportViewControl`), the ones
  * switched often enough to keep there: in the corner's column over the zoom pill, from the top down
- * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, each a 32px tile, and
- * on a phone rows of the strip's More —
+ * (`kit/shell/ViewCorner.jsx`'s `ViewPillColumn`), the same column in 2D and in 3D, each one 24px corner
+ * button, and on a phone rows of the strip's More —
  *
  * - **Display**, the corner button a 3D view has for it, its menu the presets (`boardPresetMode`;
  *   on a phone More's submenu) and, in 3D, the camera's projection (`projection`), changed seldom, so
@@ -164,9 +164,9 @@ export function boardViewControls({ display, sheet = null, onChange, dimension =
     { id: "display", label: t("display.label"), icon: <SolidModeIcon />, disabled, tile: null,
       submenu: () => <DisplayMenuItems mode={presets} projection={projection} />,
       // Its tooltip and menu open beside it, away from the corner, as a 3D view's column's Display does.
-      corner: <ViewCornerTile><ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
+      corner: <ViewCornerSided>{corner => <DisplayPopover disabled={disabled} boundary={boundary} mode={presets} projection={projection}
         icon={SolidModeIcon} className={VIEW_CORNER_BUTTON_CLASS} tooltipSide={viewCornerAway(corner).side} side={viewCornerAway(corner).side}
-        align="end" />}</ViewCornerSided></ViewCornerTile> },
+        align="end" />}</ViewCornerSided> },
     ...(onDimensionChange ? [{
       id: "dimension", label: t("board.text.view_in_3d"), icon: <Box />, disabled, active: solid, tile: null, onSelect: switchDimension,
       corner: <ViewCornerState icon={solid ? Box : Square} label={t("board.text.dimension_current", { mode: solid ? inThreeD : flat })}
