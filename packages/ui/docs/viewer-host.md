@@ -655,7 +655,7 @@ it takes from the bottom edge, and the view's whole corner sits that much higher
 opposite corner instead, set `--cad-viewport-corner-left: 2px` and
 `--cad-viewport-corner-right: auto`; their defaults are `auto` and the cube's right inset. All of the
 corner follows, as one group mirrored at the bottom-left: the cube, the column over it, a flat
-view's zoom pill and the column over the pill (a board's Display, 2D | 3D and Front | Back, flush with
+view's zoom pill and the column over the pill (a board's Display, 2D/3D and Flip, flush with
 the pill's left edge), their tooltips and menus opening away from the corner (`viewportLayout.js`'s
 `viewCornerLayout`).
 Codex's tab presentation uses the left corner across sidebar, thread and file views.

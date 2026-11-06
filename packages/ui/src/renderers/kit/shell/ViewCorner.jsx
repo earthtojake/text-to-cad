@@ -6,6 +6,7 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_CHROME_FILL_CLASS } from "../../../lib/floatingSurface.js";
 import { STRIP_BUTTON_CLASS, STRIP_SHAPE_CLASS } from "../tools/stripTouch.js";
 import ProjectionToggle from "./ProjectionToggle.jsx";
+import StateButton from "./StateButton.jsx";
 import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
 
 /**
@@ -20,12 +21,13 @@ import { VIEWPORT_CORNER_GAP_PX, viewCornerLayout } from "./viewportLayout.js";
  *
  * Every control here is the tool strip's tiles (`FloatingToolBar.js`) on the strip's own surface
  * without its border and its shadow (`VIEW_CORNER_SURFACE_CLASS`: the popover's colour at 90% under a
- * small blur): a single button is a one-button toolbar (`ViewCornerTile`), a choice between a few
- * (`ViewCornerSwitch`) and the zoom pill a small toolbar of them, its segments the strip's buttons, with
- * their hover, pressed, open and on states and their tooltips. Over an empty canvas they stand a step
- * off it, as the strip does; over the picture or the model the fill, nearly opaque and blurred, keeps
- * their glyphs at full contrast. A column's tooltips and menus open beside it, away from the corner;
- * the pill's above it.
+ * small blur): a single button is a one-button toolbar (`ViewCornerTile`), each the same 32px square
+ * (Display's menu button; a state the view is looked at in, Projection or a view's own, its state
+ * button, `StateButton.jsx`, whose icon is the state on screen), and the zoom pill a small toolbar of
+ * them, its segments the strip's buttons, with their hover, pressed, open and on states and their
+ * tooltips. Over an empty canvas they stand a step off it, as the strip does; over the picture or the
+ * model the fill, nearly opaque and blurred, keeps their glyphs at full contrast. A column's tooltips
+ * and menus open beside it, away from the corner; the pill's above it.
  *
  * A host may anchor the cube at the bottom-left (`--cad-viewport-corner-left`, `viewer-host.md`): then
  * the whole corner stands there, mirrored as one group (`viewCornerLayout`): a column flush with the
@@ -89,25 +91,15 @@ export function ViewPillColumn({ children }) {
   return <ViewCornerColumn style={viewCornerLayout(useViewCornerSide()).pillColumn} data-view-pill-column="">{children}</ViewCornerColumn>;
 }
 
-// A switch's segments: the strip's buttons drawn out to share its width, words in place of a glyph.
-const SWITCH_SEGMENT_CLASS = "w-auto min-w-0 flex-1 px-1 text-tiny font-medium";
-
 /**
- * A choice between a few ways of looking, as a small toolbar in the corner: its options side by side,
- * each a strip button, the one chosen on (the strip's pressed fill); a press on another chooses it. The
- * words say it all, so no tooltip.
- *
- * @param {{ label: string, options: { value: string, label: string }[], value: string, onChange(value: string): void,
- *   disabled?: boolean, className?: string, data?: object }} props
- *   `className`: its width (`w-[6.5rem]`); `data`: its own data attributes, and each option's
- *   (`option(value)`), so a host or a test can name it.
+ * A state of the view's own as a corner button (`StateButton.jsx`, the one control a state is drawn
+ * with): a one-button toolbar in the column, its tooltip beside it, away from the corner, as Display's
+ * and Projection's are. Its props are the state button's but the side its tooltip opens on.
+ * @param {Omit<import("react").ComponentProps<typeof StateButton>, "tooltipSide" | "className">} props
  */
-export function ViewCornerSwitch({ label, options, value, onChange, disabled = false, className = "w-[6.5rem]", data = null, option = null }) {
-  return <div role="radiogroup" aria-label={label} className={cn(VIEW_CORNER_TOOLBAR_CLASS, className)} {...data}>
-    {options.map(choice => <ToolbarButton key={choice.value} label={choice.label} tooltip={false} active={choice.value === value} role="radio"
-      aria-checked={choice.value === value} disabled={disabled} className={SWITCH_SEGMENT_CLASS} {...option?.(choice.value)}
-      onClick={() => { if (choice.value !== value) onChange(choice.value); }}>{choice.label}</ToolbarButton>)}
-  </div>;
+export function ViewCornerState(props) {
+  const away = viewCornerAway(useViewCornerSide());
+  return <ViewCornerTile><StateButton {...props} tooltipSide={away.side} className={VIEW_CORNER_BUTTON_CLASS} /></ViewCornerTile>;
 }
 
 /**

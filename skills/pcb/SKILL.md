@@ -218,14 +218,16 @@ the board is drawn: Other layers (KiCad's high-contrast modes: the layers but th
 through an active copper layer, always stay at full strength), the copper pours and the zones' and
 tracks' opacity; last, **3D models**, how many parts stand on a model in 3D, with its eye. Under the
 tabs, the picked part's or net's pads. The view's corner, over the zoom, has **Display** (the
-preset: the mode), **2D | 3D** and **Front | Back**. These are the display, so a Quick Edit's packet
+preset: the mode), **2D/3D** (a square while the board is flat, a box in 3D) and **Flip** (the side
+seen: an arrow down onto the board from the top, up from the bottom, lit while the bottom is shown; ⇧F).
+Each button's icon is what is on screen and its tooltip what a press does. These are the display, so a Quick Edit's packet
 draws the same. The board follows the app's theme: KiCad's colours on the dark canvas, and on the
 light one the same colours darkened enough to read (copper stays KiCad's red and blue).
 
-In 3D (**2D | 3D**, or the key 3) the board is a slab whose two faces are drawn as the 2D view draws
+In 3D (**2D/3D**, or the key 3) the board is a slab whose two faces are drawn as the 2D view draws
 them, each part standing its 3D model. A press picks what the 2D view picks where the pointer's ray
-meets the face, or the part whose body is in front of it; a drag turns the view; **Front | Back**
-turns the camera over. A part's model is the STEP its footprint names, looked for only in the
+meets the face, or the part whose body is in front of it; a drag turns the view; **Flip** (or ⇧F)
+turns the camera over, and its icon shows the side the camera is on. A part's model is the STEP its footprint names, looked for only in the
 board's folder (`${KIPRJMOD}`), KiCad's installed 3D library (every `${KICADn_3DMODEL_DIR}`) and the
 folders `CAD_KICAD_3DMODELS` names (separated as `PATH` is); a `.wrl` name is read as the `.step` or
 `.stp` beside it. `CAD_KICAD_3DMODELS` is read from the server's environment: a server already

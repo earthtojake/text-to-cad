@@ -133,7 +133,7 @@ export function planFromCamera({ position, target, halfHeight, width, height, mi
 }
 
 /**
- * The camera turned to the board's other side: what Front | Back does in 3D. The eye goes over the
+ * The camera turned to the board's other side: what Flip does in 3D. The eye goes over the
  * board's left-to-right axis through its target (the world's x: y and z negated), and which way is up
  * stays as it was, so the world's up stays up on screen (the cube reads upright) and the other face is
  * seen as the 2D view sees the back: mirrored left to right, not upside down. Turned about the

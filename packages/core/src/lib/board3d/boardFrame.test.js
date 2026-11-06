@@ -72,7 +72,7 @@ test("a 2D window round trips through its head-on camera exactly: the fit clear 
   }
 });
 
-test("Front | Back turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {
+test("Flip turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {
   const turned = cameraTurnedOver({ position: [10, -40, 30], target: [10, 0, 0], up: [0, 0.6, 0.8] });
   close(turned.position, [10, 40, -30], "eye");
   close(turned.up, [0, 0.6, 0.8], "up");
