@@ -15,6 +15,9 @@
  * A model's own opacity (KiCad's per-model `opacity`, the payload's, absent at 1) scales its materials'
  * on that placement: below 1 they are see-through and write no depth.
  *
+ * A hover is a pick a frame: each baked geometry gets its accelerator (`viewer/raycastBvh.js`, as the 3D
+ * views' scenes do) in idle time, the first time a ray reaches its box.
+ *
  * The highlight is the 3D views' (the overlay's colours, `board2d/boardOverlay.js`: selected, hovered);
  * while something is isolated the bodies that are not it fade. A block is the theme's muted ink, a
  * millimetre tall on the part's outline (its courtyard), see-through and edged: plainly no model.
@@ -25,6 +28,7 @@ import { boardOverlayColors } from "../board2d/boardOverlay.js";
 import { BOARD_THICKNESS_MM } from "./boardFrame.js";
 import { modelMatrix } from "./partPlacement.js";
 import { loadXbfDocument, xbfDocumentSource } from "../xbf/xbfDocument.js";
+import { scheduleRuntimeRaycastBvh } from "../viewer/raycastBvh.js";
 
 // What stands for the engine's look (`xbfLook.js`) when a document is read for its triangles alone.
 const NO_LOOK = Object.freeze({});
@@ -260,7 +264,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
 
   let parts = [];
   const update = () => {
-    const seen = new Set();
+    const seen = new Set(), fresh = [];
     for (const part of parts) {
       if (!part?.ref) continue;
       seen.add(part.ref);
@@ -270,8 +274,11 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       const was = placed.get(part.ref);
       if (was && was.signature === signature) continue;
       if (was) unplace(was);
-      placed.set(part.ref, place(part, plan, signature));
+      const entry = place(part, plan, signature);
+      placed.set(part.ref, entry);
+      for (const body of entry.bodies) if (body.mesh) fresh.push({ mesh: body.mesh });
     }
+    if (fresh.length) scheduleRuntimeRaycastBvh({ displayRecords: fresh }, { deferUntilRaycast: true });
     for (const [ref, entry] of placed) if (!seen.has(ref)) { unplace(entry); placed.delete(ref); }
     release();
   };

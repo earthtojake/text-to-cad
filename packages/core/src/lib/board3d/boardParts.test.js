@@ -89,6 +89,19 @@ test("a moved part is placed again alone; a model no part uses any more is let g
   parts.dispose();
 });
 
+test("a body's geometry gets its ray accelerator once a ray reaches it, and picks the same", async () => {
+  const parts = createBoardParts(THREE, { thickness: 1.6 });
+  parts.setParts(PARTS, TABLE);
+  parts.addModel("d1@1-10", bakeModel(THREE, DOCUMENT));
+  const body = parts.object3D.children.find(child => child.name === "R1").children[0];
+  assert.equal(parts.pick(down(10.5, -9.5)).ref, "R1");
+  for (let turn = 0; turn < 50 && !body.geometry.boundsTree; turn += 1) await new Promise(resolve => setTimeout(resolve, 0));
+  assert.ok(body.geometry.boundsTree, "built in idle time after the first ray");
+  assert.equal(parts.pick(down(10.5, -9.5)).ref, "R1");
+  assert.equal(parts.pick(down(5, -5)), null);
+  parts.dispose();
+});
+
 test("the highlight lights a picked part's body, and isolation fades the bodies that are not it", () => {
   const parts = createBoardParts(THREE, { thickness: 1.6 });
   parts.setParts(PARTS, TABLE);

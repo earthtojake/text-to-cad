@@ -244,7 +244,9 @@ point lands on the board and how far a pick reaches, Measure's camera, Annotate'
 (`board/board3dAnnotation.js`), the framing, the zoom (`ZoomControl.jsx`'s `viewportZoom` in 3D)
 and the capture — to the same handlers. The frame's `corner` is `"cube"` while the 3D view is up:
 the pill gives way to the 3D views' cube and their column over it. A tap and the pointer resting go
-through the 3D views' `usePointerPick`; a drag turns the view. Its faces' bytes are put on screen as
+through the 3D views' `usePointerPick`, handed the pointer alone: the board view picks once a frame
+(the bodies, each baked geometry with its accelerator, `viewer/raycastBvh.js`, then the face); a drag
+turns the view. Its faces' bytes are put on screen as
 drawn (no sRGB decode and encode), so they match the flat canvas's colours.
 
 The board's parts stand on it (`@cad/core/lib/board3d/boardParts.js`, placed by `partPlacement.js`): the

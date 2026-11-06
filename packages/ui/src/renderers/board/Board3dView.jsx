@@ -39,6 +39,10 @@ import { plainShellCamera, scopeShellCamera } from "../kit/shell/fileView.js";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 
 const SCALE = VIEWER_SCENE_SCALE.CAD;
+// What the 3D views' tap-or-drag is handed for a scene: the pointer alone. A tap and a resting pointer are
+// the board view's to pick (`onTap`, `onHover`: its `pickAt`, the bodies, then the face), once a frame;
+// the kit's own pick of the stage would be a second raycast of every body for nothing.
+const POINTER_ONLY = Object.freeze({ pick: () => null });
 
 /**
  * @param {{ handle: { current: object | null }, viewerRef: { current: object | null }, modelKey: string,
@@ -269,7 +273,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     viewportRef.current = viewport;
     return <>
       <ReadyTick tick={viewport.viewerReadyTick} onTick={setTick} />
-      <PointerPick viewport={viewport} scene={stage} enabled={picking} sameHit={() => false}
+      <PointerPick viewport={viewport} scene={POINTER_ONLY} enabled={picking} sameHit={() => false}
         onPick={(_hit, { multiSelect }, pointer) => live.current.onTap({ x: pointer.x, y: pointer.y }, { shiftKey: multiSelect, pointerType: "mouse" })}
         onHover={(_hit, pointer) => live.current.onHover(pointer ? { x: pointer.x, y: pointer.y } : null, pointer ? { pointerType: "mouse" } : null)} />
       <DoubleClickFit viewport={viewport} scene={stage} viewerRef={viewerRef} />
