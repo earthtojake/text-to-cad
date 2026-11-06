@@ -1,6 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
 import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BOARD_THICKNESS_MM, headOnCamera } from "@cad/core/lib/board3d/boardFrame.js";
+import { BOARD_THICKNESS_MM, headOnCamera, sideSeenAlong } from "@cad/core/lib/board3d/boardFrame.js";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -28,7 +28,8 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { plotAnnotationDocument, plotAnnotationSurface } from "../kit/tools/annotate/plotAnnotation.js";
 import { useBoardDescribe, useBoardInspect, useBoardReferences, useBoardTip } from "./boardReferences.jsx";
 import { createBoardScene } from "./boardScene.js";
-import { boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
+import { BOARD_DIMENSION_SHORTCUT, BOARD_FLIP_SHORTCUT, boardViewControls, readBoardDisplay } from "./BoardDisplay.jsx";
+import { shortcutOfEvent } from "../kit/tools/toolShortcuts.js";
 import BoardSection, { useBoardTrees } from "./BoardSection.jsx";
 import BoardSelectFilter from "./BoardSelectFilter.jsx";
 import LayersSection from "./LayersSection.jsx";
@@ -71,24 +72,27 @@ const Board3dView = lazy(() => import("./Board3dView.jsx"));
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
  * controls are the view's corner's (`kit/shell/ViewCorner.jsx`), in its column over the zoom pill
- * (`BoardDisplay.jsx`): Display (the preset), 2D | 3D and Front | Back; the Layers tab has the
+ * (`BoardDisplay.jsx`): Display (the preset), 2D/3D and Flip (the side, top or bottom; ⇧F), each of the
+ * two a button whose icon is the state on screen; the Layers tab has the
  * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
  *
- * The same view, drawn in 3D (2D | 3D, or the key 3): the board as a slab with its two faces, each the
+ * The same view, drawn in 3D (2D/3D, or the key 3): the board as a slab with its two faces, each the
  * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
  * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
  * measurements, Quick Edit and the corner are the same mounted components either way. The corner's
  * pill zooms the 3D camera (the 3D views' zoom, `viewportZoom`), and Display's menu ends with the
  * camera's projection; there is no cube and no Home button (Zoom to fit frames the board). A press
  * picks what the 2D view picks where the pointer's ray meets the face it enters; a drag turns the view
- * (naming an area by a drag is the 2D view's); Front | Back turns the camera over and follows it.
+ * (naming an area by a drag is the 2D view's); Flip turns the camera over, and its icon follows the camera to
+ * whichever side of the board it is on, turned by hand too.
  * Entering 3D opens head on, on the window the 2D view shows (the flat canvas on screen until the board in
  * 3D has drawn that same picture), and eases to the 3D views' Home, the board framed whole from the
  * opening direction (or to the camera this file was left at in 3D). Leaving it with the camera where that
- * left it gives the 2D view back as it was; once the camera has been moved, leaving frames the 2D view on
- * what the camera was centred on, at its scale, from its side (the board in 3D up until the flat canvas
- * has painted it). Which of the two is up, and the 3D camera and projection, are the file's view (`board3d`).
+ * left it gives the 2D view back as it was; once the camera has been moved (a Flip moves it), leaving frames
+ * the 2D view on what the camera was centred on, at its scale, from its side, the side Flip's icon showed
+ * (the board in 3D up until the flat canvas has painted it). Which of the two is up, and the 3D camera and
+ * projection, are the file's view (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
@@ -102,6 +106,10 @@ function readBoard3d(raw) {
   return { mode: value.mode === "3d" ? "3d" : "2d", camera: value.camera && typeof value.camera === "object" ? value.camera : null,
     projection: value.projection === "perspective" ? "perspective" : "orthographic", models: value.models !== false };
 }
+const point3 = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite);
+/** The side of the board a stored 3D camera sees (`boardFrame.js`'s `sideSeenAlong`), or null for none. */
+const cameraSide = camera => (point3(camera?.position) && point3(camera?.target)
+  ? sideSeenAlong(camera.target.map((value, axis) => value - camera.position[axis])) : null);
 
 const BOARD_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
 const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
@@ -140,12 +148,18 @@ function BoardSurface({ view, data }) {
   // ---- the file's view: the transform, the board's Display, what is isolated ----
   const [stored] = useState(() => readFileView(view.state, SLICES));
   const [restored] = useState(() => readTransform(stored.camera));
-  const [display, setDisplay] = useState(() => readBoardDisplay(stored.renderer.board));
+  // 2D or 3D, the 3D camera and its projection: the file's, as it was left.
+  const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
+  // In 3D the side shown is the side the camera is on (Flip's icon follows it): a file left in 3D opens on its
+  // camera, so on that camera's side, whatever its Display last said.
+  const [display, setDisplay] = useState(() => {
+    const board = readBoardDisplay(stored.renderer.board);
+    const side = restored3d.mode === "3d" ? cameraSide(restored3d.camera) : null;
+    return side && side !== board.side ? { ...board, side } : board;
+  });
   const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
   const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
   const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
-  // 2D or 3D, the 3D camera and its projection: the file's, as it was left.
-  const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
   const [dimension, setDimension] = useState(restored3d.mode);
   const [projection, setProjection] = useState(restored3d.projection);
   const [showModels, setShowModels] = useState(restored3d.models);
@@ -473,7 +487,7 @@ function BoardSurface({ view, data }) {
     viewRef.current?.frame([x0, -y1, x1, -y0]);
   }, []);
 
-  // ---- 2D | 3D: one view, its other canvas ------------------------------------------------
+  // ---- 2D/3D: one view, its other canvas -------------------------------------------------
   // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
   // this file was left at in 3D, or to Home; a file left in 3D opens on its camera. The flat canvas stays
   // on screen until the board in 3D has drawn that same picture (`Board3dView.jsx`'s `onShown`).
@@ -519,7 +533,10 @@ function BoardSurface({ view, data }) {
     setShown3d(false);
     setClosing3d(false);
   }, [dimension, closing3d]);
-  // The 3D camera, kept with the file's view; the side it sees is the Display's side (Front | Back follows it).
+  // Flip: the Display's side in 2D; in 3D the camera turns over to it, and the side follows the camera.
+  const chooseSide = useCallback(side => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.turnTo(side)
+    : setDisplay(current => ({ ...current, side }))), []);
+  // The 3D camera, kept with the file's view; the side it sees is the Display's side (Flip's icon follows it).
   // Only while 3D is the view: leaving, the board in 3D is still up for a frame, and what its camera does then
   // (an ease cut short, its viewport taken down) is nobody's.
   const onCamera3d = useCallback((camera, side) => {
@@ -630,10 +647,16 @@ function BoardSurface({ view, data }) {
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
     copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences,
-    // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back.
+    // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back. ⇧F, Flip's: the board seen from
+    // its other side (in 3D the camera turned over), as the corner's button does.
     onViewKey: event => {
-      if (event.key !== "3" || event.shiftKey || !layered) return false;
-      switchDimension(dimensionRef.current === "3d" ? "2d" : "3d");
+      if (!layered) return false;
+      if (event.key === BOARD_DIMENSION_SHORTCUT && !event.shiftKey) {
+        switchDimension(dimensionRef.current === "3d" ? "2d" : "3d");
+        return true;
+      }
+      if (shortcutOfEvent(event) !== BOARD_FLIP_SHORTCUT) return false;
+      chooseSide(displayRef.current.side === "bottom" ? "top" : "bottom");
       return true;
     }
   });
@@ -710,8 +733,6 @@ function BoardSurface({ view, data }) {
   const solid = dimension === "3d" && layered && plot;
   // The board in 3D is mounted while it is the view, and while it leaves (`closing3d`).
   const mounted3d = (dimension === "3d" || closing3d) && layered && plot;
-  // Front | Back: the Display's side in 2D; in 3D the camera turns over to it, and the side follows the camera.
-  const chooseSide = side => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.turnTo(side) : setDisplay(current => ({ ...current, side })));
   // In 3D, Display's menu ends with the camera's projection, a setting changed seldom (`settings-ui.md`).
   const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
     onSide: chooseSide, projection: solid ? { value: projection, onChange: setProjection } : null }) : [];

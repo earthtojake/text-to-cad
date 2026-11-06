@@ -279,7 +279,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
     fit: () => viewerRef.current?.resetZoom?.(),
     /** A page box framed, the camera's direction kept. */
     frameSheet: ([x0, y0, x1, y1]) => viewerRef.current?.zoomToBounds?.({ min: [x0, -y1, -thickness], max: [x1, -y0, 0] }),
-    /** The camera turned to `side`, eased: Front | Back. */
+    /** The camera turned over to `side`, eased: Flip's (a move of the camera, as a hand's is: `moved`). */
     turnTo(side) {
       const viewer = viewerRef.current, now = viewer?.getPerspective?.();
       if (!now || sideNow() === side) return;

@@ -86,7 +86,8 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
  * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
- *   view drawn flat or in 3D switching between them), tried before the tools' letters; true when it took it.
+ *   view drawn flat or in 3D switching between them, or one seen from two sides turning over: its state
+ *   buttons' keys, `StateButton.jsx`), tried before the tools' letters; true when it took it.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
   capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
