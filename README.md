@@ -60,7 +60,7 @@ The text-to-cad plugin gives your agent local workflows to generate 3D models as
 text-to-cad is MIT-licensed and built in the open.
 
 - **Bugs and plugin requests**: [open an issue](https://github.com/earthtojake/text-to-cad/issues/new).
-  A bug report with the model script and the output of `cad doctor` is the
+  A bug report with the model script and the output of `cad doctor --check` is the
   fastest to fix, and an agent app without a plugin gets one on request. A
   security problem is reported privately, as [SECURITY.md](SECURITY.md) says.
 - **Questions, ideas and what you made**: the [Discord](https://discord.gg/5FGB9DwJYU).

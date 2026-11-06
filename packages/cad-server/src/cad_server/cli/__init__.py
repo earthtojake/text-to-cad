@@ -45,7 +45,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
                                   "with the integrations its imports use"),
     # The installation: the requirement a Python of a program's own installs this device's cad by.
     "requirement": ("cad_server.cli.requirement", "print the exact cad requirement for a Python of a program's own"),
-    "doctor": ("cad_server.cli.doctor", "install: register, write the cad command, start the engine"),
+    "doctor": ("cad_server.cli.doctor", "set the server up and report what this device runs (--check: read-only)"),
     # text-to-cad in every agent app here, and the cad command with it, as this release; `update`
     # runs the newest release's. `uninstall` is setup's uninstall path, with a parser of its own.
     "setup": ("cad_server.cli.setup", "set up text-to-cad in every agent app here, as this release"),
@@ -222,8 +222,11 @@ def _main(argv: list[str]) -> int:
     if entry is None:
         return _unknown(command, rest)
 
-    # Help does no work: it moves nothing, writes nothing and says nothing but the help.
-    helping = _asks_help(command, rest)
+    # Help does no work: it moves nothing, writes nothing and says nothing but the help. Nor does a report
+    # asked for read-only (`cad doctor --check`).
+    from cad_server._internal.cli_errors import options
+
+    helping = _asks_help(command, rest) or (command in _REGISTERS and "--check" in options(rest))
     # `doctor` registers this installation, as `setup` does: on a device an earlier release set up, what
     # this release keeps of its state folder moves into its own first, before the notice below writes there.
     if command in _REGISTERS and not helping:

@@ -1,10 +1,11 @@
 """``cad doctor`` — the skills' one-time setup step and the repair command: it registers the
 installation where none is current, writes the ``cad`` command, says whether the CAD kernel environment
 is made (never making it: it is made on first need), starts the engine, and reports what the device runs -- the current installation, the releases on
-disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 4 when
+disk, the last switch, the engine and each app's plugin -- comparing nothing. It exits 0, or 1 when
 the CAD kernel is installed but cannot be loaded -- naming Smart App Control on Windows, where a
 refused ``OCP`` load is otherwise a bare ImportError. A kernel that is simply absent is reported and
 exits 0: the release workflow installs the wheel --no-deps and runs doctor as its smoke test.
+``--check`` is the report alone, read-only; ``--json`` is it as one document.
 
 The kernel probe is a fresh-interpreter ``import OCP``; it is stubbed here so the contract tests cost
 no kernel load, and exercised once for real. The apps are read by a stand-in: no test reads the
@@ -69,6 +70,32 @@ class DoctorTests(unittest.TestCase):
                                                      "CODEX_SANDBOX_NETWORK_DISABLED": "1"})
         environment.start()
         self.addCleanup(environment.stop)
+
+    def test_a_check_registers_nothing_writes_nothing_and_starts_nothing(self) -> None:
+        """``--check`` is the report alone: what is there, and what ``cad doctor`` would write."""
+        from cad_server._internal import installations
+
+        env = self.state / "env"
+        env.mkdir()
+        found = tuple(str(env / name) for name in ("cad.exe" if installations.WINDOWS else "cad", "python", ""))
+        for path in found[:2]:
+            Path(path).write_text("", encoding="utf-8")
+        before = sorted(path.relative_to(self.state).as_posix() for path in self.state.rglob("*"))
+        command = installations.proxy_path(str(self.state / "bin"))
+        with mock.patch.object(installations, "targets", return_value=found), \
+                mock.patch.dict("os.environ", {"CAD_INSTALLATION_VERSION": "1.2.3-dev.1"}), \
+                mock.patch("cad.engine.client.request", return_value=None) as asked:
+            code, out, err = _run(["--check"])
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn(f"  registry {self.state / 'installations' / '1.2.3-dev.1.json'} not registered: `cad doctor` "
+                      "registers it\n", out)
+        self.assertIn(f"  command  {command} missing: `cad doctor` writes it\n", out)
+        self.assertEqual(sorted(path.relative_to(self.state).as_posix() for path in self.state.rglob("*")), before,
+                         "nothing written: no record, no command, no setting")
+        self.assertTrue(all(call.kwargs.get("start") is False for call in asked.call_args_list), "no engine started")
+        self.assertEqual(doctor._probe_kernel.call_args.kwargs, {"read_only": True}, "its import writes no bytecode")
+        with self.assertRaises(SystemExit), redirect_stderr(io.StringIO()):
+            doctor.main(["--check", "--prune"])
 
     def test_the_report_registers_and_writes_the_command_and_says_so(self) -> None:
         from cad_server._internal import installations
@@ -297,23 +324,42 @@ class DoctorTests(unittest.TestCase):
         self.assertRegex(out, r"  kernel   not made — \S+, made on first need: the first build or view that needs it\n")
         self.assertNotIn("FAILED", err)
 
-    def test_a_kernel_that_will_not_load_exits_4(self) -> None:
+    def test_a_kernel_that_will_not_load_exits_1_and_the_whole_report_is_on_stdout(self) -> None:
+        # `cad doctor > report.txt` keeps all of it, the failure among it.
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "linux"), TemporaryDirectory() as tmp:
             code, out, err = _run([])
-        self.assertEqual(code, 4)
-        self.assertIn("kernel   FAILED", err)
-        self.assertIn(REFUSED, err, "the exception line is the evidence")
-        self.assertNotIn("Smart App Control", err, "off Windows the cause is not known")
+        self.assertEqual((code, err), (1, ""))
+        self.assertIn(f"  kernel   FAILED — {REFUSED}\n", out, "the exception line is the evidence")
+        self.assertNotIn("Smart App Control", out, "off Windows the cause is not known")
         self.assertIn("  server   ", out, "the rest of the report still prints")
 
     def test_a_refused_load_on_windows_names_smart_app_control(self) -> None:
         with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
                 mock.patch.object(sys, "platform", "win32"), TemporaryDirectory() as tmp:
-            code, _, err = _run([])
-        self.assertEqual(code, 4)
-        self.assertIn("Smart App Control", err)
-        self.assertIn("3077", err)
+            code, out, _err = _run([])
+            _code, said, _err = _run(["--json"])
+        self.assertEqual(code, 1)
+        self.assertIn("Smart App Control", out)
+        self.assertIn("3077", out)
+        kernel = next(check for check in json.loads(said)["checks"] if check["name"] == "kernel")
+        self.assertEqual((kernel["status"], kernel["detail"]), ("failed", f"FAILED — {REFUSED}"))
+        self.assertTrue(any("Smart App Control" in line for line in kernel["more"]))
+
+    def test_the_report_as_json_is_one_document_of_every_check(self) -> None:
+        with TemporaryDirectory() as tmp:
+            code, out, _ = _run(["--no-server"])
+            code_json, said, err = _run(["--no-server", "--json"])
+        found = json.loads(said)
+        self.assertEqual((code, code_json, found["ok"], err), (0, 0, True, ""))
+        self.assertEqual(said.count("\n"), 1, "one line")
+        names = [check["name"] for check in found["checks"]]
+        self.assertEqual(names[:2], ["python", "install"])
+        self.assertLessEqual({"registry", "command", "cache", "kernel", "server", "trimesh", "kicad"}, set(names))
+        self.assertTrue(all(check["status"] in ("ok", "info", "warning", "failed") for check in found["checks"]))
+        # The same lines as the report a person reads, line for line.
+        self.assertEqual([f"  {check['name']:<8} {check['detail']}" for check in found["checks"]],
+                         out.splitlines()[1:])
 
     def test_prune_removes_a_release_folder_but_the_current_one_and_the_one_before(self) -> None:
         # An update to 1.2.0 that failed and went back left its folder: --prune takes it, and its failure stays.

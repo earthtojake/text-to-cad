@@ -204,6 +204,18 @@ def register(version: str, found: tuple[str, str, str] | None = None, folder=Non
     return path, REGISTERED
 
 
+def registration(version: str, found: tuple[str, str, str] | None = None, folder=None) -> tuple[str, str]:
+    """What ``register`` would find, read and nothing written (``cad doctor --check``): ``(path, OK)`` when
+    the record of ``version`` names this installation as it is, else ``(path, MISSING)``, which ``register``
+    writes."""
+    folder = folder or state()
+    found = found or targets()
+    inside = _inside(version)
+    before = installation_record(folder.read(inside))
+    named = found is not None and before and (before["cad"], before["python"], before["prefix"]) == tuple(found)
+    return str(folder.path(inside)), OK if named else MISSING
+
+
 def _forget_read() -> None:
     """The records changed in this process: the version its environment is registered as
     (``cad.engine.places.registered``, read once per process) is read again."""

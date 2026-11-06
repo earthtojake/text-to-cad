@@ -111,7 +111,9 @@ The check is facts only: it never compares a figure with a printer's or a materi
 something was not measured: a `measurement_failed` error names the family (`wall_thickness`,
 `support_volume`) and the rest are still reported; `mesh_unreadable`, `not_finite` and
 `invalid_target` carry no measurements at all. Treat an unmeasured family as unverified, never as a
-measurement of zero; `cad doctor` explains an environment that cannot measure.
+measurement of zero: the `measurement_failed` finding's message says why it failed, and `cad doctor
+--check` says which environment the check measures in (its `trimesh` line: this installation's own, or
+`cad[trimesh]`'s, made on first need, and where).
 
 ## Compare and report
 

@@ -109,8 +109,11 @@ support, `--candidates` ranking the pulls or the orientations, every measurement
 in this process where its environment holds trimesh, else in the environment of `cad[trimesh]` the
 engine makes once, as `cad run` makes a program's (`_internal/integration_env.py`). `cad serve`,
 `status`, `stop`, `delete` and `server` are the engine's process control; `cad doctor` the setup (the
-installation registered, the `cad` command written, whether the CAD kernel environment is made, the engine started;
-the releases on disk, the current one, the engine's and each app's plugin's) and what earlier releases
+installation registered, the `cad` command written, whether the CAD kernel environment is made and the
+integrations' -- never made there --, the engine started; the releases on disk, the current one, the engine's
+and each app's plugin's: the whole report on stdout, exit 1 when the kernel is installed and does not load;
+`--check` the report alone, which registers, writes and starts nothing, what a bug report wants; `--json` it
+as one document, each check's name, status and detail) and what earlier releases
 left behind that nothing needs, which `cad doctor --prune` removes (`_internal/leftovers.py`: engine
 records of an older format, the bytecode of installations no longer registered, cache folders no record
 names, the launchers earlier releases published beside the `cad` command, 0.8's `cadgen` proxy among

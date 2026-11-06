@@ -90,6 +90,14 @@ them on a person's word adds `--yes`. `cad delete --dry-run` lists what it would
 | `cad doctor --prune` removed at once | the list, then asks; `cad doctor --prune --yes` where nothing can ask |
 | `cad server --rotate-token` replaced the token at once | asks; `--yes` where nothing can ask |
 
+`cad doctor` exited 4 for a CAD kernel that would not load, wrote that line (`kernel FAILED`) to stderr
+and the rest to stdout, and had no read-only or JSON report; its help said it made the CAD kernel
+environment, which it never does. It exits 1 for it now, with the whole report on stdout; `cad doctor
+--check` is the report alone -- it registers, writes and starts nothing, and says what `cad doctor` would
+write -- for a bug report or a look; `--json` is the report as one document, `{"ok", "version", "checks":
+[{"name", "status", "detail"}]}`; and it says where each integration's operations run (`trimesh`,
+`kicad`).
+
 `cad update --dry-run` printed this release's setup plan alone, never reading the version feed; it reads
 it now (bounded, keeping nothing) and says first what an update would install: `cad update: would install
 text-to-cad 0.11.2 (this is 0.11.0), ...`, or that it would set this release up again because it is the
