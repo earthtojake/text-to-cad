@@ -1091,8 +1091,9 @@ Theme:
   a setting's name, where the host gives its meaning (`info`), shows it as a hint to the
   menu's right. **Telemetry**, in both apps: anonymous usage data and crash reports, never
   prompts, models or files. **Automatic updates**, in both apps, after it: whether the server
-  installs a newer patch release by itself and restarts on it once nothing runs (a minor or major
-  release waits for the update button) (the server's
+  installs a newer release that breaks nothing by itself and restarts on it once nothing runs (a
+  patch release below 1.0, a patch or minor release from 1.0; one that may break something waits for
+  the update button) (the server's
   `cad_server/auto_updates.py`, the same setting `cad update auto` changes), on by default; one
   the environment turned off (`CAD_UPDATE_CHECK=0`, CI) shows unchecked and fixed, saying so in
   its label, as Telemetry does. Neither adds anything to the navbar: an automatic update shows

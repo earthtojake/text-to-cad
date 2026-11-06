@@ -241,7 +241,7 @@ export default {
   "consent.telemetryInfo": "text-to-cad の改善に役立つ匿名の利用データとクラッシュレポートです。プロンプト、モデル、ファイルが送信されることはありません。",
   "update.automatic": "自動アップデート",
   "update.automaticEnvironment": "自動アップデート（環境で無効）",
-  "update.automaticInfo": "text-to-cad のパッチリリース（修正）を自動でインストールし、何も実行されていないときに CAD のサーバーを再起動します。新しいマイナーリリースは自動では入りません。アップデートボタンまたはインストールコマンドでアップデートしてください。",
+  "update.automaticInfo": "text-to-cad の互換性を壊さないリリース（修正と機能追加）を自動でインストールし、何も実行されていないときに CAD のサーバーを再起動します。互換性を壊すおそれのあるリリースは自動では入りません。アップデートボタンまたはインストールコマンドでアップデートしてください。",
 
   "appearance.system": "システム",
   "appearance.light": "ライト",

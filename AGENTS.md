@@ -37,10 +37,11 @@ exact version, ask which one. A release pull request comes one of two ways:
   `main`'s and stamps the derived metadata and every pin of the release's own
   (`cad==`, `cad-server==`, `cad-mcp==`) with it.
 
-A patch release installs itself on every device (automatic updates take patch releases only), so a
-release that renames, removes or needs a migration guide is a minor one: Version Check refuses a patch
-that adds or changes a migration guide ([CONTRIBUTING.md, "Shipping a
-release"](CONTRIBUTING.md#shipping-a-release)).
+Releases follow Semantic Versioning: a breaking change, which always comes with a migration guide,
+bumps the minor below 1.0 and the major from 1.0, and a release that breaks nothing installs itself on
+every device (a patch below 1.0, a patch or minor from 1.0), so Version Check refuses a migration guide
+in one. What breaks is law 15's four tiers ([CONTRIBUTING.md, "Which number a release
+bumps"](CONTRIBUTING.md#which-number-a-release-bumps)).
 
 Merge a release pull request only on the user's explicit word, once its checks
 pass: the merge is the release. `Test` runs every job for a `VERSION` change, and
