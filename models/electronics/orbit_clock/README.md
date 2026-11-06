@@ -113,9 +113,9 @@ cad kicad_pcb export orbit.kicad_pcb --to step -o STEP          # STEP/orbit.ste
 cad step export STEP/orbit.step XBF/orbit.xbf
 cad run src/orbit.py                             # prints each model's id
 cad run src/check_fit.py                         # interference and clearances, also written to tmp/fit.txt
-cad model dfm <baffle id> --process printing --angle-limit 45    # and the stand, diffuser_print
 cad run src/exports.py                           # 3MF/ of each printed part and the two-material front,
                                                  # STEP/orbit_assembly.step, GLB/orbit_assembly.glb
+cad threemf dfm 3MF/baffle.3mf --process printing --angle-limit 45 --samples 20000   # and stand.3mf, diffuser.3mf
 ```
 
 `build_libraries.py` writes the libraries byte for byte as committed, and `board.py all` makes the same
@@ -138,14 +138,18 @@ placement, tracks and vias again. After a board change, export the STEP and the 
   (it rests on it when screwed), 0.40 mm over every part in a pocket (R3/R4/R6/R8/R9, C9/C10, U5); stand
   0.30 mm round the board's rim (the slot), 0.40 mm round the receptacle and the polyfuse; diffuser 0.30 mm from
   the stand; baffle 0.80 mm from the stand.
-- **Printing** (`cad model dfm --process printing --angle-limit 45`, FDM limits from the cad skill's printing
-  reference): baffle walls min 1.6 mm, p05 1.6 (FDM unsupported 1.6: pass), 48.6 mm2 of pocket and pilot-hole
-  ceilings (bridges of 2.6-4 mm, under FDM's 10 mm), support 0.2 %; diffuser_print walls 1.2 mm (supported 1.2:
-  pass), 75 mm2 at 44.9 degrees, its chamfer on the first layer; stand walls min 1.82 mm, p05 6.0 (pass), 245 mm2
-  at exactly 45 degrees (the cable channel's roofs and the plug pocket's lip), support 1.4 %. Fixed on the way: the
-  stand's arc-sided saddle (1,356 mm2 overhanging, now straight-sided), flat channel ceilings (now 45-degree
-  roofs), the diffuser printed face down, and peg holes 0.87 mm from the minute cells (moved in to 42 mm). Not
-  measured by the check: minimum hole (the 2.6 mm pilots are over FDM's 2.0), minimum feature, bridge length.
+- **Printing** (`cad threemf dfm --process printing --angle-limit 45 --samples 20000` of each 3MF, the files a
+  slicer gets; FDM limits from the cad skill's printing reference): baffle walls p05 1.6 mm (FDM unsupported 1.6:
+  pass), 48.6 mm2 of pocket and pilot-hole ceilings (bridges of 2.6-4 mm, under FDM's 10 mm), support 0.2 %; its
+  thinnest readings, 0.46 mm, are the webs between the light sensor's window and the pockets of C9 and R9, 0.3 and
+  0.4 mm at their thinnest, under FDM's 1.2: review. diffuser walls p05 1.2 mm (supported 1.2: pass), 0.7 mm at the
+  rim its 0.5 mm chamfer thins, the chamfer within a hair of 45 degrees (132 mm2 under it in the 3MF's mesh), on
+  the first layer. stand walls p05 6.0 mm (pass), 245 mm2 at exactly 45 degrees (the cable channel's roofs and the
+  plug pocket's lip), support 1.4 %; its thinnest is a 0.9 mm skin at the cradle's back behind the USB plug's
+  pocket, under FDM's 1.2: review. Fixed on the way: the stand's arc-sided saddle (1,356 mm2 overhanging, now
+  straight-sided), flat channel ceilings (now 45-degree roofs), the diffuser printed face down, and peg holes
+  0.87 mm from the minute cells (moved in to 42 mm). Not measured by the check: minimum hole (the 2.6 mm pilots
+  are over FDM's 2.0), minimum feature, bridge length.
 
 ## Assembly
 
