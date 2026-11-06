@@ -110,6 +110,14 @@
   from { opacity: 0; }
 }
 
+/* The hero's backdrop, the turning gear (`HeroGear`), its centre on the backdrop's bottom-right
+   corner: faded out over its last 4rem, so the gear sinks behind the agents under it rather than
+   stopping at a line. */
+.hero-backdrop {
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - 4rem), transparent);
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
