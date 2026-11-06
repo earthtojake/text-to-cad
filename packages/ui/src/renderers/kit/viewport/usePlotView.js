@@ -37,9 +37,11 @@ import { createPlotRasters } from "./plotRasters.js";
  * @param {(point: { x: number, y: number } | null, event: PointerEvent | null) => void} [options.onHover]
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDrag"]} [options.onDrag]  Select's box.
  * @param {Parameters<typeof useFlatCanvasView>[0]["onDoubleTap"]} [options.onDoubleTap]  A double-click the tool takes (a sheet entered), else the fit.
+ * @param {boolean} [options.paused]  The pane is covered (its picture shown another way meanwhile): its rasters
+ *   are let go and nothing is painted, until it is uncovered; the view, the capture and the card's picture stay.
  */
 export function usePlotView({ plot, restored = null, colorScheme = "light", surround, noun = "board", onViewMoved, drawView = null, overlay = null,
-  onTap = null, onHover = null, onDrag = null, onDoubleTap = null }) {
+  onTap = null, onHover = null, onDrag = null, onDoubleTap = null, paused = false }) {
   const plotRef = useRef(plot);
   plotRef.current = plot;
   const surroundRef = useRef(surround);
@@ -66,7 +68,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
   // One raster cache per plot, view and theme: a new revision, a new set of layers or a switch of
   // theme starts afresh, drawn here from the payload already held.
   useEffect(() => {
-    if (!plot) return undefined;
+    if (!plot || paused) return undefined;
     const rasters = createPlotRasters({ layout: plot.layout, onChange: requestPaint, view: drawViewRef.current, theme: colorScheme });
     rastersRef.current = rasters;
     requestPaint();
@@ -74,7 +76,7 @@ export function usePlotView({ plot, restored = null, colorScheme = "light", surr
       if (rastersRef.current === rasters) rastersRef.current = null;
       rasters.dispose();
     };
-  }, [plot, requestPaint, drawViewKey, colorScheme]);
+  }, [plot, requestPaint, drawViewKey, colorScheme, paused]);
 
   /** Paint the frame final now: the view drawn at its own scale, not a patch scaled while it rests. */
   const settle = useCallback(() => {

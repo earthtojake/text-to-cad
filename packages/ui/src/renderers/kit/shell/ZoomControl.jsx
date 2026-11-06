@@ -9,6 +9,7 @@ import { cn } from "@cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { ViewerHostContext } from "../../../host/context.js";
 import { ZOOM_FACTOR, zoomShortcuts } from "../tools/toolShortcuts.js";
+import { VIEW_CORNER_SURFACE_CLASS } from "./ViewCorner.jsx";
 
 export { ZOOM_FACTOR };
 
@@ -34,7 +35,7 @@ export default function ZoomPill({ zoom, style = null }) {
   const keys = zoomShortcuts(useContext(ViewerHostContext)?.environment?.platform);
   const percent = useZoomPercent(zoom);
   const shown = `${Math.round(percent).toLocaleString()}%`;
-  return <div className="pointer-events-auto absolute z-20 inline-flex h-7 items-center rounded-full bg-foreground/[0.09]" style={style ?? undefined} data-zoom-pill="">
+  return <div className={cn("pointer-events-auto absolute z-20 inline-flex h-7 items-center rounded-full", VIEW_CORNER_SURFACE_CLASS)} style={style ?? undefined} data-zoom-pill="">
     <ToolbarButton label={t("zoom.out")} shortcut={keys.out} tooltipSide="top" className={PILL_BUTTON_CLASS} onClick={() => zoom.zoomBy(1 / ZOOM_FACTOR)}>
       <Minus aria-hidden="true" />
     </ToolbarButton>
@@ -77,6 +78,23 @@ export function ZoomMenuItems({ zoom }) {
 export function zoomViewControl(zoom, { t, disabled = false }) {
   return { id: "zoom", label: t("zoom.label"), icon: <ScanSearch aria-hidden="true" />, disabled,
     tile: null, submenu: () => <ZoomMenuItems zoom={zoom} /> };
+}
+
+/**
+ * A 3D view's zoom (`ViewZoom`), read live through its viewport (`ShellViewport.jsx`'s handle in
+ * `viewerRef`): the zoom against the authored box, its steps about the camera's target, and word of the
+ * camera moving. What the zoom's keys and a phone's More reach in every 3D view, a renderer's own frame
+ * or a flat view's frame showing one alike.
+ * @returns {ViewZoom}
+ */
+export function viewportZoom(viewerRef) {
+  return {
+    read: () => viewerRef.current?.zoomPercent?.() ?? 100,
+    subscribe: listener => viewerRef.current?.subscribeCamera?.(listener) || (() => {}),
+    zoomBy: factor => viewerRef.current?.zoomBy?.(factor),
+    zoomTo100: () => viewerRef.current?.zoomTo100?.(),
+    fit: () => viewerRef.current?.resetZoom?.()
+  };
 }
 
 /** The view's zoom, live: read again at most once a frame after the view says it moved. */

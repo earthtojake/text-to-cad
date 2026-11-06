@@ -23,7 +23,7 @@ export {
 } from "./boardPick.js";
 
 /** What a host command a board cannot carry out is told. */
-export const BOARD_NO_CAMERA = "A board is drawn flat and head on: it has no camera to pose. "
-  + "Zoom and pan it in the view, or call resetCamera to fit the whole board again.";
+export const BOARD_NO_CAMERA = "This board is drawn flat and head on (2D): it has no camera to pose. "
+  + "Zoom and pan it in the view, call resetCamera to fit the whole board again, or switch the view to 3D, whose camera setCamera poses.";
 export const BOARD_NO_DISPLAY = "A board's Display (its mode, the side it is seen from, its copper pours and the layers drawn) "
   + "is the person's, set in the Layers tab of the view's panel; it has no surfaces, lighting or render mode.";

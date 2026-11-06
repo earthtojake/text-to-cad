@@ -1,5 +1,6 @@
 import { useI18n } from "@cad/ui/i18n";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { BOARD_THICKNESS_MM, headOnCamera } from "@cad/core/lib/board3d/boardFrame.js";
 import { cn } from "@cad/ui/utils";
 import { boardOverlayColors, drawBoardOverlay } from "@cad/core/lib/board2d/boardOverlay.js";
 import { buildBoardRefToken, formatBoardRefSelector, parseBoardRefSelector, splitBoardRefSelectors } from "@cad/core/lib/boardRefs.js";
@@ -37,7 +38,12 @@ import {
 } from "./tools.js";
 import { useBoardDocument } from "./useBoardDocument.js";
 import { readIsolation, useIsolation } from "../kit/tools/select/useIsolation.js";
+import { viewportZoom } from "../kit/shell/ZoomControl.jsx";
 import { useBoardView } from "./useBoardView.js";
+import { board3dAnnotationSurface } from "./board3dAnnotation.js";
+
+// The board in 3D, its own chunk: a board shown in 2D loads no three.js.
+const Board3dView = lazy(() => import("./Board3dView.jsx"));
 
 /**
  * A KiCad board as the picture drawn from its file, on a canvas, head on, as a drawing is: in
@@ -64,16 +70,34 @@ import { useBoardView } from "./useBoardView.js";
  * (`kit/shell/FlatPanel.jsx`) is a search over three tabs, the Parts (in their schematic blocks), the
  * Nets and the Layers (each layer's eye, a row's press for the active layer), and under them the
  * picked part's or net's pads (`BoardSection.jsx`'s detail); its view
- * controls are the view's corner's (`kit/shell/ViewCorner.jsx`): Display (`BoardDisplay.jsx`: the side it
- * is seen from, the preset, other layers, pours and opacities) over the zoom pill: one contract with `cad <type> snapshot --display`. A payload without its
+ * controls are the view's corner's (`kit/shell/ViewCorner.jsx`), on its bottom row left of the zoom
+ * pill (`BoardDisplay.jsx`): Display (the preset), 2D | 3D and Front | Back; the Layers tab has the
+ * layers, the other layers, the pours and the opacities: one contract with `cad <type> snapshot --display`. A payload without its
  * index (an older server's) is the picture alone: no tools, no Parts or Nets, no Quick Edit.
+ *
+ * The same view, drawn in 3D (2D | 3D, or the key 3): the board as a slab with its two faces, each the
+ * 2D drawer's picture of that side (`Board3dView.jsx`, a lazy chunk, over `@cad/core/lib/board3d/`). It
+ * is the view's other canvas, in the same frame: the strip, the panel, the selection, the ink, the
+ * measurements and Quick Edit are the same mounted components either way, and only the corner's zoom
+ * pill becomes the 3D views' cube (with Projection and Home over it). A press picks what the 2D view
+ * picks where the pointer's ray meets the face it enters; a drag turns the view (naming an area by a
+ * drag is the 2D view's); Front | Back turns the camera over and follows it. Entering 3D opens head on,
+ * on the window the 2D view shows, and eases to Home (or the camera this file was left at in 3D);
+ * leaving it frames the 2D view on what the camera was centred on, from its side. Which of the two is
+ * up, and the 3D camera and projection, are the file's view (`board3d`).
  */
 
 const SAVE_DELAY_MS = 180;
 // What the frame says it draws: a board, on its theme's canvas.
 const BOARD_SURFACE = Object.freeze({ "data-board-surface": "" });
-// The file's slices: the board's Display and what is isolated, kept across rebuilds.
-const SLICES = Object.freeze({ board: "1", isolated: "1" });
+// The file's slices: the board's Display, what is isolated, and the board in 3D (which is up, its camera, its projection), kept across rebuilds.
+const SLICES = Object.freeze({ board: "1", isolated: "1", board3d: "1" });
+/** The board in 3D as the file's view keeps it: 2D or 3D, the 3D camera (null: Home), the projection. */
+function readBoard3d(raw) {
+  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
+  return { mode: value.mode === "3d" ? "3d" : "2d", camera: value.camera && typeof value.camera === "object" ? value.camera : null,
+    projection: value.projection === "perspective" ? "perspective" : "orthographic" };
+}
 
 const BOARD_LIVE = Object.freeze({ commands: Object.freeze(["select", "clearSelection"]), declined: Object.freeze({}) });
 const NO_SELECTION = Object.freeze({ hovered: [], selected: [] });
@@ -111,15 +135,20 @@ function BoardSurface({ view, data }) {
   const canonicalPick = useCallback(id => index?.resolve(id)?.selector, [index]);
   const [restoredIsolation] = useState(() => readIsolation(stored.renderer.isolated?.selectors));
   const isolation = useIsolation({ index, restored: restoredIsolation, canonical: canonicalPick });
-  const saved = useRef({ camera: restored, display, isolated: restoredIsolation });
+  // 2D or 3D, the 3D camera and its projection: the file's, as it was left.
+  const [restored3d] = useState(() => readBoard3d(stored.renderer.board3d));
+  const [dimension, setDimension] = useState(restored3d.mode);
+  const [projection, setProjection] = useState(restored3d.projection);
+  const saved = useRef({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d });
   const storedRef = useRef("");
   const saveTimer = useRef(0);
   const stateChangeRef = useRef(view.onStateChange);
   stateChangeRef.current = view.onStateChange;
+  const recordOf = ({ camera, display: board, isolated, board3d }) => writeFileView({ camera,
+    renderer: { board, isolated: { selectors: [...isolated] }, board3d }, signatures: SLICES });
   const save = useCallback(change => {
     saved.current = { ...saved.current, ...change };
-    const { camera, display: board, isolated } = saved.current;
-    const record = writeFileView({ camera, renderer: { board, isolated: { selectors: [...isolated] } }, signatures: SLICES });
+    const record = recordOf(saved.current);
     const serialized = JSON.stringify(record);
     if (serialized === storedRef.current) return;
     storedRef.current = serialized;
@@ -128,8 +157,10 @@ function BoardSurface({ view, data }) {
   }, []);
   // A view that is still the fit stores no camera: `null` is "fit me".
   const rememberView = useCallback(transform => save({ camera: transform ? { ...transform } : null }), [save]);
-  useEffect(() => { storedRef.current = JSON.stringify(writeFileView({ camera: restored, renderer: { board: display, isolated: { selectors: [...restoredIsolation] } }, signatures: SLICES })); }, []);
+  const remember3d = useCallback(change => save({ board3d: { ...saved.current.board3d, ...change } }), [save]);
+  useEffect(() => { storedRef.current = JSON.stringify(recordOf({ camera: restored, display, isolated: restoredIsolation, board3d: restored3d })); }, []);
   useEffect(() => { save({ display, isolated: isolation.isolated }); }, [display, isolation.isolated, save]);
+  useEffect(() => { remember3d({ mode: dimension, projection }); }, [dimension, projection, remember3d]);
   useEffect(() => () => window.clearTimeout(saveTimer.current), []);
 
   // ---- tools ----------------------------------------------------------------
@@ -170,6 +201,17 @@ function BoardSurface({ view, data }) {
   const measureRef = useRef(measure);
   measureRef.current = measure;
   const viewRef = useRef(null);
+  // The board in 3D, while it is up: its handle (`Board3dView.jsx`) and its viewport's (`ShellViewport.jsx`).
+  const view3dRef = useRef(null);
+  const viewer3dRef = useRef(null);
+  const dimensionRef = useRef(dimension);
+  dimensionRef.current = dimension;
+  const in3d = () => (dimensionRef.current === "3d" ? view3dRef.current : null);
+  // In 3D a press may take what a layer drawn on the face it meets holds: that side's layers.
+  const sideLayers = useMemo(() => (sheet ? { top: new Set(boardDrawView({ ...display, side: "top" }, sheet).layers),
+    bottom: new Set(boardDrawView({ ...display, side: "bottom" }, sheet).layers) } : null), [display, sheet]);
+  const sideLayersRef = useRef(sideLayers);
+  sideLayersRef.current = sideLayers;
 
   // What is lit (resolved references) and the ink under the pointer: painted over the board, never React state.
   const highlightRef = useRef(NO_SELECTION);
@@ -190,43 +232,65 @@ function BoardSurface({ view, data }) {
   // The overlay's colours are the theme's (`board2d/boardOverlay.js`): a highlight that reads on the canvas under it.
   const schemeRef = useRef(colorScheme);
   schemeRef.current = colorScheme;
-  const overlay = useCallback((ctx, { transform, pixelRatio, width, height }) => {
+  // The same overlay on a face of the board in 3D (`Board3dView.jsx`): `frame.mirrorX` is that face's, and
+  // what it answers says whether there was anything to draw (nothing: the face's overlay is put away).
+  const overlay = useCallback((ctx, { transform, pixelRatio, width, height, ...frame }) => {
     const board = indexRef.current;
-    if (!board) return;
-    const colors = boardOverlayColors(schemeRef.current);
-    const base = { transform, pixelRatio, width, height, mirrorX: mirrorRef.current, colors };
+    const session = annotationRef.current;
     const isolated = isolationRef.current.resolved;
+    const { hovered, selected } = highlightRef.current;
+    if (!board) return false;
+    const face = "mirrorX" in frame;
+    if (face && !isolated.length && !hovered.length && !selected.length && !placementRef.current && !session.items.length) return false;
+    const mirrorX = face ? frame.mirrorX : mirrorRef.current;
+    const colors = boardOverlayColors(schemeRef.current);
+    const base = { transform, pixelRatio, width, height, mirrorX, colors };
     // What is isolated first, everything else stepped back; then the hover and the selection (a net
     // in focus steps the rest back).
     if (isolated.length) {
       drawBoardOverlay(ctx, board, { ...base, dim: true, selection: isolated, colors: { ...colors, selection: colors.hover } });
     }
-    const { hovered, selected } = highlightRef.current;
     const net = selected.some(item => item.kind === "net");
     drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current,
-      draft: draftRef.current });
-    const session = annotationRef.current;
-    drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorRef.current), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
+      draft: face ? null : draftRef.current });
+    drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorX), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
+    return true;
   }, []);
 
-  // Annotate's layer: ink on the board, under the view (and its side) as it stands.
-  const annotationSurface = useMemo(() => plotAnnotationSurface({
+  // Annotate's layer: ink on the board, under the view (and its side) as it stands; in 3D, on the face
+  // the camera sees (`board3dAnnotation.js`). The marks are sheet millimetres either way.
+  const flatSurface = useMemo(() => plotAnnotationSurface({
     transform: () => viewRef.current?.transformRef.current || null,
     mirrorX: () => mirrorRef.current,
     canvas: () => viewRef.current?.canvasRef.current || null
   }), []);
+  const surface3d = useMemo(() => board3dAnnotationSurface({
+    ray: point => view3dRef.current?.ray(point) || null,
+    project: world => view3dRef.current?.project(world) || null,
+    side: () => view3dRef.current?.side() || "top",
+    thickness: () => view3dRef.current?.thickness() ?? BOARD_THICKNESS_MM,
+    canvas: () => view3dRef.current?.canvas() || null
+  }), []);
+  const annotationSurface = dimension === "3d" ? surface3d : flatSurface;
+  const annotationSurfaceRef = useRef(annotationSurface);
+  annotationSurfaceRef.current = annotationSurface;
   // The view as Measure's and Select's kit code reads a scene's: its camera (the sheet to the screen
-  // as matrices, through the mirror from below) and the element its pointer events arrive on.
+  // as matrices, through the mirror from below; in 3D through the camera, onto the face it sees) and
+  // the element its pointer events arrive on.
   const measureRuntimeRef = useRef(null);
   if (!measureRuntimeRef.current) {
     measureRuntimeRef.current = {
       get camera() {
+        const solid = in3d();
+        if (solid) return solid.measureCamera();
         const current = viewRef.current, size = current?.sizeRef.current;
         return current && size ? boardPlanProjection(current.transformRef.current, size.width, size.height, mirrorRef.current) : null;
       },
-      renderer: { get domElement() { return viewRef.current?.canvasRef.current || null; } }
+      renderer: { get domElement() { return in3d()?.canvas() || viewRef.current?.canvasRef.current || null; } }
     };
   }
+  // The canvas the view's menu opens over: the one on screen.
+  const activeCanvasRef = useMemo(() => ({ get current() { return in3d()?.canvas() || viewRef.current?.canvasRef.current || null; } }), []);
 
   // The name of what the pointer rests on, under Select (`kit/shell/HoverTip.jsx`): its name, and a pad's or
   // pin's net, a part's value.
@@ -243,10 +307,17 @@ function BoardSurface({ view, data }) {
   useEffect(() => { if (!measuring) { measureHoverRef.current = null; measureAnchorRef.current = null; } }, [measuring]);
   useEffect(() => { if (!measure.state?.draft?.anchor) measureAnchorRef.current = null; }, [measure.state]);
   const handlers = useMemo(() => {
-    // The sheet point under a pane point, and how far a pick there reaches, in millimetres.
+    // The sheet point under a pane point, and how far a pick there reaches, in millimetres; in 3D, where
+    // its ray meets the face it enters, and that face's side and layers.
     const atPoint = (point, pointerType) => {
+      const solid = in3d();
+      if (dimensionRef.current === "3d") {
+        const at = solid?.atPoint(point, pickPx(pointerType));
+        return at ? { ...at, layers: sideLayersRef.current?.[at.side] || drawnRef.current } : null;
+      }
       const transform = viewRef.current?.transformRef.current;
-      return transform ? { page: planToSheet(screenToModel(transform, point.x, point.y), mirrorRef.current), reach: pickPx(pointerType) / transform.scale } : null;
+      return transform ? { page: planToSheet(screenToModel(transform, point.x, point.y), mirrorRef.current), reach: pickPx(pointerType) / transform.scale,
+        side: sideRef.current, layers: drawnRef.current } : null;
     };
     // Measure's end: a pad, via or hole centre, a track end or an outline corner near the pointer, else the point itself.
     const snapPick = (point, pointerType) => {
@@ -258,10 +329,10 @@ function BoardSurface({ view, data }) {
     };
     const pickAt = (point, pointerType) => {
       const at = atPoint(point, pointerType), board = indexRef.current, kinds = boardPickKinds(filterRef.current);
-      return at && board && kinds ? board.pick(at.page, { kinds, view: sideRef.current, tolerance: at.reach, layers: drawnRef.current }) : null;
+      return at && board && kinds ? board.pick(at.page, { kinds, view: at.side, tolerance: at.reach, layers: at.layers }) : null;
     };
     const inkUnder = (point, pointerType) => (annotationRef.current.items.length
-      ? annotationAt(point, annotationSurface.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
+      ? annotationAt(point, annotationSurfaceRef.current.onScreen(annotationRef.current.items), pickPx(pointerType))[0]?.id || null : null);
     const measured = clear => measureSelectHandlers(measureRef.current, () => measureRuntimeRef.current, clear);
     const pointer = event => ({ clientX: event.clientX, clientY: event.clientY, pointerType: event.pointerType, shiftKey: event.shiftKey });
     const tap = (point, event) => {
@@ -332,26 +403,76 @@ function BoardSurface({ view, data }) {
       if (phase === "end") selectionRef.current.pick({ id: board.areaSelector(from, to, workingRef.current) }, { multiSelect: Boolean(event?.shiftKey) });
       return true;
     };
-    return { tap, hover, drag, pickAt };
-  }, [annotationSurface, requestPaint]);
+    // What the board in 3D picks where a ray meets it (`boardStage.js`'s `pick`: a double-click's, the kit's tap-or-drag's).
+    const pickLocated = located => {
+      const board = indexRef.current, kinds = boardPickKinds(filterRef.current);
+      return board && kinds ? board.pick(located.page, { kinds, view: located.side, tolerance: 0.1, layers: sideLayersRef.current?.[located.side] }) : null;
+    };
+    return { tap, hover, drag, pickAt, pickLocated };
+  }, [requestPaint]);
 
+  // The flat canvas lets go of its rasters while the board is up in 3D (it is covered); it keeps its view.
+  const [shown3d, setShown3d] = useState(false);
   const boardView = useBoardView({
-    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag
+    plot, restored, colorScheme, onViewMoved: rememberView, drawView, overlay, onTap: handlers.tap, onHover: handlers.hover, onDrag: handlers.drag,
+    paused: dimension === "3d" && shown3d
   });
   viewRef.current = boardView;
-  paintRef.current = boardView.requestPaint;
-  const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = boardView;
-  // A row of the Parts, the Nets or the detail double-clicked: what it picked, framed, from the side looked at (a page box to the plan's model space).
+  paintRef.current = dimension === "3d" ? () => view3dRef.current?.requestPaint() : boardView.requestPaint;
+  const { canvasRef, containerRef, dragging, thumbnail } = boardView;
+  // The view on screen fits, frames and captures: the flat canvas, or the board in 3D.
+  const fit = useCallback(() => (dimensionRef.current === "3d" ? view3dRef.current?.fit() : viewRef.current?.fit()), []);
+  const capture = useCallback(() => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.capture() : viewRef.current.capture()), []);
+  // A row of the Parts, the Nets or the detail double-clicked: what it picked, framed, from the side looked at (a page box to the
+  // plan's model space; in 3D, the camera's direction kept).
   const frameSelectors = useCallback(selectors => {
     const board = indexRef.current;
     if (!board) return;
     const boxes = selectors.map(id => board.extent(board.resolve(id))).filter(Boolean);
     if (!boxes.length) return;
     let [x0, y0, x1, y1] = [Math.min(...boxes.map(b => b[0])), Math.min(...boxes.map(b => b[1])), Math.max(...boxes.map(b => b[2])), Math.max(...boxes.map(b => b[3]))];
+    if (dimensionRef.current === "3d") { view3dRef.current?.frameSheet([x0, y0, x1, y1]); return; }
     const mirror = mirrorRef.current;
     if (mirror != null) [x0, x1] = [2 * mirror - x1, 2 * mirror - x0];
     viewRef.current?.frame([x0, -y1, x1, -y0]);
   }, []);
+
+  // ---- 2D | 3D: one view, its other canvas ------------------------------------------------
+  // Entering 3D opens head on, on the window the 2D view shows, from its side, then eases to the camera
+  // this file was left at in 3D, or to Home; a file left in 3D opens on its camera.
+  const mirrorFor = useCallback(side => boardMirrorX(sheetRef.current, side), []);
+  const sheetRef = useRef(sheet);
+  sheetRef.current = sheet;
+  const [opening, setOpening] = useState(() => ({ camera: restored3d.camera, then: null, home: false }));
+  const leavingRef = useRef(null);
+  const switchDimension = useCallback(next => {
+    if (next === dimensionRef.current) return;
+    if (next === "3d") {
+      const flat = viewRef.current, size = flat?.sizeRef.current, board = sheetRef.current;
+      const span = board ? Math.max(board.width, board.height) : 100;
+      const headOn = size ? headOnCamera({ transform: flat.transformRef.current, width: size.width, height: size.height, side: displayRef.current.side,
+        mirrorX: mirrorFor(displayRef.current.side), thickness: BOARD_THICKNESS_MM, distance: 2 * span }) : null;
+      const left = saved.current.board3d.camera;
+      setOpening({ camera: headOn, then: left, home: !left });
+    } else {
+      // Leaving: the 2D view framed on what the camera was centred on, from its side.
+      const plan = view3dRef.current?.plan(mirrorFor) || null;
+      leavingRef.current = plan?.transform || null;
+      if (plan && plan.side !== displayRef.current.side) setDisplay(current => ({ ...current, side: plan.side }));
+      setShown3d(false);
+    }
+    setDimension(next);
+  }, [mirrorFor]);
+  useEffect(() => {
+    if (dimension !== "2d" || !leavingRef.current) return;
+    viewRef.current?.setView(leavingRef.current);
+    leavingRef.current = null;
+  }, [dimension]);
+  // The 3D camera, kept with the file's view; the side it sees is the Display's side (Front | Back follows it).
+  const onCamera3d = useCallback((camera, side) => {
+    remember3d({ camera });
+    if (side !== displayRef.current.side) setDisplay(current => ({ ...current, side }));
+  }, [remember3d]);
   // Ink put down, picked or let go, a side or an isolation changed: the same view, painted again.
   useEffect(() => { requestPaint(); }, [annotation.items, annotation.selected, display, isolation.resolved, requestPaint]);
   // A tool put down lets go of what it lit under the pointer.
@@ -361,13 +482,17 @@ function BoardSurface({ view, data }) {
   // board's Display, so a snapshot draws the layers, the pours and the side the person saw.
   const displayRef = useRef(display);
   displayRef.current = display;
+  // In 3D, the window on the board the camera shows, as a plan-view camera from the side it sees.
   const currentView = useCallback(() => {
     const current = viewRef.current, size = current?.sizeRef.current;
-    const camera = current && size ? planCamera(current.transformRef.current, size.width, size.height) : null;
+    const plan = dimensionRef.current === "3d" ? view3dRef.current?.plan(mirrorFor) || null : null;
+    const transform = plan ? plan.transform : current?.transformRef.current;
+    const camera = transform && size ? planCamera(transform, size.width, size.height) : null;
     const seen = camera ? promptView({ camera, width: size.width, height: size.height }) : null;
     // The view as it was seen: its Display and the theme it was drawn in (a snapshot's `appearance`).
-    return seen ? { ...seen, display: { ...viewDisplay(displayRef.current), appearance: schemeRef.current } } : null;
-  }, []);
+    const shownDisplay = plan ? { ...displayRef.current, side: plan.side } : displayRef.current;
+    return seen ? { ...seen, display: { ...viewDisplay(shownDisplay), appearance: schemeRef.current } } : null;
+  }, [mirrorFor]);
 
   // Measure's layer: the measurements, the one being drawn, and the snap under the pointer.
   const measureCanvasRef = useRef(null);
@@ -425,10 +550,15 @@ function BoardSurface({ view, data }) {
   const runtime = {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
-      loading: document.loading || document.updating, selection: references, camera: null, display: {},
+      loading: document.loading || document.updating, selection: references, camera: in3d()?.camera() ?? null, display: {},
       boardDisplay: viewDisplay(displayRef.current)
     }),
-    setCamera() { throw new Error(BOARD_NO_CAMERA); },
+    // A camera to pose is the board's in 3D, as every 3D view's; drawn flat, it has none.
+    setCamera(camera) {
+      const solid = in3d();
+      if (!solid) throw new Error(BOARD_NO_CAMERA);
+      solid.setCamera(camera);
+    },
     resetCamera() { fit(); },
     setDisplaySettings() { throw new Error(BOARD_NO_DISPLAY); },
     select: selectList,
@@ -445,7 +575,13 @@ function BoardSurface({ view, data }) {
   const handover = useFlatHandover({
     view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
     capture, currentView, annotationDocument: plotAnnotationDocument, runtime, live: BOARD_LIVE, onChord: cycleOthers,
-    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences
+    copySelection: index ? copySelection : null, fit, captureFailed: t("alert.captureDrawingFailed"), packetReferences: boardPacketReferences,
+    // 3, as KiCad's Alt+3 opens its 3D viewer: the board in 3D, and back.
+    onViewKey: event => {
+      if (event.key !== "3" || event.shiftKey || !layered) return false;
+      switchDimension(dimensionRef.current === "3d" ? "2d" : "3d");
+      return true;
+    }
   });
 
   // ---- the menu: a secondary tap on the board, under Select (`kit/shell/viewMenu.js`'s groups) ----
@@ -453,7 +589,7 @@ function BoardSurface({ view, data }) {
   // Deselect, Isolate for a part or a net and its net for copper, then the framing. Over bare board:
   // Exit isolate and the framing (the side is Display's View from).
   const contextMenuItems = index && toolMode === BOARD_TOOL.SELECT ? press => {
-    const canvas = canvasRef.current;
+    const canvas = activeCanvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
     const hit = handlers.pickAt({ x: press.clientX - rect.left, y: press.clientY - rect.top }, "mouse");
@@ -505,19 +641,33 @@ function BoardSurface({ view, data }) {
   const cursor = measuring ? "cursor-crosshair"
     : overPick && !dragging ? "cursor-pointer" : "cursor-default";
 
-  // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`).
-  const zoom = { ...boardView.zoom, zoomToSelection: () => frameSelectors(selectionRef.current.selected), selectionAvailable: selection.selected.length > 0 };
+  // The strip's zoom, and the zoom's keys (`useFlatHandover`'s `zoomKeys`): the flat canvas's, or in 3D the 3D views' own.
+  const zoom3d = useMemo(() => viewportZoom(viewer3dRef), []);
+  const zoom = { ...(dimension === "3d" ? zoom3d : boardView.zoom), zoomToSelection: () => frameSelectors(selectionRef.current.selected),
+    selectionAvailable: selection.selected.length > 0 };
   handover.zoomKeys.current = zoom;
+  // Front | Back: the Display's side in 2D; in 3D the camera turns over to it, and the side follows the camera.
+  const chooseSide = side => (dimensionRef.current === "3d" && view3dRef.current ? view3dRef.current.turnTo(side) : setDisplay(current => ({ ...current, side })));
+  const views = layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown, dimension, onDimensionChange: switchDimension,
+    onSide: chooseSide }) : [];
+  const solid = dimension === "3d" && layered && plot;
   return (
     <FlatViewFrame surface={BOARD_SURFACE} containerRef={containerRef} busy={document.loading || document.updating}
       file={file} mobile={mobile} compact={compact} chromeHidden={chromeHidden} loading={document.loading} loadingLabel={t("board.text.reading_board")}
-      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={layered ? boardViewControls({ t, display, sheet, onChange: setDisplay, disabled: !shown }) : []}
+      updating={document.updating} updateStatus={{ pending: true, label: t("board.text.updating_board") }} tools={index ? strip : []} toolRow={index ? row : null} views={views}
       panel={panel} panelControl={handover.panelControl} toolStack={handover.toolStack} onToolStackChange={handover.changeToolStack} notice={view.notice}
       quickEdit={index ? handover.quickEdit : null} alert={alert} cardAlert={handover.cardAlert} alertDismissal={handover.alertDismissal}
-      shown={shown} onReload={view.reload} canvasRef={canvasRef} contextMenuItems={contextMenuItems}
-      zoom={zoom}>
+      shown={shown} onReload={view.reload} canvasRef={activeCanvasRef} contextMenuItems={contextMenuItems}
+      zoom={zoom} corner={solid ? "cube" : "pill"} cube={solid ? { projection: { value: projection, onChange: setProjection }, onHome: () => view3dRef.current?.home() } : null}>
       <canvas ref={canvasRef} aria-label={t("board.text.board_file", { file: view.file.name })} role="img" data-board-tool={toolMode}
-        className={cn("absolute inset-0 block touch-none select-none", cursor)} />
+        className={cn("absolute inset-0 block touch-none select-none", cursor, solid && shown3d && "invisible")} />
+      {/* The board in 3D, over the flat canvas until its first frame is up, which then lets its rasters go. */}
+      {solid ? <Suspense fallback={null}>
+        <Board3dView handle={view3dRef} viewerRef={viewer3dRef} modelKey={`${file}#3d`} layout={plot.layout} outline={plot.board?.outline ?? null}
+          display={display} colorScheme={colorScheme} opening={opening} projection={projection} pickAt={handlers.pickLocated}
+          onTap={handlers.tap} onHover={handlers.hover} picking={Boolean(index) && !annotating} selecting={toolMode === BOARD_TOOL.SELECT}
+          overlay={overlay} onCamera={onCamera3d} onShown={() => setShown3d(true)} />
+      </Suspense> : null}
       {/* Measure's layer, over the board and under the tools: the pointer stays the board's. */}
       <canvas ref={measureCanvasRef} className="pointer-events-none absolute inset-0 z-[1] h-full w-full" aria-hidden="true" data-scene-measure="" />
       {annotating && shown && index ? <AnnotationOverlay annotation={annotation} surface={annotationSurface} viewOf={currentView} /> : null}

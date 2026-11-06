@@ -12,7 +12,7 @@ import { ROW_NAME_UNDER_ACTIONS, TreeRowLabel, TreeRowSurface, treeRowActionsCla
 import { cn } from "@cad/ui/utils";
 import { LAYER_ROW_INSET_PX, LayerSwatch } from "../kit/inspector/layerRows.jsx";
 import { useFlatPanel } from "../kit/shell/FlatPanel.jsx";
-import { BoardLayerDisplaySettings, BoardPresetSettings } from "./BoardDisplay.jsx";
+import { BoardLayerDisplaySettings } from "./BoardDisplay.jsx";
 
 // The room the eye takes at a row's right end: the row's `--row-actions`.
 const ROW_ACTIONS_WIDTH = "1.5rem";
@@ -44,10 +44,10 @@ function LayerEye({ id, hidden, onToggle }) {
  * colour (KiCad's, in the view's theme: `plot2d/theme.js`, `kit/inspector/layerRows.jsx`). While the
  * panel's search is up, the layers whose names match, and nothing else. Everything here is the
  * board's Display (`plot2d/boardDisplay.js`), the one object `cad <type> snapshot --display` draws,
- * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Over the
- * layers, the **Preset**; under them, **Layer display** (the other layers, the pours, the opacities), as
+ * so the view and a snapshot never disagree; a set the preset does not draw reads as Custom. Under the
+ * layers, **Layer display** (the other layers, the pours, the opacities), as
  * KiCad's Appearance panel has them (`BoardDisplay.jsx`): how the board is drawn, changed now and then, so
- * the panel's; the side, changed often, is the view's corner's.
+ * the panel's; the preset (Display) and the side, changed often, are the view's corner's.
  *
  * @param {{ sheet: { layers: { id: string, kind: string, side: string, items: unknown[] }[] },
  *   display: ReturnType<typeof import("@cad/core/lib/plot2d/index.js").readBoardDisplay>,
@@ -93,9 +93,6 @@ export default function LayersSection({ sheet, display, onDisplayChange, colorSc
     return found.length ? <ul className="px-2 text-tiny" aria-label={t("board.text.board_layers")} data-board-layers="" data-flat-panel-hit="">{found.map(row)}</ul> : null;
   }
   return <div className="flex flex-col pt-1 text-tiny">
-    <div className="px-2 pb-1" data-board-display-settings="preset">
-      <BoardPresetSettings display={display} sheet={sheet} onChange={onDisplayChange} />
-    </div>
     <div className="px-2" aria-label={t("board.text.board_layers")} data-board-layers="">
       {groups.map(group => <ul key={group.id} aria-label={t("board.text.name_layers", { name: group.label })} data-layer-group={group.id}>
         <li className="flex h-6 items-center text-muted-foreground" style={{ paddingLeft: LAYER_ROW_INSET_PX }} aria-hidden="true">{group.label}</li>

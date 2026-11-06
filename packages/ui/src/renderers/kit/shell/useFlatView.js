@@ -85,9 +85,11 @@ export function useFlatTools({ toolModes, file, revision, ready }) {
  * @param {((references: readonly object[], file: string) => string[]) | null} [options.packetReferences]  What the
  *   snapshot packet carries of the prompt's references into `file` (its `references`, which `cad <type> snapshot --job`
  *   lights as the view did), where the view's packets carry them; null for none.
+ * @param {((event: KeyboardEvent) => boolean) | null} [options.onViewKey]  A single key of the view's own (a
+ *   view drawn flat or in 3D switching between them), tried before the tools' letters; true when it took it.
  */
 export function useFlatHandover({ view, data, workspace, file, shown, ready, alert, tools, selection, references, chips, nameReference,
-  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null }) {
+  capture, currentView, annotationDocument, runtime, live, copySelection = null, fit, captureFailed, packetReferences = null, onChord = null, onViewKey = null }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const viewerElement = useContext(ViewerElementContext);
@@ -181,6 +183,8 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
   };
   const chordRef = useRef(onChord);
   chordRef.current = onChord;
+  const viewKeyRef = useRef(onViewKey);
+  viewKeyRef.current = onViewKey;
   // The view's panel, as the frame drew it (`FlatViewFrame.jsx` fills it in): ⌘\ (Ctrl+\) shows or
   // hides it, / opens it on its search.
   const panelControl = useRef(null);
@@ -203,8 +207,8 @@ export function useFlatHandover({ view, data, workspace, file, shown, ready, ale
     onUndo: () => history.undo(),
     onRedo: () => history.redo(),
     // A tool's letter takes it up, F fits the picture (`toolShortcuts.js`), over the strip as drawn.
-    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && pressToolKey(event, { tools: toolKeys.current,
-      selectDrawing: tool => annotationRef.current.selectTool(tool), fit })),
+    onKey: event => (event.key === "/" && !event.shiftKey && panelControl.current ? panelControl.current.search() : shown && (viewKeyRef.current?.(event) === true
+      || pressToolKey(event, { tools: toolKeys.current, selectDrawing: tool => annotationRef.current.selectTool(tool), fit }))),
     zoom: () => (shown ? zoomKeys.current : null),
     escapeActive: Boolean(selection.active || measure.drafting || measure.selected.length || annotation.selected.length || !selecting),
     onEscape(event) {

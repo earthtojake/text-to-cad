@@ -36,8 +36,16 @@ export const VIEWPORT_CUBE_COLUMN_POSITION = Object.freeze({
 export const VIEWPORT_PILL_POSITION = Object.freeze({
   right: `${VIEWPORT_INSET_PX}px`, bottom: `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-bottom, 0px))`
 });
-// The 28px pill (`ZoomControl.jsx`'s), and the column over it.
+// The 28px pill (`ZoomControl.jsx`'s), 104px wide, and the column over it.
 export const VIEWPORT_PILL_PX = 28;
+export const VIEWPORT_PILL_WIDTH_PX = 104;
+// The corner's bottom row (`ViewCorner.jsx`'s `ViewCornerRow`): left of the pill, a gap from it, on its
+// line. The cube's box ends 90px from the right edge (96px wide, overhanging it by 6), so the row clears
+// it by 28px and stands where it stands whether the pill or the cube is in the corner.
+export const VIEWPORT_CORNER_ROW_POSITION = Object.freeze({
+  right: `${VIEWPORT_INSET_PX + VIEWPORT_PILL_WIDTH_PX + VIEWPORT_CORNER_GAP_PX}px`,
+  bottom: `calc(${VIEWPORT_INSET_PX}px + var(--cad-viewport-corner-bottom, 0px))`
+});
 export const VIEWPORT_PILL_COLUMN_POSITION = Object.freeze({
   right: `${VIEWPORT_INSET_PX}px`, bottom: `calc(${VIEWPORT_INSET_PX + VIEWPORT_PILL_PX + VIEWPORT_CORNER_GAP_PX}px + var(--cad-viewport-corner-bottom, 0px))`
 });

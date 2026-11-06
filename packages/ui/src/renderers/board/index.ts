@@ -9,8 +9,9 @@ export type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewS
 
 /**
  * A board's live state is the base state, its selection the board references a person or a host
- * picked (`blinky.kicad_pcb#R1.2`), plus the board's Display as a snapshot job reads it. It has no
- * camera and no zoom command: `resetCamera` fits the board again; its Display is the person's.
+ * picked (`blinky.kicad_pcb#R1.2`), plus the board's Display as a snapshot job reads it. Drawn flat
+ * (2D) it has no camera to pose: `resetCamera` fits the board again; shown in 3D its camera is every
+ * 3D view's (`setCamera`, `readState().camera`). Its Display is the person's.
  */
 export type BoardLiveState = LiveViewState & {
   boardDisplay?: { mode: string; side: 'top' | 'bottom'; poured: boolean; layers?: string[] };
@@ -22,7 +23,7 @@ export interface BoardRendererOptions {
   preferences?: CadPreferenceSource;
   /** Host requests. One to select a reference selects it on a board read with its index (`#U3`, `#U3.9`, `#net:VIN`, `#track:<uuid>`, `#F.Cu@x10y5..x20y15`). */
   commands?: ViewerCommandSource;
-  /** The mounted view's live command surface. `select` and `clearSelection` are the board's; camera and Display commands are declined, loudly. */
+  /** The mounted view's live command surface. `select` and `clearSelection` are the board's; a camera is declined, loudly, while it is drawn flat (2D), and Display commands always are. */
   live?: LiveViewBinding<any>;
 }
 export interface PreparedBoardDocument extends PreparedWorkspaceEntry {
@@ -36,8 +37,9 @@ export const BOARD_FILE = /\.kicad_pcb$/i;
  * A `.kicad_pcb` is a flat view, as a `.dxf` is: the backend reads the board from its file, layer
  * by layer (`GET /api/v1/documents/kicad_pcb/<id>/plot`), and the client paints the layers on a canvas, with Select (its parts,
  * pads, nets, tracks, vias, zones, texts, dimensions and graphics, or a point or an area), Annotate and Measure, its Board and
- * Layers in the view's panel, its Display among them.
- * Registering loads no three.js, no viewport and no backend connection.
+ * Layers in the view's panel, its Display in the view's corner; 2D | 3D shows the same view in 3D
+ * (`Board3dView.jsx`, a chunk of its own, loaded only then).
+ * Registering loads no three.js, no viewport and no backend connection; a board drawn in 2D loads none either.
  *
  * It still opens a render session it never draws from, as a DXF does: that session is what
  * registers the file as OPEN with the client, which is how a rewritten board reaches this tab.

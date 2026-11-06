@@ -107,3 +107,51 @@ test('a board opens fitted on its own background, its track in KiCad’s red, an
   assert.ok(near(pixel(lit, x, y), highlight), `the pad is lit where it is: ${pixel(lit, x, y)}`);
   assert.deepEqual(errors, []);
 });
+
+/** A world point's pixel on the 3D view's canvas, through its live orthographic camera (`window.__cadCamera`). */
+const project3d = (camera, point, width, height) => {
+  const sub = (a, b) => a.map((v, i) => v - b[i]), dot = (a, b) => a.reduce((s, v, i) => s + v * b[i], 0);
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const unit = a => { const l = Math.hypot(...a); return a.map(v => v / l); };
+  const forward = unit(sub(camera.target, camera.position)), right = unit(cross(forward, camera.up)), up = cross(right, forward);
+  const d = sub(point, camera.target);
+  return [(dot(d, right) / (camera.halfHeight * camera.aspect) + 1) / 2 * width, (1 - dot(d, up) / camera.halfHeight) / 2 * height];
+};
+
+test('in 3D the board is its two faces in the 2D colours, a press on a pad’s pixels picks what the 2D press picks, and the corner’s switches do not move', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  await frame(pane);
+  const switches = () => Promise.all(['[data-view-corner-row] [data-display-mode]', '[data-board-dimension-switch]', '[data-board-side-switch]']
+    .map(selector => pane.locator(selector).boundingBox()));
+  const flat = await switches();
+  await pane.locator('[data-board-dimension="3d"]').click();
+  await page.waitForFunction(() => document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible'));
+  assert.deepEqual(await switches(), flat, 'the corner row stands where it stood');
+  // Head on from the top, as the 2D view sees it, through the 3D camera.
+  const settled = () => page.waitForFunction(() => { const camera = window.__cadCamera?.(); return camera && !camera.settling; });
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [20, -15, 200], target: [20, -15, 0], up: [0, 1, 0] }));
+  await settled();
+  const canvas = pane.locator('[data-board-3d] canvas').first();
+  const shot = async () => PNG.sync.read(Buffer.from((await canvas.evaluate(element => element.toDataURL('image/png'))).split(',')[1], 'base64'));
+  const box = await canvas.boundingBox();
+  let camera = await page.evaluate(() => window.__cadCamera());
+  const top = await shot();
+  const [trackX, trackY] = project3d(camera, [30, -15, 0], box.width, box.height);
+  assert.ok(red(pixel(top, trackX, trackY)), `the VBUS track on the front face: ${pixel(top, trackX, trackY)}`);
+  // Turned, a press on R1 pad 2's pixels picks it, as the 2D view's press does.
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ position: [10, -55, 40], target: [35.825, -15, 0], up: [0, 0, 1] }));
+  await settled();
+  camera = await page.evaluate(() => window.__cadCamera());
+  const [padX, padY] = project3d(camera, [35.825, -15, 0], box.width, box.height);
+  await page.mouse.click(box.x + padX, box.y + padY);
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().selection[0]?.target.selectors[0] === '#R1.2');
+  assert.equal(await pane.locator('[data-board-side][aria-checked="true"]').getAttribute('data-board-side'), 'top');
+  assert.deepEqual(errors, []);
+});
