@@ -93,7 +93,7 @@ search-path = ["src"]
 # A checkout under an ignored folder (a `.claude/worktrees/...` worktree) would
 # otherwise have src excluded by the ignore files above it and check nothing.
 use-ignore-files = false
-# netgen: imported only by the mesher's own process (`_internal/fea/mesher.py`), and it ships no type stubs.
+# netgen: imported only by the mesher's own process (`cad/netgen/_mesher.py`), and it ships no type stubs.
 ignore-missing-imports = ["netgen", "netgen.*"]
 
 [tool.setuptools.packages.find]

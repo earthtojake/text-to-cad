@@ -200,7 +200,7 @@ class Mesher(unittest.TestCase):
     def test_the_dependency_is_marked_for_the_platforms_netgen_has_wheels_for(self):
         import tomllib
 
-        from cad._internal.fea.mesh import NETGEN_PLATFORMS
+        from cad.netgen._mesher import NETGEN_PLATFORMS
 
         pyproject = Path(__file__).resolve().parents[4] / "packages" / "cad" / "pyproject.toml"
         # The kernel's extra: FEA reads the document's B-rep, so it runs where the kernel is.
@@ -747,7 +747,7 @@ class FinerMeshSize(unittest.TestCase):
 @needs_fea
 class MeshOrderGuard(unittest.TestCase):
     def _elements(self, second_order: bool):
-        # In a process of its own, as cad meshes (fea/mesher.py): netgen's OpenCascade and OCP's cannot share one.
+        # In a process of its own, as cad meshes (netgen/_mesher.py): netgen's OpenCascade and OCP's cannot share one.
         import pickle
         import subprocess
         import sys
@@ -782,7 +782,7 @@ class InvertedElements(unittest.TestCase):
         with ``slot`` the node id of each corner pair's mid-edge node."""
         import numpy as np
 
-        from cad._internal.fea.calculix import NETGEN_EDGES
+        from cad.netgen._mesher import NETGEN_EDGES
 
         corners = np.array([[0.0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1], [1, 1, 1]])
         points, slot = list(corners), {}
@@ -802,7 +802,7 @@ class InvertedElements(unittest.TestCase):
     def test_the_inverted_element_alone_is_made_straight_and_counted(self):
         import numpy as np
 
-        from cad._internal.fea.calculix import C3D10_EDGES, C3D10_POINTS, SMALLEST_JACOBIAN, c3d10_elements
+        from cad.calculix._files import C3D10_EDGES, C3D10_POINTS, SMALLEST_JACOBIAN, c3d10_elements
         from cad._internal.fea.mesh import jacobians, straighten_inverted
 
         nodes, tets, slot = self._pair()
@@ -821,7 +821,7 @@ class InvertedElements(unittest.TestCase):
         """CalculiX checks its four integration points only, and solves an element folded at a node, wrongly."""
         import numpy as np
 
-        from cad._internal.fea.calculix import C3D10_EDGES, C3D10_POINTS, SMALLEST_JACOBIAN, c3d10_elements
+        from cad.calculix._files import C3D10_EDGES, C3D10_POINTS, SMALLEST_JACOBIAN, c3d10_elements
         from cad._internal.fea.mesh import jacobians, straighten_inverted
 
         nodes, tets, slot = self._pair()

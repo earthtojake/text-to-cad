@@ -88,7 +88,7 @@ process, so it needs no engine running:
 - **The solver.** CalculiX (`ccx`) 2.20 or newer, installed by the person: `conda install -c
   conda-forge calculix`, the `calculix-ccx` package on Debian and Ubuntu, or FreeCAD 1.0 or newer
   on macOS or Windows, which carries one. text-to-cad runs `CAD_CCX` when it is set
-  (`CAD_CCX=/path/to/ccx`), else the first `ccx` (or `ccx_2.2x`) on PATH, else the one inside
+  (the file itself, named `ccx` or `ccx_2.2x`: `CAD_CCX=/path/to/ccx`), else the first `ccx` (or `ccx_2.2x`) on PATH, else the one inside
   FreeCAD where its installer puts it. A missing
   or older one stops the solve with an error that says how to install it. text-to-cad downloads nothing
   and has no other solver: ask the user to install CalculiX, or install it yourself with their

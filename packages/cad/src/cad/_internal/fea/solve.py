@@ -1,4 +1,4 @@
-"""Linear static elasticity on a :class:`VolumeMesh`, solved by CalculiX (calculix.py).
+"""Linear static elasticity on a :class:`VolumeMesh`, solved by CalculiX (``cad.calculix``).
 
 Quadratic (10-node) tetrahedra, isotropic linear elasticity, small strain. Fixed faces clamp every displacement
 component and rollers hold their normal (supports.py); a force is spread as a uniform traction over its faces and a
@@ -158,7 +158,7 @@ def body_forces(volume: "VolumeMesh", density: "np.ndarray", accelerations: "Seq
     ``density`` (tonne/mm^3) per element."""
     import numpy as np
 
-    from cad._internal.fea.calculix import NETGEN_EDGES
+    from cad.netgen._mesher import NETGEN_EDGES
 
     total = np.sum(np.asarray(accelerations, dtype=float).reshape(-1, 3), axis=0)
     forces = np.zeros((len(volume.nodes), 3))
@@ -186,7 +186,7 @@ def _corner_extrapolation() -> "np.ndarray":
     nearest corner k): the inverse of the corner shape functions there."""
     import numpy as np
 
-    from cad._internal.fea.calculix import C3D10_POINTS
+    from cad.calculix._files import C3D10_POINTS
 
     return np.linalg.inv(np.array(C3D10_POINTS))
 
@@ -211,13 +211,14 @@ def solve_linear_static(volume: "VolumeMesh", material: "Material | Sequence[Mat
     """
     import numpy as np
 
-    from cad._internal.fea import calculix
     from cad._internal.fea.mesh import small_feature_mm
     from cad._internal.fea.supports import check_held, supports_of
+    from cad.calculix._files import C3D10_EDGES, c3d10_elements, read_dat, write_inp
+    from cad.calculix._program import find_ccx, run
 
     timings: dict[str, float] = {}
     warnings: list[str] = []
-    ccx = calculix.find_ccx()
+    ccx = find_ccx()
     nodes, tets = np.asarray(volume.nodes), np.asarray(volume.tets)
     if tets.shape[1] != 10:
         raise ValueError("a static solve needs quadratic (10-node) tetrahedra")
@@ -237,10 +238,10 @@ def solve_linear_static(volume: "VolumeMesh", material: "Material | Sequence[Mat
     check_held(volume, supports)
 
     started = time.perf_counter()
-    elements = calculix.c3d10_elements(nodes, tets)
-    dat = calculix.run(ccx, lambda path: calculix.write_inp(
+    elements = c3d10_elements(nodes, tets)
+    dat = run(ccx, lambda path: write_inp(
         path, nodes, elements, part_of, materials, supports.held(), supports.frames, forces))
-    printed = calculix.read_dat(dat)
+    printed = read_dat(dat)
     timings["solve_s"] = time.perf_counter() - started
     if log:
         log(f"solved with {ccx.label} in {timings['solve_s']:.1f}s")
@@ -274,7 +275,7 @@ def solve_linear_static(volume: "VolumeMesh", material: "Material | Sequence[Mat
         raise RuntimeError("CalculiX's stresses leave elements out")
     at_points = _von_mises(stress)                                          # (T, 4)
     corners = np.einsum("ck,tkj->tcj", _corner_extrapolation(), stress)     # (T, 4, 6) at C3D10's corners
-    mids = np.stack([(corners[:, i] + corners[:, j]) / 2.0 for i, j in calculix.C3D10_EDGES], axis=1)
+    mids = np.stack([(corners[:, i] + corners[:, j]) / 2.0 for i, j in C3D10_EDGES], axis=1)
     at_nodes = _von_mises(np.concatenate([corners, mids], axis=1))          # (T, 10), in C3D10's order
 
     def averaged(rows) -> "np.ndarray":

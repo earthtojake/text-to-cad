@@ -17,7 +17,8 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
-from cad._internal.fea import calculix  # noqa: E402
+from cad.calculix import _files, _program as calculix  # noqa: E402
+from cad.netgen._mesher import NETGEN_EDGES  # noqa: E402
 
 
 def _program(folder: Path, said: str) -> str:
@@ -29,17 +30,26 @@ def _program(folder: Path, said: str) -> str:
 
 
 class FindCcx(unittest.TestCase):
-    def test_a_setting_naming_no_program_says_so_and_how_to_install(self):
+    def test_a_setting_naming_no_file_says_so_and_how_to_install(self):
         with mock.patch.dict(os.environ, {calculix.CCX_ENV: "/no/such/ccx"}):
-            with self.assertRaisesRegex(calculix.CalculixMissingError, r"CAD_CCX names /no/such/ccx, which is not a program"):
+            with self.assertRaisesRegex(calculix.CalculixMissingError, r"CAD_CCX names /no/such/ccx, which is not a file.*"
+                                                                       r"conda install"):
                 calculix.find_ccx()
+
+    def test_a_setting_naming_anything_but_ccx_is_refused_and_never_run(self):
+        with tempfile.TemporaryDirectory() as name:
+            program = Path(name) / "FreeCAD"
+            program.write_text("#!/bin/sh\ntouch ran\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: str(program)}):
+                with self.assertRaisesRegex(calculix.CalculixMissingError, "which is not ccx"):
+                    calculix.find_ccx()
 
     def test_none_on_path_or_in_freecad_is_refused_with_the_install_hint(self):
         with mock.patch.dict(os.environ, {calculix.CCX_ENV: ""}), mock.patch("cad.engine.executables.find", return_value=None), \
                 mock.patch.object(calculix, "_in_freecad", return_value=["/no/FreeCAD.app/Contents/Resources/bin/ccx"]):
             with self.assertRaises(calculix.CalculixMissingError) as caught:
                 calculix.find_ccx()
-        self.assertIn("CalculiX's ccx was not found", str(caught.exception))
+        self.assertIn("ccx was not found", str(caught.exception))
         self.assertIn("conda install -c conda-forge calculix", str(caught.exception))
         self.assertIn("FreeCAD 1.0 or newer, which carries one", str(caught.exception))
 
@@ -67,24 +77,24 @@ class FindCcx(unittest.TestCase):
                 self.assertEqual(calculix._in_freecad(), [str(Path(name) / "FreeCAD 1.10" / "bin" / "ccx.exe"),
                                                           str(Path(name) / "FreeCAD 1.9" / "bin" / "ccx.exe")])
 
-    def test_a_setting_is_an_absolute_path_or_a_name_on_path(self):
-        # A relative path would be read in whatever folder the solve runs in.
-        with mock.patch.dict(os.environ, {calculix.CCX_ENV: "bin/ccx"}):
-            with self.assertRaisesRegex(calculix.CalculixMissingError, r"CAD_CCX names bin/ccx, which is not a "
-                                                                       r"program \(give its absolute path"):
-                calculix.find_ccx()
-        with mock.patch.dict(os.environ, {calculix.CCX_ENV: "ccx"}), \
-                mock.patch("cad.engine.executables.find", return_value=None) as find:
-            with self.assertRaises(calculix.CalculixMissingError):
-                calculix.find_ccx()
-        find.assert_called_once_with("ccx")
+    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+    def test_a_newer_build_can_be_named_and_a_relative_path_is_kept_absolute(self):
+        # Relative, it would be read in the folder a solve runs in.
+        with tempfile.TemporaryDirectory() as name:
+            program = Path(_program(Path(name), "This is Version 2.24"))
+            program = program.rename(program.with_name("ccx_2.24_MT"))
+            relative = os.path.relpath(program)
+            with mock.patch.dict(os.environ, {calculix.CCX_ENV: relative}):
+                found = calculix.find_ccx()
+        self.assertTrue(os.path.isabs(found.path))
+        self.assertEqual(found.version, "2.24")
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
     def test_a_version_older_than_the_minimum_is_refused(self):
         with tempfile.TemporaryDirectory() as name:
             program = _program(Path(name), "This is Version 2.17")
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: program}):
-                with self.assertRaisesRegex(calculix.CalculixMissingError, r"is CalculiX 2\.17; cad needs 2\.20 or newer"):
+                with self.assertRaisesRegex(calculix.CalculixMissingError, r"reports 2\.17; cad needs CalculiX 2\.20 or newer"):
                     calculix.find_ccx()
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
@@ -92,7 +102,7 @@ class FindCcx(unittest.TestCase):
         with tempfile.TemporaryDirectory() as name:
             program = _program(Path(name), "hello")
             with mock.patch.dict(os.environ, {calculix.CCX_ENV: program}):
-                with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no CalculiX version"):
+                with self.assertRaisesRegex(calculix.CalculixMissingError, "reports no version"):
                     calculix.find_ccx()
 
     @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
@@ -109,22 +119,22 @@ class Elements(unittest.TestCase):
         import numpy as np
 
         corners = np.array([[0.0, 0, 0], [1, 0, 0], [0, 1, 0], [0, 0, 1]])
-        mids = [(corners[i] + corners[j]) / 2 for i, j in calculix.NETGEN_EDGES]
+        mids = [(corners[i] + corners[j]) / 2 for i, j in NETGEN_EDGES]
         nodes = np.vstack([corners, mids])
         # The same tetrahedron both ways round: netgen's orientation, and the other.
         tets = np.array([list(range(10)), [0, 2, 1, 3, 5, 4, 6, 7, 9, 8]])
-        elements = calculix.c3d10_elements(nodes, tets)
+        elements = _files.c3d10_elements(nodes, tets)
         for row in elements:
             a, b, c, d = nodes[row[:4]]
             self.assertGreater(np.dot(np.cross(b - a, c - a), d - a), 0.0)
-            for slot, (i, j) in enumerate(calculix.C3D10_EDGES, start=4):
+            for slot, (i, j) in enumerate(_files.C3D10_EDGES, start=4):
                 np.testing.assert_allclose(nodes[row[slot]], (nodes[row[i]] + nodes[row[j]]) / 2)
 
     def test_linear_elements_are_refused(self):
         import numpy as np
 
         with self.assertRaisesRegex(ValueError, "C3D10 needs quadratic"):
-            calculix.c3d10_elements(np.zeros((4, 3)), np.array([[0, 1, 2, 3]]))
+            _files.c3d10_elements(np.zeros((4, 3)), np.array([[0, 1, 2, 3]]))
 
 
 class ReadDat(unittest.TestCase):
@@ -145,7 +155,7 @@ class ReadDat(unittest.TestCase):
             "         1   1  1.0E+00  2.0E+00  3.0E+00  4.0E+00  5.0E+00  6.0E+00",
             "",
         ])
-        printed = calculix.read_dat(text)
+        printed = _files.read_dat(text)
         self.assertEqual(printed["U"].shape, (2, 4))
         self.assertAlmostEqual(printed["U"][1, 2] * 1e100, 1.234567)
         self.assertEqual(printed["RF"].tolist(), [[1.0, -10.0, 0.0, 5.0]])
@@ -161,6 +171,19 @@ class Run(unittest.TestCase):
             path.chmod(path.stat().st_mode | stat.S_IEXEC)
             with self.assertRaisesRegex(RuntimeError, "CalculiX failed .*NHELD is not defined"):
                 calculix.run(calculix.Ccx(str(path), "2.23"), lambda inp: inp.write_text("*NODE\n", encoding="utf-8"))
+
+    @unittest.skipIf(sys.platform == "win32", "a shell script stands in for ccx")
+    def test_a_run_has_no_display_a_home_of_its_own_and_one_thread(self):
+        with tempfile.TemporaryDirectory() as name:
+            path = Path(name) / "ccx"
+            path.write_text('#!/bin/sh\necho "$HOME|${DISPLAY:-none}|$OMP_NUM_THREADS|$PWD" > study.dat\n', encoding="utf-8")
+            path.chmod(path.stat().st_mode | stat.S_IEXEC)
+            with mock.patch.dict(os.environ, {"DISPLAY": ":0", "HOME": name, "OMP_NUM_THREADS": "8"}):
+                dat = calculix.run(calculix.Ccx(str(path), "2.23"), lambda inp: inp.write_text("", encoding="utf-8"))
+        home, display, threads, folder = dat.strip().split("|")
+        self.assertEqual((display, threads), ("none", "1"))
+        self.assertEqual(Path(home).resolve(), (Path(folder) / "home").resolve())
+        self.assertFalse(Path(folder).exists())
 
 
 if __name__ == "__main__":

@@ -268,7 +268,7 @@ RULES: tuple[Rule, ...] = (
         f"{LIBRARY_SRC}/engine/document.py", f"{LIBRARY_SRC}/engine/refs.py", f"{LIBRARY_SRC}/engine/kernel/bounds.py",
         f"{LIBRARY_SRC}/engine/executables.py", f"{LIBRARY_SRC}/engine/export/glb.py",
         f"{LIBRARY_SRC}/_internal/atomic_replace.py", f"{LIBRARY_SRC}/_internal/kernel_run.py",
-        f"{SERVER_SRC}/_internal/cli_from_function.py",
+        f"{LIBRARY_SRC}/_internal/programs.py", f"{SERVER_SRC}/_internal/cli_from_function.py",
     ), select(flags=["fea"])),
     Rule(ENGINE_CODE, CADGEN_CONSUMERS, final=True),
     Rule(tuple(f"{project}/**" for project in PACKAGE_PROJECTS + ALIAS_PROJECTS) + ("scripts/bundle/**",),
@@ -276,11 +276,12 @@ RULES: tuple[Rule, ...] = (
     # The stress solver's own tests need CalculiX, which no other job installs: it, its commands,
     # the result types it returns and the mesher's pin. Its skill's pages are checked against it.
     Rule((
-        f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/fea.py", f"{SERVER_SRC}/cli/fea_*",
-        f"{SERVER_SRC}/_internal/kernel_verb.py",
+        f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**",
+        f"{LIBRARY_SRC}/fea.py", f"{SERVER_SRC}/cli/fea_*", f"{SERVER_SRC}/_internal/kernel_verb.py",
         f"{LIBRARY_SRC}/results.py", "packages/cad/pyproject.toml", f"{CADGEN_SUITE}/cad/test_fea*.py",
     ), select(flags=["fea"])),
-    Rule((f"{LIBRARY_SRC}/_internal/fea/**",), select(skills=[f"{SKILL_SUITES}/fea"])),
+    Rule((f"{LIBRARY_SRC}/_internal/fea/**", f"{LIBRARY_SRC}/calculix/**", f"{LIBRARY_SRC}/netgen/**"),
+         select(skills=[f"{SKILL_SUITES}/fea"])),
 
     # The shared UI and the apps. The snapshot runtime is built from core alone, so ui
     # reaches the two hosts and the wheel, not cadgen's suites.

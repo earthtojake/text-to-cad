@@ -2,7 +2,7 @@
 
 The mesher is netgen (LGPL-2.1, the ``netgen-mesher`` wheel with its own OpenCascade). It cannot take an OCP shape
 object directly -- two pybind11 OCC builds are foreign to each other -- so the placed occurrence is written to a BREP
-file, which netgen reads in a process of its own (:mod:`.mesher`). Both sides walk the B-rep in explorer order, so netgen's face ``i`` is the engine's face ordinal
+file, which netgen reads in a process of its own (:mod:`cad.netgen._mesher`). Both sides walk the B-rep in explorer order, so netgen's face ``i`` is the engine's face ordinal
 ``i+1`` in practice; that is an implementation property, not a contract, so every face a study names is VERIFIED by area
 and centre of mass against the OCP face the document resolved, and matched geometrically when the order differs.
 
@@ -11,21 +11,17 @@ face where another part sits on it. Each part's face is then followed through th
 and those are matched to netgen's by area and centre.
 
 netgen is never imported in this process: its OpenCascade (7.8) and OCP's (8) cannot share one
-(:mod:`.mesher`). ``match_faces`` and ``generate_mesh`` run in the mesher's process, on netgen's objects. Back here,
-an element netgen's curving turned inside out is made straight (:func:`straighten_inverted`) before anything reads it.
+(:mod:`cad.netgen._mesher`, which holds all of the code that takes netgen's objects). Back here, an element netgen's curving turned inside out is made straight (:func:`straighten_inverted`) before anything reads it.
 """
 
 from __future__ import annotations
 
-import contextlib
 import itertools
-import os
-import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterator
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import numpy as np
@@ -33,43 +29,19 @@ if TYPE_CHECKING:
     from cad._internal.fea.assembly import Contact
     from cad._internal.fea.document import Document, Occurrence
 
-__all__ = ["NETGEN_PLATFORMS", "FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_center", "kernel_messages_on_stderr", "mesh_assembly",
+__all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_center", "mesh_assembly",
            "mesh_occurrence", "occurrence_fingerprints", "require_fea_stack", "small_feature_mm"]
-
-
-@contextlib.contextmanager
-def kernel_messages_on_stderr() -> Iterator[None]:
-    """netgen's C++ messages to stderr while it reads and meshes: it prints to file descriptor 1, which is where a
-    command's result belongs (``--json``'s line). The redirect is at the descriptor, as the kernel does not write
-    through Python's ``sys.stdout``."""
-    sys.stdout.flush()
-    sys.stderr.flush()
-    try:
-        saved = os.dup(1)
-    except OSError:
-        yield
-        return
-    try:
-        os.dup2(2, 1)
-        yield
-    finally:
-        sys.stdout.flush()
-        os.dup2(saved, 1)
-        os.close(saved)
-
-
-#: Where netgen publishes wheels, and so where cad installs it (its marker in ``pyproject.toml``).
-NETGEN_PLATFORMS = "macOS, Linux x86_64 and Windows x86_64"
 
 
 def require_fea_stack() -> None:
     """Fail before anything is meshed when netgen or CalculiX is missing: netgen, which meshes, is a dependency of every
-    install where it has wheels (:data:`NETGEN_PLATFORMS`), and is looked for, never imported, in this process
-    (:mod:`.mesher`); the solver is the one program the person installs, and the error says how."""
+    install where it has wheels (``NETGEN_PLATFORMS``), and is looked for, never imported, in this process
+    (:mod:`cad.netgen._mesher`); the solver is the one program the person installs, and the error says how."""
     import importlib.util
     import platform
 
-    from cad._internal.fea import calculix
+    from cad.calculix._program import CalculixMissingError, find_ccx
+    from cad.netgen._mesher import NETGEN_PLATFORMS
 
     if importlib.util.find_spec("netgen") is None:
         raise RuntimeError(
@@ -77,8 +49,8 @@ def require_fea_stack() -> None:
             f"publishes wheels ({NETGEN_PLATFORMS}), and this is {platform.system()} {platform.machine()}"
         )
     try:
-        calculix.find_ccx()
-    except calculix.CalculixMissingError as error:
+        find_ccx()
+    except CalculixMissingError as error:
         raise RuntimeError(str(error)) from error
 
 
@@ -124,22 +96,6 @@ class VolumeMesh:
     #: For an assembly, the face refs of each bonded joint, keyed like ``interface_triangles``,
     #: both parts' sides together.
     joint_faces: "dict[tuple[int, int], set[str]]" = field(default_factory=dict)
-
-
-# netgen's defaults (curvature safety 2, grading 0.3) refine to a fillet's or chamfer's own size, however large the
-# element size asked for: the 4-part rover cut came to 155k tets at any ``mesh.size_mm``. Grading 0.5 lets the size grow
-# faster away from small features, and a curvature safety of 1.5 keeps elements under about a radius: 1 put one element
-# across a 6 mm rod's radius at the default size and read its bending stress 20% high (test_fea.DefaultSizeAccuracy).
-_MESHING = {"curvaturesafety": 1.5, "grading": 0.5}
-
-
-def _meshing(refine: float) -> dict:
-    """netgen's settings for a mesh ``refine`` times finer than the default at curved features.
-
-    ``maxh`` alone does not refine a fillet or a hole: there the curvature safety
-    sets the size, so a finer solve scales it with the ratio it shrinks ``maxh`` by.
-    """
-    return {**_MESHING, "curvaturesafety": _MESHING["curvaturesafety"] * max(refine, 1.0)}
 
 
 def default_mesh_size(bbox_diagonal: float) -> float:
@@ -196,46 +152,6 @@ def write_brep(shape, path: Path) -> None:
         raise RuntimeError(f"could not write the BREP the mesher reads: {path}")
 
 
-def match_faces(fingerprints: list[FaceFingerprint], ng_faces, scale: float) -> dict[int, int]:
-    """``{netgen face index (0-based): cad ordinal}`` for EVERY face, verified.
-
-    Order is the fast path (netgen face i <-> ordinal i+1); a face that does not agree there is matched by area and
-    centre against all of netgen's faces, and an ambiguous or missing match is an error rather than a guess.
-    """
-    import numpy as np
-
-    ng = [(float(f.mass), np.array([f.center.x, f.center.y, f.center.z], dtype=float)) for f in ng_faces]
-    if len(ng) != len(fingerprints):
-        raise RuntimeError(
-            f"the mesher sees {len(ng)} faces but the document has {len(fingerprints)}; "
-            "the geometry did not survive the BREP hand-off intact"
-        )
-    area_tol = 1e-4
-    centre_tol = 1e-4 * max(scale, 1.0)
-
-    def agrees(fp: FaceFingerprint, index: int) -> bool:
-        area, centre = ng[index]
-        return abs(area - fp.area) <= area_tol * max(fp.area, 1.0) and np.linalg.norm(centre - fp.center) <= centre_tol
-
-    mapping: dict[int, int] = {}
-    unresolved = []
-    for fp in fingerprints:
-        index = fp.ordinal - 1
-        if 0 <= index < len(ng) and agrees(fp, index):
-            mapping[index] = fp.ordinal
-        else:
-            unresolved.append(fp)
-    for fp in unresolved:
-        candidates = [i for i in range(len(ng)) if i not in mapping and agrees(fp, i)]
-        if len(candidates) != 1:
-            raise RuntimeError(
-                f"face {fp.ref} (area {fp.area:.4g} mm^2 at {tuple(round(c, 3) for c in fp.center)}) has "
-                f"{len(candidates)} geometric matches in the mesher's faces; cannot place loads on it"
-            )
-        mapping[candidates[0]] = fp.ordinal
-    return mapping
-
-
 def require_elements(e3) -> None:
     """Refuse a mesh that is not all 10-node tetrahedra (``SecondOrder`` applied).
 
@@ -247,43 +163,16 @@ def require_elements(e3) -> None:
         raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
 
 
-def _offsets(radius: float) -> list[tuple[float, float, float]]:
-    """The six points ``radius`` from a centre along the axes."""
-    return [tuple(radius * sign if axis == k else 0.0 for k in range(3)) for axis in range(3) for sign in (-1.0, 1.0)]
-
-
-def generate_mesh(geometry, h: float, refine: float, size_field: dict | None):
-    """netgen's second-order mesh at size ``h``; ``size_field`` adds local sizes.
-
-    ``size_field`` is ``{"points": [[x, y, z, size_mm], ...], "radius_mm": r}``: a point holds its size within
-    ``radius_mm`` of it (its centre and six points at that distance, netgen grading the rest).
-    """
-    import netgen.meshing as ngmesh
-
-    if not size_field:
-        mesh = geometry.GenerateMesh(maxh=h, **_meshing(refine))
-    else:
-        parameters = ngmesh.MeshingParameters(maxh=h, **_meshing(refine))
-        radius = float(size_field.get("radius_mm") or 0.0)
-        offsets = [(0.0, 0.0, 0.0)] + ([] if radius <= 0 else _offsets(radius))
-        for x, y, z, size in size_field.get("points") or ():
-            for dx, dy, dz in offsets:
-                parameters.RestrictH(x=float(x) + dx, y=float(y) + dy, z=float(z) + dz, h=float(size))
-        mesh = geometry.GenerateMesh(mp=parameters)
-    mesh.SecondOrder()
-    return mesh
-
-
 def _netgen(shape, name: str, prints: list[FaceFingerprint], diagonal: float, h: float, refine: float,
             size_field: dict | None, *, count_domains: bool = False):
-    """netgen's mesh of an OCP shape, through a BREP file and the mesher's process (:func:`.mesher.volume`): the
+    """netgen's mesh of an OCP shape, through a BREP file and the mesher's process (:func:`cad.netgen._mesher.volume`): the
     verified face mapping, the nodes, the volume and surface elements, and (``count_domains``) the number of volumes."""
-    from cad._internal.fea import mesher
+    from cad.netgen._mesher import volume
 
     with tempfile.TemporaryDirectory(prefix="cad-fea-") as tmp:
         brep = Path(tmp) / name
         write_brep(shape, brep)
-        return mesher.volume(brep, prints, diagonal, h, refine, size_field, count_domains=count_domains)
+        return volume(brep, prints, diagonal, h, refine, size_field, count_domains=count_domains)
 
 
 def mesh_occurrence(
@@ -291,8 +180,8 @@ def mesh_occurrence(
 ) -> VolumeMesh:
     """Mesh one placed occurrence with second-order tetrahedra.
 
-    ``refine`` also shrinks the elements at curved features by that ratio (:func:`_meshing`).
-    ``size_field`` sets local sizes (:func:`generate_mesh`).
+    ``refine`` also shrinks the elements at curved features by that ratio (``cad.netgen._mesher``).
+    ``size_field`` sets local sizes (``cad.netgen._mesher.generate_mesh``).
     """
     require_fea_stack()
     import numpy as np
@@ -368,7 +257,7 @@ def curved_volumes(nodes, tets):
     """
     import numpy as np
 
-    from cad._internal.fea.calculix import NETGEN_EDGES
+    from cad.netgen._mesher import NETGEN_EDGES
 
     determinants = jacobians(nodes[tets], NETGEN_EDGES, [bary for bary, _ in _KEAST])
     return np.abs(determinants) @ np.array([weight for _, weight in _KEAST])
@@ -381,7 +270,7 @@ def straighten_inverted(nodes, tets) -> int:
     across a fillet or a small hole, that node can pass the element's opposite face, and the element turns inside out:
     at an integration point CalculiX refuses the whole mesh (``nonpositive jacobian``); at one of its nodes alone it
     solves it, folded, and its stress and displacement there are wrong. So an element is checked at both, CalculiX's
-    four points (:data:`.calculix.C3D10_POINTS`) and its ten nodes, and one inside out at any is made straight: its six mid-edge nodes
+    four points (:data:`cad.calculix._files.C3D10_POINTS`) and its ten nodes, and one inside out at any is made straight: its six mid-edge nodes
     go back to their edges' straight midpoints, where an element of sound corners is valid everywhere; its neighbours
     share those nodes, so the check repeats until no element is inverted. The surface there is drawn and solved as the
     straight element's, a little less curved. An element still inverted when straight has corners that enclose no
@@ -389,7 +278,8 @@ def straighten_inverted(nodes, tets) -> int:
     """
     import numpy as np
 
-    from cad._internal.fea.calculix import C3D10_EDGES, C3D10_POINTS, NETGEN_EDGES, SMALLEST_JACOBIAN, c3d10_elements
+    from cad.calculix._files import C3D10_EDGES, C3D10_POINTS, SMALLEST_JACOBIAN, c3d10_elements
+    from cad.netgen._mesher import NETGEN_EDGES
 
     elements = c3d10_elements(nodes, tets)  # corners turned as CalculiX takes them, so a sound element is positive
     # CalculiX's integration points, then the element's corners and mid-edge nodes (C3D10's order) as barycentric points.

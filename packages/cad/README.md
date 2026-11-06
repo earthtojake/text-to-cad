@@ -449,6 +449,9 @@ src/cad/
   fea.py                 # finite element analysis: `faces`, `parts` and `solve` over a
                          #   STEP or .xbf part or assembly (netgen meshes; the
                          #   person's CalculiX solves); the rest in _internal/fea/
+  calculix/              # CalculiX: `ccx` found, checked and run headless, and its
+                         #   input and printed output
+  netgen/                # netgen, in a process of its own: a BREP in, a mesh out
   check_fonts.py         # `python -m cad.check_fonts`: the font that breaks
                          #   `import build123d`
   _internal/             # the runner `cad run` starts a program by (program: the program's
@@ -487,4 +490,5 @@ OpenCascade and OCP's cannot share one. The solver is CalculiX (`ccx`, 2.20 or n
 person installs (`conda install -c conda-forge calculix`, `calculix-ccx` on Debian and Ubuntu, or
 FreeCAD on macOS and Windows, which carries one): `CAD_CCX` names it, else `ccx` on PATH, else
 FreeCAD's. A missing or older one is an error saying how to install
-it; cad downloads no solver and has no other. The result names the CalculiX version that ran.
+it; cad downloads no solver and has no other. It runs headless, in a private folder with homes of its
+own, so it reads and writes nothing of the person's. The result names the CalculiX version that ran.

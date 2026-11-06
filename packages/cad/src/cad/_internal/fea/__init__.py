@@ -3,7 +3,7 @@
 :mod:`.study` parses and checks the study file before any heavy import; :mod:`.materials` reads a material, the
 study's numbers or the model's own;
 :mod:`.mesh` turns a STEP occurrence (or an assembly's glued parts) into tetrahedra through netgen, every B-rep face
-kept under its cad ordinal; :mod:`.static` solves it through CalculiX (:mod:`.solve`, :mod:`.calculix`) and reads
+kept under its cad ordinal; :mod:`.static` solves it through CalculiX (:mod:`.solve`, :mod:`cad.calculix`) and reads
 the answer; :mod:`.checks` says what an engineer would of it; :mod:`.outputs` writes the result GLB and VTU;
 :mod:`.run` is the orchestration the verbs call.
 
