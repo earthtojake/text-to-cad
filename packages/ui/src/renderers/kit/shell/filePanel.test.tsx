@@ -9,8 +9,15 @@ import { useFlatPanelState } from '../../../../dist/renderers/kit/shell/FlatPane
 // the panel's own state (`useFlatPanelState`), whatever renderer draws the file.
 let frameWidth = 1280;
 const rect = Element.prototype.getBoundingClientRect;
+// The observers on the page, so a test can resize the view (`resize`).
+const observers = new Set<() => void>();
+const resize = (width: number) => act(() => { frameWidth = width; observers.forEach(callback => callback()); });
 beforeEach(() => {
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
+  vi.stubGlobal('ResizeObserver', class {
+    callback: () => void;
+    constructor(callback: () => void) { this.callback = callback; }
+    observe() { observers.add(this.callback); } unobserve() {} disconnect() { observers.delete(this.callback); }
+  });
   Element.prototype.getBoundingClientRect = function (this: Element) {
     return this.hasAttribute('data-frame') ? DOMRect.fromRect({ x: 0, y: 0, width: frameWidth, height: 700 }) : rect.call(this);
   };
@@ -44,15 +51,19 @@ const A = '/models/a.kicad_pcb', B = '/models/b.dxf';
 /** A tab: the file viewer over a state the test keeps (`kept`), as a host's store keeps it through a reload. */
 function tab(kept: { state: any }) {
   let show: (file: string) => void = () => {};
+  let register: () => void = () => {};
   function Tab() {
     const [file, setFile] = useState(A);
     const [state, setState] = useState(kept.state);
+    // The host's renderers, handed anew when it registers them again: the renderer mounts again on the same file.
+    const [renderers, setRenderers] = useState(() => [renderer]);
     show = setFile;
+    register = () => setRenderers([renderer]);
     kept.state = state;
-    return <FileViewer file={file} host={host as any} renderers={[renderer]} state={state} onStateChange={next => { kept.state = next; setState(next); }} />;
+    return <FileViewer file={file} host={host as any} renderers={renderers} state={state} onStateChange={next => { kept.state = next; setState(next); }} />;
   }
   const view = render(<Tab />);
-  return { unmount: view.unmount, show: (file: string) => act(() => show(file)) };
+  return { unmount: view.unmount, show: (file: string) => act(() => show(file)), register: () => act(() => register()) };
 }
 const panel = async () => JSON.parse((await screen.findByTestId('panel')).textContent!);
 const press = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
@@ -100,4 +111,35 @@ it("a file with no panel of its own starts from the tab's old shared one, which 
   expect((kept.state as any).renderers[JSON.stringify([A, 'panelled'])].panel).toEqual({ open: false, width: 280, tab: 'nets', detailHeight: 200 });
   // The shared form is dropped, the other panels' sizes and folds kept.
   expect(toolStack).toEqual({ panels: { tree: { width: 240 } }, collapsed: { tree: true }, tabs: undefined });
+});
+
+it("a panel the person opened or closed stays so while the view is resized across 1024px, either way, and when the renderer mounts again; until then the width decides", async () => {
+  toolStack = { panels: {}, collapsed: {} };
+  const kept = { state: {} };
+  const page = tab(kept);
+  expect((await panel()).open).toBe(true);
+  // No choice yet: the breakpoint decides, both ways.
+  resize(800);
+  expect((await panel()).open).toBe(false);
+  resize(1280);
+  expect((await panel()).open).toBe(true);
+  // Closed by the person in a wide view: closed at every width after, and after the renderer mounts again.
+  press('toggle');
+  for (const width of [800, 1280, 600, 1500]) {
+    resize(width);
+    expect((await panel()).open, `closed at ${width}px`).toBe(false);
+  }
+  await page.register();
+  resize(1280);
+  expect((await panel()).open, 'closed after a remount').toBe(false);
+  // Opened in a narrow view: open at every width after.
+  resize(800);
+  press('toggle');
+  for (const width of [1280, 700, 1024, 1023]) {
+    resize(width);
+    expect((await panel()).open, `open at ${width}px`).toBe(true);
+  }
+  await page.register();
+  resize(800);
+  expect((await panel()).open, 'open after a remount').toBe(true);
 });

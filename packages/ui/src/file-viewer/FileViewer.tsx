@@ -91,7 +91,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, colorS
     changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } }));
   }, [changeState, rendererStateKey, source.id, opened]);
   const setRendererState = useCallback((value: JsonValue) => { opened.record = value; writeView(); }, [opened, writeView]);
-  const filePanel = useMemo(() => ({ panel: opened.panel, change: (panel: object) => { opened.panel = panel; writeView(); } }), [opened, writeView]);
+  // `panel` is read live: a renderer that mounts again for the same file (a remount, a layout change)
+  // starts from the panel as the person last left it, not as the file opened.
+  const filePanel = useMemo(() => ({ get panel() { return opened.panel; }, change: (panel: object) => { opened.panel = panel; writeView(); } }), [opened, writeView]);
   const shown = loaded.status === "ready" ? loaded : null;
   const rendererBody = useMemo(() => {
     if (!shown) return null;

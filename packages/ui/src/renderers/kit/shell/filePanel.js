@@ -78,8 +78,9 @@ export function withoutLegacyFilePanel(toolStack) {
 }
 
 /**
- * The file on screen's panel, as the file viewer holds it: `panel` (what its record held as it
- * opened) and `change(panel)` (kept in its record from now on). Null where no file viewer mounted
+ * The file on screen's panel, as the file viewer holds it: `panel` (as the person last left it: what its
+ * record held as it opened, then each change, so a renderer that mounts again on the same file starts
+ * from their choice) and `change(panel)` (kept in its record from now on). Null where no file viewer mounted
  * the view: the panel is then kept for as long as the view is open.
  * @type {import("react").Context<{ panel: object, change(panel: object): void } | null>}
  */
