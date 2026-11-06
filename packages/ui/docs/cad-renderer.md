@@ -359,7 +359,8 @@ where the drawing has a Layers tab, kind `drawing`), Quick Edit at the top-right
   into a single path would turn their overlap into a hole as well. Fills go down
   before strokes, which is the one ordering that never hides an edge.
 - **Interaction** (`dxf/useDrawingView.js`, every flat view's `kit/viewport/useFlatCanvasView.js`
-  under the drawing's paint): fit on open and on resize until the person moves the view, drag to
+  under the drawing's paint): fit on open and on resize until the person moves the view, with a board's
+  and a schematic's margin (`fitBoardBounds`: 6% of the pane's shorter side, at least 16px), drag to
   pan (a primary press, one finger, once it has travelled more than a tap's 4 px; a press that lets
   go before is the tool's tap), the 3D views' pans too (the right or middle button's drag, a drag
   with Ctrl, Cmd or Shift), a mouse's wheel or a pinch to zoom about the pointer and a trackpad's

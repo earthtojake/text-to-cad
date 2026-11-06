@@ -5,10 +5,12 @@
  * Shift), double-click to fit, a tap and the pointer resting over it for the tool in hand), painting
  * the drawing on the theme's background in the theme's pen, without the layers hidden, then what the
  * tools draw over it (`overlay`, a highlight and ink) in the same frame, so a capture of the canvas
- * holds it too. The fit keeps clear of the view's tool strip, as a board's does.
+ * holds it too. The fit is every flat view's, a board's and a schematic's: their margin (`fitBoardBounds`,
+ * 6% of the pane's shorter side, at least 16px), clear of the view's tool strip.
  */
 import { useCallback, useEffect, useRef } from "react";
 import { clearSurface, drawDrawing, fitTransform } from "@cad/core/lib/drawing2d/index.js";
+import { fitBoardBounds } from "@cad/core/lib/plot2d/index.js";
 import { useFlatCanvasView } from "../kit/viewport/useFlatCanvasView.js";
 import { DRAWING_THEME_FALLBACK, readDrawingThemeColors } from "./themeColors.js";
 
@@ -46,7 +48,7 @@ export function useDrawingView({ drawing, restored = null, colorScheme = "light"
     overlayRef.current?.(ctx, { transform, pixelRatio, width, height });
   }, []);
   const view = useFlatCanvasView({ content: drawing, bounds: drawing?.bounds ?? null, restored, colorScheme, onViewMoved, paint,
-    onTap, onHover, clearStrip: true, middlePan: true, orbitPan: true });
+    onTap, onHover, fitBox: fitBoardBounds, clearStrip: true, middlePan: true, orbitPan: true });
   const { requestPaint, encode } = view;
 
   // A layer shown or hidden: the same view, without it.
