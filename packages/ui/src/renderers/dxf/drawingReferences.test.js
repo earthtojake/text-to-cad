@@ -37,9 +37,10 @@ test("a pick reads in the Selected pane and its card as what it is and measures;
   const drawing = fixture("layered.drawing.json");
   const fact = (item, label) => item.facts.find(row => row.label === label)?.value;
   const circle = describeDrawingPick(drawing, "h90", "mm");
-  assert.deepEqual([circle.title, circle.tip, circle.ref, fact(circle, "Diameter Ø"), circle.related], ["Circle on CUT", "Ø 12 mm", "h90", "12 mm", null]);
+  assert.deepEqual([circle.title, circle.tip, circle.ref, fact(circle, "Diameter Ø"), fact(circle, "Radius"), fact(circle, "Centre"), circle.related],
+    ["Circle on CUT", "Ø 12.00 mm", "h90", "12.00 mm", "6.00 mm", "20.00 mm, 30.00 mm", null]);
   const line = describeDrawingPick(drawing, "h92", "mm");
-  assert.match(line.tip, /^\d+(\.\d+)? mm$/);
+  assert.match(line.tip, /^\d+\.\d\d mm$/);
   assert.equal(fact(line, "Length"), line.tip);
   assert.equal(fact(line, "Size"), undefined, "a line says its length, not a box");
   const text = describeDrawingPick(drawing, "h93", "mm");
@@ -48,6 +49,15 @@ test("a pick reads in the Selected pane and its card as what it is and measures;
   assert.deepEqual([nut.title, fact(nut, "Block"), nut.related.title, nut.related.rows.map(row => [row.pick, row.label, row.detail])],
     ["Block M5_NUT on HARDWARE", "M5_NUT", "Other references of M5_NUT", [["h9B", "#9B", "HARDWARE"]]]);
   assert.equal(describeDrawingPick(drawing, "hFFFF"), null);
+});
+
+test("a pick's lengths are in the unit its drawing declares, as Measure reads them there: a millimetre drawing reads mm, one that declares none bare units", () => {
+  const drawing = fixture("layered.drawing.json");
+  const diameter = units => describeDrawingPick(drawing, "h90", drawingUnits(units).unit).facts.find(row => row.label === "Diameter Ø").value;
+  assert.equal(diameter({ insunits: 4, name: "Millimeters" }), "12.00 mm");
+  assert.equal(diameter({ insunits: 6, name: "Meters" }), "12.00 m");
+  assert.equal(diameter({ insunits: 0, name: "Unitless" }), "12.00 units");
+  assert.equal(describeDrawingPick(drawing, "h90", drawingUnits({ insunits: 1 }).unit).tip, "Ø 12.00 in");
 });
 
 test("a drawing's unit is the one it declares, and bare drawing units when it declares none", () => {

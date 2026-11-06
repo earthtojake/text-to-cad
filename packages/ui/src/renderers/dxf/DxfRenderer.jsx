@@ -126,13 +126,13 @@ function DxfSurface({ view, data }) {
   const paintRef = useRef(() => {});
   const requestPaint = useCallback(() => paintRef.current(), []);
   const scene = useMemo(() => (drawing ? createDrawingScene(drawing, {
-    onHighlight: ink => { highlightRef.current = ink; }, unit: units.declared ? units.unit : "", t
+    onHighlight: ink => { highlightRef.current = ink; }, unit: units.unit, t
   }) : null), [drawing, units, t]);
   const selection = useSceneSelection({ scene, requestRender: requestPaint });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   // What a pick is, as the Selected pane, its chip's card and the hover tip read it (`describeDrawingPick`).
-  const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.declared ? units.unit : "", t) : null), [drawing, units, t]);
+  const describe = useCallback(id => (drawing ? describeDrawingPick(drawing, id, units.unit, t) : null), [drawing, units, t]);
   const { references, chips } = useSceneReferences({ scene, selection, resource: workspace.resource, describe });
   const overlay = useCallback((ctx, { transform, pixelRatio }) => {
     const drawable = drawingRef.current;

@@ -1,3 +1,4 @@
+import { formatMeasurement } from "@cad/core/lib/viewer/measurement.js";
 import { english } from "../../i18n/core.js";
 /**
  * What a drawing's picks are called, and what the viewer says of them: a DXF's references.
@@ -43,7 +44,9 @@ export function entityKind(entity, t = english) {
 /** An entity as Quick Edit's chip names it: its kind, on its layer. */
 export const entityName = (entity, t = english) => t("drawing.onLayer", { kind: entityKind(entity, t), layer: entity.layer || "0" });
 
-const round = value => String(Math.round(Number(value) * 1e4) / 1e4);
+// A length in the drawing, as Measure reads one there (`formatMeasurement`): its figures and the drawing's
+// unit, bare drawing units ("units") where it declares none, as Measure says them (`drawingUnits`).
+const inUnit = (value, unit) => formatMeasurement({ euclidean: Number(value), unit: unit || UNITLESS });
 
 // The length of what an entity drew where it is straight segments alone (a line, a polyline of lines):
 // its `lines` runs, and its paths of moves and lines; null where it drew a curve or nothing to measure.
@@ -78,15 +81,15 @@ function entityMeasures(entity) {
 /**
  * An entity, as Quick Edit's chip and the Selected pane say it: its name, and what the drawing says of it
  * — its handle and DXF type, its layer, the block an INSERT places, a circle's or arc's centre and radius,
- * and what it measures (a straight run's length, a circle's diameter, else the size of its box) in the
- * drawing's unit; for the hover tip, its headline measure ("25 mm", "Ø 12 mm").
+ * and what it measures (a straight run's length, a circle's diameter, else the size of its box), each in the
+ * drawing's unit as Measure reads it there (`unit`: `drawingUnits`'s, "units" for none); for the hover tip,
+ * its headline measure ("25.00 mm", "Ø 12.00 mm").
  * @param {import("@cad/core/lib/drawing2d/drawing.js").DrawingEntity} entity
  */
 export function describeEntity(entity, unit = "", t = english) {
-  const units = unit ? ` ${unit}` : "";
+  const at = value => inUnit(value, unit);
   const { length, diameter, size } = entityMeasures(entity);
-  const tip = length !== null ? `${round(length)}${units}` : diameter !== null ? `Ø ${round(diameter)}${units}`
-    : entity.radius != null ? `R ${round(entity.radius)}${units}` : "";
+  const tip = length !== null ? at(length) : diameter !== null ? `Ø ${at(diameter)}` : entity.radius != null ? `R ${at(entity.radius)}` : "";
   return {
     name: entityName(entity, t),
     tip,
@@ -95,11 +98,11 @@ export function describeEntity(entity, unit = "", t = english) {
       { label: t("drawing.typeLabel"), value: entity.type || "—" },
       { label: t("drawing.layer"), value: entity.layer || "0" },
       ...(entity.block ? [{ label: t("drawing.type.block"), value: entity.block }] : []),
-      ...(entity.center ? [{ label: t("drawing.centre"), value: `${round(entity.center[0])}, ${round(entity.center[1])}` }] : []),
-      ...(entity.radius != null ? [{ label: t("drawing.radius"), value: `${round(entity.radius)}${units}` }] : []),
-      ...(diameter !== null ? [{ label: t("measure.diameter"), value: `${round(diameter)}${units}` }] : []),
-      ...(length !== null ? [{ label: t("measure.length"), value: `${round(length)}${units}` }] : []),
-      ...(size ? [{ label: t("part.size"), value: `${round(size[0])} × ${round(size[1])}${units}` }] : [])
+      ...(entity.center ? [{ label: t("drawing.centre"), value: `${at(entity.center[0])}, ${at(entity.center[1])}` }] : []),
+      ...(entity.radius != null ? [{ label: t("drawing.radius"), value: at(entity.radius) }] : []),
+      ...(diameter !== null ? [{ label: t("measure.diameter"), value: at(diameter) }] : []),
+      ...(length !== null ? [{ label: t("measure.length"), value: at(length) }] : []),
+      ...(size ? [{ label: t("part.size"), value: `${at(size[0])} × ${at(size[1])}` }] : [])
     ]
   };
 }
