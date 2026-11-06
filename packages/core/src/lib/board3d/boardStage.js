@@ -2,7 +2,9 @@
  * A board in 3D, its stage: the bare board as a kit scene (`lib/viewer/sceneContract.js`) — a slab cut
  * to the outline and as thick as the board, lit, and on its two faces the 2D drawer's pictures of the
  * two sides (`boardFaces.js`), unlit, so a face reads exactly as the 2D view does. Over each face a
- * see-through overlay carries the highlight and the ink.
+ * see-through overlay carries the highlight and the ink. What the 2D view draws past the outline (a
+ * dimension, a fab note, ink) is drawn too, on a see-through plane round the slab at each face's height
+ * (the face's surround): its pictures cover the face's box (`faceBox`), clear where nothing is drawn.
  *
  * Its frame is `boardFrame.js`'s: the front face at z = 0, the back at z = -thickness. It knows the
  * board's index only to pick: a ray meets the face it enters, the sheet point there inside the
@@ -15,7 +17,7 @@
  * Importing this module has no environmental effects.
  */
 import { BOARD_THICKNESS_MM, faceZ, rayOnBoard } from "./boardFrame.js";
-import { FACE_PIXELS, createFaceRasters, faceUv } from "./boardFaces.js";
+import { FACE_PIXELS, createFaceRasters, faceBox, faceUv } from "./boardFaces.js";
 import { pointInPolygon } from "../board2d/geometry.js";
 
 // How far a face's picture and its overlay stand off the slab, so neither fights it for depth.
@@ -53,6 +55,7 @@ export function outlineRings(outline, sheet) {
  */
 export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THICKNESS_MM, theme = "dark", createCanvas, pickAt = null }) {
   const sheet = layout.sheets[0];
+  const box = faceBox(layout, sheet);
   const rings = outlineRings(outline, sheet);
   const toShape = (ring, Kind) => new Kind(ring.map(([x, y]) => new THREE.Vector2(x, -y)));
   const shape = toShape(rings.outer, THREE.Shape);
@@ -67,16 +70,25 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
   group.add(slab);
 
   // A face: the outline's triangles, each vertex at its sheet point on the side's raster.
-  const faceGeometry = side => {
-    const geometry = new THREE.ShapeGeometry(shape, 8);
+  const onRaster = (geometry, side) => {
     const position = geometry.getAttribute("position"), uv = geometry.getAttribute("uv");
     for (let index = 0; index < position.count; index += 1) {
-      const [u, v] = faceUv([position.getX(index), -position.getY(index)], sheet, side);
+      const [u, v] = faceUv([position.getX(index), -position.getY(index)], box, side);
       uv.setXY(index, u, v);
     }
     return geometry;
   };
-  const geometries = { top: faceGeometry("top"), bottom: faceGeometry("bottom") };
+  const geometries = { top: onRaster(new THREE.ShapeGeometry(shape, 8), "top"), bottom: onRaster(new THREE.ShapeGeometry(shape, 8), "bottom") };
+  // Its surround: the face's box less the outline, and the board's cut-outs, where the 2D view draws
+  // what lies past the board as it falls.
+  const surroundShapes = () => {
+    const frame = new THREE.Shape([[box.x, box.y], [box.x + box.width, box.y], [box.x + box.width, box.y + box.height], [box.x, box.y + box.height]]
+      .map(([x, y]) => new THREE.Vector2(x, -y)));
+    frame.holes = [toShape(rings.outer, THREE.Path)];
+    return [frame, ...rings.holes.map(ring => toShape(ring, THREE.Shape))];
+  };
+  const surroundGeometries = { top: onRaster(new THREE.ShapeGeometry(surroundShapes(), 8), "top"),
+    bottom: onRaster(new THREE.ShapeGeometry(surroundShapes(), 8), "bottom") };
   // A face's picture is the canvas's pixels as they are: its bytes are sampled, filtered, mipmapped and
   // blended as the 2D canvas composites them (in sRGB, not decoded to linear light and encoded back,
   // which lightens every fine dark line a smaller mip averages in), and put on screen unconverted.
@@ -89,26 +101,34 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     return made;
   };
   const asDrawn = shader => { shader.fragmentShader = shader.fragmentShader.replace("#include <colorspace_fragment>", ""); };
-  const layer = (side, lift, transparent) => {
-    const material = new THREE.MeshBasicMaterial({ map: texture(), toneMapped: false, transparent, depthWrite: !transparent,
+  const layer = (side, lift, transparent, { geometry = geometries[side], map = texture(), order = transparent ? 2 : 0 } = {}) => {
+    const material = new THREE.MeshBasicMaterial({ map, toneMapped: false, transparent, depthWrite: !transparent,
       side: side === "bottom" ? THREE.BackSide : THREE.FrontSide });
     material.onBeforeCompile = asDrawn;
     material.customProgramCacheKey = () => "board-face-as-drawn";
-    const mesh = new THREE.Mesh(geometries[side], material);
+    const mesh = new THREE.Mesh(geometry, material);
     mesh.position.z = side === "bottom" ? faceZ(side, thickness) - lift : lift;
     mesh.visible = false;
-    if (transparent) mesh.renderOrder = 1;
+    mesh.renderOrder = order;
     group.add(mesh);
     return mesh;
   };
   const faces = { top: layer("top", FACE_LIFT_MM, false), bottom: layer("bottom", FACE_LIFT_MM, false) };
   const overlays = { top: layer("top", OVERLAY_LIFT_MM, true), bottom: layer("bottom", OVERLAY_LIFT_MM, true) };
+  // Each face's and overlay's surround: the same picture (one texture), see-through, round the slab.
+  const surround = (meshes, lift, order) => Object.fromEntries(["top", "bottom"].map(side => [side,
+    layer(side, lift, true, { geometry: surroundGeometries[side], map: meshes[side].material.map, order })]));
+  const faceSurrounds = surround(faces, FACE_LIFT_MM, 1), overlaySurrounds = surround(overlays, OVERLAY_LIFT_MM, 2);
+  const show = (side, meshes, visible) => {
+    meshes[side].visible = visible;
+    (meshes === faces ? faceSurrounds : overlaySurrounds)[side].visible = visible;
+  };
 
   let renderer = null;
   const maxSize = () => Math.max(1024, Number(renderer?.capabilities?.maxTextureSize) || 4096);
   let rasters = null;
   let software = false;
-  const rastersNow = () => (rasters ||= createFaceRasters({ layout, sheet, createCanvas, maxSize: maxSize(), maxPixels: software ? FACE_PIXELS / 4 : FACE_PIXELS }));
+  const rastersNow = () => (rasters ||= createFaceRasters({ layout, sheet, box, createCanvas, maxSize: maxSize(), maxPixels: software ? FACE_PIXELS / 4 : FACE_PIXELS }));
   // What each face shows: its Display drawn (by key), or not yet.
   let look = null;
   const drawnKey = { top: "", bottom: "" };
@@ -133,16 +153,16 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     const started = performance.now();
     upload(faces[side], rastersNow().drawFace(side, look));
     timings.face = performance.now() - started;
-    faces[side].visible = true;
+    show(side, faces, true);
     drawnKey[side] = key;
     return true;
   };
   const drawOverlay = side => {
-    if (!renderer || !overlayPaint || !faces[side].visible) { overlays[side].visible = false; return; }
+    if (!renderer || !overlayPaint || !faces[side].visible) { show(side, overlays, false); return; }
     const canvas = rastersNow().drawOverlay(side, overlayPaint, { lineScale: overlayScale });
-    if (!canvas) { overlays[side].visible = false; return; }
+    if (!canvas) { show(side, overlays, false); return; }
     upload(overlays[side], canvas);
-    overlays[side].visible = true;
+    show(side, overlays, true);
   };
 
   const minX = Math.min(...rings.outer.map(p => p[0])), maxX = Math.max(...rings.outer.map(p => p[0]));
@@ -225,7 +245,8 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
     },
     dispose() {
       for (const mesh of [...Object.values(faces), ...Object.values(overlays)]) { mesh.material.map.dispose(); mesh.material.dispose(); }
-      for (const geometry of Object.values(geometries)) geometry.dispose();
+      for (const mesh of [...Object.values(faceSurrounds), ...Object.values(overlaySurrounds)]) mesh.material.dispose();
+      for (const geometry of [...Object.values(geometries), ...Object.values(surroundGeometries)]) geometry.dispose();
       slabGeometry.dispose();
       slabMaterial.dispose();
       rasters?.dispose();

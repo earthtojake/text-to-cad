@@ -232,8 +232,10 @@ A board is a flat view with two canvases in one frame (`ViewFrame.jsx`, through 
 (`board/useBoardView.js`) and, under 2D | 3D, the board in 3D (`board/Board3dView.jsx`, a lazy
 chunk, so a board in 2D loads no three.js): a `ShellViewport` (its settings through
 `useStageViewport.js`) around core's bare board (`@cad/core/lib/board3d/`: `boardStage.js`, a slab cut
-to the outline; `boardFaces.js`, its two faces the 2D drawer's own `drawPlot` of each side and an
-overlay of `drawBoardOverlay` and the ink, drawn through one scratch canvas per kind into textures
+to the outline, and round it, at each face's height, a see-through surround with what the file draws
+past the outline; `boardFaces.js`, its two faces the 2D drawer's own `drawPlot` of each side over the
+face's box (`faceBox`: the outline's box and what lies past it, symmetric about the sheet's centre line,
+at most half the sheet farther) and an overlay of `drawBoardOverlay` and the ink, drawn through one scratch canvas per kind into textures
 overwritten in place, at most 8 megapixels a face (a quarter of it on software WebGL) and 2 an
 overlay, freed when 3D is left; `boardFrame.js`, the sheet to the world and back). The frame, the
 strip, the panel, the selection (`useSceneSelection` over the board's one scene), the tools'

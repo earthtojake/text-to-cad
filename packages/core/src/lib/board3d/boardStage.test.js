@@ -71,6 +71,11 @@ test("the faces are drawn once a renderer takes them, through one scratch canvas
   assert.equal(made.length, 1, "one scratch canvas for every face drawn");
   const { texturePixels } = stage.stats();
   assert.ok(texturePixels <= 2 * 8_000_000 && texturePixels > 0, `${texturePixels}`);
+  // What lies past the outline is drawn round the slab, see-through, from the same picture as the face.
+  const meshes = stage.object3D.children.filter(mesh => mesh.material?.map);
+  const top = meshes.filter(mesh => mesh.material.map === meshes[0].material.map);
+  assert.equal(top.length, 2, "the front face and its surround share one picture");
+  assert.ok(top[1].material.transparent && top[1].visible, "the surround is see-through, and shown with its face");
   stage.setOverlay(() => false);
   assert.equal(made.length, 2, "and one for the overlays");
   stage.dispose();

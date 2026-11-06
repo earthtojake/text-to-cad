@@ -858,7 +858,9 @@ pick.
 
 **2D | 3D** shows the same view of a board in 3D (`board/Board3dView.jsx`, a lazy chunk): the board as a
 slab cut to its outline, its two faces the 2D drawer's own pictures of the two sides, in the Layers
-tab's Display and the view's theme, on the 2D canvas's colour. It is the view's other canvas in the same
+tab's Display and the view's theme, on the 2D canvas's colour; what the 2D view draws past the outline (a
+dimension, a fab note, ink) is drawn as it falls, on a see-through plane round the slab at each face's
+height, so nothing the 2D view shows is lost. It is the view's other canvas in the same
 frame (`ViewFrame.jsx`, through the flat views' `FlatViewFrame.jsx`), never another view: the strip, the panel and its tabs, Quick Edit, the
 selection, the ink and the measurements are the same mounted components, with the same names, in both;
 the one change is the corner, whose zoom pill becomes the 3D views' cube with their Projection and Home

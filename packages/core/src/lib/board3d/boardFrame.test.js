@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { cameraTurnedOver, headOnCamera, millimetresPerPixel, planFromCamera, rayOnBoard, sheetToWorld, worldToSheet } from "./boardFrame.js";
-import { faceRaster, faceTransform, faceUv, faceView } from "./boardFaces.js";
+import { faceBox, faceRaster, faceTransform, faceUv, faceView } from "./boardFaces.js";
 
 const close = (actual, expected, message) => actual.forEach((value, index) => assert.ok(Math.abs(value - expected[index]) < 1e-9, `${message}: ${actual} vs ${expected}`));
 
@@ -74,6 +74,19 @@ test("a face's raster keeps to its budget and the GPU's largest texture, and map
   assert.deepEqual(faceTransform({ x: 2, y: 3 }, 10), { scale: 10, offsetX: -20, offsetY: -30 });
   assert.deepEqual(faceUv([30, 25], sheet, "top"), [0.1, 0.75]);
   assert.deepEqual(faceUv([30, 25], sheet, "bottom"), [0.9, 0.75]);
+});
+
+test("a face's pictures cover what the file draws past the outline, both sides of the sheet's centre line, and no farther than half the sheet", () => {
+  const sheet = { x: 0, y: 0, width: 100, height: 40 };
+  // A dimension 12mm right of the board and 6mm under it: the box reaches as far on the left, so the
+  // back's picture, mirrored about the sheet's centre line, lands in the same box.
+  assert.deepEqual(faceBox({ extent: [0, 0, 112, 46] }, sheet), { x: -12, y: 0, width: 124, height: 46 });
+  assert.deepEqual(faceBox({ extent: [0, 0, 100, 40] }, sheet), { x: 0, y: 0, width: 100, height: 40 });
+  // A note far off is cut at half the sheet's longer side.
+  assert.deepEqual(faceBox({ extent: [0, -500, 100, 40] }, sheet), { x: 0, y: -50, width: 100, height: 90 });
+  const box = faceBox({ extent: [0, 0, 112, 46] }, sheet);
+  assert.deepEqual(faceUv([-12, 0], box, "top"), [0, 1]);
+  assert.deepEqual(faceUv([-12, 0], box, "bottom"), [1, 1]);
 });
 
 test("a face draws the Display from its own side", () => {
