@@ -448,6 +448,48 @@ test("picking: a STEP's Select: an edge near the pointer, else the face under it
   document.release();
 });
 
+test("a box takes what is visible in it and touches it, by a click's rules", async () => {
+  const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
+  const scene = createXbfScene(THREE, document);
+  const camera = new THREE.OrthographicCamera(-30, 30, 30, -30, 0.1, 1000);
+  camera.position.set(0, 0, 100);
+  camera.lookAt(0, 0, 0);
+  camera.updateMatrixWorld();
+  const view = { camera, width: 600, height: 600 };
+  // The view's pixels: ten to the scene's unit, (0, 0) at the top-left.
+  const box = (x0, y0, x1, y1) => ({ left: (x0 + 30) * 10, right: (x1 + 30) * 10, top: (30 - y1) * 10, bottom: (30 - y0) * 10 });
+  const ids = (found, kind) => found.filter(hit => hit.kind === kind).map(hit => hit.id).sort();
+  const ray = (x, y) => new THREE.Ray(new THREE.Vector3(x, y, 100), new THREE.Vector3(0, 0, -1));
+  // A small box on the plate's top, away from every edge: its top face, never the faces behind it.
+  const top = scene.pickElement(ray(-7, 5), view);
+  assert.deepEqual(scene.pickBox(box(-7.5, 4.5, -6.5, 5.5), view), [{ id: top.id, kind: "face", instance: 0, key: top.key, ordinal: top.ordinal }]);
+  // A box over a peg, partly over the plate too: the peg's top and its rim, and the plate's top it touches.
+  const pegTop = scene.pickElement(ray(12, 0), view);
+  const rim = scene.pickElement(ray(12, 2.95), view);
+  const over = scene.pickBox(box(8, -4, 16, 4), view);
+  assert.ok(ids(over, "face").includes(pegTop.id) && ids(over, "edge").includes(rim.id));
+  assert.ok(over.some(hit => hit.kind === "face" && hit.instance === 0), "the plate's top, touched");
+  // Faces alone, edges alone.
+  assert.deepEqual(ids(scene.pickBox(box(8, -4, 16, 4), view, { edges: false }), "edge"), []);
+  assert.deepEqual(ids(scene.pickBox(box(8, -4, 16, 4), view, { faces: false }), "face"), []);
+  // Where an instance's elements cannot be picked, the instance is taken whole where Parts is ticked,
+  // even though only a corner of it lies in the box.
+  const parts = scene.pickBox(box(8, -4, 16, 4), view, { parts: true, elements: new Set() });
+  assert.ok(parts.every(hit => hit.kind === null) && parts.some(hit => hit.id === "i0") && parts.some(hit => hit.id === "i1"));
+  assert.deepEqual(scene.pickBox(box(8, -4, 16, 4), view, { parts: true, elements: new Set([1]) }).filter(hit => hit.kind === null).map(hit => hit.id), ["i0"]);
+  // A hidden instance, or one an isolation dims, is not taken.
+  scene.setHiddenParts(["i1"]);
+  assert.ok(scene.pickBox(box(8, -4, 16, 4), view, { parts: true }).every(hit => hit.instance !== 1));
+  scene.setHiddenParts([]);
+  scene.setFocusedParts(["i1"]);
+  assert.ok(scene.pickBox(box(8, -4, 16, 4), view).every(hit => hit.instance === 1));
+  scene.setFocusedParts([]);
+  // A box over nothing takes nothing.
+  assert.deepEqual(scene.pickBox(box(-29, -29, -28, -28), view, { parts: true }), []);
+  scene.dispose();
+  document.release();
+});
+
 test("picking: an edge wins over the face under the pointer only when it is that face's own, as a STEP's", async () => {
   const document = await loadXbfDocument(URL_BASE, { fetch: engine().fetch });
   const scene = createXbfScene(THREE, document);

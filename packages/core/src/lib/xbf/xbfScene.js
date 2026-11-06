@@ -39,6 +39,7 @@ import { LineSegmentsGeometry } from "three/examples/jsm/lines/LineSegmentsGeome
 import { resolveCadEdgeSettings } from "../../common/cadInk.js";
 import { createScreenSpaceLineSegments, topologyLineDepthBiasForWidth } from "../../common/renderEdges.js";
 import { syncMaterialClipPlanes } from "../viewer/clipPlane.js";
+import { boxSamplePoints, pointInBox, segmentInBox, triangleTouchesBox } from "../viewer/boxSelect.js";
 import { worldUnitsPerPixelAtDistance } from "../viewer/pickingThresholds.js";
 import { scheduleRuntimeRaycastBvh } from "../viewer/raycastBvh.js";
 import { REFERENCE_HOVER_COLOR } from "../viewer/referenceGeometry.js";
@@ -66,6 +67,14 @@ const EDGE_REACH_PER_RADIUS = 1 / 320;
 const EDGE_REACH_MIN = 0.65;
 const EDGE_OCCLUSION_FACTOR = 0.75;
 const EDGE_OCCLUSION_MIN = 0.08;
+// A box's own rays (`pickBox`), beyond its grid: at most this many, for the faces, edges or parts the
+// grid passed between, and at most this many looks along each edge; how far behind the surface in
+// front an edge may lie and still be visible, in screen pixels at its depth (an edge is the border of
+// the faces either side, give or take the tessellation); a part's vertices looked at, at most.
+const BOX_PROBE_MAX = 3000;
+const BOX_EDGE_LOOKS = 3;
+const BOX_EDGE_OCCLUSION_PIXELS = 3;
+const BOX_PART_VERTICES_MAX = 20000;
 const DEFAULT_SURFACE = 0xb8bcc4;
 const HIGHLIGHT_ORDER = 30;
 // A STEP's reference highlight (`cadInk.js`): one colour, opaque, its lines this many
@@ -1063,6 +1072,154 @@ export function createXbfScene(THREE, document) {
       if (!hit || !parts) return null;
       return { id: xbfElementId(entry.index), kind: null, instance: entry.index, key: String(entry.prototype.key), ordinal: null,
         name: entry.prototype.name || entry.instance.path, point: hit.point.toArray(), path: entry.instance.path, partName: entry.prototype.name || "" };
+    },
+    /**
+     * What a box takes under Select's Box select tool (`../viewer/boxSelect.js`), by a click's
+     * rules (`pickElement`'s options): what is VISIBLE in the box, anything of it touching the box.
+     * On an instance whose elements can be picked, its faces (`faces`) and edges (`edges`); else,
+     * where `parts` says so, the instance. A face or a part is visible where a ray of a grid over
+     * the box, or one cast at a point of it in the box the grid passed between, meets it first; an
+     * edge where no surface stands nearer than it. `box` is in the viewport's CSS pixels, its
+     * top-left (0, 0), as `view` measures them.
+     * @param {{ left: number, top: number, right: number, bottom: number }} box
+     * @param {{ faces?: boolean, edges?: boolean, parts?: boolean, elements?: Set<number> | null }} [options]
+     * @returns {{ id: string, kind: "face" | "edge" | null, instance: number, key: string, ordinal: number | null }[]}
+     */
+    pickBox(box, view, { faces = true, edges = true, parts = false, elements = null } = {}) {
+      if (disposed || !view?.camera || !(view.width > 0 && view.height > 0)) return [];
+      const { camera, width, height } = view;
+      camera.updateMatrixWorld();
+      const project = new THREE.Matrix4().multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse).elements;
+      const ndc = new THREE.Vector2();
+      const ray = new THREE.Raycaster();
+      // The ray through a point of the view, and what it meets first.
+      const castAt = (x, y) => {
+        ray.setFromCamera(ndc.set((x / width) * 2 - 1, 1 - (y / height) * 2), camera);
+        return ray.ray;
+      };
+      const frontAt = (x, y) => {
+        const hit = surfaceHit(castAt(x, y));
+        if (!hit) return null;
+        const entry = instances[hit.object.userData.xbfInstance];
+        return { entry, hit, distance: hit.distance };
+      };
+      const open = entry => !elements || elements.has(entry.index);
+      const takesElements = entry => (faces || edges) && open(entry);
+      // A point of the part's frame on the screen, `behind` the eye or not.
+      const projector = (world) => {
+        const m = project, o = world.elements;
+        return (x, y, z) => {
+          const wx = o[0] * x + o[4] * y + o[8] * z + o[12], wy = o[1] * x + o[5] * y + o[9] * z + o[13], wz = o[2] * x + o[6] * y + o[10] * z + o[14];
+          const w = m[3] * wx + m[7] * wy + m[11] * wz + m[15];
+          if (!(w > 1e-9)) return { x: 0, y: 0, behind: true, wx, wy, wz };
+          return { x: ((m[0] * wx + m[4] * wy + m[8] * wz + m[12]) / w + 1) * 0.5 * width,
+            y: (1 - (m[1] * wx + m[5] * wy + m[9] * wz + m[13]) / w) * 0.5 * height, behind: false, wx, wy, wz };
+        };
+      };
+      // The grid: the faces and the instances it meets first.
+      const seenFaces = new Set(), seenParts = new Set();
+      for (const sample of boxSamplePoints(box)) {
+        const front = frontAt(sample.x, sample.y);
+        if (!front) continue;
+        seenParts.add(front.entry.index);
+        if (faces && open(front.entry)) {
+          const ordinal = faceOf(front.entry, front.hit);
+          if (ordinal != null) seenFaces.add(xbfElementId(front.entry.index, "face", ordinal));
+        }
+      }
+      let probes = 0;
+      const taken = [];
+      const middle = { x: (box.left + box.right) / 2, y: (box.top + box.bottom) / 2 };
+      for (const entry of instances) {
+        if (!reachable(entry)) continue;
+        entry.group.updateWorldMatrix(true, false);
+        const at = projector(entry.group.matrixWorld);
+        const mesh = entry.surface.part.mesh;
+        const key = String(entry.prototype.key);
+        if (takesElements(entry)) {
+          if (faces && surfaceStyle !== "off") {
+            // Each face touching the box, with a point of it in the box to cast at.
+            const rows = triangleFaces(entry.surface.held, entry.surface.part);
+            const touched = new Map();
+            const p = mesh.positions, index = mesh.indices;
+            for (let triangle = 0; triangle * 3 + 2 < index.length; triangle += 1) {
+              const row = rows[triangle] ?? -1;
+              if (row < 0) continue;
+              const id = xbfElementId(entry.index, "face", mesh.faces[row * 3]);
+              if (touched.has(id) && touched.get(id)) continue;
+              const [a, b, c] = [0, 1, 2].map(corner => { const v = index[triangle * 3 + corner] * 3; return at(p[v], p[v + 1], p[v + 2]); });
+              if (a.behind || b.behind || c.behind || !triangleTouchesBox(box, a.x, a.y, b.x, b.y, c.x, c.y)) continue;
+              const cx = (a.x + b.x + c.x) / 3, cy = (a.y + b.y + c.y) / 3;
+              touched.set(id, touched.get(id) || (pointInBox(box, cx, cy) ? { x: cx, y: cy } : null));
+            }
+            for (const [id, probe] of touched) {
+              let visible = seenFaces.has(id);
+              if (!visible && probe && probes < BOX_PROBE_MAX) {
+                probes += 1;
+                const front = frontAt(probe.x, probe.y);
+                visible = Boolean(front) && front.entry === entry && xbfElementId(entry.index, "face", faceOf(entry, front.hit)) === id;
+              }
+              if (visible) taken.push({ id, kind: "face", instance: entry.index, key, ordinal: parseXbfElementId(id).ordinal });
+            }
+          }
+          if (edges) {
+            // Each edge with a stretch of it in the box: visible where no surface stands nearer.
+            const points = mesh.edgePoints, table = mesh.edges;
+            const world = new THREE.Vector3();
+            for (let row = 0; row < table.length / 4; row += 1) {
+              const first = table[row * 4 + 1], count = table[row * 4 + 2];
+              const looks = [];
+              for (let point = first; point + 1 < first + count && looks.length < BOX_EDGE_LOOKS * 4; point += 1) {
+                const a = at(points[point * 3], points[point * 3 + 1], points[point * 3 + 2]);
+                const b = at(points[point * 3 + 3], points[point * 3 + 4], points[point * 3 + 5]);
+                const span = a.behind || b.behind ? null : segmentInBox(box, a.x, a.y, b.x, b.y);
+                if (!span) continue;
+                // The middle of the stretch in the box: a long edge across it may have no end in it.
+                const t = (span[0] + span[1]) / 2;
+                const lerp = axis => points[point * 3 + axis] + (points[point * 3 + 3 + axis] - points[point * 3 + axis]) * t;
+                looks.push(at(lerp(0), lerp(1), lerp(2)));
+              }
+              if (!looks.length) continue;
+              const stride = Math.max(1, Math.floor(looks.length / BOX_EDGE_LOOKS));
+              for (let look = 0; look < looks.length && probes < BOX_PROBE_MAX; look += stride) {
+                const spot = looks[look];
+                world.set(spot.wx, spot.wy, spot.wz);
+                if (!kept(world)) continue;
+                probes += 1;
+                const cast = castAt(spot.x, spot.y);
+                const depth = cast.origin.distanceTo(world);
+                const front = surfaceHit(cast);
+                const allowance = Math.max(1e-6, (worldUnitsPerPixelAtDistance(camera, height, depth) || 0) * BOX_EDGE_OCCLUSION_PIXELS);
+                if (!front || front.distance + allowance >= depth) {
+                  taken.push({ id: xbfElementId(entry.index, "edge", table[row * 4]), kind: "edge", instance: entry.index, key, ordinal: table[row * 4] });
+                  break;
+                }
+              }
+            }
+          }
+          continue;
+        }
+        if (!parts || surfaceStyle === "off") continue;
+        let visible = seenParts.has(entry.index);
+        if (!visible && probes < BOX_PROBE_MAX) {
+          // The grid passed between it: its vertex in the box nearest the box's middle, to cast at.
+          const p = mesh.positions;
+          const stride = Math.max(1, Math.ceil(p.length / 3 / BOX_PART_VERTICES_MAX));
+          let probe = null, nearest = Infinity;
+          for (let vertex = 0; vertex * 3 + 2 < p.length; vertex += stride) {
+            const spot = at(p[vertex * 3], p[vertex * 3 + 1], p[vertex * 3 + 2]);
+            if (spot.behind || !pointInBox(box, spot.x, spot.y)) continue;
+            const distance = (spot.x - middle.x) ** 2 + (spot.y - middle.y) ** 2;
+            if (distance < nearest) { nearest = distance; probe = spot; }
+          }
+          if (probe) {
+            probes += 1;
+            visible = frontAt(probe.x, probe.y)?.entry === entry;
+          }
+        }
+        if (visible) taken.push({ id: xbfElementId(entry.index), kind: null, instance: entry.index, key, ordinal: null });
+      }
+      return taken;
     },
     /**
      * A second scene of the same document (the viewer's Preview beside its editor): its own

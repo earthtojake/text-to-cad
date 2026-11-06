@@ -315,6 +315,8 @@ export default {
   "select.filter": "選択フィルター",
   "select.filterCurrent": "{filter}: {mode}",
   "select.everything": "すべて",
+  "select.tool": "ツール",
+  "select.boxSelect": "範囲選択",
   "select.groupEdges": "エッジ一括選択",
   "select.groupFaces": "面を一括選択",
   "measure.filter": "計測フィルター",

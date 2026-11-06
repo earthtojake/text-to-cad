@@ -10,8 +10,9 @@ const PLURAL = Object.freeze({ vertex: "vertices", edge: "edges", face: "faces" 
 /**
  * What a picking tool takes, as a CAD tool's selection priority is: the chevron after its button on
  * the strip, whose dropdown is headed "Pick" and lists the tool's modes (`modes`, `selectFilter.js`)
- * as ONE choice — All first, then each kind alone. Choosing one puts the menu away. Whatever
- * follows (`children`: how a pick grows, Group faces and Group edges) comes after a rule. Measure's
+ * as ONE choice — All first, then each kind alone. Choosing one puts the menu away. A `header`
+ * (Select's two tools, Select and Box select: how a pick is made, beside what it takes) comes
+ * first, before a rule. Whatever follows (`children`: how a pick grows, Group faces and Group edges) comes after a rule. Measure's
  * menu is this one too (`MeasureFilterMenu.jsx`): `name` marks its trigger and rows
  * (`data-<name>-filter-trigger`, `data-<name>-filter`) and `triggerName` names its chevron
  * ("Measure filter"), so the two chevrons on the strip are told apart. The strip's button shows the
@@ -20,9 +21,10 @@ const PLURAL = Object.freeze({ vertex: "vertices", edge: "edges", face: "faces" 
  *
  * @param {{ value: readonly string[], onChange(filter: readonly string[]): void,
  *   modes: { id: string, label: string, key?: string, kinds: readonly string[], icon?: import("react").ReactNode }[],
- *   disabled?: boolean, children?: import("react").ReactNode, name?: string, triggerName?: string }} props
+ *   disabled?: boolean, children?: import("react").ReactNode, header?: import("react").ReactNode,
+ *   name?: string, triggerName?: string }} props
  */
-export default function SelectFilterMenu({ value, onChange, modes, disabled = false, children = null, name = "select", triggerName }) {
+export default function SelectFilterMenu({ value, onChange, modes, disabled = false, children = null, header = null, name = "select", triggerName }) {
   const { t } = useI18n();
   const named = modeOf => modeOf.key ? t(modeOf.key) : modeOf.label;
   const mode = pickModeOf(value, modes);
@@ -30,6 +32,7 @@ export default function SelectFilterMenu({ value, onChange, modes, disabled = fa
   return <ToolSettingsMenu label={t("select.filter")}
     triggerLabel={t("select.filterCurrent", { filter: triggerName ?? t("select.filter"), mode: mode === modes[0] ? t("select.everything") : named(mode) })}
     disabled={disabled} trigger="chevron" triggerProps={{ [`data-${name}-filter-trigger`]: mode === modes[0] ? "all" : mode.id }}>
+    {header ? <>{header}<DropdownMenuSeparator /></> : null}
     <DropdownMenuLabel className="text-tiny font-normal text-muted-foreground">{t("select.pick")}</DropdownMenuLabel>
     <DropdownMenuRadioGroup value={mode.id} onValueChange={id => {
       controls.used(`${name}_filter_${PLURAL[id] ?? id}`);

@@ -23,6 +23,7 @@ import JointHandleOverlay from "../kit/tools/pose/JointHandleOverlay.jsx";
 import { pickModeOf, selects } from "../kit/tools/select/selectFilter.js";
 import { TOOL_SHORTCUTS } from "../kit/tools/toolShortcuts.js";
 import { usePointerPick } from "../kit/tools/select/usePointerPick.js";
+import { BoxSelectGesture } from "../kit/tools/select/useBoxSelectGesture.js";
 import { prefersCoarsePointer } from "../kit/viewport/dom.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import { createClickActivation } from "./clickActivation.js";
@@ -141,6 +142,8 @@ function XbfSurface({ view, data }) {
 
   // ---- Select's menu: All as the file opens, or one kind alone ---------------------------------
   const [selectFilter, setSelectFilter] = useState(XBF_SELECT_DEFAULT);
+  // Select's two tools (`SELECT_TOOLS`): a click picks under either; under Box select a drag draws a box.
+  const [selectTool, setSelectTool] = useState("select");
   // Measure's menu, a STEP's (`kit/tools/measure/measureFilter.js`): All as the file opens, or
   // Vertices, Edges or Faces alone: what a press takes whole (`XbfMeasure.jsx`).
   const [measureFilter, setMeasureFilter] = useState(MEASURE_FILTER_DEFAULT);
@@ -528,6 +531,24 @@ function XbfSurface({ view, data }) {
     const node = nodeOf(hit);
     if (node && (!selectableIds || selectableIds.has(node))) setChosen(now => pickNode(now, node, multiSelect));
   }, [ensureSelect, grownIds, nodeOf, selectableIds]);
+  // Box select: what the box takes, by a click's rules (`pickBox`, `pickOptions`): under All the
+  // faces and edges of the parts that are open and every other part as the node a click takes;
+  // Group faces and Group edges grow it. Shift adds; otherwise it replaces the selection.
+  const handleBoxSelect = useCallback(async (box) => {
+    const camera = viewportRef.current?.runtimeRef.current?.camera;
+    const rect = viewportRef.current?.hostRef.current?.getBoundingClientRect?.();
+    if (!scene || !camera || !rect?.width || mode === "none") return;
+    const found = scene.pickBox(box, { camera, width: rect.width, height: rect.height }, pickOptions);
+    const nodes = new Set();
+    for (const hit of found) {
+      const node = hit.kind ? "" : nodeOf(hit);
+      if (node && (!selectableIds || selectableIds.has(node))) nodes.add(node);
+    }
+    const elements = (await Promise.all(found.filter(hit => hit.kind).map(grownIds))).flat();
+    if (!box.additive) measureRef.current.select([]);
+    const taken = [...nodes, ...elements];
+    setChosen(now => [...new Set(box.additive ? [...now, ...taken] : taken)]);
+  }, [scene, mode, pickOptions, nodeOf, selectableIds, grownIds]);
   const handleHover = useCallback((found) => {
     const hit = found?.rest || null;
     if (!hit) { setHover(now => (now === NO_HOVER ? now : NO_HOVER)); return; }
@@ -652,16 +673,17 @@ function XbfSurface({ view, data }) {
   const effects = useModelTools({ view: viewSettings, features, store, mesh: bounds ? { bounds } : null, disabled: shell.idle });
   const selectModeMenu = useMemo(() => <SelectModeMenu value={selectFilter} assembly={assembly} posable={posable} disabled={shell.idle}
     onChange={value => { setSelectFilter(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }}
+    tool={selectTool} onToolChange={value => { setSelectTool(value); shellRef.current?.selectTool(XBF_TOOL.SELECT); }}
     connected={connected} onConnectedChange={(id, checked) => setConnected(now => ({ ...now, [id]: checked }))} />,
-  [selectFilter, assembly, posable, shell.idle, connected]);
+  [selectFilter, selectTool, assembly, posable, shell.idle, connected]);
   // Measure's chevron, a STEP's: a choice takes Measure up, as Select's takes Select up.
   const measureFilterMenu = useMemo(() => <MeasureFilterMenu value={measureFilter} disabled={shell.idle}
     onChange={value => { setMeasureFilter(value); shellRef.current?.selectTool(XBF_TOOL.MEASURE); }} />,
   [measureFilter, shell.idle]);
   const strip = [
     // Each button badged with what its tool picks alone (its chevron's menu), none for All.
-    shell.tools.own({ id: XBF_TOOL.SELECT, label: t("tool.select"), shortcut: TOOL_SHORTCUTS.select, menu: selectModeMenu,
-      icon: <SelectIcon mode={pickModeOf(selectFilter, xbfSelectModes({ assembly, posable })).id} className="size-3.5" aria-hidden="true" /> }),
+    shell.tools.own({ id: XBF_TOOL.SELECT, label: t(selectTool === "box" ? "select.boxSelect" : "tool.select"), shortcut: TOOL_SHORTCUTS.select, menu: selectModeMenu,
+      icon: <SelectIcon tool={selectTool} mode={pickModeOf(selectFilter, xbfSelectModes({ assembly, posable })).id} className="size-3.5" aria-hidden="true" /> }),
     ...shell.tools.drawing.map(tool => ({ ...tool, disabled: shell.idle })),
     shell.tools.own({ id: XBF_TOOL.MEASURE, label: t("tool.measure"), shortcut: TOOL_SHORTCUTS.measure, menu: measureFilterMenu,
       icon: <MeasureIcon mode={pickModeOf(measureFilter, MEASURE_MODES).id} className="size-3.5" aria-hidden="true" />,
@@ -709,6 +731,7 @@ function XbfSurface({ view, data }) {
         {handles ? <JointHandleOverlay handles={handles} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
         <XbfPick viewport={viewport} scene={picker} enabled={picking} onPick={handlePick} onHover={handleHover} onDoublePick={handleDoublePick}
           deferRef={deferPickRef} pointerTypeRef={pointerTypeRef} />
+        <BoxSelectGesture viewport={viewport} enabled={picking && selectTool === "box"} onBox={handleBoxSelect} />
       </>;
     }} />;
 }
