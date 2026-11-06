@@ -21,10 +21,16 @@ wrote. The board is read, never rewritten. What each writes into ``out_dir``:
 ``dxf``       ``<board>-outline.dxf``: Edge.Cuts and every drilled hole, millimetres, for an enclosure
 ============  ===========================================================================================
 
-A STEP or GLB written without some of its parts' 3D models (a model file not found -- kicode carries none
-of KiCad's libraries -- or, for a STEP, a model only in VRML) is written, with a warning naming them;
-kicad-cli calls it an error. A BOM needs a schematic, and KiCad's schematic support (kicode-sch): without
-either it is refused in one line.
+A STEP or GLB holds the parts' models the board's 3D view stands its parts on: kicad-cli reads KiCad's 3D
+library (every ``${KICADn_3DMODEL_DIR}``, ``${KISYS3DMOD}``, and a relative name the board's folder lacks)
+as a folder of this run's own (``library``), holding each such model the viewer's resolver finds in a
+library (``models3d.resolve_models``: a STEP inside KiCad's installed 3D library or ``CAD_KICAD_3DMODELS``'s
+folders, every symlink followed, its size bounded), at its name's place, a ``.wrl`` name's STEP under that
+name too. Nothing else of the libraries is read through them, and the person's own KiCad settings never. A
+name that is a place (``${KIPRJMOD}/...``, an absolute path) kicad-cli reads itself.
+A STEP or GLB written without some of its parts' 3D models (a model file not found, or, for a STEP, a model
+only in VRML) is written, with a warning naming them; kicad-cli calls it an error. A BOM needs a schematic,
+and KiCad's schematic support (kicode-sch): without either it is refused in one line.
 """
 
 from __future__ import annotations
@@ -38,10 +44,10 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from ._program import KicadRunError, private_run, project_as_found, ready
+from ._program import KicadRunError, library_variables, private_run, project_as_found, ready
 from ._program import quiet as _quiet
 
-__all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export"]
+__all__ = ["BOM_FIELDS", "EXPORTS", "FOLDERS", "PDF_LAYERS", "commands", "export", "library"]
 
 #: What can be exported, in the order they are listed to a person.
 EXPORTS = ("gerbers", "drill", "pos", "bom", "step", "glb", "odb", "ipc2581", "pdf", "dxf")
@@ -100,6 +106,50 @@ def commands(cli: Path, board: Path, to: str, out_dir: Path, scratch: Path | Non
                  "-o", str(out_dir / f"{stem}-{side}.pdf"), str(board)] for side, layers in PDF_LAYERS.items()]
     return [[*pcb, "--mode-single", "--output-units", "mm", "--layers", "Edge.Cuts", "--drill-shape-opt", "2",
              "-o", str(out_dir / f"{stem}-outline.dxf"), str(board)]]
+
+
+def library(board: Path, folder: Path) -> Path:
+    """``folder`` made KiCad's 3D library as an export of ``board`` reads it: each model the board names in
+    the library (by a library variable, or a relative name its own folder lacks) that the viewer's resolver
+    finds (``models3d.resolve_models``), at the place its name has there, standing for that STEP -- a
+    ``.wrl`` name's under the ``.step`` name beside it too, which ``--subst-models`` reads in its place --
+    whichever library each is in. A link where the system makes one, else a copy (the resolver bounds them)."""
+    from cad.engine.formats.kicad import models3d
+
+    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        text = board.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return folder
+    for answer in models3d.resolve_models(board, models3d.model_names(text)).values():
+        if answer.path is None or answer.under is None:
+            continue
+        place = folder.joinpath(*answer.under.split("/"))
+        named = [place]
+        if place.suffix.lower() in (".wrl", ".wrz"):
+            named.append(place.with_suffix(".step"))
+        for at in named:
+            if not at.exists() and not at.is_symlink():
+                try:
+                    _stand(Path(answer.path), at)
+                except OSError as error:
+                    raise KicadRunError(f"cannot give kicad-cli the 3D model {answer.name}: "
+                                        f"{error.strerror or error}") from None
+    return folder
+
+
+def _stand(model: Path, at: Path) -> None:
+    """``at`` made to stand for ``model``: a symbolic link, else a hard link, else a copy."""
+    at.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        at.symlink_to(model)
+        return
+    except OSError:  # Windows without the right to make one
+        pass
+    try:
+        os.link(model, at)
+    except OSError:  # another volume, or a file the person may not link
+        shutil.copyfile(model, at)
 
 
 def _model_file(to: str, board: Path, out_dir: Path) -> Path | None:
@@ -206,6 +256,8 @@ def export(board: Path, to: str, out_dir: Path, *, cli: Path | None = None, time
     what = "sch export bom" if to == "bom" else f"pcb export {to}"
     before = _listing(out_dir)
     with private_run("cad-export-", cli) as (scratch, env), project_as_found(board):
+        if to in ("step", "glb"):
+            env.update(library_variables(library(board, scratch / "3dmodels")))
         for command in commands(cli, board, to, out_dir, scratch):
             try:
                 completed = subprocess.run(command, env=env, stdin=subprocess.DEVNULL, capture_output=True, text=True,

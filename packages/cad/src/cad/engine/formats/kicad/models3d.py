@@ -38,6 +38,10 @@ nowhere: on Windows, opening a share connects to its server and offers it the pe
 
 Only ``stat``, ``realpath`` and ``isfile`` touch the file system, inside those folders; nothing is read or
 written. Pure standard library.
+
+A name found in a library also says where it lies there (``Resolved.under``): a board's STEP or GLB export
+(the kicad integration's) gives KiCad's command line those files, at those places, as its 3D library, so
+the export holds the parts the viewer stands a model on.
 """
 
 from __future__ import annotations
@@ -81,13 +85,17 @@ _MODEL = re.compile(r'\(\s*model\s+(?:"((?:[^"\\]|\\.)*)"|([^\s()"]+))', re.DOTA
 @dataclass(frozen=True)
 class Resolved:
     """A model name's answer: ``path`` the STEP it is (its real path) and ``stamp`` its ``mtime_ns-size``,
-    else ``reason`` (one of :data:`REASONS`). ``file`` is the name's last part, as a person reads it."""
+    else ``reason`` (one of :data:`REASONS`). ``file`` is the name's last part, as a person reads it.
+    ``under`` is, for a name found in a 3D library (a library variable's, or a relative name the board's
+    folder lacks), the place the name itself has in that library, ``/``-separated (``Resistor_SMD.3dshapes/
+    R_0603.wrl`` for a VRML name read as the STEP beside it); None for one found in the board's folder."""
 
     name: str
     file: str
     path: str | None = None
     stamp: str | None = None
     reason: str | None = None
+    under: str | None = None
 
 
 def standard_libraries(platform: str | None = None, environ: Mapping[str, str] | None = None) -> list[str]:
@@ -184,27 +192,37 @@ def _local(candidate: str, roots: Sequence[str]) -> str | None:
 
 
 def _candidates(name: str, folder: str, libraries: Sequence[str],
-                variables: Mapping[str, str]) -> Iterable[str | None]:
-    """Every place a name may be, in KiCad's order: its variables expanded (a library's against each
-    library), else the board's folder and then each library for a relative name. ``None`` stands for a
-    name that is a share, a device or drive-relative (:func:`_refused`): it is looked for nowhere."""
+                variables: Mapping[str, str]) -> Iterable[tuple[str | None, str | None]]:
+    """Every place a name may be, in KiCad's order, each with the library it is looked for in (None for the
+    board's folder or a name that is a place already): its variables expanded (a library's against each
+    library), else the board's folder and then each library for a relative name. A place of ``None`` stands
+    for a name that is a share, a device or drive-relative (:func:`_refused`): it is looked for nowhere."""
     name = name.strip().replace("\\", "/")
     library_named = [match.group(1) or match.group(2) for match in _VARIABLE.finditer(name)]
     if any(_LIBRARY_VARIABLE.match(variable or "") for variable in library_named):
         for library in libraries:
             yield _VARIABLE.sub(lambda match: library if _LIBRARY_VARIABLE.match(match.group(1) or match.group(2) or "")
-                                else _value(match, folder, variables), name)
+                                else _value(match, folder, variables), name), library
         return
     expanded = _VARIABLE.sub(lambda match: _value(match, folder, variables), name)
     if _refused(expanded):
-        yield None
+        yield None, None
         return
     if expanded.replace("\\", "/").startswith("/") or _DRIVE.match(expanded):
-        yield expanded
+        yield expanded, None
         return
-    yield os.path.join(folder, expanded)
+    yield os.path.join(folder, expanded), None
     for library in libraries:
-        yield os.path.join(library, expanded)
+        yield os.path.join(library, expanded), library
+
+
+def _under(place: str, library: str | None) -> str | None:
+    """Where ``place`` (a name's place, normalised) lies in ``library``, ``/``-separated; None when it lies
+    in no library (a library name's ``..`` that leaves it for the board's folder, say)."""
+    if library is None or not _inside(place, [library]):
+        return None
+    under = os.path.relpath(place, library).replace(os.sep, "/")
+    return None if under in (".", "") or under.startswith("../") else under
 
 
 def _value(match: re.Match, folder: str, variables: Mapping[str, str]) -> str:
@@ -224,7 +242,7 @@ def _resolve(name: str, folder: str, libraries: Sequence[str], roots: Sequence[s
     if suffix not in _STEP + _VRML:
         return Resolved(name, file, reason="not-step")
     vrml = outside = large = False
-    for candidate in _candidates(name, folder, libraries, variables):
+    for candidate, library in _candidates(name, folder, libraries, variables):
         # Inside a root as text first: nothing outside the roots is ever stat-ed, opened or resolved.
         place = None if candidate is None else _local(candidate, roots)
         if place is None:
@@ -247,7 +265,8 @@ def _resolve(name: str, folder: str, libraries: Sequence[str], roots: Sequence[s
             if info.st_size > MAX_BYTES:
                 large = True
                 continue
-            return Resolved(name, file, path=real, stamp=f"{info.st_mtime_ns}-{info.st_size}")
+            return Resolved(name, file, path=real, stamp=f"{info.st_mtime_ns}-{info.st_size}",
+                            under=_under(place, library))
         if suffix in _VRML and any(os.path.isfile(stem + ending) for ending in _VRML):
             vrml = True
     reason = "too-large" if large else "outside" if outside else "vrml-only" if vrml else "not-found"

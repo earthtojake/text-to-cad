@@ -121,11 +121,14 @@ class Headless(unittest.TestCase):
 
     def test_a_run_has_no_display_and_homes_of_its_own(self) -> None:
         person = {name: str(Path("someone") / name) for names in self.HOMES.values() for name in names}
-        person.update(DISPLAY=":0", WAYLAND_DISPLAY="wayland-0", KICAD_STOCK_DATA_HOME="stock")
+        # The person's own 3D library variable, which their KiCad reads: never a run's.
+        person.update(DISPLAY=":0", WAYLAND_DISPLAY="wayland-0", KICAD_STOCK_DATA_HOME="stock",
+                      KICAD9_3DMODEL_DIR="someone-library")
         for platform, names in self.HOMES.items():
             with self.subTest(platform=platform), tempfile.TemporaryDirectory(prefix="tmp-kicad-env-") as folder, \
                     mock.patch.object(install.programs.sys, "platform", platform), \
-                    mock.patch.dict(sys.modules, {"kicode": None}), mock.patch.dict(os.environ, person):
+                    mock.patch.dict(sys.modules, {"kicode": None}), \
+                    mock.patch.dict(os.environ, {**person, "CAD_KICAD_3DMODELS": folder}):
                 root = Path(folder)
                 env = install.headless_env(root)
                 self.assertNotIn("DISPLAY", env)
@@ -137,8 +140,10 @@ class Headless(unittest.TestCase):
                 self.assertEqual(Path(env["KICAD_CONFIG_HOME"]), root / "settings")
                 # A kicad-cli CAD_KICAD_CLI names finds its stock data by this; only kicode's sets it.
                 self.assertEqual(env["KICAD_STOCK_DATA_HOME"], "stock")
+                # Every 3D library variable names the library the board view reads first.
+                self.assertEqual({env[name] for name in install.LIBRARY_VARIABLES}, {os.path.realpath(folder)})
                 # Everything else is this process's own, untouched.
-                for name in env.keys() - set(names):
+                for name in env.keys() - set(names) - set(install.LIBRARY_VARIABLES):
                     self.assertEqual(env[name], os.environ[name], name)
 
     def test_kicodes_kicad_cli_gets_kicodes_variables(self) -> None:

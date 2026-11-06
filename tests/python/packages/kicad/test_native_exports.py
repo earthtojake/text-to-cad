@@ -164,6 +164,53 @@ class StepWithoutModels(unittest.TestCase):
             self.assertIn("R1", said)
             self.assertIn("VRML", said)
 
+    def test_library_models_are_read_where_the_board_view_reads_them(self):
+        """A model named in KiCad's 3D library is in the STEP, read in the folders the board's 3D view reads
+        (here two that ``CAD_KICAD_3DMODELS`` names, standing for KiCad's installed library), never where the
+        caller's own ``KICAD10_3DMODEL_DIR`` points: any library variable, a KiCad 8 ``.wrl`` name read as
+        the STEP beside it, each in whichever folder holds it. ``cad run kicad-cli`` reads the first folder."""
+        import os
+        import re
+        import shutil
+        from unittest import mock
+
+        def parts(step):
+            text = step.read_text(encoding="utf-8", errors="replace")
+            return sorted(set(re.findall(r"NEXT_ASSEMBLY_USAGE_OCCURRENCE\('[^']*','(R\d+)'", text)))
+
+        with tempfile.TemporaryDirectory(prefix="kicad-step-library-") as folder:
+            root = Path(folder)
+            (root / "plain").mkdir()
+            (root / "plain" / "board.kicad_pcb").write_text(BOARD, encoding="utf-8")
+            (model,) = [Path(path) for path in
+                        kicode.call(self, "export", root / "plain" / "board.kicad_pcb", "step", root / "plain")["written"]]
+            first, second, elsewhere = root / "library", root / "more", root / "elsewhere"
+            for library, name in ((first, "R_0603_1608Metric.step"), (first, "R_0805_2012Metric.step"),
+                                  (second, "R_1206_3216Metric.step"), (elsewhere, "R_0603_1608Metric.step")):
+                (library / "Resistor_SMD.3dshapes").mkdir(parents=True, exist_ok=True)
+                shutil.copyfile(model, library / "Resistor_SMD.3dshapes" / name)
+            named = {"R1": "${KICAD10_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0603_1608Metric.step",
+                     "R2": "${KICAD8_3DMODEL_DIR}/Resistor_SMD.3dshapes/R_0805_2012Metric.wrl",
+                     "R3": "${KISYS3DMOD}/Resistor_SMD.3dshapes/R_1206_3216Metric.step"}
+            footprints = "".join(f'''
+ (footprint "test:r" (layer "F.Cu") (at {10 * index} 15)
+  (property "Reference" "{ref}" (at 0 -2) (layer "F.SilkS") (effects (font (size 1 1) (thickness 0.15))))
+  (attr smd)
+  (model "{name}")
+  (pad "1" smd rect (at -0.8 0) (size 0.9 1) (layers "F.Cu" "F.Mask")))''' for index, (ref, name) in enumerate(named.items(), 1))
+            board = root / "board" / "board.kicad_pcb"
+            board.parent.mkdir()
+            board.write_text(BOARD.split(" (footprint", 1)[0] + footprints + "\n)\n", encoding="utf-8")
+            with mock.patch.dict(os.environ, {"CAD_KICAD_3DMODELS": os.pathsep.join([str(first), str(second)]),
+                                              "KICAD10_3DMODEL_DIR": str(elsewhere / "none")}):
+                found = kicode.call(self, "export", board, "step", root / "fab")
+                (step,) = [Path(path) for path in found["written"]]
+                self.assertEqual((parts(step), found["warnings"]), (["R1", "R2", "R3"], []))
+                run = kicode.run_python(self, "import sys; from cad.kicad._command import main; raise SystemExit(main())",
+                                        "kicad-cli", "pcb", "export", "step", "--subst-models", "--force", "-o",
+                                        str(root / "run.step"), str(board))
+            self.assertIn("R1", parts(root / "run.step"), run.stdout + run.stderr)
+
     def test_an_output_folder_that_cannot_be_made_is_the_exports_error(self):
         from cad_server._internal.integration_env import Failed
 

@@ -466,8 +466,9 @@ verbosity) key nothing. What it adds is two things:
   one on PATH; one an integration declares runs through that integration's `_command` module in the
   environment's Python (`cad.kicad._command`): the environment's own `kicad-cli` (kicode's console
   script; with a kicode that has none, `kicode.executable()`), headless in private homes
-  (`cad.kicad._program.private_run`, a typed command's), its arguments, stdio and exit code
-  kicad-cli's, and never the one `CAD_KICAD_CLI` names. The environment of the build123d integration
+  (`cad.kicad._program.private_run`, a typed command's, KiCad's 3D library variables naming the first
+  library a board's 3D view reads), its arguments, stdio and exit code kicad-cli's, and never the one
+  `CAD_KICAD_CLI` names. The environment of the build123d integration
   alone, with nothing else, is the base.
 
 **What an environment holds** (`extras.Spec`): the pin, and beside it the packages the program names.

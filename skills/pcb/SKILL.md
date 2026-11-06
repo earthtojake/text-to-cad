@@ -54,8 +54,9 @@ KiPy's names from `kicode` (`from kicode.proto.common.types import KIID`, `from 
 from_mm`), never from `kipy`: the two cannot share a process. Saving writes the file in the nightly's
 format: one from an older KiCad is upgraded, which the run says, and that older KiCad can no longer open
 it. Checks and exports of the saved board are calls after the block (`kicad_pcb.drc`, `kicad_pcb.export`);
-a STEP or GLB export leaves out a part whose 3D model is missing (or, in a STEP, only in VRML), which it
-says, and `--to dxf` writes the outline and drilled holes, for an enclosure:
+a STEP or GLB export holds each part's 3D model where the board's 3D view finds it ([board
+views](#board-views)), and leaves out, naming them, the parts whose model is missing (or, in a STEP, only in
+VRML); `--to dxf` writes the outline and drilled holes, for an enclosure:
 
 ```python
 from cad import kicad_pcb
@@ -232,7 +233,11 @@ running does not see a variable set in a shell afterwards, so set it before the 
 **Parts** lists it under **No 3D model**, with why: VRML only (no STEP beside the VRML), not found,
 outside the folders above, too large, not a STEP, embedded in the board, or too many models.
 `cad kicad_pcb inspect board.kicad_pcb --json` reports each model the same way (`models`: found,
-missing with the reason, and the parts that name none).
+missing with the reason, and the parts that name none), and a STEP or GLB export (`cad kicad_pcb export
+--to step|glb`, `kicad_pcb.export`) holds exactly the models found, a `CAD_KICAD_3DMODELS` read from
+the command's environment. `cad run kicad-cli` reads KiCad's library as KiCad does: every
+`${KICADn_3DMODEL_DIR}` is the first of those library folders, and a `.wrl` name needs its `.wrl` file
+there (KiCad 10's library ships STEP alone), so prefer the typed export.
 
 Snapshots use `cad kicad_pcb snapshot`, including `--job` packets saved by Quick Edit, which carry the
 theme the view was in. Display modes are `board`, `copper`, `assembly`, and `placement`; a still is

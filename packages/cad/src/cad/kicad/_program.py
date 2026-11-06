@@ -28,9 +28,10 @@ from cad.registry import INTEGRATIONS
 from cad._internal import programs
 from cad._internal.programs import version_tuple  # noqa: F401 - the tests' and callers' comparison
 
-__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "KicadMissingError", "KicadRunError",
-           "carried", "check_api_server", "check_version", "find_kicad_cli", "headless_env", "install_hint",
-           "kicad_version", "packaged", "private_run", "project_as_found", "quiet", "ready"]
+__all__ = ["API_SERVER_HINT", "CLI_NAMES", "KICAD", "KICAD_MINIMUM", "LIBRARY_VARIABLES", "KicadMissingError",
+           "KicadRunError", "carried", "check_api_server", "check_version", "find_kicad_cli", "headless_env",
+           "install_hint", "kicad_version", "library_variables", "packaged", "private_run", "project_as_found", "quiet",
+           "ready"]
 
 # What kicad-cli says on stderr that says nothing about the board.
 _NOISE = ("Fontconfig error",)
@@ -57,6 +58,23 @@ CLI_NAMES = ("kicad-cli", "kicad-cli.exe")
 # (``programs.headless_env``); kicode's own kicad-cli gets kicode's (``kicode.environment``), which sets the
 # same three and, on Linux, where the packaged build finds its stock data and plugins.
 _HOMES = {"KICAD_CONFIG_HOME": "settings", "KICAD_DOCUMENTS_HOME": "documents", "KICAD_CACHE_HOME": "cache"}
+#: KiCad's 3D library variables, every spelling a footprint names its model by: KiCad 5's, then one a major
+#: version since 6. A kicad-cli reads its own version's (kicode's, 10.99, reads every other spelling as its own).
+LIBRARY_VARIABLES = ("KISYS3DMOD", *(f"KICAD{major}_3DMODEL_DIR" for major in range(6, 13)))
+_LIBRARY_VARIABLE = re.compile(r"KICAD\d*_3DMODEL_DIR|KISYS3DMOD")
+
+
+def library_variables(folder: str | os.PathLike | None) -> dict[str, str]:
+    """Every one of :data:`LIBRARY_VARIABLES` naming ``folder``; none for None."""
+    return {} if folder is None else {name: os.fspath(folder) for name in LIBRARY_VARIABLES}
+
+
+def _library() -> str | None:
+    """KiCad's 3D library as the viewer reads it first (``models3d.library_roots``: ``CAD_KICAD_3DMODELS``'s
+    first folder, else the newest installed KiCad's), or None where there is none."""
+    from cad.engine.formats.kicad.models3d import library_roots
+
+    return next(iter(library_roots()), None)
 
 
 class KicadMissingError(programs.ProgramMissing):
@@ -130,13 +148,22 @@ def headless_env(root: str | os.PathLike, cli: Path | None = None) -> dict[str, 
     """The environment a ``kicad-cli`` run gets (``programs.headless_env``: no display, every home inside
     ``root``), with KiCad's own homes inside ``root`` too: kicode's variables (``kicode.environment``) for
     kicode's kicad-cli -- ``cli``, or none named where this environment holds kicode -- else
-    ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``."""
+    ``KICAD_CONFIG_HOME`` (``root/settings``), ``KICAD_DOCUMENTS_HOME`` and ``KICAD_CACHE_HOME``.
+
+    KiCad's 3D library variables (:data:`LIBRARY_VARIABLES`) name the library the viewer reads a board's
+    models in first -- ``CAD_KICAD_3DMODELS``'s first folder, else the newest installed KiCad's -- and none
+    where there is none: never what this process's environment or the person's KiCad settings say. A
+    board's STEP or GLB export names its own (``_export``)."""
     kicode = _kicode()
     if kicode is not None and (cli is None or _is_packaged(cli)):
         env = programs.headless_env(root)
         env.update(kicode.environment(root))
-        return env
-    return programs.headless_env(root, _HOMES)
+    else:
+        env = programs.headless_env(root, _HOMES)
+    for name in [name for name in env if _LIBRARY_VARIABLE.fullmatch(name)]:
+        del env[name]
+    env.update(library_variables(_library()))
+    return env
 
 
 @contextmanager
