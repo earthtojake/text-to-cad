@@ -200,6 +200,72 @@ test('in 3D the board is its two faces in the 2D colours, a press on a pad’s p
   assert.deepEqual(errors, []);
 });
 
+/** Where the highlight lights the canvas (its pixels' centroid and count): a picked pad, as the 2D view draws it. */
+const litAt = image => {
+  let [x, y, count] = [0, 0, 0];
+  for (let row = 0; row < image.height; row += 1) {
+    for (let column = 0; column < image.width; column += 1) {
+      if (near(pixel(image, column, row), [141, 197, 255], 30)) { x += column; y += row; count += 1; }
+    }
+  }
+  return count ? [x / count, y / count, count] : null;
+};
+
+test('2D to 3D and back with the camera left alone: every frame shows the board, and the 2D view comes back as it was, a pad where it stood', async (t) => {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(30000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=blinky.kicad_pcb`);
+  const pane = page.getByTestId('one');
+  const fitted = await frame(pane);
+  // R1 pad 2 picked, so it is lit where it is drawn, in a view zoomed a step and panned off the fit.
+  await page.evaluate(() => window.cadHarness.a.controller.select('#R1.2'));
+  await pane.locator('[data-zoom-pill]').getByRole('button', { name: 'Zoom in' }).click();
+  const canvas = await canvasOf(pane).boundingBox();
+  await page.mouse.move(canvas.x + 400, canvas.y + 250);
+  await page.mouse.down({ button: 'right' });
+  await page.mouse.move(canvas.x + 300, canvas.y + 280, { steps: 4 });
+  await page.mouse.up({ button: 'right' });
+  await page.mouse.move(canvas.x + 2, canvas.y + 2);
+  const pad = litAt(await frame(pane, fitted));
+  assert.ok(pad, 'R1 pad 2 lit in 2D');
+  // Every animation frame, either way: the flat canvas, or the board in 3D with its face drawn; never the
+  // 3D view's cover over the board, its bare slab, or neither.
+  await page.evaluate(() => {
+    window.__missed = [];
+    const look = () => {
+      if (!window.__missed) return;
+      const flat = document.querySelector('[data-board-surface] canvas[role=img]');
+      const solid = document.querySelector('[data-board-3d]');
+      const seen = Boolean(solid) && getComputedStyle(solid).opacity !== '0';
+      const drawn = seen && solid.querySelector('canvas')?.style.visibility !== 'hidden';
+      const cover = seen && Boolean(solid.querySelector('[data-viewer-transition]'));
+      const bare = drawn && !solid.dataset.boardFaces;
+      const flatShown = Boolean(flat) && !flat.classList.contains('invisible');
+      if (cover || bare || (!flatShown && !drawn)) window.__missed.push({ cover, bare, flatShown, drawn });
+      requestAnimationFrame(look);
+    };
+    requestAnimationFrame(look);
+  });
+  await pane.locator('[data-board-dimension="3d"]').click();
+  // Up in place of the flat canvas, then eased from head on to where 3D opens (Home, the world's z up);
+  // nothing moves the camera.
+  await page.waitForFunction(() => {
+    const camera = window.__cadCamera?.();
+    return document.querySelector('[data-board-surface] canvas[role=img]')?.classList.contains('invisible') && camera && !camera.settling && camera.up[2] > 0.9;
+  });
+  await pane.locator('[data-board-dimension="2d"]').click();
+  await pane.locator('[data-board-3d]').waitFor({ state: 'detached' });
+  const back = litAt(await frame(pane));
+  assert.deepEqual(await page.evaluate(() => { const missed = window.__missed; window.__missed = null; return missed; }), [],
+    'a frame showed the board on neither canvas, or the 3D view unready over it');
+  assert.ok(back && Math.hypot(back[0] - pad[0], back[1] - pad[1]) <= 1, `R1 pad 2 back where it stood: ${back} vs ${pad}`);
+  assert.deepEqual(errors, []);
+});
+
 test('in 3D a part stands its model, a press on its body picks the part rather than the pad under it, and with 3D models hidden the pad', async (t) => {
   // R1's model is the bracket, a tenth its size: a 4 x 2 mm plate over both its pads, 0.4 mm thick, standing on the front face.
   const name = '${KIPRJMOD}/bracket.step';
