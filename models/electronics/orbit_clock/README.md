@@ -29,7 +29,7 @@ in the baffle. Between the rings at 12 o'clock: the hop from the minute ring's e
 the data input as an arc on a 43.5 mm radius.
 
 **Back (B.Cu): the electronics.** The ESP32-C3-WROOM-02 at the top edge with its antenna at the board's edge and
-a keep-out (no copper on any layer, 5 mm round the antenna, Espressif's rule); the USB-C receptacle on the flat at
+its own keep-out (no copper on any layer, 5 mm round the antenna, Espressif's rule); the USB-C receptacle on the flat at
 the bottom; its USBLC6-2SC6 ESD array in line (flow-through), 5.1k CC pull-downs, a 3 A polyfuse, a 470 uF bulk
 capacitor and 22 uF; an AP2112K 3.3 V regulator; a 74AHCT1G125 shifting the LED data from 3.3 V to 5 V with 33 ohm
 at the driver; BOOT and RESET; test points for 5V, 3V3, GND, TX and RX (and TP6 at the chain's end on the front).
@@ -127,9 +127,9 @@ placement, tracks and vias again. After a board change, export the STEP and the 
 - **ERC**: clean, 0 warnings. **Board vs schematic**, pin by pin: 540 pins, 0 differ.
 - **DRC** (the board's JLCPCB rules): 0 errors, 0 unconnected; 102 warnings: 101 `lib_footprint_mismatch`
   and the module's own silkscreen outline running past the board edge at the antenna.
-- **Antenna**: nothing poured on any layer and no via under the antenna keep-out (736 sample points). The
-  module's own keep-out (a rule area inside its footprint) was left 88 mm right of the module as the footprint
-  was placed over KiCad's API, so a board-level keep-out over the antenna is the one that holds.
+- **Antenna**: nothing poured on any layer and no via under the module's keep-out (736 sample points): the rule
+  area inside its footprint, which `board.py place` sets from the library footprint after every move, since
+  KiPy's move shifts it (it once sat 88 mm right of the module, off the board).
 - **Decoupling**: every LED's VDD pad 1.91 mm from its 100 nF; U1 3V3 1.83 mm, U4 2.13 mm, U2 in 2.38 mm, U2 out
   3.13 mm (review: over the 3 mm guide), U5 1.42 mm.
 - **Fit** (`src/check_fit.py`, the assembly as built, every board solid against each printed part):
