@@ -120,6 +120,26 @@ ELSEWHERE = textwrap.dedent("""
         print(error)
 """)
 
+# A sheet symbol made over IPC (its file not there yet): this nightly saves the root, then fails to save the new
+# sheet, resolving its file against the root's file name; the edit's save is whole or none.
+SHEET = textwrap.dedent("""
+    import json, sys
+    from cad import kicad_sch
+    from kicode.geometry import Vector2
+    from kicode.schematic_types import SheetSymbol
+
+    try:
+        with kicad_sch.edit(sys.argv[1]) as s:
+            sheet = SheetSymbol()
+            sheet.position, sheet.size = Vector2.from_xy_mm(50.8, 50.8), Vector2.from_xy_mm(25.4, 12.7)
+            sheet.name_field.text.value = "Power"
+            sheet.filename_field.text.value = "power.kicad_sch"
+            s.create_items(sheet)
+        print(json.dumps({"saved": True}))
+    except RuntimeError as error:
+        print(json.dumps({"raised": type(error).__name__, "said": str(error)}))
+""")
+
 # An edit in a process of its own: it says "ready" from inside its block, then waits there.
 WAITING = textwrap.dedent("""
     import sys, time
@@ -169,6 +189,17 @@ class Edits(unittest.TestCase):
         self.assertEqual({"parts": ["D1", "J1", "R1"], "symbols": 0}, self.last(done))
         self.assertEqual(before, _files(self.folder), "byte for byte, in their own formats, and nothing beside them")
         self.assertNotIn("is saved in the", done.stderr)
+
+    def test_a_save_kicad_cannot_finish_leaves_every_file_as_it_was(self) -> None:
+        schematic = write_library_project(self.folder)
+        before = _files(self.folder)
+        ran = self.last(self.run_edit(SHEET, str(schematic)))
+        if ran.get("saved"):  # a KiCad that saves a sheet made over IPC: the hierarchy, whole
+            self.assertTrue((self.folder / "power.kicad_sch").is_file())
+            return
+        self.assertEqual("KicadRunError", ran["raised"], ran)
+        self.assertIn("KiCad could not save design.kicad_sch: failed to save schematic", ran["said"])
+        self.assertEqual(before, _files(self.folder), "the root as it was, no new sheet file, nothing beside them")
 
     def test_a_board_and_a_schematic_of_one_project_share_one_server(self) -> None:
         from cad import kicad_pcb, kicad_sch

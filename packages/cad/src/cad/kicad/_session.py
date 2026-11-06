@@ -19,7 +19,11 @@ ends.
 The block is handed the open document. A file not there yet is made by KiCad (``CreateDocument``, with its
 project where it has none). On a normal exit the document is saved when the block changed it (KiCad's own
 ``is_document_modified``) or KiCad made it, so a block that changes nothing leaves the file byte for byte, in
-its own format; when the block raises, nothing is saved and the exception goes on. Each document of a
+its own format; when the block raises, nothing is saved and the exception goes on. A save is whole or none:
+when KiCad's fails (it may have written some files of a hierarchy first), every file the save writes -- the
+document, its project and, for a schematic, each sheet file of its hierarchy as KiCad holds it -- is put
+back as it was, a file it made is removed, and the edit raises ``KicadRunError`` with KiCad's words and what
+its server logged. Each document of a
 shared server is saved at its own block's exit, by the same rules. A ``.kicad_prl`` (KiCad's local
 settings) the edit made beside its file is removed once its server stops, and so is a folder made for a new
 file that ends with no file in it.
@@ -329,12 +333,70 @@ def _with_libraries(kicad: Any, schematic: Any, path: Path) -> Any:
 class _Server:
     """One headless api-server, serving a project's board and schematic to the edits of this thread: KiPy's
     client of it, the files its edits have open, and what is undone once it stops (``after``: a folder made
-    for a new file, the local settings KiCad wrote)."""
+    for a new file, the local settings KiCad wrote); ``log``, what the server says."""
 
     client: Any
     open: set[Path] = field(default_factory=set)
     after: ExitStack = field(default_factory=ExitStack)
     said: set[Path] = field(default_factory=set)  # the projects KiCad made for its edits, said once
+    log: Path | None = None
+
+
+def _saved_files(opened: Any, path: Path, kind: _Kind) -> list[Path]:
+    """The files a save of ``opened`` may write: ``path``, its project's ``.kicad_pro`` and, for a schematic,
+    every sheet file of its hierarchy as KiCad holds it (a sheet the block made among them), and the
+    schematics beside it."""
+    files = [path, path.with_suffix(".kicad_pro")]
+    if kind is _SCHEMATIC:
+        try:
+            sheets = list(opened.get_hierarchy())
+        except Exception:  # noqa: BLE001 - KiPy's ApiError: a server without the request; the files beside it
+            sheets = []
+        files += [path.parent / name for name in (getattr(sheet, "filename", "") for sheet in sheets) if name]
+        files += sorted(path.parent.glob("*.kicad_sch"))
+    return list(dict.fromkeys(Path(os.path.abspath(file)) for file in files))
+
+
+def _logged(log: Path | None, since: int) -> str:
+    """The errors the server logged after byte ``since`` of its log, one line."""
+    if log is None:
+        return ""
+    try:
+        with log.open("rb") as file:
+            file.seek(since)
+            text = file.read().decode("utf-8", "replace")
+    except OSError:
+        return ""
+    # wxWidgets stamps each line with the time ("01:47:22 PM: ", a narrow no-break space before PM on macOS).
+    lines = [re.sub(r"^\d\d:\d\d:\d\d(\s?[AP]M)?:\s*", "", line.strip()) for line in quiet(text).splitlines()]
+    return "; ".join(line for line in lines if "error" in line.lower())
+
+
+def _save(opened: Any, path: Path, kind: _Kind, server: _Server) -> None:
+    """``opened`` saved whole, or none of it: when KiCad's save fails, each file it may have written is put back
+    as it was (one it made removed) and ``KicadRunError`` says why, in KiCad's words and its server's log."""
+    from cad._internal.atomic_replace import write_bytes_atomic
+
+    files = _saved_files(opened, path, kind)
+    kept = {file: file.read_bytes() if file.is_file() else None for file in files}
+    since = server.log.stat().st_size if server.log is not None and server.log.exists() else 0
+    try:
+        opened.save()
+    except Exception as error:  # noqa: BLE001 - KiPy's ApiError, by kind: KiCad's own refusal
+        if type(error).__name__ != "ApiError":
+            raise
+        for file, data in kept.items():
+            try:
+                if data is None:
+                    file.unlink(missing_ok=True)
+                elif not file.is_file() or file.read_bytes() != data:
+                    write_bytes_atomic(file, data)
+            except OSError:
+                pass
+        said = str(error).removeprefix("KiCad returned error: ")
+        logged = _logged(server.log, since)
+        raise KicadRunError(f"KiCad could not save {path.name}: {said}" + (f" ({logged})" if logged else "")
+                            + "; nothing is saved: every file the save writes is as it was") from None
 
 
 # The servers the edits of this process run, by project: its folder, its name and the thread editing it.
@@ -369,7 +431,7 @@ def _serving(path: Path, kind: _Kind, create: bool, cli: Path | None, kicad: Any
                     with _stopped_on_signals(process):
                         client = _client(kicad, socket)
                         opened = _document(client, process, log, kind, path, create)
-                        server = _Server(client, {path}, after)  # what a joining edit leaves undone goes there too
+                        server = _Server(client, {path}, after, log=log)  # what a joining edit leaves undone goes there too
                         _SERVERS[key] = server
                         yield server, opened
                 finally:
@@ -422,7 +484,7 @@ def edit(path: Path | str, document_type: str, *, cli: Path | None = None) -> It
         yield opened  # a raise leaves the file as it was: nothing is saved, and the exception goes on
         saved = create or _modified(opened)
         if saved:
-            opened.save()
+            _save(opened, path, kind, server)
     if create:
         made = None if project or path.with_suffix(".kicad_pro") in server.said else path.with_suffix(".kicad_pro")
         server.said.add(path.with_suffix(".kicad_pro"))
