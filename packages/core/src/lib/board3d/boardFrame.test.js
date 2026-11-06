@@ -63,13 +63,31 @@ test("a 2D window round trips through its head-on camera exactly: the fit clear 
         ["perspective", perspectiveHeadOn(headOn, 28.6), null]]) {
         // A perspective camera's half height at its target is its distance times tan(fov / 2).
         const half = halfHeight ?? Math.hypot(...camera.position.map((value, axis) => value - camera.target[axis])) * Math.tan((28.6 * Math.PI) / 360);
-        const plan = planFromCamera({ position: camera.position, target: camera.target, halfHeight: half, width, height, mirrorX: mirror, thickness: 1.6 });
+        const plan = planFromCamera({ position: camera.position, target: camera.target, halfHeight: half, perspective: lens === "perspective",
+          width, height, mirrorX: mirror, thickness: 1.6 });
         assert.equal(plan.side, side);
         close([plan.transform.scale, plan.transform.offsetX, plan.transform.offsetY], [transform.scale, transform.offsetX, transform.offsetY],
           `${lens} from the ${side}, scale ${transform.scale}`);
       }
     }
   }
+});
+
+test("a camera turned off the face hands the 2D view the face point it centres, at the scale that point is drawn at: in perspective, not its target's", () => {
+  // From the front, right and above, its target 8 mm over the front face, as Home frames a board whose parts stand on it.
+  const [width, height, position, target] = [1000, 600, [60, -80, 50], [20, -30, 8]];
+  const camera = { position, target, halfHeight: 20, width, height, mirrorX: () => null, thickness: 1.6 };
+  // The line of sight meets the face past the target: at 50 / 42 of the target's depth.
+  const along = 50 / 42;
+  const face = [60 + (20 - 60) * along, -80 + (-30 + 80) * along];
+  const orthographic = planFromCamera(camera), perspective = planFromCamera({ ...camera, perspective: true });
+  for (const plan of [orthographic, perspective]) {
+    const { scale, offsetX, offsetY } = plan.transform;
+    close([(width / 2 - offsetX) / scale, (offsetY - height / 2) / scale], face, "the pane's centre is the face point");
+  }
+  // An orthographic lens draws every depth at the target's half height; a perspective one the face point, farther, smaller.
+  close([orthographic.transform.scale], [height / 40], "orthographic");
+  close([perspective.transform.scale], [height / (40 * along)], "perspective");
 });
 
 test("Flip turns the camera over the board's left-to-right axis, up kept: the back mirrored left to right, the world's up still up", () => {

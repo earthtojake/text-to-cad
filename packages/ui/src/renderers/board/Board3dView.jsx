@@ -292,7 +292,7 @@ export default function Board3dView({ handle, viewerRef, modelKey, layout, outli
       const current = camera(), target = runtime()?.controls?.target, { width, height } = paneSize();
       if (!current || !target) return null;
       return planFromCamera({ position: current.position.toArray(), target: target.toArray(), halfHeight: (pixelSize(target) * height) / 2,
-        width, height, mirrorX, thickness });
+        perspective: Boolean(current.isPerspectiveCamera), width, height, mirrorX, thickness });
     },
     camera: () => plainShellCamera(viewerRef.current?.getPerspective?.()),
     setCamera: camera => viewerRef.current?.setPerspective?.(scopeShellCamera(camera, modelKey, SCALE), { animate: false }),

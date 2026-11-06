@@ -114,12 +114,14 @@ export function perspectiveHeadOn(camera, fov) {
  * its line of sight meets the face it looks at), from that side, at the millimetres per pixel there.
  * What leaving a 3D view frames the 2D view on.
  *
- * @param {{ position: number[], target: number[], halfHeight: number, width: number, height: number,
+ * @param {{ position: number[], target: number[], halfHeight: number, perspective?: boolean, width: number, height: number,
  *   mirrorX: (side: "top" | "bottom") => number | null, thickness?: number }} camera  `halfHeight`: the
- *   view's half height in millimetres at its target.
+ *   view's half height in millimetres at its target; `perspective`: a perspective lens, whose half height
+ *   grows with the depth, so the face point's is the target's times the face point's depth over the
+ *   target's (a target standing over the face, as Home's does over a board's parts, is nearer the eye).
  * @returns {{ side: "top" | "bottom", transform: { scale: number, offsetX: number, offsetY: number } } | null}
  */
-export function planFromCamera({ position, target, halfHeight, width, height, mirrorX, thickness = BOARD_THICKNESS_MM }) {
+export function planFromCamera({ position, target, halfHeight, perspective = false, width, height, mirrorX, thickness = BOARD_THICKNESS_MM }) {
   if (!(halfHeight > 0) || !(width > 0) || !(height > 0)) return null;
   const direction = target.map((value, axis) => value - position[axis]);
   const hit = rayOnBoard({ origin: position, direction }, thickness);
@@ -128,7 +130,8 @@ export function planFromCamera({ position, target, halfHeight, width, height, mi
   const mirror = side === "bottom" ? mirrorX(side) : null;
   const planX = mirror == null ? sheetX : 2 * mirror - sheetX;
   const planY = -sheetY;
-  const scale = height / (2 * halfHeight);
+  // Along the line of sight the target is at distance 1 (`direction` is the eye to it), the face point at `hit.distance`.
+  const scale = height / (2 * halfHeight * (perspective && hit ? hit.distance : 1));
   return { side, transform: { scale, offsetX: width / 2 - planX * scale, offsetY: height / 2 + planY * scale } };
 }
 
