@@ -1,4 +1,4 @@
-"""One setup's toolpaths, planned and posted by FreeCAD's CAM workbench: run by ``freecadcmd`` (``freecad.run``), never
+"""One setup's toolpaths, planned and posted by FreeCAD's CAM workbench: run by ``freecadcmd`` (``_program.run``), never
 imported by the server.
 
 It reads ``plan.json`` from the folder ``CAD_CAM_FOLDER`` names, with the part beside it as ``part.brep``, already

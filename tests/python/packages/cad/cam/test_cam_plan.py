@@ -371,11 +371,11 @@ class HoleBlock(unittest.TestCase):
 
 class Refused(unittest.TestCase):
     def test_no_freecad_is_refused_with_how_to_install_it_and_writes_nothing(self):
-        from cad._internal.cam import freecad
+        from cad.freecad import _program as freecad
 
         directory = class_directory(type(self))
         step = block_step(directory)
-        with mock.patch.dict(os.environ, {freecad.FREECAD_ENV: str(directory / "no-freecad")}):
+        with mock.patch.dict(os.environ, {freecad.FREECAD_ENV: str(directory / "freecadcmd")}):
             result = plan(step, mill_job([{"op": "face", "tool": "T1"}]))
         self.assertFalse(result.ok)
         (found,) = result.findings

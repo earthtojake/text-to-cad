@@ -2,7 +2,7 @@
 
 Parts are built with build123d into a temporary directory per test class (never ``models/``), and :func:`mill_job`
 builds the dicts the suites plan. Heavy imports stay inside the helpers. :data:`needs_freecad` skips a test where
-no FreeCAD is installed (``CAD_FREECAD`` names one that is not on PATH).
+no FreeCAD is installed.
 
 The block (:func:`block_step`, :data:`BLOCK`): 80 x 60 x 25 mm standing on z = 0, centred in x and y, with a stepped
 pocket (an upper step 50 x 40 down to z = 17, a lower step 24 x 20 centred at x = -10 down to z = 11), a round
@@ -36,7 +36,7 @@ from tests.python.support.paths import add_repo_path
 
 add_repo_path("packages/cad/src")
 
-from cad._internal.cam.freecad import FreecadMissingError, find_freecad  # noqa: E402
+from cad.freecad._program import FreecadMissingError, find_freecad  # noqa: E402
 
 try:
     find_freecad()

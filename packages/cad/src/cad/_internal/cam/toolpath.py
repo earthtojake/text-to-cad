@@ -1,6 +1,6 @@
 """FreeCAD's path commands, read as moves: what the checks test against the part and the viewer draws.
 
-An operation's commands (``[name, {word: value}]``, as ``freecad_job.py`` hands them back) are FreeCAD's own: ``G0``
+An operation's commands (``[name, {word: value}]``, as ``cad/freecad/_job.py`` hands them back) are FreeCAD's own: ``G0``
 rapids, ``G1`` feeds, ``G2``/``G3`` arcs in the XY plane (``I J`` the centre from the start, a helix with ``Z``),
 and the drilling cycles ``G81``/``G82``/``G83`` (to ``Z`` from ``R``, back to ``R`` under ``G99`` or to where the cycle
 began under ``G98``). Coordinates are absolute (``G90``); FreeCAD's feeds are mm/s, as its posts read them. Anything

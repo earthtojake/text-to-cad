@@ -267,7 +267,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         self.assertIn(f"{LIBRARY}/cam", job)
         self.assertIn("timeout-minutes: 5", job)             # twice its slowest run, about 2 minutes
         library, server = "packages/cad/src/cad", "packages/cad-server/src/cad_server"
-        for path in (f"{library}/_internal/cam/run.py", f"{library}/cam.py", f"{library}/results.py",
+        for path in (f"{library}/_internal/cam/run.py", f"{library}/freecad/_program.py", f"{library}/_internal/programs.py", f"{library}/cam.py", f"{library}/results.py",
                      f"{server}/cli/cam_plan.py", f"{server}/_internal/kernel_verb.py", f"{LIBRARY}/cam/test_cam_plan.py",
                      "tests/python/support/cam_fixtures.py", "skills/cam/SKILL.md"):
             with self.subTest(path=path):
@@ -276,7 +276,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
         # Every module of the packages CAM's code imports, and the read a part goes through, reaches its plans too,
         # the engine's final rule notwithstanding; the rest of the engine does not.
         sources = {"cad": REPO_ROOT / "packages/cad/src", "cad_server": REPO_ROOT / "packages/cad-server/src"}
-        cam = [*sorted((sources["cad"] / "cad/_internal/cam").glob("*.py")), sources["cad"] / "cad/cam.py",
+        cam = [*sorted((sources["cad"] / "cad/_internal/cam").glob("*.py")), *sorted((sources["cad"] / "cad/freecad").glob("*.py")),
+               sources["cad"] / "cad/cam.py",
                *sorted((sources["cad_server"] / "cad_server/cli").glob("cam_*.py")),
                sources["cad_server"] / "cad_server/_internal/kernel_verb.py"]
         imported = set()

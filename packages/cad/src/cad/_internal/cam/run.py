@@ -2,7 +2,7 @@
 
 ``plan_job`` is the pipeline: parse the job -> find FreeCAD -> read the part and its features -> per setup: its work
 coordinates, each operation's faces, depths and feeds, and the reach checks -> FreeCAD plans and posts the setup's
-operations (``freecad.run``) -> the moves are read back and checked against the part -> the verdict -> the result GLB
+operations (``cad.freecad``) -> the moves are read back and checked against the part -> the verdict -> the result GLB
 and, when nothing is an error, the posted files, each written to a temporary name and renamed into place only when
 every one is written.
 
@@ -197,7 +197,7 @@ def _setup_reach(direction: str, sign: float) -> str:
 
 def plan_job(target: Path, *, job, occurrence: str | None = None, out_dir: Path | None = None,
              verbose: bool = False) -> CamPlanResult:
-    from cad._internal.cam.freecad import FreecadMissingError, find_freecad
+    from cad.freecad._program import FreecadMissingError, find_freecad
     from cad._internal.cam.job import parse_job
     from cad._internal.cam.part import read_part
 
@@ -317,7 +317,8 @@ def _targets(op, faces, holes, final_z, frame, mesh, face_of_triangle, tool) -> 
 def _plan(document, parsed, part, freecad, glb_path, logger, started) -> CamPlanResult:
     import numpy as np
 
-    from cad._internal.cam import checks, freecad as runner, toolpath
+    from cad._internal.cam import checks, toolpath
+    from cad.freecad import _program as runner
     from cad._internal.cam.features import read_features, walls_in
     from cad._internal.cam.feeds import default_stepdown, for_op
     from cad._internal.cam.job import OPERATIONS, POSTS

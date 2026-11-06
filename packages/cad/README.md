@@ -446,6 +446,8 @@ src/cad/
   cam.py                 # CAM: features (what a job can name) and plan (FreeCAD's toolpaths
                          #   and G-code, checked against the part, one result GLB); behind it
                          #   _internal/cam
+  freecad/               # our support for FreeCAD: freecadcmd found, checked and run headless
+                         #   (_program), and the script it runs (_job)
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties
@@ -474,7 +476,7 @@ or the CAD Viewer copies names the same face. It reads the part's exact faces wi
 library's and runs in the CAD kernel environment: the server's commands run it there
 (`cad_server._internal.kernel_verb`, by `python -m cad._internal.kernel_run`). FreeCAD, installed by the
 person (1.1 or newer; `CAD_FREECAD` names its `freecadcmd`), plans and posts each setup in a process of
-its own; `src/cad/_internal/cam/` checks what it plans against the part, reads back what FreeCAD holds
+its own; `src/cad/freecad/` runs it, and `src/cad/_internal/cam/` checks what it plans against the part, reads back what FreeCAD holds
 and what its post wrote against what it set, and posts nothing a check refuses. A plan writes
 `<stem>.cam.glb`, an ordinary GLB the viewer's GLB renderer draws the job of, and the G-code for each
 setup. `cad cam plan --help` names the job's keys, and a key or value a job cannot take is refused with

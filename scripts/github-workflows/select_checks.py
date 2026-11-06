@@ -281,7 +281,8 @@ RULES: tuple[Rule, ...] = (
     # CAM's plans need FreeCAD, which no other job installs: it, its commands, the result types it
     # returns, its suites and their fixtures, and its skill.
     Rule((
-        f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/cam.py", f"{SERVER_SRC}/cli/cam_*",
+        f"{LIBRARY_SRC}/_internal/cam/**", f"{LIBRARY_SRC}/freecad/**", f"{LIBRARY_SRC}/_internal/programs.py",
+        f"{LIBRARY_SRC}/cam.py", f"{SERVER_SRC}/cli/cam_*",
         f"{SERVER_SRC}/_internal/kernel_verb.py", f"{CADGEN_SUITE}/cad/cam/**", "tests/python/support/cam_fixtures.py",
         "skills/cam/**",
     ), select(flags=["cam"])),

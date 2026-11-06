@@ -51,8 +51,7 @@ https://www.freecad.org/downloads.php:
   `FreeCAD.app/Contents/Resources/bin/freecadcmd` there.
 - Windows: run the installer. `cad cam` finds `bin\freecadcmd.exe` in the newest `FreeCAD *` folder
   under Program Files, or under `%LOCALAPPDATA%\Programs` for a one-user install.
-- Linux: a distribution or snap package (`/usr/bin/freecadcmd`, `/usr/local/bin/freecadcmd`,
-  `/snap/bin/freecad.cmd`), or the AppImage unpacked with `--appimage-extract` and
+- Linux: a distribution's package (`/usr/bin/freecadcmd`, `/usr/local/bin/freecadcmd`), or the AppImage unpacked with `--appimage-extract` and
   `CAD_FREECAD` set to its `squashfs-root/usr/bin/freecadcmd`.
 
 Anywhere else, set `CAD_FREECAD` to the `freecadcmd` program

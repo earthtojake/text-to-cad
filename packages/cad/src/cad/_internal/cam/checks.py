@@ -101,7 +101,7 @@ _HELD = {"rpm": ("spindle", "rpm"), "feed_mm_min": ("feed", "mm/min"), "plunge_m
 
 
 def _given(spec: dict) -> dict:
-    """What cad cam set of one operation (``spec``, as ``freecad_job.py`` reads it), by ``_HELD``'s keys."""
+    """What cad cam set of one operation (``spec``, as ``cad/freecad/_job.py`` reads it), by ``_HELD``'s keys."""
     given = {**spec["feeds"], "stepdown_mm": spec.get("stepdown_mm"), "peck_mm": spec.get("peck_mm"),
              "final_z": spec.get("final_z")}
     return {key: float(value) for key, value in given.items() if value is not None}
