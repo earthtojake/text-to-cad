@@ -16,6 +16,7 @@ import json
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from cad_server._internal.cli_from_function import (NotDerivable, cli_from_function, parse_docstring, parser_dests, result_payload, run_cli)
 
@@ -80,6 +81,25 @@ class Derivation(unittest.TestCase):
         parser = cli_from_function(verb, prog="t")
         with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
             parser.parse_args(["a.py", "--mesh-tol", "0.25"])
+
+    def test_an_enumeration_is_its_flags_choices_and_a_value_outside_them_a_usage_error(self):
+        def checked(target: Path, *, mode: Literal["auto", "never"] = "auto",
+                    units: Literal["mm", "in"] | None = None) -> Result:
+            """Summary."""
+
+        parser = cli_from_function(checked, prog="t")
+        self.assertEqual(("never", "in"), tuple(vars(parser.parse_args(["a", "--mode", "never", "--units", "in"]))[name]
+                                                for name in ("mode", "units")))
+        err = io.StringIO()
+        with self.assertRaises(SystemExit) as refused, contextlib.redirect_stderr(err):
+            parser.parse_args(["a", "--mode", "maybe"])
+        self.assertEqual(2, refused.exception.code)
+        self.assertIn("argument --mode: invalid choice: 'maybe' (choose from 'auto', 'never')", err.getvalue())
+
+        def numbered(target: Path, *, level: Literal[1, 2] = 1) -> Result: ...
+
+        with self.assertRaises(NotDerivable):
+            cli_from_function(numbered, prog="t")
 
     def test_docstring_supplies_description_and_per_argument_help(self):
         summary, helps = parse_docstring(verb.__doc__)

@@ -118,7 +118,8 @@ class TheParser(unittest.TestCase):
     def test_every_parser_of_the_command_is_the_factory_s(self) -> None:
         # No module of the server makes an argparse parser of its own: each is the factory's subclass.
         made = [path.relative_to(PACKAGE).as_posix() for path in sorted(PACKAGE.rglob("*.py"))
-                if re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
+                if "_runtime" not in path.relative_to(PACKAGE).parts  # the bundled plugin: skills, not the server
+                and re.search(r"\bArgumentParser\(", path.read_text(encoding="utf-8"))]
         self.assertEqual(made, [])
         for name in ("status", "delete", "xbf export", "sdf validate", "kicad_pcb inspect", "setup", "telemetry"):
             with self.subTest(command=name):

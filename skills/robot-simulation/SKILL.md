@@ -197,7 +197,8 @@ cad sdf snapshot path/to/robot.sdf review.png --pose '{"arm::elbow": 45}'
   `--strict` treats warnings as failures; `--json` prints one line of `{"ok", "path", "findings":
   [{"severity", "code", "message", "location", "hint"}], "summary"}`, where `location` is the XML
   path. It exits 1 if the target fails its checks, and 2, with nothing checked, for a command line
-  it refuses -- a file of another format, an option it does not take -- which `--json` says as one
+  it refuses -- a file of another format, one that is not there, an option or a value it does not
+  take (`--gz-check` is `auto`, `required` or `never`) -- which `--json` says as one
   `{"ok": false, "error", "reason"}`. Relative targets resolve from the working directory: run
   from the workspace that owns the files.
 - A clean check is a guardrail, not proof: it cannot show that a joint origin or axis matches the

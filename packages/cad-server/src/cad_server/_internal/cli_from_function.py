@@ -13,7 +13,9 @@ an argument-parsing framework:
 * Keyword-only parameters become ``--kebab-case`` flags; ``bool`` becomes
   ``store_true`` (and must default to ``False``, since a flag can only turn
   something on).
-* The allowed annotation set is ``str, int, float, bool, Path`` and ``X | None``
+* The allowed annotation set is ``str, int, float, bool, Path``, a ``Literal`` of
+  strings -- an enumeration, whose values are the flag's ``choices``, so a value
+  outside them is the parser's usage error, naming the flag -- and ``X | None``
   over those. Anything richer DISQUALIFIES the function from mirror status: it
   must be an ADAPTER instead — a hand-written parser plus an explicit
   signature-sync allowlist.
@@ -77,8 +79,18 @@ def _scalar(annotation: Any, *, where: str) -> Any:
     )
 
 
-def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool]:
-    """``(scalar type, optional?)`` for one annotation, or raise :class:`NotDerivable`."""
+def _literal(annotation: Any, *, where: str) -> tuple[str, ...] | None:
+    """A ``Literal`` of strings' values -- an enumeration, a flag's ``choices`` -- or None for no ``Literal``."""
+    if typing.get_origin(annotation) is not typing.Literal:
+        return None
+    values = typing.get_args(annotation)
+    if not values or not all(isinstance(value, str) for value in values):
+        raise NotDerivable(f"{where}: only a Literal of strings is derivable, got {annotation!r}")
+    return tuple(values)
+
+
+def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool, tuple[str, ...] | None]:
+    """``(scalar type, optional?, choices or None)`` for one annotation, or raise :class:`NotDerivable`."""
     origin = typing.get_origin(annotation)
     if origin is typing.Union or origin is types.UnionType:
         args = typing.get_args(annotation)
@@ -87,14 +99,20 @@ def _resolve_annotation(annotation: Any, *, where: str) -> tuple[Any, bool]:
         # (a saved name, inline JSON, or a path); the verb interprets it, and
         # library callers pass real dicts through the same parameter.
         if len(args) == 3 and set(non_none) == {str, dict}:
-            return str, True
+            return str, True, None
         if len(args) != 2 or len(non_none) != 1:
             raise NotDerivable(
                 f"{where}: only ``X | None`` and ``str | dict | None`` unions are "
                 f"derivable, got {annotation!r}"
             )
-        return _scalar(non_none[0], where=where), True
-    return _scalar(annotation, where=where), False
+        choices = _literal(non_none[0], where=where)
+        if choices is not None:
+            return str, True, choices
+        return _scalar(non_none[0], where=where), True, None
+    choices = _literal(annotation, where=where)
+    if choices is not None:
+        return str, False, choices
+    return _scalar(annotation, where=where), False, None
 
 
 def _repeatable(annotation: Any) -> bool:
@@ -223,7 +241,7 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                 help=help_text,
             )
             continue
-        base, _optional = _resolve_annotation(hints[name], where=f"{where}.{name}")
+        base, _optional, choices = _resolve_annotation(hints[name], where=f"{where}.{name}")
         if parameter.kind is parameter.KEYWORD_ONLY:
             flag = "--" + name.replace("_", "-")
             if base is bool:
@@ -234,17 +252,20 @@ def cli_from_function(func: Callable[..., Any], *, prog: str) -> argparse.Argume
                     )
                 parser.add_argument(flag, action="store_true", help=help_text)
                 continue
+            # An enumeration's values are its choices, which its usage shows in place of a metavar.
             parser.add_argument(
                 flag,
                 type=base,
                 default=None if parameter.default is parameter.empty else parameter.default,
-                metavar=metavars[name],
+                **({"choices": choices} if choices is not None else {"metavar": metavars[name]}),
                 help=help_text,
             )
             continue
         if base is bool:
             raise NotDerivable(f"{where}: positional {name!r} may not be a bool")
         options: dict[str, Any] = {"type": base, "help": help_text, "metavar": name.upper()}
+        if choices is not None:
+            options["choices"] = choices
         if parameter.default is not parameter.empty:
             options["nargs"] = "?"
             options["default"] = parameter.default

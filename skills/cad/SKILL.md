@@ -346,7 +346,9 @@ cad threemf dfm part.3mf --process printing
 `model` for a model's id.
 
 A check reports facts, never a verdict: its `OK` means every family was measured, not that the part
-can be made, and it exits 1 with a `measurement_failed` finding for a family it could not measure.
+can be made, and it exits 1 with a `measurement_failed` finding for a family it could not measure. It
+exits 2, measuring nothing, for a command line it refuses by the option's name -- a choice it does not
+take, the other process's option, a value out of range -- or a file that is not there.
 Its reference says how to read each figure. An order from SendCutSend is the sendcutsend skill's;
 slicing and sending a print is the print3d skill's.
 

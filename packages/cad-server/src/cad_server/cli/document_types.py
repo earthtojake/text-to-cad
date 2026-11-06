@@ -31,6 +31,7 @@ engine and the checks import when an operation runs, never for ``--help``.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Callable, Sequence
 from pathlib import Path
@@ -64,7 +65,9 @@ def _urdf_parser(prog: str) -> argparse.ArgumentParser:
 def _urdf_validate(argv: list[str], prog: str) -> int:
     from cad_server._internal.cli_from_function import JSON_FLAG_DEST, call_verb
 
-    args = _typed(_urdf_parser(prog), "urdf", "validate", "path").parse_args(argv)
+    parser = _typed(_urdf_parser(prog), "urdf", "validate", "path")
+    parser.checks.append(lambda parsed: _refused_value(package_map, parsed.packages))  # type: ignore[attr-defined]
+    args = parser.parse_args(argv)
     return call_verb(("cad.urdf", "validate"),
                      lambda validate: validate(args.path, strict=bool(args.strict), packages=package_map(args.packages),
                                          verbose=bool(args.verbose)),
@@ -72,16 +75,31 @@ def _urdf_validate(argv: list[str], prog: str) -> int:
 
 
 def package_map(entries: Sequence[str]) -> "dict[str, Path] | None":
-    """``NAME=PATH`` pairs as the map ``cad.urdf.validate`` takes, or None for no roots."""
+    """``NAME=PATH`` pairs as the map ``cad.urdf.validate`` takes, or None for no roots; ``ArgumentRefused``
+    (a ``ValueError``) naming ``--packages`` for one that is no such pair."""
     if not entries:
         return None
+    from cad._internal.refused import ArgumentRefused
+
     roots: dict[str, Path] = {}
     for entry in entries:
         name, separator, raw = str(entry).partition("=")
         if not separator or not name.strip() or not raw.strip():
-            raise ValueError(f"--packages expects NAME=PATH, got {entry!r}")
+            raise ArgumentRefused(f"--packages expects NAME=PATH, got {entry!r}")
         roots[name.strip()] = Path(raw.strip()).expanduser()
     return roots
+
+
+def _refused_value(check: Callable[..., object], *args: object) -> None:
+    """``check(*args)``, an argument's own check, with the value it refuses by name (``ArgumentRefused``) the
+    command line's failure (``invalid_argument``), said before anything runs."""
+    from cad._internal.refused import ArgumentRefused
+    from cad_server._internal.cli_errors import Failure
+
+    try:
+        check(*args)
+    except ArgumentRefused as refused:
+        raise Failure(str(refused), "invalid_argument") from None
 
 
 def _generated(document_type: str, operation: str) -> Callable[[list[str], str], int]:
@@ -495,8 +513,8 @@ def operations_of(document_type: str) -> tuple[str, ...]:
 
 def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, attribute: str) -> argparse.ArgumentParser:
     """``parser`` (the command's, ``cad_server._internal.cli_parser``) with the check that the source it reads
-    as ``attribute`` is the type's (``_refuse_other_type``): a source of another type is the command line's
-    failure, said before anything runs."""
+    as ``attribute`` is the type's and is there (``_refuse_other_type``): a source of another type, and a file
+    that is not there, are the command line's failures, said the same for every type before anything runs."""
 
     def check(parsed: argparse.Namespace) -> None:
         source = getattr(parsed, attribute, None)
@@ -509,7 +527,8 @@ def _typed(parser: argparse.ArgumentParser, document_type: str, operation: str, 
 
 def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     """A source of another type, refused by name before anything runs (``Failure``, ``wrong_type``): a file
-    of another type, a model's document id given to a file's type, a file given to ``model``."""
+    of another type or of no type, a model's document id given to a file's type, a file given to ``model``;
+    and a file of the type's that is not there (``not_found``), whichever the type."""
     from cad.engine.ids import is_id
     from cad_server._internal.cli_errors import Failure
 
@@ -527,9 +546,14 @@ def _refuse_other_type(document_type: str, operation: str, source: str) -> None:
     found = by_extension(suffix) if suffix else None
     if found is not None and found.id != document_type:
         raise Failure(f"{source} is a {found.id}, not a {document_type}{use(found.id)}", "wrong_type")
-    if found is None and not entry.has_file:
+    if not entry.has_file:
         raise Failure(f"cad model takes a model's document id (python SCRIPT.py prints it), not {source!r}",
                       "wrong_type")
+    if found is None:
+        raise Failure(f"{source} is not a {document_type} file: cad {document_type} takes "
+                      f"{' or '.join(entry.extensions)}", "wrong_type")
+    if not os.path.exists(os.path.expanduser(given)):
+        raise Failure(f"no such file: {source}", "not_found")
 
 
 def type_usage(document_type: str) -> str:

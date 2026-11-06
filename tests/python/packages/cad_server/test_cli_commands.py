@@ -83,6 +83,29 @@ class TheCommandTable(unittest.TestCase):
                           "reason": "wrong_type"}, json.loads(said))
         self.assertEqual("", err)
 
+    def test_a_file_that_is_not_there_is_the_same_failure_for_every_type(self) -> None:
+        """Every operation of every file's type refuses a file that is not there before anything runs, alike:
+        ``not_found``, exit 2, with ``--json`` and without; and a file of no type as ``wrong_type``."""
+        from cad.registry import DOCUMENT_TYPES as TYPES_TABLE
+        from cad_server.cli.document_types import OPERATIONS
+
+        rest = {"export": ["out.step"], "snapshot": ["out.png"], "dfm": ["--process", "printing"]}
+        for document_type, operation in sorted(OPERATIONS):
+            entry = TYPES_TABLE[document_type]
+            if not entry.has_file:
+                continue
+            missing = f"no-such-file{entry.extensions[0]}"
+            extra = (["--to", "pdf", "-o", "out"] if document_type.startswith("kicad_") and operation == "export"
+                     else rest.get(operation, []))
+            with self.subTest(command=f"{document_type} {operation}"):
+                code, out, err = _run([document_type, operation, missing, *extra])
+                self.assertEqual((code, out, err), (2, "", f"cad {document_type} {operation}: no such file: {missing}\n"))
+                code, out, err = _run([document_type, operation, missing, *extra, "--json"])
+                self.assertEqual((code, err), (2, ""))
+                self.assertEqual(json.loads(out), {"ok": False, "error": f"no such file: {missing}", "reason": "not_found"})
+        code, _, err = _run(["urdf", "validate", "robot.xml"])
+        self.assertEqual((code, err), (2, "cad urdf validate: robot.xml is not a urdf file: cad urdf takes .urdf\n"))
+
     def test_a_model_is_its_id_and_a_file_is_its_types(self) -> None:
         """``cad model`` takes a model's document id and no file; a file's type takes its file and no id."""
         ident = "0b4c5f1e-1a2b-4c3d-8e9f-0123456789ab"

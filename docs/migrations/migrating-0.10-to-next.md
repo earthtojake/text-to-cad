@@ -91,6 +91,10 @@ Ctrl-C -- and under `--json` it is one JSON document on stdout, `{"ok": false, "
 | a prefix of an option was read as the option: `cad status --js`, `cad doctor --p` (which ran `--prune`) | an unrecognized argument, exit 2, naming the option it is closest to |
 | an unknown command printed the whole usage | its name, the one command it is closest to, and `'cad --help' lists the commands` |
 | Ctrl-C printed a traceback | `cad: canceled`, exit 130 |
+| a value a check's option does not take (`cad sdf validate world.sdf --gz-check maybe`, `cad stl dfm part.stl --process casting`) failed as a `ValueError` naming the Python parameter, exit 1 | `argument --gz-check: invalid choice: 'maybe' (choose from 'auto', 'required', 'never')`, exit 2, `usage` |
+| a manufacturing check's option refused (`--samples 0`, `--pull` beside `--candidates`, the other process's option) exited 1 | exits 2, `invalid_argument`, measuring nothing |
+| a file that is not there: `cad urdf validate missing.urdf` exited 1 with an `invalid_target` finding, `cad stl snapshot missing.stl` 2, `cad kicad_pcb inspect` 2 with its own words | every type's every operation: `no such file: missing.urdf`, exit 2, `not_found`, before anything runs |
+| a file of no type given to a type's command (`cad urdf validate robot.xml`) exited 1 with a finding | `robot.xml is not a urdf file: cad urdf takes .urdf`, exit 2, `wrong_type` |
 
 ## The manufacturing measurements
 

@@ -60,28 +60,42 @@ class ManufacturingCheckCommand(unittest.TestCase):
         self.assertRegex(out.splitlines()[-1], r"^OK .*box\.stl: printing: 6000 mm3, 1 body\(ies\); overhangs under 30 deg")
 
     def test_a_mistake_is_refused_before_anything_is_read(self) -> None:
-        for argv, words in (((str(self.box),), "give --process molding or printing"),
-                            ((str(self.box), "--process", "casting"), "not 'casting'"),
-                            ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's"),
-                            ((str(self.box), "--process", "printing", "--pull", "z"), "--pull is not printing's"),
-                            ((str(self.box), "--process", "molding", "--candidates", "--pull", "x"), "ranks every pull")):
+        """An option's value it refuses is the command line's mistake, exit 2, named by its flag: a choice
+        its parser does not take (``usage``), or a value the check refuses (``invalid_argument``)."""
+        for argv, words, reason in (
+                ((str(self.box),), "give --process molding or printing", "invalid_argument"),
+                ((str(self.box), "--process", "casting"), "argument --process: invalid choice: 'casting'", "usage"),
+                ((str(self.box), "--process", "molding", "--samples", "9"), "--samples is not molding's",
+                 "invalid_argument"),
+                ((str(self.box), "--process", "printing", "--pull", "z"), "--pull is not printing's", "invalid_argument"),
+                ((str(self.box), "--process", "molding", "--candidates", "--pull", "x"), "ranks every pull",
+                 "invalid_argument"),
+                ((str(self.box), "--process", "molding", "--pull", "up"), "--pull is an axis", "invalid_argument"),
+                ((str(self.box), "--process", "printing", "--samples", "0"), "--samples is a count of at least 1",
+                 "invalid_argument"),
+                ((str(self.box), "--process", "printing", "--units", "yd"), "argument --units: invalid choice: 'yd'",
+                 "usage")):
             with self.subTest(argv=argv):
                 code, out, _ = _run("stl", *argv, "--json")
-                self.assertEqual((code, json.loads(out)["ok"]), (1, False))
-                self.assertIn(words, json.loads(out)["error"])
+                found = json.loads(out)
+                self.assertEqual((code, found["ok"], found["reason"]), (2, False, reason))
+                self.assertIn(words, found["error"])
+        (self.folder / "box.3mf").write_bytes(b"")
         code, out, _ = _run("threemf", str(self.folder / "box.3mf"), "--process", "printing", "--units", "cm", "--json")
+        self.assertEqual(code, 2)
         self.assertIn("a 3MF declares its unit", json.loads(out)["error"])
         code, _, err = _run("stl", str(self.folder / "box.glb"), "--process", "molding")
         self.assertEqual(code, 2)
         self.assertIn("box.glb is a glb, not a stl: use cad glb dfm", err)
 
     def test_a_usage_error_is_argparses_two_and_a_failed_measurement_one(self) -> None:
-        """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one."""
+        """Exit 1 is a check that failed (a family not measured); a misspelled flag never reads as one, nor
+        does a file that is not there."""
         code, _out, err = _run("stl", str(self.box), "--process", "molding", "--not-a-flag")
         self.assertEqual(code, 2)
         self.assertIn("unrecognized arguments: --not-a-flag", err)
         code, out, _ = _run("stl", str(self.folder / "missing.stl"), "--process", "molding", "--json")
-        self.assertEqual((code, json.loads(out)["findings"][0]["code"]), (1, "invalid_target"))
+        self.assertEqual((code, json.loads(out)["reason"]), (2, "not_found"))
 
     def test_a_step_is_measured_as_the_engine_tessellates_it(self) -> None:
         from build123d import Box, export_step
@@ -105,7 +119,7 @@ class ManufacturingCheckCommand(unittest.TestCase):
             refused, said, _ = _run("stl", str(self.box), "--process", "molding", "--samples", "3", "--json")
         self.assertEqual(code, 0)
         self.assertEqual(json.loads(there), json.loads(here))
-        self.assertEqual((refused, made.call_count), (1, 1), "a refusal makes no environment")
+        self.assertEqual((refused, made.call_count), (2, 1), "a refusal makes no environment")
         self.assertIn("--samples is not molding's", json.loads(said)["error"])
 
 
