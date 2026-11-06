@@ -165,6 +165,44 @@ class ThePayload(SchematicFixture):
         self.assertNotIn("#PWR01", fields)  # a hidden field is not drawn
         self.assertEqual([part["ref"] for part in payload["schematic"]["parts"]], ["C1", "J1", "R1", "R2", "R3"])
 
+    def test_a_sheet_block_draws_its_own_sheets_pins_in_any_order_in_the_file(self) -> None:
+        """KiCad saves a sheet's blocks in uuid order, which need not be page order: each block draws its own
+        sheet's pins, every one, under its own sheet's reference."""
+        from cad.engine.formats.kicad.schematic import read_schematic_index
+        from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
+
+        def block(uuid: str, name: str, y: float, page: str, pins: tuple[str, ...]) -> str:
+            drawn = "".join(f'\n    (pin "{pin}" input (at 100 {y + 2.54 * (index + 1):g} 180) (uuid "{uuid[:-1]}{index + 1}")'
+                            f' (effects (font (size 1.27 1.27)) (justify left)))' for index, pin in enumerate(pins))
+            return f"""
+  (sheet (at 100 {y:g}) (size 20 10) (exclude_from_sim no) (in_bom yes) (on_board yes) (dnp no)
+    (stroke (width 0.1524) (type solid)) (fill (color 0 0 0 0.0000)) (uuid "{uuid}")
+    (property "Sheetname" "{name}" (at 100 {y - 0.7:g} 0) (effects (font (size 1.27 1.27)) (justify left bottom)))
+    (property "Sheetfile" "{name.lower()}.kicad_sch" (at 100 {y + 10.6:g} 0) (effects (font (size 1.27 1.27)) (justify left top))){drawn}
+    (instances (project "pages" (path "/{ROOT_UUID}" (page "{page}")))))"""
+
+        folder = Path(self.folder.name) / "pages"
+        folder.mkdir()
+        for name in ("Sensors", "Lights"):
+            (folder / f"{name.lower()}.kicad_sch").write_text(
+                '(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") (paper "A4") (embedded_fonts no))\n',
+                encoding="utf-8")
+        root = folder / "pages.kicad_sch"
+        # Lights (page 3) saved before Sensors (page 2), its uuid the lower.
+        root.write_text(f"""(kicad_sch (version 20250114) (generator "eeschema") (generator_version "9.0") (uuid "{ROOT_UUID}") (paper "A4")
+  (lib_symbols){block("00000000-0000-4000-8000-0000000000b0", "Lights", 80, "3", ("DIN",))}{block(
+      "00000000-0000-4000-8000-0000000000c0", "Sensors", 40, "2", ("SDA", "SCL"))}
+  (sheet_instances (path "/" (page "1")))
+  (embedded_fonts no)
+)
+""", encoding="utf-8")
+        index, _warnings = read_schematic_index(root)
+        self.assertEqual([sheet.path for sheet in index.sheets], ["/", "/Sensors/", "/Lights/"])
+        page = build_schematic_plot(root, sheets=["/"], index=False)["sheets"][0]
+        (sheets,) = [layer["items"] for layer in page["layers"] if layer["id"] == "sheets"]
+        drawn = {(item["ref"], item["text"]) for item in sheets if item.get("role") == "pin" and item["t"] == "text"}
+        self.assertEqual(drawn, {("#sheet:/Sensors/", "SDA"), ("#sheet:/Sensors/", "SCL"), ("#sheet:/Lights/", "DIN")})
+
     def test_a_page_alone(self) -> None:
         from cad.engine.formats.kicad.schematic_plot import build_schematic_plot
 

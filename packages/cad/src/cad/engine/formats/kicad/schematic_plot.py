@@ -469,7 +469,11 @@ def _page_layers(index: SchematicIndex, sheet) -> list[dict]:
                 if layers[layer_id] or layer_id == "page"]
     library = index.lib_symbols.get(sheet.file, {})
     symbols = iter(symbol for symbol in index.symbols if symbol.sheet == sheet.path)
-    children = iter(child for child in index.sheets if child.parent == sheet.path)
+    # A sheet block is its own child sheet, by uuid: the index lists the children by page, and KiCad saves
+    # the blocks in another order (by uuid), so a block's pins are never another sheet's.
+    children = [child for child in index.sheets if child.parent == sheet.path]
+    by_uuid = {child.uuid: child for child in children if child.uuid}
+    unnamed = iter(child for child in children if not child.uuid)
     for node in tree[1:]:
         head = sexpr.head(node)
         if head == "symbol":
@@ -480,7 +484,8 @@ def _page_layers(index: SchematicIndex, sheet) -> list[dict]:
             lib = library.get(lib_name) or library.get(symbol.lib_id)
             _symbol_items(symbol, lib, node, {pin.number: pin.net for pin in symbol.pins}, layers)
         elif head == "sheet":
-            child = next(children, None)
+            uuid = _id(node)
+            child = by_uuid.get(uuid) if uuid else next(unnamed, None)
             if child is not None:
                 _sheet_items(child, node, layers)
         elif head in ("polyline", "rectangle", "circle", "arc", "bezier"):
