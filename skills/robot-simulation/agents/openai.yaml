@@ -1,0 +1,4 @@
+interface:
+  display_name: "Robot simulation"
+  short_description: "Author and validate URDF, SRDF and SDF robot descriptions."
+  default_prompt: "Use $robot-simulation to author or edit the URDF, MoveIt2 SRDF or SDFormat model or world I describe as direct XML, validate it with cad urdf, srdf or sdf check, and show me the result."

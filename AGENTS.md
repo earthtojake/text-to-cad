@@ -239,7 +239,7 @@ which points both at the checkout.
 - The CAD Viewer is `cad viewer`: the server hosts `cad_server.viewer` (Python, in
   `packages/cad-server`), the React client's source is `apps/web/` and its build
   ships in the server's wheel at `cad_server/_runtime/viewer` (built, never committed; a
-  checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, simulation) documents that verb directly.
+  checkout serves `apps/web/dist`). Every skill that shows a model (CAD, PCB, robot simulation) documents that verb directly.
   Nothing in `cad_server.viewer` imports the CAD kernel at module scope — a STEP or
   `.xbf` it shows is read and meshed by the server's kernel processes (`viewer/documents.py`),
   never by a request's thread.

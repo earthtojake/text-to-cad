@@ -112,7 +112,7 @@ also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
 pale highlight on charcoal. Every Copy is a plain icon button, and each icon button has a tooltip.
 Every button shows a pointer. Every section title
 shares one heading scale. Each section title links to its
-own anchor (`#skills`), as GitHub's headings do, so following it puts
+own anchor (`#features`), as GitHub's headings do, so following it puts
 that address in the bar. The header is bare: at the left the C mark and "text-to-cad" set as a
 title (semibold), one link home, on every size and always shown; at the right the version as its
 release tag names it (`v<VERSION>`, on a phone 360px or wider) and GitHub with its star count, the
@@ -136,7 +136,7 @@ Icons (MIT) in the same tile, each tile blended into the page's background. The 
 links; under them one line asks for a plugin request (a new GitHub issue). Overview has the
 plugin's description, which every manifest and the README's opening paragraph say word for word
 (`test_plugin_manifests.py` holds them to one text), and How it works: three steps from a model's
-script to the CAD viewer (`howItWorks`), the README's How it works. Then Skills. The site has no
+script to the CAD viewer (`howItWorks`), the README's How it works. Then Features (below). The site has no
 Install section, no per-app install of its own and no telemetry note: the privacy policy, linked
 from the footer and from `/llms.txt`, says what is sent and how to turn it off. Contributing closes
 the page (`contributing`, the README's Contributing in substance): its intro, then each way to take
@@ -147,7 +147,7 @@ text fill the content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
 together: the plugin's description, how it works, the install commands, what they
-do, the link to installing by hand, the skills and Contributing. Updates are on
+do, the link to installing by hand, the features and Contributing. Updates are on
 `docs/install.md`, with each app's own commands, which both link, and the telemetry in full is
 the privacy policy. The site has the hero and the agents carousel. The page's copy lives in
 `src/lib/content.ts`, which `/llms.txt`
@@ -165,6 +165,26 @@ its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 
+
+## Features
+
+The homepage's Features are the README's, item for item and word for word (`features` and
+`featuresIntro` in `src/lib/content.ts`; `test_plugin_manifests.py` holds the two lists to one text,
+and every skill's folder to a feature that links it). Each feature is a tile
+(`src/components/feature-grid.tsx`): a line drawing of the file it makes over that file's name, in
+the hero demo's caption bar, then its name, linking to the page that documents it, and what it does.
+The drawings (`src/components/feature-art.tsx`) are inline SVG in the site's tokens, so they follow
+the light and dark themes: the part in the foreground, construction in the muted ink, what the
+feature adds in the brand blue, a check's finding in the destructive red. Two parts run through
+them, the bracket the Parts tile's script models (and the drawing, the viewer, the flat pattern and
+the SendCutSend check show) and the housing the checks and the printer take. Each drawing draws itself
+in once, as its tile first scrolls into view (`features-reveal.tsx` and the `feature-*` rules in
+`globals.css`); the server's page has them drawn, so without scripts, for reduced motion, or for a tile
+already on screen, nothing moves. No image file: nothing to regenerate, nothing heavy.
+
+The grid gives Parts and Circuit boards the first row, then rows of three and four; two columns on a
+tablet, one on a phone. A new feature is an entry in `features` and in the README's list, a drawing
+in `feature-art.tsx` and its place in `feature-grid.tsx`'s `LAYOUT`.
 
 ## Social previews
 

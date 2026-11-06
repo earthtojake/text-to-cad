@@ -1,6 +1,6 @@
 ---
-name: simulation
-description: URDF, SRDF and SDF robot and world descriptions for simulation and motion planning. Use for ROS robot_description files (links, joints, limits, inertials, meshes), MoveIt planning groups, end effectors, group states and disabled collision pairs, Gazebo/gz models and worlds (sensors, plugins, physics), and opening or reviewing a `.urdf`, `.srdf` or `.sdf`. Not the 3D CAD part itself, which the `cad` skill makes, nor signed-distance fields.
+name: robot-simulation
+description: Robot and world descriptions (URDF, SRDF, SDF) for ROS, MoveIt and Gazebo. Use for ROS robot_description files (links, joints, limits, inertials, meshes), MoveIt planning groups, end effectors, group states and disabled collision pairs, Gazebo/gz models and worlds (sensors, plugins, physics), and opening or reviewing a `.urdf`, `.srdf` or `.sdf`. Not the 3D CAD part itself, which the `cad` skill makes, nor a part's structural or physics analysis, nor signed-distance fields.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad

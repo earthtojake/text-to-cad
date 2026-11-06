@@ -1,6 +1,7 @@
 import { ExternalLink, LinkIcon } from "lucide-react";
 import Image from "next/image";
 import type { ReactNode } from "react";
+import { FeatureGrid } from "@/components/feature-grid";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -9,8 +10,8 @@ import {
   contributing,
   howItWorks,
   pluginDescription,
+  featuresIntro,
   pluginRequestUrl,
-  skillGroups,
   support,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
@@ -134,20 +135,6 @@ function SectionIntro({
   );
 }
 
-function SkillLink({ skill }: { skill: (typeof skillGroups)[number] }) {
-  return (
-    <a
-      className="inline-flex min-w-0 items-center gap-1.5 font-mono text-xs text-muted-foreground transition hover:text-foreground"
-      href={`https://github.com/earthtojake/text-to-cad/blob/main/${skill.path}/SKILL.md`}
-      target="_blank"
-      rel="noreferrer"
-    >
-      <span className="truncate">{skill.path}</span>
-      <ExternalLink className="size-3 shrink-0" />
-    </a>
-  );
-}
-
 // What search engines read about the project: the site, and the free, open-source software it is.
 const structuredData = {
   "@context": "https://schema.org",
@@ -217,51 +204,10 @@ export default function Home() {
             <HowItWorks />
           </section>
 
-          <section
-            id="skills"
-            aria-labelledby="skills-title"
-            className="scroll-mt-20 space-y-3 py-6"
-          >
-            <SectionIntro
-              section="skills"
-              title="Skills"
-              description="Install the library to give agents focused workflows for CAD, fabrication, robot description files, simulation, and local review."
-            />
-
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <div className="grid grid-cols-[minmax(0,1fr)] border-b border-border px-3.5 py-2.5 text-xs font-medium text-muted-foreground md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:gap-5 md:pl-0 md:pr-3.5">
-                <span className="md:pl-3.5">Skill</span>
-                <span className="hidden md:block">Summary</span>
-                <span className="hidden text-right md:block">Source</span>
-              </div>
-              <ul className="divide-y divide-border">
-                {skillGroups.map((skill) => (
-                  <li
-                    key={skill.name}
-                    className="grid transition-colors gap-3 px-3.5 py-3 hover:bg-secondary/60 md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:items-center md:gap-5 md:pl-0 md:pr-3.5"
-                  >
-                    <div className="flex min-w-0 items-center md:pl-3.5">
-                      <div className="min-w-0">
-                        <h3 className="text-sm font-medium text-foreground">
-                          {skill.name}
-                        </h3>
-                        <p className="mt-0.5 text-xs font-mono text-muted-foreground md:hidden">
-                          {skill.path}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="min-w-0 text-sm leading-6 text-muted-foreground">
-                      <p>{skill.summary}</p>
-                    </div>
-                    <div className="min-w-0 md:justify-self-end md:pt-0.5 md:text-right">
-                      <SkillLink skill={skill} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+          <section id="features" aria-labelledby="features-title" className="scroll-mt-20 space-y-4 py-6">
+            <SectionIntro section="features" title="Features" description={featuresIntro} />
+            <FeatureGrid />
           </section>
-
 
           <section id="contributing" aria-labelledby="contributing-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro section="contributing" title="Contributing" description={contributing.intro} />

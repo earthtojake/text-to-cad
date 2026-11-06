@@ -6,7 +6,7 @@ Design physical products with AI.
 
 [Website](https://www.texttocad.dev)
 
-[![cad-server](https://img.shields.io/pypi/v/cad-server?style=flat&logo=pypi&logoColor=white&label=cad-server)](https://pypi.org/project/cad-server/)
+[![cad](https://img.shields.io/pypi/v/cad?style=flat&logo=pypi&logoColor=white&label=cad)](https://pypi.org/project/cad/)
 [![Tests](https://img.shields.io/github/actions/workflow/status/earthtojake/text-to-cad/test.yml?branch=main&style=flat&logo=githubactions&logoColor=white&label=Tests)](https://github.com/earthtojake/text-to-cad/actions/workflows/test.yml?query=branch%3Amain)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue?style=flat)](LICENSE)
 
@@ -63,19 +63,19 @@ script, runs it to build the model and shows it in the CAD viewer.
 
 Installing by hand, app by app, and updates: [docs/install.md](docs/install.md)
 
-## 🧰 Skills
+## ✨ Features
 
-The plugin gives agents focused workflows for CAD, circuit boards, fabrication
-and robots for simulation.
+What your agent can design, check and make with text-to-cad.
 
-| Skill        | Summary                                                                                                                                            | Source                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| CAD          | Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built by text-to-cad's server and exported as STEP, STL, 3MF, GLB, DXF or xbf files. | [skills/cad](skills/cad/SKILL.md)                   |
-| Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
-| PCB          | Checks KiCad schematics (ERC), edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP. | [skills/pcb](skills/pcb/SKILL.md)                   |
-| Simulation   | Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF. | [skills/simulation](skills/simulation/SKILL.md)     |
-| SendCutSend | Checks DXF and STEP files before upload to SendCutSend. | [skills/sendcutsend](skills/sendcutsend/SKILL.md) |
-| 3D Printing | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets, and sends prints to Bambu Lab printers. | [skills/print3d](skills/print3d/SKILL.md) |
+- [**Parts and assemblies**](skills/cad/SKILL.md): Models written as Python scripts with build123d, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms.
+- [**Circuit boards**](skills/pcb/SKILL.md): KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.
+- [**Manufacturing checks**](skills/cad/SKILL.md#can-it-be-made): Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.
+- [**Engineering drawings**](skills/engineering-drawing/SKILL.md): Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.
+- [**The CAD Viewer**](skills/cad/SKILL.md#show-the-model): Shows each model in your agent app or your browser and follows every rebuild. Measure, clip and explode it, or mark it up for your agent.
+- [**Cut files**](skills/cad/references/2d-profiles-and-dxf.md): DXF profiles, gaskets and flat patterns with their bend lines, for laser and waterjet cutting.
+- [**SendCutSend orders**](skills/sendcutsend/SKILL.md): Checks DXF and STEP files against SendCutSend's own guide, materials and services before you upload them.
+- [**3D printing**](skills/print3d/SKILL.md): Slices a model to G-code with OrcaSlicer for your printer, and sends Bambu Lab prints to Bambu Connect or Bambu Studio.
+- [**Robots and worlds**](skills/robot-simulation/SKILL.md): Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.
 
 ## 🛠️ Contributing
 

@@ -2,12 +2,13 @@
 // says, from the same copy (src/lib/content.ts), so the two never drift apart.
 import {
   contributing,
+  features,
+  featuresIntro,
   howItWorks,
   installCommands,
   installSummary,
   manualInstall,
   pluginDescription,
-  skillGroups,
   support,
 } from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
@@ -35,9 +36,11 @@ export function GET() {
     "",
     `${manualInstall.label}: ${onGitHub(manualInstall.path)}`,
     "",
-    "## Skills",
+    "## Features",
     "",
-    ...skillGroups.map((skill) => `- [${skill.name}](${onGitHub(`${skill.path}/SKILL.md`)}): ${skill.summary}`),
+    featuresIntro,
+    "",
+    ...features.map((feature) => `- [${feature.name}](${onGitHub(feature.path)}): ${feature.summary}`),
     "",
     "## Contributing",
     "",

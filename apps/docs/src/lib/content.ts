@@ -1,6 +1,6 @@
 /**
  * The homepage's copy, which the README says too (README.md and apps/docs/README.md): the plugin's
- * description, how it works, the install commands, the agents and the skills. The page renders it,
+ * description, how it works, the install commands, the agents and the features. The page renders it,
  * and so does /llms.txt (app/llms.txt/route.ts), so the two never drift apart.
  */
 import { normalizeDiscordUrl } from "@/lib/github";
@@ -95,41 +95,72 @@ export const contributing = {
   ],
 };
 
-export const skillGroups = [
+// What text-to-cad does, the README's Features, item for item and word for word: each one's name,
+// the page that documents it (a path in the repository; every skill's folder is one of them), what it
+// does, and the file its picture on the homepage shows (`FeatureArt`, components/feature-art.tsx).
+export const featuresIntro = "What your agent can design, check and make with text-to-cad.";
+export const features = [
   {
-    name: "CAD",
-    path: "skills/cad",
-    summary:
-      "Creates and edits CAD models and 2D profiles from plain-language or image requests as Python scripts, built by text-to-cad's server and exported as STEP, STL, 3MF, GLB, DXF or xbf files.",
+    id: "parts",
+    name: "Parts and assemblies",
+    path: "skills/cad/SKILL.md",
+    summary: "Models written as Python scripts with build123d, exported as STEP, STL, 3MF or GLB, with joints and animations for mechanisms.",
+    file: "bracket.py",
   },
   {
-    name: "Engineering Drawing",
-    path: "skills/engineering-drawing",
-    summary:
-      "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
+    id: "boards",
+    name: "Circuit boards",
+    path: "skills/pcb/SKILL.md",
+    summary: "KiCad schematics and boards, placed and routed, checked with ERC and DRC, reviewed before you order, and exported as fabrication files.",
+    file: "sensor.kicad_pcb",
   },
   {
-    name: "PCB",
-    path: "skills/pcb",
-    summary:
-      "Checks KiCad schematics (ERC), edits and lays out native KiCad circuit boards, runs DRC, reviews a board before ordering (fab limits, current, assembly, sourcing), and exports fabrication files or STEP.",
+    id: "checks",
+    name: "Manufacturing checks",
+    path: "skills/cad/SKILL.md#can-it-be-made",
+    summary: "Whether a part can be machined, cut and bent, molded or 3D printed, measured against the process's rules, and what to change where it cannot.",
+    file: "housing.step",
   },
   {
-    name: "Simulation",
-    path: "skills/simulation",
-    summary:
-      "Describes robots and worlds for simulation and motion planning: URDF links and joints, MoveIt's SRDF, Gazebo's SDF.",
+    id: "drawings",
+    name: "Engineering drawings",
+    path: "skills/engineering-drawing/SKILL.md",
+    summary: "Dimensioned PDF sheets projected from the part's geometry: views, hidden lines, centre marks, hole callouts and a title block.",
+    file: "bracket.pdf",
   },
   {
-    name: "SendCutSend",
-    path: "skills/sendcutsend",
-    summary:
-      "Checks DXF and STEP files before upload to SendCutSend.",
+    id: "viewer",
+    name: "The CAD Viewer",
+    path: "skills/cad/SKILL.md#show-the-model",
+    summary: "Shows each model in your agent app or your browser and follows every rebuild. Measure, clip and explode it, or mark it up for your agent.",
+    file: "bracket.step",
   },
   {
-    name: "3D Printing",
-    path: "skills/print3d",
-    summary:
-      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets, and sends prints to Bambu Lab printers.",
+    id: "cut",
+    name: "Cut files",
+    path: "skills/cad/references/2d-profiles-and-dxf.md",
+    summary: "DXF profiles, gaskets and flat patterns with their bend lines, for laser and waterjet cutting.",
+    file: "bracket_flat.dxf",
+  },
+  {
+    id: "sendcutsend",
+    name: "SendCutSend orders",
+    path: "skills/sendcutsend/SKILL.md",
+    summary: "Checks DXF and STEP files against SendCutSend's own guide, materials and services before you upload them.",
+    file: "bracket_flat.dxf",
+  },
+  {
+    id: "print",
+    name: "3D printing",
+    path: "skills/print3d/SKILL.md",
+    summary: "Slices a model to G-code with OrcaSlicer for your printer, and sends Bambu Lab prints to Bambu Connect or Bambu Studio.",
+    file: "housing.gcode.3mf",
+  },
+  {
+    id: "robots",
+    name: "Robots and worlds",
+    path: "skills/robot-simulation/SKILL.md",
+    summary: "Robot and world descriptions for simulation and motion planning: URDF for ROS, SRDF for MoveIt and SDF for Gazebo.",
+    file: "arm.urdf",
   },
 ];

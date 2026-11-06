@@ -109,5 +109,5 @@ tool's description, which only agents that have the tool read, never in a skill.
 - [ ] It has a **Check each change** section, and every method it teaches has a check.
 - [ ] The setup and Show the model blocks are the shared text, word for word, where they apply.
 - [ ] It installs nothing and imports no other skill.
-- [ ] README.md's skills table, the docs site's skills list (`apps/docs/src/lib/content.ts`) and
-      `skills.sh.json` list it.
+- [ ] A feature in README.md's Features and the docs site's (`features` in
+      `apps/docs/src/lib/content.ts`, the same list) links it, and `skills.sh.json` lists it.

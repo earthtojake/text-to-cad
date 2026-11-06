@@ -211,7 +211,7 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
 
     def test_prose_and_metadata_run_only_the_contracts_that_read_them(self):
         for path in ("README.md", "CONTRIBUTING.md", "AGENTS.md", "LICENSE", ".claude-plugin/plugin.json",
-                     "claude.mcp.json", "skills.sh.json", "skills/simulation/SKILL.md", "skills/simulation/references/urdf-frames.md",
+                     "claude.mcp.json", "skills.sh.json", "skills/robot-simulation/SKILL.md", "skills/robot-simulation/references/urdf-frames.md",
                      "skills/cad/SKILL.md", "skills/cad/references/snapshot-review.md", "skills/sendcutsend/SKILL.md",
                      "skills/print3d/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/render-mode.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",

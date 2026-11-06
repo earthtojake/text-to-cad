@@ -28,7 +28,7 @@ KNOWN_COLLISION_CHILDREN = {"origin", "geometry"}
 KNOWN_INERTIAL_CHILDREN = {"origin", "mass", "inertia"}
 
 # The CAD Viewer's nonlinear coupling of a four-bar linkage (`<tcad:four_bar>` on the derived
-# joint), as the simulation skill's URDF authoring reference specifies it.
+# joint), as the robot-simulation skill's URDF authoring reference specifies it.
 TCAD_URDF_NAMESPACE = "https://text-to-cad.dev/urdf"
 FOUR_BAR_TAG = f"{{{TCAD_URDF_NAMESPACE}}}four_bar"
 FOUR_BAR_LENGTHS = ("input_length", "ground_length", "output_length", "coupler_length")
@@ -652,7 +652,7 @@ def _warn_movable_links_without_inertial(
                 "missing_inertial",
                 f"{display} movable link {link_name!r} has geometry but no inertial data",
                 path=f"/robot/link[@name='{link_name}']",
-                hint="Simulation and dynamics consumers need an inertial block; see the simulation skill's inertials reference (references/inertials.md).",
+                hint="Simulation and dynamics consumers need an inertial block; see the robot-simulation skill's inertials reference (references/inertials.md).",
             )
 
 

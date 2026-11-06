@@ -405,13 +405,28 @@ class PluginManifestPolicyTest(unittest.TestCase):
         shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
         self.assertEqual(sorted(listed), shipped)
 
-    def test_the_docs_site_lists_only_skills_that_ship(self) -> None:
-        # The site's catalog is its own copy, not read from skills/, and its build does not check
-        # the links: a renamed or retired skill would leave it pointing at nothing.
+    def test_the_features_link_every_skill_and_only_pages_that_exist(self) -> None:
+        # The site's Features are their own copy, not read from skills/, and its build does not check
+        # the links: a renamed or retired skill would leave a feature pointing at nothing, and a new
+        # skill no feature links would go unmentioned.
         content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
-        listed = re.findall(r'path: "skills/([a-z0-9-]+)"', content)
-        self.assertTrue(listed, "no skill paths found in the docs site's catalog")
-        self.assertEqual([name for name in listed if not (SKILLS_ROOT / name / "SKILL.md").is_file()], [])
+        paths = re.findall(r'path: "(skills/[^"#]+)(?:#[^"]*)?"', content)
+        self.assertTrue(paths, "no feature paths found in the docs site's copy")
+        self.assertEqual([path for path in paths if not (REPO_ROOT / path).is_file()], [])
+        shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
+        self.assertEqual(sorted({path.split("/")[1] for path in paths}), shipped)
+
+    def test_the_readme_and_the_docs_site_list_the_same_features(self) -> None:
+        # The README's Features and the site's are one list (apps/docs/README.md): each feature's
+        # name, the page it links and what it does, in the same order, word for word.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        page = re.findall(r'name: "([^"]+)",\s*path: "([^"]+)",\s*summary:\s*"([^"]+)"', content)
+        self.assertTrue(page, "no features found in the docs site's copy")
+        section = readme.split("\n## ✨ Features\n\n", 1)[1].split("\n## ", 1)[0]
+        intro = re.search(r'const featuresIntro = "([^"]+)"', content).group(1)
+        self.assertTrue(section.startswith(f"{intro}\n"), "the README's Features open with the site's intro")
+        self.assertEqual(re.findall(r"^- \[\*\*([^*]+)\*\*\]\(([^)]+)\): (.+)$", section, re.M), page)
 
     def test_skill_handoffs_name_skills_that_ship(self) -> None:
         # `$cad`, `$sendcutsend`: one skill hands the agent to another by name (shell variables are upper case).

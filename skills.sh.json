@@ -20,7 +20,7 @@
     {
       "title": "Robotics",
       "description": "Robots and worlds for simulation and motion planning: ROS, MoveIt2 and Gazebo.",
-      "skills": ["simulation"]
+      "skills": ["robot-simulation"]
     }
   ]
 }
