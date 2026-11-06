@@ -9,9 +9,10 @@ the installation's release, made once by the device's engine outside any sandbox
 Python runs the library's runner of one operation (``cad._internal.operation``), handed the call on
 stdin and answering it on stdout; what the operation says beside goes to stderr as it comes.
 
-An installation whose own environment carries the integration (a checkout's development environment,
-``requirements-dev.txt``; one installed with the extra) runs the operation itself, in this process, as
-an installation that carries the kernel is its own base (``base``).
+An installation whose own environment carries the integration (one installed with its extra; a
+checkout's development environment for trimesh alone, as ``requirements-dev.txt`` installs the library
+with that extra and not kicad's) runs the operation itself, in this process, as an installation that
+carries the kernel is its own base (``base``).
 """
 
 from __future__ import annotations
