@@ -8,8 +8,10 @@ project BOM; do not infer purchase quantities from pad count.
 A native board embeds its footprints. `fp-lib-table` is needed to resolve or update the original
 library, not to display an existing board. A project-local footprint library is a `.pretty`
 folder containing `.kicad_mod` files, referenced with `${KIPRJMOD}`. Stock libraries use the
-installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`. Preserve
-project-local libraries when handing off a board. Read the library footprint before placing it.
+installed KiCad major's environment variable, such as `${KICAD9_FOOTPRINT_DIR}`, which DRC, ERC and an
+edit read in the KiCad you installed ([SKILL.md](../SKILL.md#setup)); with no KiCad installed, DRC warns
+`lib_footprint_issues` for each such footprint. Preserve project-local libraries when handing off a
+board. Read the library footprint before placing it.
 
 Several physical pads may share one number (a shield or thermal pad). `part.pads_numbered("1")`
 returns every shape for that logical pin; `part.pad("1")` returns the first. Check connectivity

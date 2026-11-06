@@ -107,6 +107,29 @@ class WallThicknessTest(unittest.TestCase):
 
         self.assertLess(thin["median_mm"], thick["median_mm"])
 
+    def test_a_coarse_mesh_is_sampled_all_over_its_surface(self) -> None:
+        """A plate thinning from 6 mm to 0.6 mm, meshed as a dozen large triangles: every ray asked for is cast,
+        each from anywhere on the surface, so the thin end is measured. Rays from the triangles' centres, at most
+        one a triangle, found the plate's thinnest place 2.4 mm thick."""
+        plate = extrude(make_face(Polyline((0, 0, 0), (60, 0, 0), (60, 0.6, 0), (0, 6, 0), (0, 0, 0))), 30)
+        with tempfile.TemporaryDirectory() as td:
+            mesh = dfam_tool._load(_stl(plate, Path(td), "ramp"))
+            facts = dfam_tool._wall_facts(mesh, samples=2000)
+
+        self.assertLess(len(mesh.faces), 20)
+        self.assertGreater(facts["samples_valid"], 1900)
+        self.assertLess(facts["min_mm"], 1.0)
+
+    def test_a_corner_is_no_wall(self) -> None:
+        """A block 10 mm tall whose sides lean out 10 degrees: a ray from its top face by an edge leaves through the
+        side after a hair, past a corner, not across a wall, and is not counted, so the block measures its own
+        size."""
+        block = extrude(make_face(Polyline((5, 0, 0), (15, 0, 0), (16.76, 10, 0), (3.24, 10, 0), (5, 0, 0))), 30)
+        with tempfile.TemporaryDirectory() as td:
+            facts = dfam_tool._wall_facts(dfam_tool._load(_stl(block, Path(td), "flared")), samples=2000)
+
+        self.assertGreater(facts["min_mm"], 9.0)
+
 
 class OrientationTest(unittest.TestCase):
     def test_flipping_a_wedge_removes_its_support_requirement(self) -> None:
@@ -291,8 +314,8 @@ class MultiBodyWallTest(unittest.TestCase):
         self.assertEqual([round(wall, 3) for wall in walls], [2.0, 10.0])
 
     def test_per_body_carries_p05_for_the_same_judgement_rule_as_pooled(self) -> None:
-        """SKILL.md says judge on p05_mm (min_mm alone can be a sampling
-        outlier) and also says attribute a violation to its own body rather
+        """The printing reference judges walls on p05_mm (min_mm alone is a
+        small thin place) and attributes a violation to its own body rather
         than the pooled figure. Both rules only hold together if p05_mm is
         present per body, not only in the pooled result.
         """

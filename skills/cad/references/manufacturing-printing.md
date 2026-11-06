@@ -30,9 +30,17 @@ category structure (feature limits §6.5, support structures §6.7).
 
 ## Interpretation notes
 
-- **Wall thickness facts** come from ray-cast sampling, so `min_mm` is a
-  sampled minimum, not an exhaustive one. Treat `p05_mm` below the limit as
-  a strong violation signal even when `min_mm` alone might be an outlier.
+- **Wall thickness facts** come from `--samples` rays (2000 by default), each
+  from a random point on the surface straight in along its normal to the
+  face it leaves through, counted when that face is turned at least 120
+  degrees from its own: a wall's other side, or a wedge's of up to 60
+  degrees, never a corner's. `min_mm` is the thinnest place a ray found, not
+  the thinnest the part has, and every reading is real: a thin `min_mm`
+  beside a thick `p05_mm` is a small thin place (a web between two cuts, a
+  chamfered rim, a sharp wedge), never noise. A place smaller than the
+  rays' spacing (2000 rays over 35,000 mm2 is one per 17 mm2) is found by
+  chance: before a print, measure again with `--samples 20000`, a few
+  seconds more.
 - **Overhang facts** exclude faces resting on the build plate. For powder
   processes (SLS, MJF) the surrounding powder supports all geometry:
   support-area findings do not apply, but trapped-powder escape holes
@@ -84,7 +92,8 @@ type: `stl`, `threemf` (`cad threemf dfm part.3mf`), `glb`, `step`, `xbf` or `mo
 tessellated by the engine, so there is nothing to export first. Set `--angle-limit` to the target
 process's self-supporting angle ([above](#process-limits)) before measuring, and measure again when the process
 changes: the overhang and support figures are binned against it. `--samples` (default 2000) is the
-number of rays cast for the wall-thickness field; `--units mm|cm|m|in|ft` states an STL's units
+number of rays cast for the wall-thickness field, each from a random point on the surface, however finely
+or coarsely it is meshed; `--units mm|cm|m|in|ft` states an STL's units
 (millimetres by default), the other types declaring their own. A mesh already held in a program is
 measured with `cad.trimesh.printing(mesh)` in a check script.
 
@@ -124,7 +133,10 @@ measurement of zero: the `measurement_failed` finding's message says why it fail
 2. Select the limit column for the target process from the [process limits](#process-limits). A machine or material datasheet the
    person provides overrides the defaults; cite whichever source is used for every comparison.
 3. Check the exact file that will be sliced, or the model's document: never only a generator script,
-   a source model the file was not exported from, or a console summary.
+   a source model the file was not exported from, or a console summary. For a print, check the file:
+   its mesh is the one the printer gets. A model's or a STEP's check meshes it at the viewer's tolerance,
+   a quarter per cent of the part (some 0.3 mm on a 120 mm part), which can move a curved wall by as
+   much; both read the same surface, and differ where their meshes do.
 4. Rank orientations (`--candidates`) when the process needs supports and the measured support area
    is not zero. Report any candidate that materially reduces support area, with its build-height
    tradeoff.
@@ -135,8 +147,9 @@ Compare only trustworthy pairs of evidence:
 
 - Cite the limit (the process-limits row, or the person's datasheet field) and the measured fact (its
   JSON field, such as `measurements.wall_thickness.p05_mm`) for every finding.
-- Treat `p05_mm` below the wall limit as a violation even when `min_mm` alone could be a sampling
-  outlier; report both values.
+- Treat `p05_mm` below the wall limit as walls too thin, and a `min_mm` below it alone as a small place
+  that thin: name it from its location in `thinnest_samples` (a web, a chamfered rim, a sharp wedge)
+  and say whether it matters to the part; report both values.
 - On an assembly, attribute a wall violation to the body in `per_body` it belongs to; a thin figure
   pooled across bodies is not a finding against the part as a whole.
 - Do not apply support-angle findings to powder processes (SLS, MJF). Their check is trapped-powder

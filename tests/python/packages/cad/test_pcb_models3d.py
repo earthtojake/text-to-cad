@@ -155,6 +155,14 @@ class Resolve(unittest.TestCase):
         self.assertEqual(library_roots({"CAD_KICAD_3DMODELS": named}, platform="none")[0], str(self.library))
         self.assertNotIn(str(self.outside / "none"), library_roots({"CAD_KICAD_3DMODELS": named}, platform="none"))
 
+    def test_the_newest_installation_of_kicad_is_read_first(self) -> None:
+        # Windows keeps one folder a version, side by side: KiCad 10's is read before KiCad 9's.
+        programs = Path(self._tmp.name) / "Program Files"
+        for version in ("9.0", "10.0", "8.0"):
+            (programs / "KiCad" / version / "share" / "kicad" / "3dmodels").mkdir(parents=True)
+        found = models3d.standard_libraries("win32", {"ProgramFiles": str(programs)})
+        self.assertEqual([Path(library).parts[-4] for library in found], ["10.0", "9.0", "8.0"])
+
     def test_the_names_a_board_writes_are_the_ones_its_parts_carry(self) -> None:
         # The table is keyed by these names and the plot payload's parts by the parser's: KiCad 5's bare
         # name, a spaced "( model", and a quoted name's escapes (\n, \\, \") read the same on both sides.

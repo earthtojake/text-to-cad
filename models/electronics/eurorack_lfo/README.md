@@ -15,7 +15,7 @@ panel's hole moves with it*, then the panel goes straight to a fabrication servi
 | --- | --- |
 | Schematic | 3 sheets (root, `lfo.kicad_sch` placed twice, `power.kicad_sch`); 76 parts, 45 nets, 227 pins; ERC 0 errors, 0 warnings; KiCad's nets equal the drawn intent pin for pin (`scripts/check_schematic.py`) |
 | Board | 48 x 107 mm, 2 layers, 1.6 mm; 76 parts (58 SMD, 62 on the back, panel parts on the front); 235 pads; 538 track segments, 1354 mm of copper track, 115 signal vias + 292 GND stitching vias; GND poured on both layers |
-| DRC | JLCPCB 2-layer standard rules (track 0.25 / space 0.2, rails 0.4, via 0.8/0.4, copper to edge 0.3): **0 errors, 0 unconnected**; 69 warnings, all `lib_footprint_mismatch` (KiPy rounds a turned or flipped footprint's local coordinates by a nanometre, and the jacks' keepouts are rewritten from the library: see below); silkscreen 0 warnings (46 references printed, 30 in the dense expo cluster and under the jacks kept on the Fab layer) |
+| DRC | JLCPCB 2-layer standard rules (track 0.25 / space 0.2, rails 0.4, via 0.8/0.4, copper to edge 0.3): **0 errors, 0 unconnected**; 69 warnings, all `lib_footprint_mismatch` (KiPy rounds a turned or flipped footprint's local coordinates by a nanometre, and KiCad's API hands the jacks back with their keepouts' fill settings and a text's angle changed); silkscreen 0 warnings (46 references printed, 30 in the dense expo cluster and under the jacks kept on the Fab layer) |
 | Layout checks | `check_twin_orbit.py`: 0 segments off 45 degrees; no two-pad net over 1.6x its straight line; rails 0.4 mm (1.2 A for 10 C rise, 0.1 A needed); board == schematic, 0 differences; decoupling 2.2-5.5 mm from each supply pin except C106/C206, 8.8 mm from the LM13700's V- pin (it sits at pin 10, the buffer input tied to -12 V: a revision would move it) |
 | Panel | 10HP x 3U, 2 mm, every hole read from the board; fit: worst overlap 0.000 mm^3 across 50 panel/hardware x board pairs and 435 hardware pairs; bushings clear their holes by 0.15 mm, LEDs by 0.25 mm (`src/check_fit.py`) |
 | SendCutSend | the cut DXF in ALU-080 (5052 H32, 0.080"): every cut check passed (2026-11-06: holes, webs, hole to edge, size, units); the engraved legend is a separate file and a separate question |
@@ -71,8 +71,9 @@ open question, so it stays this project's script and no skill names it. Its resu
 octolinear, but not what a careful person would draw: some detours and extra vias.
 
 Moving a footprint over KiCad's API leaves its own keepout zones behind (KiPy moves a footprint zone's outline
-by the move in the footprint's frame), so `scripts/board_02_keepouts.py` rewrites each jack's keepout from the
-library footprint through the footprint's place, after every placement.
+by the move in the footprint's frame), so `scripts/board_02_keepouts.py` writes each jack's keepout back as the
+library footprint has it, in the footprint's own frame, after every placement: KiCad 11 holds a footprint's zones
+there and places them with it, so the router, the stitching and the front pour keep out of each jack's circle.
 
 ## Files
 
@@ -91,14 +92,11 @@ and `.gitignore` keeps them out of Git.
 ## Rebuild
 
 From this folder, with the `cad` command. KiCad's stock libraries are named through `${KICAD10_SYMBOL_DIR}` and
-`${KICAD10_FOOTPRINT_DIR}`, which ERC, DRC and the generators read from the environment: set them to KiCad's own
-folders first, or ERC counts every stock symbol as a missing library and DRC every stock footprint. KiCad's 3D
-library needs nothing: the board's 3D view and its exports find it.
+`${KICAD10_FOOTPRINT_DIR}`, which ERC and DRC read in the KiCad you installed: nothing to set. The generators
+(`make_libs.py`, `gen_schematic.py`) read the same libraries in macOS's KiCad.app; elsewhere, give them KiCad's
+folders in those two variables.
 
 ```bash
-export KICAD10_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols      # macOS
-export KICAD10_FOOTPRINT_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints
-
 # the 3D models KiCad's library lacks: run this before opening the board in 3D or exporting its STEP or GLB
 cad run src/footprint_models.py                 # 3dmodels/: the PJ398SM jack and the RD901F pot
 

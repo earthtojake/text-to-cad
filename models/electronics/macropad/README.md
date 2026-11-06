@@ -122,15 +122,11 @@ written by the commands below, and `.gitignore` keeps them out of Git.
 ## Rebuild
 
 From this folder, with the `cad` command. KiCad's stock libraries are named through
-`${KICAD10_SYMBOL_DIR}` and `${KICAD10_FOOTPRINT_DIR}`, which ERC, DRC and the generators read from the
-environment: set them to KiCad's own folders first, or ERC counts every stock symbol as a missing library
-and DRC every stock footprint. KiCad's 3D library needs nothing: the board's 3D view and its exports find
-it.
+`${KICAD10_SYMBOL_DIR}` and `${KICAD10_FOOTPRINT_DIR}`, which ERC and DRC read in the KiCad you installed:
+nothing to set. The generators (`gen_footprints.py`, `gen_schematic.py`) read the same libraries in macOS's
+KiCad.app; elsewhere, give them KiCad's folders in those two variables.
 
 ```bash
-export KICAD10_SYMBOL_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/symbols      # macOS
-export KICAD10_FOOTPRINT_DIR=/Applications/KiCad/KiCad.app/Contents/SharedSupport/footprints
-
 # the 3D models KiCad's library lacks: run this before opening the board in 3D or exporting its STEP or GLB
 cad run src/vendor_parts.py                # macropad.3dshapes/: the hot-swap socket and the EC11
 
@@ -161,7 +157,7 @@ cad run src/case.py                        # tray, plate, keycap, knob and their
 cad run src/assembly.py                    # nine (with its explode) and nine_exploded
 cad run src/check_fit.py                   # overlap volumes and clearances against the board's STEP
 cad run src/exports.py                     # 3MF/ and STEP/ of each printed part, STEP/nine.step, GLB/nine.glb
-cad threemf dfm 3MF/tray.3mf --process printing --angle-limit 45   # and plate, keycap, knob
+cad threemf dfm 3MF/tray.3mf --process printing --angle-limit 45 --samples 20000   # and plate, keycap, knob
 ```
 
 `gen_footprints.py`, `gen_schematic.py` and `step0_rules.py` write the files they make byte for byte as
@@ -177,15 +173,15 @@ rests on the tray's bosses (distance 0) with 0.4 mm to the tray's walls; the tra
 3.59 mm above the bare board (MX: 3.5 plus the copper); each keycap is 1.2 mm clear of its switch;
 the knob's D-bore sits on the EC11's shaft with the bore turned to the encoder's rotation.
 
-**Printing** (`cad threemf dfm 3MF/<part>.3mf --process printing --angle-limit 45`; FDM limits
+**Printing** (`cad threemf dfm 3MF/<part>.3mf --process printing --angle-limit 45 --samples 20000`; FDM limits
 from the cad skill's printing reference: 1.2 mm supported wall, 45 degrees, 10 mm bridge):
 
 | Part | Overhangs under 45 deg | Walls min / p05 | Support | Result |
 | --- | --- | --- | --- | --- |
 | tray (floor down) | 0 mm2 | 1.38 / 2.0 mm | 0 | pass |
-| plate (top down) | 0 mm2 | 0.79 / 1.18 mm | 0 | review: the thin sample is the acute inside corner of the stencil N; the plate is 1.5 mm |
-| keycap (top down) | 0 mm2 | 0.54 / 0.95 mm | 0 | review: the MX cross (4.2 x 1.35 mm) inside the 5.5 mm stem leaves 0.54 mm at the cross's ends; the stem cannot grow (it travels into the switch's 5.6 mm opening). Print with a 0.25 mm nozzle, or in resin |
-| knob (top down) | 3 mm2 (the 1 mm pointer groove, on the bed face) | 1.2 / 5.15 mm | 3 mm3 | pass |
+| plate (top down) | 0 mm2 | 0.04 / 1.5 mm | 0 | review: the thin readings are the acute inside corner of the stencil N, a wedge down to its tip; the plate is 1.5 mm |
+| keycap (top down) | 0 mm2 | 0.53 / 1.2 mm | 0 | review: the MX cross (4.2 x 1.35 mm) inside the 5.5 mm stem leaves 0.53 mm at the cross's ends; the stem cannot grow (it travels into the switch's 5.6 mm opening). Print with a 0.25 mm nozzle, or in resin |
+| knob (top down) | 3 mm2 (the 1 mm pointer groove, on the bed face) | 0.25 / 5.08 mm | 3 mm3 | review: the pointer groove ends 0.25 mm from the flute beyond it, for the groove's 1 mm depth |
 
 What the check found and what changed: the tray's foot recesses (220 mm2 of 0.8 mm ceilings and
 1.0 mm floors) are gone (stick-on feet instead) and the screw pilots stop 1.4 mm above the bed; the

@@ -19,6 +19,11 @@ from __future__ import annotations
 import numpy as np
 import trimesh
 
+# The most a wall's two faces' normals agree: cos 120 degrees. A ray's way out through a face at least 120 degrees from
+# the one it started on is across a wall (180: parallel sides; a draft, a curve, a wedge of up to 60 degrees); through
+# a face nearer its own, past a convex edge: the corner of a box (90), a tapered rim (100-110), no wall.
+_WALL = -0.5
+
 
 def _load(path: str) -> trimesh.Trimesh:
     mesh = trimesh.load(path, force="mesh")
@@ -205,13 +210,17 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
 
 
 def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> dict:
-    """Ray-cast thickness field for ONE connected body."""
-    rng = np.random.default_rng(seed)
-    n = min(samples, max(len(mesh.faces), 1))
+    """Ray-cast thickness field for ONE connected body: ``samples`` rays, each from a point drawn at random over
+    the surface (a triangle by its area, then anywhere on it), straight in along that face's normal to the face it
+    leaves through. The points are the surface's, not the tessellation's: a coarse mesh and a fine one of the same
+    part are sampled alike. A ray counts when it leaves through a face turned away from its own (``_WALL``): a
+    wall's other side, or a thin wedge's; one started by a convex edge leaves through the edge's neighbour after a
+    hair, which is no wall."""
+    n = max(int(samples), 1)
 
     # Area weighting needs a positive total. A mesh of only degenerate faces
     # has none, and is not something a thickness field can describe - say so
-    # rather than dividing by zero inside rng.choice.
+    # rather than dividing by zero in the sampling.
     total_area = float(mesh.area_faces.sum())
     if not np.isfinite(total_area) or total_area <= 0.0:
         return {
@@ -219,14 +228,11 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
             "note": "no positive face area; mesh is degenerate, thickness not measured",
         }
 
-    face_idx = rng.choice(len(mesh.faces), size=n,
-                          p=mesh.area_faces / total_area)
-
-    origins = mesh.triangles_center[face_idx]
+    origins, face_idx = trimesh.sample.sample_surface(mesh, n, seed=seed)
     directions = -mesh.face_normals[face_idx]
     origins = origins + directions * 1e-4
 
-    locations, ray_ids, _ = mesh.ray.intersects_location(
+    locations, ray_ids, hit_faces = mesh.ray.intersects_location(
         ray_origins=origins, ray_directions=directions, multiple_hits=False)
 
     if len(ray_ids) == 0:
@@ -234,7 +240,8 @@ def _wall_facts_single(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> d
 
     thickness = np.linalg.norm(locations - origins[ray_ids], axis=1)
     diag = float(np.linalg.norm(mesh.extents))
-    valid = (thickness > 1e-3) & (thickness < diag)
+    facing = np.einsum("ij,ij->i", -directions[ray_ids], mesh.face_normals[hit_faces]) <= _WALL
+    valid = (thickness > 1e-3) & (thickness < diag) & facing
     thickness = thickness[valid]
 
     if len(thickness) == 0:

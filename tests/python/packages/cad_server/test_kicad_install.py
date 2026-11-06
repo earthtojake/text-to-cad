@@ -21,6 +21,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from cad.engine.formats.kicad import models3d
 from cad.kicad import _check as cli
 from cad.kicad import _program as install
 
@@ -121,15 +122,24 @@ class Headless(unittest.TestCase):
 
     def test_a_run_has_no_display_and_homes_of_its_own(self) -> None:
         person = {name: str(Path("someone") / name) for names in self.HOMES.values() for name in names}
-        # The person's own 3D library variable, which their KiCad reads: never a run's.
+        # The person's own library variables, which their KiCad reads, and their own folders: never a run's.
+        own = {"KICAD10_3RD_PARTY": "someone-packages", "KICAD_USER_TEMPLATE_DIR": "someone-templates"}
         person.update(DISPLAY=":0", WAYLAND_DISPLAY="wayland-0", KICAD_STOCK_DATA_HOME="stock",
-                      KICAD9_3DMODEL_DIR="someone-library")
+                      KICAD9_3DMODEL_DIR="someone-library", KICAD10_SYMBOL_DIR="someone-symbols",
+                      KISYSMOD="someone-footprints", KICAD9_DESIGN_BLOCK_DIR="someone-blocks", **own)
+        stock = {name for names in install.STOCK_VARIABLES.values() for name in names}
         for platform, names in self.HOMES.items():
+            # KiCad's installation is the test's own (no KiCad of this computer's): its 3D, footprint, symbol,
+            # template and design-block libraries side by side, CAD_KICAD_3DMODELS naming the first.
             with self.subTest(platform=platform), tempfile.TemporaryDirectory(prefix="tmp-kicad-env-") as folder, \
                     mock.patch.object(install.programs.sys, "platform", platform), \
                     mock.patch.dict(sys.modules, {"kicode": None}), \
-                    mock.patch.dict(os.environ, {**person, "CAD_KICAD_3DMODELS": folder}):
+                    mock.patch.object(models3d, "installations", lambda *_args, **_options: []), \
+                    mock.patch.dict(os.environ, {**person, "CAD_KICAD_3DMODELS": os.path.join(folder, "kicad", "3dmodels")}):
                 root = Path(folder)
+                kicad = os.path.realpath(root / "kicad")
+                for kind in ("3dmodels", *install.STOCK_VARIABLES):
+                    os.makedirs(os.path.join(kicad, kind))
                 env = install.headless_env(root)
                 self.assertNotIn("DISPLAY", env)
                 self.assertNotIn("WAYLAND_DISPLAY", env)
@@ -140,11 +150,38 @@ class Headless(unittest.TestCase):
                 self.assertEqual(Path(env["KICAD_CONFIG_HOME"]), root / "settings")
                 # A kicad-cli CAD_KICAD_CLI names finds its stock data by this; only kicode's sets it.
                 self.assertEqual(env["KICAD_STOCK_DATA_HOME"], "stock")
-                # Every 3D library variable names the library the board view reads first.
-                self.assertEqual({env[name] for name in install.LIBRARY_VARIABLES}, {os.path.realpath(folder)})
+                # Every 3D library variable names the library the board view reads first, and every other library
+                # variable the folder of its name beside it, the installation's; the person's own folders are
+                # KiCad's defaults, in the run's homes.
+                self.assertEqual({env[name] for name in install.LIBRARY_VARIABLES}, {os.path.join(kicad, "3dmodels")})
+                for kind, variables in install.STOCK_VARIABLES.items():
+                    self.assertEqual({env[name] for name in variables}, {os.path.join(kicad, kind)}, kind)
+                for name in own:
+                    self.assertNotIn(name, env)
                 # Everything else is this process's own, untouched.
-                for name in env.keys() - set(names) - set(install.LIBRARY_VARIABLES):
+                for name in env.keys() - set(names) - set(install.LIBRARY_VARIABLES) - stock:
                     self.assertEqual(env[name], os.environ[name], name)
+
+    def test_kicads_other_libraries_are_an_installations_the_one_named_first(self) -> None:
+        """Each of KiCad's other libraries is the first folder of its name in an installation of KiCad: one whose
+        ``3dmodels`` CAD_KICAD_3DMODELS names, then each installed KiCad. A folder of models by another name is
+        no installation, whatever lies beside it; a library no installation has is unnamed, whatever the
+        caller's own variable says."""
+        with tempfile.TemporaryDirectory(prefix="tmp-kicad-libraries-") as folder:
+            root = Path(os.path.realpath(folder))
+            models, kicad, installed = root / "parts" / "models", root / "kicad", root / "installed"
+            for made in (models, root / "parts" / "symbols", kicad / "3dmodels", kicad / "symbols",
+                         installed / "footprints"):
+                made.mkdir(parents=True)
+            named = os.pathsep.join([str(models), str(kicad / "3dmodels")])
+            with mock.patch.dict(sys.modules, {"kicode": None}), \
+                    mock.patch.object(models3d, "installations", lambda *_args, **_options: [str(installed)]), \
+                    mock.patch.dict(os.environ, {"CAD_KICAD_3DMODELS": named, "KICAD10_TEMPLATE_DIR": "someone"}):
+                env = install.headless_env(root / "run")
+        self.assertEqual(env["KICAD10_3DMODEL_DIR"], str(models))
+        self.assertEqual(env["KICAD10_SYMBOL_DIR"], str(kicad / "symbols"))
+        self.assertEqual(env["KICAD10_FOOTPRINT_DIR"], str(installed / "footprints"))
+        self.assertNotIn("KICAD10_TEMPLATE_DIR", env)
 
     def test_kicodes_kicad_cli_gets_kicodes_variables(self) -> None:
         packaged = Path(tempfile.mkdtemp(prefix="tmp-kicode-")) / "kicad-cli"

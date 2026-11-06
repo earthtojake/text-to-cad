@@ -19,9 +19,10 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 from cad import kicad_pcb, kicad_sch  # noqa: E402
+from cad.engine.formats.kicad import sexpr as S  # noqa: E402
 from kicode.board_types import (ArcTrack, BoardArc, BoardSegment, BoardText, Track, Via, Zone)  # noqa: E402
 from kicode.geometry import Angle, PolygonWithHoles, PolyLine, PolyLineNode, Vector2  # noqa: E402
-from kicode.proto.board.board_types_pb2 import BoardLayer as BL, ZoneConnectionStyle, ZoneType  # noqa: E402
+from kicode.proto.board.board_types_pb2 import BoardLayer as BL, ZoneConnectionStyle  # noqa: E402
 from kicode.util.units import from_mm  # noqa: E402
 
 import geometry as G  # noqa: E402
@@ -159,9 +160,33 @@ def place(b):
             fp.position = target
             fp.reference_field.visible = show
             moved.append(fp)
+        # Its own zones (the module's antenna keep-out) as its library footprint has them. KiCad holds them in the
+        # footprint's frame, and KiPy's position setter shifts them by the move (the pcb skill's placement
+        # reference), which left the module's 88 mm off the board: so they are stated after every move.
+        zones = [item for item in fp.definition.items if isinstance(item, Zone)]
+        outlines = library_zones(fp) if zones else []
+        if [[(node.point.x, node.point.y) for node in zone.outline.outline] for zone in zones] != outlines:
+            for zone, points in zip(zones, outlines, strict=True):
+                del zone.proto.outline.polygons[:]
+                poly = zone.proto.outline.polygons.add()
+                for x, y in points:
+                    poly.outline.nodes.add().point.CopyFrom(Vector2.from_xy(x, y).proto)
+                poly.outline.closed = True
+            if fp not in moved:
+                moved.append(fp)
     if moved:
         b.update_items(moved)
     print(f"place: {len(moved)} moved, {len(flip)} flipped")
+
+
+def library_zones(fp):
+    """The outlines of the own zones of ``fp``'s library footprint (orbit.pretty), in nm, in the frame KiCad holds a
+    placed footprint's zones in: the library's, each y negated on the back (KiCad's flip mirrors top to bottom)."""
+    library = S.parse((PROJECT / "orbit.pretty" / f"{fp.definition.id.name}.kicad_mod").read_text())
+    sign = -1 if fp.layer == BL.BL_B_Cu else 1
+    return [[(round(x * 1e6), round(sign * y * 1e6)) for x, y in
+             (S.pair(xy) for xy in S.find_all(S.find(S.find(zone, "polygon"), "pts"), "xy"))]
+            for zone in S.find_all(library, "zone")]
 
 
 # ------------------------------------------------------------------------------------------- route
@@ -221,26 +246,12 @@ def outline_points(step=2.0):
 
 def zones(b):
     nets = {n.name: n for n in b.get_nets()}
+    # The board holds exactly these pours, made afresh each run; the copy of the antenna's keep-out an earlier run
+    # made goes too: the module's own keep-out (Espressif's, 5 mm round the antenna) is over it, from place.
     copper = [z for z in b.get_zones() if not z.is_rule_area() or z.name == "antenna keep-out"]
     if copper:
-        b.remove_items(copper)      # the board holds exactly these pours and its own keep-out, made afresh each run
+        b.remove_items(copper)
     new = []
-    # The antenna's keep-out, on the board itself: the module's own rule area, flipped to the back over IPC,
-    # does not stay over the antenna, so it keeps nothing out there. Espressif: no copper under the antenna,
-    # 5 mm round it.
-    keep = Zone()
-    keep.type = ZoneType.ZT_RULE_AREA
-    keep.name = "antenna keep-out"
-    keep.layers = [BL.BL_F_Cu, BL.BL_In1_Cu, BL.BL_In2_Cu, BL.BL_B_Cu]
-    ra = keep.rule_area_settings
-    ra.keepout_copper = ra.keepout_vias = ra.keepout_tracks = ra.keepout_pads = True
-    ra.keepout_footprints = False
-    poly = keep._proto.outline.polygons.add()
-    for x, y in ((-11.4, -64.3), (16.6, -64.3), (16.6, -52.7), (-11.4, -52.7)):
-        node = poly.outline.nodes.add()
-        node.point.CopyFrom(v(G.CX + x, G.CY + y).proto)
-    poly.outline.closed = True
-    new.append(keep)
     for net, layer, name in ZONES:
         z = Zone()
         z.layers = [layer]
