@@ -329,6 +329,11 @@ def route(board: Any, connections: Sequence[Any], *, layers: Any = None, width: 
     entries = _entries(connections, {"layers": layers, "width": width, "clearance": clearance, "vias": vias,
                                      "via_cost": via_cost})
     copper = read_copper(board.get_as_string())
+    if copper.open_outline or not copper.outline:
+        ends = [f"({x:g}, {y:g})" for piece in copper.open_outline for x, y in (piece[0], piece[-1])][:4]
+        raise ValueError("route keeps copper inside the board's outline, and this board's Edge.Cuts "
+                         + (f"does not close: it ends apart at {', '.join(ends)}" if copper.open_outline else "draws none")
+                         + "; draw the outline closed first")
     rules = _rules(board, sorted({pad.net for pad in copper.pads if pad.net}))
     router = Router(copper, rules, _wants(entries, copper, rules))
     outcomes = router.run()

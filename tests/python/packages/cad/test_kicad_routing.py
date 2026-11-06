@@ -21,7 +21,7 @@ add_repo_path("packages/cad/src")
 
 import numpy as np  # noqa: E402
 
-from cad.kicad._route import _entries, _wants  # noqa: E402
+from cad.kicad._route import _entries, _wants, route  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
 from cad.kicad._routing import plan  # noqa: E402
@@ -318,6 +318,24 @@ class Plans(unittest.TestCase):
                                                                                      a.clearance, a.via_cost))
         self.assertEqual(("B", ("R3.1", "R1.2")), (b.net, b.pads))
         self.assertEqual(((("F.Cu", 1.0), ("B.Cu", 3.0)), 0), (c.layers, c.vias))
+
+    def test_a_board_without_a_closed_outline_is_refused_before_anything_is_routed(self) -> None:
+        class Open:  # the open board, as far as route reads it before the rules
+            def __init__(self, text: str) -> None:
+                self.text = text
+
+            def get_as_string(self) -> str:
+                return self.text
+
+        bare = board(resistor("R1", 5, 10, 0, "A", "B")).replace('(layer "Edge.Cuts")', '(layer "Dwgs.User")')
+        with self.assertRaises(ValueError) as caught:
+            route(Open(bare), ["A"], layers=["F.Cu"])
+        self.assertIn("Edge.Cuts draws none", str(caught.exception))
+        broken = board(resistor("R1", 5, 10, 0, "A", "B")).replace(
+            "(gr_rect (start 0 0) (end 30.0 20.0)", "(gr_line (start 0 0) (end 30 0)")
+        with self.assertRaises(ValueError) as caught:
+            route(Open(broken), ["A"], layers=["F.Cu"])
+        self.assertIn("does not close: it ends apart at (0, 0), (30, 0)", str(caught.exception))
 
     def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
         limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
