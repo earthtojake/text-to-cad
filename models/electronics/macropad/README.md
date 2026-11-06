@@ -47,7 +47,7 @@ switches' plastic) and a few short hops.
 | Size | 59.0 x 83.5 mm, 1.6 mm FR-4, rounded corners r 3 mm |
 | Layers | 2 (1 oz); both are ground pours |
 | Parts | 73 footprints: 63 to assemble (all SMD on the bottom; the encoder is through-hole), 6 M2 holes, 4 test pads |
-| Nets | 67 |
+| Nets | 46 connected (KiCad adds 21 more, one on each unconnected pin) |
 | Routing | 371 tracks, 1384 mm of copper, 81 vias; 0 unconnected |
 | ERC | clean, 0 warnings (`cad kicad_sch erc macropad.kicad_sch`) |
 | DRC | 0 errors; 40 warnings, all `lib_footprint_mismatch`: KiPy rounds a turned or flipped footprint's local coordinates by a nanometre (`7.499999`), so KiCad no longer finds 40 of them equal to their library's |
