@@ -54,3 +54,23 @@ it('fits its content under the cap, caps at min(320px, 40% of the panel), and ke
   fireEvent.doubleClick(grip());
   expect(height()).toBe('301px'); // back to fitting
 });
+
+// "/" puts the keyboard in the search once per press: the panel closed and opened again, or mounted
+// again, leaves the focus where it is, so the next V, M or P is a tool's key and not typed in the search.
+it('focuses its search once for each press of /, never again when it reopens or remounts', () => {
+  const panel = (open: boolean, focusSearch: number, key = 'a') => <FlatPanel key={key} mode="docked" open={open} onClose={() => {}} label="Panel" searchLabel="Search"
+    tabs={[{ id: 'parts', label: 'Parts', content: <p>Parts</p> }]} tab="parts" onTabChange={() => {}} width={216} maxWidth={400}
+    onWidthChange={() => {}} focusSearch={focusSearch} />;
+  const { rerender } = render(panel(true, 0));
+  const search = () => document.querySelector('[data-flat-panel-search] input, input[data-flat-panel-search]');
+  rerender(panel(true, 1));
+  expect(document.activeElement).toBe(search());
+  act(() => { (document.activeElement as HTMLElement).blur(); });
+  rerender(panel(false, 1));
+  rerender(panel(true, 1));
+  expect(document.activeElement).toBe(document.body);
+  rerender(panel(true, 1, 'b'));
+  expect(document.activeElement).toBe(document.body);
+  rerender(panel(true, 2, 'b'));
+  expect(document.activeElement).toBe(search());
+});

@@ -225,7 +225,13 @@ export default function FlatPanel({ mode, open, onClose, label, searchLabel, tab
   }, [shownKey]);
 
   const input = useRef(null);
-  useEffect(() => { if (focusSearch && open) input.current?.focus(); }, [focusSearch, open]);
+  // Each new count once, when the panel is open: a reopened or remounted panel takes no focus.
+  const searched = useRef(focusSearch);
+  useEffect(() => {
+    if (!open || focusSearch === searched.current) return;
+    searched.current = focusSearch;
+    input.current?.focus();
+  }, [focusSearch, open]);
   const onSearchKeyDown = event => {
     if (event.key === "Escape") {
       if (query) { event.preventDefault(); event.stopPropagation(); setQuery(""); return; }
