@@ -55,17 +55,23 @@ def _bodies(mesh: trimesh.Trimesh) -> tuple[list[trimesh.Trimesh], int]:
     return [group[0] if len(group) == 1 else trimesh.util.concatenate(group) for group in held], len(voids)
 
 
-def _mesh_facts(mesh: trimesh.Trimesh) -> dict:
-    bodies, voids = _bodies(mesh)
-    facts = {
+def _mesh_facts(mesh: trimesh.Trimesh, split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
+    """The mesh as a whole; ``body_count`` None where its bodies could not be split (the wall family then
+    says why)."""
+    facts: dict = {
         "bbox_mm": [round(float(v), 2) for v in mesh.extents],
         "volume_mm3": round(float(abs(mesh.volume)), 1) if mesh.is_volume else None,
         "surface_area_mm2": round(float(mesh.area), 1),
         "triangle_count": int(len(mesh.faces)),
         "watertight": bool(mesh.is_watertight),
         "euler_number": int(mesh.euler_number),
-        "body_count": len(bodies),
+        "body_count": None,
     }
+    try:
+        bodies, voids = split if split is not None else _bodies(mesh)
+    except Exception:  # noqa: BLE001 - a split that fails is the wall family's error, in its own words
+        return facts
+    facts["body_count"] = len(bodies)
     if voids:
         facts["internal_void_count"] = voids
     return facts
@@ -121,7 +127,8 @@ def _overhang_facts(mesh: trimesh.Trimesh, angle_limit: float) -> dict:
     }
 
 
-def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> dict:
+def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42,
+                split: tuple[list[trimesh.Trimesh], int] | None = None) -> dict:
     """Ray-cast thickness field, measured one connected body at a time.
 
     Cast against a whole assembly, a ray leaving one body can cross a mating
@@ -131,7 +138,7 @@ def _wall_facts(mesh: trimesh.Trimesh, samples: int, seed: int = 42) -> dict:
     each body is only ever measured against itself -- with the sealed voids it
     holds (``_bodies``), so the skin over a cavity is one of its walls.
     """
-    bodies, _voids = _bodies(mesh)
+    bodies, _voids = split if split is not None else _bodies(mesh)
     if len(bodies) <= 1:
         facts = _wall_facts_single(mesh, samples, seed)
         facts.pop("_thickness", None)
@@ -377,11 +384,15 @@ def _scale_hint(mesh: trimesh.Trimesh) -> dict:
 def measure(mesh: trimesh.Trimesh, samples: int, angle_limit: float, orientations: bool = False) -> dict:
     """Every family: the mesh, its scale, overhangs, wall thickness and support volume, and with
     ``orientations`` the six axis-aligned candidate orientations ranked beside them."""
+    try:  # the bodies, split once for the two families that read them
+        split = _bodies(mesh)
+    except Exception:  # noqa: BLE001 - each family then fails in its own words
+        split = None
     report = {
-        "mesh": _safe(_mesh_facts, mesh),
+        "mesh": _safe(_mesh_facts, mesh, split),
         "scale": _safe(_scale_hint, mesh),
         "overhangs": _safe(_overhang_facts, mesh, angle_limit),
-        "wall_thickness": _safe(_wall_facts, mesh, samples),
+        "wall_thickness": _safe(_wall_facts, mesh, samples, 42, split),
         "support_volume": _safe(_support_volume_facts, mesh, angle_limit),
     }
     if orientations:
