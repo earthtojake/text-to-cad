@@ -280,6 +280,22 @@ class ItemsTest(unittest.TestCase):
             drawn = sorted(item["id"] for layer in build_plot(path)["sheets"][0]["layers"] for item in layer["items"] if "id" in item)
             self.assertEqual(drawn, sorted(shape.id for shape in board.shapes))
 
+    def test_an_outline_of_arcs_reads_back_within_five_microns_of_them(self) -> None:
+        # A round board, 120 mm across, of two half arcs, and a 30 mm round window: each chord of the outline
+        # read back lies within 0.005 mm of the arc it stands for, so a part fitted to it fits the board.
+        text = """(kicad_pcb (version 20241229) (generator "pcbnew")
+          (layers (0 "F.Cu" signal) (31 "B.Cu" signal) (44 "Edge.Cuts" user))
+          (gr_arc (start 40 100) (mid 100 40) (end 160 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts"))
+          (gr_arc (start 160 100) (mid 100 160) (end 40 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts"))
+          (gr_circle (center 100 100) (end 115 100) (stroke (width 0.1) (type default)) (layer "Edge.Cuts")))"""
+        loops = sorted(read_index(text).outline, key=len)
+        self.assertEqual(len(loops), 2)
+        for line, radius in zip(loops, (15.0, 60.0)):
+            off = [abs(math.hypot(x - 100, y - 100) - radius) for x, y in line]
+            sagitta = [radius - math.hypot((a[0] + b[0]) / 2 - 100, (a[1] + b[1]) / 2 - 100) for a, b in zip(line, line[1:])]
+            self.assertLess(max(off), 1e-9, radius)
+            self.assertLessEqual(max(sagitta), 0.005, radius)
+
 
 class OlderBoardTest(unittest.TestCase):
     def test_a_board_with_numbered_nets_reads_by_name(self) -> None:

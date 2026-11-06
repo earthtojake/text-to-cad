@@ -13,11 +13,13 @@ import math
 from typing import Iterable, Iterator, Sequence
 
 __all__ = [
+    "CHORD_TOLERANCE",
     "XY",
     "arc_points",
     "area",
     "bezier_points",
     "box",
+    "chords",
     "format_xy",
     "hull",
     "inside",
@@ -32,6 +34,19 @@ __all__ = [
 XY = tuple[float, float]
 
 _ARC_STEP = math.radians(10)
+#: How far a board graphic's chord may stray from its arc or circle, millimetres (an Edge.Cuts outline, a
+#: courtyard, a fabrication circle): a fit or an offset made from the points is off by less than this.
+CHORD_TOLERANCE = 0.005
+
+
+def chords(radius: float, sweep: float, tolerance: float | None = None) -> int:
+    """How many chords an arc of ``radius`` turning ``sweep`` radians is drawn with: one each 10 degrees at
+    least, and with ``tolerance``, as many more as keep each chord within it of the arc (a 120 mm circle
+    is 244 at :data:`CHORD_TOLERANCE`)."""
+    steps = max(2, math.ceil(abs(sweep) / _ARC_STEP))
+    if tolerance is not None and radius > tolerance:
+        steps = max(steps, math.ceil(abs(sweep) / (2 * math.acos(1 - tolerance / radius))))
+    return steps
 
 
 def format_xy(point: XY) -> str:
@@ -47,8 +62,9 @@ def rotate(x: float, y: float, degrees: float) -> XY:
     return x * cos + y * sin, -x * sin + y * cos
 
 
-def arc_points(start: XY, mid: XY, end: XY) -> list[XY]:
-    """Points along the circular arc from ``start`` through ``mid`` to ``end``."""
+def arc_points(start: XY, mid: XY, end: XY, tolerance: float | None = None) -> list[XY]:
+    """Points along the circular arc from ``start`` through ``mid`` to ``end``: one each 10 degrees, or as
+    :func:`chords` keeps them within ``tolerance`` of it."""
     (ax, ay), (bx, by), (cx, cy) = start, mid, end
     determinant = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by))
     if abs(determinant) < 1e-12:
@@ -62,7 +78,7 @@ def arc_points(start: XY, mid: XY, end: XY) -> list[XY]:
     sweep = (math.atan2(cy - oy, cx - ox) - first) % (2 * math.pi)
     if through > sweep:  # the mid point lies the other way round
         sweep -= 2 * math.pi
-    steps = max(2, math.ceil(abs(sweep) / _ARC_STEP))
+    steps = chords(radius, sweep, tolerance)
     points = [(ox + radius * math.cos(first + sweep * step / steps), oy + radius * math.sin(first + sweep * step / steps)) for step in range(steps)]
     return points + [end]
 

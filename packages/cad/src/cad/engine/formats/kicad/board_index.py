@@ -24,7 +24,9 @@ its pads and graphics are in its own frame (a pad's position relative to the
 footprint, before its rotation; its angle absolute), a bottom-side footprint's
 already flipped; a pad's shape
 is a polygon (rect, roundrect, oval, circle, trapezoid, chamfered rect; a
-custom pad's is the hull of its primitives); arcs and circles are sampled; a
+custom pad's is the hull of its primitives); arcs and circles are sampled, a
+graphic's (an Edge.Cuts outline, a courtyard) with chords within ``CHORD_TOLERANCE``
+(0.005 mm) of it, so a part fitted to the outline read back fits the board as drawn; a
 part's outline is its courtyard (else the box around its pads and fabrication
 drawing); the outline's segments are joined where their ends meet within
 KiCad's own chaining epsilon. Net names are unescaped as KiCad displays them
@@ -50,7 +52,8 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 from cad.engine.formats.kicad.ref_path import ref_prefix_names
 from cad.engine.formats.kicad import sexpr
 from cad.engine.formats.kicad.geometry import (
-    XY, arc_points, area, bezier_points, box, format_xy, hull, inside, polygon_distance, polyline_distance, rotate,
+    CHORD_TOLERANCE, XY, arc_points, area, bezier_points, box, chords, format_xy, hull, inside, polygon_distance,
+    polyline_distance, rotate,
 )
 from cad.engine.formats.kicad.naming import natural, netclass_of, project_netclasses, unescape_net_name
 from cad.engine.formats.kicad.refs import (
@@ -515,7 +518,8 @@ class BoardIndex:
     vias: tuple[Via, ...]
     zones: tuple[Zone, ...]
     holes: tuple[Hole, ...]
-    outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts as polylines; a closed one repeats its first point
+    outline: tuple[tuple[XY, ...], ...]  # Edge.Cuts as polylines (an arc's chords within CHORD_TOLERANCE of it);
+    # a closed one repeats its first point
     nets: tuple[tuple[str, str], ...]  # (name, class), in natural order
     origin: XY
     texts: tuple[Text, ...] = ()
@@ -717,8 +721,8 @@ def _closed(line: Sequence[XY]) -> bool:
 # --- reading graphics ------------------------------------------------------------------
 
 
-def points_of(node: list | None) -> list[XY]:
-    """A ``(pts ...)`` list: its points, an ``(arc ...)`` in it sampled."""
+def points_of(node: list | None, tolerance: float | None = None) -> list[XY]:
+    """A ``(pts ...)`` list: its points, an ``(arc ...)`` in it sampled (within ``tolerance`` of it, given one)."""
     out: list[XY] = []
     for child in (node or [])[1:]:
         head = sexpr.head(child)
@@ -727,7 +731,7 @@ def points_of(node: list | None) -> list[XY]:
         elif head == "arc":
             start, mid, end = (sexpr.pair(sexpr.find(child, key)) for key in ("start", "mid", "end"))
             if None not in (start, mid, end):
-                sampled = arc_points(start, mid, end)
+                sampled = arc_points(start, mid, end, tolerance)
                 out.extend(sampled[1:] if out and _close(out[-1], sampled[0]) else sampled)
     return out
 
@@ -745,7 +749,8 @@ def _legacy_arc(center: XY, start: XY, angle: float) -> tuple[XY, XY, XY]:
 
 def graphic(node: list) -> tuple[list[XY], bool] | None:
     """A graphic item (``gr_*``, ``fp_*`` or a custom pad's primitive) as points, and whether
-    they close on themselves (a rectangle, a circle, a polygon; a line, an arc or a curve do not)."""
+    they close on themselves (a rectangle, a circle, a polygon; a line, an arc or a curve do not). An
+    arc's and a circle's chords lie within :data:`CHORD_TOLERANCE` of it: an outline read back fits as drawn."""
     head = sexpr.head(node) or ""
     kind = head.split("_", 1)[-1]
     if kind == "line":
@@ -755,19 +760,20 @@ def graphic(node: list) -> tuple[list[XY], bool] | None:
         start, mid, end = (sexpr.pair(sexpr.find(node, key)) for key in ("start", "mid", "end"))
         if start and end and mid is None and sexpr.value(node, "angle") is not None:
             start, mid, end = _legacy_arc(start, end, sexpr.number(sexpr.value(node, "angle")))
-        return (arc_points(start, mid, end), False) if start and mid and end else None
+        return (arc_points(start, mid, end, CHORD_TOLERANCE), False) if start and mid and end else None
     if kind == "circle":
         center, end = sexpr.pair(sexpr.find(node, "center")), sexpr.pair(sexpr.find(node, "end"))
         if not center or not end:
             return None
-        return _circle(center, math.hypot(end[0] - center[0], end[1] - center[1])), True
+        radius = math.hypot(end[0] - center[0], end[1] - center[1])
+        return _circle(center, radius, max(_CIRCLE_SEGMENTS, chords(radius, 2 * math.pi, CHORD_TOLERANCE))), True
     if kind == "rect":
         start, end = sexpr.pair(sexpr.find(node, "start")), sexpr.pair(sexpr.find(node, "end"))
         if not start or not end:
             return None
         return [start, (end[0], start[1]), end, (start[0], end[1])], True
     if kind == "poly":
-        points = points_of(sexpr.find(node, "pts"))
+        points = points_of(sexpr.find(node, "pts"), CHORD_TOLERANCE)
         return (points, True) if points else None
     if kind == "curve":
         points = points_of(sexpr.find(node, "pts"))
