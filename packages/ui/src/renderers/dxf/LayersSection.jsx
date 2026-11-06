@@ -51,7 +51,8 @@ function searchRows(rows, query) {
  * in, holds its chevron where blocks hang under it, else a layer's icon, and the box after it its
  * colour. A block reference's row stands in line with its layer's: its slot only the layer's guide
  * (under the chevron), its box its block's glyph (under the colour), its name under the layer's name.
- * While the panel's search is up, the layers whose names match and the blocks whose names do, opened.
+ * While the panel's search is up, the layers whose names match and the blocks whose names do, opened,
+ * the search deciding what shows: a layer's chevron is a locked mark until it is cleared.
  * The rows are one flat list mounted as they scroll into view (`VirtualRows`), as a circuit's tree is:
  * a drawing of thousands of block references draws, and searches, only the rows on screen.
  *
@@ -83,7 +84,8 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
     if (!insert) {
       const hidden = hiddenLayers.has(row.name);
       return <TreeRowSurface dense depth={0} actions={1} className="group/row" data-layer-row={row.name}>
-        {row.inserts.length ? <TreeRowToggle open={open} label={t(open ? "tree.collapse" : "tree.expand", { name: row.name })} onToggle={() => toggle(row.name)} />
+        {/* While the search decides what shows (every layer open on its matches), the chevron is a mark nobody can press. */}
+        {row.inserts.length ? <TreeRowToggle open={open} locked={Boolean(query)} label={t(open ? "tree.collapse" : "tree.expand", { name: row.name })} onToggle={() => toggle(row.name)} />
           : <TreeRowGlyph><Layers className={TREE_ROW_DENSE_ICON_CLASS} strokeWidth={TREE_GLYPH_STROKE} /></TreeRowGlyph>}
         <LayerSwatch color={row.color} />
         <span className={cn(TREE_ROW_NAME_CLASS, hidden && "text-muted-foreground", hidden ? ROW_NAME_UNDER_ACTIONS.shown : ROW_NAME_UNDER_ACTIONS.hover)}>
@@ -109,7 +111,7 @@ export default function LayersSection({ drawing, hiddenLayers, onToggleLayer, se
         </button>
       </TooltipHint>
     </TreeRowSurface>;
-  }, [flat, hiddenLayers, chosen, selection, onToggleLayer, t]);
+  }, [flat, query, hiddenLayers, chosen, selection, onToggleLayer, t]);
   if (query && !rows.length) return null;
   return <VirtualRows className="text-tiny" aria-label={t("layers.label")} data-drawing-layers="" data-flat-panel-hit={query ? "" : undefined}
     count={flat.length} rowHeight={rowHeight} rowKey={at => (flat[at].insert ? `insert:${flat[at].insert.handle}` : `layer:${flat[at].row.name}`)}

@@ -755,7 +755,8 @@ file.
   its name under the layer's name and, under its count, its handle as the entity's id it is, `#9C` (the
   payload carries no insertion point to show instead), its tooltip **Handle 9C**; Copy Reference names
   it by that handle (`drawing.dxf#h9C`), and the search finds it by it. Searching, the layers whose names match,
-  and the blocks whose names do under their layer.
+  and the blocks whose names do under their layer, open: the search decides what shows, so a layer's
+  chevron is locked (a mark nobody can press) until it is cleared.
 - **A board's view controls on the screen** (`board/BoardDisplay.jsx`'s `boardViewControls`), changed
   often, so in the corner's column over the zoom pill, from the top down, the same in 2D and 3D:
   **Display**, the corner button every 3D view has for it (`kit/shell/DisplayPopover.jsx`, its

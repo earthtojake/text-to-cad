@@ -300,12 +300,18 @@ it('a drawing with layers and blocks has the docked panel and its Layers tab: a 
   fireEvent.change(search, { target: { value: 'nut' } });
   await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-layer-row]')].map(row => row.getAttribute('data-layer-row'))).toEqual(['HARDWARE']));
   expect(aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')).toHaveLength(2);
+  // The search decides what shows: HARDWARE's chevron is a mark, turned down, that no press folds, until the search is cleared.
+  const hardware = () => aside.querySelector<HTMLElement>('[data-layer-row="HARDWARE"]')!;
+  expect([within(hardware()).queryByRole('button', { name: 'Collapse HARDWARE' }), hardware().querySelector('[data-tree-row-glyph] svg')!.classList.contains('rotate-90')]).toEqual([null, true]);
   // A handle finds its reference, as it is shown or bare.
   fireEvent.change(search, { target: { value: '#9b' } });
   await waitFor(() => expect([...aside.querySelectorAll('[data-flat-panel-hit] [data-insert-row]')].map(row => row.getAttribute('data-insert-row'))).toEqual(['9B']));
   fireEvent.change(search, { target: { value: 'zzz' } });
   await waitFor(() => expect(aside.querySelector('[data-flat-panel-empty]')).not.toBeNull());
   fireEvent.change(search, { target: { value: '' } });
+  // Cleared, the chevron is a button again, which folds the layer.
+  fireEvent.click(await waitFor(() => within(hardware()).getByRole('button', { name: 'Collapse HARDWARE' })));
+  await waitFor(() => expect(aside.querySelectorAll('[data-insert-row]')).toHaveLength(0));
 
   // Hidden, its expand button stands alone on a pill at the canvas's top-left, and brings it back.
   fireEvent.click(within(aside).getByRole('button', { name: 'Hide panel' }));
