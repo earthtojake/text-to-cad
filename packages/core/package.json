@@ -1,6 +1,6 @@
 {
   "name": "@cad/core",
-  "version": "0.10.3",
+  "version": "0.10.4",
   "private": true,
   "type": "module",
   "description": "Reusable CAD render/viewer runtime for docs, CAD Viewer, and generated snapshot browser assets.",
