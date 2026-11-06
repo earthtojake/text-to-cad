@@ -253,7 +253,9 @@ function BoardSurface({ view, data }) {
     const net = selected.some(item => item.kind === "net");
     drawBoardOverlay(ctx, board, { ...base, hover: hovered[0] || null, selection: selected, dim: net && !isolated.length, placement: placementRef.current,
       draft: face ? null : draftRef.current });
-    drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorX), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current });
+    // The ink over the board, in 2D and on a face in 3D alike: edged, so red ink reads on red copper.
+    drawAnnotationMarks(ctx, marksInPlan(session.items, mirrorX), { transform, pixelRatio, selected: session.selected, hovered: hoveredInkRef.current,
+      keyline: colors.inkKeyline });
     return true;
   }, []);
 

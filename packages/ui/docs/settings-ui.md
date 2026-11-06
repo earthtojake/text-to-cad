@@ -870,7 +870,7 @@ over it (`ViewCubeColumn`, every 3D view's). The key **3** switches, as KiCad's 
 | --- | --- |
 | Select: a click, Shift, a click on nothing | the same pick where the pointer's ray meets the face it enters, from that side, with the same filter and the layers that side draws |
 | Select: a drag | turns the view, as in every 3D view; naming an area is the 2D view's, and an area named stays selected and drawn |
-| Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other |
+| Pencil, Shapes | the same ink, laid on the face the camera sees; ink drawn in either mode shows in the other; over the board, in 2D and 3D alike, each opaque mark is edged with a thin keyline in the canvas's contrast (dark on the dark canvas, white on the light: `boardOverlay.js`'s `inkKeyline`), so neon red reads on red copper |
 | Measure | the same snaps and measurements, on the board's plane, drawn through the camera |
 | Hover tip, the context menu, double-click | the same; the menu's groups are every view's; a double-click on nothing fits, under Select as in every view |
 | Display, the Layers tab | the same Display: both faces redraw |
