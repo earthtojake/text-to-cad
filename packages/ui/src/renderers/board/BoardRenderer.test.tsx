@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@cad/core/client';
-import { pageToScreen } from '@cad/core/lib/plot2d/plot.js';
+import { pageToScreen, screenToPage } from '@cad/core/lib/plot2d/plot.js';
 import { FileViewer } from '../../../dist/file-viewer/index.js';
 import { createBoardRenderer } from '../../../dist/renderers/board/index.js';
 // Loaded with the file, not inside the first test: the registration imports it lazily.
@@ -885,7 +885,7 @@ it("under 1024px the panel starts collapsed and, opened, docks all the same; on 
   phone.dispose();
 });
 
-it("a panel docking beside a board the person has moved neither zooms nor slides it; a board still at its fit refits to the room left", async () => {
+it("a panel docking beside a board is a resize of its pane: a board still at its fit refits to the room left, one the person has moved keeps its zoom and the point at its centre", async () => {
   // The pane's observers, run by hand: the pane's box is what the test says it is.
   const observers: Array<() => void> = [];
   vi.stubGlobal('ResizeObserver', class { constructor(callback: () => void) { observers.push(callback); } observe() {} unobserve() {} disconnect() {} });
@@ -898,9 +898,11 @@ it("a panel docking beside a board the person has moved neither zooms nor slides
   const fitted = { ...frames.at(-1)! };
   await resize(200, 400);
   await waitFor(() => expect(frames.at(-1)!.scale).toBeLessThan(fitted.scale));
+  const narrow = { ...frames.at(-1)! };
   await resize(0, 1200);
   await waitFor(() => expect(frames.at(-1)!.scale).toBe(fitted.scale));
-  // Moved (a middle-button pan): the panel docks, and the board keeps its scale and stays where it was on screen.
+  // Moved (a middle-button pan): the panel docks, and the board keeps its zoom against the fit, and
+  // what was at the pane's centre is at the centre of the room left; nothing is left under the panel.
   const canvas = pane.querySelector<HTMLCanvasElement>('[data-board-surface] canvas')!;
   const at = ([x, y]: [number, number]) => { const [clientX, clientY] = pageToScreen(frames.at(-1)!, x, y); return { clientX, clientY }; };
   const middle = { pointerId: 2, pointerType: 'mouse', button: 1 };
@@ -909,9 +911,16 @@ it("a panel docking beside a board the person has moved neither zooms nor slides
   fireEvent.pointerUp(canvas, { ...middle, ...at([25, 15]) });
   await waitFor(() => expect(frames.at(-1)!.offsetX).not.toBe(fitted.offsetX));
   const moved = { ...frames.at(-1)! };
+  const held = screenToPage(moved, 600, 350);
+  const centred = (x: number) => {
+    const [cx, cy] = pageToScreen(frames.at(-1)!, held[0], held[1]);
+    expect([cx, cy].map(value => Math.round(value * 1000) / 1000)).toEqual([x, 350]);
+  };
   await resize(200, 400);
-  await waitFor(() => expect(frames.at(-1)).toEqual({ ...moved, offsetX: moved.offsetX - 200 }));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeCloseTo(moved.scale / fitted.scale * narrow.scale, 9));
+  centred(200);
   await resize(0, 1200);
-  await waitFor(() => expect(frames.at(-1)).toEqual(moved));
+  await waitFor(() => expect(frames.at(-1)!.scale).toBeCloseTo(moved.scale, 9));
+  centred(600);
   dispose();
 });

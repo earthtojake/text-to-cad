@@ -282,8 +282,9 @@ is `chrome`: the navbar (`"page"`, the default) or the view alone (`"bare"`).
   rows of the strip's More (Projection, Display, the zoom's submenu, Preview; a board's View from the
   back, ticked while it is). A view drawn as a picture, or one that is loading or failed to load, has none of them. In Preview the strip is gone and Preview's own controls are its bar's (see
   [Preview](#camera-animation-and-preview)).
-- **A file's routines are a playbar at the bottom centre**, in the tools view (Reset first; on a
-  phone over Quick Edit's peek) as in Preview, one transparent row on no surface in both (see
+- **A file's routines are a playbar at the bottom centre**, in the tools view (on a phone over
+  Quick Edit's peek) as in Preview, one transparent row on no surface, the same row in both;
+  the tools view's Reset is an item of its Playback settings (see
   [Preview](#camera-animation-and-preview)). Nothing else sits there.
 - **Model update status** sits under the strip and its sub-toolbar, centred, and where
   there is no strip (Preview, a compact view, a load) at the top centre, in the strip's
@@ -561,10 +562,12 @@ Model (`STEP_PART_VIEW_FEATURES`).
 file, whatever tool is in hand, after KiCad's Appearance panel: docked at the view's left edge, the
 full height of the view, on the chrome's colour (the navbar's, `bg-sidebar`: a step off the canvas,
 lighter than the dark canvas and off the white one, as Figma's, VS Code's and Linear's chrome is)
-with a rule at its right, and the canvas the narrower for it (the strip stays at the view's centre,
+with a rule at its right, and the canvas the narrower for it: open, at any width, it takes its
+width out of the canvas, and the picture is drawn in what it leaves, nothing of it under the panel
+(a phone's whole-view page aside). The strip stays at the view's centre,
 panel open or not, and stands over the panel where a narrow view makes them meet, as Figma's toolbar
 stands over its layers; its reach is written before the frame is painted, so opening or shutting the
-panel never moves it, `kit/shell/useStageReach.js`). Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
+panel never moves it, `kit/shell/useStageReach.js`. Its tabs: a board's Parts, Nets and Layers, a schematic's Parts, Nets and Hierarchy,
 a drawing's Layers (handed in); a 3D view's its renderer's sections in their order (`ToolPanel`s, each a tab by its
 name: a STEP assembly's **Model** — a part file, whose tree would be its one row, has none —
 then **Position**, where the file has joints to move; a robot's **Links**, an `.sdf`'s **SDF**, then
@@ -677,11 +680,12 @@ file.
   the keyboard. Docked, open or collapsed is the person's (`toolStack.collapsed.flat`), and so is its
   width (`toolStack.panels.flat`: 216px at first, 200px to half the view, from a grip on its right
   edge, Left/Right by 16px).
-- **Open, it is always docked**: the canvas is the narrower for it, at any width. Showing or hiding it
-  never zooms the picture: a view the person has moved keeps its scale and stays still on screen
-  (what was beside the panel is where it was), and a view still at its fit refits to the room it has
-  now (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`: a pane whose own edge moved, as against a window resized,
-  which keeps the zoom relative to the fit, centred). Under 1024px of
+- **Open, it is always docked**: the canvas is the narrower for it, at any width; it never covers
+  the picture. Showing or hiding it is a resize of the canvas, as a 3D viewport's: a view still at
+  its fit refits to the room it has now, and a view the person has moved keeps its zoom against
+  the fit and the point of the picture at its centre at the centre of the room left
+  (`kit/viewport/useFlatCanvasView.js`, a drawing's `dxf/useDrawingView.js`). Zoom to fit and 100%
+  measure the room beside the panel. Under 1024px of
   view it starts collapsed (not kept); opened, it docks as it does on a wide view. **On a phone**
   (under 600px) the pill is a touch tile at the left of the strip's line, and the panel opens as the
   whole view, **Back to the view** before its search; a row pressed closes it, the pick made, and
@@ -1189,11 +1193,14 @@ left in it reads as the defaults. Render settings edited in Preview are the file
 leaving returns the tools view to the file's mode.
 
 **Routines** play from the playbar under the model (`kit/tools/playbar/PreviewPlaybar.jsx`), one
-transparent row on no surface in both views, in the tools view with **Reset animation** first, which
-stops the routine and puts the model at rest, disabled while it is (on a phone, over Quick Edit's
-peek): the routines' list where there are two or more, then **Play** or
+transparent row on no surface, the same in both views (in the tools view on a phone, over Quick
+Edit's peek): the routines' list where there are two or more, then **Play** or
 **Pause**, the scrubber (`AnimationTimeControl`) and **Playback settings** (a cog: the routine's
-Speed, a submenu, then Loop and Autoplay). Each routine in the dropdown says its duration at its
+Speed, a submenu, then Loop and Autoplay; in the tools view, last after a rule, **Reset
+animation**, which stops the routine and puts the model at rest, disabled while it is). Reset is
+used seldom, so it is behind the cog, not on the row. The model is at rest while the routine
+neither plays nor owns the pose: a routine scrubbed back to its start, or just chosen, still owns
+it at its first frame, so the scrubber's start is not Reset; only Reset lets go. Each routine in the dropdown says its duration at its
 right, muted, in tabular figures. In the tools view a routine is a motion as a pose is
 (see [one motion at a time](#tools-and-lifecycle)): paused, its frame stays on the model. A
 routine opens at rest. Each view's routine is its own: entering Preview sets the
@@ -1296,8 +1303,7 @@ full technical name only when it is truncated (`overflowOnly`). Quick Edit's but
 strip's buttons (Display and Preview among them; a tool with a key shows it after its name,
 muted), the drawing row's tools (each with its key), the navbar's right-hand controls (the
 update, an alert's icon, the host's actions: the CAD app's Full size), Preview's bar (Preview
-settings, Exit preview) and the
-playbar's Reset are hinted by name — the strip's hints above their buttons, the
+settings, Exit preview) are hinted by name — the strip's hints above their buttons, the
 others' below; there is no hint on the navbar's left (the logo,
 the file's name and the ⋯ say what they are), on Display's settings button, Playback settings, an X,
 the transport (play, pause, the scrubber), the drawing row's settings or labelled text

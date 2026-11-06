@@ -34,7 +34,10 @@ import { VIEWPORT_PILL_COLUMN_POSITION, VIEWPORT_PILL_POSITION } from "./viewpor
  * `ViewCorner.jsx`; on a phone, rows of the strip's More with the zoom), its panel's tabs (`panel`)
  * and Quick Edit's props (`useFlatHandover`'s `quickEdit`).
  *
- * The panel is docked, the canvas always the narrower for it while it is open. In a view 1024px wide
+ * The panel is docked, the canvas always the narrower for it while it is open, at any width: the
+ * picture is drawn in what the panel leaves, never under it, and opening or shutting the panel is
+ * a resize of the canvas (`useFlatCanvasView.js`); the strip alone stays at the view's centre, over
+ * the panel where they meet. In a view 1024px wide
  * or more it is open until the person collapses it (kept: `toolStack.collapsed.flat`, its width
  * `toolStack.panels.flat`, its tab by the kind of file `toolStack.tabs`); narrower, it starts
  * collapsed. Collapsed, its expand button stands on a pill at the canvas's top-left. On a phone it

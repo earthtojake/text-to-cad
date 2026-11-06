@@ -284,7 +284,13 @@ test('an animated GLB opens at rest, its clips its playbar\'s, under the model; 
   // Its routines are its playbar's, under the model, as in Preview: no panel, no tab for them.
   assert.equal(await pane.locator('[data-flat-panel], [data-flat-panel-pill]').count(), 0, 'a GLB has no panel');
   await animationSection(pane).waitFor();
-  assert.equal(await animationSection(pane).getByRole('button', { name: 'Reset animation', exact: true }).isDisabled(), true, 'Reset, idle at rest');
+  // Reset is the last item of its Playback settings, not a button of the row: idle at rest.
+  assert.equal(await animationSection(pane).getByRole('button', { name: 'Reset animation', exact: true }).count(), 0, 'no Reset on the row');
+  await animationSection(pane).getByRole('button', { name: 'Playback settings' }).click();
+  const resetItem = page.getByRole('menu', { name: 'Playback settings', exact: true }).getByRole('menuitem', { name: 'Reset animation', exact: true });
+  assert.equal(await resetItem.getAttribute('aria-disabled'), 'true', 'Reset, idle at rest');
+  await page.keyboard.press('Escape');
+  await resetItem.waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const toolsRest = await stillCapture(page);
   const panelTime = () => page.evaluate(() => Number(document.querySelector(

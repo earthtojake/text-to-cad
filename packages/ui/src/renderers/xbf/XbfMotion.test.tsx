@@ -84,6 +84,21 @@ function Harness({ mechanism = kinematics, scene }: { mechanism?: any, scene: { 
 const lastPose = (scene: { setPose: ReturnType<typeof vi.fn> }) => scene.setPose.mock.calls.at(-1)?.[0] ?? null;
 const hingeAt = (scene: { setPose: ReturnType<typeof vi.fn> }) => lastPose(scene)?.hinge?.[0] ?? null;
 const playbar = () => document.querySelector<HTMLElement>('[data-playbar="tools"]');
+// Reset is the last item of the playbar's Playback settings, after a rule; the row has no Reset.
+async function resetItem(user: ReturnType<typeof userEvent.setup>) {
+  expect(within(playbar()!).queryByRole('button', { name: 'Reset motion' })).toBeNull();
+  await user.click(within(playbar()!).getByRole('button', { name: 'Playback settings' }));
+  const menu = await screen.findByRole('menu');
+  const items = [...menu.querySelectorAll('[role^="menuitem"]')];
+  expect(items.at(-1)!.textContent).toBe('Reset motion');
+  expect(items.at(-1)!.previousElementSibling?.getAttribute('role')).toBe('separator');
+  return within(menu).getByRole('menuitem', { name: 'Reset motion' });
+}
+const resetDisabled = async (user: ReturnType<typeof userEvent.setup>) => {
+  const disabled = (await resetItem(user)).getAttribute('aria-disabled') === 'true';
+  await user.keyboard('{Escape}');
+  return disabled;
+};
 
 it('a document with no motions has no motion playbar', () => {
   const { motions: _none, ...still } = kinematics;
@@ -100,7 +115,7 @@ it("the playbar lists the document's motions with their durations, and plays, pa
   expect(panel.className).not.toMatch(/border|bg-|shadow|backdrop-blur/);
   expect(panel.getAttribute('aria-label')).toBe('Motion playback');
   // At rest as the file opens: nothing to reset, the scene as Position has it.
-  expect((screen.getByRole('button', { name: 'Reset motion' }) as HTMLButtonElement).disabled).toBe(true);
+  expect(await resetDisabled(user)).toBe(true);
   expect(lastPose(scene)).toBeNull();
   await user.click(within(panel).getByRole('button', { name: 'Motions' }));
   expect(within(screen.getByRole('menu')).getAllByRole('menuitemradio').map(item => item.textContent))
@@ -122,7 +137,7 @@ it("the playbar lists the document's motions with their durations, and plays, pa
   // Paused, its frame stays.
   await user.click(within(panel).getByRole('button', { name: 'Pause motion' }));
   expect(hingeAt(scene)).toBeCloseTo(-10 + 35 * 0.25, 9);
-  expect((screen.getByRole('button', { name: 'Reset motion' }) as HTMLButtonElement).disabled).toBe(false);
+  expect(await resetDisabled(user)).toBe(false);
 
   // Speed 2x and Loop off: a second of clock is two of the motion (played from the frame it is
   // paused at, the clock reading 0 as it starts), and it stops at its end.
@@ -141,10 +156,12 @@ it("the playbar lists the document's motions with their durations, and plays, pa
   expect(within(panel).getByRole('button', { name: 'Play motion' })).toBeTruthy();
   expect(frames).toEqual([]);
 
-  // Another motion is chosen at its start, at rest until it plays: `swing` opens at `open`.
+  // Another motion is chosen at its start, paused until it plays: `swing` opens at `open`.
   await user.click(within(panel).getByRole('button', { name: 'Motions' }));
   await user.click(screen.getByRole('menuitemradio', { name: /^swing/ }));
   expect(hingeAt(scene)).toBe(90);
+  // Paused at its start, it still holds the pose: Reset is what lets go.
+  expect(await resetDisabled(user)).toBe(false);
 });
 
 it("a motion replaces Position's pose, shown read-only while it owns it, and Reset leaves the model as built, nothing set aside", async () => {
@@ -171,7 +188,7 @@ it("a motion replaces Position's pose, shown read-only while it owns it, and Res
   expect((screen.getByRole('button', { name: 'Reset position' }) as HTMLButtonElement).disabled).toBe(true);
 
   // Reset lets go: `open` was put at rest as the motion took the pose, so the model is as built.
-  await user.click(screen.getByRole('button', { name: 'Reset motion' }));
+  await user.click(await resetItem(user));
   expect(lastPose(scene)).toBeNull();
   const again = screen.getByRole('region', { name: 'Position controls' });
   const after = within(again).getByRole('textbox', { name: 'hinge slider value' }) as HTMLInputElement;

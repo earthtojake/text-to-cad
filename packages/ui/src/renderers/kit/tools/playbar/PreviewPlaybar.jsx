@@ -1,4 +1,4 @@
-import { ListVideo, Pause, Play, RotateCcw } from "lucide-react";
+import { ListVideo, Pause, Play } from "lucide-react";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger
 } from "@cad/ui/primitives/dropdown-menu";
@@ -50,8 +50,11 @@ function RoutineMenu({ runtime, disabled }) {
  * with Preview's bar (`idle`, `createPreviewIdle`), its playing untouched by either.
  *
  * The tools view has the same playbar (`toolsView`: a file's routines are its playbar's in both views,
- * never a section of the panel), the same transparent row on no surface, Reset first — the model back
- * at rest, idle while it is — and on a phone (`phone`) over Quick Edit's peek, which keeps the bottom.
+ * never a section of the panel), the same row on no surface, and on a phone (`phone`) over Quick
+ * Edit's peek, which keeps the bottom. Its Reset is the last item of its Playback settings: the
+ * routine let go of, the model back at rest. The model is at rest while the routine neither plays
+ * nor owns the pose (`enabled`): paused at its start, after a scrub or a choice of routine, the
+ * routine still holds the model at its first frame, and only Reset (`onRelease`) lets go.
  *
  * @param {{ runtime: object, autoplay: boolean, onAutoplayChange(value: boolean): void, disabled?: boolean,
  *   idle?: ReturnType<typeof import("../PreviewChrome.jsx").createPreviewIdle> | null, toolsView?: boolean, phone?: boolean }} props
@@ -62,16 +65,13 @@ export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, di
   if (!animationControlsHaveContent(runtime)) return null;
   const playing = runtime.playing === true;
   const words = playbarWords(runtime, t);
-  const atRest = !playing && !(Number(runtime?.elapsedSec) > 0);
+  const atRest = !playing && runtime.enabled !== true && !(Number(runtime?.elapsedSec) > 0);
   return <div role="toolbar" aria-label={words.playback} data-preview-playbar={toolsView ? undefined : ""} data-playbar={toolsView ? "tools" : "preview"}
     data-state={shown ? "visible" : "hidden"} {...idle?.hold("playbar")}
     style={toolsView ? { bottom: phone ? `calc(var(--cad-quick-edit-peek, 0px) + ${VIEWPORT_INSET_PX}px)` : VIEWPORT_INSET_PX * 2 } : undefined}
     className={cn("absolute left-1/2 z-30 flex w-96 max-w-[calc(100%-24px)] -translate-x-1/2 items-center gap-1 px-2 py-1",
       !toolsView && "bottom-4", PREVIEW_FADE_CLASS,
       shown ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")}>
-    {toolsView ? <ToolbarButton label={words.reset} tooltipSide="top" disabled={disabled || atRest} onClick={() => runtime.onRelease?.()} data-animation-reset="">
-      <RotateCcw className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
-    </ToolbarButton> : null}
     <RoutineMenu runtime={runtime} disabled={disabled} />
     <ToolbarButton tooltip={false} disabled={disabled} label={playing ? words.pause : words.play} onClick={() => runtime.onPlayToggle?.()}>
       {playing ? <Pause className="size-3.5" strokeWidth={1.5} aria-hidden="true" /> : <Play className="size-3.5" strokeWidth={1.5} aria-hidden="true" />}
@@ -79,6 +79,7 @@ export default function PreviewPlaybar({ runtime, autoplay, onAutoplayChange, di
     <div className="min-w-0 flex-1 px-1">
       <AnimationTimeControl runtime={runtime} disabled={disabled} />
     </div>
-    <PlaybackMenu animation={runtime} side="top" disabled={disabled} autoplay={autoplay} onAutoplayChange={onAutoplayChange} />
+    <PlaybackMenu animation={runtime} side="top" disabled={disabled} autoplay={autoplay} onAutoplayChange={onAutoplayChange}
+      reset={toolsView ? { label: words.reset, disabled: atRest, onSelect: () => runtime.onRelease?.() } : null} />
   </div>;
 }

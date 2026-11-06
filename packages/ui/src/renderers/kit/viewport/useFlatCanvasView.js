@@ -87,8 +87,6 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
   const canvasRef = useRef(null);
   const contextRef = useRef(null);
   const sizeRef = useRef({ width: 0, height: 0 });
-  // The pane's place on screen when it was last measured.
-  const placeRef = useRef(null);
   const transformRef = useRef(null);
   const fitScaleRef = useRef(0);
   // The person has framed this picture themselves: a resize must not take it back,
@@ -212,11 +210,6 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       const height = Math.max(0, Math.round(rect.height));
       const previous = sizeRef.current;
       if (width === previous.width && height === previous.height) return;
-      // Where the pane stood on screen before: a pane whose own edge moved (a panel docked or
-      // taken away beside it) is told apart from one whose window resized.
-      const before = placeRef.current;
-      placeRef.current = { left: rect.left, top: rect.top };
-      const edgeMoved = before !== null && previous.width > 0 && (Math.round(before.left) !== Math.round(rect.left) || Math.round(before.top) !== Math.round(rect.top));
       // What the pane held in its middle, and how far the view was from the fitted scale.
       // Both are read BEFORE the size changes: a view the person chose is carried across a
       // resize in those terms rather than in pixels (see below).
@@ -236,21 +229,13 @@ export function useFlatCanvasView({ content, bounds, restored = null, colorSchem
       // cached context has to be re-read along with the picture.
       contextRef.current = canvas.getContext("2d");
       refit(false);
-      // A pane whose edge moved because a panel docked beside it (or left): a view the person
-      // framed keeps its scale and stays still on screen, so what was beside the panel is where it
-      // was, and toggling the panel never zooms or slides the picture. A view still the fit has
-      // just refitted to the room it has now.
-      if (edgeMoved && movedRef.current && transformRef.current) {
-        const held = transformRef.current;
-        moveTo({ scale: held.scale, offsetX: held.offsetX + before.left - rect.left, offsetY: held.offsetY + before.top - rect.top });
-        paintNow();
-        return;
-      }
-      // A view the person framed is not taken back by a resize — but it must not keep an
-      // absolute pixel scale either, or a pane that narrows (the window resizing) simply
-      // crops the picture where it stands. So it keeps what it MEANT: the same zoom
-      // relative to the fit, still centred on what it was centred on.
-      // That is how the 3D viewports behave when their pane changes size.
+      // A view still the fit has just refitted to the room it has now. A view the person framed is
+      // not taken back by a resize — but it must not keep an absolute pixel scale either, or a pane
+      // that narrows simply crops the picture where it stands. So it keeps what it MEANT: the same
+      // zoom relative to the fit, still centred on what it was centred on. That is how the 3D
+      // viewports behave when their pane changes size, and a panel docked beside the pane, or
+      // taken away, is such a change: the pane is what the panel leaves, and the picture is
+      // centred in it, never left under the panel.
       if (heldCentre && heldZoom > 0 && movedRef.current && fitScaleRef.current > 0) {
         const scale = clampScale(heldZoom * fitScaleRef.current, zoomLimits(fitScaleRef.current));
         moveTo({
