@@ -122,7 +122,7 @@ export function createBoardIndex(board, sheet = {}) {
       fields: entry.fields && typeof entry.fields === "object" ? { ...entry.fields } : {},
       dnp: Boolean(entry.dnp), locked: entry.locked === true, sheet: typeof entry.sheet === "string" ? entry.sheet : "", script: typeof entry.script === "string" ? entry.script : "",
       outline, area: outline.length > 2 ? polygonArea(outline) : Infinity, box: outline.length > 2 ? boxOf(outline) : null, pads: [],
-      // Its footprint's 3D models as the file writes them (the payload's `models`: name, offset, rotate, scale, hidden).
+      // Its footprint's 3D models as the file writes them (the payload's `models`: name, offset, rotate, scale, hidden, opacity).
       models: Array.isArray(entry.models) ? entry.models.filter(model => model && typeof model.name === "string") : []
     });
   }

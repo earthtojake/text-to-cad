@@ -12,6 +12,9 @@
  * Placements are diffed by reference on every `setParts`: a part that did not change keeps its meshes, a
  * moved one is a matrix, and only a model never held is asked for (`wanted`).
  *
+ * A model's own opacity (KiCad's per-model `opacity`, the payload's, absent at 1) scales its materials'
+ * on that placement: below 1 they are see-through and write no depth.
+ *
  * The highlight is the 3D views' (the overlay's colours, `board2d/boardOverlay.js`: selected, hovered);
  * while something is isolated the bodies that are not it fade. A block is the theme's muted ink, a
  * millimetre tall on the part's outline (its courtyard), see-through and edged: plainly no model.
@@ -42,6 +45,8 @@ const outlineArea = part => {
   const xs = ring.map(point => finite(point?.[0], 0)), ys = ring.map(point => finite(point?.[1], 0));
   return (Math.max(...xs) - Math.min(...xs)) * (Math.max(...ys) - Math.min(...ys));
 };
+// A model's own opacity on its placement (the payload's `opacity`, KiCad's), 0 to 1; 1 where absent.
+const opacityOf = model => Math.min(Math.max(finite(model?.opacity, 1), 0), 1);
 const colorKey = rgba => (rgba ? rgba.map(value => Math.round(finite(value, 0) * 1000)).join(",") : "");
 
 /**
@@ -139,9 +144,11 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
     return new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(finite(color[0], 0), finite(color[1], 0), finite(color[2], 0), THREE.LinearSRGBColorSpace),
       roughness: 0.55, metalness: 0, transparent: alpha < 1, opacity: alpha, depthWrite: alpha >= 1, side: THREE.DoubleSide });
   };
-  // A model's materials in a state: as authored, lit by the highlight (selected, hovered), or faded.
-  const materialsOf = (model, state) => {
-    let found = model.materials[state];
+  // A model's materials in a state: as authored, lit by the highlight (selected, hovered), or faded; at
+  // a placement's own opacity (`opacityOf`), see-through below 1.
+  const materialsOf = (model, state, opacity = 1) => {
+    const key = opacity < 1 ? `${state}@${opacity}` : state;
+    let found = model.materials[key];
     if (found) return found;
     const colors = boardOverlayColors(scheme);
     const tint = new THREE.Color(colors.selection);
@@ -154,9 +161,10 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       } else if (state === "faded") {
         Object.assign(material, { transparent: true, opacity: material.opacity * FADED_OPACITY, depthWrite: false });
       }
+      if (opacity < 1) Object.assign(material, { transparent: true, opacity: material.opacity * opacity, depthWrite: false });
       return material;
     });
-    model.materials[state] = found;
+    model.materials[key] = found;
     return found;
   };
   const dropMaterials = model => {
@@ -185,7 +193,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
     const state = stateOf(entry.ref);
     for (const body of entry.bodies) {
       const model = models.get(body.key);
-      if (model && body.mesh) body.mesh.material = materialsOf(model, state);
+      if (model && body.mesh) body.mesh.material = materialsOf(model, state, body.opacity);
     }
     if (entry.block) {
       const faded = state === "faded";
@@ -202,7 +210,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
     for (const model of shown) {
       const entry = table?.[model.name];
       const key = entry?.document ? `${entry.document}@${entry.stamp || ""}` : "";
-      if (key && !failed.has(key)) bodies.push({ key, entry, matrix: modelMatrix(part, model, thickness) });
+      if (key && !failed.has(key)) bodies.push({ key, entry, matrix: modelMatrix(part, model, thickness), opacity: opacityOf(model) });
       else if (table) missing = true;
     }
     return { bodies, missing };
@@ -223,7 +231,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
     const entry = { ref: part.ref, signature, group: holder, bodies: [], block: null, part };
     for (const body of plan.bodies) {
       const model = models.get(body.key);
-      const mesh = model ? new THREE.Mesh(model.geometry, materialsOf(model, "normal")) : null;
+      const mesh = model ? new THREE.Mesh(model.geometry, materialsOf(model, "normal", body.opacity)) : null;
       if (mesh) {
         mesh.matrixAutoUpdate = false;
         mesh.matrix.fromArray(body.matrix);
@@ -231,7 +239,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
         holder.add(mesh);
         model.users.add(part.ref);
       }
-      entry.bodies.push({ key: body.key, entry: body.entry, mesh });
+      entry.bodies.push({ key: body.key, entry: body.entry, mesh, opacity: body.opacity });
     }
     if (plan.missing) {
       entry.block = block(part);
@@ -258,7 +266,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
       seen.add(part.ref);
       const plan = planOf(part);
       const signature = JSON.stringify([part.at, part.rotation, part.side, part.outline?.length, plan.missing,
-        plan.bodies.map(body => [body.key, models.has(body.key)])]);
+        plan.bodies.map(body => [body.key, models.has(body.key), body.opacity])]);
       const was = placed.get(part.ref);
       if (was && was.signature === signature) continue;
       if (was) unplace(was);

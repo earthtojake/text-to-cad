@@ -105,6 +105,18 @@ test("the highlight lights a picked part's body, and isolation fades the bodies 
   parts.dispose();
 });
 
+test("a model's own opacity makes its body's materials see-through, and one with none stays opaque", () => {
+  const parts = createBoardParts(THREE, { thickness: 1.6 });
+  parts.setParts(PARTS.map(part => (part.ref === "R1" ? { ...part, models: [{ name: "${KIPRJMOD}/r.step", opacity: 0.4 }] } : part)), TABLE);
+  parts.addModel("d1@1-10", bakeModel(THREE, DOCUMENT));
+  const body = ref => parts.object3D.children.find(child => child.name === ref).children[0];
+  assert.deepEqual(body("R1").material.map(material => [+material.opacity.toFixed(6), material.transparent, material.depthWrite]), [[0.4, true, false], [0.4, true, false], [0.4, true, false]]);
+  assert.deepEqual(body("R2").material.map(material => [material.opacity, material.transparent]), [[1, false], [1, false], [1, false]]);
+  parts.setInk({ selected: ["R1"] });
+  assert.ok(body("R1").material.every(material => Math.abs(material.opacity - 0.4) < 1e-6), "lit, it keeps its opacity");
+  parts.dispose();
+});
+
 test("the loader opens each model by its document id once and bakes it, reading no look (the board's materials are its own)", async () => {
   const opened = [];
   const fetch = async url => {

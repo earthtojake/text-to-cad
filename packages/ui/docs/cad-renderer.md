@@ -253,7 +253,7 @@ and when the window takes the focus back, in 2D too, for the Selected pane's fac
 model block) names each model a STEP by its document id; the 3D view opens each by that id
 (`client.engineDocument`), four at a time, reads it (`loadXbfDocument`, no look, no version wait: the
 engine may let it go), bakes it into ONE geometry with a material per colour, and shares it with every
-placement of it; a placement is diffed by reference on every revision (a moved part a matrix, a model
+placement of it, at the placement's own opacity (KiCad's per-model `opacity`: see-through below 1); a placement is diffed by reference on every revision (a moved part a matrix, a model
 held never asked for again), and a model no placement uses is released. A named model that is missing
 is a see-through block on the part's outline, a millimetre tall. A press tries the bodies before the
 face (the board's `pickAt` and the stage's `pickBody`), as the filter's Footprints takes them; the
