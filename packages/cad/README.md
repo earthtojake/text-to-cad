@@ -351,8 +351,10 @@ it is: a board, a schematic, a robot description, a mesh, an opened STEP or xbf)
     and leaves everything as it was. `cad update --dry-run`, asked what an update would do, reads the
     feed the same bounded way and keeps nothing of it, saying so in a line when it cannot reach it. An automatic update (on by default, `cad update auto off` to
     leave every update to the person) waits on nothing: the server installs the release in the
-    background and switches only once it has been idle for a minute. It takes patch releases
-    only; a minor or major release waits for the person's click.
+    background and switches only once it has been idle for a minute. It takes a release that breaks
+    nothing, as Semantic Versioning numbers it -- a patch release below 1.0, a patch or minor release
+    from 1.0 --; one that may (a minor or major release below 1.0, a major one from 1.0) waits for the
+    person's click.
     An integration's environment (`cad[kicad]`'s, with kicode; `cad[trimesh]`'s) is fetched once, the
     first time a command needs it, from uv's cache and the network, and works offline after that; a
     first-need fetch that cannot reach the network says so in a line, and nothing else waits on it.

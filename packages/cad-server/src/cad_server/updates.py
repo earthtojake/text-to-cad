@@ -67,15 +67,18 @@ _seen: set[str] = set()
 _seen_lock = threading.Lock()
 
 
-def _release(value: Any) -> tuple[int, ...] | None:
+def parse_release(value: Any) -> tuple[int, int, int] | None:
+    """A release, a plain ``X.Y.Z``, as its three numbers; None for anything else (a development or
+    pre-release version). The one reading of a release for both questions an update asks: whether it is
+    newer (here) and whether it installs itself (``auto_updates.takes``)."""
     match = _RELEASE.fullmatch(value) if isinstance(value, str) else None
-    return tuple(int(part) for part in match.groups()) if match else None
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
     """The feed as the server reads it: a release as ``latest`` (``None`` when there is none). Anything
     else in it is left out, so the feed can grow without a release of text-to-cad."""
-    if not isinstance(data, dict) or _release(data.get("latest")) is None:
+    if not isinstance(data, dict) or parse_release(data.get("latest")) is None:
         return None
     return {"latest": data["latest"]}
 
@@ -158,15 +161,15 @@ def feed(*, fetch: bool = True, force: bool = False, now: float | None = None, p
 def see(release: Any) -> None:
     """A release an agent app's CAD server runs, as it said when it connected: one newer than this
     install proves a release exists, and the update button shows it, with no network."""
-    if _release(release) is not None:
+    if parse_release(release) is not None:
         with _seen_lock:
             _seen.add(release)
 
 
 def _newest(candidates: list[Any], version: str) -> str | None:
     """The newest of ``candidates`` that is newer than ``version``, or None."""
-    current = _release(version)
-    found = [(_release(value), value) for value in candidates if _release(value) is not None]
+    current = parse_release(version)
+    found = [(parse_release(value), value) for value in candidates if parse_release(value) is not None]
     newer = [(parsed, value) for parsed, value in found if current is not None and parsed > current]
     return max(newer)[1] if newer else None
 

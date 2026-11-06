@@ -54,8 +54,9 @@ src/cad_server/
                          #   whats_new), and whether a device was updated or is new
   updates.py             # the hourly version check, for a copy nothing else keeps current,
                          #   and the release an update moves to
-  auto_updates.py        # automatic updates: the person's setting (on by default), patch
-                         #   releases only (takes), the idle and retry rules the engine's own
+  auto_updates.py        # automatic updates: the person's setting (on by default), the
+                         #   releases they take by Semantic Versioning (takes: patch below 1.0,
+                         #   patch or minor from 1.0), the idle and retry rules the engine's own
                          #   update keeps
   assets.py              # where the bundled runtime is
   _internal/             # the environments models run in (base: the installation's base,
@@ -131,8 +132,9 @@ up or updates text-to-cad in every agent app it finds, each by its own command
 made on first need -- and moves the device's engine to its release; `cad update` runs the newest release's
 `cad setup`, as the update button does (`--dry-run` reads the version feed, keeping nothing, and says the
 release it would install before the plan), and `cad update auto on|off` turns automatic updates on or off
-(on by default: the engine installs a newer patch release in the background and switches to it once
-idle; a minor or major release waits for the update button or `cad update`);
+(on by default: the engine installs a newer release that breaks nothing -- a patch release below 1.0, a
+patch or minor release from 1.0 -- in the background and switches to it once idle; one that may break
+something waits for the update button or `cad update`);
 `cad uninstall` takes text-to-cad out, asked first as every command that destroys is (`cad delete`, `cad
 doctor --prune`, `cad server --rotate-token`: a terminal's `(y/N)`, else `--yes`; `_internal/consent.py`);
 `cad plugin` writes
