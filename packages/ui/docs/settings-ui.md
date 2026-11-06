@@ -1213,7 +1213,9 @@ tree, and the pose while its joints are unchanged. The tool, the selection and
 measurements never come back — every open starts in the default tool with nothing
 selected.
 
-Zoom to Fit recenters and frames the whole original model at the current angle;
+Zoom to Fit recenters and frames the whole original model at the current angle, in the room under
+the tool strip and centred in it, as a flat view's fit keeps clear of the strip (every 3D fit does:
+Home, the first frame, a board's 3D view);
 Zoom to Selection frames the selection and is unavailable without one. Both are
 every view's context-menu items and the zoom's menu's (below); the live `resetCamera` command takes
 the same fit path.

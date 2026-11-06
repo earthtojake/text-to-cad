@@ -1677,7 +1677,12 @@ other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
 `kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
-for clipping, lighting and picking. Nothing shows that percentage in 3D (a flat view's corner pill shows its own, `ZoomControl.jsx`); the
+for clipping, lighting and picking. Every fit — Zoom to fit, Home, Zoom to selection, the first frame,
+a board's 3D view — frames in the room under the view's tool strip and centres there, as a flat view's
+fit does: the strip's reach is the frame's `--cad-tools-bottom` (`runtimeCamera.js`'s
+`readStripClearance`, none in Preview's view), its share of the height `fitRoom`, and the camera's
+target stands above the box's centre by half of what the strip takes. The 100% ruler and a resize's
+rescale read the reach the last fit measured, so a sub-toolbar coming and going moves neither. Nothing shows that percentage in 3D (a flat view's corner pill shows its own, `ZoomControl.jsx`); the
 viewport's `zoomPercent()`, `subscribeCamera()` and `zoomBy(factor)` serve the zoom keys and a phone's
 Zoom submenu, and the `window.__cadCamera()` test seam reads it (`zoomPercent`). The corner's Home
 (`goHome()`) frames what is shown from the opening direction. The acts that frame the

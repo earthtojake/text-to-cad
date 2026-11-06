@@ -7,7 +7,7 @@ import { harnessBundle } from '../../harness/bundle.mjs';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 import * as THREE from 'three';
-import { interactiveCameraFrameForBounds } from '../../../../dist/renderers/kit/camera/viewportCameraFit.js';
+import { fitRoom, interactiveCameraFrameForBounds } from '../../../../dist/renderers/kit/camera/viewportCameraFit.js';
 import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from '../../../../dist/renderers/kit/camera/viewportCameraKit.js';
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES } from '../../../../dist/renderers/kit/camera/cameraLens.js';
 
@@ -445,19 +445,21 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const opened = await page.evaluate(() => {
     const camera = window.__cadCamera();
     const canvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas');
+    const strip = Number.parseFloat(getComputedStyle(canvas.closest('[data-slot=cad-file-view]')).getPropertyValue('--cad-tools-bottom')) || 0;
     return { projection: camera.projection, halfHeight: camera.halfHeight, zoomPercent: camera.zoomPercent,
-      bounds: camera.originalBounds, aspect: canvas.clientWidth / canvas.clientHeight };
+      bounds: camera.originalBounds, aspect: canvas.clientWidth / canvas.clientHeight, room: [strip, canvas.clientHeight] };
   });
   assert.equal(opened.projection, 'orthographic');
   // 100% means "framed as the file opens". It is a ruler the viewport computes independently
   // of the fit, so the two agreeing is the whole claim: a fit taken under the opening
   // PERSPECTIVE lens and then converted to orthographic used to land near 89% of it.
   assert.equal(Math.round(opened.zoomPercent), 100, `opened at ${opened.zoomPercent}% of its own ruler`);
-  // And it is the half-height the fit mathematics gives for this box at the REAL canvas aspect.
+  // And it is the half-height the fit mathematics gives for this box at the REAL canvas aspect, in the
+  // room the strip leaves under it.
   const expected = interactiveCameraFrameForBounds(THREE, {
     camera: Object.assign(new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 1000), { fov: CAD_DEFAULT_VERTICAL_FOV_DEGREES }),
     controls: { target: new THREE.Vector3() }, bounds: opened.bounds, frameAspect: opened.aspect,
-    minRadius: 0, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP,
+    minRadius: 0, viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP, room: fitRoom(...opened.room),
   }).halfHeight;
   assert.ok(Math.abs(opened.halfHeight - expected) / expected < 0.01,
     `framed at the fit for this aspect: ${opened.halfHeight} vs ${expected}`);

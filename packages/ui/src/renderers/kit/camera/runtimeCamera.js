@@ -26,6 +26,7 @@ import {
   toNumber
 } from "@cad/core/lib/viewer/modelRuntime.js";
 import {
+  fitRoom,
   originalModelCameraFrame,
   interactiveViewportFitScale,
   interactiveCameraFrameForBounds
@@ -110,9 +111,10 @@ export function boundsModelRadius(THREE, bounds, sceneScaleMode) {
 export function resetRuntimeZoomBaseline(runtime) {
   const bounds = runtimeFramingBounds(runtime);
   if (!runtime?.camera || !runtime?.THREE || !bounds) return null;
+  const metrics = getViewportMetrics(runtime);
   const frame = originalModelCameraFrame(runtime.THREE, {
-    camera: runtime.camera, bounds, frameAspect: getViewportMetrics(runtime).aspect,
-    minRadius: getSceneScaleSettings(runtime.sceneScaleMode).minModelRadius,
+    camera: runtime.camera, bounds, frameAspect: metrics.aspect,
+    minRadius: getSceneScaleSettings(runtime.sceneScaleMode).minModelRadius, room: runtimeFitRoom(runtime, metrics),
   });
   if (!frame) return null;
   runtime.zoomBaseHalfHeight = frame.halfHeight;
@@ -200,12 +202,32 @@ export function setRuntimeZoomPercent(runtime, percent) {
 }
 
 // The canvas IS the viewport: it fills the viewer's box and nothing else, so the camera
-// frames and centres in the whole of it.
+// frames in the whole of it, less the strip over its top (`readStripClearance`).
 export function getViewportMetrics(runtime) {
   const canvas = runtime?.renderer?.domElement;
   const width = Math.max(1, canvas?.clientWidth || canvas?.parentElement?.clientWidth || 1);
   const height = Math.max(1, canvas?.clientHeight || canvas?.parentElement?.clientHeight || 1);
   return { width, height, aspect: width / height };
+}
+
+/**
+ * How far down the view's tool strip reaches over the canvas, in CSS pixels: what the frame measures
+ * onto its root (`ViewFrame.jsx`'s `--cad-tools-bottom`), which a flat view's fit keeps clear of too.
+ * None for Preview's view, which has no strip, nor for a canvas outside a frame (a library card).
+ */
+export function readStripClearance(runtime) {
+  const canvas = runtime?.renderer?.domElement;
+  if (!canvas?.closest || canvas.closest("[data-preview-view]")) return 0;
+  const frame = canvas.closest("[data-slot=cad-file-view]");
+  if (!frame || typeof getComputedStyle !== "function") return 0;
+  const clear = Number.parseFloat(getComputedStyle(frame).getPropertyValue("--cad-tools-bottom"));
+  return Number.isFinite(clear) && clear > 0 ? clear : 0;
+}
+
+// The share of the viewport a fit frames in, for the strip's reach the last fit measured: the 100%
+// ruler and a resize's rescale read the same, so neither moves with what comes and goes under the strip.
+function runtimeFitRoom(runtime, metrics) {
+  return fitRoom(runtime?.stripClearance, metrics.height);
 }
 
 export function runtimeCameraProjection(runtime) {
@@ -250,6 +272,7 @@ export function runtimeViewportFitScale(runtime, frameMetrics) {
   const fitCamera = camera?.isPerspectiveCamera ? camera : runtime?.perspectiveCamera || camera;
   const projected = interactiveViewportFitScale(runtime.THREE, {
     camera, framing: runtime.interactiveFraming, aspect: frameMetrics?.aspect,
+    room: frameMetrics ? runtimeFitRoom(runtime, frameMetrics) : 1,
   });
   if (Number.isFinite(projected) && projected > 0) return projected;
   return viewportFitScale({
@@ -621,6 +644,9 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     return false;
   }
   const frameMetrics = getViewportMetrics(runtime);
+  // Every fit frames the model in the room under the view's tool strip, centred in it.
+  runtime.stripClearance = readStripClearance(runtime);
+  const room = runtimeFitRoom(runtime, frameMetrics);
   // Render adjusts its clipping range to the current pose every frame. A fit
   // must use the model's base range, or resetting after zooming out would fit
   // behind the old distant near plane instead of returning to the default view.
@@ -637,7 +663,8 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
     minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius,
     nearClip: fitNearClip,
     viewDirection,
-    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP
+    viewUp: viewUp || runtime.camera.up?.toArray?.() || WORLD_UP,
+    room
   });
   if (!frame) {
     return false;
@@ -647,7 +674,7 @@ export function zoomRuntimeToBounds(runtime, bounds, sceneScaleMode, {
   if (originalModelScale) {
     const original = originalModelCameraFrame(runtime.THREE, {
       camera: runtime.camera, bounds: normalizedBounds, frameAspect: frameMetrics.aspect,
-      minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius, modelOffset
+      minRadius: getSceneScaleSettings(sceneScaleMode).minModelRadius, modelOffset, room
     });
     if (original) {
       frame.halfHeight = original.halfHeight;
