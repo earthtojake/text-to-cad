@@ -446,6 +446,7 @@ src/cad/
   work_instruction.py    # @work_instruction: the steps that build one assembly, one PDF;
                          #   its pages and figures in _internal/work_instruction_pages.py,
                          #   a simple one's picture guide in _internal/work_instruction_guide.py
+                         #   and its 3D page in _internal/work_instruction_player.py
   flatten.py             # flat patterns: exact 2D geometry from a solid's planar faces
   geometry.py            # measurements of native geometry: closest points, overlap,
                          #   soundness, mass properties

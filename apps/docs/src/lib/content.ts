@@ -118,7 +118,7 @@ export const skillGroups = [
     name: "Work Instructions",
     path: "skills/work-instructions",
     summary:
-      "Step-by-step build instructions for an assembly, as a PDF: by default a picture guide anyone can follow, with a big picture per step and an arrow where each part goes, or a shop work instruction with sign-offs and every torque, bonding and cure value cited to its process spec.",
+      "Step-by-step build instructions for an assembly, as a PDF: by default a picture guide anyone can follow, with a big picture per step, an arrow where each part goes and a 3D page that plays the build, or a shop work instruction with sign-offs and every torque, bonding and cure value cited to its process spec.",
   },
   {
     name: "DXF",

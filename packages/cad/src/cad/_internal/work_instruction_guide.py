@@ -161,34 +161,42 @@ def _notice(flow: _Flow, kind: str, line) -> None:
     flow.y -= height + 1.5
 
 
-def _body(flow: _Flow, step) -> _Cell:
-    """What the step says under its picture: what it uses, then each thing it asks for."""
-    cell = _Cell(flow.measure, flow.inner)
+def says(step, *, surfaces: bool = True) -> list[tuple[str, str]]:
+    """What a step says beyond its title, as ``(kind, text)``: what it uses, then each thing it asks
+    for. A kind is ``need``, ``text``, ``small`` (a source) or ``open`` (what nobody has decided).
+    ``surfaces`` says where a picture outlines them; the page plays no outlines."""
+    lines = []
     if step.units:
-        cell.text("You need: " + ", ".join(f"×{len(refs)} {plain(name)}" for name, refs in _group(step.units)),
-                  TEXT, color=GREY)
+        lines.append(("need", "You need: " + ", ".join(f"×{len(refs)} {plain(name)}"
+                                                       for name, refs in _group(step.units))))
     if any(where == "title" for where, _name in step.missing):
-        cell.text(f"Where this number comes from: {NOT_DECIDED}", SMALL, color=AMBER)
+        lines.append(("open", f"Where this number comes from: {NOT_DECIDED}"))
     for op in step.ops:
         shown = None  # a source prints once for the lines of one operation it covers
-        cell.gap(0.8)
-        if op.surfaces:
-            cell.text("The purple outline shows where.", TEXT, color=GREY)
+        if op.surfaces and surfaces:
+            lines.append(("need", "The purple outline shows where."))
         for line in op.lines:
             caption = "Check" if line.caption == "Inspect" else line.caption
             if line.value is None:
-                cell.text(f"{caption}: {NOT_DECIDED}", TEXT, color=AMBER)
-            elif op.kind == "instruct":
-                cell.text(line.value, TEXT)
+                lines.append(("open", f"{caption}: {NOT_DECIDED}"))
             else:
-                cell.text(f"{caption}: {line.value}", TEXT)
+                lines.append(("text", line.value if op.kind == "instruct" else f"{caption}: {line.value}"))
             if line.source is not None and line.source != shown:
-                cell.text(_citation(line.source), SMALL, color=GREY)
+                lines.append(("small", _citation(line.source)))
             elif line.source is None and line.cite:
-                cell.text(f"Where this number comes from: {NOT_DECIDED}", SMALL, color=AMBER)
+                lines.append(("open", f"Where this number comes from: {NOT_DECIDED}"))
             shown = line.source or shown
         if op.record:
-            cell.text(f"Write down: {op.record}", TEXT)
+            lines.append(("text", f"Write down: {op.record}"))
+    return lines
+
+
+def _body(flow: _Flow, step) -> _Cell:
+    """What the step says under its picture."""
+    cell = _Cell(flow.measure, flow.inner)
+    for kind, text in says(step):
+        small = kind == "small"
+        cell.text(text, SMALL if small else TEXT, color={"need": GREY, "small": GREY, "open": AMBER}.get(kind, "black"))
     return cell
 
 

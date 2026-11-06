@@ -988,6 +988,123 @@ class GuideTests(_Assembly):
         self.assertIn("DONE", [t for page in self._pages(wi) for t in page])
 
 
+class PlayerTests(_Assembly):
+    """A picture guide's steps as a GLB's animation, and the page that plays it."""
+
+    def _guide(self, **kwargs):
+        from cad.work_instruction import Instruction
+
+        wi = Instruction(self.document, title="Bracket", **kwargs)
+        wi.step("Lay it flat", install=["base_plate"])
+        wi.step("Fit the bracket", install=["bracket"], arrow="down")
+        wi.step("Add the pins", install=["pin"])
+        return wi
+
+    def test_each_part_hides_until_its_step_and_travels_in_along_its_arrow(self) -> None:
+        from cad._internal.work_instruction_player import REACH, TRAVEL, TURN, channels
+        from cad._internal.work_instruction_pages import _extent
+
+        wi = self._guide()
+        found = {(ref, path): (keys, kind) for ref, path, keys, kind in channels(wi)}
+        self.assertNotIn(("base_plate", "scale"), found, "the first step's parts are there from the start")
+        self.assertEqual(found[("bracket", "scale")], ([(0.0, 0.0), (TURN, 1.0)], "STEP"))
+        keys, _kind = found[("bracket", "translation")]
+        reach = round(REACH * _extent(wi)[1], 4)
+        self.assertEqual(keys, [(0.0, (0.0, 0.0, reach)), (TURN, (0.0, 0.0, reach)), (TURN + TRAVEL, (0.0, 0.0, 0.0))],
+                         "down from above, held until its turn, so the curve is one")
+        self.assertFalse([path for ref, path in found if ref == "assembly/pin.1" and path == "translation"],
+                         "a step with no arrow appears in place")
+        self.assertLess(TRAVEL, TURN)
+
+    def test_a_guide_writes_its_pdf_glb_and_page_together(self) -> None:
+        import json
+        import struct
+        from unittest import mock
+
+        from cad.work_instruction import work_instruction
+
+        target = self.root / "player" / "bracket.pdf"
+
+        @work_instruction(out=str(target))
+        def guide():
+            return self._guide()
+
+        with mock.patch("cad._internal.work_instruction_pages.render_pictures", return_value={}):
+            written = guide()
+            self.assertEqual(guide(), written, "a second run over one document writes the same files")
+        self.assertEqual([path.suffix for path in written], [".pdf", ".glb", ".html"])
+        glb = target.with_suffix(".glb").read_bytes()
+        size = struct.unpack("<I", glb[12:16])[0]
+        clips = json.loads(glb[20:20 + size])["animations"]
+        self.assertEqual([clip["name"] for clip in clips], ["assemble"])
+        page = target.with_suffix(".html").read_text(encoding="utf-8")
+        for present in ("Bracket", "Fit the bracket", "You need: "):
+            self.assertIn(present, page)
+
+    def test_a_guide_of_a_file_names_its_glb_s_document_plainly(self) -> None:
+        from unittest import mock
+
+        from cad._internal.work_instruction_player import write_glb
+
+        wi = self._guide()
+        wi.source_name = "cart v2.step"
+        with mock.patch("cad.export") as export, mock.patch("cad.model") as handed:
+            write_glb(wi, self.root / "named.glb")
+        self.assertEqual(handed.call_args.kwargs["name"], "cart_v2_step_guide")
+        export.assert_called_once()
+
+    def test_animated_false_writes_only_the_pdf(self) -> None:
+        from unittest import mock
+
+        from cad.work_instruction import work_instruction
+
+        target = self.root / "flat" / "bracket.pdf"
+
+        @work_instruction(out=str(target))
+        def guide():
+            return self._guide(animated=False)
+
+        with mock.patch("cad._internal.work_instruction_pages.render_pictures", return_value={}):
+            self.assertEqual(guide(), [target])
+        self.assertFalse(target.with_suffix(".html").exists())
+
+    def test_a_failed_pdf_leaves_an_earlier_page_as_it_was(self) -> None:
+        from unittest import mock
+
+        from cad.work_instruction import work_instruction
+
+        target = self.root / "failed" / "bracket.pdf"
+        target.parent.mkdir()
+        earlier = target.with_suffix(".html")
+        earlier.write_text("an earlier page", encoding="utf-8")
+
+        @work_instruction(out=str(target))
+        def guide():
+            return self._guide()
+
+        with mock.patch("cad._internal.work_instruction_pages.write_pdf", side_effect=RuntimeError("no")), \
+                self.assertRaises(RuntimeError):
+            guide()
+        self.assertEqual(earlier.read_text(encoding="utf-8"), "an earlier page")
+
+    def test_the_page_holds_its_words_safely_and_three_at_the_viewer_s_version(self) -> None:
+        import json
+
+        from cad._internal.work_instruction_player import THREE, page
+        from cad.work_instruction import Instruction
+
+        wi = Instruction(self.document, title="A <b> & c")
+        wi.step("Close </script> it", install=["base_plate"]).caution("Mind it.")
+        text = page(wi, b"glb")
+        self.assertIn("<title>A &lt;b&gt; &amp; c</title>", text)
+        self.assertNotIn("Close </script>", text, "a step's words cannot end the page's script")
+        self.assertIn('"text": "Careful: Mind it."', text)
+        viewer = json.loads(repo_path("packages/ui/package.json").read_text(encoding="utf-8"))
+        self.assertEqual(THREE, viewer["peerDependencies"]["three"])
+        self.assertEqual(sorted(set(re.findall(r"https://[\w./-]*?/npm/three@", text))),
+                         ["https://cdn.jsdelivr.net/npm/three@"], "three.js is all it fetches")
+
+
 class DocumentedTemplateTests(unittest.TestCase):
     """The skill's template is run, not just proofread: an agent copies it, so a template that has
     drifted from ``cad.work_instruction`` is a generator of broken scripts. It runs here beside

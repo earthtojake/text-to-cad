@@ -1,6 +1,6 @@
 ---
 name: work-instructions
-description: Write step-by-step instructions for building one assembly, as a PDF. By default a picture guide anyone can follow, like a furniture or LEGO manual - what you need, then a big picture of each step with an arrow where the parts go. For a shop, a work instruction with sign-offs, and torque, bonding and cure values cited to the user's process specs. Use when the user asks how to put something together, for build or assembly instructions, work instructions, a build procedure, a traveler or operation sheet.
+description: Write step-by-step instructions for building one assembly, as a PDF. By default a picture guide anyone can follow, like a furniture or LEGO manual - what you need, then a big picture of each step with an arrow where the parts go - plus a page to turn the model in 3D and watch it assemble. For a shop, a work instruction with sign-offs, and torque, bonding and cure values cited to the user's process specs. Use when the user asks how to put something together, for build or assembly instructions, work instructions, a build procedure, a traveler or operation sheet.
 license: MIT
 metadata:
   repository: earthtojake/text-to-cad
@@ -12,6 +12,9 @@ Instructions for building one assembly, as one PDF. Most people want a picture
 guide: a hobbyist building their own design, a friend putting a kit together.
 It reads like a furniture manual: what you need, then one big picture and one
 short sentence a step, with the new parts in blue and an arrow where they go.
+Beside the PDF it writes a page to open in any browser, where you turn the model
+in 3D and step through the build, parts flying in and back out, and the same
+build as a GLB.
 
 A shop building to company rules wants a work instruction instead: an
 engineering drawing documents the finished state, a process spec states the
@@ -189,6 +192,14 @@ sentence, tick box, picture and anything it asks for, two to a page. It has no
 tables, sign-offs or document numbers; those it was given print small in the
 footer. With `pictures=False` it is the table below with a done column.
 
+Beside the PDF, a picture guide writes `<name>.html` and `<name>.glb`
+(`animated=False` writes neither). The page is one file to open or send: the
+finished model, then Next and Back through the steps, or Play all, with the same
+words as the PDF. Each part arrives along its step's `arrow=`, and a step with
+none appears in place. The GLB is the same build as one animation, `assemble`, for
+the viewer or anything that plays a GLB. Neither shows hardware the model does not
+carry.
+
 A work instruction is laid out as shops and NASA assembly procedures lay one
 out, on US Letter (or A4) portrait. The rigor decides which of the paperwork
 below is there, and a `Format` renames or replaces what the user's own
@@ -251,3 +262,5 @@ The script raises rather than writing a wrong document:
   `fasten()`; only parts in the assembly are drawn.
 - The figures show the assembly at rest, from the instruction's camera or a
   step's own; they do not show tooling, fixtures or hand positions.
+- The page needs an internet connection to load its 3D viewer, and says so if it
+  cannot. Everything else is inside the file.

@@ -71,7 +71,9 @@ from __future__ import annotations
 
 import functools
 import math
+import os
 import re
+import tempfile
 from dataclasses import KW_ONLY, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Mapping, Sequence
@@ -892,7 +894,9 @@ class Instruction:
     ``number`` and ``revision`` are the instruction's identity, required from
     ``production`` up. ``names`` gives parts the names a reader knows, each
     name to the labels or refs it covers: ``{"Planet pin": ["pin_1", "pin_2"]}``.
-    Parts that share a name share a line, with their count. ``emphasis`` is ``visual`` (a figure per step) or ``process``
+    Parts that share a name share a line, with their count. A picture guide also
+    writes the build as a GLB and a page to play it in, beside its PDF, unless
+    ``animated=False``. ``emphasis`` is ``visual`` (a figure per step) or ``process``
     (text-led steps, no figure column, and a table of which steps apply which
     section of which document). ``format`` is the company's own layout as a
     :class:`Format`, read from a template or example the user supplied; it
@@ -912,7 +916,7 @@ class Instruction:
                  scope: str | Cited = "", safety: Sequence[str | Cited] = (), tools: Sequence[str] = (),
                  revisions: Sequence[tuple[str, str, str]] = (), rigor: str = "simple",
                  emphasis: str = "visual", format: Format | None = None,  # noqa: A002
-                 names: Mapping[str, Sequence[str]] | None = None) -> None:
+                 names: Mapping[str, Sequence[str]] | None = None, animated: bool = True) -> None:
         shape, self.source, self.source_name = _assembly(assembly)
         self.title = _text("title", title)
         self.number = _text("number", number or None, required=False) or ""
@@ -931,6 +935,7 @@ class Instruction:
         if not self.layout.guide and not (self.number and self.revision):
             raise ValueError(f"a {rigor} instruction needs its number= and revision=, as the user states them")
         self.pictures = bool(pictures) and self.emphasis == "visual" and self.layout.figures
+        self.animated = bool(animated) and self.pictures and self.layout.guide
         # The front page's free text, held to the steps' rule: a value it states cites a source
         # (``Cited(text, per=...)``), or that source is an open item (``missing``, as (where, what)).
         self.missing: list[tuple[str, str]] = []
@@ -948,6 +953,7 @@ class Instruction:
         self.materials: list[_Record] = []
         self._installed: dict[str, int] = {}
         self.scene = _Scene(shape, self.source)
+        self.shape = shape
         if len(self.scene.leaves()) < 2:  # refused before any step
             raise TypeError(f"{self.source_name} is a single part: work instructions are for an assembly; "
                             "instructions for machining or processing one detail part are not supported yet")
@@ -1108,10 +1114,21 @@ class Instruction:
 # --- the decorator -----------------------------------------------------------
 
 
+def _write_player(wi: "Instruction", target: Path, folder: Path) -> dict[Path, Path]:
+    """A picture guide's GLB and page, written in ``folder``: {there: where each lands, beside the PDF}."""
+    from cad._internal.work_instruction_player import page, write_glb
+
+    glb, html = folder / f"{target.stem}.glb", folder / f"{target.stem}.html"
+    write_glb(wi, glb)
+    html.write_text(page(wi, glb.read_bytes()), encoding="utf-8")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    return {glb: target.with_suffix(".glb"), html: target.with_suffix(".html")}
+
+
 def work_instruction(func: Callable[..., Any] | None = None, *, out: str | Path | None = None):
     """Declare a work instruction. The function returns an :class:`Instruction`;
-    calling it (the script's ``__main__`` does) writes one PDF at ``out``, prints
-    every open item, and returns the path written.
+    calling it (the script's ``__main__`` does) writes one PDF at ``out`` (a picture
+    guide also its GLB and page beside it), prints every open item, and returns the paths written.
 
     ``out`` is required and relative paths resolve against the script.
     """
@@ -1149,11 +1166,19 @@ def work_instruction(func: Callable[..., Any] | None = None, *, out: str | Path 
                 )
             from cad._internal.work_instruction_pages import write_pdf
 
-            pages = write_pdf(wi, target, open_items=items)
+            written = [target]
+            with tempfile.TemporaryDirectory(prefix="cad-wi-") as folder:
+                beside = _write_player(wi, target, Path(folder)) if wi.animated else {}
+                pages = write_pdf(wi, target, open_items=items)
+                for staged, final in beside.items():
+                    os.replace(staged, final)  # only now: a failed run leaves earlier files as they were
+                    written.append(final)
             for item in items:
                 print(f"{fn.__name__}: open item: {item}")
             print(f"wrote {target} ({pages} page{'s' if pages != 1 else ''})")
-            return [target]
+            for final in written[1:]:
+                print(f"wrote {final}")
+            return written
 
         from cad._internal import counts
 

@@ -123,6 +123,7 @@ there is left as it was.
 | `assembly` | the assembly's document: what calling its model returns, or an `.xbf` or `.step` path; a single part is refused |
 | `title` | the instruction's own; on every page |
 | `number`, `revision` | the instruction's identity: required from `production` up, in a picture guide's footer if given |
+| `animated` | `False` skips a picture guide's page and GLB |
 | `names` | what a person calls each part: `{"Pin": ["pin_1", "pin_2"]}`, each name to the labels or refs it covers; parts sharing a name share a line, with their count |
 | `part_number`, `author` | optional; the author signs "prepared by" |
 | `drawing` | the assembly `Drawing`, first under APPLICABLE DOCUMENTS |
@@ -286,6 +287,7 @@ across them. A picture guide's fit leaves room for its arrows.
 | `open item: step 3 (caution): source of 45 in-lbf not stated` | a value written into free text with no source |
 | `open item: assembly/pin.2: no step installs it` | a part the order leaves out |
 | `wrote <path> (N pages)` | the PDF |
+| `wrote <path>.glb`, `wrote <path>.html` | a picture guide's animated build, and the page that plays it |
 
 A step taller than a page is refused, naming the step: split it into shorter
 steps.
