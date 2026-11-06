@@ -257,7 +257,9 @@ placement of it; a placement is diffed by reference on every revision (a moved p
 held never asked for again), and a model no placement uses is released. A named model that is missing
 is a see-through block on the part's outline, a millimetre tall. A press tries the bodies before the
 face (the board's `pickAt` and the stage's `pickBody`), as the filter's Footprints takes them; the
-highlight and an isolation light and fade them (`bodyInk`); the Layers tab's 3D models hides them. The
+highlight and an isolation light and fade them (`bodyInk`); the Layers tab's 3D models hides them. Zoom to fit, Home and the opening's ease frame the slab with
+the bodies and blocks shown on it at that moment (the stage's `shownBounds`), while its `bounds` stay
+the slab's (what 100% means): a body arriving moves no camera, and the next fit takes it in. The
 canvas element says what it holds: `data-board-bodies`, `-blocks`, `-models`, `-mesh-mb`,
 `-models-waiting`, `-models-failed`.
 

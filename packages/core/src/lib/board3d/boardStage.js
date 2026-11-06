@@ -171,6 +171,27 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
   const minY = Math.min(...rings.outer.map(p => p[1])), maxY = Math.max(...rings.outer.map(p => p[1]));
   const bounds = Object.freeze({ min: [minX, 0 - maxY, -thickness], max: [maxX, 0 - minY, 0] });
 
+  // What stands on the board besides the stage's own meshes (the parts' bodies and blocks, `boardParts.js`,
+  // added under its group): what a fit frames with the slab once it is there (`shownBounds`).
+  const own = new Set(group.children);
+  const inverse = new THREE.Matrix4(), local = new THREE.Matrix4(), piece = new THREE.Box3();
+  const shownBounds = () => {
+    const found = new THREE.Box3(new THREE.Vector3(...bounds.min), new THREE.Vector3(...bounds.max));
+    const standing = group.children.filter(child => !own.has(child) && child.visible);
+    if (!standing.length) return bounds;
+    group.updateMatrixWorld(true);
+    inverse.copy(group.matrixWorld).invert();
+    for (const child of standing) {
+      child.traverseVisible(object => {
+        const geometry = object.isMesh ? object.geometry : null;
+        if (!geometry?.getAttribute?.("position")) return;
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+        found.union(piece.copy(geometry.boundingBox).applyMatrix4(local.multiplyMatrices(inverse, object.matrixWorld)));
+      });
+    }
+    return { min: found.min.toArray(), max: found.max.toArray() };
+  };
+
   /** Where a ray meets the board, inside its outline (not in a cut-out); null off it. */
   const locate = ray => {
     const located = rayOnBoard({ origin: ray.origin.toArray(), direction: ray.direction.toArray() }, thickness);
@@ -180,7 +201,14 @@ export function createBoardStage(THREE, { layout, outline, thickness = BOARD_THI
 
   return {
     object3D: group,
+    // The slab's box: what the camera is grounded on and what 100% means, whatever stands on it.
     bounds,
+    /**
+     * What a fit frames (Zoom to fit, Home, the opening's ease): the slab with whatever is shown on it as
+     * it is NOW — the parts' bodies and blocks once they are in, none while they are hidden. Read only
+     * when a fit is asked for: bodies arriving move no camera.
+     */
+    shownBounds,
     thickness,
     sheet,
     locate,

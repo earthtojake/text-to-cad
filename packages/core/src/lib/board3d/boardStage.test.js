@@ -81,3 +81,25 @@ test("the faces are drawn once a renderer takes them, through one scratch canvas
   stage.dispose();
   assert.ok(made.every(canvas => canvas.width === 0), "disposing frees the canvases");
 });
+
+test("a fit frames the slab and what stands on it as it is now: a tall part once it is in, nothing while it is hidden", () => {
+  const stage = createBoardStage(THREE, { layout: LAYOUT, outline: BOARD.outline, thickness: 1.6, theme: "dark" });
+  assert.deepEqual(stage.shownBounds(), stage.bounds, "the bare board frames its slab");
+  // A part's body, 12 mm tall, standing on the front past the board's right edge (its parts' group, as boardParts.js adds it).
+  const parts = new THREE.Group(), holder = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4, 4, 12).translate(0, 0, 6));
+  body.matrixAutoUpdate = false;
+  body.matrix.makeTranslation(41, -15, 0);
+  holder.add(body);
+  parts.add(holder);
+  stage.object3D.add(parts);
+  stage.object3D.position.set(100, 0, 0); // the viewport's offset of the model is not the scene's frame
+  const shown = stage.shownBounds();
+  assert.deepEqual(shown.min.map(value => +value.toFixed(6)), [0, -30, -1.6]);
+  assert.deepEqual(shown.max.map(value => +value.toFixed(6)), [43, 0, 12]);
+  assert.deepEqual(stage.bounds, { min: [0, -30, -1.6], max: [40, 0, 0] }, "the slab's own box stays what 100% means");
+  parts.visible = false;
+  assert.deepEqual(stage.shownBounds(), stage.bounds);
+  body.geometry.dispose();
+  stage.dispose();
+});
