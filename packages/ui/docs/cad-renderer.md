@@ -254,7 +254,8 @@ model block) names each model a STEP by its document id; the 3D view opens each 
 (`client.engineDocument`), four at a time, reads it (`loadXbfDocument`, no look, no version wait: the
 engine may let it go), bakes it into ONE geometry with a material per colour, and shares it with every
 placement of it, at the placement's own opacity (KiCad's per-model `opacity`: see-through below 1); a placement is diffed by reference on every revision (a moved part a matrix, a model
-held never asked for again), and a model no placement uses is released. A named model that is missing
+held never asked for again), and a model no placement uses is released, and loaded again if a
+placement wants it back (a part deleted and put back, a model hidden and shown). A named model that is missing
 is a see-through block on the part's outline, a millimetre tall. A press tries the bodies before the
 face (the board's `pickAt` and the stage's `pickBody`), as the filter's Footprints takes them; the
 highlight and an isolation light and fade them (`bodyInk`); the Layers tab's 3D models hides them. Zoom to fit, Home and the opening's ease frame the slab with

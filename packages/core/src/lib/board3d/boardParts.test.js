@@ -137,3 +137,34 @@ test("the loader opens each model by its document id once and bakes it, reading 
   assert.deepEqual([opened.sort(), done.sort()], [["a", "b"], ["a@1", "b@1"]]);
   loader.dispose();
 });
+
+test("a model let go and wanted again is loaded again: a part deleted and put back stands on its body", async () => {
+  // A structure of one cube, served as the engine serves a STEP's (`loadXbfDocument`'s routes).
+  const fetch = async url => {
+    if (url.endsWith("/structure")) return { ok: true, json: async () => ({ prototypes: [], instances: [] }) };
+    throw new Error(`asked for ${url}`);
+  };
+  const parts = createBoardParts(THREE, { thickness: 1.6 });
+  const opened = [];
+  const loader = createModelLoader(THREE, {
+    open: async document => { opened.push(document); return { url: `http://127.0.0.1:9/api/v1/documents/step/${document}`, fetch }; },
+    onModel: (key, baked) => { baked.geometry.dispose(); parts.addModel(key, bakeModel(THREE, DOCUMENT)); },
+    onFailed: (key, message) => { throw new Error(`${key}: ${message}`); }
+  });
+  // What the parts want asked for, and the loader's work awaited until none is left.
+  const load = async () => {
+    loader.request(parts.wanted());
+    for (let turn = 0; turn < 200 && loader.pending; turn += 1) await new Promise(resolve => setImmediate(resolve));
+  };
+  parts.setParts(PARTS, TABLE);
+  await load();
+  assert.equal(parts.stats().bodies, 2);
+  parts.setParts(PARTS.filter(part => !part.ref.startsWith("R")), TABLE); // R1 and R2 deleted: the model is let go
+  assert.equal(parts.stats().models, 0);
+  parts.setParts(PARTS, TABLE); // and put back
+  await load();
+  const stats = parts.stats();
+  assert.deepEqual([stats.bodies, stats.waiting, opened.length], [2, 0, 2]);
+  loader.dispose();
+  parts.dispose();
+});

@@ -381,7 +381,9 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
  * The page's side of the models: each wanted model (`wanted()`'s `{ key, document }`) opened by its
  * document id (`open`: the client's `engineDocument`, which waits out the engine's first read of the
  * STEP), read (`loadXbfDocument`), baked and handed to `onModel(key, baked)`; at most `concurrency` at
- * once, each key once. A failure is `onFailed(key, message)`. No version is waited on: the engine may let the model go; the page has its triangles.
+ * once, a key asked again while it is queued or loading not asked twice. Once in, a key is the parts'
+ * (`wanted()` asks only for what they do not hold), so one they let go and want again is loaded again.
+ * A failure is `onFailed(key, message)`. No version is waited on: the engine may let the model go; the page has its triangles.
  *
  * @param {typeof import("three")} THREE
  * @param {{ open(document: string, options: { signal: AbortSignal }): Promise<{ url: string, fetch?: typeof fetch }>,
@@ -390,6 +392,7 @@ export function createBoardParts(THREE, { thickness = BOARD_THICKNESS_MM, theme 
  */
 export function createModelLoader(THREE, { open, onModel, onFailed, concurrency = 4 }) {
   const controller = new AbortController();
+  // The keys queued or loading: what a request does not ask for again.
   const queue = [], asked = new Set();
   let running = 0;
   const timings = { loaded: 0, failed: 0, ms: 0, bytes: 0 };
@@ -408,6 +411,7 @@ export function createModelLoader(THREE, { open, onModel, onFailed, concurrency 
           const baked = bakeModel(THREE, document);
           timings.bytes += document.load.bytes;
           timings.loaded += 1;
+          asked.delete(item.key); // the parts' from here on: one they let go is asked for again
           onModel(item.key, baked);
         } finally {
           document.release();
@@ -415,8 +419,10 @@ export function createModelLoader(THREE, { open, onModel, onFailed, concurrency 
       })().catch(error => {
         if (controller.signal.aborted) return;
         timings.failed += 1;
+        asked.delete(item.key);
         onFailed(item.key, error instanceof Error ? error.message : String(error));
       }).finally(() => {
+        asked.delete(item.key);
         running -= 1;
         timings.ms = Math.max(timings.ms, performance.now() - started);
         next();
@@ -424,7 +430,7 @@ export function createModelLoader(THREE, { open, onModel, onFailed, concurrency 
     }
   };
   return {
-    /** Ask for these (`wanted()`'s): each key is asked for once. */
+    /** Ask for these (`wanted()`'s): a key already queued or loading is not asked for again. */
     request(wanted) {
       for (const item of wanted) if (!asked.has(item.key)) { asked.add(item.key); queue.push(item); }
       next();
