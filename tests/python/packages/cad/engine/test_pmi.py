@@ -165,6 +165,18 @@ def _face(loaded: document.Loaded, entry: dict, at: int = 0) -> tuple[str, dict]
 
 
 class PlateTest(_Folder):
+    def test_inspect_gives_what_the_structure_serves(self) -> None:
+        from cad.engine.api import _summary
+
+        self.build(plate())
+        for source in (self.xbf, self.step):
+            with self.subTest(source=source.suffix):
+                structure = document.Loaded(source).structure()
+                self.assertTrue(structure["pmi"])
+                summary = _summary(structure, source, lambda *_: {}, "id", measured=False)
+                self.assertEqual([summary[name] for name in ("pmi", "pmi_views", "pmi_coverage")],
+                                 [structure[name] for name in ("pmi", "pmi_views", "pmi_coverage")])
+
     def test_the_document_holds_each_annotation_on_its_face(self) -> None:
         report = self.build(plate())
         self.assertEqual(_but_coverage(report), {"annotations": 9, "problems": []})

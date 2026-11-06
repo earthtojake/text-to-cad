@@ -356,31 +356,26 @@ pmi: PART: ask: What is the 9 mm hole for? Suggest dimensional_size(...), positi
 
 ## Read and check
 
-The engine's `read` (`cad.engine.pmi`) reads the PMI a file holds: the STEP a model
-was exported to (what a supplier reads), an `.xbf`, or a vendor's STEP.
+`cad inspect` reads the PMI a document or a file holds: a model's id, the STEP it was
+exported to (what a supplier reads), an `.xbf`, or a vendor's STEP. Its first screen lists
+each annotation's id, kind and status; `--json` gives all of it under `summary`, as `pmi`,
+`pmi_views` and `pmi_coverage`.
 
 ```bash
 cad export "$ID" STEP/plate.step
+cad inspect STEP/plate.step --json
 ```
 
-```python
-from cad.engine.pmi import read
-
-for entry in read("STEP/plate.step"):   # or an .xbf
-    print(entry["id"], entry["kind"], entry["status"], entry["problem"])
-```
-
-Each entry has `id`, `kind` (`datum`, `dimension`, `geometric_tolerance`, `note`),
+Each entry of `pmi` has `id`, `kind` (`datum`, `dimension`, `geometric_tolerance`, `note`),
 `status` (`ok`, `missing`, `ambiguous`, `invalid`), `problem`, `refs` (each with its
 canonical ref and status), and one of `datum`, `dimension`, `geometric_tolerance` or
 `note` holding its values. A note's is `{"number", "text", "general", "annotations"}`,
-its `refs` its faces. The document's structure lists each part's views as `pmi_views`
+its `refs` its faces. `pmi_views` lists each part's views
 (`{"part", "name", "label", "camera", "section", "shows", "place"}`, the camera's
-`direction` and `up` unit vectors and its `preset` the name or null), and each part's
-coverage as `pmi_coverage` ([Coverage](#coverage)). A general profile says
+`direction` and `up` unit vectors and its `preset` the name or null), and `pmi_coverage`
+each part's coverage ([Coverage](#coverage)). A general profile says
 `"general": true`, and its `refs` are the faces it covers on this build, each with
-`written` null; `otherwise_controlled(entries)` (`cad.engine.pmi`) gives the faces the
-rest control.
+`written` null.
 PMI read from another system's STEP that this does not model whole (another
 characteristic, a fit, modifiers, limits beside any of these, a link to an edge or a
 point) is listed as `kind: "unsupported"` with its `xcaf_type` and a `reason`, never

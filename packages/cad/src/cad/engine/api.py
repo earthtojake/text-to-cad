@@ -969,7 +969,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
     distinct parts, the root's name); its bounds and volume, each part's (``.../volumes``: the
     engine's facts of every part, kept by geometry key and measured together) placed where its
     occurrences stand; its materials and their masses, where any part has one; its joints,
-    mechanism states, configuration sequences and animations; and a model's declared files.
+    mechanism states, configuration sequences and animations; its PMI, as the structure serves it;
+    and a model's declared files.
     Nothing is built. Not ``measured`` (``query="structure"``): no bounds, volume or masses, and
     nothing measured for them -- the lists alone."""
     from cad.engine.refs import placed_facts
@@ -1041,6 +1042,8 @@ def _summary(structure: dict[str, Any], path: Path | str, get: Callable[..., Any
         "sequences": [{"name": name, "duration": motion.get("duration")}
                       for name, motion in (kinematics.get("motions") or {}).items()],
         "animations": structure.get("animations") or [],
+        "pmi": structure.get("pmi") or [], "pmi_views": structure.get("pmi_views") or [],
+        "pmi_coverage": structure.get("pmi_coverage") or [],
         "files": list((model or {}).get("files") or []),
     }
     if not measured:

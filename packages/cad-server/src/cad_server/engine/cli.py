@@ -520,6 +520,8 @@ def summary_text(summary: dict[str, Any]) -> str:
                       for row in summary["states"]])
     listed("sequences", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["sequences"]])
     listed("animations", [f"{row['name']}  {_said.number(row['duration'])} s" for row in summary["animations"]])
+    listed("pmi", [f"{row['id']}  {row['kind']}  {row['status']}" + (f": {row['problem']}" if row.get("problem") else "")
+                   for row in summary.get("pmi") or []])
     # The files the model's decorators declare, not what an export wrote beside it.
     listed("declared files", summary["files"])
     return "\n".join(plain(line) for line in lines)
