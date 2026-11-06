@@ -6,8 +6,8 @@ of its own. Millimetres throughout.
 
 Custom rules (a ``.kicad_dru``) hold conditions only KiCad's DRC can evaluate. The router keeps them the safe
 way: every clearance a rule names (clearance, hole clearance, edge clearance, hole to hole, creepage) is kept
-everywhere, the largest of each; a rule's least track width or via size is checked against the router's. A
-``disallow`` rule is refused by name (``custom_limits``): where it applies is a condition the router cannot
+everywhere, the largest of each. A rule's sizes (a least track width for a net) are left to the plan and to DRC.
+A ``disallow`` rule is refused by name (``custom_limits``): where it applies is a condition the router cannot
 evaluate, so it cannot promise to keep it.
 """
 
@@ -80,13 +80,13 @@ class Rules:
 
 
 #: The custom constraints the router keeps everywhere, the largest of each (KiCad's constraint types, as its API
-#: names them): every clearance, and the least track width and via sizes. Creepage, measured along the
-#: surface, is never less than the straight gap: keeping it as a clearance keeps it.
+#: names them): the clearances. Creepage, measured along the surface, is never less than the straight gap:
+#: keeping it as a clearance keeps it. A rule's sizes (a track's width, a via's) are the plan's to give and DRC's
+#: to judge: a size held where its condition does not hold would refuse copper the board allows.
 _KEPT = {
     "CRCT_CLEARANCE": "clearance", "CRCT_PHYSICAL_CLEARANCE": "clearance", "CRCT_CREEPAGE": "clearance",
     "CRCT_HOLE_CLEARANCE": "hole_clearance", "CRCT_PHYSICAL_HOLE_CLEARANCE": "hole_clearance",
-    "CRCT_EDGE_CLEARANCE": "edge_clearance", "CRCT_HOLE_TO_HOLE": "hole_to_hole", "CRCT_TRACK_WIDTH": "track_width",
-    "CRCT_VIA_DIAMETER": "via_diameter", "CRCT_HOLE_SIZE": "hole_size", "CRCT_ANNULAR_WIDTH": "annular_width",
+    "CRCT_EDGE_CLEARANCE": "edge_clearance", "CRCT_HOLE_TO_HOLE": "hole_to_hole",
 }
 
 

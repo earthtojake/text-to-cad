@@ -125,9 +125,10 @@ def _path(state: int, parent: array, nodes: int, plane: int, swap_ok: bytes | by
 
 
 def flood(free: bytes | bytearray, layers: int, nx: int, ny: int, via_ok: bytes | bytearray,
-          swap_ok: bytes | bytearray, starts: Sequence[int], goals: bytes | bytearray, limit: int) -> tuple[int, bool]:
-    """How many states the free space round ``starts`` holds, counting to ``limit``, and whether it reaches a goal:
-    a connection whose end is walled in fails here in a few thousand steps, not after the whole board."""
+          swap_ok: bytes | bytearray, starts: Sequence[int], goals: bytes | bytearray, limit: int
+          ) -> tuple[list[int], bool]:
+    """The states of the free space round ``starts``, counted to ``limit``, and whether it reaches a goal: a
+    connection whose end is walled in fails here in a few thousand steps, not after the whole board."""
     nodes = nx * ny
     seen = bytearray(layers * nodes)
     queue = []
@@ -139,11 +140,11 @@ def flood(free: bytes | bytearray, layers: int, nx: int, ny: int, via_ok: bytes 
     head = 0
     while head < len(queue):
         if len(queue) >= limit:
-            return len(queue), False
+            return queue, False
         state = queue[head]
         head += 1
         if goals[state]:
-            return len(queue), True
+            return queue, True
         layer, node = divmod(state, nodes)
         base = layer * nodes
         for offset in moves:
@@ -157,4 +158,4 @@ def flood(free: bytes | bytearray, layers: int, nx: int, ny: int, via_ok: bytes 
                 if other != layer and free[to] and not seen[to]:
                     seen[to] = 1
                     queue.append(to)
-    return len(queue), False
+    return queue, False

@@ -175,6 +175,24 @@ class Obstacles:
                 return False
         return True
 
+    def tightest(self, layer: int, at: tuple[float, float], net: int, clearance: float, holes: float,
+                 edge: float) -> tuple[str, int] | None:
+        """What leaves a track of ``net`` least room at ``at`` on ``layer``: (its kind, its net), or None where
+        nothing is near."""
+        x, y = at
+        best = None
+        for index in self._near((x, y, x, y), [layer]):
+            kind, shape, owner, keep = self._items[index]
+            if kind in ("copper", "hole") and owner == net:
+                continue
+            need = {"copper": max(keep, clearance), "hole": holes, "tracks": 0.0, "edge": edge}.get(kind)
+            if need is None:
+                continue
+            room = shape.point_distance(x, y) - need
+            if best is None or room < best[0]:
+                best = (room, kind, owner)
+        return (best[1], best[2]) if best else None
+
     def via_clear(self, at: tuple[float, float], radius: float, drill: float, net: int, clearance: float,
                   holes: float, hole_gap: float, edge: float, epsilon: float) -> bool:
         """Whether a through via of ``net`` at ``at`` (its copper ``radius``, its drill's ``drill``) keeps every

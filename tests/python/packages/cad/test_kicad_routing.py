@@ -13,6 +13,7 @@ from __future__ import annotations
 import math
 import random
 import unittest
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -23,7 +24,8 @@ import numpy as np  # noqa: E402
 from cad.kicad._route import _entries, _wants  # noqa: E402
 from cad.kicad._routing.board import read_copper  # noqa: E402
 from cad.kicad._routing.field import move_margin  # noqa: E402
-from cad.kicad._routing.plan import Router, Want  # noqa: E402
+from cad.kicad._routing import plan  # noqa: E402
+from cad.kicad._routing.plan import Router, Want, pitch_for  # noqa: E402
 from cad.kicad._routing.rules import NetClass, Rules, custom_limits  # noqa: E402
 from cad.kicad._routing.shapes import Shape  # noqa: E402
 from cad.kicad._routing.tighten import octolinear  # noqa: E402
@@ -218,11 +220,51 @@ class Routes(unittest.TestCase):
         self.assertGreater(length, 20.0 + 2.0)
         independent_check(self, self.copper, RULES, router, [want("A")])
 
+    def test_a_wall_is_named_by_what_it_is(self) -> None:
+        router, done = self.route([want("F", layers=(("F.Cu", 1.0), ("B.Cu", 1.0)))])
+        self.assertIn("R5.1 is walled in by a keep-out", done[0].reason)
+
     def test_one_pair_of_pads_is_one_connection(self) -> None:
         router, done = self.route([want("B", pads=("R3.1", "J1.3"), layers=(("F.Cu", 1.0), ("B.Cu", 1.0)))])
         self.assertEqual(1, len(done))
         self.assertEqual(("R3.1", "J1.3"), done[0].between)
         self.assertTrue(done[0].routed, done[0].line())
+
+
+def fine_pitch(ref: str, x: float, y: float, nets: list[str]) -> str:
+    """A row of pads 0.3 x 0.775 mm at a 0.5 mm pitch (a TSSOP's side), down the page: a 0.2 mm track keeping
+    0.2 mm leaves a pin straight out with 0.05 mm to spare, a lane narrower than a 0.1 mm grid."""
+    pads = "".join(f'(pad "{k + 1}" smd roundrect (at 0 {k * 0.5}) (size 0.775 0.3) (layers "F.Cu" "F.Mask") '
+                   f'(roundrect_rratio 0.25) (net "{net}") (uuid "{_uuid()}"))' for k, net in enumerate(nets))
+    return (f'(footprint "TSSOP" (layer "F.Cu") (uuid "{_uuid()}") (transform (translate {x} {y}) (rotate 0) (scale 1 1)) '
+            f'(property "Reference" "{ref}" (at 0 -2 0) (layer "F.SilkS") (uuid "{_uuid()}") '
+            f'(effects (font (size 1 1) (thickness 0.15)))) {pads})')
+
+
+class FinePitch(unittest.TestCase):
+    def test_a_pin_whose_lane_is_narrower_than_the_grid_escapes_exactly(self) -> None:
+        """The middle pin of a 0.5 mm-pitch row, off the grid by half its pitch, reaches a resistor 8 mm away: its
+        free lane (0.07 mm, off every grid row) holds no node of the 0.1 mm grid, so the route leaves it by an elbow
+        to a free node outside the pad, checked exactly. Without that escape there is no room for it."""
+        nets = ["N1", "N2", "N3", "N4", "N5"]
+        copper = read_copper(board(fine_pitch("U1", 10.05, 9.05, nets), resistor("R1", 18, 10, 0, "N3", "N9")))
+        rules = Rules({}, NetClass("Default", 0.2, 0.2, 0.6, 0.3), min_clearance=0.1, min_track_width=0.1,
+                      edge_clearance=0.3, hole_clearance=0.25, hole_to_hole=0.5)
+        wants = [want("N3", width=0.2, clearance=0.2)]
+        router = Router(copper, rules, wants)
+        done = router.run()
+        self.assertTrue(done[0].routed, done[0].line())
+        self.assertIn((10_050_000, 10_050_000), {end for t in router.tracks for end in (t.start, t.end)}, "on its anchor")
+        independent_check(self, copper, rules, router, wants)
+        with mock.patch.object(plan, "ESCAPES", 0):
+            done = Router(copper, rules, wants).run()
+        self.assertIn("U1.3 has no room", done[0].reason)
+
+    def test_the_pitch_is_a_quarter_of_the_narrowest_track_and_its_clearance(self) -> None:
+        self.assertEqual(0.1, pitch_for([0.25, 0.5], [0.2, 0.3]))
+        self.assertEqual(0.075, pitch_for([0.15], [0.15]))
+        self.assertEqual(0.025, pitch_for([0.05], [0.05]))
+        self.assertEqual(0.02, pitch_for([0.03], [0.03]), "and never finer than 0.02 mm")
 
 
 class Plans(unittest.TestCase):
@@ -267,7 +309,8 @@ class Plans(unittest.TestCase):
 
     def test_custom_rules_are_kept_everywhere_or_refused_by_name(self) -> None:
         limits, refused = custom_limits([("hv", "CRCT_CLEARANCE", 0.5), ("edge", "CRCT_EDGE_CLEARANCE", 0.4),
-                                         ("no", "CRCT_DISALLOW", 0.0), ("len", "CRCT_LENGTH", 10.0)])
+                                         ("no", "CRCT_DISALLOW", 0.0), ("len", "CRCT_LENGTH", 10.0),
+                                         ("power", "CRCT_TRACK_WIDTH", 1.5)])
         self.assertEqual({"clearance": 0.5, "edge_clearance": 0.4}, limits)
         self.assertEqual(["no"], refused)
         self.assertEqual(0.5, RULES.with_custom(limits).clearance("A"))

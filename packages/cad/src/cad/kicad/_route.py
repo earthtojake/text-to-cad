@@ -192,9 +192,9 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         netclass = rules.of(net)
         least = rules.clearance(net)
         width = _number(entry.get("width", netclass.track_width), "width", where)
-        if width < rules.min_track_width - 1e-9 or width < rules.custom.get("track_width", 0.0) - 1e-9 or width <= 0:
+        if width < rules.min_track_width - 1e-9 or width <= 0:
             raise ValueError(f"{where}: width {width:g} mm is under the board's least track width "
-                             f"({max(rules.min_track_width, rules.custom.get('track_width', 0.0)):g} mm)")
+                             f"({rules.min_track_width:g} mm)")
         clearance = _number(entry.get("clearance", least), "clearance", where)
         if clearance < least - 1e-9:
             raise ValueError(f"{where}: clearance {clearance:g} mm is under the {least:g} mm DRC holds {net} to (its "
@@ -203,9 +203,9 @@ def _wants(entries: Sequence[Mapping[str, Any]], board: Any, rules: Any) -> list
         vias = entry.get("vias")
         vias = None if vias is None else int(_number(vias, "vias", where, 0, whole=True))
         via_cost = _number(entry.get("via_cost", VIA_COST), "via_cost", where)
-        diameter = max(netclass.via_diameter, rules.min_via_diameter, rules.custom.get("via_diameter", 0.0))
-        drill = max(netclass.via_drill, rules.min_via_drill, rules.custom.get("hole_size", 0.0))
-        annulus = max(rules.min_annulus, rules.custom.get("annular_width", 0.0))
+        diameter = max(netclass.via_diameter, rules.min_via_diameter)
+        drill = max(netclass.via_drill, rules.min_via_drill)
+        annulus = rules.min_annulus
         if len(layers) > 1 and vias != 0 and (diameter - drill) / 2 < annulus - 1e-9:
             raise ValueError(f"{where}: the netclass's via ({diameter:g}/{drill:g} mm) leaves a ring under the board's "
                              f"least {annulus:g} mm: set its via in the .kicad_pro")

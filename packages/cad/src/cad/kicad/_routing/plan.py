@@ -11,7 +11,10 @@ checker (``tighten.Obstacles``) once, then ``run()`` routes each wanted connecti
 
 Each connection is searched in a window round its two ends (``search``), wider each time it fails (a margin,
 a larger margin, the whole region), on the layers its entry allows, at its width and clearance, under its via
-limit; a walled-in end is found by a small flood and said as such. A path found is turned into copper: its runs
+limit. A pad whose free lane is narrower than the grid (a fine-pitch pin) starts or ends at a free node just
+outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
+flood and said as such, with what walls it in (the nets nearest the rim of its room, a keep-out, the edge): an
+earlier entry of the plan is said so, for the agent to reorder. A path found is turned into copper: its runs
 on each layer, its vias; each end carried onto its anchor (a pad's position, a via's centre, an axis-aligned
 track's centreline); each run pulled tight (``tighten.pull``); a via pair whose two vias an elbow or a straight
 on the first layer can join is removed. Every segment and via is then checked once more, exactly, against every
@@ -42,8 +45,15 @@ __all__ = ["Connection", "NewTrack", "NewVia", "Router", "Want", "pitch_for"]
 Point = tuple[int, int]  # nanometres
 XY = tuple[float, float]
 
-#: The most nodes the region's fields hold per layer: a 200 x 200 mm board at 0.1 mm. Past it, route in parts.
-MAX_NODES = 4_000_000
+#: The most memory the region's fields may take: 28 bytes a node on each copper layer and 16 more (``field``). A
+#: 100 x 100 mm region of a four-layer board at 0.075 mm is some 230 MB. Past it, route the plan in parts.
+MAX_BYTES = 600_000_000
+#: How far past the box round a plan's pads its region reaches: at least this, or a quarter of the box's size.
+REGION_MARGIN = 5.0
+#: A pad with no free node of its own (a fine-pitch pin whose free lane is narrower than the grid) escapes to a
+#: free node at most this far past its copper, by a straight or an elbow checked exactly; the nearest ESCAPES
+#: candidates are tried.
+ESCAPE, ESCAPES = 0.8, 80
 #: How much longer than the best a path the search settles for may be (its heuristic's weight).
 WEIGHT = 1.2
 #: The most states one search expands before it gives up on a window.
@@ -55,14 +65,10 @@ FLOOD = 20_000
 
 
 def pitch_for(widths: Iterable[float], clearances: Iterable[float]) -> float:
-    """The grid's pitch: 0.1 mm where every track and its clearance span 0.4 mm or more, finer where they do not
-    (a quarter of the narrowest track plus clearance, 0.05 or 0.025 mm), so a lane two clearances and a width
-    wide is always found."""
+    """The grid's pitch: a quarter of the narrowest track plus its clearance, in steps of 5 microns, 0.1 mm at most
+    and 0.02 mm at least, so a lane two clearances and a width wide always holds a node."""
     span = min(w + c for w, c in zip(widths, clearances))
-    for pitch in (0.1, 0.05, 0.025):
-        if span / 4 >= pitch - 1e-9:
-            return pitch
-    return 0.025
+    return min(0.1, max(0.02, math.floor(span / 4 / 0.005 + 1e-9) * 0.005))
 
 
 @dataclass(frozen=True)
@@ -274,24 +280,33 @@ class Router:
         self.vias: list[NewVia] = []
         self._own: dict[str, list[_Item]] = {}  # each net's copper as items, the new copper added as it lands
         self._last: list[_Item] = []  # the copper the last connection added
+        self.routed: set[str] = set()  # the nets this plan has added copper to
         self._read_obstacles()
 
     # --- the region and its obstacles ------------------------------------------------------------------------
 
     def _region(self) -> None:
-        """The region the fields cover: the board's outline's box, or (no outline) its pads' box, a margin round
-        it; refused past ``MAX_NODES`` a layer."""
-        points = [p for ring in self.board.outline for p in ring] or [pad.at for pad in self.board.pads]
+        """The region the fields cover: the box round the plan's pads (every pad of each net it routes), grown by a
+        margin, inside the box round the board's outline; refused past ``MAX_BYTES``."""
+        nets = {want.net for want in self.wants}
+        points = [pad.at for pad in self.board.pads if pad.net in nets]
+        edge = [p for ring in self.board.outline for p in ring] or points
         if not points:
-            raise ValueError("the board has no outline and no pads: nothing to route on")
-        g, grow = self.pitch, self.reach + 1.0
-        x0, y0 = min(p[0] for p in points) - grow, min(p[1] for p in points) - grow
-        x1, y1 = max(p[0] for p in points) + grow, max(p[1] for p in points) + grow
+            raise ValueError("the plan's nets have no pad on the board: nothing to route")
+        g = self.pitch
+        x0, y0 = min(p[0] for p in points), min(p[1] for p in points)
+        x1, y1 = max(p[0] for p in points), max(p[1] for p in points)
+        grow = max(REGION_MARGIN, (x1 - x0) / 4, (y1 - y0) / 4) + self.reach
+        x0, y0 = max(x0 - grow, min(p[0] for p in edge) - self.reach - 1.0), max(y0 - grow, min(p[1] for p in edge) - self.reach - 1.0)
+        x1, y1 = min(x1 + grow, max(p[0] for p in edge) + self.reach + 1.0), min(y1 + grow, max(p[1] for p in edge) + self.reach + 1.0)
         self.i0, self.j0 = math.floor(x0 / g), math.floor(y0 / g)
         self.nx, self.ny = math.ceil(x1 / g) - self.i0 + 1, math.ceil(y1 / g) - self.j0 + 1
-        if self.nx * self.ny > MAX_NODES:
-            raise ValueError(f"the board spans {x1 - x0:.0f} x {y1 - y0:.0f} mm, {self.nx * self.ny:,} nodes a layer at "
-                             f"the {g} mm pitch its rules need: more than the router holds ({MAX_NODES:,})")
+        size = self.nx * self.ny * (28 * len(self.copper) + 16)
+        if size > MAX_BYTES:
+            raise ValueError(f"the plan spans {x1 - x0:.0f} x {y1 - y0:.0f} mm of a {len(self.copper)}-layer board, "
+                             f"{self.nx * self.ny:,} nodes a layer at the {g:g} mm pitch its rules need, some "
+                             f"{size / 1e6:.0f} MB of fields, past the router's {MAX_BYTES / 1e6:.0f} MB: route the plan in "
+                             "parts, the nets of one area each")
 
     def _ids(self, layers: Iterable[str]) -> list[int]:
         return [self.layer_of[layer] for layer in layers if layer in self.layer_of]
@@ -504,6 +519,8 @@ class Router:
             sources = self._terminals(source, window, allowed)
             targets = self._terminals(target, window, allowed)
             free, via_ok, rooms = self._maps(want, window, allowed, net)
+            self._escapes(target, targets, free, window, allowed, want, net)
+            self._escapes(source, sources, free, window, allowed, want, net)
             if not any(free[s] for s in targets):
                 reason = (f"{between[1]} has no room for a {want.width:g} mm track keeping {want.clearance:g} mm on "
                           f"{' or '.join(self.copper[k] for k in allowed)}")
@@ -531,22 +548,84 @@ class Router:
             reason = f"the search gave up after {expanded:,} steps" if out else f"no way through on {layers}{limit}"
         return Connection(want.net, between, False, reason)
 
+    def _escapes(self, items: Sequence[_Item], terminals: dict[int, _Item], free: bytearray, window: _Window,
+                 allowed: Sequence[int], want: Want, net: int) -> None:
+        """For each pad of ``items`` with no free node inside it, the free nodes just outside it from which a clear
+        straight or elbow reaches its anchor, added to ``terminals`` (the route is then carried onto the anchor that
+        way): a fine-pitch pin's lane can be narrower than the grid, never narrower than the copper's own rules."""
+        nodes, g = window.nx * window.ny, self.pitch
+        reached = {id(item) for state, item in terminals.items() if free[state]}
+        for item in items:
+            if item.kind != "pad" or id(item) in reached:
+                continue
+            anchor, at = _nm(item.pad.at), item.pad.at
+            box = [shape.box for shape in item.pad.copper]
+            reach = max(max(b[2] - at[0], at[0] - b[0], b[3] - at[1], at[1] - b[1]) for b in box) + ESCAPE
+            c0 = max(1, math.floor((at[0] - reach) / g) - window.i0)
+            c1 = min(window.nx - 2, math.ceil((at[0] + reach) / g) - window.i0)
+            r0 = max(1, math.floor((at[1] - reach) / g) - window.j0)
+            r1 = min(window.ny - 2, math.ceil((at[1] + reach) / g) - window.j0)
+            for k, layer in enumerate(allowed):
+                if self.copper[layer] not in item.layers:
+                    continue
+                clear = self._clear(want, net, layer, None, None)
+                candidates = sorted((((window.i0 + c) * self.g_nm - anchor[0]) ** 2
+                                     + ((window.j0 + r) * self.g_nm - anchor[1]) ** 2, r, c)
+                                    for r in range(r0, r1 + 1) for c in range(c0, c1 + 1)
+                                    if free[k * nodes + r * window.nx + c])
+                found = 0
+                for _, r, c in candidates[:ESCAPES]:
+                    node = self._node_nm(window, r * window.nx + c)
+                    legs = [[]] if octolinear(anchor, node) else [[corner] for corner in elbows(anchor, node)]
+                    if any(all(clear(a, b) for a, b in zip([anchor, *leg, node], [*leg, node])) for leg in legs):
+                        terminals.setdefault(k * nodes + r * window.nx + c, item)
+                        found += 1
+                        if found >= 4:
+                            break
+
     def _walled(self, want: Want, window: _Window, free: bytearray, via_ok: bytearray, swap: bytearray, sources: dict,
                 targets: dict, between: tuple[str, str], layers: str) -> str | None:
         """Why one end of a connection is walled in, when a small flood from it fills its room without meeting the
-        other end; None when both have a way out."""
-        count = len(free)
+        other end, naming what walls it (the nets whose copper is nearest the room's rim: those this plan routed
+        first are the agent's to put after it); None when both ends have a way out."""
+        count, nodes = len(free), window.nx * window.ny
         for ends, others, name in ((targets, sources, between[1]), (sources, targets, between[0])):
             marks = bytearray(count)
             for state in others:
                 marks[state] = 1
-            reached, met = flood(free, count // (window.nx * window.ny), window.nx, window.ny, via_ok, swap,
-                                 [state for state in ends if free[state]], marks, FLOOD)
-            if reached < FLOOD and not met:
-                area = reached * self.pitch ** 2 / (count // (window.nx * window.ny))
-                return (f"{name} is walled in: no way out of the {area:.1f} mm² round it on {layers} for a "
-                        f"{want.width:g} mm track keeping {want.clearance:g} mm")
+            room, met = flood(free, count // nodes, window.nx, window.ny, via_ok, swap,
+                              [state for state in ends if free[state]], marks, FLOOD)
+            if len(room) < FLOOD and not met:
+                area = len(room) * self.pitch ** 2 / (count // nodes)
+                walls = self._walls(room, free, window, want)
+                return (f"{name} is walled in{' by ' + walls if walls else ''}: no way out of the {area:.1f} mm² round "
+                        f"it on {layers} for a {want.width:g} mm track keeping {want.clearance:g} mm")
         return None
+
+    def _walls(self, room: Sequence[int], free: bytearray, window: _Window, want: Want) -> str:
+        """What stands round ``room`` (a flood's states): at each blocked neighbour of a state in it, what leaves a
+        track least room there (a net's copper or drill, a keep-out, the board's edge), the commonest first; a net
+        this plan routed first is said so."""
+        nodes, nx, g = window.nx * window.ny, window.nx, self.pitch
+        allowed = [self.layer_of[layer] for layer, _ in want.layers]
+        names = {k: name for name, k in self.net_id.items()}
+        net, count = self._net(want.net), {}
+        for state in room:
+            k, node = divmod(state, nodes)
+            for offset in (1, -1, nx, -nx):
+                if free[k * nodes + node + offset]:
+                    continue
+                r, c = divmod(node + offset, nx)
+                found = self.obstacles.tightest(allowed[k], ((window.i0 + c) * g, (window.j0 + r) * g), net,
+                                                want.clearance, self.rules.holes, self.rules.edge)
+                if found is None:
+                    continue
+                kind, owner = found
+                what = {"tracks": "a keep-out", "edge": "the board's edge"}.get(kind) or names.get(owner, "copper of no net")
+                count[what] = count.get(what, 0) + 1
+        ranked = sorted(count, key=lambda what: (-count[what], what))[:3]
+        said = [f"{what} (routed first in this plan)" if what in self.routed else what for what in ranked]
+        return ", ".join(said[:-1]) + (" and " if len(said) > 1 else "") + said[-1] if said else ""
 
     def _heuristic(self, window: _Window, boxes: Sequence[tuple[float, float, float, float]], cheapest: float) -> list[float]:
         g = self.pitch
@@ -716,4 +795,5 @@ class Router:
             self._item(want.net, item := _Item("via", tuple(self.copper), (disc,), (p,), via=via))
             self._last.append(item)
             self.vias.append(NewVia(want.net, at, want.via_diameter, want.via_drill))
+        self.routed.add(want.net)
         return Connection(want.net, between, True, None, count, len(vias), length)
