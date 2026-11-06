@@ -16,9 +16,10 @@ limit. A pad whose free lane is narrower than the grid (a fine-pitch pin) starts
 outside it, joined to its anchor by a straight or an elbow checked exactly. A walled-in end is found by a small
 flood and said as such, with what walls it in (the nets nearest the rim of its room, a keep-out, the edge): an
 earlier entry of the plan is said so, for the agent to reorder. A path found is turned into copper: its runs
-on each layer, its vias; each end carried onto its anchor (a pad's position, a via's centre, an axis-aligned
-track's centreline); each run pulled tight (``tighten.pull``); a via pair whose two vias an elbow or a straight
-on the first layer can join is removed. Every segment and via is then checked once more, exactly, against every
+on each layer, its vias; each end carried onto its anchor (a pad's position, a via's centre, the nearer end of a
+track that was on the board; on a track this plan made, the node on its centreline where that track is split);
+each run pulled tight (``tighten.pull``); a via pair whose two vias an elbow or a straight on the first layer can
+join is removed. Every segment and via is then checked once more, exactly, against every
 obstacle; a route that fails that check is a bug, raised (the edit then saves nothing). The new copper becomes an
 obstacle for everything routed after it, and the tree its net grows from.
 
@@ -28,8 +29,7 @@ Nothing here touches KiCad or a file: the caller (``cad.kicad._route``) reads th
 from __future__ import annotations
 
 import math
-import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Iterable, Sequence
 
 import numpy as np
@@ -88,10 +88,6 @@ class Want:
     via_drill: float
     vias: int | None
     via_cost: float
-
-    @property
-    def name(self) -> str:
-        return f"{self.pads[0]} to {self.pads[1]}" if self.pads else f"net {self.net}"
 
 
 @dataclass(frozen=True)
@@ -254,7 +250,6 @@ class Router:
         biggest = max([rules.clearance(net) for net in self.net_id] + [w.clearance for w in wants] + local
                       + [rules.holes, rules.edge + 0.005, rules.hole_gap + max(w.via_drill for w in wants) / 2, 0.0])
         self.reach = biggest + widest + 0.2
-        self.started = time.monotonic()
         self._region()
         self.fields = Fields(self.i0, self.j0, self.nx, self.ny, self.pitch, self.copper, self.reach)
         self.obstacles = Obstacles(len(self.copper), self.reach)
